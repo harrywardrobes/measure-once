@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Admin · Measure Once</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: 'Inter', system-ui, sans-serif;
+      background: #f8fafc; color: #0f172a;
+    }
+    header {
+      background: #0f172a; color: #fff;
+      padding: 14px 24px; display: flex; align-items: center; gap: 14px;
+    }
+    header .brand { font-family: 'Anton', sans-serif; letter-spacing: 0.04em; text-transform: uppercase; }
+    header .spacer { flex: 1; }
+    header a { color: #cbd5e1; text-decoration: none; font-size: 0.9rem; }
+    header a:hover { color: #fff; }
+    main { max-width: 920px; margin: 32px auto; padding: 0 24px; }
+    h1 { font-size: 1.4rem; margin: 0 0 4px; }
+    .sub { color: #64748b; font-size: 0.9rem; margin-bottom: 24px; }
+    section {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+      padding: 20px; margin-bottom: 24px;
+    }
+    section h2 {
+      font-size: 1rem; margin: 0 0 14px;
+      text-transform: uppercase; letter-spacing: 0.04em; color: #475569;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td {
+      text-align: left; padding: 10px 12px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    th { font-weight: 500; color: #64748b; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    tr:last-child td { border-bottom: none; }
+    .empty { color: #94a3b8; font-style: italic; padding: 16px 0; text-align: center; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 0.72rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-approved { background: #dcfce7; color: #166534; }
+    .badge-rejected { background: #fee2e2; color: #991b1b; }
+    .actions { display: flex; gap: 6px; justify-content: flex-end; }
+    button {
+      border: 1px solid transparent; border-radius: 6px;
+      padding: 6px 12px; font-size: 0.82rem; cursor: pointer;
+      font-family: inherit; transition: background 0.15s;
+    }
+    .btn-approve { background: #059669; color: #fff; }
+    .btn-approve:hover { background: #047857; }
+    .btn-reject  { background: #fff; color: #991b1b; border-color: #fecaca; }
+    .btn-reject:hover { background: #fee2e2; }
+    .btn-revoke  { background: #fff; color: #475569; border-color: #cbd5e1; }
+    .btn-revoke:hover { background: #f1f5f9; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #0f172a; color: #fff; padding: 10px 18px; border-radius: 8px;
+      font-size: 0.88rem; opacity: 0; transition: opacity 0.2s;
+      pointer-events: none; z-index: 1000;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { background: #991b1b; }
+    .loading { text-align: center; padding: 48px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="brand">Measure Once</span>
+    <span style="color:#64748b;font-size:0.85rem;">Admin</span>
+    <span class="spacer"></span>
+    <a href="/">← Dashboard</a>
+    <a href="/api/logout">Sign out</a>
+  </header>
+
+  <main id="main">
+    <div class="loading">Loading…</div>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const $ = sel => document.querySelector(sel);
+    const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    function toast(msg, isError) {
+      const t = $('#toast');
+      t.textContent = msg;
+      t.className = 'toast show' + (isError ? ' error' : '');
+      setTimeout(() => t.className = 'toast', 2200);
+    }
+
+    async function api(method, path, body) {
+      const opts = { method, headers: { 'Content-Type': 'application/json' } };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const r = await fetch(path, opts);
+      if (r.status === 401) { window.location.href = '/'; return; }
+      if (r.status === 403) {
+        document.getElementById('main').innerHTML =
+          '<section><h2>Forbidden</h2><p class="sub">You don\'t have admin access. Ask the owner to add your email to <code>ADMIN_EMAILS</code>.</p></section>';
+        throw new Error('Forbidden');
+      }
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+      return data;
+    }
+
+    function fmtDate(iso) {
+      if (!iso) return '';
+      return new Date(iso).toLocaleString('en-GB', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+    }
+
+    async function load() {
+      try {
+        const [requests, allowed] = await Promise.all([
+          api('GET', '/api/admin/requests'),
+          api('GET', '/api/admin/allowed'),
+        ]);
+        render(requests, allowed);
+      } catch (e) {
+        if (e.message !== 'Forbidden') toast(e.message, true);
+      }
+    }
+
+    function render(requests, allowed) {
+      const pending = requests.filter(r => r.status === 'pending');
+      const past    = requests.filter(r => r.status !== 'pending').slice(0, 25);
+
+      const reqRow = r => `
+        <tr data-id="${r.id}">
+          <td>${esc(r.name)}</td>
+          <td>${esc(r.email)}</td>
+          <td>${fmtDate(r.created_at)}</td>
+          <td>
+            ${r.status === 'pending'
+              ? `<div class="actions">
+                   <button class="btn-approve" onclick="approve(${r.id})">Approve</button>
+                   <button class="btn-reject"  onclick="reject(${r.id})">Reject</button>
+                 </div>`
+              : `<span class="badge badge-${r.status}">${r.status}</span>`
+            }
+          </td>
+        </tr>`;
+
+      const allowRow = a => `
+        <tr>
+          <td>${esc(a.email)}</td>
+          <td>${esc(a.note || '')}</td>
+          <td>${fmtDate(a.approved_at)}</td>
+          <td class="actions">
+            ${a.note === 'admin'
+              ? '<span style="color:#94a3b8;font-size:0.78rem;">admin</span>'
+              : `<button class="btn-revoke" onclick="revoke('${esc(a.email)}')">Revoke</button>`}
+          </td>
+        </tr>`;
+
+      $('#main').innerHTML = `
+        <h1>Access management</h1>
+        <p class="sub">Approve incoming requests and manage who can sign in.</p>
+
+        <section>
+          <h2>Pending requests <span style="color:#94a3b8;font-weight:400;">(${pending.length})</span></h2>
+          ${pending.length === 0
+            ? '<div class="empty">No pending requests.</div>'
+            : `<table>
+                 <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th></th></tr></thead>
+                 <tbody>${pending.map(reqRow).join('')}</tbody>
+               </table>`}
+        </section>
+
+        <section>
+          <h2>Approved emails <span style="color:#94a3b8;font-weight:400;">(${allowed.length})</span></h2>
+          ${allowed.length === 0
+            ? '<div class="empty">No approved emails yet.</div>'
+            : `<table>
+                 <thead><tr><th>Email</th><th>Note</th><th>Approved</th><th></th></tr></thead>
+                 <tbody>${allowed.map(allowRow).join('')}</tbody>
+               </table>`}
+        </section>
+
+        ${past.length > 0 ? `
+          <section>
+            <h2>Recent decisions</h2>
+            <table>
+              <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th>Status</th></tr></thead>
+              <tbody>${past.map(reqRow).join('')}</tbody>
+            </table>
+          </section>` : ''}
+      `;
+    }
+
+    async function approve(id) {
+      try { await api('POST', '/api/admin/requests/' + id + '/approve'); toast('Approved'); load(); }
+      catch (e) { toast(e.message, true); }
+    }
+    async function reject(id) {
+      if (!confirm('Reject this request?')) return;
+      try { await api('POST', '/api/admin/requests/' + id + '/reject'); toast('Rejected'); load(); }
+      catch (e) { toast(e.message, true); }
+    }
+    async function revoke(email) {
+      if (!confirm('Revoke access for ' + email + '?')) return;
+      try { await api('DELETE', '/api/admin/allowed/' + encodeURIComponent(email)); toast('Revoked'); load(); }
+      catch (e) { toast(e.message, true); }
+    }
+
+    load();
+  </script>
+</body>
+</html>

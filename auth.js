@@ -52,6 +52,25 @@ async function ensureAuthTables() {
   }
 }
 
+function getAdminEmails() {
+  return new Set(
+    (process.env.ADMIN_EMAILS || '')
+      .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+  );
+}
+
+function isAdminEmail(email) {
+  return !!email && getAdminEmails().has(email.toLowerCase());
+}
+
+const requireAdmin = (req, res, next) => {
+  const email = req.user?.claims?.email;
+  if (!isAdminEmail(email)) {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+  next();
+};
+
 async function isEmailApproved(email) {
   if (!email) return false;
   const lower = email.toLowerCase();
@@ -235,9 +254,95 @@ async function setupAuth(app) {
   app.get('/api/auth/user', isAuthenticated, async (req, res) => {
     try {
       const user = await getUser(req.user.claims.sub);
-      res.json(user || null);
+      const isAdmin = isAdminEmail(req.user.claims.email);
+      res.json(user ? { ...user, isAdmin } : null);
     } catch (e) {
       res.status(500).json({ message: 'Failed to fetch user' });
+    }
+  });
+
+  // ── Admin: review access requests & manage allow-list ──────────────────────
+  app.get('/api/admin/requests', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT id, name, email, status, created_at
+         FROM account_requests
+         ORDER BY (status = 'pending') DESC, created_at DESC
+         LIMIT 200`
+      );
+      res.json(r.rows);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/requests/:id/approve', isAuthenticated, requireAdmin, async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const r = await client.query(
+        `SELECT email FROM account_requests WHERE id = $1`,
+        [req.params.id]
+      );
+      if (r.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Request not found' });
+      }
+      const email = r.rows[0].email.toLowerCase();
+      await client.query(
+        `INSERT INTO allowed_emails (email, note) VALUES ($1, 'approved via admin')
+         ON CONFLICT (email) DO NOTHING`,
+        [email]
+      );
+      await client.query(
+        `UPDATE account_requests SET status = 'approved' WHERE id = $1`,
+        [req.params.id]
+      );
+      await client.query('COMMIT');
+      res.json({ ok: true, email });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      res.status(500).json({ error: e.message });
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post('/api/admin/requests/:id/reject', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `UPDATE account_requests SET status = 'rejected' WHERE id = $1`,
+        [req.params.id]
+      );
+      if (r.rowCount === 0) return res.status(404).json({ error: 'Request not found' });
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/allowed', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT email, approved_at, note FROM allowed_emails ORDER BY approved_at DESC`
+      );
+      res.json(r.rows);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete('/api/admin/allowed/:email', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const email = req.params.email.toLowerCase();
+      // Don't let admins lock themselves out by removing their own admin email.
+      if (isAdminEmail(email)) {
+        return res.status(400).json({ error: 'Cannot revoke an ADMIN_EMAILS address.' });
+      }
+      await pool.query(`DELETE FROM allowed_emails WHERE email = $1`, [email]);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
     }
   });
 

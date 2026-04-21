@@ -971,6 +971,7 @@ function renderAuthStatus() {
            ? `<img src="${escHtml(user.profile_image_url)}" alt="" style="width:22px;height:22px;border-radius:50%;object-fit:cover;">`
            : ''}
          <span class="hidden sm:inline">${userName}</span>
+         ${user.isAdmin ? '<a href="/admin.html" class="text-slate-400 hover:text-white text-xs transition" title="Admin">Admin</a>' : ''}
          <a href="/api/logout" class="text-slate-400 hover:text-white text-xs transition" title="Sign out">Sign out</a>
        </div>`
     : `<a href="/api/login" class="connect-btn connect-btn-google">Sign in</a>`;
