@@ -32,7 +32,7 @@ function requireHubspotToken(req, res, next) {
   next();
 }
 // Replit Auth gate for all /api/* routes (whitelist auth-flow endpoints).
-const AUTH_WHITELIST = new Set(['/login', '/callback', '/auth/user']);
+const AUTH_WHITELIST = new Set(['/login', '/callback', '/auth/user', '/request-access']);
 app.use('/api', (req, res, next) => {
   if (AUTH_WHITELIST.has(req.path)) return next();
   return isAuthenticated(req, res, next);

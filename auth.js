@@ -7,7 +7,7 @@ const { Pool } = require('pg');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// Ensure required tables exist (sessions + users).
+// Ensure required tables exist.
 async function ensureAuthTables() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (
@@ -25,7 +25,38 @@ async function ensureAuthTables() {
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS allowed_emails (
+      email VARCHAR PRIMARY KEY,
+      approved_at TIMESTAMP DEFAULT NOW(),
+      note VARCHAR
+    );
+    CREATE TABLE IF NOT EXISTS account_requests (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR NOT NULL,
+      email VARCHAR NOT NULL,
+      status VARCHAR NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS "IDX_account_requests_email" ON account_requests (email);
   `);
+
+  // Seed admin emails from env var.
+  const admins = (process.env.ADMIN_EMAILS || '')
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  for (const email of admins) {
+    await pool.query(
+      `INSERT INTO allowed_emails (email, note) VALUES ($1, 'admin')
+       ON CONFLICT (email) DO NOTHING`,
+      [email]
+    );
+  }
+}
+
+async function isEmailApproved(email) {
+  if (!email) return false;
+  const lower = email.toLowerCase();
+  const r = await pool.query('SELECT 1 FROM allowed_emails WHERE email = $1', [lower]);
+  return r.rowCount > 0;
 }
 
 async function upsertUser(claims) {
@@ -114,10 +145,15 @@ async function setupAuth(app) {
   const { Strategy } = await import('openid-client/passport');
 
   const verify = async (tokens, verified) => {
-    const user = {};
-    updateUserSession(user, tokens);
     try {
-      await upsertUser(tokens.claims());
+      const claims = tokens.claims();
+      const email = (claims.email || '').toLowerCase();
+      if (!(await isEmailApproved(email))) {
+        return verified(null, false, { message: 'not_approved' });
+      }
+      const user = {};
+      updateUserSession(user, tokens);
+      await upsertUser(claims);
       verified(null, user);
     } catch (e) {
       verified(e);
@@ -157,7 +193,7 @@ async function setupAuth(app) {
     ensureStrategy(req.hostname);
     passport.authenticate(`replitauth:${req.hostname}`, {
       successReturnToOrRedirect: '/',
-      failureRedirect: '/api/login',
+      failureRedirect: '/?denied=1',
     })(req, res, next);
   });
 
@@ -170,6 +206,30 @@ async function setupAuth(app) {
         }).href
       );
     });
+  });
+
+  // Public: anyone can request access by submitting their name + email.
+  app.post('/api/request-access', async (req, res) => {
+    try {
+      const name  = (req.body?.name  || '').trim();
+      const email = (req.body?.email || '').trim().toLowerCase();
+      if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: 'Please provide a valid name and email.' });
+      }
+      // If already approved, tell the user to just sign in.
+      if (await isEmailApproved(email)) {
+        return res.json({ ok: true, alreadyApproved: true });
+      }
+      await pool.query(
+        `INSERT INTO account_requests (name, email) VALUES ($1, $2)`,
+        [name, email]
+      );
+      console.log(`  Access request: ${name} <${email}>`);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error('request-access failed:', e.message);
+      res.status(500).json({ error: 'Could not submit request. Please try again later.' });
+    }
   });
 
   app.get('/api/auth/user', isAuthenticated, async (req, res) => {

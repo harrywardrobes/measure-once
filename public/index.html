@@ -15,6 +15,40 @@
 </head>
 <body>
 
+  <!-- Access Gate (shown when user is not signed in / approved) -->
+  <div id="access-gate" class="access-gate" style="display:none;">
+    <div class="access-card">
+      <div class="access-brand">
+        <img src="assets/logo-mark-paper.png" alt="" style="height:32px;width:auto;">
+        <span style="font-family:'Anton',sans-serif;font-size:1.05rem;letter-spacing:0.04em;text-transform:uppercase;color:#0f172a;">Measure Once</span>
+      </div>
+      <h1 class="access-title">Request access</h1>
+      <p class="access-sub">This dashboard is invite-only. Leave your name and email and we'll get back to you.</p>
+
+      <div id="access-denied-banner" class="access-banner" style="display:none;">
+        Your email isn't on the access list yet. Submit a request below — once approved, you'll be able to sign in.
+      </div>
+
+      <form id="request-access-form" class="access-form" onsubmit="submitAccessRequest(event)">
+        <label class="access-label">
+          <span>Name</span>
+          <input type="text" id="ra-name" required autocomplete="name" placeholder="Your full name">
+        </label>
+        <label class="access-label">
+          <span>Email</span>
+          <input type="email" id="ra-email" required autocomplete="email" placeholder="you@example.com">
+        </label>
+        <button type="submit" id="ra-submit" class="access-submit">Request access</button>
+      </form>
+
+      <div id="request-access-message" class="access-message" style="display:none;"></div>
+
+      <div class="access-footer">
+        Already approved? <a href="/api/login">Sign in</a>
+      </div>
+    </div>
+  </div>
+
   <!-- Top Nav -->
   <header class="app-header">
     <div class="flex items-center gap-2.5 min-w-0">

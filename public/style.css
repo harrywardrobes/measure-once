@@ -1266,3 +1266,76 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   color: var(--ink-4);
   margin-bottom: 8px;
 }
+
+/* ── Access Gate ─────────────────────────────────────────────────────────── */
+.access-gate {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+.access-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  width: 100%; max-width: 420px;
+  padding: 32px;
+}
+.access-brand {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 24px;
+}
+.access-title {
+  font-size: 1.5rem; font-weight: 600;
+  color: #0f172a; margin: 0 0 8px;
+}
+.access-sub {
+  font-size: 0.9rem; color: #64748b;
+  margin: 0 0 20px; line-height: 1.5;
+}
+.access-banner {
+  background: #fef3c7; color: #92400e;
+  border: 1px solid #fde68a; border-radius: 8px;
+  padding: 10px 12px; font-size: 0.85rem;
+  margin-bottom: 16px;
+}
+.access-form { display: flex; flex-direction: column; gap: 14px; }
+.access-label { display: flex; flex-direction: column; gap: 6px; }
+.access-label > span {
+  font-size: 0.8rem; font-weight: 500;
+  color: #475569; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.access-label input {
+  border: 1px solid #cbd5e1; border-radius: 8px;
+  padding: 10px 12px; font-size: 0.95rem;
+  outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.access-label input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+}
+.access-submit {
+  margin-top: 4px;
+  background: #0f172a; color: #fff;
+  border: none; border-radius: 8px;
+  padding: 11px; font-size: 0.95rem; font-weight: 500;
+  cursor: pointer; transition: background 0.15s;
+}
+.access-submit:hover:not(:disabled) { background: #1e293b; }
+.access-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+.access-message {
+  margin-top: 16px; padding: 12px 14px;
+  border-radius: 8px; font-size: 0.9rem;
+}
+.access-message.success {
+  background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;
+}
+.access-message.error {
+  background: #fee2e2; color: #991b1b; border: 1px solid #fecaca;
+}
+.access-footer {
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid #e2e8f0;
+  font-size: 0.85rem; color: #64748b; text-align: center;
+}
+.access-footer a { color: #3b82f6; text-decoration: none; }
+.access-footer a:hover { text-decoration: underline; }
