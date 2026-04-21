@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#200842">
+  <title>Measure Once</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Top Nav -->
+  <header class="app-header">
+    <div class="flex items-center gap-2.5 min-w-0">
+      <img src="assets/logo-mark-paper.png" alt="Harry Wardrobes" class="flex-shrink-0" style="height:28px;width:auto;">
+      <span class="hidden sm:inline" style="font-family:'Anton',sans-serif;font-size:1rem;letter-spacing:0.04em;color:#fff;line-height:1;text-transform:uppercase;">Measure Once</span>
+    </div>
+
+    <div class="header-tabs">
+      <button class="header-tab header-tab-active" id="tab-btn-customers" onclick="setTab('customers')">Customers</button>
+      <button class="header-tab" id="tab-btn-projects" onclick="setTab('projects')">Projects</button>
+      <button class="header-tab" id="tab-btn-tasks" onclick="setTab('tasks')">Tasks</button>
+    </div>
+
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <div id="auth-status" class="flex items-center gap-2"></div>
+      <button onclick="refreshDeals()" title="Refresh" class="nav-btn" id="refresh-btn">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Customers Tab -->
+  <div id="tab-customers" class="app-body">
+
+    <!-- List Panel (customer list) -->
+    <aside id="list-panel" class="list-panel">
+      <div class="p-3 border-b border-slate-100 flex-shrink-0">
+        <input id="search" type="text" placeholder="Search customers..."
+          oninput="filterDeals(this.value)"
+          class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition">
+        <div class="flex gap-1.5 mt-2">
+          <select id="stage-filter" onchange="setStageFilter(this.value)"
+            class="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-blue-400 transition"
+            style="font-size:13px">
+            <option value="">All stages</option>
+          </select>
+          <button id="archived-toggle" onclick="toggleArchived()" class="filter-btn">
+            Archived
+          </button>
+        </div>
+        <div id="deal-count" class="text-xs text-slate-400 mt-1.5 px-0.5"></div>
+      </div>
+      <div id="customer-list" class="flex-1 overflow-y-auto">
+        <div class="flex items-center gap-2 p-4 text-slate-400 text-sm">
+          <div class="spinner"></div> Loading...
+        </div>
+      </div>
+    </aside>
+
+    <!-- Workflow Panel -->
+    <main id="workflow-panel" class="workflow-panel">
+      <div id="empty-state" class="flex items-center justify-center h-full">
+        <div class="text-center px-6" style="color:var(--stone-deep)">
+          <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin:0 auto 16px;opacity:0.4">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+          </svg>
+          <p style="font-weight:600;color:var(--ink-3);font-size:1rem;">Select a customer</p>
+          <p style="font-size:0.875rem;margin-top:4px;color:var(--stone-deep);">Choose a customer from the list to view their project workflow</p>
+        </div>
+      </div>
+      <div id="workflow-view" class="hidden">
+        <!-- Populated by JS -->
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Projects Tab -->
+  <div id="tab-projects" class="projects-tab hidden">
+    <div id="projects-view"></div>
+  </div>
+
+  <!-- Tasks Tab -->
+  <div id="tab-tasks" class="tasks-tab hidden">
+    <div id="tasks-view">
+      <!-- Populated by JS -->
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

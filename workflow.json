@@ -1,0 +1,84 @@
+{
+  "stages": {
+    "sales": {
+      "label": "Sales",
+      "statuses": [
+        { "id": "form_submission",   "label": "Form submission",      "hint": "Email + WhatsApp customer asking for more information" },
+        { "id": "attempted_contact", "label": "Attempted to contact", "hint": "If no response in 2 working days, call to discuss" },
+        { "id": "in_progress",       "label": "In progress",          "hint": "" },
+        { "id": "awaiting_photos",   "label": "Awaiting photos",      "hint": "" },
+        { "id": "rough_estimate",    "label": "Rough estimate",       "hint": "" },
+        { "id": "unqualified",       "label": "Unqualified",          "hint": "" },
+        { "id": "not_suitable",      "label": "Not suitable",         "hint": "" },
+        { "id": "bad_timing",        "label": "Bad timing",           "hint": "Get back in touch in 1 month, or date suggested" }
+      ]
+    },
+    "designvisit": {
+      "label": "Design Visit",
+      "statuses": [
+        { "id": "scheduled", "label": "Scheduled", "hint": "Add date to calendar" },
+        { "id": "open_deal",  "label": "Open deal", "hint": "" }
+      ]
+    },
+    "survey": {
+      "label": "Survey",
+      "statuses": [
+        { "id": "design_accepted", "label": "Design accepted", "hint": "" },
+        { "id": "awaiting_deposit", "label": "Awaiting deposit invoice", "hint": "" },
+        { "id": "scheduled", "label": "Scheduled", "hint": "" },
+        { "id": "in_progress", "label": "In progress", "hint": "Check date with customer" },
+        { "id": "ready_for_production", "label": "Ready for production", "hint": "Email to customer, confirm date of installation" }
+      ]
+    },
+    "order": {
+      "label": "Order",
+      "statuses": [
+        { "id": "order_doors", "label": "Order doors", "hint": "Order in for previous Monday or Tuesday" },
+        { "id": "order_sheets", "label": "Order sheets", "hint": "" },
+        { "id": "order_hardware", "label": "Order hardware", "hint": "" }
+      ]
+    },
+    "workshop": {
+      "label": "Workshop",
+      "statuses": [
+        { "id": "print_installer_pack", "label": "Print installer pack", "hint": "Renders, cutlist, any installation instructions" },
+        { "id": "print_labels", "label": "Print labels", "hint": "" },
+        { "id": "notify_customer", "label": "Notify customer production is underway", "hint": "" },
+        { "id": "prep_framework", "label": "Prep framework, timber and MDF", "hint": "" },
+        { "id": "prep_sheet_materials", "label": "Prep sheet materials", "hint": "" },
+        { "id": "cut_sheet_materials", "label": "Cut sheet materials", "hint": "" }
+      ]
+    },
+    "packing": {
+      "label": "Packing",
+      "statuses": [
+        { "id": "in_progress", "label": "In progress", "hint": "" },
+        { "id": "date_agreed", "label": "Date / time agreed with customer", "hint": "" },
+        { "id": "ready_to_load", "label": "Ready to load into van", "hint": "" }
+      ]
+    },
+    "delivery": {
+      "label": "Delivery",
+      "statuses": [
+        { "id": "loaded", "label": "Loaded into van", "hint": "" },
+        { "id": "delivered", "label": "Delivered", "hint": "Note date, time, and any comments" }
+      ]
+    },
+    "installation": {
+      "label": "Installation",
+      "statuses": [
+        { "id": "scheduled", "label": "Scheduled", "hint": "" },
+        { "id": "in_progress", "label": "In progress", "hint": "" },
+        { "id": "complete", "label": "Complete", "hint": "" },
+        { "id": "final_invoice_sent", "label": "Final invoice sent", "hint": "" }
+      ]
+    },
+    "aftercare": {
+      "label": "Aftercare",
+      "statuses": [
+        { "id": "final_payment", "label": "Final payment received", "hint": "" },
+        { "id": "thank_you", "label": "Thank you message sent", "hint": "Email customer thanking them and requesting a review" }
+      ]
+    }
+  }
+}

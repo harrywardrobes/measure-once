@@ -1,0 +1,20 @@
+
+
+# HubSpot config file
+hubspot.config.yml
+
+# Secrets — never commit
+.env
+
+# Customer data (GDPR)
+data/
+
+# Dependencies
+node_modules/
+
+# HubSpot CLI project folders
+harry-wardrobes-crm/
+measure-once/
+
+# Claude Code local settings
+.claude/settings.local.json
