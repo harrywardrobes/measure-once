@@ -7,7 +7,8 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 3456;
+const PORT = process.env.PORT || 5000;
+const HOST = '0.0.0.0';
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json());
@@ -755,7 +756,7 @@ app.get('/api/calendar/upcoming', async (req, res) => {
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-app.listen(PORT, async () => {
+app.listen(PORT, HOST, async () => {
   console.log(`\n  Measure Once`);
   console.log(`  Running at: http://localhost:${PORT}\n`);
   await ensureHubSpotProperties();
