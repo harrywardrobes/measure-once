@@ -1,10 +1,10 @@
 require('dotenv').config();
 const express = require('express');
-const session = require('express-session');
 const axios = require('axios').create({ timeout: 10000 });
 const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
+const { installSession, setupAuth, isAuthenticated } = require('./auth');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -13,12 +13,7 @@ const HOST = '0.0.0.0';
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'hw-crm-secret-change-me',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000, secure: false }
-}));
+installSession(app);
 
 // ── HubSpot ───────────────────────────────────────────────────────────────────
 const HS = 'https://api.hubapi.com';
@@ -756,8 +751,17 @@ app.get('/api/calendar/upcoming', async (req, res) => {
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-app.listen(PORT, HOST, async () => {
-  console.log(`\n  Measure Once`);
-  console.log(`  Running at: http://localhost:${PORT}\n`);
-  await ensureHubSpotProperties();
-});
+(async () => {
+  try {
+    const ok = await setupAuth(app);
+    if (ok) console.log('  Replit Auth initialized');
+  } catch (e) {
+    console.error('  Replit Auth setup failed:', e.message);
+  }
+
+  app.listen(PORT, HOST, async () => {
+    console.log(`\n  Measure Once`);
+    console.log(`  Running at: http://localhost:${PORT}\n`);
+    await ensureHubSpotProperties();
+  });
+})();

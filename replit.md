@@ -12,7 +12,16 @@ Project management dashboard (HubSpot CRM integration).
 - Server binds to `0.0.0.0:5000` (PORT env var override supported)
 - Deployment: VM target, `node server.js`
 
-## Required Secrets (optional, for full functionality)
-- `HUBSPOT_TOKEN` — HubSpot private app token (otherwise `/api/*` endpoints return 503)
-- `SESSION_SECRET` — express-session secret
+## Authentication
+Replit Auth (OpenID Connect) is wired in via `auth.js`. Login/logout endpoints:
+- `GET /api/login` — start login
+- `GET /api/callback` — OIDC callback
+- `GET /api/logout` — log out
+- `GET /api/auth/user` — current user (requires session)
+
+Sessions and users are stored in PostgreSQL (`sessions` and `users` tables, auto-created on boot). Protect routes by importing `isAuthenticated` from `./auth` and adding it as middleware.
+
+## Required Secrets
+- `DATABASE_URL`, `SESSION_SECRET`, `REPL_ID`, `REPLIT_DOMAINS` — provided by Replit; required for auth
+- `HUBSPOT_TOKEN` — HubSpot private app token (otherwise `/api/*` HubSpot endpoints return 503)
 - `GOOGLE_*` — Google OAuth credentials for calendar integration
