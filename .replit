@@ -42,3 +42,4 @@ run = ["node", "server.js"]
 
 [userenv.shared]
 ADMIN_EMAILS = "harry@harrywardrobes.co.uk,harrygautierdesign@gmail.com"
+HUBSPOT_ACCESS_TOKEN = "pat-eu1-5df04b9a-4112-48b7-9417-44cec3a87d0d"
