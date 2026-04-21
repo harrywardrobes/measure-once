@@ -137,6 +137,10 @@ async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const r = await fetch(path, opts);
+  if (r.status === 401) {
+    window.location.href = '/api/login';
+    throw new Error('Unauthorized');
+  }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
   return data;
@@ -236,7 +240,12 @@ async function init() {
 }
 
 async function checkAuthStatus() {
-  state.authStatus = await GET('/auth/status');
+  const [status, user] = await Promise.all([
+    GET('/auth/status'),
+    fetch('/api/auth/user').then(r => r.ok ? r.json() : null).catch(() => null),
+  ]);
+  state.authStatus = status;
+  state.user = user;
   renderAuthStatus();
 }
 
@@ -896,7 +905,20 @@ async function deletePersonalTask(id) {
 function renderAuthStatus() {
   const el = document.getElementById('auth-status');
   const { google, hubspot } = state.authStatus;
+  const user = state.user;
   const dot = ok => `<span class="auth-dot ${ok ? 'auth-dot-ok' : 'auth-dot-off'}"></span>`;
+  const userName = user
+    ? escHtml([user.first_name, user.last_name].filter(Boolean).join(' ') || user.email || 'Account')
+    : '';
+  const userBadge = user
+    ? `<div class="flex items-center gap-2 text-xs text-slate-300">
+         ${user.profile_image_url
+           ? `<img src="${escHtml(user.profile_image_url)}" alt="" style="width:22px;height:22px;border-radius:50%;object-fit:cover;">`
+           : ''}
+         <span class="hidden sm:inline">${userName}</span>
+         <a href="/api/logout" class="text-slate-400 hover:text-white text-xs transition" title="Sign out">Sign out</a>
+       </div>`
+    : `<a href="/api/login" class="connect-btn connect-btn-google">Sign in</a>`;
   el.innerHTML = `
     <div class="flex items-center gap-1 text-xs text-slate-400">
       ${dot(hubspot)}<span class="hidden sm:inline">HubSpot</span>
@@ -910,6 +932,7 @@ function renderAuthStatus() {
            + <span class="hidden sm:inline">Google</span><span class="sm:hidden">G</span>
          </a>`
     }
+    ${userBadge}
   `;
 }
 
