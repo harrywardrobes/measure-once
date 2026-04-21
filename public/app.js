@@ -1213,6 +1213,27 @@ async function submitAddRoom() {
   renderFullWorkflowView();
 }
 
+function deleteRoom(idx) {
+  if (state.allRooms.length <= 1) return;
+  const snapshot = JSON.parse(JSON.stringify(state.allRooms));
+  const prevSelected = state.selectedRoomIdx;
+  const removed = state.allRooms[idx];
+  const removedName = removed?.room || `Room ${idx + 1}`;
+
+  state.allRooms.splice(idx, 1);
+  if (state.selectedRoomIdx >= state.allRooms.length) {
+    state.selectedRoomIdx = state.allRooms.length - 1;
+  } else if (idx < prevSelected) {
+    state.selectedRoomIdx = prevSelected - 1;
+  }
+  state.workflowData = state.allRooms[state.selectedRoomIdx] || null;
+
+  updateRoomCache();
+  renderCustomerList();
+  renderFullWorkflowView();
+  scheduleSave(`Deleted "${removedName}"`, snapshot);
+}
+
 function setRoomStatus(value) {
   const snapshot = JSON.parse(JSON.stringify(state.allRooms));
   state.workflowData.roomStatus = value;
@@ -1258,11 +1279,16 @@ function renderRoomTabs() {
   if (!el) return;
 
   const roomStatus = state.workflowData?.roomStatus || 'active';
+  const canDelete = state.allRooms.length > 1;
   const tabs = state.allRooms.map((r, idx) => `
-    <button onclick="switchRoom(${idx})"
-      class="room-tab ${idx === state.selectedRoomIdx ? 'room-tab-active' : ''}">
-      ${escHtml(r.room || `Room ${idx + 1}`)}
-    </button>
+    <span class="room-tab-wrap ${idx === state.selectedRoomIdx ? 'room-tab-wrap-active' : ''}">
+      <button onclick="switchRoom(${idx})"
+        class="room-tab ${idx === state.selectedRoomIdx ? 'room-tab-active' : ''}">
+        ${escHtml(r.room || `Room ${idx + 1}`)}
+      </button>
+      ${canDelete ? `<button class="room-tab-del" title="Delete room"
+        onclick="event.stopPropagation();deleteRoom(${idx})">×</button>` : ''}
+    </span>
   `).join('');
 
   const addForm = state.addingRoom ? `

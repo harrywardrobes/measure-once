@@ -390,6 +390,29 @@ body.showing-workflow .workflow-panel { display: flex; }
   -webkit-tap-highlight-color: transparent;
 }
 .room-tab-add:hover { color: var(--orchid); border-color: var(--orchid-soft); }
+.room-tab-wrap { display: inline-flex; align-items: stretch; }
+.room-tab-wrap .room-tab { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none; }
+.room-tab-del {
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0 8px;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border: 1px solid var(--stone);
+  border-left: none;
+  background: var(--chalk);
+  color: var(--ink-3);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.room-tab-del:hover { background: #fee2e2; color: #b91c1c; }
+.room-tab-wrap-active .room-tab-del {
+  background: var(--plum);
+  color: #fff;
+  border-color: var(--plum);
+}
+.room-tab-wrap-active .room-tab-del:hover { background: #b91c1c; border-color: #b91c1c; }
 
 /* ── Stage Cards ─────────────────────────────────────────────────────────────── */
 .stage-card {
