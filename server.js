@@ -18,15 +18,15 @@ installSession(app);
 // ── HubSpot ───────────────────────────────────────────────────────────────────
 const HS = 'https://api.hubapi.com';
 const hsHeaders = () => ({
-  Authorization: `Bearer ${process.env.HUBSPOT_TOKEN}`,
+  Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
   'Content-Type': 'application/json'
 });
 
 // Guard: return a clear error if no token is set
 function requireHubspotToken(req, res, next) {
-  if (!process.env.HUBSPOT_TOKEN) {
+  if (!process.env.HUBSPOT_ACCESS_TOKEN) {
     return res.status(503).json({
-      error: 'HUBSPOT_TOKEN is not set. Add it to your .env file and restart the server.'
+      error: 'HUBSPOT_ACCESS_TOKEN is not set. Add it to your .env file and restart the server.'
     });
   }
   next();
@@ -192,7 +192,7 @@ app.get('/auth/logout-google', (req, res) => {
 app.get('/auth/status', (req, res) => {
   res.json({
     google:  !!req.session.googleTokens,
-    hubspot: !!process.env.HUBSPOT_TOKEN
+    hubspot: !!process.env.HUBSPOT_ACCESS_TOKEN
   });
 });
 
