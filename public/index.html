@@ -60,6 +60,7 @@
       <button class="header-tab header-tab-active" id="tab-btn-customers" onclick="setTab('customers')">Customers</button>
       <button class="header-tab" id="tab-btn-projects" onclick="setTab('projects')">Projects</button>
       <button class="header-tab" id="tab-btn-tasks" onclick="setTab('tasks')">Tasks</button>
+      <button class="header-tab" id="tab-btn-invoices" onclick="setTab('invoices')">Invoices</button>
     </div>
 
     <div class="flex items-center gap-2 flex-shrink-0">
@@ -129,6 +130,11 @@
     <div id="tasks-view">
       <!-- Populated by JS -->
     </div>
+  </div>
+
+  <!-- Invoices Tab -->
+  <div id="tab-invoices" class="invoices-tab hidden">
+    <div id="invoices-view"></div>
   </div>
 
   <script src="app.js"></script>

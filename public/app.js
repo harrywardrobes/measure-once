@@ -130,6 +130,13 @@ const state = {
   calendarEvents: [],
   calendarConnected: false,
   showAddPersonalTask: false,
+  qb: {
+    connected: false,
+    company: null,
+    invoices: [],
+    loaded: false,
+    loading: false,
+  },
 };
 
 // ── API helpers ───────────────────────────────────────────────────────────────
@@ -248,6 +255,7 @@ async function init() {
     await Promise.all([loadOpenLeads(), loadWorkflowStages()]);
     populateStageFilter();
     renderCustomerList();
+    loadQBInvoices();
   } catch (e) {
     document.getElementById('customer-list').innerHTML =
       `<div class="p-4 text-sm text-red-500">Failed to load: ${escHtml(e.message)}</div>`;
@@ -424,6 +432,12 @@ function renderCustomerList() {
         ? `<span class="urgency-dot urgency-orange" title="Task due within 2 working days"></span>`
         : '';
 
+    const qbInvs    = matchInvoicesForContact(contact);
+    const qbTotal   = qbInvs.reduce((s, inv) => s + inv.balance, 0);
+    const qbBadge   = qbInvs.length > 0
+      ? `<span class="qb-badge" title="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}">£${qbTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
+      : '';
+
     const stagePillHtml = stageLabel && colour
       ? `<span class="stage-pill" style="background:${colour.light};color:${colour.text}">${escHtml(stageLabel)}</span>`
       : `<span class="stage-pill" style="background:${stageColour('sales').light};color:${stageColour('sales').text}">Sales</span>`;
@@ -441,6 +455,7 @@ function renderCustomerList() {
         </div>
         <div class="customer-card-meta">
           ${stagePillHtml}
+          ${qbBadge}
           ${email ? `<span class="customer-card-value">${escHtml(email)}</span>` : ''}
         </div>
       </div>
@@ -683,13 +698,14 @@ async function runBottomAction() {
 // ── Tab Navigation ────────────────────────────────────────────────────────────
 function setTab(tab) {
   state.activeTab = tab;
-  ['customers', 'tasks', 'projects'].forEach(t => {
+  ['customers', 'tasks', 'projects', 'invoices'].forEach(t => {
     document.getElementById(`tab-${t}`)?.classList.toggle('hidden', tab !== t);
     document.getElementById(`tab-btn-${t}`)?.classList.toggle('header-tab-active', tab === t);
   });
   document.getElementById('refresh-btn').classList.toggle('hidden', tab !== 'customers');
   if (tab === 'tasks')    loadTasksView();
   if (tab === 'projects') renderProjectsView();
+  if (tab === 'invoices') renderInvoicesTab();
 }
 
 // ── Projects View ─────────────────────────────────────────────────────────────
@@ -1258,6 +1274,7 @@ function renderFullWorkflowView() {
     <div class="workflow-inner">
       <div id="comments-section" class="mb-5"></div>
       <div id="room-tabs-section" class="mb-5"></div>
+      <div id="invoices-section" class="mb-5"></div>
       <div id="tasks-section" class="mb-6"></div>
       <div id="workflow-stages" class="space-y-2"></div>
     </div>
@@ -1265,6 +1282,7 @@ function renderFullWorkflowView() {
   renderWorkflowHeader();
   renderComments();
   renderRoomTabs();
+  renderWorkflowInvoices();
   renderTasks();
   renderWorkflowStages();
   renderComments();
@@ -1787,6 +1805,201 @@ async function deleteTask(taskId) {
     renderTasks();
     showToast('Failed to delete task', true);
   }
+}
+
+// ── QuickBooks ────────────────────────────────────────────────────────────────
+async function loadQBInvoices() {
+  try {
+    const status = await fetch('/api/quickbooks/status').then(r => r.json()).catch(() => ({ connected: false }));
+    state.qb.connected = status.connected;
+    state.qb.company   = status.company || null;
+    if (!status.connected) return;
+
+    state.qb.loading = true;
+    const data = await fetch('/api/quickbooks/invoices').then(r => r.json()).catch(() => ({ invoices: [] }));
+    state.qb.invoices = data.invoices || [];
+    state.qb.loaded   = true;
+    state.qb.loading  = false;
+    renderCustomerList();
+    const invEl = document.getElementById('invoices-view');
+    if (invEl && state.activeTab === 'invoices') renderInvoicesTab();
+    const wfInvEl = document.getElementById('invoices-section');
+    if (wfInvEl) renderWorkflowInvoices();
+  } catch {
+    state.qb.loading = false;
+  }
+}
+
+function matchInvoicesForContact(contact) {
+  if (!state.qb.loaded || !state.qb.invoices.length) return [];
+  const email = (contact.properties?.email || '').toLowerCase().trim();
+  const name  = contactName(contact).toLowerCase().trim();
+  return state.qb.invoices.filter(inv => {
+    const custName  = (inv.customerName || '').toLowerCase().trim();
+    const custEmail = (inv.email        || '').toLowerCase().trim();
+    if (email && custEmail && email === custEmail) return true;
+    if (name  && custName  && custName === name)   return true;
+    return false;
+  });
+}
+
+function fmtGBP(amount) {
+  return '£' + Number(amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtQBDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function renderWorkflowInvoices() {
+  const el = document.getElementById('invoices-section');
+  if (!el) return;
+
+  if (!state.qb.connected) { el.innerHTML = ''; return; }
+
+  const contact = state.selectedContact;
+  if (!contact) { el.innerHTML = ''; return; }
+
+  if (!state.qb.loaded) {
+    el.innerHTML = `<div class="qb-section"><div class="qb-section-title">Invoices</div><p class="text-sm text-slate-400">Loading…</p></div>`;
+    return;
+  }
+
+  const invoices = matchInvoicesForContact(contact);
+  if (!invoices.length) {
+    el.innerHTML = `<div class="qb-section"><div class="qb-section-title">Invoices <span class="qb-section-company">${escHtml(state.qb.company || 'QuickBooks')}</span></div><p class="text-sm text-slate-400">No outstanding invoices</p></div>`;
+    return;
+  }
+
+  const total = invoices.reduce((s, inv) => s + inv.balance, 0);
+  const rows  = invoices.sort((a, b) => b.balance - a.balance).map(inv => {
+    const overdue = inv.dueDate && new Date(inv.dueDate) < new Date();
+    return `
+      <div class="qb-invoice-row">
+        <div class="qb-invoice-meta">
+          <span class="qb-invoice-num">Invoice #${escHtml(inv.docNumber || inv.id)}</span>
+          ${inv.dueDate ? `<span class="qb-invoice-date ${overdue ? 'qb-overdue' : ''}">${overdue ? 'Overdue ' : 'Due '}${fmtQBDate(inv.dueDate)}</span>` : ''}
+        </div>
+        <span class="qb-invoice-amount ${overdue ? 'qb-overdue' : ''}">${fmtGBP(inv.balance)}</span>
+      </div>
+    `;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="qb-section">
+      <div class="qb-section-title">
+        Invoices <span class="qb-section-company">${escHtml(state.qb.company || 'QuickBooks')}</span>
+        <span class="qb-section-total">${fmtGBP(total)} outstanding</span>
+      </div>
+      ${rows}
+    </div>
+  `;
+}
+
+function renderInvoicesTab() {
+  const el = document.getElementById('invoices-view');
+  if (!el) return;
+
+  if (!state.qb.connected) {
+    el.innerHTML = `
+      <div class="qb-tab-empty">
+        <div class="qb-tab-empty-icon">
+          <svg width="40" height="40" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity:0.35">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/>
+          </svg>
+        </div>
+        <p class="qb-tab-empty-title">Connect QuickBooks</p>
+        <p class="qb-tab-empty-sub">See outstanding invoices matched to your customers.</p>
+        <a href="/auth/quickbooks" class="qb-connect-btn">Connect QuickBooks</a>
+      </div>
+    `;
+    return;
+  }
+
+  if (state.qb.loading || !state.qb.loaded) {
+    el.innerHTML = `<div class="qb-tab-loading"><div class="spinner"></div> Loading invoices…</div>`;
+    return;
+  }
+
+  const invoices = [...state.qb.invoices].sort((a, b) => b.balance - a.balance);
+  const total    = invoices.reduce((s, inv) => s + inv.balance, 0);
+
+  if (!invoices.length) {
+    el.innerHTML = `
+      <div class="qb-tab-header">
+        <div>
+          <h2 class="qb-tab-title">Outstanding Invoices</h2>
+          <p class="qb-tab-sub">${escHtml(state.qb.company || 'QuickBooks')}</p>
+        </div>
+        <button onclick="disconnectQB()" class="qb-disconnect-btn">Disconnect</button>
+      </div>
+      <div class="qb-tab-empty" style="margin-top:48px">
+        <p class="qb-tab-empty-title">All clear!</p>
+        <p class="qb-tab-empty-sub">No outstanding invoices found.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const rows = invoices.map(inv => {
+    const overdue    = inv.dueDate && new Date(inv.dueDate) < new Date();
+    const matchedContact = state.contacts.find(c => {
+      const email = (c.properties?.email || '').toLowerCase();
+      const name  = contactName(c).toLowerCase();
+      if (email && inv.email && email === inv.email.toLowerCase()) return true;
+      if (name  && inv.customerName && name === inv.customerName.toLowerCase()) return true;
+      return false;
+    });
+
+    return `
+      <div class="qb-row">
+        <div class="qb-row-customer">
+          <span class="qb-row-name">${escHtml(inv.customerName || '—')}</span>
+          ${matchedContact
+            ? `<span class="qb-row-linked" title="Matched to HubSpot contact">
+                <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                Linked
+              </span>`
+            : ''}
+        </div>
+        <div class="qb-row-meta">
+          <span class="qb-row-num">Inv #${escHtml(inv.docNumber || inv.id)}</span>
+          ${inv.dueDate ? `<span class="qb-row-date ${overdue ? 'qb-overdue' : ''}">Due ${fmtQBDate(inv.dueDate)}</span>` : ''}
+        </div>
+        <span class="qb-row-amount ${overdue ? 'qb-overdue' : ''}">${fmtGBP(inv.balance)}</span>
+      </div>
+    `;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="qb-tab-header">
+      <div>
+        <h2 class="qb-tab-title">Outstanding Invoices</h2>
+        <p class="qb-tab-sub">${escHtml(state.qb.company || 'QuickBooks')} · ${invoices.length} invoice${invoices.length !== 1 ? 's' : ''} · ${fmtGBP(total)} total</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="loadQBInvoices()" class="qb-refresh-btn" title="Refresh invoices">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Refresh
+        </button>
+        <button onclick="disconnectQB()" class="qb-disconnect-btn">Disconnect</button>
+      </div>
+    </div>
+    <div class="qb-list">${rows}</div>
+  `;
+}
+
+async function disconnectQB() {
+  await fetch('/auth/quickbooks/disconnect').catch(() => {});
+  state.qb = { connected: false, company: null, invoices: [], loaded: false, loading: false };
+  renderCustomerList();
+  renderInvoicesTab();
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────

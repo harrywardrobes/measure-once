@@ -1362,3 +1362,106 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .access-footer a { color: #3b82f6; text-decoration: none; }
 .access-footer a:hover { text-decoration: underline; }
+
+/* ── QuickBooks ───────────────────────────────────────────────────────────────── */
+.qb-badge {
+  display: inline-flex; align-items: center;
+  font-size: 0.68rem; font-weight: 700;
+  padding: 2px 7px; border-radius: 999px;
+  background: #fef3c7; color: #92400e;
+  border: 1px solid #fde68a;
+  white-space: nowrap;
+}
+
+/* Workflow view — invoices section */
+.qb-section {
+  background: var(--chalk);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+.qb-section-title {
+  font-size: 0.8rem; font-weight: 700;
+  color: var(--ink-2); margin-bottom: 10px;
+  display: flex; align-items: baseline; gap: 6px;
+}
+.qb-section-company {
+  font-size: 0.72rem; font-weight: 500; color: var(--ink-3);
+}
+.qb-section-total {
+  margin-left: auto;
+  font-size: 0.75rem; font-weight: 700; color: #92400e;
+}
+.qb-invoice-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 0;
+  border-top: 1px solid var(--stone);
+  gap: 8px;
+}
+.qb-invoice-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.qb-invoice-num  { font-size: 0.8rem; font-weight: 600; color: var(--ink-2); }
+.qb-invoice-date { font-size: 0.72rem; color: var(--ink-3); }
+.qb-invoice-amount { font-size: 0.85rem; font-weight: 700; color: var(--ink-1); white-space: nowrap; flex-shrink: 0; }
+.qb-overdue { color: #dc2626 !important; }
+
+/* Invoices tab */
+.invoices-tab { flex: 1; overflow-y: auto; padding: 24px; max-width: 860px; margin: 0 auto; width: 100%; }
+.qb-tab-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 20px; gap: 12px; flex-wrap: wrap;
+}
+.qb-tab-title { font-size: 1.15rem; font-weight: 700; color: var(--ink-1); }
+.qb-tab-sub   { font-size: 0.8rem; color: var(--ink-3); margin-top: 2px; }
+.qb-connect-btn {
+  display: inline-block; margin-top: 14px;
+  background: #2ca01c; color: #fff;
+  padding: 10px 22px; border-radius: var(--radius-md);
+  font-size: 0.85rem; font-weight: 600;
+  text-decoration: none; transition: background 0.15s;
+}
+.qb-connect-btn:hover { background: #208015; }
+.qb-disconnect-btn {
+  font-size: 0.75rem; font-weight: 600;
+  padding: 6px 12px; border-radius: var(--radius-md);
+  border: 1px solid var(--stone-deep); background: transparent;
+  color: var(--ink-3); cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  font-family: inherit;
+}
+.qb-disconnect-btn:hover { border-color: #dc2626; color: #dc2626; background: #fee2e2; }
+.qb-refresh-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.75rem; font-weight: 600;
+  padding: 6px 12px; border-radius: var(--radius-md);
+  border: 1px solid var(--stone); background: var(--chalk);
+  color: var(--ink-2); cursor: pointer; transition: all 0.15s;
+  font-family: inherit;
+}
+.qb-refresh-btn:hover { background: var(--paper-deep); }
+.qb-list { display: flex; flex-direction: column; gap: 1px; }
+.qb-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: var(--radius-md);
+  background: var(--chalk); border: 1px solid var(--stone);
+  margin-bottom: 6px;
+}
+.qb-row-customer { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.qb-row-name { font-size: 0.875rem; font-weight: 600; color: var(--ink-1); }
+.qb-row-linked {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 0.68rem; font-weight: 600;
+  color: #16a34a; background: #dcfce7;
+  border: 1px solid #bbf7d0; border-radius: 999px;
+  padding: 2px 7px; white-space: nowrap; flex-shrink: 0;
+}
+.qb-row-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+.qb-row-num  { font-size: 0.75rem; color: var(--ink-3); }
+.qb-row-date { font-size: 0.72rem; color: var(--ink-3); }
+.qb-row-amount { font-size: 0.95rem; font-weight: 700; color: var(--ink-1); white-space: nowrap; flex-shrink: 0; min-width: 80px; text-align: right; }
+.qb-tab-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 60px 20px; text-align: center;
+}
+.qb-tab-empty-icon { margin-bottom: 16px; }
+.qb-tab-empty-title { font-size: 1rem; font-weight: 600; color: var(--ink-2); }
+.qb-tab-empty-sub { font-size: 0.85rem; color: var(--ink-3); margin-top: 6px; }
+.qb-tab-loading { display: flex; align-items: center; gap: 10px; padding: 40px 24px; color: var(--ink-3); font-size: 0.875rem; }

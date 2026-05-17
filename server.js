@@ -5,6 +5,7 @@ const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
 const { installSession, setupAuth, isAuthenticated } = require('./auth');
+const qbRoutes = require('./quickbooks');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -31,12 +32,17 @@ function requireHubspotToken(req, res, next) {
   }
   next();
 }
+// QuickBooks OAuth routes (must be before auth gate — callback comes from Intuit)
+app.use(qbRoutes);
+
 // Replit Auth gate for all /api/* routes (whitelist auth-flow endpoints).
 const AUTH_WHITELIST = new Set(['/login', '/callback', '/auth/user', '/request-access']);
 app.use('/api', (req, res, next) => {
   if (AUTH_WHITELIST.has(req.path)) return next();
   return isAuthenticated(req, res, next);
 });
+
+app.use('/api/quickbooks', isAuthenticated);
 
 app.use('/api/pipeline', requireHubspotToken);
 app.use('/api/deals', requireHubspotToken);
