@@ -136,6 +136,7 @@ const state = {
     invoices: [],
     loaded: false,
     loading: false,
+    showMatchedOnly: true,
   },
 };
 
@@ -1924,41 +1925,72 @@ function renderInvoicesTab() {
     return;
   }
 
-  const invoices = [...state.qb.invoices].sort((a, b) => b.balance - a.balance);
-  const total    = invoices.reduce((s, inv) => s + inv.balance, 0);
+  const allInvoices = [...state.qb.invoices].sort((a, b) => b.balance - a.balance);
 
-  if (!invoices.length) {
-    el.innerHTML = `
-      <div class="qb-tab-header">
-        <div>
-          <h2 class="qb-tab-title">Outstanding Invoices</h2>
-          <p class="qb-tab-sub">${escHtml(state.qb.company || 'QuickBooks')}</p>
-        </div>
-        <button onclick="disconnectQB()" class="qb-disconnect-btn">Disconnect</button>
-      </div>
-      <div class="qb-tab-empty" style="margin-top:48px">
-        <p class="qb-tab-empty-title">All clear!</p>
-        <p class="qb-tab-empty-sub">No outstanding invoices found.</p>
-      </div>
-    `;
-    return;
-  }
-
-  const rows = invoices.map(inv => {
-    const overdue    = inv.dueDate && new Date(inv.dueDate) < new Date();
-    const matchedContact = state.contacts.find(c => {
+  // Tag each invoice with its matched HubSpot contact (if any)
+  const tagged = allInvoices.map(inv => {
+    const matched = state.contacts.find(c => {
       const email = (c.properties?.email || '').toLowerCase();
       const name  = contactName(c).toLowerCase();
       if (email && inv.email && email === inv.email.toLowerCase()) return true;
       if (name  && inv.customerName && name === inv.customerName.toLowerCase()) return true;
       return false;
     });
+    return { inv, matched };
+  });
 
+  const matchedOnly = state.qb.showMatchedOnly;
+  const visible     = matchedOnly ? tagged.filter(t => t.matched) : tagged;
+  const total       = visible.reduce((s, t) => s + t.inv.balance, 0);
+  const matchCount  = tagged.filter(t => t.matched).length;
+
+  const filterBar = `
+    <div class="qb-filter-bar">
+      <button class="qb-filter-btn ${!matchedOnly ? 'qb-filter-active' : ''}"
+        onclick="state.qb.showMatchedOnly=false;renderInvoicesTab()">
+        All (${allInvoices.length})
+      </button>
+      <button class="qb-filter-btn ${matchedOnly ? 'qb-filter-active' : ''}"
+        onclick="state.qb.showMatchedOnly=true;renderInvoicesTab()">
+        Matched to customers (${matchCount})
+      </button>
+    </div>
+  `;
+
+  if (!visible.length) {
+    el.innerHTML = `
+      <div class="qb-tab-header">
+        <div>
+          <h2 class="qb-tab-title">Outstanding Invoices</h2>
+          <p class="qb-tab-sub">${escHtml(state.qb.company || 'QuickBooks')}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="loadQBInvoices()" class="qb-refresh-btn">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Refresh
+          </button>
+          <button onclick="disconnectQB()" class="qb-disconnect-btn">Disconnect</button>
+        </div>
+      </div>
+      ${filterBar}
+      <div class="qb-tab-empty" style="margin-top:32px">
+        <p class="qb-tab-empty-title">${matchedOnly ? 'No matched invoices' : 'All clear!'}</p>
+        <p class="qb-tab-empty-sub">${matchedOnly ? 'No outstanding invoices matched to your HubSpot customers.' : 'No outstanding invoices found.'}</p>
+      </div>
+    `;
+    return;
+  }
+
+  const rows = visible.map(({ inv, matched }) => {
+    const overdue = inv.dueDate && new Date(inv.dueDate) < new Date();
     return `
       <div class="qb-row">
         <div class="qb-row-customer">
           <span class="qb-row-name">${escHtml(inv.customerName || '—')}</span>
-          ${matchedContact
+          ${matched
             ? `<span class="qb-row-linked" title="Matched to HubSpot contact">
                 <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
                 Linked
@@ -1978,7 +2010,7 @@ function renderInvoicesTab() {
     <div class="qb-tab-header">
       <div>
         <h2 class="qb-tab-title">Outstanding Invoices</h2>
-        <p class="qb-tab-sub">${escHtml(state.qb.company || 'QuickBooks')} · ${invoices.length} invoice${invoices.length !== 1 ? 's' : ''} · ${fmtGBP(total)} total</p>
+        <p class="qb-tab-sub">${escHtml(state.qb.company || 'QuickBooks')} · ${visible.length} invoice${visible.length !== 1 ? 's' : ''} · ${fmtGBP(total)} total</p>
       </div>
       <div class="flex items-center gap-2">
         <button onclick="loadQBInvoices()" class="qb-refresh-btn" title="Refresh invoices">
@@ -1991,6 +2023,7 @@ function renderInvoicesTab() {
         <button onclick="disconnectQB()" class="qb-disconnect-btn">Disconnect</button>
       </div>
     </div>
+    ${filterBar}
     <div class="qb-list">${rows}</div>
   `;
 }
