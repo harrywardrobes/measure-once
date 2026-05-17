@@ -154,4 +154,125 @@ router.get('/api/quickbooks/invoices', async (req, res) => {
   }
 });
 
+// ── API: single invoice detail ─────────────────────────────────────────────────
+router.get('/api/quickbooks/invoice/:id', async (req, res) => {
+  try {
+    const data = await qbGet(`/invoice/${req.params.id}`);
+    const inv  = data.Invoice;
+    if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+
+    const lines = (inv.Line || [])
+      .filter(l => l.DetailType === 'SalesItemLineDetail' || l.DetailType === 'SubTotalLineDetail' || l.Amount)
+      .map(l => ({
+        id:          l.Id,
+        description: l.Description || l.SalesItemLineDetail?.ItemRef?.name || '',
+        qty:         l.SalesItemLineDetail?.Qty || null,
+        unitPrice:   l.SalesItemLineDetail?.UnitPrice || null,
+        amount:      parseFloat(l.Amount || 0),
+        detailType:  l.DetailType,
+      }));
+
+    res.json({
+      id:           inv.Id,
+      syncToken:    inv.SyncToken,
+      docNumber:    inv.DocNumber,
+      customerName: inv.CustomerRef?.name || '',
+      customerRef:  inv.CustomerRef?.value,
+      email:        inv.BillEmail?.Address || '',
+      memo:         inv.CustomerMemo?.value || '',
+      balance:      parseFloat(inv.Balance || 0),
+      totalAmt:     parseFloat(inv.TotalAmt || 0),
+      dueDate:      inv.DueDate || null,
+      txnDate:      inv.TxnDate || null,
+      lines,
+    });
+  } catch (e) {
+    console.error('QB invoice detail error:', e.response?.data || e.message);
+    res.status(503).json({ error: e.message });
+  }
+});
+
+// ── API: update invoice (sparse) ───────────────────────────────────────────────
+router.post('/api/quickbooks/invoice/:id', async (req, res) => {
+  try {
+    const { syncToken, dueDate, memo, email } = req.body;
+    const t = await getValidTokens();
+    if (!t) return res.status(503).json({ error: 'QuickBooks not connected' });
+
+    const body = {
+      sparse:    true,
+      Id:        req.params.id,
+      SyncToken: String(syncToken),
+    };
+    if (dueDate !== undefined) body.DueDate = dueDate;
+    if (memo    !== undefined) body.CustomerMemo = { value: memo };
+    if (email   !== undefined) body.BillEmail    = { Address: email };
+
+    const r = await axios.post(
+      `${qbBase()}/v3/company/${t.realm_id}/invoice`,
+      body,
+      {
+        headers: { Authorization: `Bearer ${t.access_token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+        params:  { minorversion: 65 },
+        timeout: 12000
+      }
+    );
+    const inv = r.data.Invoice;
+    res.json({ success: true, syncToken: inv.SyncToken });
+  } catch (e) {
+    console.error('QB invoice update error:', e.response?.data || e.message);
+    res.status(503).json({ error: e.response?.data?.Fault?.Error?.[0]?.Message || e.message });
+  }
+});
+
+// ── API: download invoice PDF ──────────────────────────────────────────────────
+router.get('/api/quickbooks/invoice/:id/pdf', async (req, res) => {
+  try {
+    const t = await getValidTokens();
+    if (!t) return res.status(503).json({ error: 'QuickBooks not connected' });
+
+    const r = await axios.get(
+      `${qbBase()}/v3/company/${t.realm_id}/invoice/${req.params.id}/pdf`,
+      {
+        headers: { Authorization: `Bearer ${t.access_token}`, Accept: 'application/pdf' },
+        params:  { minorversion: 65 },
+        responseType: 'arraybuffer',
+        timeout: 20000
+      }
+    );
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `attachment; filename="invoice-${req.params.id}.pdf"`);
+    res.send(r.data);
+  } catch (e) {
+    console.error('QB PDF error:', e.response?.data || e.message);
+    res.status(503).json({ error: e.message });
+  }
+});
+
+// ── API: send invoice by email ─────────────────────────────────────────────────
+router.post('/api/quickbooks/invoice/:id/send', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const t = await getValidTokens();
+    if (!t) return res.status(503).json({ error: 'QuickBooks not connected' });
+
+    const params = { minorversion: 65 };
+    if (email) params.sendTo = email;
+
+    const r = await axios.post(
+      `${qbBase()}/v3/company/${t.realm_id}/invoice/${req.params.id}/send`,
+      {},
+      {
+        headers: { Authorization: `Bearer ${t.access_token}`, 'Content-Type': 'application/octet-stream', Accept: 'application/json' },
+        params,
+        timeout: 20000
+      }
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error('QB send error:', e.response?.data || e.message);
+    res.status(503).json({ error: e.response?.data?.Fault?.Error?.[0]?.Message || e.message });
+  }
+});
+
 module.exports = router;
