@@ -1,6 +1,8 @@
 const express = require('express');
 const axios   = require('axios');
+const crypto  = require('crypto');
 const { Pool } = require('pg');
+const { isAuthenticated, requireAdmin } = require('./auth');
 
 const router = express.Router();
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -79,24 +81,33 @@ async function qbGet(path, params = {}) {
 }
 
 // ── OAuth: start ───────────────────────────────────────────────────────────────
-router.get('/auth/quickbooks', (req, res) => {
+router.get('/auth/quickbooks', isAuthenticated, requireAdmin, (req, res) => {
   if (!process.env.QB_CLIENT_ID) {
     return res.status(503).send('QB_CLIENT_ID secret is not set. Add it in Replit Secrets.');
   }
+  const state = crypto.randomBytes(16).toString('hex');
+  req.session.qbOAuthState = state;
   const params = new URLSearchParams({
     client_id:     process.env.QB_CLIENT_ID,
     redirect_uri:  qbRedirectUri(),
     response_type: 'code',
     scope:         'com.intuit.quickbooks.accounting',
-    state:         Math.random().toString(36).slice(2)
+    state,
   });
   res.redirect(`${QB_AUTH_BASE}?${params}`);
 });
 
 // ── OAuth: callback ────────────────────────────────────────────────────────────
-router.get('/auth/quickbooks/callback', async (req, res) => {
-  const { code, realmId, error } = req.query;
+router.get('/auth/quickbooks/callback', isAuthenticated, requireAdmin, async (req, res) => {
+  const { code, realmId, error, state } = req.query;
   if (error) return res.redirect(`/?qb=error&reason=${encodeURIComponent(error)}`);
+
+  const savedState = req.session.qbOAuthState;
+  delete req.session.qbOAuthState;
+  if (!savedState || savedState !== state) {
+    return res.redirect('/?qb=error&reason=invalid_state');
+  }
+
   try {
     const creds = Buffer.from(`${process.env.QB_CLIENT_ID}:${process.env.QB_CLIENT_SECRET}`).toString('base64');
     const r = await axios.post(
@@ -113,13 +124,13 @@ router.get('/auth/quickbooks/callback', async (req, res) => {
 });
 
 // ── OAuth: disconnect ──────────────────────────────────────────────────────────
-router.get('/auth/quickbooks/disconnect', async (req, res) => {
+router.get('/auth/quickbooks/disconnect', isAuthenticated, requireAdmin, async (req, res) => {
   try { await pool.query('DELETE FROM qb_tokens'); } catch {}
   res.json({ success: true });
 });
 
 // ── API: connection status ─────────────────────────────────────────────────────
-router.get('/api/quickbooks/status', async (req, res) => {
+router.get('/api/quickbooks/status', isAuthenticated, async (req, res) => {
   try {
     const t = await getValidTokens();
     if (!t) return res.json({ connected: false });
@@ -131,7 +142,7 @@ router.get('/api/quickbooks/status', async (req, res) => {
 });
 
 // ── API: all outstanding invoices ──────────────────────────────────────────────
-router.get('/api/quickbooks/invoices', async (req, res) => {
+router.get('/api/quickbooks/invoices', isAuthenticated, async (req, res) => {
   try {
     const data = await qbGet('/query', {
       query: "SELECT * FROM Invoice WHERE Balance > '0.0' MAXRESULTS 1000"
@@ -155,7 +166,7 @@ router.get('/api/quickbooks/invoices', async (req, res) => {
 });
 
 // ── API: single invoice detail ─────────────────────────────────────────────────
-router.get('/api/quickbooks/invoice/:id', async (req, res) => {
+router.get('/api/quickbooks/invoice/:id', isAuthenticated, async (req, res) => {
   try {
     const data = await qbGet(`/invoice/${req.params.id}`);
     const inv  = data.Invoice;
@@ -193,7 +204,7 @@ router.get('/api/quickbooks/invoice/:id', async (req, res) => {
 });
 
 // ── API: update invoice (sparse) ───────────────────────────────────────────────
-router.post('/api/quickbooks/invoice/:id', async (req, res) => {
+router.post('/api/quickbooks/invoice/:id', isAuthenticated, async (req, res) => {
   try {
     const { syncToken, dueDate, memo, email } = req.body;
     const t = await getValidTokens();
@@ -226,7 +237,7 @@ router.post('/api/quickbooks/invoice/:id', async (req, res) => {
 });
 
 // ── API: download invoice PDF ──────────────────────────────────────────────────
-router.get('/api/quickbooks/invoice/:id/pdf', async (req, res) => {
+router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, async (req, res) => {
   try {
     const t = await getValidTokens();
     if (!t) return res.status(503).json({ error: 'QuickBooks not connected' });
@@ -250,7 +261,7 @@ router.get('/api/quickbooks/invoice/:id/pdf', async (req, res) => {
 });
 
 // ── API: send invoice by email ─────────────────────────────────────────────────
-router.post('/api/quickbooks/invoice/:id/send', async (req, res) => {
+router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, async (req, res) => {
   try {
     const { email } = req.body;
     const t = await getValidTokens();

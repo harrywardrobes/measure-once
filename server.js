@@ -32,7 +32,7 @@ function requireHubspotToken(req, res, next) {
   }
   next();
 }
-// QuickBooks OAuth routes (must be before auth gate — callback comes from Intuit)
+// QuickBooks routes (auth enforced inside the router)
 app.use(qbRoutes);
 
 // Replit Auth gate for all /api/* routes (whitelist auth-flow endpoints).
@@ -41,8 +41,6 @@ app.use('/api', (req, res, next) => {
   if (AUTH_WHITELIST.has(req.path)) return next();
   return isAuthenticated(req, res, next);
 });
-
-app.use('/api/quickbooks', isAuthenticated);
 
 app.use('/api/pipeline', requireHubspotToken);
 app.use('/api/deals', requireHubspotToken);

@@ -370,4 +370,4 @@ const isAuthenticated = async (req, res, next) => {
   }
 };
 
-module.exports = { installSession, setupAuth, isAuthenticated };
+module.exports = { installSession, setupAuth, isAuthenticated, requireAdmin };
