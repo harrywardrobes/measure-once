@@ -197,8 +197,12 @@ function contactName(contact) {
 function showToast(msg, isError) {
   const el = document.createElement('div');
   el.className = `toast ${isError ? 'toast-error' : 'toast-success'}`;
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
   el.textContent = msg;
   document.body.appendChild(el);
+  const live = document.getElementById('toast-live');
+  if (live) { live.textContent = ''; setTimeout(() => { live.textContent = msg; }, 50); }
   setTimeout(() => el.remove(), 3500);
 }
 
@@ -1037,7 +1041,7 @@ function calRange() {
 async function loadTasksView() {
   initCalendarState();
   const view = document.getElementById('tasks-view');
-  view.innerHTML = `<div class="cal-shell"><div class="flex items-center gap-2 text-sm" style="color:var(--stone-deep);padding:16px"><div class="spinner"></div> Loading...</div></div>`;
+  view.innerHTML = `<div class="cal-shell"><div class="flex items-center gap-2 text-sm" style="color:var(--stone-deep);padding:16px"><div class="spinner"></div> Loading…</div></div>`;
   const { from, to } = calRange();
   const [visits, tasks, platformUsers] = await Promise.all([
     GET(`/api/visits?from=${from.toISOString()}&to=${to.toISOString()}`).catch(() => []),
@@ -1905,7 +1909,7 @@ async function selectContact(contactId, roomIdx = 0) {
   document.getElementById('empty-state').classList.add('hidden');
   const wv = document.getElementById('workflow-view');
   wv.classList.remove('hidden');
-  wv.innerHTML = `<div class="flex items-center justify-center h-64 text-slate-400 gap-3"><div class="spinner"></div> Loading...</div>`;
+  wv.innerHTML = `<div class="flex items-center justify-center h-64 text-slate-400 gap-3"><div class="spinner"></div> Loading…</div>`;
 
   try {
     const [localData, tasksData] = await Promise.all([

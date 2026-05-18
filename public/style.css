@@ -16,6 +16,7 @@
 
 /* ── Brand Tokens ────────────────────────────────────────────────────────────── */
 :root {
+  color-scheme: light;
   --paper:        #F6F1E7;
   --paper-deep:   #EDE5D4;
   --chalk:        #FBFAF5;
@@ -160,6 +161,7 @@ body {
   text-transform: uppercase;
   transition: color 0.15s;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   padding: 0 4px;
 }
 .bottom-nav-btn svg { transition: color 0.15s; }
@@ -1646,7 +1648,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   font-size: 0.75rem; font-weight: 600;
   padding: 6px 12px; border-radius: var(--radius-md);
   border: 1px solid var(--stone-deep); background: transparent;
-  color: var(--ink-3); cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  color: var(--ink-3); cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; white-space: nowrap;
   font-family: inherit;
 }
 .qb-disconnect-btn:hover { border-color: #dc2626; color: #dc2626; background: #fee2e2; }
@@ -1655,7 +1657,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   font-size: 0.75rem; font-weight: 600;
   padding: 6px 12px; border-radius: var(--radius-md);
   border: 1px solid var(--stone); background: var(--chalk);
-  color: var(--ink-2); cursor: pointer; transition: all 0.15s;
+  color: var(--ink-2); cursor: pointer; transition: background 0.15s, border-color 0.15s;
   font-family: inherit;
 }
 .qb-refresh-btn:hover { background: var(--paper-deep); }
@@ -1696,7 +1698,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   font-size: 0.78rem; font-weight: 600; font-family: inherit;
   padding: 5px 14px; border-radius: calc(var(--radius-md) - 2px);
   border: none; background: transparent; color: var(--ink-3);
-  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  cursor: pointer; transition: background 0.15s, color 0.15s; white-space: nowrap;
 }
 .qb-filter-btn:hover { color: var(--ink-1); }
 .qb-filter-active { background: #fff !important; color: var(--ink-1) !important; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
@@ -1781,7 +1783,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 0.82rem; font-weight: 600; font-family: inherit;
   padding: 8px 16px; border-radius: var(--radius-md);
-  cursor: pointer; transition: all 0.15s; border: none; white-space: nowrap;
+  cursor: pointer; transition: background 0.15s, opacity 0.15s; border: none; white-space: nowrap;
   text-decoration: none;
 }
 .inv-btn-primary { background: var(--plum); color: #fff; }
@@ -2399,4 +2401,28 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   background: var(--orchid-tint); color: var(--orchid-deep);
   font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
   border-radius: 999px; letter-spacing: 0.02em;
+}
+
+/* ── Skip link ───────────────────────────────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -999px; left: 0;
+  background: var(--plum); color: #fff;
+  padding: 8px 14px; font-size: 0.875rem; font-weight: 600;
+  border-radius: 0 0 var(--radius-md) 0;
+  z-index: 99999;
+  text-decoration: none;
+}
+.skip-link:focus { top: 0; }
+
+/* ── Reduced motion ──────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .project-card:hover { transform: none; }
 }
