@@ -514,7 +514,7 @@ function renderCustomerList() {
     const statusMini = `<span class="status-mini status-mini-${roomStatus}" onclick="openStatusPicker(event,'${contact.id}',${roomIdx})" title="Change status">${statusLabel}</span>`;
 
     const customerNumBadge = customerNum
-      ? `<span class="customer-card-value" style="font-family:monospace;font-size:0.7rem;color:#7c3aed;letter-spacing:0.03em;" title="Customer number">${escHtml(customerNum)}</span>`
+      ? `<span class="customer-num-badge" title="Customer number">${escHtml(customerNum)}</span>`
       : '';
 
     return `
