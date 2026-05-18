@@ -1192,8 +1192,9 @@ async function renderProfileTab() {
   let profile;
   try {
     profile = await GET(`/api/users/${encodeURIComponent(user.id)}/profile`);
-  } catch {
-    profile = { ...user, job_role: user.job_role || null, privilege_level: user.privilege_level || 'member' };
+  } catch (e) {
+    el.innerHTML = `<div class="profile-loading" style="color:#b91c1c;">Failed to load profile. <button onclick="renderProfileTab()" style="color:var(--orchid);background:none;border:none;cursor:pointer;font-size:0.875rem;font-weight:600;padding:0;font-family:inherit;">Retry</button></div>`;
+    return;
   }
 
   const { google, hubspot } = state.authStatus;
