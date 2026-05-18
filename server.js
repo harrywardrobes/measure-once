@@ -422,6 +422,12 @@ app.post('/api/deals/:id/checklist', async (req, res) => {
   try {
     const { checklistData, existingNoteId } = req.body;
     const noteBody = `WORKFLOW_CHECKLIST:${JSON.stringify(checklistData)}`;
+    const dealId = String(req.params.id || '');
+
+    // HubSpot deal IDs are numeric; reject anything else to prevent URL/path injection.
+    if (!/^\d+$/.test(dealId)) {
+      return res.status(400).json({ error: 'Invalid deal id' });
+    }
 
     if (existingNoteId) {
       const r = await axios.patch(
@@ -439,7 +445,7 @@ app.post('/api/deals/:id/checklist', async (req, res) => {
       { headers: hsHeaders() }
     );
     await axios.put(
-      `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/deals/${req.params.id}/note_to_deal`,
+      `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/deals/${dealId}/note_to_deal`,
       {},
       { headers: hsHeaders() }
     );
