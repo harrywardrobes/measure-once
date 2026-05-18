@@ -430,8 +430,13 @@ app.post('/api/deals/:id/checklist', async (req, res) => {
     }
 
     if (existingNoteId) {
+      const validatedExistingNoteId = String(existingNoteId);
+      if (!/^[A-Za-z0-9_-]+$/.test(validatedExistingNoteId)) {
+        return res.status(400).json({ error: 'Invalid existingNoteId' });
+      }
+
       const r = await axios.patch(
-        `${HS}/crm/v3/objects/notes/${existingNoteId}`,
+        `${HS}/crm/v3/objects/notes/${validatedExistingNoteId}`,
         { properties: { hs_note_body: noteBody } },
         { headers: hsHeaders() }
       );
