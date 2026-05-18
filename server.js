@@ -624,11 +624,21 @@ app.get('/api/contacts/:id/notes', async (req, res) => {
 app.post('/api/contacts/:id/workflow', async (req, res) => {
   try {
     const { data, existingNoteId } = req.body;
+    const contactId = String(req.params.id || '');
+    if (!/^\d+$/.test(contactId)) {
+      return res.status(400).json({ error: 'Invalid contact id' });
+    }
+
     const noteBody = `WORKFLOW_DATA:${JSON.stringify(data)}`;
 
     if (existingNoteId) {
+      const safeExistingNoteId = String(existingNoteId || '');
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(safeExistingNoteId)) {
+        return res.status(400).json({ error: 'Invalid note id' });
+      }
+
       const r = await axios.patch(
-        `${HS}/crm/v3/objects/notes/${existingNoteId}`,
+        `${HS}/crm/v3/objects/notes/${safeExistingNoteId}`,
         { properties: { hs_note_body: noteBody } },
         { headers: hsHeaders() }
       );
@@ -641,7 +651,7 @@ app.post('/api/contacts/:id/workflow', async (req, res) => {
       { headers: hsHeaders() }
     );
     await axios.put(
-      `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/contacts/${req.params.id}/note_to_contact`,
+      `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/contacts/${contactId}/note_to_contact`,
       {},
       { headers: hsHeaders() }
     );
