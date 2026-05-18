@@ -360,7 +360,12 @@ app.post('/api/contacts', async (req, res) => {
 
 app.get('/api/contacts/:id', async (req, res) => {
   try {
-    const r = await axios.get(`${HS}/crm/v3/objects/contacts/${req.params.id}`, {
+    const contactId = String(req.params.id || '');
+    if (!/^\d+$/.test(contactId)) {
+      return res.status(400).json({ error: 'Invalid contact id.' });
+    }
+    const safeContactId = encodeURIComponent(contactId);
+    const r = await axios.get(`${HS}/crm/v3/objects/contacts/${safeContactId}`, {
       headers: hsHeaders(),
       params: { properties: 'firstname,lastname,email,phone,address,city,zip,customer_number' }
     });
