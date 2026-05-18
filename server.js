@@ -633,6 +633,11 @@ app.get('/api/contacts/:id/tasks', async (req, res) => {
 app.post('/api/contacts/:id/tasks', async (req, res) => {
   try {
     const { subject, dueDate, stageKey } = req.body;
+    const contactId = req.params.id;
+    if (!/^\d+$/.test(contactId)) {
+      return res.status(400).json({ error: 'Invalid contact id' });
+    }
+
     const properties = {
       hs_task_subject: subject,
       hs_task_status: 'NOT_STARTED',
@@ -647,7 +652,7 @@ app.post('/api/contacts/:id/tasks', async (req, res) => {
       { headers: hsHeaders() }
     );
     await axios.put(
-      `${HS}/crm/v3/objects/tasks/${taskR.data.id}/associations/contacts/${req.params.id}/task_to_contact`,
+      `${HS}/crm/v3/objects/tasks/${taskR.data.id}/associations/contacts/${contactId}/task_to_contact`,
       {},
       { headers: hsHeaders() }
     );
