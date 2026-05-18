@@ -103,8 +103,12 @@ app.get('/api/contacts/:id/localdata', async (req, res) => {
 app.post('/api/contacts/:id/localdata', async (req, res) => {
   try {
     const { rooms, notes, stage, substage } = req.body;
+    const contactId = req.params.id;
+    if (!/^[A-Za-z0-9_-]+$/.test(contactId)) {
+      return res.status(400).json({ error: 'Invalid contact id' });
+    }
     await axios.patch(
-      `${HS}/crm/v3/objects/contacts/${req.params.id}`,
+      `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
       {
         properties: {
           measure_once_rooms:    JSON.stringify(rooms),
