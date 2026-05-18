@@ -12,6 +12,17 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
 
+function validateHsObjectId(value, fieldName) {
+  if (value === undefined || value === null) return null;
+  const id = String(value).trim();
+  if (!/^\d+$/.test(id)) {
+    const err = new Error(`${fieldName} must be a numeric ID`);
+    err.status = 400;
+    throw err;
+  }
+  return id;
+}
+
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -627,8 +638,9 @@ app.post('/api/contacts/:id/workflow', async (req, res) => {
     const noteBody = `WORKFLOW_DATA:${JSON.stringify(data)}`;
 
     if (existingNoteId) {
+      const safeExistingNoteId = validateHsObjectId(existingNoteId, 'existingNoteId');
       const r = await axios.patch(
-        `${HS}/crm/v3/objects/notes/${existingNoteId}`,
+        `${HS}/crm/v3/objects/notes/${safeExistingNoteId}`,
         { properties: { hs_note_body: noteBody } },
         { headers: hsHeaders() }
       );
@@ -658,8 +670,9 @@ app.post('/api/deals/:id/workflow', async (req, res) => {
     const noteBody = `WORKFLOW_DATA:${JSON.stringify(data)}`;
 
     if (existingNoteId) {
+      const safeExistingNoteId = validateHsObjectId(existingNoteId, 'existingNoteId');
       const r = await axios.patch(
-        `${HS}/crm/v3/objects/notes/${existingNoteId}`,
+        `${HS}/crm/v3/objects/notes/${safeExistingNoteId}`,
         { properties: { hs_note_body: noteBody } },
         { headers: hsHeaders() }
       );
