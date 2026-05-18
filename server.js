@@ -659,8 +659,13 @@ app.post('/api/contacts/:id/tasks', async (req, res) => {
 
 app.patch('/api/tasks/:id', async (req, res) => {
   try {
+    const taskId = req.params.id;
+    if (!/^\d+$/.test(taskId)) {
+      return res.status(400).json({ error: 'Invalid task id' });
+    }
+
     const r = await axios.patch(
-      `${HS}/crm/v3/objects/tasks/${req.params.id}`,
+      `${HS}/crm/v3/objects/tasks/${taskId}`,
       { properties: req.body },
       { headers: hsHeaders() }
     );
