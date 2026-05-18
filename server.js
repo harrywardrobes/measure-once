@@ -237,6 +237,13 @@ app.get('/api/pipeline', async (req, res) => {
 });
 
 // ── HubSpot: Deals ────────────────────────────────────────────────────────────
+function normalizeHubspotObjectId(id) {
+  if (typeof id !== 'string') return null;
+  const trimmed = id.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  return encodeURIComponent(trimmed);
+}
+
 app.get('/api/deals', async (req, res) => {
   try {
     const r = await axios.get(`${HS}/crm/v3/objects/deals`, {
@@ -255,12 +262,11 @@ app.get('/api/deals', async (req, res) => {
 
 app.get('/api/deals/:id', async (req, res) => {
   try {
-    const dealId = String(req.params.id || '');
-    if (!/^[A-Za-z0-9_-]{1,64}$/.test(dealId)) {
+    const safeDealId = normalizeHubspotObjectId(req.params.id);
+    if (!safeDealId) {
       return res.status(400).json({ error: 'Invalid deal id' });
     }
-
-    const r = await axios.get(`${HS}/crm/v3/objects/deals/${encodeURIComponent(dealId)}`, {
+    const r = await axios.get(`${HS}/crm/v3/objects/deals/${safeDealId}`, {
       headers: hsHeaders(),
       params: {
         properties: 'dealname,dealstage,amount,closedate,pipeline,hs_lastmodifieddate,createdate',
@@ -275,8 +281,12 @@ app.get('/api/deals/:id', async (req, res) => {
 
 app.patch('/api/deals/:id', async (req, res) => {
   try {
+    const safeDealId = normalizeHubspotObjectId(req.params.id);
+    if (!safeDealId) {
+      return res.status(400).json({ error: 'Invalid deal id' });
+    }
     const r = await axios.patch(
-      `${HS}/crm/v3/objects/deals/${req.params.id}`,
+      `${HS}/crm/v3/objects/deals/${safeDealId}`,
       { properties: req.body },
       { headers: hsHeaders() }
     );
