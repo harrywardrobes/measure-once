@@ -625,6 +625,10 @@ app.post('/api/contacts/:id/workflow', async (req, res) => {
   try {
     const { data, existingNoteId } = req.body;
     const noteBody = `WORKFLOW_DATA:${JSON.stringify(data)}`;
+    const contactId = String(req.params.id || '');
+    if (!/^\d+$/.test(contactId)) {
+      return res.status(400).json({ error: 'Invalid contact id' });
+    }
 
     if (existingNoteId) {
       const r = await axios.patch(
@@ -641,7 +645,7 @@ app.post('/api/contacts/:id/workflow', async (req, res) => {
       { headers: hsHeaders() }
     );
     await axios.put(
-      `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/contacts/${req.params.id}/note_to_contact`,
+      `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/contacts/${encodeURIComponent(contactId)}/note_to_contact`,
       {},
       { headers: hsHeaders() }
     );
