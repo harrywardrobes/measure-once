@@ -677,8 +677,13 @@ app.patch('/api/tasks/:id', async (req, res) => {
 
 app.delete('/api/tasks/:id', async (req, res) => {
   try {
+    const taskId = req.params.id;
+    if (!/^\d+$/.test(taskId)) {
+      return res.status(400).json({ error: 'Invalid task id' });
+    }
+
     await axios.delete(
-      `${HS}/crm/v3/objects/tasks/${req.params.id}`,
+      `${HS}/crm/v3/objects/tasks/${taskId}`,
       { headers: hsHeaders() }
     );
     res.json({ success: true });
