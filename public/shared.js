@@ -123,7 +123,6 @@ const state = {
   addingRoom: false,
   stageFilter: '',
   showArchived: false,
-  activeTab: 'home',
   projectStageFilter: '',
   customerNotes: '',
   personalTasks: [],
@@ -240,8 +239,25 @@ function updateRoomCache() {
   }));
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-async function init() {
+// ── Bootstrap (called by each page) ───────────────────────────────────────────
+// Map URL paths to the bottom-nav button id that should be marked active.
+const NAV_PATH_MAP = {
+  '/': 'home',
+  '/sales': 'sales',
+  '/projects': 'projects',
+  '/calendar': 'calendar',
+  '/invoices': 'invoices',
+};
+
+function highlightActiveNav() {
+  const key = NAV_PATH_MAP[location.pathname];
+  if (!key) return;
+  document.getElementById(`bnav-${key}`)?.classList.add('bottom-nav-active');
+}
+
+// Common per-page bootstrap. Returns true if user is signed in & data loaded.
+async function bootstrap() {
+  highlightActiveNav();
   const params = new URLSearchParams(window.location.search);
 
   const user = await fetch('/api/auth/user')
@@ -250,25 +266,25 @@ async function init() {
 
   if (!user) {
     showAccessGate(params);
-    return;
+    return false;
   }
 
   state.user = user;
-
-  setTab('home');
 
   try {
     await checkAuthStatus();
     await loadWorkflow();
     await Promise.all([loadOpenLeads(), loadWorkflowStages()]);
     populateStageFilter();
-    renderCustomerList();
+    if (document.getElementById('customer-list')) renderCustomerList();
     loadQBInvoices();
-    if (state.activeTab === 'home') renderHomeTab();
   } catch (e) {
-    document.getElementById('customer-list').innerHTML =
+    const list = document.getElementById('customer-list');
+    if (list) list.innerHTML =
       `<div class="p-4 text-sm text-red-500">Failed to load: ${escHtml(e.message)}</div>`;
+    else console.error('Bootstrap failed', e);
   }
+  return true;
 }
 
 function showAccessGate(params) {
@@ -450,6 +466,7 @@ function buildListItems() {
 // ── Customer List ─────────────────────────────────────────────────────────────
 function renderCustomerList() {
   const list  = document.getElementById('customer-list');
+  if (!list) return; // Sales-only DOM; safe no-op on other pages
   const count = document.getElementById('deal-count');
   const items = buildListItems();
 
@@ -709,7 +726,7 @@ async function undoLastChange() {
     renderWorkflowHeader();
     renderRoomTabs();
   }
-  if (state.activeTab === 'projects') renderProjectsView();
+  renderProjectsView();
   // Save the restored state so disk matches memory
   try { await saveWorkflowData(); } catch { showToast('Failed to save', true); }
 }
@@ -752,27 +769,15 @@ async function runBottomAction() {
   if (fn) await fn();
 }
 
-// ── Tab Navigation ────────────────────────────────────────────────────────────
-function setTab(tab) {
-  if (tab === 'profile' && state.activeTab !== 'profile') {
-    state.prevTab = state.activeTab;
-  }
-  state.activeTab = tab;
-  ['home', 'customers', 'tasks', 'projects', 'invoices', 'profile'].forEach(t => {
-    document.getElementById(`tab-${t}`)?.classList.toggle('hidden', tab !== t);
-    document.getElementById(`bnav-${t}`)?.classList.toggle('bottom-nav-active', tab === t);
-  });
-  if (tab === 'home')     renderHomeTab();
-  if (tab === 'tasks')    loadTasksView();
-  if (tab === 'projects') renderProjectsView();
-  if (tab === 'invoices') renderInvoicesTab();
-  if (tab === 'profile')  renderProfileTab();
-}
-
+// ── Header Search ─────────────────────────────────────────────────────────────
 function onHeaderSearch(val) {
+  // On non-sales pages, redirect to /sales with the search pre-applied.
+  if (location.pathname !== '/sales') {
+    if (val) location.href = '/sales?q=' + encodeURIComponent(val);
+    return;
+  }
   const clear = document.getElementById('search-clear');
   if (clear) clear.classList.toggle('hidden', !val);
-  if (val && state.activeTab !== 'customers') setTab('customers');
   filterDeals(val);
 }
 
@@ -814,7 +819,7 @@ function renderHomeTab() {
   function taskCard(t) {
     const isOvr = t.dueDate && new Date(t.dueDate).getTime() < todayMs;
     const dueLbl = t.dueDate ? fmtQBDate(t.dueDate) : '';
-    return `<div class="home-card" onclick="setTab('tasks')">
+    return `<div class="home-card" onclick="location.href='/calendar'">
       <div class="home-card-title">${escHtml(t.title)}</div>
       ${dueLbl ? `<div class="home-card-sub ${isOvr ? 'home-card-sub-red' : ''}">${isOvr ? '⚠ Overdue · ' : ''}${dueLbl}</div>` : ''}
     </div>`;
@@ -849,7 +854,7 @@ function renderHomeTab() {
     const stage   = active[0]?.stageKey;
     const stageLbl = stage ? (state.workflow?.stages?.[stage]?.label || stage) : null;
     const name    = [c.properties?.firstname, c.properties?.lastname].filter(Boolean).join(' ') || '—';
-    return `<div class="home-card" onclick="selectContact('${c.id}')">
+    return `<div class="home-card" onclick="openProject('${c.id}', 0)">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
         <div class="home-card-title">${escHtml(name)}</div>
         ${stageLbl ? `<span class="home-badge home-badge-stage">${escHtml(stageLbl)}</span>` : ''}
@@ -867,12 +872,12 @@ function renderHomeTab() {
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-title">My Tasks${overdue.length ? ` <span class="home-badge home-badge-red" style="margin-left:6px">${overdue.length} overdue</span>` : ''}</span>
-        <button class="home-section-link" onclick="setTab('tasks')">See all</button>
+        <button class="home-section-link" onclick="location.href='/calendar'">See all</button>
       </div>
       ${dueTasks.length === 0
         ? `<div class="home-empty">No tasks due today — you're all clear.</div>`
         : dueTasks.slice(0, 4).map(taskCard).join('') +
-          (dueTasks.length > 4 ? `<button class="home-more" onclick="setTab('tasks')">+${dueTasks.length - 4} more tasks</button>` : '')
+          (dueTasks.length > 4 ? `<button class="home-more" onclick="location.href='/calendar'">+${dueTasks.length - 4} more tasks</button>` : '')
       }
     </div>
 
@@ -880,7 +885,7 @@ function renderHomeTab() {
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-title">Upcoming</span>
-        <button class="home-section-link" onclick="setTab('tasks')">Calendar</button>
+        <button class="home-section-link" onclick="location.href='/calendar'">Calendar</button>
       </div>
       ${calEvents.map(eventCard).join('')}
     </div>` : ''}
@@ -889,7 +894,7 @@ function renderHomeTab() {
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-title">Overdue Invoices</span>
-        <button class="home-section-link" onclick="setTab('invoices')">See all</button>
+        <button class="home-section-link" onclick="location.href='/invoices'">See all</button>
       </div>
       ${overdueInvs.map(invCard).join('')}
     </div>` : ''}
@@ -898,7 +903,7 @@ function renderHomeTab() {
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-title">Active Projects</span>
-        <button class="home-section-link" onclick="setTab('customers')">All customers</button>
+        <button class="home-section-link" onclick="location.href='/sales'">All customers</button>
       </div>
       ${activeCustomers.map(customerCard).join('')}
     </div>` : ''}
@@ -1001,8 +1006,11 @@ function projectCardHtml(contactId, room) {
 }
 
 function openProject(contactId, roomIdx) {
-  setTab('customers');
-  selectContact(contactId, roomIdx);
+  // Cross-page navigation: stash request, navigate to /sales, sales page will open it.
+  try {
+    sessionStorage.setItem('pendingOpenContact', JSON.stringify({ contactId, roomIdx }));
+  } catch {}
+  location.href = '/sales';
 }
 
 // ── Tasks View ────────────────────────────────────────────────────────────────
@@ -1529,12 +1537,12 @@ function renderAuthStatus() {
   const initials = [user.first_name, user.last_name]
     .filter(Boolean).map(s => s[0]).join('').toUpperCase() || '?';
   el.innerHTML = user.profile_image_url
-    ? `<button onclick="setTab('profile')" class="header-avatar-btn" title="Profile" aria-label="Open profile">
+    ? `<a href="/profile" class="header-avatar-btn" title="Profile" aria-label="Open profile">
          <img src="${escHtml(user.profile_image_url)}" alt="" class="header-avatar-img">
-       </button>`
-    : `<button onclick="setTab('profile')" class="header-avatar-btn header-avatar-initials" title="Profile" aria-label="Open profile">
+       </a>`
+    : `<a href="/profile" class="header-avatar-btn header-avatar-initials" title="Profile" aria-label="Open profile">
          ${escHtml(initials)}
-       </button>`;
+       </a>`;
 }
 
 async function renderProfileTab() {
@@ -1563,7 +1571,7 @@ async function renderProfileTab() {
 
   el.innerHTML = `
     <!-- Back button -->
-    <button class="profile-back-btn" onclick="setTab(state.prevTab || 'home')">
+    <button class="profile-back-btn" onclick="history.length > 1 ? history.back() : (location.href = '/')">
       <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
       </svg>
@@ -2240,7 +2248,7 @@ function setStatusChecked(stageKey, statusId, checked) {
       state.expandedStages = new Set([stageKey]);
       updateRoomCache();
       renderCustomerList();
-      if (state.activeTab === 'projects') renderProjectsView();
+      renderProjectsView();
       message = `Moved back to ${state.workflow?.stages?.[stageKey]?.label || stageKey}`;
     }
   }
@@ -2257,7 +2265,7 @@ function setStatusChecked(stageKey, statusId, checked) {
         state.expandedStages = new Set();
         updateRoomCache();
         renderCustomerList();
-        if (state.activeTab === 'projects') renderProjectsView();
+        renderProjectsView();
         message = `Advanced to ${state.workflow.stages[nextKey].label}`;
       }
     }
@@ -2276,7 +2284,7 @@ function moveBackToStage(stageKey) {
   state.expandedStages = new Set([stageKey]);
   updateRoomCache();
   renderCustomerList();
-  if (state.activeTab === 'projects') renderProjectsView();
+  renderProjectsView();
   renderWorkflowStages();
   renderWorkflowHeader();
   const label = state.workflow?.stages?.[stageKey]?.label || stageKey;
@@ -2539,7 +2547,7 @@ async function loadQBInvoices() {
     state.qb.loading  = false;
     renderCustomerList();
     const invEl = document.getElementById('invoices-view');
-    if (invEl && state.activeTab === 'invoices') renderInvoicesTab();
+    if (invEl) renderInvoicesTab();
     const wfInvEl = document.getElementById('invoices-section');
     if (wfInvEl) renderWorkflowInvoices();
   } catch {
@@ -2968,5 +2976,3 @@ async function sendInvoice() {
   }
 }
 
-// ── Start ─────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', init);

@@ -45,6 +45,21 @@ app.use('/__mockup', (req, res) => {
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json());
+
+// Clean URLs for each page (no .html extension). Must precede express.static so the
+// extensionless paths win over any default static-index handling.
+const PAGE_ROUTES = {
+  '/':         'index.html',
+  '/sales':    'sales.html',
+  '/projects': 'projects.html',
+  '/calendar': 'calendar.html',
+  '/invoices': 'invoices.html',
+  '/profile':  'profile.html',
+};
+for (const [route, file] of Object.entries(PAGE_ROUTES)) {
+  app.get(route, (_req, res) => res.sendFile(path.join(__dirname, 'public', file)));
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 installSession(app);
 

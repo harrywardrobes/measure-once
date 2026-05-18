@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#200842">
   <meta name="color-scheme" content="light">
-  <title>Home · Measure Once</title>
+  <title>Profile · Measure Once</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,8 +16,8 @@
 </head>
 <body>
 
-  <div id="tab-home" class="home-tab">
-    <div id="home-view" class="home-inner"></div>
+  <div id="tab-profile" class="profile-tab">
+    <div id="profile-view" class="profile-inner"></div>
   </div>
 
   <script src="/chrome.js"></script>
@@ -25,17 +25,7 @@
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       if (!await bootstrap()) return;
-      // Home needs personal tasks and upcoming calendar events for its cards.
-      try {
-        const [tasks, cal] = await Promise.all([
-          GET('/api/personal-tasks').catch(() => []),
-          GET('/api/calendar/upcoming').catch(() => ({ events: [], connected: false })),
-        ]);
-        state.personalTasks    = tasks || [];
-        state.calendarEvents   = cal.events || [];
-        state.calendarConnected = !!cal.connected;
-      } catch {}
-      renderHomeTab();
+      renderProfileTab();
     });
   </script>
 </body>
