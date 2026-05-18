@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C · Split master-detail</title>
+<style>
+  :root {
+    --orchid: #9b669b; --orchid-deep: #7d4b7d;
+    --ink-1: #1a1a1a; --ink-2: #404040; --ink-3: #737373;
+    --stone-soft: #fafaf7; --stone-light: #e7e5e0; --stone-deep: #a8a29e;
+  }
+  * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  body { margin: 0; background: #fff; color: var(--ink-1); font-size: 14px; }
+  .shell { padding: 12px; height: 100vh; display: flex; flex-direction: column; }
+  .hdr { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .nav-grp { display: flex; align-items: center; gap: 6px; }
+  .iconbtn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--stone-light); background: #fff; cursor: pointer; font-size: 18px; line-height: 1; color: var(--ink-2); }
+  .today-btn { height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--stone-light); background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--ink-2); }
+  .title { margin-left: 8px; font-size: 16px; font-weight: 600; }
+  .actions { display: flex; align-items: center; gap: 10px; }
+  .view-toggle { display: flex; border: 1px solid var(--stone-light); border-radius: 8px; overflow: hidden; }
+  .view-btn { padding: 6px 12px; background: #fff; border: none; cursor: pointer; font-size: 13px; color: var(--ink-2); border-right: 1px solid var(--stone-light); }
+  .view-btn:last-child { border: none; }
+  .view-btn.active { background: var(--orchid); color: #fff; }
+  .ws-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+  .new-btn { height: 32px; padding: 0 14px; border-radius: 8px; border: none; background: var(--orchid); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+  .split { display: grid; grid-template-columns: 320px 1fr; gap: 16px; flex: 1; min-height: 0; }
+  .rail { border: 1px solid var(--stone-light); border-radius: 12px; padding: 14px; overflow-y: auto; background: var(--stone-soft); }
+  .rail-title { font-size: 14px; font-weight: 600; margin: 0 0 12px; }
+  .mini { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .mini-h { font-size: 10px; font-weight: 600; color: var(--stone-deep); text-align: center; padding: 4px 0; text-transform: uppercase; }
+  .mini-cell { aspect-ratio: 1; border-radius: 6px; background: #fff; border: 1px solid transparent; cursor: pointer; padding: 4px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; transition: background 0.1s; }
+  .mini-cell:hover { background: #fff; border-color: var(--stone-light); }
+  .mini-cell.out { color: var(--stone-deep); background: transparent; }
+  .mini-cell.today .mini-num { background: var(--ink-1); color: #fff; border-radius: 999px; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+  .mini-cell.selected { background: var(--orchid); color: #fff; }
+  .mini-cell.selected .mini-num { color: #fff; background: transparent; }
+  .mini-cell.selected .mini-dots .dot { box-shadow: 0 0 0 1px rgba(255,255,255,0.6); }
+  .mini-num { font-size: 12px; font-weight: 600; }
+  .mini-dots { display: flex; gap: 2px; }
+  .dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+  .rail-section { margin-top: 18px; }
+  .rail-section-title { font-size: 11px; font-weight: 700; color: var(--stone-deep); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+  .summary-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 4px 0; color: var(--ink-2); }
+  .summary-row .count { font-weight: 600; color: var(--ink-1); }
+
+  .pane { border: 1px solid var(--stone-light); border-radius: 12px; padding: 18px; overflow-y: auto; }
+  .pane-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--stone-light); }
+  .pane-date { display: flex; align-items: baseline; gap: 10px; }
+  .pane-num { font-size: 32px; font-weight: 700; line-height: 1; }
+  .pane-day { font-size: 15px; font-weight: 600; color: var(--ink-2); }
+  .pane-sub { font-size: 13px; color: var(--ink-3); margin-top: 4px; }
+
+  .visit-card { display: flex; gap: 14px; padding: 14px; border: 1px solid var(--stone-light); border-radius: 10px; margin-bottom: 10px; cursor: pointer; background: #fff; transition: border-color 0.1s, box-shadow 0.1s; }
+  .visit-card:hover { border-color: var(--stone-deep); box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+  .vc-time { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; min-width: 80px; color: var(--ink-1); }
+  .vc-time .vc-end { display: block; font-size: 11px; color: var(--ink-3); font-weight: 500; margin-top: 1px; }
+  .vc-stripe { width: 4px; border-radius: 2px; flex-shrink: 0; }
+  .vc-body { flex: 1; min-width: 0; }
+  .vc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .vc-tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 999px; color: #fff; text-transform: uppercase; letter-spacing: 0.04em; }
+  .vc-cust { font-size: 15px; font-weight: 600; color: var(--ink-1); }
+  .vc-loc { font-size: 12px; color: var(--ink-3); margin-bottom: 6px; }
+  .vc-notes { font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="hdr">
+      <div class="nav-grp">
+        <button class="iconbtn">‹</button>
+        <button class="today-btn">Today</button>
+        <button class="iconbtn">›</button>
+        <span class="title">May 2026</span>
+      </div>
+      <div class="actions">
+        <div class="view-toggle">
+          <button class="view-btn">Day</button>
+          <button class="view-btn">Week</button>
+          <button class="view-btn active">Month</button>
+        </div>
+        <label class="ws-toggle"><input type="checkbox" checked> Workshop time</label>
+        <button class="new-btn">+ New visit</button>
+      </div>
+    </div>
+
+    <div class="split">
+      <aside class="rail">
+        <h3 class="rail-title">May 2026</h3>
+        <div class="mini" id="mini"></div>
+        <div class="rail-section">
+          <div class="rail-section-title">This week</div>
+          <div class="summary-row"><span>Design visits</span><span class="count">3</span></div>
+          <div class="summary-row"><span>Surveys</span><span class="count">3</span></div>
+          <div class="summary-row"><span>Installations</span><span class="count">2</span></div>
+          <div class="summary-row"><span>Remedials</span><span class="count">2</span></div>
+          <div class="summary-row"><span>Workshop hours</span><span class="count">7.5</span></div>
+        </div>
+      </aside>
+
+      <main class="pane">
+        <div class="pane-head">
+          <div class="pane-date">
+            <span class="pane-num">18</span>
+            <div>
+              <div class="pane-day">Monday, May</div>
+              <div class="pane-sub">3 visits · Today</div>
+            </div>
+          </div>
+          <button class="new-btn">+ Add to this day</button>
+        </div>
+        <div id="cards"></div>
+      </main>
+    </div>
+  </div>
+
+<script>
+const TYPES = {
+  design:       { color:'#3b82f6', label:'Design' },
+  survey:       { color:'#f59e0b', label:'Survey' },
+  installation: { color:'#10b981', label:'Install' },
+  remedial:     { color:'#ef4444', label:'Remedial' },
+  workshop:     { color:'#8b5cf6', label:'Workshop' },
+};
+const SELECTED = 18, TODAY = 18;
+
+// month grid (May 2026: starts on Friday May 1)
+const OFFSET = 4; // Fri (Mon-based: 4)
+const DAYS_IN_MONTH = 31;
+// dummy visit dots per day
+const DAY_DOTS = {
+  4:['design'], 5:['survey','workshop'], 7:['installation','installation'],
+  11:['design','survey'], 12:['installation'], 13:['workshop'],
+  14:['remedial'], 15:['design','survey'],
+  18:['survey','design','workshop'], 19:['installation','remedial'],
+  20:['design','survey','workshop'], 21:['installation','design'], 22:['survey','remedial','workshop'],
+  25:['design'], 26:['installation'], 27:['survey','workshop'], 28:['design','installation'],
+};
+
+const SELECTED_VISITS = [
+  { time:'09:00', end:'10:30', type:'survey',   cust:'James Wilson',  loc:'14 Lavender Hill, Putney SW15',
+    notes:'Initial kitchen survey. Customer requested island layout. Bring tape measure and laser.' },
+  { time:'11:00', end:'12:30', type:'design',   cust:'Priya Patel',   loc:'Showroom · Studio 2',
+    notes:'Walk-through of plan v2 with revised handle selection. Confirm worktop finish.' },
+  { time:'14:00', end:'17:00', type:'workshop', cust:'Henderson job', loc:'Workshop',
+    notes:'Carcass prep — 5 base units. Materials staged Friday.' },
+];
+
+function renderMini() {
+  const grid = document.getElementById('mini');
+  let html = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => `<div class="mini-h">${d}</div>`).join('');
+  // previous-month padding
+  for (let i = 0; i < OFFSET; i++) html += `<div class="mini-cell out"><span class="mini-num">${27+i}</span></div>`;
+  for (let d = 1; d <= DAYS_IN_MONTH; d++) {
+    const dots = (DAY_DOTS[d] || []).slice(0,4).map(t => `<span class="dot" style="background:${TYPES[t].color}"></span>`).join('');
+    const cls = (d === SELECTED ? ' selected' : '') + (d === TODAY && d !== SELECTED ? ' today' : '');
+    html += `<div class="mini-cell${cls}"><span class="mini-num">${d}</span><span class="mini-dots">${dots}</span></div>`;
+  }
+  const total = OFFSET + DAYS_IN_MONTH;
+  const tail = (7 - (total % 7)) % 7;
+  for (let i = 1; i <= tail; i++) html += `<div class="mini-cell out"><span class="mini-num">${i}</span></div>`;
+  grid.innerHTML = html;
+}
+
+function renderCards() {
+  const out = document.getElementById('cards');
+  out.innerHTML = SELECTED_VISITS.map(v => {
+    const m = TYPES[v.type];
+    return `<div class="visit-card">
+      <div class="vc-time">${v.time}<span class="vc-end">to ${v.end}</span></div>
+      <div class="vc-stripe" style="background:${m.color}"></div>
+      <div class="vc-body">
+        <div class="vc-head"><span class="vc-tag" style="background:${m.color}">${m.label}</span><span class="vc-cust">${v.cust}</span></div>
+        <div class="vc-loc">📍 ${v.loc}</div>
+        <div class="vc-notes">${v.notes}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+renderMini();
+renderCards();
+</script>
+</body>
+</html>
