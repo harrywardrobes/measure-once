@@ -456,6 +456,27 @@ async function setupAuth(app) {
     }
   });
 
+  // Platform users — all registered users, for the visit assignee picker.
+  app.get('/api/platform-users', isAuthenticated, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT id, first_name, last_name, email, profile_image_url, job_role
+         FROM users ORDER BY first_name ASC, last_name ASC LIMIT 200`
+      );
+      res.json(r.rows.map(u => ({
+        id:              u.id,
+        firstName:       u.first_name  || '',
+        lastName:        u.last_name   || '',
+        email:           u.email       || '',
+        profileImageUrl: u.profile_image_url || null,
+        jobRole:         u.job_role    || null
+      })));
+    } catch (e) {
+      console.error('GET /api/platform-users failed:', e.message);
+      res.status(500).json({ error: 'Failed to load users' });
+    }
+  });
+
   // Admin: list all users with profile fields.
   app.get('/api/admin/users', isAuthenticated, requireAdmin, async (req, res) => {
     try {
