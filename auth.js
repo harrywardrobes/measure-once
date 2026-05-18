@@ -4,6 +4,61 @@ const passport = require('passport');
 const memoize = require('memoizee');
 const connectPg = require('connect-pg-simple');
 const { Pool } = require('pg');
+const nodemailer = require('nodemailer');
+
+function createMailTransport() {
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+}
+
+async function notifyAdminsOfAccessRequest(name, email, timestamp) {
+  const adminEmails = (process.env.ADMIN_EMAILS || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  if (adminEmails.length === 0) return;
+
+  const transport = createMailTransport();
+  if (!transport) {
+    console.warn('  SMTP not configured — skipping admin notification email.');
+    return;
+  }
+
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const ts = timestamp ? new Date(timestamp).toUTCString() : new Date().toUTCString();
+
+  try {
+    await transport.sendMail({
+      from,
+      to: adminEmails.join(', '),
+      subject: 'New access request — Measure Once',
+      text: [
+        'A new access request has been submitted.',
+        '',
+        `Name:      ${name}`,
+        `Email:     ${email}`,
+        `Requested: ${ts}`,
+        '',
+        'Log in to the admin panel to approve or reject the request.',
+      ].join('\n'),
+      html: `
+        <p>A new access request has been submitted.</p>
+        <table cellpadding="4" cellspacing="0">
+          <tr><td><strong>Name</strong></td><td>${name}</td></tr>
+          <tr><td><strong>Email</strong></td><td>${email}</td></tr>
+          <tr><td><strong>Requested</strong></td><td>${ts}</td></tr>
+        </table>
+        <p>Log in to the admin panel to approve or reject the request.</p>
+      `,
+    });
+    console.log(`  Admin notification sent for access request: ${email}`);
+  } catch (err) {
+    console.error('  Failed to send admin notification email:', err.message);
+  }
+}
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -184,13 +239,18 @@ async function setupAuth(app) {
       if (!(await isEmailApproved(email))) {
         const name = [claims.first_name, claims.last_name].filter(Boolean).join(' ')
           || claims.name || email;
-        await pool.query(
+        const insertResult = await pool.query(
           `INSERT INTO account_requests (name, email)
            VALUES ($1, $2)
-           ON CONFLICT (email) DO NOTHING`,
+           ON CONFLICT (email) DO NOTHING
+           RETURNING created_at`,
           [name, email]
         );
         console.log(`  Auto access request: ${name} <${email}>`);
+        if (insertResult.rowCount > 0) {
+          const createdAt = insertResult.rows[0].created_at;
+          notifyAdminsOfAccessRequest(name, email, createdAt).catch(() => {});
+        }
         return verified(null, false, { message: 'not_approved' });
       }
       const user = {};
@@ -262,11 +322,15 @@ async function setupAuth(app) {
       if (await isEmailApproved(email)) {
         return res.json({ ok: true, alreadyApproved: true });
       }
-      await pool.query(
-        `INSERT INTO account_requests (name, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING`,
+      const insertResult = await pool.query(
+        `INSERT INTO account_requests (name, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING created_at`,
         [name, email]
       );
       console.log(`  Access request: ${name} <${email}>`);
+      if (insertResult.rowCount > 0) {
+        const createdAt = insertResult.rows[0].created_at;
+        notifyAdminsOfAccessRequest(name, email, createdAt).catch(() => {});
+      }
       res.json({ ok: true });
     } catch (e) {
       console.error('request-access failed:', e.message);
