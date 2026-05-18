@@ -2,7 +2,11 @@ const express = require('express');
 const axios   = require('axios');
 const crypto  = require('crypto');
 const { Pool } = require('pg');
-const { isAuthenticated, requireAdmin } = require('./auth');
+const { isAuthenticated, requireAdmin, isAdminEmail } = require('./auth');
+
+// ── Per-user rate limiter for sensitive send actions (Postgres-backed) ──────────
+// Durable across restarts; safe in multi-instance deployments.
+const SEND_LIMIT = 10; // max sends per user per rolling hour
 
 const router = express.Router();
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -41,8 +45,37 @@ async function initDB() {
       updated_at    TIMESTAMP DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS qb_send_log (
+      id         SERIAL PRIMARY KEY,
+      user_id    TEXT        NOT NULL,
+      sent_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS qb_send_log_user_sent
+      ON qb_send_log (user_id, sent_at)
+  `);
 }
 initDB().catch(e => console.warn('QB DB init:', e.message));
+
+// Purge rows older than 1 hour every 30 minutes to keep the table small.
+setInterval(() => {
+  pool.query(`DELETE FROM qb_send_log WHERE sent_at < NOW() - INTERVAL '1 hour'`)
+    .catch(e => console.warn('QB send log cleanup:', e.message));
+}, 30 * 60 * 1000);
+
+// Returns true and records the attempt if under the limit; false if over limit.
+async function checkSendRateLimit(userId) {
+  const r = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM qb_send_log
+     WHERE user_id = $1 AND sent_at > NOW() - INTERVAL '1 hour'`,
+    [userId]
+  );
+  if (Number(r.rows[0].cnt) >= SEND_LIMIT) return false;
+  await pool.query(`INSERT INTO qb_send_log (user_id) VALUES ($1)`, [userId]);
+  return true;
+}
 
 async function getStoredTokens() {
   const r = await pool.query('SELECT * FROM qb_tokens ORDER BY id DESC LIMIT 1');
@@ -272,6 +305,18 @@ router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, async (req, res) 
 
 // ── API: send invoice by email ─────────────────────────────────────────────────
 router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, async (req, res) => {
+  // Rate-limit: cap sends per authenticated user to SEND_LIMIT per rolling hour.
+  const userId = req.user?.claims?.sub || req.user?.id;
+  try {
+    const allowed = await checkSendRateLimit(userId);
+    if (!allowed) {
+      return res.status(429).json({ error: 'Too many invoice send requests. Please wait before sending again.' });
+    }
+  } catch (e) {
+    console.error('QB send rate-limit check failed:', e.message);
+    return res.status(500).json({ error: 'Could not verify send rate limit.' });
+  }
+
   try {
     const { email } = req.body;
     const t = await getValidTokens();
@@ -281,7 +326,13 @@ router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, async (req, res
     if (!invoiceId) return res.status(400).json({ error: 'Invalid invoice id' });
 
     const params = { minorversion: 65 };
-    if (email) params.sendTo = email;
+    if (email) {
+      // Only admins may redirect the invoice to an arbitrary email address.
+      if (!isAdminEmail(req.user?.claims?.email)) {
+        return res.status(403).json({ error: 'Only admins may override the recipient email.' });
+      }
+      params.sendTo = email;
+    }
 
     const r = await axios.post(
       `${qbBase()}/v3/company/${t.realm_id}/invoice/${invoiceId}/send`,
