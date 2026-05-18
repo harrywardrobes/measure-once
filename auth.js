@@ -179,23 +179,40 @@ async function isEmailApproved(email) {
 }
 
 async function upsertUser(claims) {
-  await pool.query(
-    `INSERT INTO users (id, email, first_name, last_name, profile_image_url, updated_at)
-     VALUES ($1, $2, $3, $4, $5, NOW())
-     ON CONFLICT (id) DO UPDATE
-       SET email = EXCLUDED.email,
-           first_name = EXCLUDED.first_name,
-           last_name = EXCLUDED.last_name,
-           profile_image_url = EXCLUDED.profile_image_url,
-           updated_at = NOW()`,
-    [
-      claims.sub,
-      claims.email || null,
-      claims.first_name || null,
-      claims.last_name || null,
-      claims.profile_image_url || null,
-    ]
-  );
+  const email = claims.email || null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (email) {
+      await client.query(
+        `UPDATE users SET id = $1 WHERE email = $2 AND id != $1`,
+        [claims.sub, email]
+      );
+    }
+    await client.query(
+      `INSERT INTO users (id, email, first_name, last_name, profile_image_url, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       ON CONFLICT (id) DO UPDATE
+         SET email = EXCLUDED.email,
+             first_name = EXCLUDED.first_name,
+             last_name = EXCLUDED.last_name,
+             profile_image_url = EXCLUDED.profile_image_url,
+             updated_at = NOW()`,
+      [
+        claims.sub,
+        email,
+        claims.first_name || null,
+        claims.last_name || null,
+        claims.profile_image_url || null,
+      ]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 async function getUser(id) {
