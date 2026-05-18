@@ -547,9 +547,13 @@ app.post('/api/events', async (req, res) => {
 
 // ── HubSpot: Contact Notes + Workflow Data ────────────────────────────────────
 app.get('/api/contacts/:id/notes', async (req, res) => {
+  const contactId = String(req.params.id || '');
+  if (!/^\d+$/.test(contactId)) {
+    return res.status(400).json({ error: 'Invalid contact id' });
+  }
   try {
     const assocR = await axios.get(
-      `${HS}/crm/v3/objects/contacts/${req.params.id}/associations/notes`,
+      `${HS}/crm/v3/objects/contacts/${contactId}/associations/notes`,
       { headers: hsHeaders() }
     );
     const noteIds = assocR.data.results?.map(r => r.id) || [];
