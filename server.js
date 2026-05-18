@@ -709,13 +709,16 @@ function writePersonalTasks(tasks) {
 }
 
 app.get('/api/personal-tasks', (req, res) => {
-  res.json(readPersonalTasks());
+  const userId = req.user.claims.sub;
+  res.json(readPersonalTasks().filter(t => t.userId === userId));
 });
 
 app.post('/api/personal-tasks', (req, res) => {
+  const userId = req.user.claims.sub;
   const tasks = readPersonalTasks();
   const task = {
     id: Date.now().toString(),
+    userId,
     title: (req.body.title || '').trim(),
     dueDate: req.body.dueDate || null,
     done: false,
@@ -728,16 +731,22 @@ app.post('/api/personal-tasks', (req, res) => {
 });
 
 app.patch('/api/personal-tasks/:id', (req, res) => {
+  const userId = req.user.claims.sub;
   const tasks = readPersonalTasks();
-  const idx = tasks.findIndex(t => t.id === req.params.id);
+  const idx = tasks.findIndex(t => t.id === req.params.id && t.userId === userId);
   if (idx === -1) return res.status(404).json({ error: 'Not found' });
-  tasks[idx] = { ...tasks[idx], ...req.body };
+  const { userId: _uid, id: _id, createdAt: _ca, ...allowed } = req.body;
+  tasks[idx] = { ...tasks[idx], ...allowed };
   writePersonalTasks(tasks);
   res.json(tasks[idx]);
 });
 
 app.delete('/api/personal-tasks/:id', (req, res) => {
-  writePersonalTasks(readPersonalTasks().filter(t => t.id !== req.params.id));
+  const userId = req.user.claims.sub;
+  const tasks = readPersonalTasks();
+  const idx = tasks.findIndex(t => t.id === req.params.id && t.userId === userId);
+  if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  writePersonalTasks(tasks.filter(t => t.id !== req.params.id || t.userId !== userId));
   res.json({ success: true });
 });
 
