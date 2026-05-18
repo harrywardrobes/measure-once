@@ -1023,7 +1023,6 @@ function calStartOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1);
 function initCalendarState() {
   if (state.calendar) return;
   state.calendar = {
-    view: 'week',
     cursor: calStartOfDay(new Date()),
     showWorkshop: true,
     visits: []
@@ -1031,11 +1030,8 @@ function initCalendarState() {
 }
 
 function calRange() {
-  const c = state.calendar;
-  if (c.view === 'day')  { const f = calStartOfDay(c.cursor); return { from: f, to: calAddDays(f, 1) }; }
-  if (c.view === 'week') { const f = calStartOfWeek(c.cursor); return { from: f, to: calAddDays(f, 7) }; }
-  const f = calStartOfMonth(c.cursor);
-  return { from: f, to: new Date(c.cursor.getFullYear(), c.cursor.getMonth()+1, 1) };
+  const f = calStartOfWeek(state.calendar.cursor);
+  return { from: f, to: calAddDays(f, 7) };
 }
 
 async function loadTasksView() {
@@ -1059,10 +1055,7 @@ function renderTasksView() {
   const view = document.getElementById('tasks-view');
   if (!view) return;
   const c = state.calendar;
-  let body = '';
-  if (c.view === 'day')   body = renderDayGrid([c.cursor]);
-  if (c.view === 'week')  body = renderAgendaView();
-  if (c.view === 'month') body = renderMonthGrid();
+  const body = renderAgendaView();
   view.innerHTML = `
     <div class="cal-shell">
       ${renderCalendarHeader()}
@@ -1080,14 +1073,10 @@ function weekDays() {
 
 function calHeaderTitle() {
   const c = state.calendar;
-  if (c.view === 'day') return c.cursor.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'short', year:'numeric' });
-  if (c.view === 'week') {
-    const s = calStartOfWeek(c.cursor), e = calAddDays(s, 6);
-    if (s.getMonth() === e.getMonth())
-      return `${s.getDate()}–${e.getDate()} ${s.toLocaleDateString('en-GB',{month:'long',year:'numeric'})}`;
-    return `${s.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${e.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
-  }
-  return c.cursor.toLocaleDateString('en-GB', { month:'long', year:'numeric' });
+  const s = calStartOfWeek(c.cursor), e = calAddDays(s, 6);
+  if (s.getMonth() === e.getMonth())
+    return `${s.getDate()}–${e.getDate()} ${s.toLocaleDateString('en-GB',{month:'long',year:'numeric'})}`;
+  return `${s.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${e.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
 }
 
 function renderCalendarHeader() {
@@ -1119,92 +1108,6 @@ function visibleVisits(dayStart, dayEnd) {
     const s = new Date(v.startAt), e = new Date(v.endAt);
     return s < dayEnd && e > dayStart;
   });
-}
-
-function renderDayGrid(days) {
-  const hours = [];
-  for (let h = DAY_START_HOUR; h < DAY_END_HOUR; h++) hours.push(h);
-  const gridHeight = (DAY_END_HOUR - DAY_START_HOUR) * HOUR_PX;
-  const todayMs = calStartOfDay(new Date()).getTime();
-
-  const cols = days.map(day => {
-    const dayStart = calStartOfDay(day);
-    const dayEnd   = calAddDays(dayStart, 1);
-    const isToday  = dayStart.getTime() === todayMs;
-    const dayVisits = visibleVisits(dayStart, dayEnd);
-
-    const bandStartMs = dayStart.getTime() + DAY_START_HOUR * 3600 * 1000;
-    const bandEndMs   = dayStart.getTime() + DAY_END_HOUR   * 3600 * 1000;
-    const blocks = dayVisits.map(v => {
-      const s = new Date(v.startAt), e = new Date(v.endAt);
-      const visStart = Math.max(s.getTime(), bandStartMs);
-      const visEnd   = Math.min(e.getTime(), bandEndMs);
-      if (visEnd <= visStart) return '';
-      const top    = ((visStart - bandStartMs) / 3600000) * HOUR_PX;
-      const height = Math.max(22, ((visEnd - visStart) / 3600000) * HOUR_PX);
-      const meta = VISIT_TYPE_META[v.type] || VISIT_TYPE_META.other;
-      const time = s.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-      const label = v.customerName || v.title || meta.label;
-      const clipped = s.getTime() < bandStartMs || e.getTime() > bandEndMs;
-      return `
-        <div class="cal-block" style="top:${top}px;height:${height}px;background:${meta.color};"
-             onclick="event.stopPropagation();openVisitModal(${v.id})" title="${escHtml(meta.label + ' — ' + label)}">
-          <div class="cal-block-time">${time}${clipped ? ' ⟂' : ''}</div>
-          <div class="cal-block-title">${escHtml(label)}</div>
-        </div>`;
-    }).filter(Boolean).join('');
-
-    const slots = hours.map(h => `<div class="cal-slot" onclick="calSlotClick('${dayStart.toISOString()}',${h})"></div>`).join('');
-
-    return `
-      <div class="cal-day-col">
-        <div class="cal-day-head ${isToday?'cal-day-head-today':''}">
-          <div class="cal-day-name">${day.toLocaleDateString('en-GB',{weekday:'short'})}</div>
-          <div class="cal-day-num">${day.getDate()}</div>
-        </div>
-        <div class="cal-day-grid" style="height:${gridHeight}px">${slots}${blocks}</div>
-      </div>`;
-  }).join('');
-
-  const timeAxis = `
-    <div class="cal-time-col">
-      <div class="cal-day-head"></div>
-      <div class="cal-time-grid" style="height:${gridHeight}px">
-        ${hours.map(h => `<div class="cal-time-label">${h}:00</div>`).join('')}
-      </div>
-    </div>`;
-
-  return `<div class="cal-grid">${timeAxis}${cols}</div>`;
-}
-
-function renderMonthGrid() {
-  const c = state.calendar;
-  const first = calStartOfMonth(c.cursor);
-  const gridStart = calAddDays(first, -((first.getDay()+6)%7));
-  const todayMs = calStartOfDay(new Date()).getTime();
-  const cells = [];
-  for (let i = 0; i < 42; i++) {
-    const day = calAddDays(gridStart, i);
-    const dayStart = calStartOfDay(day);
-    const dayEnd   = calAddDays(dayStart, 1);
-    const inMonth  = day.getMonth() === first.getMonth();
-    const isToday  = dayStart.getTime() === todayMs;
-    const dayVisits = visibleVisits(dayStart, dayEnd);
-    const dots = dayVisits.slice(0,5).map(v => {
-      const m = VISIT_TYPE_META[v.type] || VISIT_TYPE_META.other;
-      return `<span class="cal-month-dot" style="background:${m.color}" title="${escHtml(m.label)}"></span>`;
-    }).join('');
-    cells.push(`
-      <div class="cal-month-cell ${inMonth?'':'cal-month-cell-out'} ${isToday?'cal-month-cell-today':''}"
-           onclick="calMonthDayClick('${dayStart.toISOString()}')">
-        <div class="cal-month-num">${day.getDate()}</div>
-        <div class="cal-month-dots">${dots}</div>
-        ${dayVisits.length > 5 ? `<div class="cal-month-more">+${dayVisits.length-5}</div>` : ''}
-      </div>`);
-  }
-  const headers = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
-    .map(d => `<div class="cal-month-day-name">${d}</div>`).join('');
-  return `<div class="cal-month"><div class="cal-month-header">${headers}</div><div class="cal-month-grid">${cells.join('')}</div></div>`;
 }
 
 function renderPersonalTasksSection() {
@@ -1392,17 +1295,13 @@ function renderCalTopPanel() {
 }
 
 function calNav(dir) {
-  const c = state.calendar;
-  if (c.view === 'day')  c.cursor = calAddDays(c.cursor, dir);
-  else if (c.view === 'week') c.cursor = calAddDays(c.cursor, 7 * dir);
-  else c.cursor = new Date(c.cursor.getFullYear(), c.cursor.getMonth() + dir, 1);
+  state.calendar.cursor = calAddDays(state.calendar.cursor, 7 * dir);
   loadTasksView();
 }
 function calGoToday()              { state.calendar.cursor = calStartOfDay(new Date()); loadTasksView(); }
 function calToggleWorkshop(checked){ state.calendar.showWorkshop = checked; renderTasksView(); }
-function calMonthDayClick(iso)     { state.calendar.cursor = new Date(iso); loadTasksView(); }
 function calMiniDayClick(iso)      { state.calendar.cursor = new Date(iso); loadTasksView(); }
-function calSlotClick(dayIso, hour){ const s = new Date(dayIso); s.setHours(hour,0,0,0); openVisitModal(null, s); }
+
 
 function contactDisplayName(c) {
   const p = (c && c.properties) || {};
