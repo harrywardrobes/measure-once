@@ -6,6 +6,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
 
 const VALID_TYPES = ['design', 'survey', 'installation', 'remedial', 'workshop', 'other'];
+const VALID_ROLES = ['designer', 'surveyor', 'fitter', 'manager'];
 
 async function ensureVisitsTable() {
   await pool.query(`
@@ -27,6 +28,10 @@ async function ensureVisitsTable() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS visits_start_at_idx ON visits (start_at)`);
+  await pool.query(`
+    ALTER TABLE visits ADD COLUMN IF NOT EXISTS assignee_id   VARCHAR;
+    ALTER TABLE visits ADD COLUMN IF NOT EXISTS assignee_role VARCHAR;
+  `);
 }
 
 function rowToVisit(r) {
@@ -42,6 +47,8 @@ function rowToVisit(r) {
     isWorkshop:     r.is_workshop,
     notes:          r.notes,
     location:       r.location,
+    assigneeId:     r.assignee_id   || null,
+    assigneeRole:   r.assignee_role || null,
     googleEventId:  r.google_event_id,
     createdAt:      r.created_at.toISOString(),
     updatedAt:      r.updated_at.toISOString()
@@ -55,6 +62,7 @@ function validatePayload(body) {
   const end   = new Date(body.endAt);
   if (isNaN(start.getTime()) || isNaN(end.getTime())) return { error: 'Invalid start/end' };
   if (end <= start) return { error: 'End must be after start' };
+  const rawRole = body.assigneeRole ? String(body.assigneeRole).trim().toLowerCase() : null;
   return {
     type,
     title:        body.title ? String(body.title).slice(0, 200) : null,
@@ -64,7 +72,9 @@ function validatePayload(body) {
     location:     body.location ? String(body.location).slice(0, 300) : null,
     isWorkshop:   type === 'workshop' ? true : !!body.isWorkshop,
     startAt:      start.toISOString(),
-    endAt:        end.toISOString()
+    endAt:        end.toISOString(),
+    assigneeId:   body.assigneeId ? String(body.assigneeId) : null,
+    assigneeRole: rawRole && VALID_ROLES.includes(rawRole) ? rawRole : null
   };
 }
 
@@ -110,9 +120,9 @@ router.post('/api/visits', isAuthenticated, async (req, res) => {
   try {
     const r = await pool.query(
       `INSERT INTO visits
-       (created_by, customer_id, customer_name, type, title, start_at, end_at, is_workshop, notes, location)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [userId, v.customerId, v.customerName, v.type, v.title, v.startAt, v.endAt, v.isWorkshop, v.notes, v.location]
+       (created_by, customer_id, customer_name, type, title, start_at, end_at, is_workshop, notes, location, assignee_id, assignee_role)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [userId, v.customerId, v.customerName, v.type, v.title, v.startAt, v.endAt, v.isWorkshop, v.notes, v.location, v.assigneeId, v.assigneeRole]
     );
     res.json(rowToVisit(r.rows[0]));
   } catch (e) {
@@ -131,9 +141,9 @@ router.patch('/api/visits/:id', isAuthenticated, async (req, res) => {
       `UPDATE visits SET
          customer_id=$1, customer_name=$2, type=$3, title=$4,
          start_at=$5, end_at=$6, is_workshop=$7, notes=$8, location=$9,
-         updated_at=NOW()
-       WHERE id=$10 RETURNING *`,
-      [v.customerId, v.customerName, v.type, v.title, v.startAt, v.endAt, v.isWorkshop, v.notes, v.location, id]
+         assignee_id=$10, assignee_role=$11, updated_at=NOW()
+       WHERE id=$12 RETURNING *`,
+      [v.customerId, v.customerName, v.type, v.title, v.startAt, v.endAt, v.isWorkshop, v.notes, v.location, v.assigneeId, v.assigneeRole, id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(rowToVisit(r.rows[0]));

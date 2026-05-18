@@ -1039,12 +1039,14 @@ async function loadTasksView() {
   const view = document.getElementById('tasks-view');
   view.innerHTML = `<div class="cal-shell"><div class="flex items-center gap-2 text-sm" style="color:var(--stone-deep);padding:16px"><div class="spinner"></div> Loading...</div></div>`;
   const { from, to } = calRange();
-  const [visits, tasks] = await Promise.all([
+  const [visits, tasks, platformUsers] = await Promise.all([
     GET(`/api/visits?from=${from.toISOString()}&to=${to.toISOString()}`).catch(() => []),
-    GET('/api/personal-tasks').catch(() => [])
+    GET('/api/personal-tasks').catch(() => []),
+    state.platformUsers?.length ? Promise.resolve(state.platformUsers) : GET('/api/platform-users').catch(() => [])
   ]);
   state.calendar.visits = visits || [];
   state.personalTasks   = tasks || [];
+  state.platformUsers   = platformUsers || [];
   renderTasksView();
 }
 
@@ -1055,11 +1057,12 @@ function renderTasksView() {
   const c = state.calendar;
   let body = '';
   if (c.view === 'day')   body = renderDayGrid([c.cursor]);
-  if (c.view === 'week')  body = renderDayGrid(weekDays());
+  if (c.view === 'week')  body = renderAgendaView();
   if (c.view === 'month') body = renderMonthGrid();
   view.innerHTML = `
     <div class="cal-shell">
       ${renderCalendarHeader()}
+      ${renderCalTopPanel()}
       <div class="cal-body">${body}</div>
       ${renderPersonalTasksSection()}
     </div>
@@ -1230,6 +1233,164 @@ function renderPersonalTasksSection() {
     </details>`;
 }
 
+// ── Agenda view (week layout B) ──────────────────────────────────────────────
+function renderAgendaView() {
+  const days = weekDays();
+  const todayMs = calStartOfDay(new Date()).getTime();
+  const SPAN = DAY_END_HOUR - DAY_START_HOUR;
+  return days.map(day => {
+    const dayStart  = calStartOfDay(day);
+    const dayEnd    = calAddDays(dayStart, 1);
+    const isToday   = dayStart.getTime() === todayMs;
+    const dayVisits = visibleVisits(dayStart, dayEnd);
+    const headCls   = isToday ? ' agenda-day-today' : '';
+    if (dayVisits.length === 0) {
+      return `<div class="agenda-day-card${headCls}">
+        <div class="agenda-day-head">
+          <div class="agenda-day-meta">
+            <span class="agenda-day-num${isToday?' agenda-day-num-today':''}">${day.getDate()}</span>
+            <div class="agenda-day-info">
+              <span class="agenda-day-name">${day.toLocaleDateString('en-GB',{weekday:'long'})}</span>
+              ${isToday?'<span class="agenda-day-rel">Today</span>':''}
+            </div>
+          </div>
+        </div>
+        <div class="agenda-empty">No visits scheduled</div>
+      </div>`;
+    }
+    const miniBlks = dayVisits.map(v => {
+      const s = new Date(v.startAt), e = new Date(v.endAt);
+      const sh = Math.max(s.getHours() + s.getMinutes()/60, DAY_START_HOUR);
+      const eh = Math.min(e.getHours() + e.getMinutes()/60, DAY_END_HOUR);
+      const left  = ((sh - DAY_START_HOUR) / SPAN) * 100;
+      const width = Math.max(1, ((eh - sh) / SPAN) * 100);
+      const m = VISIT_TYPE_META[v.type] || VISIT_TYPE_META.other;
+      return `<div class="agenda-mini-blk" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${m.color}"></div>`;
+    }).join('');
+    const rows = dayVisits.map(v => renderAgendaRow(v)).join('');
+    return `<div class="agenda-day-card${headCls}">
+      <div class="agenda-day-head">
+        <div class="agenda-day-meta">
+          <span class="agenda-day-num${isToday?' agenda-day-num-today':''}">${day.getDate()}</span>
+          <div class="agenda-day-info">
+            <span class="agenda-day-name">${day.toLocaleDateString('en-GB',{weekday:'long'})}</span>
+            ${isToday?'<span class="agenda-day-rel">Today</span>':''}
+          </div>
+        </div>
+        <span class="agenda-day-count">${dayVisits.length} visit${dayVisits.length>1?'s':''}</span>
+      </div>
+      <div class="agenda-mini-timeline">${miniBlks}</div>
+      <div class="agenda-mini-axis">
+        <span>${DAY_START_HOUR}:00</span><span>${Math.floor((DAY_START_HOUR+DAY_END_HOUR)/2)}:00</span><span>${DAY_END_HOUR}:00</span>
+      </div>
+      <div class="agenda-rows">${rows}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderAgendaRow(v) {
+  const meta = VISIT_TYPE_META[v.type] || VISIT_TYPE_META.other;
+  const s = new Date(v.startAt), e = new Date(v.endAt);
+  const fmt = d => d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  const customer = v.customerName || v.title || '—';
+  const assignee = (state.platformUsers || []).find(u => u.id === v.assigneeId);
+  const assigneeName = assignee ? `${assignee.firstName} ${assignee.lastName}`.trim() || assignee.email : null;
+  const assigneeHtml = v.assigneeRole
+    ? `<span class="agenda-assignee-chip">${v.assigneeRole.charAt(0).toUpperCase()+v.assigneeRole.slice(1)}${assigneeName ? ' · '+escHtml(assigneeName) : ''}</span>`
+    : (assigneeName ? `<span class="agenda-assignee-chip">${escHtml(assigneeName)}</span>` : '');
+  return `<div class="agenda-row" onclick="openVisitModal(${v.id})">
+    <div class="agenda-row-pill" style="background:${meta.color}"></div>
+    <div class="agenda-row-time">${fmt(s)}<span class="agenda-row-end"> – ${fmt(e)}</span></div>
+    <div class="agenda-row-body">
+      <div class="agenda-row-title">
+        <span class="agenda-type-tag" style="background:${meta.color}">${escHtml(meta.label)}</span>${escHtml(customer)}
+      </div>
+      <div class="agenda-row-meta">
+        ${v.location ? `<span>📍 ${escHtml(v.location)}</span>` : ''}
+        ${assigneeHtml}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── Top panel: mini calendars + visit stats ──────────────────────────────────
+function renderCalTopPanel() {
+  const c = state.calendar;
+  const today = new Date();
+  const todayMs = calStartOfDay(today).getTime();
+  const month1 = new Date(c.cursor.getFullYear(), c.cursor.getMonth(), 1);
+  const month2 = new Date(month1.getFullYear(), month1.getMonth() + 1, 1);
+
+  const typeCounts = {};
+  let totalHours = 0;
+  for (const v of c.visits) {
+    if (!c.showWorkshop && v.isWorkshop) continue;
+    typeCounts[v.type] = (typeCounts[v.type] || 0) + 1;
+    totalHours += (new Date(v.endAt) - new Date(v.startAt)) / 3600000;
+  }
+
+  const statsHtml = `
+    <div class="cal-stats">
+      <div class="cal-stats-title">This period</div>
+      ${Object.entries(VISIT_TYPE_META).map(([k, m]) =>
+        typeCounts[k] ? `<div class="cal-stat-row">
+          <span class="cal-stat-dot" style="background:${m.color}"></span>
+          <span class="cal-stat-label">${m.label}</span>
+          <span class="cal-stat-count">${typeCounts[k]}</span>
+        </div>` : ''
+      ).filter(Boolean).join('')}
+      ${Object.keys(typeCounts).length === 0
+        ? '<div class="cal-stat-empty">No visits this period</div>'
+        : `<div class="cal-stat-total">${totalHours.toFixed(1)} hrs total</div>`}
+    </div>`;
+
+  const miniCalHtml = (month) => {
+    const first = calStartOfMonth(month);
+    const gridStart = calAddDays(first, -((first.getDay()+6)%7));
+    const cells = [];
+    for (let i = 0; i < 42; i++) {
+      const d = calAddDays(gridStart, i);
+      const inMonth  = d.getMonth() === first.getMonth();
+      const dMs      = calStartOfDay(d).getTime();
+      const isToday  = dMs === todayMs;
+      const isCursor = dMs === calStartOfDay(c.cursor).getTime();
+      const dayStart = calStartOfDay(d), dayEnd = calAddDays(dayStart, 1);
+      const dots = c.visits.filter(v => {
+        const s = new Date(v.startAt), e = new Date(v.endAt);
+        return s < dayEnd && e > dayStart && (c.showWorkshop || !v.isWorkshop);
+      }).slice(0, 3).map(v => {
+        const m = VISIT_TYPE_META[v.type] || VISIT_TYPE_META.other;
+        return `<span class="cal-mini-dot" style="background:${m.color}"></span>`;
+      }).join('');
+      cells.push(`<div class="cal-mini-cell${!inMonth?' cal-mini-out':''}${isToday?' cal-mini-today':''}${isCursor?' cal-mini-selected':''}"
+        onclick="calMiniDayClick('${dayStart.toISOString()}')">
+        <span class="cal-mini-num">${d.getDate()}</span>
+        <span class="cal-mini-dots">${dots}</span>
+      </div>`);
+    }
+    const headers = ['M','T','W','T','F','S','S'].map(d => `<span class="cal-mini-dow">${d}</span>`).join('');
+    return `<div class="cal-mini-month">
+      <div class="cal-mini-month-title">${month.toLocaleDateString('en-GB',{month:'long',year:'numeric'})}</div>
+      <div class="cal-mini-grid">${headers}${cells.join('')}</div>
+    </div>`;
+  };
+
+  return `
+    <div class="cal-top-panel">
+      <details class="cal-top-mobile">
+        <summary class="cal-top-mobile-summary">
+          Schedule overview · ${Object.values(typeCounts).reduce((a,b)=>a+b,0)} visits
+        </summary>
+        <div class="cal-top-mobile-body">${statsHtml}</div>
+      </details>
+      <div class="cal-top-desktop">
+        ${miniCalHtml(month1)}
+        ${miniCalHtml(month2)}
+        ${statsHtml}
+      </div>
+    </div>`;
+}
+
 function calNav(dir) {
   const c = state.calendar;
   if (c.view === 'day')  c.cursor = calAddDays(c.cursor, dir);
@@ -1241,6 +1402,7 @@ function calGoToday()              { state.calendar.cursor = calStartOfDay(new D
 function calSetView(v)             { state.calendar.view = v; loadTasksView(); }
 function calToggleWorkshop(checked){ state.calendar.showWorkshop = checked; renderTasksView(); }
 function calMonthDayClick(iso)     { state.calendar.cursor = new Date(iso); state.calendar.view = 'day'; loadTasksView(); }
+function calMiniDayClick(iso)      { state.calendar.cursor = new Date(iso); loadTasksView(); }
 function calSlotClick(dayIso, hour){ const s = new Date(dayIso); s.setHours(hour,0,0,0); openVisitModal(null, s); }
 
 function contactDisplayName(c) {
@@ -1304,6 +1466,29 @@ function openVisitModal(visitId, prefillStart) {
           <span class="visit-label">Notes</span>
           <textarea id="vm-notes" class="visit-input visit-textarea" rows="3">${escHtml(existing?.notes||'')}</textarea>
         </label>
+        <div class="visit-row">
+          <label class="visit-field">
+            <span class="visit-label">Assigned role</span>
+            <select id="vm-assignee-role" class="visit-input">
+              <option value="">— None —</option>
+              ${['designer','surveyor','fitter','manager'].map(r => {
+                const sel = existing?.assigneeRole === r;
+                return `<option value="${r}" ${sel?'selected':''}>${r.charAt(0).toUpperCase()+r.slice(1)}</option>`;
+              }).join('')}
+            </select>
+          </label>
+          <label class="visit-field">
+            <span class="visit-label">Assigned to</span>
+            <select id="vm-assignee-id" class="visit-input">
+              <option value="">— None —</option>
+              ${(state.platformUsers || []).map(u => {
+                const name = `${u.firstName} ${u.lastName}`.trim() || u.email;
+                const sel = existing?.assigneeId === u.id;
+                return `<option value="${u.id}" ${sel?'selected':''}>${escHtml(name)}</option>`;
+              }).join('')}
+            </select>
+          </label>
+        </div>
       </div>
       <div class="visit-modal-footer">
         ${existing ? `<button class="visit-delete-btn" onclick="deleteVisit(${existing.id})">Delete</button>` : '<span></span>'}
@@ -1328,13 +1513,15 @@ async function saveVisit(id) {
   const dateStr  = document.getElementById('vm-date').value;
   const startStr = document.getElementById('vm-start').value;
   const endStr   = document.getElementById('vm-end').value;
-  const location = document.getElementById('vm-location').value.trim() || null;
-  const notes    = document.getElementById('vm-notes').value.trim() || null;
+  const location    = document.getElementById('vm-location').value.trim() || null;
+  const notes       = document.getElementById('vm-notes').value.trim() || null;
+  const assigneeRole = document.getElementById('vm-assignee-role').value || null;
+  const assigneeId   = document.getElementById('vm-assignee-id').value || null;
   if (!dateStr || !startStr || !endStr) { showToast('Date and times are required', true); return; }
   const startAt = new Date(`${dateStr}T${startStr}`);
   const endAt   = new Date(`${dateStr}T${endStr}`);
   if (endAt <= startAt) { showToast('End must be after start', true); return; }
-  const payload = { type, customerId, customerName, title, startAt: startAt.toISOString(), endAt: endAt.toISOString(), location, notes };
+  const payload = { type, customerId, customerName, title, startAt: startAt.toISOString(), endAt: endAt.toISOString(), location, notes, assigneeRole, assigneeId };
   try {
     if (id) await PATCH_REQ(`/api/visits/${id}`, payload);
     else    await POST('/api/visits', payload);

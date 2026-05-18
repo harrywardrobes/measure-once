@@ -37,6 +37,27 @@ function requireHubspotToken(req, res, next) {
 app.use(qbRoutes);
 app.use(visitsRouter);
 
+// Platform users — list of all registered users (for visit assignee picker).
+app.get('/api/platform-users', isAuthenticated, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, first_name, last_name, email, profile_image_url, job_role
+       FROM users ORDER BY first_name ASC, last_name ASC LIMIT 200`
+    );
+    res.json(r.rows.map(u => ({
+      id:              u.id,
+      firstName:       u.first_name  || '',
+      lastName:        u.last_name   || '',
+      email:           u.email       || '',
+      profileImageUrl: u.profile_image_url || null,
+      jobRole:         u.job_role    || null
+    })));
+  } catch (e) {
+    console.error('GET /api/platform-users failed:', e.message);
+    res.status(500).json({ error: 'Failed to load users' });
+  }
+});
+
 // Replit Auth gate for all /api/* routes (whitelist auth-flow endpoints).
 const AUTH_WHITELIST = new Set(['/login', '/callback', '/auth/user', '/request-access']);
 app.use('/api', (req, res, next) => {
