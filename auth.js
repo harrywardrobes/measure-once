@@ -37,8 +37,15 @@ async function ensureAuthTables() {
       status VARCHAR NOT NULL DEFAULT 'pending',
       created_at TIMESTAMP DEFAULT NOW()
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS "IDX_account_requests_email_unique" ON account_requests (email);
     CREATE INDEX IF NOT EXISTS "IDX_account_requests_email" ON account_requests (email);
+  `);
+  /* Deduplicate account_requests by email before enforcing uniqueness — keeps
+     the earliest record per email so existing data is not lost. */
+  await pool.query(`
+    DELETE FROM account_requests a
+      USING account_requests b
+      WHERE a.id > b.id AND a.email = b.email;
+    CREATE UNIQUE INDEX IF NOT EXISTS "IDX_account_requests_email_unique" ON account_requests (email);
   `);
 
   // Seed admin emails from env var.
@@ -250,7 +257,7 @@ async function setupAuth(app) {
         return res.json({ ok: true, alreadyApproved: true });
       }
       await pool.query(
-        `INSERT INTO account_requests (name, email) VALUES ($1, $2)`,
+        `INSERT INTO account_requests (name, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING`,
         [name, email]
       );
       console.log(`  Access request: ${name} <${email}>`);
