@@ -408,7 +408,10 @@ async function setupAuth(app) {
   const ALLOWED_PRIVILEGE_LEVELS = ['viewer', 'member', 'manager', 'admin'];
 
   app.patch('/api/users/:id/profile', isAuthenticated, requireAdmin, async (req, res) => {
-    const { job_role, privilege_level } = req.body || {};
+    const { job_role } = req.body || {};
+    const privilege_level = typeof req.body?.privilege_level === 'string'
+      ? req.body.privilege_level.trim().toLowerCase()
+      : req.body?.privilege_level;
     if (privilege_level !== undefined && !ALLOWED_PRIVILEGE_LEVELS.includes(privilege_level)) {
       return res.status(400).json({ error: 'Invalid privilege level' });
     }

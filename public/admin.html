@@ -205,12 +205,13 @@
       if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
       try {
         await api('PATCH', '/api/users/' + encodeURIComponent(id) + '/profile', { job_role, privilege_level });
-        document.getElementById('ujob-' + id).textContent   = job_role || '—';
-        document.getElementById('ulevel-' + id).innerHTML   = levelBadge(privilege_level);
+        document.getElementById('ujob-' + id).textContent = job_role || '—';
+        document.getElementById('ulevel-' + id).innerHTML = levelBadge(privilege_level);
         closeUserEdit(id);
         toast('Saved');
       } catch (e) {
         toast(e.message, true);
+      } finally {
         if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
       }
     }
