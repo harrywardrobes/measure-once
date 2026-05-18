@@ -1023,7 +1023,7 @@ function calStartOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1);
 function initCalendarState() {
   if (state.calendar) return;
   state.calendar = {
-    view: window.innerWidth >= 768 ? 'week' : 'day',
+    view: 'week',
     cursor: calStartOfDay(new Date()),
     showWorkshop: true,
     visits: []
@@ -1101,11 +1101,7 @@ function renderCalendarHeader() {
         <span class="cal-title">${calHeaderTitle()}</span>
       </div>
       <div class="cal-actions">
-        <div class="cal-view-toggle">
-          ${['day','week','month'].map(v => `
-            <button class="cal-view-btn ${c.view===v?'cal-view-btn-active':''}" onclick="calSetView('${v}')">${v[0].toUpperCase()+v.slice(1)}</button>
-          `).join('')}
-        </div>
+
         <label class="cal-workshop-toggle">
           <input type="checkbox" ${c.showWorkshop?'checked':''} onchange="calToggleWorkshop(this.checked)">
           <span>Workshop time</span>
@@ -1403,9 +1399,8 @@ function calNav(dir) {
   loadTasksView();
 }
 function calGoToday()              { state.calendar.cursor = calStartOfDay(new Date()); loadTasksView(); }
-function calSetView(v)             { state.calendar.view = v; loadTasksView(); }
 function calToggleWorkshop(checked){ state.calendar.showWorkshop = checked; renderTasksView(); }
-function calMonthDayClick(iso)     { state.calendar.cursor = new Date(iso); state.calendar.view = 'day'; loadTasksView(); }
+function calMonthDayClick(iso)     { state.calendar.cursor = new Date(iso); loadTasksView(); }
 function calMiniDayClick(iso)      { state.calendar.cursor = new Date(iso); loadTasksView(); }
 function calSlotClick(dayIso, hour){ const s = new Date(dayIso); s.setHours(hour,0,0,0); openVisitModal(null, s); }
 
