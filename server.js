@@ -81,9 +81,14 @@ async function ensureHubSpotProperties() {
 
 // Read one contact's workflow data from HubSpot custom properties
 app.get('/api/contacts/:id/localdata', async (req, res) => {
+  const contactId = req.params.id;
+  if (typeof contactId !== 'string' || !/^[A-Za-z0-9_-]+$/.test(contactId)) {
+    return res.status(400).json({ error: 'Invalid contact id.' });
+  }
+
   try {
     const r = await axios.get(
-      `${HS}/crm/v3/objects/contacts/${req.params.id}`,
+      `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
       { headers: hsHeaders(), params: { properties: 'measure_once_rooms,measure_once_notes' } }
     );
     const roomsJson = r.data.properties?.measure_once_rooms;
@@ -98,8 +103,12 @@ app.get('/api/contacts/:id/localdata', async (req, res) => {
 app.post('/api/contacts/:id/localdata', async (req, res) => {
   try {
     const { rooms, notes, stage, substage } = req.body;
+    const contactId = req.params.id;
+    if (!/^[A-Za-z0-9_-]+$/.test(contactId)) {
+      return res.status(400).json({ error: 'Invalid contact id' });
+    }
     await axios.patch(
-      `${HS}/crm/v3/objects/contacts/${req.params.id}`,
+      `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
       {
         properties: {
           measure_once_rooms:    JSON.stringify(rooms),
@@ -375,7 +384,12 @@ app.post('/api/contacts', async (req, res) => {
 
 app.get('/api/contacts/:id', async (req, res) => {
   try {
-    const r = await axios.get(`${HS}/crm/v3/objects/contacts/${req.params.id}`, {
+    const contactId = String(req.params.id || '');
+    if (!/^\d+$/.test(contactId)) {
+      return res.status(400).json({ error: 'Invalid contact id.' });
+    }
+    const safeContactId = encodeURIComponent(contactId);
+    const r = await axios.get(`${HS}/crm/v3/objects/contacts/${safeContactId}`, {
       headers: hsHeaders(),
       params: { properties: 'firstname,lastname,email,phone,address,city,zip,customer_number' }
     });
@@ -388,8 +402,13 @@ app.get('/api/contacts/:id', async (req, res) => {
 // ── HubSpot: Notes (for checklist storage) ────────────────────────────────────
 app.get('/api/deals/:id/notes', async (req, res) => {
   try {
+    const dealId = req.params.id;
+    if (!/^\d+$/.test(dealId)) {
+      return res.status(400).json({ error: 'Invalid deal id' });
+    }
+
     const assocR = await axios.get(
-      `${HS}/crm/v3/objects/deals/${req.params.id}/associations/notes`,
+      `${HS}/crm/v3/objects/deals/${dealId}/associations/notes`,
       { headers: hsHeaders() }
     );
     const noteIds = assocR.data.results?.map(r => r.id) || [];
@@ -413,10 +432,21 @@ app.post('/api/deals/:id/checklist', async (req, res) => {
   try {
     const { checklistData, existingNoteId } = req.body;
     const noteBody = `WORKFLOW_CHECKLIST:${JSON.stringify(checklistData)}`;
+    const dealId = String(req.params.id || '');
+
+    // HubSpot deal IDs are numeric; reject anything else to prevent URL/path injection.
+    if (!/^\d+$/.test(dealId)) {
+      return res.status(400).json({ error: 'Invalid deal id' });
+    }
 
     if (existingNoteId) {
+      const validatedExistingNoteId = String(existingNoteId);
+      if (!/^[A-Za-z0-9_-]+$/.test(validatedExistingNoteId)) {
+        return res.status(400).json({ error: 'Invalid existingNoteId' });
+      }
+
       const r = await axios.patch(
-        `${HS}/crm/v3/objects/notes/${existingNoteId}`,
+        `${HS}/crm/v3/objects/notes/${validatedExistingNoteId}`,
         { properties: { hs_note_body: noteBody } },
         { headers: hsHeaders() }
       );
@@ -430,7 +460,7 @@ app.post('/api/deals/:id/checklist', async (req, res) => {
       { headers: hsHeaders() }
     );
     await axios.put(
-      `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/deals/${req.params.id}/note_to_deal`,
+      `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/deals/${dealId}/note_to_deal`,
       {},
       { headers: hsHeaders() }
     );
@@ -538,9 +568,13 @@ app.post('/api/events', async (req, res) => {
 
 // ── HubSpot: Contact Notes + Workflow Data ────────────────────────────────────
 app.get('/api/contacts/:id/notes', async (req, res) => {
+  const contactId = String(req.params.id || '');
+  if (!/^\d+$/.test(contactId)) {
+    return res.status(400).json({ error: 'Invalid contact id' });
+  }
   try {
     const assocR = await axios.get(
-      `${HS}/crm/v3/objects/contacts/${req.params.id}/associations/notes`,
+      `${HS}/crm/v3/objects/contacts/${contactId}/associations/notes`,
       { headers: hsHeaders() }
     );
     const noteIds = assocR.data.results?.map(r => r.id) || [];
