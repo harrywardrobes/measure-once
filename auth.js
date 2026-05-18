@@ -1,5 +1,36 @@
 // Replit Auth (OpenID Connect) — JavaScript adaptation for plain Express app.
 const session = require('express-session');
+
+// ── In-memory IP rate limiter for public endpoints ─────────────────────────
+// Allows at most MAX_REQUESTS per IP within WINDOW_MS.  The map is swept
+// periodically so memory does not grow without bound.
+const RATE_LIMIT_WINDOW_MS  = 15 * 60 * 1000; // 15 minutes
+const RATE_LIMIT_MAX_REQ    = 5;               // requests per window per IP
+const _rateLimitMap = new Map();               // ip → { count, windowStart }
+
+function _sweepRateLimitMap() {
+  const now = Date.now();
+  for (const [ip, entry] of _rateLimitMap) {
+    if (now - entry.windowStart >= RATE_LIMIT_WINDOW_MS) _rateLimitMap.delete(ip);
+  }
+}
+setInterval(_sweepRateLimitMap, RATE_LIMIT_WINDOW_MS).unref();
+
+function checkRateLimit(req, res) {
+  const ip  = req.ip || req.socket?.remoteAddress || 'unknown';
+  const now = Date.now();
+  let entry = _rateLimitMap.get(ip);
+  if (!entry || now - entry.windowStart >= RATE_LIMIT_WINDOW_MS) {
+    entry = { count: 0, windowStart: now };
+    _rateLimitMap.set(ip, entry);
+  }
+  entry.count += 1;
+  if (entry.count > RATE_LIMIT_MAX_REQ) {
+    res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    return false;
+  }
+  return true;
+}
 const passport = require('passport');
 const memoize = require('memoizee');
 const connectPg = require('connect-pg-simple');
@@ -312,6 +343,7 @@ async function setupAuth(app) {
 
   // Public: anyone can request access by submitting their name + email.
   app.post('/api/request-access', async (req, res) => {
+    if (!checkRateLimit(req, res)) return;
     try {
       const name  = (req.body?.name  || '').trim();
       const email = (req.body?.email || '').trim().toLowerCase();
