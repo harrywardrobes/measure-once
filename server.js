@@ -81,9 +81,14 @@ async function ensureHubSpotProperties() {
 
 // Read one contact's workflow data from HubSpot custom properties
 app.get('/api/contacts/:id/localdata', async (req, res) => {
+  const contactId = req.params.id;
+  if (typeof contactId !== 'string' || !/^[A-Za-z0-9_-]+$/.test(contactId)) {
+    return res.status(400).json({ error: 'Invalid contact id.' });
+  }
+
   try {
     const r = await axios.get(
-      `${HS}/crm/v3/objects/contacts/${req.params.id}`,
+      `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
       { headers: hsHeaders(), params: { properties: 'measure_once_rooms,measure_once_notes' } }
     );
     const roomsJson = r.data.properties?.measure_once_rooms;
