@@ -6,5 +6,9 @@ export const modules: ModuleMap = {
   "./components/mockups/home-variants/PolishedSections.tsx": () => import("../components/mockups/home-variants/PolishedSections.tsx"),
   "./components/mockups/home-variants/TodayTimeline.tsx": () => import("../components/mockups/home-variants/TodayTimeline.tsx"),
   "./components/mockups/home-variants/UrgencyFeed.tsx": () => import("../components/mockups/home-variants/UrgencyFeed.tsx"),
-  "./components/mockups/home-variants/WarmEditorial.tsx": () => import("../components/mockups/home-variants/WarmEditorial.tsx")
+  "./components/mockups/home-variants/WarmEditorial.tsx": () => import("../components/mockups/home-variants/WarmEditorial.tsx"),
+  "./components/mockups/signin-approaches/Conversational.tsx": () => import("../components/mockups/signin-approaches/Conversational.tsx"),
+  "./components/mockups/signin-approaches/DualAction.tsx": () => import("../components/mockups/signin-approaches/DualAction.tsx"),
+  "./components/mockups/signin-approaches/EditorialCraft.tsx": () => import("../components/mockups/signin-approaches/EditorialCraft.tsx"),
+  "./components/mockups/signin-approaches/SplitPreview.tsx": () => import("../components/mockups/signin-approaches/SplitPreview.tsx")
 };
