@@ -392,8 +392,13 @@ app.get('/api/contacts/:id', async (req, res) => {
 // ── HubSpot: Notes (for checklist storage) ────────────────────────────────────
 app.get('/api/deals/:id/notes', async (req, res) => {
   try {
+    const dealId = req.params.id;
+    if (!/^\d+$/.test(dealId)) {
+      return res.status(400).json({ error: 'Invalid deal id' });
+    }
+
     const assocR = await axios.get(
-      `${HS}/crm/v3/objects/deals/${req.params.id}/associations/notes`,
+      `${HS}/crm/v3/objects/deals/${dealId}/associations/notes`,
       { headers: hsHeaders() }
     );
     const noteIds = assocR.data.results?.map(r => r.id) || [];
