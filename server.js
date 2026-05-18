@@ -59,6 +59,7 @@ async function ensureHubSpotProperties() {
     { name: 'measure_once_notes',    label: 'Measure Once Notes',    fieldType: 'textarea', type: 'string', description: 'Customer notes (Measure Once CRM)' },
     { name: 'measure_once_stage',    label: 'Measure Once Stage',    fieldType: 'text',     type: 'string', description: 'Current workflow stage (Measure Once CRM)' },
     { name: 'measure_once_substage', label: 'Measure Once Substage', fieldType: 'text',     type: 'string', description: 'Current workflow substage/task (Measure Once CRM)' },
+    { name: 'customer_number',       label: 'Customer Number',       fieldType: 'text',     type: 'string', description: 'Unique customer number (e.g. LL01234) — Measure Once CRM' },
   ];
   for (const prop of props) {
     try {
@@ -275,7 +276,7 @@ app.get('/api/open-leads', async (req, res) => {
         filterGroups: [{
           filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' }]
         }],
-        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city'],
+        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number'],
         sorts: [{ propertyName: 'lastname', direction: 'ASCENDING' }],
         limit: 100
       };
@@ -295,11 +296,67 @@ app.get('/api/open-leads', async (req, res) => {
 });
 
 // ── HubSpot: Contacts ─────────────────────────────────────────────────────────
+
+// Create a new contact in HubSpot and generate a customer number
+app.post('/api/contacts', async (req, res) => {
+  const { firstname, lastname, email, phone, postcode } = req.body || {};
+
+  if (!firstname || !email || !postcode) {
+    return res.status(400).json({ error: 'First name, email, and postcode are required.' });
+  }
+
+  // Extract the area letters from the postcode (leading alpha chars before first digit)
+  const areaMatch = postcode.trim().match(/^([A-Za-z]+)/);
+  const areaPrefix = areaMatch ? areaMatch[1].toUpperCase() : 'XX';
+
+  try {
+    // Create the contact in HubSpot
+    const createBody = {
+      properties: {
+        firstname,
+        lastname:       lastname  || '',
+        email,
+        phone:          phone     || '',
+        zip:            postcode,
+        hs_lead_status: 'OPEN_DEAL',
+      }
+    };
+    const createRes = await axios.post(
+      `${HS}/crm/v3/objects/contacts`,
+      createBody,
+      { headers: hsHeaders() }
+    );
+    const contact = createRes.data;
+    const contactId = contact.id;
+
+    // Generate customer number: area letters + zero-padded contact ID (5 digits min)
+    const numPart = contactId.padStart(5, '0');
+    const customerNumber = `${areaPrefix}${numPart}`;
+
+    // Patch the contact with the generated customer number
+    await axios.patch(
+      `${HS}/crm/v3/objects/contacts/${contactId}`,
+      { properties: { customer_number: customerNumber } },
+      { headers: hsHeaders() }
+    );
+
+    contact.properties.customer_number = customerNumber;
+    return res.status(201).json(contact);
+  } catch (e) {
+    const status = e.response?.status;
+    if (status === 409) {
+      return res.status(409).json({ error: 'A contact with this email address already exists in HubSpot.' });
+    }
+    const msg = e.response?.data?.message || e.message;
+    return res.status(500).json({ error: msg });
+  }
+});
+
 app.get('/api/contacts/:id', async (req, res) => {
   try {
     const r = await axios.get(`${HS}/crm/v3/objects/contacts/${req.params.id}`, {
       headers: hsHeaders(),
-      params: { properties: 'firstname,lastname,email,phone,address,city,zip' }
+      params: { properties: 'firstname,lastname,email,phone,address,city,zip,customer_number' }
     });
     res.json(r.data);
   } catch (e) {

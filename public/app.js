@@ -385,6 +385,66 @@ async function refreshDeals() {
   }
 }
 
+// ── New Customer Modal ────────────────────────────────────────────────────────
+function openNewCustomerModal() {
+  const overlay = document.getElementById('new-customer-overlay');
+  const modal   = document.getElementById('new-customer-modal');
+  const form    = document.getElementById('new-customer-form');
+  const err     = document.getElementById('nc-error');
+  if (form)    form.reset();
+  if (err)     { err.style.display = 'none'; err.textContent = ''; }
+  if (overlay) { overlay.classList.remove('hidden'); }
+  if (modal)   { modal.style.display = 'flex'; modal.classList.remove('hidden'); }
+  setTimeout(() => document.getElementById('nc-firstname')?.focus(), 50);
+}
+
+function closeNewCustomerModal() {
+  const overlay = document.getElementById('new-customer-overlay');
+  const modal   = document.getElementById('new-customer-modal');
+  if (overlay) overlay.classList.add('hidden');
+  if (modal)   { modal.style.display = 'none'; modal.classList.add('hidden'); }
+}
+
+async function submitNewCustomer(ev) {
+  ev.preventDefault();
+  const firstname = document.getElementById('nc-firstname')?.value.trim();
+  const lastname  = document.getElementById('nc-lastname')?.value.trim();
+  const email     = document.getElementById('nc-email')?.value.trim();
+  const phone     = document.getElementById('nc-phone')?.value.trim();
+  const postcode  = document.getElementById('nc-postcode')?.value.trim();
+  const errEl     = document.getElementById('nc-error');
+  const submitBtn = document.getElementById('nc-submit');
+
+  const showError = msg => {
+    if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+  };
+
+  if (!firstname) { showError('First name is required.'); return; }
+  if (!email)     { showError('Email is required.'); return; }
+  if (!postcode)  { showError('Postcode is required.'); return; }
+
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Creating…'; }
+
+  try {
+    const contact = await POST('/api/contacts', { firstname, lastname, email, phone, postcode });
+
+    // Insert into local state so it appears immediately, then refresh from server for correct sort order
+    state.contacts.unshift(contact);
+    state.filteredContacts = [...state.contacts];
+    closeNewCustomerModal();
+    renderCustomerList();
+    const customerNum = contact.properties?.customer_number;
+    showToast(`Customer created${customerNum ? ` — ${customerNum}` : ''}`);
+    // Background refresh to pick up server sort order
+    loadOpenLeads().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
+  } catch (e) {
+    showError(e.message || 'Failed to create customer.');
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Create Customer'; }
+  }
+}
+
 // ── Build List Items ──────────────────────────────────────────────────────────
 function buildListItems() {
   const items = [];
@@ -422,8 +482,9 @@ function renderCustomerList() {
   count.textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
 
   list.innerHTML = items.map(({ contact, roomIdx, roomName, stageKey, roomStatus }) => {
-    const name       = contactName(contact);
-    const email      = contact.properties?.email || '';
+    const name         = contactName(contact);
+    const email        = contact.properties?.email || '';
+    const customerNum  = contact.properties?.customer_number || '';
     const colour     = stageKey ? stageColour(stageKey) : null;
     const stageLabel = stageKey ? (state.workflow?.stages?.[stageKey]?.label || stageKey) : null;
     const isSelected = contact.id === state.selectedContactId && roomIdx === state.selectedRoomIdx;
@@ -452,6 +513,10 @@ function renderCustomerList() {
     const statusLabel = roomStatus === 'declined' ? 'Declined' : roomStatus === 'complete' ? 'Complete' : roomStatus === 'remedial' ? 'Remedial' : 'Active';
     const statusMini = `<span class="status-mini status-mini-${roomStatus}" onclick="openStatusPicker(event,'${contact.id}',${roomIdx})" title="Change status">${statusLabel}</span>`;
 
+    const customerNumBadge = customerNum
+      ? `<span class="customer-card-value" style="font-family:monospace;font-size:0.7rem;color:#7c3aed;letter-spacing:0.03em;" title="Customer number">${escHtml(customerNum)}</span>`
+      : '';
+
     return `
       <div class="customer-card ${isSelected ? 'selected' : ''} ${isArchived ? 'card-archived' : ''}"
            data-contact-id="${contact.id}" data-room-idx="${roomIdx}"
@@ -463,6 +528,7 @@ function renderCustomerList() {
         <div class="customer-card-meta">
           ${stagePillHtml}
           ${qbBadge}
+          ${customerNumBadge}
           ${email ? `<span class="customer-card-value">${escHtml(email)}</span>` : ''}
         </div>
       </div>
