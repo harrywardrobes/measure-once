@@ -23,6 +23,26 @@ function validateHsObjectId(value, fieldName) {
   return id;
 }
 
+// ── Mockup sandbox proxy ───────────────────────────────────────────────────────
+const http = require('http');
+const MOCKUP_PORT = 23636;
+app.use('/__mockup', (req, res) => {
+  const target = '/__mockup' + (req.url || '/');
+  const options = {
+    hostname: 'localhost',
+    port: MOCKUP_PORT,
+    path: target,
+    method: req.method,
+    headers: { ...req.headers, host: `localhost:${MOCKUP_PORT}` },
+  };
+  const proxy = http.request(options, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    proxyRes.pipe(res, { end: true });
+  });
+  proxy.on('error', () => res.status(502).send('Mockup sandbox not running'));
+  req.pipe(proxy, { end: true });
+});
+
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
