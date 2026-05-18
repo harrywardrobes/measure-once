@@ -1,9 +1,17 @@
 const express = require('express');
 const { Pool } = require('pg');
+const rateLimit = require('express-rate-limit');
 const { isAuthenticated } = require('./auth');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
+
+const visitsRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 const VALID_TYPES = ['design', 'survey', 'installation', 'remedial', 'workshop', 'other'];
 const VALID_ROLES = ['designer', 'surveyor', 'fitter', 'manager'];
@@ -87,7 +95,7 @@ function parseDateParam(v) {
 // Visits are shared, organization-wide business data (same trust model as
 // HubSpot CRM notes/tasks). Any authenticated user may create, edit, or delete
 // any visit. created_by is stored for audit only.
-router.get('/api/visits', isAuthenticated, async (req, res) => {
+router.get('/api/visits', isAuthenticated, visitsRateLimiter, async (req, res) => {
   const from = parseDateParam(req.query.from);
   const to   = parseDateParam(req.query.to);
   if (from === undefined || to === undefined) return res.status(400).json({ error: 'Invalid from/to' });
