@@ -16,6 +16,13 @@ function qbBase() {
     : 'https://quickbooks.api.intuit.com';
 }
 
+function getValidatedInvoiceId(rawId) {
+  const id = String(rawId || '').trim();
+  // QuickBooks invoice ids are numeric in this integration; reject anything else.
+  if (!/^\d+$/.test(id)) return null;
+  return id;
+}
+
 function qbRedirectUri() {
   if (process.env.QB_REDIRECT_URI) return process.env.QB_REDIRECT_URI;
   const domain = (process.env.REPLIT_DOMAINS || '').split(',')[0].trim();
@@ -242,8 +249,11 @@ router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, async (req, res) 
     const t = await getValidTokens();
     if (!t) return res.status(503).json({ error: 'QuickBooks not connected' });
 
+    const invoiceId = getValidatedInvoiceId(req.params.id);
+    if (!invoiceId) return res.status(400).json({ error: 'Invalid invoice id' });
+
     const r = await axios.get(
-      `${qbBase()}/v3/company/${t.realm_id}/invoice/${req.params.id}/pdf`,
+      `${qbBase()}/v3/company/${t.realm_id}/invoice/${invoiceId}/pdf`,
       {
         headers: { Authorization: `Bearer ${t.access_token}`, Accept: 'application/pdf' },
         params:  { minorversion: 65 },
@@ -267,11 +277,14 @@ router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, async (req, res
     const t = await getValidTokens();
     if (!t) return res.status(503).json({ error: 'QuickBooks not connected' });
 
+    const invoiceId = getValidatedInvoiceId(req.params.id);
+    if (!invoiceId) return res.status(400).json({ error: 'Invalid invoice id' });
+
     const params = { minorversion: 65 };
     if (email) params.sendTo = email;
 
     const r = await axios.post(
-      `${qbBase()}/v3/company/${t.realm_id}/invoice/${req.params.id}/send`,
+      `${qbBase()}/v3/company/${t.realm_id}/invoice/${invoiceId}/send`,
       {},
       {
         headers: { Authorization: `Bearer ${t.access_token}`, 'Content-Type': 'application/octet-stream', Accept: 'application/json' },
