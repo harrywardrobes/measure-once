@@ -2056,3 +2056,18 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .profile-action-admin:hover { color: var(--orchid-deep); }
 .profile-action-signout { color: #dc2626; }
 .profile-action-signout:hover { color: #b91c1c; }
+.profile-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--orchid);
+  cursor: pointer;
+}
+.profile-back-btn:hover { color: var(--orchid-deep); }

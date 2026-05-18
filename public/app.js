@@ -746,6 +746,9 @@ async function runBottomAction() {
 
 // ── Tab Navigation ────────────────────────────────────────────────────────────
 function setTab(tab) {
+  if (tab === 'profile' && state.activeTab !== 'profile') {
+    state.prevTab = state.activeTab;
+  }
   state.activeTab = tab;
   ['home', 'customers', 'tasks', 'projects', 'invoices', 'profile'].forEach(t => {
     document.getElementById(`tab-${t}`)?.classList.toggle('hidden', tab !== t);
@@ -1206,6 +1209,14 @@ async function renderProfileTab() {
   const levelLabel  = levelLabels[profile.privilege_level] || 'Member';
 
   el.innerHTML = `
+    <!-- Back button -->
+    <button class="profile-back-btn" onclick="setTab(state.prevTab || 'home')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+      </svg>
+      Back
+    </button>
+
     <!-- Identity card -->
     <div class="profile-card">
       <div class="profile-identity">
