@@ -48,6 +48,12 @@ async function ensureAuthTables() {
     CREATE UNIQUE INDEX IF NOT EXISTS "IDX_account_requests_email_unique" ON account_requests (email);
   `);
 
+  /* Add profile columns to users if they don't exist yet (idempotent). */
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS job_role TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS privilege_level TEXT NOT NULL DEFAULT 'member';
+  `);
+
   // Seed admin emails from env var.
   const admins = (process.env.ADMIN_EMAILS || '')
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -358,6 +364,49 @@ async function setupAuth(app) {
       }
       await pool.query(`DELETE FROM allowed_emails WHERE email = $1`, [email]);
       res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── User Profile ─────────────────────────────────────────────────────────────
+  app.get('/api/users/:id/profile', isAuthenticated, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT id, email, first_name, last_name, profile_image_url, job_role, privilege_level, created_at
+         FROM users WHERE id = $1`,
+        [req.params.id]
+      );
+      if (r.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+      const u = r.rows[0];
+      res.json({ ...u, isAdmin: isAdminEmail(u.email) });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  const ALLOWED_PRIVILEGE_LEVELS = ['viewer', 'member', 'manager', 'admin'];
+
+  app.patch('/api/users/:id/profile', isAuthenticated, requireAdmin, async (req, res) => {
+    const { job_role, privilege_level } = req.body || {};
+    if (privilege_level !== undefined && !ALLOWED_PRIVILEGE_LEVELS.includes(privilege_level)) {
+      return res.status(400).json({ error: 'Invalid privilege level' });
+    }
+    try {
+      const cols = [];
+      const vals = [];
+      if (job_role !== undefined)       { cols.push(`job_role = $${cols.length + 1}`);       vals.push(job_role || null); }
+      if (privilege_level !== undefined) { cols.push(`privilege_level = $${cols.length + 1}`); vals.push(privilege_level); }
+      if (!cols.length) return res.status(400).json({ error: 'Nothing to update' });
+      vals.push(req.params.id);
+      const r = await pool.query(
+        `UPDATE users SET ${cols.join(', ')}, updated_at = NOW()
+         WHERE id = $${vals.length}
+         RETURNING id, email, first_name, last_name, profile_image_url, job_role, privilege_level`,
+        vals
+      );
+      if (r.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+      res.json(r.rows[0]);
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
