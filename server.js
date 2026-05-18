@@ -246,7 +246,12 @@ app.get('/api/deals', async (req, res) => {
 
 app.get('/api/deals/:id', async (req, res) => {
   try {
-    const r = await axios.get(`${HS}/crm/v3/objects/deals/${req.params.id}`, {
+    const dealId = String(req.params.id || '');
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(dealId)) {
+      return res.status(400).json({ error: 'Invalid deal id' });
+    }
+
+    const r = await axios.get(`${HS}/crm/v3/objects/deals/${encodeURIComponent(dealId)}`, {
       headers: hsHeaders(),
       params: {
         properties: 'dealname,dealstage,amount,closedate,pipeline,hs_lastmodifieddate,createdate',
