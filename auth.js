@@ -37,6 +37,7 @@ async function ensureAuthTables() {
       status VARCHAR NOT NULL DEFAULT 'pending',
       created_at TIMESTAMP DEFAULT NOW()
     );
+    CREATE UNIQUE INDEX IF NOT EXISTS "IDX_account_requests_email_unique" ON account_requests (email);
     CREATE INDEX IF NOT EXISTS "IDX_account_requests_email" ON account_requests (email);
   `);
 
@@ -172,9 +173,8 @@ async function setupAuth(app) {
           || claims.name || email;
         await pool.query(
           `INSERT INTO account_requests (name, email)
-           SELECT $1, $2 WHERE NOT EXISTS (
-             SELECT 1 FROM account_requests WHERE email = $2
-           )`,
+           VALUES ($1, $2)
+           ON CONFLICT (email) DO NOTHING`,
           [name, email]
         );
         console.log(`  Auto access request: ${name} <${email}>`);
