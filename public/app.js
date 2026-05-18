@@ -275,14 +275,18 @@ function showAccessGate(params) {
   const gate = document.getElementById('access-gate');
   if (gate) gate.style.display = 'flex';
 
-  const isConfirmed = params.get('access_requested') === '1'
+  const isEmailConflict = params.get('email_conflict') === '1';
+  const isConfirmed     = params.get('access_requested') === '1'
     || params.get('denied') === '1'
     || params.has('error');
 
-  const signInEl   = document.getElementById('access-sign-in-state');
-  const confirmedEl = document.getElementById('access-confirmed-state');
-  if (signInEl)    signInEl.style.display    = isConfirmed ? 'none' : '';
-  if (confirmedEl) confirmedEl.style.display = isConfirmed ? ''     : 'none';
+  const signInEl        = document.getElementById('access-sign-in-state');
+  const confirmedEl     = document.getElementById('access-confirmed-state');
+  const emailConflictEl = document.getElementById('access-email-conflict-state');
+
+  if (signInEl)        signInEl.style.display        = (!isConfirmed && !isEmailConflict) ? '' : 'none';
+  if (confirmedEl)     confirmedEl.style.display     = (isConfirmed && !isEmailConflict) ? '' : 'none';
+  if (emailConflictEl) emailConflictEl.style.display = isEmailConflict ? '' : 'none';
 }
 
 async function checkAuthStatus() {

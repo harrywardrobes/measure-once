@@ -180,16 +180,8 @@ async function isEmailApproved(email) {
 
 async function upsertUser(claims) {
   const email = claims.email || null;
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    if (email) {
-      await client.query(
-        `UPDATE users SET id = $1 WHERE email = $2 AND id != $1`,
-        [claims.sub, email]
-      );
-    }
-    await client.query(
+    await pool.query(
       `INSERT INTO users (id, email, first_name, last_name, profile_image_url, updated_at)
        VALUES ($1, $2, $3, $4, $5, NOW())
        ON CONFLICT (id) DO UPDATE
@@ -206,12 +198,13 @@ async function upsertUser(claims) {
         claims.profile_image_url || null,
       ]
     );
-    await client.query('COMMIT');
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (err.code === '23505' && err.constraint === 'users_email_key') {
+      const conflict = new Error('This email address is already registered to another account.');
+      conflict.code = 'EMAIL_CONFLICT';
+      throw conflict;
+    }
     throw err;
-  } finally {
-    client.release();
   }
 }
 
@@ -306,6 +299,9 @@ async function setupAuth(app) {
       await upsertUser(claims);
       verified(null, user);
     } catch (e) {
+      if (e.code === 'EMAIL_CONFLICT') {
+        return verified(null, false, { message: 'email_conflict' });
+      }
       verified(e);
     }
   };
@@ -341,9 +337,20 @@ async function setupAuth(app) {
 
   app.get('/api/callback', (req, res, next) => {
     ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: '/',
-      failureRedirect: '/?access_requested=1',
+    passport.authenticate(`replitauth:${req.hostname}`, (err, user, info) => {
+      if (err) return next(err);
+      if (!user) {
+        if (info?.message === 'email_conflict') {
+          return res.redirect('/?email_conflict=1');
+        }
+        return res.redirect('/?access_requested=1');
+      }
+      req.logIn(user, (loginErr) => {
+        if (loginErr) return next(loginErr);
+        const returnTo = req.session?.returnTo || '/';
+        delete req.session?.returnTo;
+        res.redirect(returnTo);
+      });
     })(req, res, next);
   });
 

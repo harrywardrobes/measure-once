@@ -43,6 +43,16 @@
           Already approved? <a href="/api/login">Sign in</a>
         </div>
       </div>
+
+      <!-- Email conflict: email already registered to another account -->
+      <div id="access-email-conflict-state" style="display:none;">
+        <div class="access-confirmed-icon" style="background:#fee2e2;color:#dc2626;">✕</div>
+        <h1 class="access-title">Email already in use</h1>
+        <p class="access-sub">The email address on your Replit account is already registered to a different account here. Please contact an admin if you think this is an error.</p>
+        <div class="access-footer" style="margin-top:20px;">
+          <a href="/api/login">Try a different account</a>
+        </div>
+      </div>
     </div>
   </div>
 
