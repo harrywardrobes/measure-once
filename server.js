@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { installSession, setupAuth, isAuthenticated, requireAdmin } = require('./auth');
 const qbRoutes = require('./quickbooks');
+const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -34,6 +35,7 @@ function requireHubspotToken(req, res, next) {
 }
 // QuickBooks routes (auth enforced inside the router)
 app.use(qbRoutes);
+app.use(visitsRouter);
 
 // Replit Auth gate for all /api/* routes (whitelist auth-flow endpoints).
 const AUTH_WHITELIST = new Set(['/login', '/callback', '/auth/user', '/request-access']);
@@ -864,5 +866,7 @@ app.get('/api/calendar/upcoming', async (req, res) => {
     console.log(`\n  Measure Once`);
     console.log(`  Running at: http://localhost:${PORT}\n`);
     await ensureHubSpotProperties();
+    try { await ensureVisitsTable(); console.log('  Visits table ready'); }
+    catch (e) { console.error('  Visits table setup failed:', e.message); }
   });
 })();

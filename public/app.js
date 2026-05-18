@@ -998,96 +998,360 @@ function openProject(contactId, roomIdx) {
 }
 
 // ── Tasks View ────────────────────────────────────────────────────────────────
+// ── Calendar state & helpers ──────────────────────────────────────────────────
+const VISIT_TYPE_META = {
+  design:       { label: 'Design visit',  color: '#3b82f6' },
+  survey:       { label: 'Survey',        color: '#f59e0b' },
+  installation: { label: 'Installation',  color: '#10b981' },
+  remedial:     { label: 'Remedial',      color: '#ef4444' },
+  workshop:     { label: 'Workshop time', color: '#8b5cf6' },
+  other:        { label: 'Other',         color: '#6b7280' }
+};
+const DAY_START_HOUR = 7;
+const DAY_END_HOUR   = 20;
+const HOUR_PX        = 56;
+
+function calStartOfDay(d)   { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function calAddDays(d, n)   { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function calStartOfWeek(d)  { const x = calStartOfDay(d); x.setDate(x.getDate() - ((x.getDay()+6)%7)); return x; }
+function calStartOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+
+function initCalendarState() {
+  if (state.calendar) return;
+  state.calendar = {
+    view: window.innerWidth >= 768 ? 'week' : 'day',
+    cursor: calStartOfDay(new Date()),
+    showWorkshop: true,
+    visits: []
+  };
+}
+
+function calRange() {
+  const c = state.calendar;
+  if (c.view === 'day')  { const f = calStartOfDay(c.cursor); return { from: f, to: calAddDays(f, 1) }; }
+  if (c.view === 'week') { const f = calStartOfWeek(c.cursor); return { from: f, to: calAddDays(f, 7) }; }
+  const f = calStartOfMonth(c.cursor);
+  return { from: f, to: new Date(c.cursor.getFullYear(), c.cursor.getMonth()+1, 1) };
+}
+
 async function loadTasksView() {
+  initCalendarState();
   const view = document.getElementById('tasks-view');
-  view.innerHTML = `<div class="tasks-inner"><div class="flex items-center gap-2 text-sm" style="color:var(--stone-deep)"><div class="spinner"></div> Loading...</div></div>`;
-  const [tasks, calData] = await Promise.all([
-    GET('/api/personal-tasks').catch(() => []),
-    GET('/api/calendar/upcoming').catch(() => ({ events: [], connected: false }))
+  view.innerHTML = `<div class="cal-shell"><div class="flex items-center gap-2 text-sm" style="color:var(--stone-deep);padding:16px"><div class="spinner"></div> Loading...</div></div>`;
+  const { from, to } = calRange();
+  const [visits, tasks] = await Promise.all([
+    GET(`/api/visits?from=${from.toISOString()}&to=${to.toISOString()}`).catch(() => []),
+    GET('/api/personal-tasks').catch(() => [])
   ]);
-  state.personalTasks    = tasks;
-  state.calendarEvents   = calData.events || [];
-  state.calendarConnected = calData.connected || false;
+  state.calendar.visits = visits || [];
+  state.personalTasks   = tasks || [];
   renderTasksView();
 }
 
 function renderTasksView() {
+  initCalendarState();
   const view = document.getElementById('tasks-view');
   if (!view) return;
-
-  const today   = new Date(); today.setHours(0,0,0,0);
-  const todayStr = today.toISOString().slice(0,10);
-  const in7days  = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-  const pending  = state.personalTasks.filter(t => !t.done);
-  const done     = state.personalTasks.filter(t => t.done);
-
-  const overdue  = pending.filter(t => t.dueDate && t.dueDate < todayStr);
-  const todayTasks  = pending.filter(t => t.dueDate === todayStr);
-  const upcoming = pending.filter(t => t.dueDate && t.dueDate > todayStr && new Date(t.dueDate) <= in7days);
-  const later    = pending.filter(t => !t.dueDate || new Date(t.dueDate) > in7days);
-
-  const taskGroup = (label, tasks, colour) => {
-    if (!tasks.length) return '';
-    return `
-      <div class="task-group">
-        <div class="task-group-label" style="color:${colour}">${label}</div>
-        ${tasks.map(t => personalTaskHtml(t)).join('')}
-      </div>`;
-  };
-
-  const addForm = state.showAddPersonalTask ? `
-    <div class="ptask-add-form">
-      <input id="ptask-title" type="text" placeholder="Task title"
-        class="ptask-input" onkeydown="if(event.key==='Enter')submitPersonalTask()">
-      <div class="flex gap-2 mt-2 items-center">
-        <input id="ptask-due" type="date" class="ptask-date-input">
-        <div style="flex:1"></div>
-        <button onclick="state.showAddPersonalTask=false;renderTasksView()" class="ptask-cancel-btn">Cancel</button>
-        <button onclick="submitPersonalTask()" class="ptask-confirm-btn">Add task</button>
-      </div>
-    </div>
-  ` : `
-    <button onclick="state.showAddPersonalTask=true;renderTasksView();setTimeout(()=>document.getElementById('ptask-title')?.focus(),30)"
-      class="ptask-add-btn">+ Add task</button>
-  `;
-
-  const calSection = `
-    <div class="tasks-section-heading">Google Calendar — next 14 days</div>
-    ${!state.calendarConnected
-      ? `<div class="cal-connect-prompt">
-           <p style="font-size:0.875rem;color:var(--ink-3);margin-bottom:12px;">Connect Google Calendar to see upcoming events here.</p>
-           <a href="/auth/google" class="ptask-confirm-btn" style="text-decoration:none;display:inline-block;">Connect Google</a>
-         </div>`
-      : state.calendarEvents.length === 0
-        ? `<p style="font-size:0.875rem;color:var(--stone-deep);padding:8px 0;">No events in the next 14 days.</p>`
-        : state.calendarEvents.map(ev => calEventHtml(ev)).join('')
-    }
-  `;
-
-  const doneSection = done.length ? `
-    <details class="done-details">
-      <summary class="done-summary">Completed (${done.length})</summary>
-      <div style="margin-top:8px">${done.map(t => personalTaskHtml(t)).join('')}</div>
-    </details>
-  ` : '';
-
+  const c = state.calendar;
+  let body = '';
+  if (c.view === 'day')   body = renderDayGrid([c.cursor]);
+  if (c.view === 'week')  body = renderDayGrid(weekDays());
+  if (c.view === 'month') body = renderMonthGrid();
   view.innerHTML = `
-    <div class="tasks-inner">
-      <div class="tasks-section-heading">My tasks</div>
-      ${addForm}
-      ${taskGroup('Overdue', overdue, '#dc2626')}
-      ${taskGroup('Today', todayTasks, 'var(--orchid)')}
-      ${taskGroup('This week', upcoming, 'var(--ink-2)')}
-      ${taskGroup('No date / later', later, 'var(--ink-3)')}
-      ${!pending.length && !state.showAddPersonalTask
-        ? `<p style="font-size:0.875rem;color:var(--stone-deep);padding:4px 0 16px;">No pending tasks.</p>` : ''}
-      ${doneSection}
-      <div style="margin-top:32px">
-        ${calSection}
+    <div class="cal-shell">
+      ${renderCalendarHeader()}
+      <div class="cal-body">${body}</div>
+      ${renderPersonalTasksSection()}
+    </div>
+  `;
+}
+
+function weekDays() {
+  const start = calStartOfWeek(state.calendar.cursor);
+  return [0,1,2,3,4,5,6].map(i => calAddDays(start, i));
+}
+
+function calHeaderTitle() {
+  const c = state.calendar;
+  if (c.view === 'day') return c.cursor.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'short', year:'numeric' });
+  if (c.view === 'week') {
+    const s = calStartOfWeek(c.cursor), e = calAddDays(s, 6);
+    if (s.getMonth() === e.getMonth())
+      return `${s.getDate()}–${e.getDate()} ${s.toLocaleDateString('en-GB',{month:'long',year:'numeric'})}`;
+    return `${s.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${e.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
+  }
+  return c.cursor.toLocaleDateString('en-GB', { month:'long', year:'numeric' });
+}
+
+function renderCalendarHeader() {
+  const c = state.calendar;
+  return `
+    <div class="cal-header">
+      <div class="cal-nav">
+        <button class="cal-nav-btn" onclick="calNav(-1)" aria-label="Previous">‹</button>
+        <button class="cal-today-btn" onclick="calGoToday()">Today</button>
+        <button class="cal-nav-btn" onclick="calNav(1)" aria-label="Next">›</button>
+        <span class="cal-title">${calHeaderTitle()}</span>
+      </div>
+      <div class="cal-actions">
+        <div class="cal-view-toggle">
+          ${['day','week','month'].map(v => `
+            <button class="cal-view-btn ${c.view===v?'cal-view-btn-active':''}" onclick="calSetView('${v}')">${v[0].toUpperCase()+v.slice(1)}</button>
+          `).join('')}
+        </div>
+        <label class="cal-workshop-toggle">
+          <input type="checkbox" ${c.showWorkshop?'checked':''} onchange="calToggleWorkshop(this.checked)">
+          <span>Workshop time</span>
+        </label>
+        <button class="cal-new-btn" onclick="openVisitModal()">+ New visit</button>
       </div>
     </div>
   `;
+}
+
+function visibleVisits(dayStart, dayEnd) {
+  const c = state.calendar;
+  return c.visits.filter(v => {
+    if (!c.showWorkshop && v.isWorkshop) return false;
+    const s = new Date(v.startAt), e = new Date(v.endAt);
+    return s < dayEnd && e > dayStart;
+  });
+}
+
+function renderDayGrid(days) {
+  const hours = [];
+  for (let h = DAY_START_HOUR; h < DAY_END_HOUR; h++) hours.push(h);
+  const gridHeight = (DAY_END_HOUR - DAY_START_HOUR) * HOUR_PX;
+  const todayMs = calStartOfDay(new Date()).getTime();
+
+  const cols = days.map(day => {
+    const dayStart = calStartOfDay(day);
+    const dayEnd   = calAddDays(dayStart, 1);
+    const isToday  = dayStart.getTime() === todayMs;
+    const dayVisits = visibleVisits(dayStart, dayEnd);
+
+    const bandStartMs = dayStart.getTime() + DAY_START_HOUR * 3600 * 1000;
+    const bandEndMs   = dayStart.getTime() + DAY_END_HOUR   * 3600 * 1000;
+    const blocks = dayVisits.map(v => {
+      const s = new Date(v.startAt), e = new Date(v.endAt);
+      const visStart = Math.max(s.getTime(), bandStartMs);
+      const visEnd   = Math.min(e.getTime(), bandEndMs);
+      if (visEnd <= visStart) return '';
+      const top    = ((visStart - bandStartMs) / 3600000) * HOUR_PX;
+      const height = Math.max(22, ((visEnd - visStart) / 3600000) * HOUR_PX);
+      const meta = VISIT_TYPE_META[v.type] || VISIT_TYPE_META.other;
+      const time = s.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+      const label = v.customerName || v.title || meta.label;
+      const clipped = s.getTime() < bandStartMs || e.getTime() > bandEndMs;
+      return `
+        <div class="cal-block" style="top:${top}px;height:${height}px;background:${meta.color};"
+             onclick="event.stopPropagation();openVisitModal(${v.id})" title="${escHtml(meta.label + ' — ' + label)}">
+          <div class="cal-block-time">${time}${clipped ? ' ⟂' : ''}</div>
+          <div class="cal-block-title">${escHtml(label)}</div>
+        </div>`;
+    }).filter(Boolean).join('');
+
+    const slots = hours.map(h => `<div class="cal-slot" onclick="calSlotClick('${dayStart.toISOString()}',${h})"></div>`).join('');
+
+    return `
+      <div class="cal-day-col">
+        <div class="cal-day-head ${isToday?'cal-day-head-today':''}">
+          <div class="cal-day-name">${day.toLocaleDateString('en-GB',{weekday:'short'})}</div>
+          <div class="cal-day-num">${day.getDate()}</div>
+        </div>
+        <div class="cal-day-grid" style="height:${gridHeight}px">${slots}${blocks}</div>
+      </div>`;
+  }).join('');
+
+  const timeAxis = `
+    <div class="cal-time-col">
+      <div class="cal-day-head"></div>
+      <div class="cal-time-grid" style="height:${gridHeight}px">
+        ${hours.map(h => `<div class="cal-time-label">${h}:00</div>`).join('')}
+      </div>
+    </div>`;
+
+  return `<div class="cal-grid">${timeAxis}${cols}</div>`;
+}
+
+function renderMonthGrid() {
+  const c = state.calendar;
+  const first = calStartOfMonth(c.cursor);
+  const gridStart = calAddDays(first, -((first.getDay()+6)%7));
+  const todayMs = calStartOfDay(new Date()).getTime();
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const day = calAddDays(gridStart, i);
+    const dayStart = calStartOfDay(day);
+    const dayEnd   = calAddDays(dayStart, 1);
+    const inMonth  = day.getMonth() === first.getMonth();
+    const isToday  = dayStart.getTime() === todayMs;
+    const dayVisits = visibleVisits(dayStart, dayEnd);
+    const dots = dayVisits.slice(0,5).map(v => {
+      const m = VISIT_TYPE_META[v.type] || VISIT_TYPE_META.other;
+      return `<span class="cal-month-dot" style="background:${m.color}" title="${escHtml(m.label)}"></span>`;
+    }).join('');
+    cells.push(`
+      <div class="cal-month-cell ${inMonth?'':'cal-month-cell-out'} ${isToday?'cal-month-cell-today':''}"
+           onclick="calMonthDayClick('${dayStart.toISOString()}')">
+        <div class="cal-month-num">${day.getDate()}</div>
+        <div class="cal-month-dots">${dots}</div>
+        ${dayVisits.length > 5 ? `<div class="cal-month-more">+${dayVisits.length-5}</div>` : ''}
+      </div>`);
+  }
+  const headers = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+    .map(d => `<div class="cal-month-day-name">${d}</div>`).join('');
+  return `<div class="cal-month"><div class="cal-month-header">${headers}</div><div class="cal-month-grid">${cells.join('')}</div></div>`;
+}
+
+function renderPersonalTasksSection() {
+  const pending = state.personalTasks.filter(t => !t.done);
+  return `
+    <details class="cal-ptasks">
+      <summary class="cal-ptasks-summary">Personal tasks${pending.length?` (${pending.length})`:''}</summary>
+      <div class="cal-ptasks-body">
+        ${state.showAddPersonalTask ? `
+          <div class="ptask-add-form">
+            <input id="ptask-title" type="text" placeholder="Task title" class="ptask-input"
+              onkeydown="if(event.key==='Enter')submitPersonalTask()">
+            <div class="flex gap-2 mt-2 items-center">
+              <input id="ptask-due" type="date" class="ptask-date-input">
+              <div style="flex:1"></div>
+              <button onclick="state.showAddPersonalTask=false;renderTasksView()" class="ptask-cancel-btn">Cancel</button>
+              <button onclick="submitPersonalTask()" class="ptask-confirm-btn">Add task</button>
+            </div>
+          </div>` : `
+          <button onclick="state.showAddPersonalTask=true;renderTasksView();setTimeout(()=>document.getElementById('ptask-title')?.focus(),30)"
+            class="ptask-add-btn">+ Add task</button>`}
+        ${state.personalTasks.length === 0
+          ? `<p style="font-size:0.85rem;color:var(--stone-deep);padding:8px 0;">No personal tasks.</p>`
+          : state.personalTasks.map(t => personalTaskHtml(t)).join('')}
+      </div>
+    </details>`;
+}
+
+function calNav(dir) {
+  const c = state.calendar;
+  if (c.view === 'day')  c.cursor = calAddDays(c.cursor, dir);
+  else if (c.view === 'week') c.cursor = calAddDays(c.cursor, 7 * dir);
+  else c.cursor = new Date(c.cursor.getFullYear(), c.cursor.getMonth() + dir, 1);
+  loadTasksView();
+}
+function calGoToday()              { state.calendar.cursor = calStartOfDay(new Date()); loadTasksView(); }
+function calSetView(v)             { state.calendar.view = v; loadTasksView(); }
+function calToggleWorkshop(checked){ state.calendar.showWorkshop = checked; renderTasksView(); }
+function calMonthDayClick(iso)     { state.calendar.cursor = new Date(iso); state.calendar.view = 'day'; loadTasksView(); }
+function calSlotClick(dayIso, hour){ const s = new Date(dayIso); s.setHours(hour,0,0,0); openVisitModal(null, s); }
+
+function contactDisplayName(c) {
+  const p = (c && c.properties) || {};
+  const n = `${p.firstname || ''} ${p.lastname || ''}`.trim();
+  return n || p.email || `Contact ${c?.id || ''}`;
+}
+
+function openVisitModal(visitId, prefillStart) {
+  const existing = visitId ? state.calendar.visits.find(v => v.id === visitId) : null;
+  const start = existing ? new Date(existing.startAt) : (prefillStart || new Date());
+  const end   = existing ? new Date(existing.endAt)   : new Date(start.getTime() + 60*60*1000);
+  const fmtDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const fmtTime = d => `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  const contacts = (state.contacts || []).slice().sort((a,b) =>
+    contactDisplayName(a).toLowerCase().localeCompare(contactDisplayName(b).toLowerCase()));
+
+  const modal = document.createElement('div');
+  modal.className = 'visit-modal-overlay';
+  modal.onclick = e => { if (e.target === modal) closeVisitModal(); };
+  modal.innerHTML = `
+    <div class="visit-modal">
+      <div class="visit-modal-header">
+        <h3>${existing ? 'Edit visit' : 'New visit'}</h3>
+        <button class="visit-modal-close" onclick="closeVisitModal()" aria-label="Close">✕</button>
+      </div>
+      <div class="visit-modal-body">
+        <label class="visit-field">
+          <span class="visit-label">Type</span>
+          <select id="vm-type" class="visit-input">
+            ${Object.entries(VISIT_TYPE_META).map(([k,m]) => {
+              const sel = existing ? existing.type===k : k==='design';
+              return `<option value="${k}" ${sel?'selected':''}>${m.label}</option>`;
+            }).join('')}
+          </select>
+        </label>
+        <label class="visit-field">
+          <span class="visit-label">Customer</span>
+          <select id="vm-customer" class="visit-input">
+            <option value="">— None —</option>
+            ${contacts.map(c => `<option value="${c.id}" ${existing?.customerId===c.id?'selected':''}>${escHtml(contactDisplayName(c))}</option>`).join('')}
+          </select>
+        </label>
+        <label class="visit-field">
+          <span class="visit-label">Title (optional)</span>
+          <input id="vm-title" type="text" class="visit-input" value="${escHtml(existing?.title||'')}" placeholder="e.g. Kitchen install — day 1">
+        </label>
+        <div class="visit-row">
+          <label class="visit-field"><span class="visit-label">Date</span>
+            <input id="vm-date" type="date" class="visit-input" value="${fmtDate(start)}"></label>
+          <label class="visit-field"><span class="visit-label">Start</span>
+            <input id="vm-start" type="time" class="visit-input" value="${fmtTime(start)}"></label>
+          <label class="visit-field"><span class="visit-label">End</span>
+            <input id="vm-end" type="time" class="visit-input" value="${fmtTime(end)}"></label>
+        </div>
+        <label class="visit-field">
+          <span class="visit-label">Location (optional)</span>
+          <input id="vm-location" type="text" class="visit-input" value="${escHtml(existing?.location||'')}">
+        </label>
+        <label class="visit-field">
+          <span class="visit-label">Notes</span>
+          <textarea id="vm-notes" class="visit-input visit-textarea" rows="3">${escHtml(existing?.notes||'')}</textarea>
+        </label>
+      </div>
+      <div class="visit-modal-footer">
+        ${existing ? `<button class="visit-delete-btn" onclick="deleteVisit(${existing.id})">Delete</button>` : '<span></span>'}
+        <div style="display:flex;gap:8px">
+          <button class="visit-cancel-btn" onclick="closeVisitModal()">Cancel</button>
+          <button class="visit-save-btn" onclick="saveVisit(${existing?existing.id:'null'})">Save</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function closeVisitModal() { document.querySelector('.visit-modal-overlay')?.remove(); }
+
+async function saveVisit(id) {
+  const type        = document.getElementById('vm-type').value;
+  const customerId  = document.getElementById('vm-customer').value || null;
+  const customerName = customerId
+    ? contactDisplayName(state.contacts.find(c => c.id === customerId) || { properties: {} })
+    : null;
+  const title    = document.getElementById('vm-title').value.trim() || null;
+  const dateStr  = document.getElementById('vm-date').value;
+  const startStr = document.getElementById('vm-start').value;
+  const endStr   = document.getElementById('vm-end').value;
+  const location = document.getElementById('vm-location').value.trim() || null;
+  const notes    = document.getElementById('vm-notes').value.trim() || null;
+  if (!dateStr || !startStr || !endStr) { showToast('Date and times are required', true); return; }
+  const startAt = new Date(`${dateStr}T${startStr}`);
+  const endAt   = new Date(`${dateStr}T${endStr}`);
+  if (endAt <= startAt) { showToast('End must be after start', true); return; }
+  const payload = { type, customerId, customerName, title, startAt: startAt.toISOString(), endAt: endAt.toISOString(), location, notes };
+  try {
+    if (id) await PATCH_REQ(`/api/visits/${id}`, payload);
+    else    await POST('/api/visits', payload);
+    closeVisitModal();
+    showToast(id ? 'Visit updated' : 'Visit created');
+    loadTasksView();
+  } catch { showToast('Failed to save visit', true); }
+}
+
+async function deleteVisit(id) {
+  if (!confirm('Delete this visit?')) return;
+  try {
+    await DELETE_REQ(`/api/visits/${id}`);
+    closeVisitModal();
+    showToast('Visit deleted');
+    loadTasksView();
+  } catch { showToast('Failed to delete visit', true); }
 }
 
 function personalTaskHtml(task) {
