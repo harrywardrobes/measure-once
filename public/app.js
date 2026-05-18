@@ -1593,6 +1593,7 @@ function renderWorkflowHeader() {
   const email      = contact?.properties?.email || '';
   const phone      = contact?.properties?.phone || '';
   const city       = contact?.properties?.city  || '';
+  const customerNum = contact?.properties?.customer_number || '';
   const stageKey   = state.workflowData?.stageKey || 'sales';
   const colour     = stageColour(stageKey);
   const stageLabel = state.workflow?.stages?.[stageKey]?.label || stageKey;
@@ -1604,7 +1605,10 @@ function renderWorkflowHeader() {
   el.innerHTML = `
     <div class="flex items-start justify-between gap-4 flex-wrap">
       <div class="flex-1 min-w-0">
-        <h1 class="text-xl font-bold text-slate-900 truncate">${escHtml(name)}</h1>
+        <div class="flex items-center gap-2.5 min-w-0">
+          <h1 class="text-xl font-bold text-slate-900 truncate">${escHtml(name)}</h1>
+          ${customerNum ? `<span class="customer-num-badge">${escHtml(customerNum)}</span>` : ''}
+        </div>
         <div class="flex flex-wrap items-center gap-2 mt-1.5">
           <span class="text-xs font-semibold px-2.5 py-1 rounded-full"
                 style="background:${colour.light};color:${colour.text}">${escHtml(stageLabel)}</span>

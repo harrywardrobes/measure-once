@@ -1110,6 +1110,19 @@ body.showing-workflow .workflow-panel { display: flex; }
   text-align: center;
 }
 
+.customer-num-badge {
+  font-family: monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--orchid-deep);
+  background: var(--orchid-tint);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* ── Projects stage filter tabs ──────────────────────────────────────────────── */
 .project-stage-tabs-bar {
   display: flex;
