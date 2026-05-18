@@ -69,6 +69,23 @@
     .toast.show { opacity: 1; }
     .toast.error { background: #991b1b; }
     .loading { text-align: center; padding: 48px; color: #94a3b8; }
+    .level-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 0.72rem; font-weight: 600; text-transform: capitalize;
+    }
+    .level-viewer  { background: #f1f5f9; color: #475569; }
+    .level-member  { background: #dbeafe; color: #1d4ed8; }
+    .level-manager { background: #fef3c7; color: #b45309; }
+    .level-admin   { background: #ede0ff; color: #3d0f7a; }
+    .inline-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .field-input {
+      border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px;
+      font-size: 0.82rem; font-family: inherit; outline: none;
+    }
+    .field-input:focus { border-color: #6366f1; }
+    .btn-save { background: #200842; color: #fff; }
+    .btn-save:hover { background: #3a0a6e; }
+    .btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -121,17 +138,84 @@
 
     async function load() {
       try {
-        const [requests, allowed] = await Promise.all([
+        const [requests, allowed, users] = await Promise.all([
           api('GET', '/api/admin/requests'),
           api('GET', '/api/admin/allowed'),
+          api('GET', '/api/admin/users'),
         ]);
-        render(requests, allowed);
+        render(requests, allowed, users);
       } catch (e) {
         if (e.message !== 'Forbidden') toast(e.message, true);
       }
     }
 
-    function render(requests, allowed) {
+    function levelBadge(level) {
+      const labels = { viewer: 'Viewer', member: 'Member', manager: 'Manager', admin: 'Admin' };
+      return `<span class="level-badge level-${esc(level || 'member')}">${esc(labels[level] || 'Member')}</span>`;
+    }
+
+    function userRow(u) {
+      const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || '—';
+      return `
+        <tr id="urow-${esc(u.id)}">
+          <td>
+            ${u.profile_image_url
+              ? `<img src="${esc(u.profile_image_url)}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px;">`
+              : ''}
+            ${esc(fullName)}
+            ${u.isAdmin ? '<span class="badge" style="background:#ede0ff;color:#3d0f7a;margin-left:4px;">Admin</span>' : ''}
+          </td>
+          <td style="color:#64748b">${esc(u.email || '')}</td>
+          <td id="ujob-${esc(u.id)}">${esc(u.job_role || '—')}</td>
+          <td id="ulevel-${esc(u.id)}">${levelBadge(u.privilege_level)}</td>
+          <td class="actions">
+            <button class="btn-save" onclick="openUserEdit('${esc(u.id)}')">Edit</button>
+          </td>
+        </tr>
+        <tr id="uedit-${esc(u.id)}" style="display:none;background:#f8fafc;">
+          <td colspan="5" style="padding:12px 16px;">
+            <div class="inline-form">
+              <label style="font-size:0.78rem;font-weight:500;color:#475569;">Job role</label>
+              <input class="field-input" id="uinput-job-${esc(u.id)}" type="text" value="${esc(u.job_role || '')}" placeholder="e.g. Site Manager" style="width:160px;">
+              <label style="font-size:0.78rem;font-weight:500;color:#475569;margin-left:8px;">Level</label>
+              <select class="field-input" id="uinput-level-${esc(u.id)}">
+                ${['viewer','member','manager','admin'].map(v =>
+                  `<option value="${v}" ${u.privilege_level === v ? 'selected' : ''}>${v.charAt(0).toUpperCase()+v.slice(1)}</option>`
+                ).join('')}
+              </select>
+              <button class="btn-save" onclick="saveUserEdit('${esc(u.id)}')">Save</button>
+              <button class="btn-revoke" onclick="closeUserEdit('${esc(u.id)}')">Cancel</button>
+            </div>
+          </td>
+        </tr>`;
+    }
+
+    function openUserEdit(id) {
+      document.getElementById('uedit-' + id).style.display = '';
+      document.getElementById('urow-' + id).querySelector('.btn-save').style.display = 'none';
+    }
+    function closeUserEdit(id) {
+      document.getElementById('uedit-' + id).style.display = 'none';
+      document.getElementById('urow-' + id).querySelector('.btn-save').style.display = '';
+    }
+    async function saveUserEdit(id) {
+      const job_role       = document.getElementById('uinput-job-' + id).value.trim();
+      const privilege_level = document.getElementById('uinput-level-' + id).value;
+      const saveBtn = document.querySelector(`#uedit-${id} .btn-save`);
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+      try {
+        await api('PATCH', '/api/users/' + encodeURIComponent(id) + '/profile', { job_role, privilege_level });
+        document.getElementById('ujob-' + id).textContent   = job_role || '—';
+        document.getElementById('ulevel-' + id).innerHTML   = levelBadge(privilege_level);
+        closeUserEdit(id);
+        toast('Saved');
+      } catch (e) {
+        toast(e.message, true);
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+      }
+    }
+
+    function render(requests, allowed, users) {
       const pending = requests.filter(r => r.status === 'pending');
       const past    = requests.filter(r => r.status !== 'pending').slice(0, 25);
 
@@ -164,8 +248,18 @@
         </tr>`;
 
       $('#main').innerHTML = `
-        <h1>Access management</h1>
-        <p class="sub">Approve incoming requests and manage who can sign in.</p>
+        <h1>Admin panel</h1>
+        <p class="sub">Manage team members, access requests, and the approved email list.</p>
+
+        <section>
+          <h2>Team <span style="color:#94a3b8;font-weight:400;">(${users.length})</span></h2>
+          ${users.length === 0
+            ? '<div class="empty">No users yet.</div>'
+            : `<table>
+                 <thead><tr><th>Name</th><th>Email</th><th>Job role</th><th>Level</th><th></th></tr></thead>
+                 <tbody>${users.map(userRow).join('')}</tbody>
+               </table>`}
+        </section>
 
         <section>
           <h2>Pending requests <span style="color:#94a3b8;font-weight:400;">(${pending.length})</span></h2>

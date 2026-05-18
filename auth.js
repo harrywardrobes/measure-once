@@ -370,16 +370,36 @@ async function setupAuth(app) {
   });
 
   // ── User Profile ─────────────────────────────────────────────────────────────
+  // Accessible only by the user themselves or an admin.
   app.get('/api/users/:id/profile', isAuthenticated, async (req, res) => {
+    const requestingId    = req.user?.claims?.sub;
+    const requestingEmail = req.user?.claims?.email;
+    const targetId        = req.params.id;
+    if (targetId !== requestingId && !isAdminEmail(requestingEmail)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
     try {
       const r = await pool.query(
         `SELECT id, email, first_name, last_name, profile_image_url, job_role, privilege_level, created_at
          FROM users WHERE id = $1`,
-        [req.params.id]
+        [targetId]
       );
       if (r.rowCount === 0) return res.status(404).json({ error: 'User not found' });
       const u = r.rows[0];
       res.json({ ...u, isAdmin: isAdminEmail(u.email) });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Admin: list all users with profile fields.
+  app.get('/api/admin/users', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT id, email, first_name, last_name, profile_image_url, job_role, privilege_level, created_at
+         FROM users ORDER BY created_at DESC LIMIT 500`
+      );
+      res.json(r.rows.map(u => ({ ...u, isAdmin: isAdminEmail(u.email) })));
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
