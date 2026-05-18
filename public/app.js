@@ -346,7 +346,7 @@ function populateStageFilter() {
   if (!sel || !state.workflow?.stages) return;
   sel.innerHTML = `<option value="">All stages</option>` +
     Object.entries(state.workflow.stages).map(([key, s]) =>
-      `<option value="${key}">${escHtml(s.label)}</option>`
+      `<option value="${escHtml(key)}">${escHtml(s.label)}</option>`
     ).join('');
 }
 
@@ -519,8 +519,12 @@ function openStagePicker(event, contactId, roomIdx) {
   const top = Math.min(rect.bottom + 4, window.innerHeight - 320);
   popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
   popup.innerHTML = Object.entries(state.workflow?.stages || {}).map(([key, s]) =>
-    `<button class="card-picker-opt" onclick="quickSetStage('${contactId}',${roomIdx},'${key}')">${escHtml(s.label)}</button>`
+    `<button class="card-picker-opt" data-stage-key="${escHtml(key)}">${escHtml(s.label)}</button>`
   ).join('');
+  popup.querySelectorAll('[data-stage-key]').forEach(btn => {
+    const k = btn.dataset.stageKey;
+    btn.addEventListener('click', () => quickSetStage(contactId, roomIdx, k));
+  });
   document.body.appendChild(popup);
   setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
 }
@@ -760,7 +764,7 @@ function renderProjectsView() {
         ? 'background:var(--plum);color:#fff;border-color:var(--plum)'
         : '';
     return `<button class="project-stage-tab ${active ? 'project-stage-tab-active' : ''}"
-      style="${style}" onclick="setProjectStageFilter('${key}')">${escHtml(label)}</button>`;
+      style="${style}" data-stage-filter="${escHtml(key)}">${escHtml(label)}</button>`;
   }).join('');
 
   const bodyHtml = !rows.length
@@ -782,6 +786,12 @@ function renderProjectsView() {
       ${bodyHtml}
     </div>
   `;
+
+  view.querySelector('.project-stage-tabs-bar').addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-stage-filter]');
+    if (!btn) return;
+    setProjectStageFilter(btn.dataset.stageFilter);
+  });
 }
 
 function projectCardHtml(contactId, room) {
@@ -1283,6 +1293,19 @@ function renderFullWorkflowView() {
       <div id="workflow-stages" class="space-y-2"></div>
     </div>
   `;
+  document.getElementById('workflow-stages').addEventListener('click', function(e) {
+    const target = e.target.closest('[data-action]');
+    if (!target) return;
+    const action = target.dataset.action;
+    const key = target.dataset.key;
+    if (action === 'toggleStage' && key) {
+      toggleStage(key);
+    } else if (action === 'setStatusChecked' && key) {
+      setStatusChecked(key, target.dataset.statusId, target.dataset.checked === 'true');
+    } else if (action === 'moveBackToStage' && key) {
+      moveBackToStage(key);
+    }
+  });
   renderWorkflowHeader();
   renderComments();
   renderRoomTabs();
@@ -1370,7 +1393,7 @@ function renderWorkflowHeader() {
   const stageLabel = state.workflow?.stages?.[stageKey]?.label || stageKey;
 
   const stageOptions = Object.entries(state.workflow?.stages || {}).map(([key, s]) =>
-    `<option value="${key}" ${key === stageKey ? 'selected' : ''}>${escHtml(s.label)}</option>`
+    `<option value="${escHtml(key)}" ${key === stageKey ? 'selected' : ''}>${escHtml(s.label)}</option>`
   ).join('');
 
   el.innerHTML = `
@@ -1414,7 +1437,7 @@ function renderWorkflowStages() {
 
   const completedStatuses = state.workflowData?.completedStatuses || {};
 
-  el.innerHTML = Object.entries(state.workflow.stages).map(([key, stage], i) => {
+  const stagesHtml = Object.entries(state.workflow.stages).map(([key, stage], i) => {
     const colour     = STAGE_COLOURS[i] || STAGE_COLOURS[0];
     const isCurrent  = key === currentStageKey;
     const isPast     = i < currentStageIdx;
@@ -1439,7 +1462,7 @@ function renderWorkflowStages() {
           const done = doneIds.includes(status.id);
           return `
             <div class="status-task-row ${done ? 'status-task-done' : ''}"
-                 onclick="setStatusChecked('${key}','${status.id}',${!done})">
+                 data-action="setStatusChecked" data-key="${escHtml(key)}" data-status-id="${escHtml(status.id)}" data-checked="${!done}">
               <div class="status-task-check ${done ? 'status-task-check-done' : ''}"
                    style="${done ? `background:${colour.bg};border-color:${colour.bg}` : ''}">
                 ${done ? `<svg width="10" height="8" fill="none" stroke="#fff" viewBox="0 0 12 10">
@@ -1455,7 +1478,7 @@ function renderWorkflowStages() {
         }).join('')}
         ${isPast ? `
           <div style="padding:4px 0 4px;">
-            <button class="btn-move-back" onclick="moveBackToStage('${key}')">← Set as current stage</button>
+            <button class="btn-move-back" data-action="moveBackToStage" data-key="${escHtml(key)}">← Set as current stage</button>
           </div>
         ` : ''}
       </div>
@@ -1468,7 +1491,7 @@ function renderWorkflowStages() {
 
     return `
       <div class="${cardClass}">
-        <div class="stage-header-row ${isFuture ? '' : ''}" onclick="${isFuture ? '' : `toggleStage('${key}')`}"
+        <div class="stage-header-row" ${isFuture ? '' : `data-action="toggleStage" data-key="${escHtml(key)}"`}
              style="${isCurrent ? `border-left:3px solid ${colour.bg}` : 'border-left:3px solid transparent'}${isFuture ? ';cursor:default' : ''}">
           <div class="flex items-center gap-3 min-w-0 flex-1">
             ${icon}
@@ -1492,6 +1515,8 @@ function renderWorkflowStages() {
       </div>
     `;
   }).join('');
+
+  el.innerHTML = stagesHtml;
 }
 
 function toggleStage(key) {
@@ -1660,7 +1685,7 @@ function renderTasks() {
   if (!el) return;
 
   const stageOptions = Object.entries(state.workflow?.stages || {}).map(([key, s]) =>
-    `<option value="${key}">${escHtml(s.label)}</option>`
+    `<option value="${escHtml(key)}">${escHtml(s.label)}</option>`
   ).join('');
 
   const sorted = [...state.tasks].sort((a, b) => {

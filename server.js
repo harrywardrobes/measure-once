@@ -4,7 +4,7 @@ const axios = require('axios').create({ timeout: 10000 });
 const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
-const { installSession, setupAuth, isAuthenticated } = require('./auth');
+const { installSession, setupAuth, isAuthenticated, requireAdmin } = require('./auth');
 const qbRoutes = require('./quickbooks');
 
 const app = express();
@@ -691,7 +691,27 @@ app.get('/api/workflow', (req, res) => {
   }
 });
 
-app.post('/api/workflow', (req, res) => {
+const IDENTIFIER_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+function validateWorkflow(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return 'Invalid workflow object';
+  if (!body.stages || typeof body.stages !== 'object' || Array.isArray(body.stages)) return 'Missing or invalid stages';
+  for (const [stageKey, stage] of Object.entries(body.stages)) {
+    if (!IDENTIFIER_RE.test(stageKey)) return `Invalid stage key: "${stageKey}"`;
+    if (stage && Array.isArray(stage.statuses)) {
+      for (const status of stage.statuses) {
+        if (status.id !== undefined && !IDENTIFIER_RE.test(String(status.id))) {
+          return `Invalid status id: "${status.id}" in stage "${stageKey}"`;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+app.post('/api/workflow', requireAdmin, (req, res) => {
+  const err = validateWorkflow(req.body);
+  if (err) return res.status(400).json({ error: err });
   fs.writeFileSync(WORKFLOW_FILE, JSON.stringify(req.body, null, 2));
   res.json({ success: true });
 });
