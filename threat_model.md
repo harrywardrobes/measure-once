@@ -27,9 +27,9 @@ Platform assumptions for future scans: production traffic is TLS-protected by th
 
 ## Scan Anchors
 
-- **Production entry points:** `server.js`, `auth.js`, `quickbooks.js`, static client in `public/`.
-- **Highest-risk areas:** OAuth callbacks and token persistence (`auth.js`, Google routes in `server.js`, QuickBooks routes in `quickbooks.js`); admin/access-control routes in `auth.js`; shared local file storage and workflow config in `server.js`; client HTML sinks in `public/app.js`.
-- **Surface split:** Public routes include `/api/login`, `/api/callback`, `/api/request-access`, `/auth/google*`, `/auth/quickbooks*`, and static assets. Most `/api/*` routes are behind `isAuthenticated`; `/api/admin/*` also require `requireAdmin`.
+- **Production entry points:** `server.js`, `auth.js`, `quickbooks.js`, `visits.js`, static client in `public/`.
+- **Highest-risk areas:** OAuth callbacks and token persistence (`auth.js`, Google routes in `server.js`, QuickBooks routes in `quickbooks.js`); admin/access-control routes in `auth.js`; shared local file storage and workflow config in `server.js`; client HTML sinks in `public/app.js`; abuse-prone shared-work endpoints such as `POST /api/request-access`, `GET /api/localdata/all`, and `POST /api/quickbooks/invoice/:id/send`.
+- **Surface split:** Public routes include `/api/login`, `/api/callback`, `/api/request-access`, `/auth/google*`, and static assets. Most `/api/*` routes are behind `isAuthenticated`; `/api/admin/*` also require `requireAdmin`; QuickBooks connect/disconnect routes require admin but invoice operations currently do not.
 - **Dev-only areas:** None identified so far beyond local development defaults such as localhost redirect fallback values. Reassess only if a route is proven unreachable in production.
 
 ## Threat Categories
@@ -48,7 +48,7 @@ The dashboard exposes customer PII, CRM notes, task data, calendar data, and fin
 
 ### Denial of Service
 
-Public or lightly protected routes that mutate shared integration state or trigger external API work can disrupt business operations. The application must prevent unauthenticated users from disconnecting shared integrations, corrupting shared config, or causing repeated expensive third-party calls. External API calls should keep timeouts, and public request surfaces should avoid easy abuse.
+Public or lightly protected routes that mutate shared integration state or trigger external API work can disrupt business operations. The application must prevent unauthenticated users from flooding `POST /api/request-access`, and it must place meaningful abuse controls around authenticated shared-work endpoints such as `GET /api/localdata/all`, `POST /api/visits`, and `POST /api/quickbooks/invoice/:id/send`. External API calls should keep timeouts, and public request surfaces should avoid easy abuse.
 
 ### Elevation of Privilege
 
