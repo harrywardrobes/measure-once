@@ -184,7 +184,11 @@ app.get('/auth/google/callback', async (req, res) => {
     req.session.googleTokens = tokens;
     res.redirect('/?connected=true');
   } catch (e) {
-    res.redirect('/?error=google_auth_failed');
+    if (req.isAuthenticated && req.isAuthenticated()) {
+      res.redirect('/?error=google_auth_failed');
+    } else {
+      res.redirect('/?access_requested=1');
+    }
   }
 });
 

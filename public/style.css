@@ -1546,6 +1546,16 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .access-submit:hover:not(:disabled) { background: #1e293b; }
 .access-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+.access-confirmed-icon {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 1.4rem;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 16px;
+  font-weight: 700;
+}
 .access-message {
   margin-top: 16px; padding: 12px 14px;
   border-radius: 8px; font-size: 0.9rem;

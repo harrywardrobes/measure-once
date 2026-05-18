@@ -168,6 +168,16 @@ async function setupAuth(app) {
       const claims = tokens.claims();
       const email = (claims.email || '').toLowerCase();
       if (!(await isEmailApproved(email))) {
+        const name = [claims.first_name, claims.last_name].filter(Boolean).join(' ')
+          || claims.name || email;
+        await pool.query(
+          `INSERT INTO account_requests (name, email)
+           SELECT $1, $2 WHERE NOT EXISTS (
+             SELECT 1 FROM account_requests WHERE email = $2
+           )`,
+          [name, email]
+        );
+        console.log(`  Auto access request: ${name} <${email}>`);
         return verified(null, false, { message: 'not_approved' });
       }
       const user = {};
@@ -212,7 +222,7 @@ async function setupAuth(app) {
     ensureStrategy(req.hostname);
     passport.authenticate(`replitauth:${req.hostname}`, {
       successReturnToOrRedirect: '/',
-      failureRedirect: '/?denied=1',
+      failureRedirect: '/?access_requested=1',
     })(req, res, next);
   });
 

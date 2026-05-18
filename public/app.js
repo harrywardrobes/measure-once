@@ -238,16 +238,14 @@ function updateRoomCache() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
-  // Gate the entire dashboard behind authentication.
   const params = new URLSearchParams(window.location.search);
-  const denied = params.get('denied') === '1';
 
   const user = await fetch('/api/auth/user')
     .then(r => r.ok ? r.json() : null)
     .catch(() => null);
 
   if (!user) {
-    showAccessGate(denied);
+    showAccessGate(params);
     return;
   }
 
@@ -269,44 +267,18 @@ async function init() {
   }
 }
 
-function showAccessGate(denied) {
+function showAccessGate(params) {
   const gate = document.getElementById('access-gate');
   if (gate) gate.style.display = 'flex';
-  if (denied) {
-    const banner = document.getElementById('access-denied-banner');
-    if (banner) banner.style.display = 'block';
-  }
-}
 
-async function submitAccessRequest(ev) {
-  ev.preventDefault();
-  const name = document.getElementById('ra-name').value.trim();
-  const email = document.getElementById('ra-email').value.trim();
-  const btn = document.getElementById('ra-submit');
-  const msg = document.getElementById('request-access-message');
-  btn.disabled = true; btn.textContent = 'Submitting…';
-  msg.style.display = 'none';
-  try {
-    const r = await fetch('/api/request-access', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email }),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(data.error || 'Request failed');
-    msg.className = 'access-message success';
-    msg.style.display = 'block';
-    msg.textContent = data.alreadyApproved
-      ? "Good news — you're already approved. Click \"Sign in\" below."
-      : "Thanks! Your request has been submitted. We'll be in touch.";
-    document.getElementById('request-access-form').reset();
-  } catch (e) {
-    msg.className = 'access-message error';
-    msg.style.display = 'block';
-    msg.textContent = e.message;
-  } finally {
-    btn.disabled = false; btn.textContent = 'Request access';
-  }
+  const isConfirmed = params.get('access_requested') === '1'
+    || params.get('denied') === '1'
+    || params.has('error');
+
+  const signInEl   = document.getElementById('access-sign-in-state');
+  const confirmedEl = document.getElementById('access-confirmed-state');
+  if (signInEl)    signInEl.style.display    = isConfirmed ? 'none' : '';
+  if (confirmedEl) confirmedEl.style.display = isConfirmed ? ''     : 'none';
 }
 
 async function checkAuthStatus() {
