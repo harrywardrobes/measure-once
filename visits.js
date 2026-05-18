@@ -86,6 +86,24 @@ function validatePayload(body) {
   };
 }
 
+// Per-user POST rate limit: max 30 visits created per 10-minute sliding window
+const VISITS_RATE_WINDOW_MS = 10 * 60 * 1000;
+const VISITS_RATE_LIMIT     = 30;
+const _visitsRateMap = new Map(); // userId -> number[]  (timestamps of recent requests)
+
+function checkVisitsRateLimit(userId) {
+  const now = Date.now();
+  const cutoff = now - VISITS_RATE_WINDOW_MS;
+  const timestamps = (_visitsRateMap.get(userId) || []).filter(t => t > cutoff);
+  if (timestamps.length >= VISITS_RATE_LIMIT) return false;
+  timestamps.push(now);
+  _visitsRateMap.set(userId, timestamps);
+  return true;
+}
+
+// Maximum allowed date range for GET /api/visits queries (366 days)
+const VISITS_MAX_RANGE_MS = 366 * 24 * 60 * 60 * 1000;
+
 function parseDateParam(v) {
   if (!v) return null;
   const d = new Date(v);
@@ -98,22 +116,13 @@ function parseDateParam(v) {
 router.get('/api/visits', isAuthenticated, visitsRateLimiter, async (req, res) => {
   const from = parseDateParam(req.query.from);
   const to   = parseDateParam(req.query.to);
+  // Both from and to are required to prevent unbounded full-table scans
+  if (!from || !to) return res.status(400).json({ error: 'from and to query parameters are required' });
   if (from === undefined || to === undefined) return res.status(400).json({ error: 'Invalid from/to' });
+  if (to - from > VISITS_MAX_RANGE_MS) return res.status(400).json({ error: 'Date range must not exceed 366 days' });
   try {
-    let sql = 'SELECT * FROM visits';
-    const params = [];
-    if (from && to) {
-      sql += ' WHERE start_at < $1 AND end_at > $2';
-      params.push(to.toISOString(), from.toISOString());
-    } else if (from) {
-      sql += ' WHERE end_at > $1';
-      params.push(from.toISOString());
-    } else if (to) {
-      sql += ' WHERE start_at < $1';
-      params.push(to.toISOString());
-    }
-    sql += ' ORDER BY start_at ASC';
-    const r = await pool.query(sql, params);
+    const sql = 'SELECT * FROM visits WHERE start_at < $1 AND end_at > $2 ORDER BY start_at ASC';
+    const r = await pool.query(sql, [to.toISOString(), from.toISOString()]);
     res.json(r.rows.map(rowToVisit));
   } catch (e) {
     console.error('GET /api/visits failed:', e.message);
@@ -123,6 +132,9 @@ router.get('/api/visits', isAuthenticated, visitsRateLimiter, async (req, res) =
 
 router.post('/api/visits', isAuthenticated, async (req, res) => {
   const userId = req.user.claims.sub;
+  if (!checkVisitsRateLimit(userId)) {
+    return res.status(429).json({ error: 'Too many requests. Please wait before creating more visits.' });
+  }
   const v = validatePayload(req.body);
   if (v.error) return res.status(400).json({ error: v.error });
   try {

@@ -126,37 +126,64 @@ app.post('/api/contacts/:id/localdata', async (req, res) => {
 });
 
 // Read all contacts' stage summaries from HubSpot (for list-panel stage badges)
+// Cache: one shared result, refreshed at most every 60 seconds.
+// Concurrency guard: if a scan is already in progress, new requests wait for
+// the same promise rather than each launching an independent HubSpot crawl.
+const LOCALDATA_CACHE_TTL_MS = 60_000;
+let _localdataCache = null;       // { data, expiresAt }
+let _localdataInflight = null;    // Promise while a scan is running
+
+async function fetchLocaldataFromHubspot() {
+  const allResults = [];
+  let after;
+  do {
+    const body = {
+      filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' }] }],
+      properties: ['measure_once_rooms'],
+      limit: 100
+    };
+    if (after) body.after = after;
+    const r = await axios.post(`${HS}/crm/v3/objects/contacts/search`, body, { headers: hsHeaders() });
+    allResults.push(...(r.data.results || []));
+    after = r.data.paging?.next?.after;
+  } while (after);
+
+  const result = {};
+  for (const contact of allResults) {
+    const roomsJson = contact.properties?.measure_once_rooms;
+    if (!roomsJson) continue;
+    try {
+      const rooms = JSON.parse(roomsJson);
+      if (Array.isArray(rooms)) {
+        result[contact.id] = rooms.map(r => ({
+          room: r.room || 'Main', stageKey: r.stageKey || 'sales', roomStatus: r.roomStatus || 'active'
+        }));
+      }
+    } catch {}
+  }
+  return result;
+}
+
 app.get('/api/localdata/all', async (req, res) => {
   try {
-    const allResults = [];
-    let after;
-    do {
-      const body = {
-        filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' }] }],
-        properties: ['measure_once_rooms'],
-        limit: 100
-      };
-      if (after) body.after = after;
-      const r = await axios.post(`${HS}/crm/v3/objects/contacts/search`, body, { headers: hsHeaders() });
-      allResults.push(...(r.data.results || []));
-      after = r.data.paging?.next?.after;
-    } while (after);
-
-    const result = {};
-    for (const contact of allResults) {
-      const roomsJson = contact.properties?.measure_once_rooms;
-      if (!roomsJson) continue;
-      try {
-        const rooms = JSON.parse(roomsJson);
-        if (Array.isArray(rooms)) {
-          result[contact.id] = rooms.map(r => ({
-            room: r.room || 'Main', stageKey: r.stageKey || 'sales', roomStatus: r.roomStatus || 'active'
-          }));
-        }
-      } catch {}
+    // Serve from cache if still fresh
+    if (_localdataCache && Date.now() < _localdataCache.expiresAt) {
+      return res.json(_localdataCache.data);
     }
-    res.json(result);
-  } catch { res.json({}); }
+
+    // If a scan is already running, piggyback on it
+    if (!_localdataInflight) {
+      _localdataInflight = fetchLocaldataFromHubspot().finally(() => {
+        _localdataInflight = null;
+      });
+    }
+
+    const data = await _localdataInflight;
+    _localdataCache = { data, expiresAt: Date.now() + LOCALDATA_CACHE_TTL_MS };
+    res.json(data);
+  } catch {
+    res.json({});
+  }
 });
 
 // ── Local storage for personal tasks only ─────────────────────────────────────
