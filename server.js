@@ -671,6 +671,7 @@ app.post('/api/contacts/:id/workflow', async (req, res) => {
 app.post('/api/deals/:id/workflow', async (req, res) => {
   try {
     const { data, existingNoteId } = req.body;
+    const safeDealId = validateHsObjectId(req.params.id, 'id');
     const noteBody = `WORKFLOW_DATA:${JSON.stringify(data)}`;
 
     if (existingNoteId) {
@@ -689,7 +690,7 @@ app.post('/api/deals/:id/workflow', async (req, res) => {
       { headers: hsHeaders() }
     );
     await axios.put(
-      `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/deals/${req.params.id}/note_to_deal`,
+      `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/deals/${safeDealId}/note_to_deal`,
       {},
       { headers: hsHeaders() }
     );
