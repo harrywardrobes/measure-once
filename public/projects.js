@@ -71,7 +71,7 @@ async function renderProjectsView() {
     ? 'No rooms are currently assigned to you.'
     : 'No projects at this stage.';
   const bodyHtml = !rows.length
-    ? `<p style="color:var(--stone-deep);font-size:0.875rem;padding:8px 0;">${emptyMsg}</p>`
+    ? `<p class="projects-empty-msg">${emptyMsg}</p>`
     : rows.map(({ contact, rooms }) => customerCardHtml(contact, rooms, canAssign)).join('');
 
   view.innerHTML = `
@@ -213,7 +213,7 @@ function openFitterPicker(contactId, roomIdx) {
         <button class="fitter-picker-close" id="fitter-picker-close" aria-label="Close">✕</button>
       </div>
       <div class="fitter-picker-list">
-        ${userItems || '<p style="padding:12px;color:var(--ink-4);font-size:0.875rem;">No team members found.</p>'}
+        ${userItems || '<p class="picker-empty-msg">No team members found.</p>'}
       </div>
       ${unassignBtn}
     </div>

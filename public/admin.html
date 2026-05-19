@@ -376,8 +376,10 @@
     }
     .form-field-wrap { display: flex; flex-direction: column; gap: 4px; }
     .form-field-wrap label { font-size: .72rem; font-weight: 600; color: var(--ink-3); }
-    .form-field-wrap .opt { font-weight: 400; color: var(--ink-4); }
+    .opt { font-weight: 400; color: var(--ink-4); text-transform: none; letter-spacing: 0; }
     .form-actions { margin-top: 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .invite-err { font-size: .8rem; color: #991b1b; }
+    .app-header .nav-btn { font-size: .8rem; }
 
     /* ── Offline checklist reminder ── */
     .checklist-box {
@@ -485,9 +487,9 @@
 <body>
 
 <header class="app-header">
-  <a href="/" class="nav-btn" style="font-size:.8rem;">← Home</a>
-  <span style="flex:1"></span>
-  <a href="/api/logout" class="nav-btn" style="font-size:.8rem;">Sign out</a>
+  <a href="/" class="nav-btn">← Home</a>
+  <span class="flex-spacer"></span>
+  <a href="/api/logout" class="nav-btn">Sign out</a>
 </header>
 
 <div class="page" id="page">
@@ -512,13 +514,13 @@
         <input class="field" id="modal-lname" type="text" maxlength="100" autocomplete="off"
           onkeydown="if(event.key==='Enter')saveModal()">
       </div>
-      <div class="form-field-wrap" style="grid-column:1/-1;">
+      <div class="form-field-wrap form-field-full">
         <label>Job role</label>
-        <select class="field" id="modal-jobrole" style="width:100%;"></select>
+        <select class="field field-full" id="modal-jobrole"></select>
       </div>
-      <div class="form-field-wrap" style="grid-column:1/-1;">
+      <div class="form-field-wrap form-field-full">
         <label>Privilege level</label>
-        <select class="field" id="modal-privilege" style="width:100%;"></select>
+        <select class="field field-full" id="modal-privilege"></select>
       </div>
     </div>
     <div class="modal-err" id="modal-err"></div>
@@ -631,7 +633,7 @@
               <div>
                 <div class="user-cell-name">
                   ${esc(name)}
-                  ${u.isAdmin ? '<span class="lvl lvl-admin" style="margin-left:4px;">Admin</span>' : ''}
+                  ${u.isAdmin ? '<span class="lvl lvl-admin ml-1">Admin</span>' : ''}
                 </div>
                 <div class="user-cell-role">${esc(u.email || '')}</div>
               </div>
@@ -639,7 +641,7 @@
           </td>
           <td>${esc(u.job_role || '—')}</td>
           <td>${lvlBadge(u.privilege_level)}</td>
-          <td style="color:var(--ink-4);font-size:.78rem;">${fmtDateShort(u.created_at)}</td>
+          <td class="td-date">${fmtDateShort(u.created_at)}</td>
           <td class="actions">
             <button class="btn btn-ghost" onclick="openEditModal('${esc(u.id)}')">Edit</button>
           </td>
@@ -765,7 +767,7 @@
         <button class="btn btn-primary" id="perm-save-btn" onclick="savePerms()">Save permissions</button>
         <span class="perm-unsaved" id="perm-unsaved-note" style="display:none;">Unsaved changes</span>
       </div>
-      <p style="font-size:.75rem;color:var(--ink-4);margin:10px 0 0;">
+      <p class="card-note">
         * Toggles update the documented permission policy stored in the database.
         Server-side middleware enforces a minimum security floor independently —
         admin panel access always requires the <code>ADMIN_EMAILS</code> environment variable.
@@ -859,8 +861,8 @@
     const reqRow = r => `
       <tr data-id="${r.id}">
         <td>${esc(r.name)}</td>
-        <td style="color:var(--ink-3)">${esc(r.email)}</td>
-        <td style="color:var(--ink-4);font-size:.78rem;">${fmtDate(r.created_at)}</td>
+        <td class="td-secondary">${esc(r.email)}</td>
+        <td class="td-date">${fmtDate(r.created_at)}</td>
         <td>
           ${r.status === 'pending'
             ? `<div class="actions">
@@ -879,21 +881,21 @@
       return `
       <tr>
         <td>
-          <div style="font-weight:600;">${esc(name || a.email)}</div>
-          ${name ? `<div style="font-size:.72rem;color:var(--ink-4);">${esc(a.email)}</div>` : ''}
+          <div class="fw-600">${esc(name || a.email)}</div>
+          ${name ? `<div class="text-faint-sm">${esc(a.email)}</div>` : ''}
         </td>
-        <td style="font-size:.78rem;">
-          ${m.date_of_birth  ? `<div style="color:var(--ink-3);">DOB: ${esc(m.date_of_birth)}</div>` : ''}
-          ${m.ni_number      ? `<div style="color:var(--ink-3);">NI: ${esc(m.ni_number)}</div>` : ''}
-          ${m.mobile_number  ? `<div style="color:var(--ink-3);">Mobile: ${esc(m.mobile_number)}</div>` : ''}
-          ${ec ? `<div style="color:var(--ink-4);margin-top:2px;">EC: ${esc(ec)}${ecPhone ? ` · ${esc(ecPhone)}` : ''}</div>` : ''}
-          ${!m.date_of_birth && !m.ni_number && !m.mobile_number && !ec ? '<span style="color:var(--ink-4);">—</span>' : ''}
+        <td class="td-sm">
+          ${m.date_of_birth  ? `<div class="text-secondary">DOB: ${esc(m.date_of_birth)}</div>` : ''}
+          ${m.ni_number      ? `<div class="text-secondary">NI: ${esc(m.ni_number)}</div>` : ''}
+          ${m.mobile_number  ? `<div class="text-secondary">Mobile: ${esc(m.mobile_number)}</div>` : ''}
+          ${ec ? `<div class="text-faint mt-1">EC: ${esc(ec)}${ecPhone ? ` · ${esc(ecPhone)}` : ''}</div>` : ''}
+          ${!m.date_of_birth && !m.ni_number && !m.mobile_number && !ec ? '<span class="text-faint">—</span>' : ''}
         </td>
         <td><span class="badge ${a.protected ? 'badge-approved' : ''}">${esc(a.note || '—')}</span></td>
-        <td style="color:var(--ink-4);font-size:.78rem;">${fmtDate(a.approved_at)}</td>
+        <td class="td-date">${fmtDate(a.approved_at)}</td>
         <td class="actions">
           ${a.protected
-            ? '<span style="color:var(--ink-4);font-size:.75rem;">Protected</span>'
+            ? '<span class="text-faint-xs">Protected</span>'
             : `<button class="btn btn-danger" onclick="revoke('${esc(a.email)}')">Revoke</button>`}
         </td>
       </tr>`;
@@ -918,13 +920,13 @@
 
       <div class="card">
         <div class="card-title">Add team member</div>
-        <p style="font-size:.82rem;color:var(--ink-3);margin:0 0 4px;">
+        <p class="card-desc" style="margin-bottom:4px;">
           Approve an email address so this person can sign in straight away, and capture their key details at the same time.
         </p>
 
         <div class="form-section-label">Personal details</div>
         <div class="form-grid">
-          <div class="form-field-wrap" style="grid-column:1/-1;">
+          <div class="form-field-wrap form-field-full">
             <label>Work email address</label>
             <input class="field" id="invite-email" type="email" placeholder="colleague@example.com" maxlength="254" autocomplete="off">
           </div>
@@ -967,17 +969,17 @@
           </div>
         </div>
 
-        <div class="form-section-label">Note <span style="text-transform:none;font-weight:400;letter-spacing:0;">(optional)</span></div>
-        <input class="field" id="invite-note" type="text" placeholder="e.g. New hire · Site manager" maxlength="200" style="width:100%;">
+        <div class="form-section-label">Note <span class="opt">(optional)</span></div>
+        <input class="field field-full" id="invite-note" type="text" placeholder="e.g. New hire · Site manager" maxlength="200">
 
         <div class="form-actions">
           <button class="btn btn-primary" id="invite-btn" onclick="addAllowed()">Add team member</button>
-          <div id="invite-err" style="display:none;font-size:.8rem;color:#991b1b;"></div>
+          <div id="invite-err" class="invite-err" style="display:none;"></div>
         </div>
 
         <div class="checklist-box">
           <div class="checklist-box-title">
-            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0;">
+            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="flex-shrink-0">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
             </svg>
             Still to collect offline before their first day
@@ -1126,7 +1128,7 @@
         <div class="ov-card">
           <div class="ov-header">
             ${avatarEl(u)}
-            <div style="min-width:0;flex:1;">
+            <div class="flex-fill">
               <div class="ov-name">${esc(name)}</div>
               <div class="ov-email">${esc(u.email || '')}</div>
             </div>
@@ -1235,7 +1237,7 @@
       <p class="page-sub">Manage the team, permissions, and access requests.</p>
 
       <div class="tabs">
-        <button class="tab-btn active" data-tab="team"       onclick="switchTab('team')">Team <span id="team-count" style="color:var(--ink-4);font-weight:400;">${_users.length}</span></button>
+        <button class="tab-btn active" data-tab="team"       onclick="switchTab('team')">Team <span id="team-count" class="count-muted">${_users.length}</span></button>
         <button class="tab-btn" data-tab="permissions"       onclick="switchTab('permissions')">Permissions &amp; roles</button>
         <button class="tab-btn" data-tab="requests"          onclick="switchTab('requests')">Access requests <span id="req-tab-badge">${pendingBadge}</span></button>
         <button class="tab-btn" data-tab="overview"          onclick="switchTab('overview')">Overview</button>
@@ -1260,7 +1262,7 @@
         </div>
         <div class="card">
           <div class="card-title">Manage job roles</div>
-          <p style="font-size:.82rem;color:var(--ink-3);margin:0 0 14px;">
+          <p class="card-desc">
             These labels are available when editing a team member's profile.
           </p>
           <div class="roles-add-form">
@@ -1285,8 +1287,8 @@
       <!-- AUDIT LOG -->
       <div class="tab-panel" id="tab-auditlog">
         <div class="card">
-          <div class="card-title">Admin audit log <span class="card-count" style="font-size:.72rem;font-weight:400;">(read-only)</span></div>
-          <p style="font-size:.82rem;color:var(--ink-3);margin:0 0 16px;">
+          <div class="card-title">Admin audit log <span class="card-count count-muted">(read-only)</span></div>
+          <p class="card-desc" style="margin-bottom:16px;">
             A time-ordered record of every admin action — who changed what, and when.
           </p>
           <div id="audit-content"></div>

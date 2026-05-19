@@ -21,8 +21,7 @@
       <div class="p-3 border-b border-slate-100 flex-shrink-0">
         <div class="flex gap-1.5">
           <select id="stage-filter" onchange="setStageFilter(this.value)"
-            class="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-blue-400 transition"
-            style="font-size:13px">
+            class="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-blue-400 transition">
             <option value="">All stages</option>
           </select>
           <button id="archived-toggle" onclick="toggleArchived()" class="filter-btn">Archived</button>
@@ -45,12 +44,12 @@
 
     <main id="workflow-panel" class="workflow-panel">
       <div id="empty-state" class="flex items-center justify-center h-full">
-        <div class="text-center px-6" style="color:var(--stone-deep)">
-          <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin:0 auto 16px;opacity:0.4">
+        <div class="text-center px-6 empty-state-text">
+          <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="empty-state-icon">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
           </svg>
-          <p style="font-weight:600;color:var(--ink-3);font-size:1rem;">Select a customer</p>
-          <p style="font-size:0.875rem;margin-top:4px;color:var(--stone-deep);">Choose a customer from the list to view their project workflow</p>
+          <p class="empty-state-heading">Select a customer</p>
+          <p class="empty-state-sub">Choose a customer from the list to view their project workflow</p>
         </div>
       </div>
       <div id="workflow-view" class="hidden"></div>
@@ -59,60 +58,43 @@
 
   <!-- New Customer Modal (sales page only) -->
   <div id="new-customer-overlay" class="inv-overlay hidden" onclick="closeNewCustomerModal()"></div>
-  <div id="new-customer-modal" class="hidden" style="position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:1rem;">
-    <div style="background:#fff;border-radius:1rem;box-shadow:0 20px 60px rgba(0,0,0,0.18);width:100%;max-width:420px;padding:1.5rem;" onclick="event.stopPropagation()">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;">
-        <h2 style="font-size:1rem;font-weight:700;color:#0f172a;">New Customer</h2>
-        <button onclick="closeNewCustomerModal()" style="background:none;border:none;cursor:pointer;color:#94a3b8;padding:0.25rem;" title="Close">
+  <div id="new-customer-modal" class="nc-modal-wrap hidden" style="display:none;">
+    <div class="nc-modal-box" onclick="event.stopPropagation()">
+      <div class="nc-modal-header">
+        <h2 class="nc-modal-title">New Customer</h2>
+        <button onclick="closeNewCustomerModal()" class="nc-modal-close" title="Close">
           <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
           </svg>
         </button>
       </div>
       <form id="new-customer-form" onsubmit="submitNewCustomer(event)" novalidate>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
-          <label style="display:flex;flex-direction:column;gap:0.3rem;">
-            <span style="font-size:0.75rem;font-weight:600;color:#475569;">First name <span style="color:#dc2626;">*</span></span>
-            <input id="nc-firstname" type="text" required autocomplete="given-name"
-              style="border:1px solid #e2e8f0;border-radius:0.5rem;padding:0.5rem 0.75rem;font-size:0.875rem;outline:none;transition:border-color 0.15s;"
-              onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+        <div class="nc-form-grid">
+          <label class="nc-form-row">
+            <span class="nc-label-text">First name <span class="nc-required">*</span></span>
+            <input id="nc-firstname" type="text" required autocomplete="given-name" class="nc-input">
           </label>
-          <label style="display:flex;flex-direction:column;gap:0.3rem;">
-            <span style="font-size:0.75rem;font-weight:600;color:#475569;">Last name</span>
-            <input id="nc-lastname" type="text" autocomplete="family-name"
-              style="border:1px solid #e2e8f0;border-radius:0.5rem;padding:0.5rem 0.75rem;font-size:0.875rem;outline:none;transition:border-color 0.15s;"
-              onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+          <label class="nc-form-row">
+            <span class="nc-label-text">Last name</span>
+            <input id="nc-lastname" type="text" autocomplete="family-name" class="nc-input">
           </label>
         </div>
-        <label style="display:flex;flex-direction:column;gap:0.3rem;margin-bottom:0.75rem;">
-          <span style="font-size:0.75rem;font-weight:600;color:#475569;">Email <span style="color:#dc2626;">*</span></span>
-          <input id="nc-email" type="email" required autocomplete="email"
-            style="border:1px solid #e2e8f0;border-radius:0.5rem;padding:0.5rem 0.75rem;font-size:0.875rem;outline:none;transition:border-color 0.15s;"
-            onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+        <label class="nc-form-row">
+          <span class="nc-label-text">Email <span class="nc-required">*</span></span>
+          <input id="nc-email" type="email" required autocomplete="email" class="nc-input">
         </label>
-        <label style="display:flex;flex-direction:column;gap:0.3rem;margin-bottom:0.75rem;">
-          <span style="font-size:0.75rem;font-weight:600;color:#475569;">Phone</span>
-          <input id="nc-phone" type="tel" autocomplete="tel"
-            style="border:1px solid #e2e8f0;border-radius:0.5rem;padding:0.5rem 0.75rem;font-size:0.875rem;outline:none;transition:border-color 0.15s;"
-            onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+        <label class="nc-form-row">
+          <span class="nc-label-text">Phone</span>
+          <input id="nc-phone" type="tel" autocomplete="tel" class="nc-input">
         </label>
-        <label style="display:flex;flex-direction:column;gap:0.3rem;margin-bottom:1.25rem;">
-          <span style="font-size:0.75rem;font-weight:600;color:#475569;">Postcode <span style="color:#dc2626;">*</span></span>
-          <input id="nc-postcode" type="text" required autocomplete="postal-code"
-            style="border:1px solid #e2e8f0;border-radius:0.5rem;padding:0.5rem 0.75rem;font-size:0.875rem;outline:none;transition:border-color 0.15s;text-transform:uppercase;"
-            onfocus="this.style.borderColor='#6366f1'" onblur="this.style.borderColor='#e2e8f0'">
+        <label class="nc-form-row nc-form-row-last">
+          <span class="nc-label-text">Postcode <span class="nc-required">*</span></span>
+          <input id="nc-postcode" type="text" required autocomplete="postal-code" class="nc-input nc-postcode">
         </label>
-        <div id="nc-error" style="display:none;background:#fef2f2;border:1px solid #fca5a5;border-radius:0.5rem;padding:0.6rem 0.75rem;font-size:0.8rem;color:#b91c1c;margin-bottom:0.75rem;"></div>
-        <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
-          <button type="button" onclick="closeNewCustomerModal()"
-            style="padding:8px 16px;border-radius:var(--radius-md);border:1px solid #e2e8f0;background:#f8fafc;color:#475569;font-size:.88rem;font-weight:600;cursor:pointer;font-family:inherit;">
-            Cancel
-          </button>
-          <button type="submit" id="nc-submit"
-            style="padding:8px 16px;border-radius:var(--radius-md);border:none;background:#200842;color:#fff;font-size:.88rem;font-weight:600;cursor:pointer;transition:background 0.15s;font-family:inherit;"
-            onmouseover="this.style.background='#3d0f7a'" onmouseout="this.style.background='#200842'">
-            Create Customer
-          </button>
+        <div id="nc-error" class="nc-error"></div>
+        <div class="nc-actions">
+          <button type="button" onclick="closeNewCustomerModal()" class="nc-btn-cancel">Cancel</button>
+          <button type="submit" id="nc-submit" class="nc-btn-submit">Create Customer</button>
         </div>
       </form>
     </div>

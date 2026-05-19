@@ -25,7 +25,7 @@ async function renderProfileTab() {
   el.innerHTML = `
     <!-- Back button -->
     <button class="profile-back-btn" onclick="history.length > 1 ? history.back() : (location.href = '/')">
-      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0">
+      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="flex-shrink-0">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
       </svg>
       Back
@@ -67,11 +67,11 @@ async function renderProfileTab() {
 
       <!-- Edit view (admins only, hidden by default) -->
       <div id="prof-edit-view" style="display:none;">
-        <div class="profile-field" style="flex-direction:column;gap:6px;">
+        <div class="profile-field profile-field-col">
           <label class="profile-field-label" for="prof-job-role">Job role</label>
           <input id="prof-job-role" type="text" class="profile-input" value="${escHtml(profile.job_role || '')}" placeholder="e.g. Site Manager">
         </div>
-        <div class="profile-field" style="flex-direction:column;gap:6px;margin-top:12px;">
+        <div class="profile-field profile-field-col" style="margin-top:12px;">
           <label class="profile-field-label" for="prof-priv-level">Privilege level</label>
           <select id="prof-priv-level" class="profile-input">
             ${['viewer','member','manager','admin'].map(v =>
@@ -113,13 +113,13 @@ async function renderProfileTab() {
     <!-- Account actions card -->
     <div class="profile-card">
       ${isAdmin ? `<a href="/admin.html" class="profile-action-row profile-action-admin">
-        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="flex-shrink-0">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
         </svg>
         Admin panel
       </a>` : ''}
       <a href="/api/logout" class="profile-action-row profile-action-signout">
-        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="flex-shrink-0">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
         </svg>
         Sign out

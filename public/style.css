@@ -2606,3 +2606,88 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   }
   .project-card:hover { transform: none; }
 }
+
+/* ── Utility helpers ─────────────────────────────────────────────────────────── */
+.flex-spacer      { flex: 1; }
+.flex-fill        { flex: 1; min-width: 0; }
+.flex-shrink-0    { flex-shrink: 0; }
+.field-full       { width: 100%; }
+.form-field-full  { grid-column: 1 / -1; }
+.fw-600           { font-weight: 600; }
+.mt-1             { margin-top: 2px; }
+.text-faint       { color: var(--ink-4); }
+.text-secondary   { color: var(--ink-3); }
+.text-faint-sm    { color: var(--ink-4); font-size: .72rem; }
+.text-faint-xs    { color: var(--ink-4); font-size: .75rem; }
+.td-date          { color: var(--ink-4); font-size: .78rem; }
+.td-sm            { font-size: .78rem; }
+.td-secondary     { color: var(--ink-3); }
+.card-desc        { font-size: .82rem; color: var(--ink-3); margin: 0 0 14px; }
+.card-note        { font-size: .75rem; color: var(--ink-4); margin: 10px 0 0; }
+.count-muted      { color: var(--ink-4); font-weight: 400; }
+.projects-empty-msg { color: var(--stone-deep); font-size: 0.875rem; padding: 8px 0; }
+.picker-empty-msg   { padding: 12px; color: var(--ink-4); font-size: 0.875rem; }
+.profile-field-col  { flex-direction: column; gap: 6px; }
+
+/* ── New Customer modal (sales.html) ─────────────────────────────────────────── */
+.nc-modal-wrap {
+  position: fixed; inset: 0; z-index: 100;
+  align-items: center; justify-content: center; padding: 1rem;
+}
+.nc-modal-box {
+  background: #fff;
+  border-radius: 1rem;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+  width: 100%; max-width: 420px;
+  padding: 1.5rem;
+}
+.nc-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+.nc-modal-title  { font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0; }
+.nc-modal-close  { background: none; border: none; cursor: pointer; color: #94a3b8; padding: 0.25rem; }
+.nc-form-grid    { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; }
+.nc-form-row     { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.75rem; }
+.nc-form-row-last { margin-bottom: 1.25rem; }
+.nc-label-text   { font-size: 0.75rem; font-weight: 600; color: #475569; }
+.nc-required     { color: #dc2626; }
+.nc-input {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+.nc-input:focus  { border-color: #6366f1; }
+.nc-postcode     { text-transform: uppercase; }
+.nc-error {
+  display: none;
+  background: #fef2f2; border: 1px solid #fca5a5;
+  border-radius: 0.5rem; padding: 0.6rem 0.75rem;
+  font-size: 0.8rem; color: #b91c1c; margin-bottom: 0.75rem;
+}
+.nc-actions    { display: flex; gap: 0.75rem; justify-content: flex-end; }
+.nc-btn-cancel {
+  padding: 8px 16px; border-radius: var(--radius-md);
+  border: 1px solid #e2e8f0; background: #f8fafc; color: #475569;
+  font-size: .88rem; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.nc-btn-submit {
+  padding: 8px 16px; border-radius: var(--radius-md);
+  border: none; background: #200842; color: #fff;
+  font-size: .88rem; font-weight: 600; cursor: pointer;
+  transition: background 0.15s; font-family: inherit;
+}
+.nc-btn-submit:hover { background: #3d0f7a; }
+.nc-form-grid .nc-form-row { margin-bottom: 0; }
+
+/* ── Empty state (sales workflow panel) ──────────────────────────────────────── */
+.empty-state-text    { color: var(--stone-deep); }
+.empty-state-icon    { display: block; margin: 0 auto 16px; opacity: 0.4; }
+.empty-state-heading { font-weight: 600; color: var(--ink-3); font-size: 1rem; margin: 0; }
+.empty-state-sub     { font-size: 0.875rem; margin-top: 4px; color: var(--stone-deep); margin-bottom: 0; }
+#stage-filter        { font-size: 13px; }
