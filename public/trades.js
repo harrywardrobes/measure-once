@@ -1,4 +1,27 @@
 // ── Trades Directory ──────────────────────────────────────────────────────────
+const TRADE_CATEGORIES = [
+  'Carpentry / Roofing',
+  'Carpet Fitting',
+  'Electrical',
+  'Handyman Services',
+  'Internal Joinery',
+  'Landscaping / Outdoors',
+  'Painting + Decorating',
+  'Plasterer',
+  'Plumbing',
+];
+
+const TRADE_AREAS = [
+  'Anglesey',
+  'Chester Only',
+  'Cheshire',
+  'Greater Manchester',
+  'Liverpool',
+  'North Wales',
+  'Wirral',
+  'Wrexham',
+];
+
 let _tradeContacts = [];
 let _tradeDeleteId = null;
 let _tradeTypeFilter = '';
@@ -56,22 +79,16 @@ function populateTradeFilters() {
   const typeSelect = document.getElementById('trades-filter-type');
   const areaSelect = document.getElementById('trades-filter-area');
 
-  const types = [...new Set(_tradeContacts.map(co => (co.trade_type || '').trim()).filter(Boolean))].sort();
   if (typeSelect) {
     const cur = typeSelect.value;
-    typeSelect.innerHTML = `<option value="">All services</option>` +
-      types.map(t => `<option value="${escHtml(t)}"${t === cur ? ' selected' : ''}>${escHtml(t)}</option>`).join('');
+    typeSelect.innerHTML = `<option value="">All categories</option>` +
+      TRADE_CATEGORIES.map(t => `<option value="${escHtml(t)}"${t === cur ? ' selected' : ''}>${escHtml(t)}</option>`).join('');
   }
 
-  const areas = [...new Set(
-    _tradeContacts.flatMap(co =>
-      (co.areas_served || '').split(',').map(a => a.trim()).filter(Boolean)
-    )
-  )].sort();
   if (areaSelect) {
     const cur = areaSelect.value;
     areaSelect.innerHTML = `<option value="">All areas</option>` +
-      areas.map(a => `<option value="${escHtml(a)}"${a === cur ? ' selected' : ''}>${escHtml(a)}</option>`).join('');
+      TRADE_AREAS.map(a => `<option value="${escHtml(a)}"${a === cur ? ' selected' : ''}>${escHtml(a)}</option>`).join('');
   }
 }
 
@@ -87,7 +104,7 @@ function applyTradeFilters() {
   }
   if (_tradeAreaFilter) {
     filtered = filtered.filter(co => {
-      const areas = (co.areas_served || '').split(',').map(a => a.trim());
+      const areas = Array.isArray(co.areas_served) ? co.areas_served : [];
       return areas.includes(_tradeAreaFilter);
     });
   }
@@ -107,7 +124,8 @@ function renderTradeContacts(contacts) {
 function tradeCardHtml(co) {
   const company = escHtml(co.company_name || '');
   const trade   = escHtml(co.trade_type   || '');
-  const areas   = escHtml(co.areas_served || '');
+  const areasArr = Array.isArray(co.areas_served) ? co.areas_served : [];
+  const areasDisplay = escHtml(areasArr.join(', '));
   const timescale  = escHtml(co.timescale      || '');
   const payTerms   = escHtml(co.payment_terms  || '');
   const invMethod  = escHtml(co.invoice_method || '');
@@ -145,7 +163,7 @@ function tradeCardHtml(co) {
           <div class="trades-card-name">${company}</div>
           <div class="trades-card-trade-row">
             <span class="trades-card-trade-badge">${trade}</span>
-            ${areas ? `<span class="trades-card-areas">${areas}</span>` : ''}
+            ${areasDisplay ? `<span class="trades-card-areas">${areasDisplay}</span>` : ''}
           </div>
         </div>
         <div class="trades-card-actions">
@@ -257,6 +275,11 @@ function collectContactSlots() {
   }));
 }
 
+function collectAreasServed() {
+  const checkboxes = document.querySelectorAll('#tf-areas-group input[type="checkbox"]:checked');
+  return Array.from(checkboxes).map(cb => cb.value);
+}
+
 // ── Modal open / close ─────────────────────────────────────────────────────────
 
 function openTradesModal(id) {
@@ -273,8 +296,12 @@ function openTradesModal(id) {
     title.textContent = 'Edit Company';
     editId.value = id;
     document.getElementById('tf-company').value        = co.company_name    || '';
-    document.getElementById('tf-trade').value          = co.trade_type      || '';
-    document.getElementById('tf-areas').value          = co.areas_served    || '';
+    const catSelect = document.getElementById('tf-category');
+    if (catSelect) catSelect.value = co.trade_type || '';
+    const currentAreas = Array.isArray(co.areas_served) ? co.areas_served : [];
+    document.querySelectorAll('#tf-areas-group input[type="checkbox"]').forEach(cb => {
+      cb.checked = currentAreas.includes(cb.value);
+    });
     document.getElementById('tf-timescale').value      = co.timescale       || '';
     document.getElementById('tf-invoice-method').value = co.invoice_method  || '';
     document.getElementById('tf-payment-terms').value  = co.payment_terms   || '';
@@ -325,10 +352,17 @@ async function saveTradeContact(e) {
     return;
   }
 
+  const categoryEl = document.getElementById('tf-category');
+  const trade_type = categoryEl ? categoryEl.value.trim() : '';
+  if (!trade_type) {
+    showToast('Please select a category', true);
+    return;
+  }
+
   const body = {
     company_name:   document.getElementById('tf-company').value.trim(),
-    trade_type:     document.getElementById('tf-trade').value.trim(),
-    areas_served:   document.getElementById('tf-areas').value.trim(),
+    trade_type,
+    areas_served:   collectAreasServed(),
     timescale:      document.getElementById('tf-timescale').value.trim(),
     invoice_method: document.getElementById('tf-invoice-method').value.trim(),
     payment_terms:  document.getElementById('tf-payment-terms').value.trim(),

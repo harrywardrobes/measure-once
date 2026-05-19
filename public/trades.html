@@ -60,27 +60,35 @@
           <input class="trades-input" id="tf-company" type="text" placeholder="e.g. Cheshire Electrical" required>
         </div>
         <div class="trades-field">
-          <label class="trades-label" for="tf-trade">Trade type <span class="trades-required">*</span></label>
-          <input class="trades-input" id="tf-trade" type="text" placeholder="e.g. Electrician, Plasterer" list="trades-type-list" required>
-          <datalist id="trades-type-list">
-            <option value="Carpet Fitter">
-            <option value="Electrician">
-            <option value="Plasterer">
-            <option value="Plumber">
-            <option value="Painter & Decorator">
-            <option value="Joiner">
-            <option value="Tiler">
-            <option value="Roofer">
-            <option value="Builder">
-            <option value="Gas Engineer">
-          </datalist>
+          <label class="trades-label" for="tf-category">Category <span class="trades-required">*</span></label>
+          <select class="trades-input trades-select" id="tf-category" required>
+            <option value="">Select a category…</option>
+            <option value="Carpentry / Roofing">Carpentry / Roofing</option>
+            <option value="Carpet Fitting">Carpet Fitting</option>
+            <option value="Electrical">Electrical</option>
+            <option value="Handyman Services">Handyman Services</option>
+            <option value="Internal Joinery">Internal Joinery</option>
+            <option value="Landscaping / Outdoors">Landscaping / Outdoors</option>
+            <option value="Painting + Decorating">Painting + Decorating</option>
+            <option value="Plasterer">Plasterer</option>
+            <option value="Plumbing">Plumbing</option>
+          </select>
         </div>
       </div>
 
       <div class="trades-form-row">
         <div class="trades-field">
-          <label class="trades-label" for="tf-areas">Areas served</label>
-          <input class="trades-input" id="tf-areas" type="text" placeholder="e.g. Manchester, Salford, Trafford">
+          <label class="trades-label">Areas served</label>
+          <div id="tf-areas-group" class="trades-areas-group">
+            <label class="trades-area-chip"><input type="checkbox" value="Anglesey"> Anglesey</label>
+            <label class="trades-area-chip"><input type="checkbox" value="Chester Only"> Chester Only</label>
+            <label class="trades-area-chip"><input type="checkbox" value="Cheshire"> Cheshire</label>
+            <label class="trades-area-chip"><input type="checkbox" value="Greater Manchester"> Greater Manchester</label>
+            <label class="trades-area-chip"><input type="checkbox" value="Liverpool"> Liverpool</label>
+            <label class="trades-area-chip"><input type="checkbox" value="North Wales"> North Wales</label>
+            <label class="trades-area-chip"><input type="checkbox" value="Wirral"> Wirral</label>
+            <label class="trades-area-chip"><input type="checkbox" value="Wrexham"> Wrexham</label>
+          </div>
         </div>
       </div>
 

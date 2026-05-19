@@ -1096,6 +1096,46 @@ app.delete('/api/personal-tasks/:id', (req, res) => {
 // ── Trades Directory ──────────────────────────────────────────────────────────
 const _tradesPool = new (require('pg').Pool)({ connectionString: process.env.DATABASE_URL });
 
+const TRADE_CATEGORIES = [
+  'Carpentry / Roofing',
+  'Carpet Fitting',
+  'Electrical',
+  'Handyman Services',
+  'Internal Joinery',
+  'Landscaping / Outdoors',
+  'Painting + Decorating',
+  'Plasterer',
+  'Plumbing',
+];
+
+const TRADE_AREAS = [
+  'Anglesey',
+  'Chester Only',
+  'Cheshire',
+  'Greater Manchester',
+  'Liverpool',
+  'North Wales',
+  'Wirral',
+  'Wrexham',
+];
+
+function parseAreasServed(val) {
+  if (!val) return [];
+  try {
+    const p = JSON.parse(val);
+    if (Array.isArray(p)) return p;
+  } catch {}
+  return val.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function serializeAreasServed(val) {
+  if (Array.isArray(val)) return JSON.stringify(val.filter(a => TRADE_AREAS.includes(a)));
+  if (typeof val === 'string' && val.startsWith('[')) {
+    try { return JSON.stringify(JSON.parse(val).filter(a => TRADE_AREAS.includes(a))); } catch {}
+  }
+  return JSON.stringify([]);
+}
+
 async function ensureTradesTable() {
   await _tradesPool.query(`
     CREATE TABLE IF NOT EXISTS trade_contacts (
@@ -1196,6 +1236,7 @@ app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) 
     }
     const result = companies.map(co => ({
       ...co,
+      areas_served: parseAreasServed(co.areas_served),
       created_by_name: [co.created_first, co.created_last].filter(Boolean).join(' ') || co.created_email || null,
       updated_by_name: [co.updated_first, co.updated_last].filter(Boolean).join(' ') || co.updated_email || null,
       contacts: contactMap[co.id] || []
@@ -1221,7 +1262,7 @@ app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res)
         (company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING *`,
-      [company_name.trim(), trade_type.trim(), (areas_served || '').trim(),
+      [company_name.trim(), trade_type.trim(), serializeAreasServed(areas_served),
        (timescale || '').trim(), (invoice_method || '').trim(),
        (payment_terms || '').trim(), (notes || '').trim(),
        req.user?.claims?.sub || null]
@@ -1237,7 +1278,7 @@ app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res)
       insertedContacts.push(cc);
     }
     await client.query('COMMIT');
-    res.status(201).json({ ...co, contacts: insertedContacts });
+    res.status(201).json({ ...co, areas_served: parseAreasServed(co.areas_served), contacts: insertedContacts });
   } catch (e) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: e.message });
@@ -1264,7 +1305,7 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
            invoice_method=$5, payment_terms=$6, notes=$7,
            updated_by=$8, updated_at=NOW()
        WHERE id=$9 RETURNING *`,
-      [company_name.trim(), trade_type.trim(), (areas_served || '').trim(),
+      [company_name.trim(), trade_type.trim(), serializeAreasServed(areas_served),
        (timescale || '').trim(), (invoice_method || '').trim(),
        (payment_terms || '').trim(), (notes || '').trim(),
        req.user?.claims?.sub || null, id]
@@ -1282,7 +1323,7 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
       insertedContacts.push(cc);
     }
     await client.query('COMMIT');
-    res.json({ ...co, contacts: insertedContacts });
+    res.json({ ...co, areas_served: parseAreasServed(co.areas_served), contacts: insertedContacts });
   } catch (e) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: e.message });

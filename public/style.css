@@ -3334,6 +3334,26 @@ body.showing-workflow .sales-layout #workflow-panel {
 }
 .trades-input:focus { border-color: var(--orchid); }
 .trades-textarea { resize: vertical; min-height: 70px; }
+.trades-select { cursor: pointer; }
+
+.trades-areas-group {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 8px 0 2px;
+}
+.trades-area-chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px 5px 8px;
+  border: 1.5px solid var(--stone);
+  border-radius: var(--radius-pill);
+  background: var(--chalk);
+  font-size: 0.8rem; font-weight: 500; color: var(--ink-2);
+  cursor: pointer; user-select: none;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.trades-area-chip:has(input:checked) {
+  background: var(--orchid); border-color: var(--orchid); color: #fff;
+}
+.trades-area-chip input[type="checkbox"] { display: none; }
 
 .trades-contacts-section {
   border-top: 1.5px solid var(--stone-light);
