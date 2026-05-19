@@ -134,9 +134,15 @@ function renderInvoicePanelBody() {
     const isLast  = ctx.index === total - 1;
     const dropdownOptions = ctx.ids.map((id, i) => {
       const match = state.qb.invoices.find(x => x.id === id);
-      const label = match
-        ? `#${match.docNumber || id} — ${fmtGBP(match.totalAmt)}`
-        : `Invoice ${i + 1}`;
+      let label;
+      if (match) {
+        const isPaid   = match.balance != null && Number(match.balance) === 0;
+        const isOverdue = !isPaid && match.dueDate && new Date(match.dueDate) < new Date();
+        const status   = isPaid ? 'Paid' : isOverdue ? 'Overdue' : 'Open';
+        label = `#${match.docNumber || id} — ${fmtGBP(match.totalAmt)} · ${status}`;
+      } else {
+        label = `Invoice ${i + 1}`;
+      }
       return `<option value="${i}"${i === ctx.index ? ' selected' : ''}>${escHtml(label)}</option>`;
     }).join('');
     title.innerHTML = `
