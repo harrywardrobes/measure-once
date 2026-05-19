@@ -1282,6 +1282,31 @@ async function ensureTradesTable() {
       [co.id, row.name, row.phone || '', row.email || '']
     );
   }
+
+  // Backfill audit log for companies that pre-date the audit feature
+  const { rows: companiesWithoutAudit } = await _tradesPool.query(`
+    SELECT tc.id, tc.created_by, tc.created_by_name, tc.created_at,
+           tc.updated_by, tc.updated_by_name, tc.updated_at
+    FROM trade_companies tc
+    WHERE NOT EXISTS (
+      SELECT 1 FROM trade_audit_log al WHERE al.company_id = tc.id
+    )
+    ORDER BY tc.created_at ASC
+  `);
+  for (const co of companiesWithoutAudit) {
+    await _tradesPool.query(
+      `INSERT INTO trade_audit_log (company_id, actor_id, actor_name, action, changed_at)
+       VALUES ($1, $2, $3, 'Company created', $4)`,
+      [co.id, co.created_by || null, co.created_by_name || null, co.created_at || new Date()]
+    );
+    if (co.updated_at) {
+      await _tradesPool.query(
+        `INSERT INTO trade_audit_log (company_id, actor_id, actor_name, action, changed_at)
+         VALUES ($1, $2, $3, 'Updated (migrated)', $4)`,
+        [co.id, co.updated_by || null, co.updated_by_name || null, co.updated_at]
+      );
+    }
+  }
 }
 
 app.get('/trades', isAuthenticated, requireManagerOrAdmin, (_req, res) => {
