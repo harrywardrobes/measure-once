@@ -171,6 +171,33 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+const requireManagerOrAdmin = async (req, res, next) => {
+  const email  = req.user?.claims?.email;
+  const userId = req.user?.claims?.sub;
+  if (!email || !userId) return res.status(403).json({ message: 'Forbidden' });
+  if (isAdminEmail(email)) return next();
+  try {
+    const r = await pool.query(
+      `SELECT privilege_level FROM users WHERE id = $1`, [userId]
+    );
+    const level = r.rows[0]?.privilege_level || 'member';
+    if (level === 'manager' || level === 'admin') return next();
+    return res.status(403).json({ message: 'Manager or admin access required' });
+  } catch {
+    return res.status(500).json({ message: 'Authorization check failed' });
+  }
+};
+
+async function userIdExists(id) {
+  if (!id) return false;
+  try {
+    const r = await pool.query('SELECT 1 FROM users WHERE id = $1', [id]);
+    return r.rowCount > 0;
+  } catch {
+    return false;
+  }
+}
+
 async function isEmailApproved(email) {
   if (!email) return false;
   const lower = email.toLowerCase();
@@ -600,4 +627,4 @@ const isAuthenticated = async (req, res, next) => {
   }
 };
 
-module.exports = { installSession, setupAuth, isAuthenticated, requireAdmin, isAdminEmail };
+module.exports = { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, isAdminEmail, userIdExists };

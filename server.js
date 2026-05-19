@@ -4,7 +4,7 @@ const axios = require('axios').create({ timeout: 10000 });
 const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
-const { installSession, setupAuth, isAuthenticated, requireAdmin } = require('./auth');
+const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, userIdExists } = require('./auth');
 const qbRoutes = require('./quickbooks');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 
@@ -202,13 +202,62 @@ async function fetchLocaldataFromHubspot() {
       const rooms = JSON.parse(roomsJson);
       if (Array.isArray(rooms)) {
         result[contact.id] = rooms.map(r => ({
-          room: r.room || 'Main', stageKey: r.stageKey || 'sales', roomStatus: r.roomStatus || 'active'
+          room: r.room || 'Main', stageKey: r.stageKey || 'sales', roomStatus: r.roomStatus || 'active',
+          assignedFitterId: r.assignedFitterId || null
         }));
       }
     } catch {}
   }
   return result;
 }
+
+// Assign (or unassign) a fitter to a specific room on a contact (manager or admin only)
+app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireManagerOrAdmin, requireHubspotToken, async (req, res) => {
+  const contactId = req.params.id;
+  const roomIdx   = parseInt(req.params.roomIdx, 10);
+  const { fitterId } = req.body; // string id or null/'' to unassign
+
+  if (!/^[A-Za-z0-9_-]+$/.test(contactId)) {
+    return res.status(400).json({ error: 'Invalid contact id' });
+  }
+  if (isNaN(roomIdx) || roomIdx < 0) {
+    return res.status(400).json({ error: 'Invalid room index' });
+  }
+
+  try {
+    const r = await axios.get(
+      `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+      { headers: hsHeaders(), params: { properties: 'measure_once_rooms' } }
+    );
+    const roomsJson = r.data.properties?.measure_once_rooms;
+    if (!roomsJson) return res.status(404).json({ error: 'No rooms found' });
+    const rooms = JSON.parse(roomsJson);
+    if (!Array.isArray(rooms) || roomIdx >= rooms.length) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+
+    if (fitterId) {
+      const exists = await userIdExists(fitterId);
+      if (!exists) return res.status(400).json({ error: 'Fitter user not found' });
+      rooms[roomIdx].assignedFitterId = fitterId;
+    } else {
+      delete rooms[roomIdx].assignedFitterId;
+    }
+
+    await axios.patch(
+      `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+      { properties: { measure_once_rooms: JSON.stringify(rooms) } },
+      { headers: hsHeaders() }
+    );
+
+    // Bust cache so next /api/localdata/all reflects the new assignment
+    _localdataCache = null;
+
+    res.json({ success: true, rooms });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.get('/api/localdata/all', async (req, res) => {
   try {

@@ -1286,6 +1286,203 @@ body.showing-workflow .workflow-panel { display: flex; }
   min-width: 0;
 }
 
+/* ── Fitter chip (on room rows) ──────────────────────────────────────────────── */
+.fitter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--paper);
+  border: 1px solid var(--stone);
+  border-radius: 999px;
+  padding: 2px 8px 2px 3px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ink-3);
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.fitter-chip-admin {
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.fitter-chip-admin:hover {
+  background: var(--stone);
+  border-color: var(--stone-deep);
+}
+.fitter-chip-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.fitter-chip-avatar-initials {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--plum);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.fitter-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fitter-chip-unassigned {
+  color: var(--ink-4);
+  font-style: italic;
+}
+
+/* ── Fitter picker bottom sheet ──────────────────────────────────────────────── */
+#fitter-picker-sheet {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+}
+#fitter-picker-sheet.fitter-picker-open {
+  display: block;
+}
+.fitter-picker-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  animation: fpFadeIn 0.18s ease;
+}
+@keyframes fpFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.fitter-picker-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0; right: 0;
+  background: #fff;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.22s ease;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.fitter-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--stone);
+  flex-shrink: 0;
+}
+.fitter-picker-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink-1);
+}
+.fitter-picker-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ink-3);
+  font-size: 1rem;
+  padding: 4px 6px;
+  border-radius: 6px;
+  line-height: 1;
+}
+.fitter-picker-close:hover {
+  background: var(--stone);
+}
+.fitter-picker-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 8px 0;
+  -webkit-overflow-scrolling: touch;
+}
+.fitter-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 18px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.1s;
+}
+.fitter-picker-item:hover {
+  background: var(--paper);
+}
+.fitter-picker-item:active {
+  background: var(--stone);
+}
+.fitter-picker-item-selected {
+  background: var(--paper);
+}
+.fitter-picker-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.fitter-picker-avatar-initials {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--plum);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.fitter-picker-item-name {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ink-1);
+}
+.fitter-picker-check {
+  color: var(--plum);
+  font-size: 1rem;
+  font-weight: 700;
+}
+.fitter-picker-unassign {
+  display: block;
+  width: calc(100% - 36px);
+  margin: 4px 18px 12px;
+  padding: 10px;
+  background: none;
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ink-3);
+  text-align: center;
+  transition: background 0.1s;
+}
+.fitter-picker-unassign:hover {
+  background: var(--stone);
+}
+
 /* ── Tasks tab panel ─────────────────────────────────────────────────────────── */
 .tasks-tab {
   position: fixed;

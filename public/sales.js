@@ -148,6 +148,7 @@ async function selectContact(contactId, roomIdx = 0) {
         stageDates,
         installStart:      r.installStart  || null,
         installFinish:     r.installFinish || null,
+        assignedFitterId:  r.assignedFitterId || null,
       };
     });
 

@@ -4,11 +4,27 @@ function setProjectStageFilter(key) {
   renderProjectsView();
 }
 
-function renderProjectsView() {
+async function ensureProjectPlatformUsers() {
+  if (state.platformUsers && state.platformUsers.length) return;
+  try {
+    state.platformUsers = await GET('/api/platform-users');
+  } catch {
+    state.platformUsers = [];
+  }
+}
+
+async function renderProjectsView() {
   const view = document.getElementById('projects-view');
   if (!view) return;
 
-  const filter = state.projectStageFilter;
+  await ensureProjectPlatformUsers();
+
+  const filter    = state.projectStageFilter;
+  const myRooms   = filter === '__mine__';
+  const stageKey  = myRooms ? '' : filter;
+  const currentId = state.user?.id;
+  const privLevel = state.user?.privilege_level || 'member';
+  const canAssign = !!state.user?.isAdmin || privLevel === 'manager' || privLevel === 'admin';
 
   // Collect contacts that have at least one active room with saved data
   const rows = [];
@@ -18,7 +34,8 @@ function renderProjectsView() {
     const activeRooms = cached
       .map((r, idx) => ({ ...r, roomIdx: idx }))
       .filter(r => (r.roomStatus || 'active') === 'active')
-      .filter(r => !filter || r.stageKey === filter);
+      .filter(r => !stageKey || r.stageKey === stageKey)
+      .filter(r => !myRooms || r.assignedFitterId === currentId);
     if (!activeRooms.length) continue;
     rows.push({ contact, rooms: activeRooms });
   }
@@ -36,9 +53,10 @@ function renderProjectsView() {
 
   const stageTabs = [
     { key: '', label: 'All' },
+    { key: '__mine__', label: 'My rooms' },
     ...STAGE_KEYS.map(k => ({ key: k, label: state.workflow?.stages?.[k]?.label || k }))
   ].map(({ key, label }) => {
-    const colour  = key ? stageColour(key) : null;
+    const colour  = (key && key !== '__mine__') ? stageColour(key) : null;
     const active  = filter === key;
     const style   = active && colour
       ? `background:${colour.bg};color:#fff;border-color:${colour.bg}`
@@ -49,9 +67,12 @@ function renderProjectsView() {
       style="${style}" data-stage-filter="${escHtml(key)}">${escHtml(label)}</button>`;
   }).join('');
 
+  const emptyMsg = myRooms
+    ? 'No rooms are currently assigned to you.'
+    : 'No projects at this stage.';
   const bodyHtml = !rows.length
-    ? `<p style="color:var(--stone-deep);font-size:0.875rem;padding:8px 0;">No projects at this stage.</p>`
-    : rows.map(({ contact, rooms }) => customerCardHtml(contact, rooms)).join('');
+    ? `<p style="color:var(--stone-deep);font-size:0.875rem;padding:8px 0;">${emptyMsg}</p>`
+    : rows.map(({ contact, rooms }) => customerCardHtml(contact, rooms, canAssign)).join('');
 
   view.innerHTML = `
     <div class="project-stage-tabs-bar">
@@ -69,23 +90,67 @@ function renderProjectsView() {
   });
 
   view.addEventListener('click', function(e) {
+    // Fitter chip click — open assignment picker (admin only)
+    const chip = e.target.closest('[data-fitter-contact-id]');
+    if (chip) {
+      e.stopPropagation();
+      openFitterPicker(chip.dataset.fitterContactId, parseInt(chip.dataset.fitterRoomIdx, 10));
+      return;
+    }
+
+    // Room row click — navigate to contact
     const row = e.target.closest('[data-contact-id]');
     if (!row) return;
     openProject(row.dataset.contactId, parseInt(row.dataset.roomIdx, 10));
   });
 }
 
-function customerCardHtml(contact, rooms) {
-  const name = escHtml(contactName(contact));
+function fitterChipHtml(room, contactId, canAssign) {
+  const users   = state.platformUsers || [];
+  const fitter  = room.assignedFitterId ? users.find(u => u.id === room.assignedFitterId) : null;
+  const unknownAssigned = room.assignedFitterId && !fitter;
+  const name    = fitter
+    ? escHtml(`${fitter.firstName || ''} ${fitter.lastName || ''}`.trim() || fitter.email || 'Fitter')
+    : unknownAssigned ? 'Assigned (unknown)' : 'Unassigned';
+  const img     = fitter?.profileImageUrl
+    ? `<img src="${escHtml(fitter.profileImageUrl)}" alt="" class="fitter-chip-avatar">`
+    : `<span class="fitter-chip-avatar fitter-chip-avatar-initials">${escHtml(fitterInitials(fitter))}</span>`;
+
+  if (canAssign) {
+    return `<button class="fitter-chip fitter-chip-admin" aria-label="Assign fitter"
+        data-fitter-contact-id="${escHtml(contactId)}" data-fitter-room-idx="${escHtml(String(room.roomIdx))}"
+        title="${fitter ? 'Reassign fitter' : 'Assign a fitter'}">
+      ${fitter ? img : ''}
+      <span class="fitter-chip-name ${fitter ? '' : 'fitter-chip-unassigned'}">${name}</span>
+    </button>`;
+  }
+
+  return `<span class="fitter-chip">
+    ${fitter ? img : ''}
+    <span class="fitter-chip-name ${fitter ? '' : 'fitter-chip-unassigned'}">${name}</span>
+  </span>`;
+}
+
+function fitterInitials(fitter) {
+  if (!fitter) return '+';
+  const parts = [fitter.firstName, fitter.lastName].filter(Boolean);
+  if (parts.length) return parts.map(s => s[0]).join('').toUpperCase();
+  return (fitter.email || '?')[0].toUpperCase();
+}
+
+function customerCardHtml(contact, rooms, isAdmin) {
+  const name      = escHtml(contactName(contact));
   const contactId = escHtml(contact.id || '');
 
   const roomRows = rooms.map(r => {
     const colour     = stageColour(r.stageKey);
     const stageLabel = escHtml(state.workflow?.stages?.[r.stageKey]?.label || r.stageKey);
     const roomLabel  = escHtml(r.room || 'Main');
+    const chip       = fitterChipHtml(r, contact.id, isAdmin);
     return `
       <div class="project-room-row" data-contact-id="${escHtml(contact.id)}" data-room-idx="${r.roomIdx}">
         <span class="project-room-row-name">${roomLabel}</span>
+        ${chip}
         <span class="stage-pill" style="background:${colour.light};color:${colour.text}">${stageLabel}</span>
       </div>`;
   }).join('');
@@ -100,4 +165,97 @@ function customerCardHtml(contact, rooms) {
         ${roomRows}
       </div>
     </div>`;
+}
+
+// ── Fitter Picker Modal ───────────────────────────────────────────────────────
+let _fitterPickerContactId = null;
+let _fitterPickerRoomIdx   = null;
+
+function openFitterPicker(contactId, roomIdx) {
+  _fitterPickerContactId = contactId;
+  _fitterPickerRoomIdx   = roomIdx;
+
+  const users   = state.platformUsers || [];
+  const cached  = (state.contactStageCache[contactId] || [])[roomIdx];
+  const current = cached?.assignedFitterId;
+
+  const userItems = users.map(u => {
+    const fullName  = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || 'Unknown';
+    const initials  = fitterInitials(u);
+    const selected  = u.id === current;
+    const imgHtml   = u.profileImageUrl
+      ? `<img src="${escHtml(u.profileImageUrl)}" alt="" class="fitter-picker-avatar">`
+      : `<span class="fitter-picker-avatar fitter-picker-avatar-initials">${escHtml(initials)}</span>`;
+    return `<button class="fitter-picker-item ${selected ? 'fitter-picker-item-selected' : ''}"
+        data-user-id="${escHtml(u.id)}">
+      ${imgHtml}
+      <span class="fitter-picker-item-name">${escHtml(fullName)}</span>
+      ${selected ? '<span class="fitter-picker-check">✓</span>' : ''}
+    </button>`;
+  }).join('');
+
+  const unassignBtn = current
+    ? `<button class="fitter-picker-unassign" data-user-id="">Remove assignment</button>`
+    : '';
+
+  let el = document.getElementById('fitter-picker-sheet');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'fitter-picker-sheet';
+    document.body.appendChild(el);
+  }
+
+  el.innerHTML = `
+    <div class="fitter-picker-backdrop" id="fitter-picker-backdrop"></div>
+    <div class="fitter-picker-panel" role="dialog" aria-modal="true" aria-label="Assign fitter">
+      <div class="fitter-picker-header">
+        <span class="fitter-picker-title">Assign fitter</span>
+        <button class="fitter-picker-close" id="fitter-picker-close" aria-label="Close">✕</button>
+      </div>
+      <div class="fitter-picker-list">
+        ${userItems || '<p style="padding:12px;color:var(--ink-4);font-size:0.875rem;">No team members found.</p>'}
+      </div>
+      ${unassignBtn}
+    </div>
+  `;
+
+  el.classList.add('fitter-picker-open');
+
+  el.querySelector('#fitter-picker-backdrop').addEventListener('click', closeFitterPicker);
+  el.querySelector('#fitter-picker-close').addEventListener('click', closeFitterPicker);
+
+  el.querySelectorAll('[data-user-id]').forEach(btn => {
+    btn.addEventListener('click', () => assignFitter(btn.dataset.userId || null));
+  });
+}
+
+function closeFitterPicker() {
+  const el = document.getElementById('fitter-picker-sheet');
+  if (el) {
+    el.classList.remove('fitter-picker-open');
+    setTimeout(() => { el.innerHTML = ''; }, 300);
+  }
+}
+
+async function assignFitter(fitterId) {
+  const contactId = _fitterPickerContactId;
+  const roomIdx   = _fitterPickerRoomIdx;
+  closeFitterPicker();
+
+  if (contactId === null || roomIdx === null) return;
+
+  try {
+    await PATCH_REQ(`/api/contacts/${contactId}/rooms/${roomIdx}/fitter`, { fitterId: fitterId || null });
+
+    // Update local cache immediately so the UI reflects the change
+    const cached = state.contactStageCache[contactId];
+    if (cached && cached[roomIdx] !== undefined) {
+      cached[roomIdx] = { ...cached[roomIdx], assignedFitterId: fitterId || null };
+    }
+
+    renderProjectsView();
+    showToast(fitterId ? 'Fitter assigned' : 'Assignment removed');
+  } catch (e) {
+    showToast('Failed to save assignment', true);
+  }
 }
