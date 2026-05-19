@@ -152,6 +152,24 @@ function renderCustomerList() {
       ? `<span class="customer-num-badge" title="Customer number">${escHtml(customerNum)}</span>`
       : '';
 
+    const leadStatusBadge = (() => {
+      if (state.contactsViewMode !== 'all') return '';
+      const raw = contact.properties?.hs_lead_status || '';
+      if (!raw) return '';
+      const map = {
+        'OPEN_DEAL':            { label: 'Open Deal',   cls: 'lsb-open-deal' },
+        'NEW':                  { label: 'New',          cls: 'lsb-new' },
+        'IN_PROGRESS':          { label: 'In Progress',  cls: 'lsb-in-progress' },
+        'OPEN':                 { label: 'Open',         cls: 'lsb-new' },
+        'CONNECTED':            { label: 'Connected',    cls: 'lsb-connected' },
+        'ATTEMPTED_TO_CONTACT': { label: 'Attempted',    cls: '' },
+        'UNQUALIFIED':          { label: 'Unqualified',  cls: 'lsb-unqualified' },
+        'BAD_TIMING':           { label: 'Bad Timing',   cls: 'lsb-bad-timing' },
+      };
+      const entry = map[raw] || { label: raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()), cls: '' };
+      return `<span class="lead-status-badge ${entry.cls}" title="Lead status">${escHtml(entry.label)}</span>`;
+    })();
+
     return `
       <div class="customer-card ${isSelected ? 'selected' : ''} ${isArchived ? 'card-archived' : ''}"
            data-contact-id="${contact.id}" data-room-idx="${roomIdx}"
@@ -162,6 +180,7 @@ function renderCustomerList() {
         </div>
         <div class="customer-card-meta">
           ${stagePillHtml}
+          ${leadStatusBadge}
           ${qbBadge}
           ${customerNumBadge}
           ${email ? `<span class="customer-card-value">${escHtml(email)}</span>` : ''}

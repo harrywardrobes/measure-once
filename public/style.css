@@ -1173,6 +1173,25 @@ body.showing-workflow .workflow-panel { display: flex; }
   white-space: nowrap;
 }
 
+/* ── Lead status badge (shown in All-contacts view) ──────────────────────────── */
+.lead-status-badge {
+  font-size: 0.67rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+  background: var(--stone-light);
+  color: var(--ink-3);
+}
+.lead-status-badge.lsb-open-deal   { background: #dbeafe; color: #1e40af; }
+.lead-status-badge.lsb-new         { background: #d1fae5; color: #065f46; }
+.lead-status-badge.lsb-in-progress { background: #fef3c7; color: #92400e; }
+.lead-status-badge.lsb-connected   { background: #ede9fe; color: #5b21b6; }
+.lead-status-badge.lsb-unqualified { background: #fee2e2; color: #991b1b; }
+.lead-status-badge.lsb-bad-timing  { background: #f3f4f6; color: #6b7280; }
+
 /* ── Projects stage filter tabs ──────────────────────────────────────────────── */
 .project-stage-tabs-bar {
   display: flex;
