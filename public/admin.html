@@ -328,6 +328,41 @@
     .chip-delete_job_role   { background: #fff7ed; color: #9a3412; }
     .chip-edit_permissions  { background: #ede0ff; color: #3d0f7a; }
 
+    /* ── Migration card ── */
+    .mig-card { margin-bottom: 20px; }
+    .mig-desc { font-size: .83rem; color: var(--ink-3); margin: 0 0 14px; line-height: 1.5; }
+    .mig-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+    .mig-results { margin-top: 16px; display: none; }
+    .mig-results.show { display: block; }
+    .mig-section { margin-bottom: 14px; }
+    .mig-section-title {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--ink-3); margin: 0 0 8px;
+    }
+    .mig-section-empty { font-size: .83rem; color: var(--ink-4); font-style: italic; }
+    .mig-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4px 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--stone-soft);
+      font-size: .83rem;
+      align-items: center;
+    }
+    .mig-row:last-child { border-bottom: none; }
+    .mig-company { font-weight: 600; color: var(--ink-1); }
+    .mig-change {
+      color: var(--ink-3); font-size: .78rem; grid-column: 1 / -1;
+      display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    }
+    .mig-old { text-decoration: line-through; color: var(--ink-4); }
+    .mig-arrow { color: var(--ink-4); flex-shrink: 0; }
+    .mig-new { color: #059669; font-weight: 600; }
+    .mig-warn { font-size: .8rem; color: #92400e; background: #fffbeb; border: 1px solid #fde68a;
+                border-radius: var(--radius-sm); padding: 10px 14px; margin-top: 10px; }
+    .mig-success { font-size: .8rem; color: #166534; background: #dcfce7; border: 1px solid #86efac;
+                   border-radius: var(--radius-sm); padding: 10px 14px; margin-top: 10px; }
+
     /* ── Trades audit badge ── */
     .trades-audit-badge {
       display: inline-block;
@@ -1478,6 +1513,21 @@
 
       <!-- TRADES AUDIT -->
       <div class="tab-panel" id="tab-tradesaudit">
+        <div class="card mig-card">
+          <div class="card-title" style="margin:0 0 6px;">Migrate legacy trade data</div>
+          <p class="mig-desc">
+            Companies added before the fixed category list was introduced may have freeform trade types
+            (e.g. "Electrician", "Painter &amp; Decorator") and comma-separated areas. This tool maps them
+            to the nearest fixed values so they appear correctly in filtered views.
+            Use <strong>Preview</strong> first to review what will change before committing.
+          </p>
+          <div class="mig-btns">
+            <button class="btn btn-ghost" id="mig-preview-btn" onclick="previewMigration()">Preview changes</button>
+            <button class="btn btn-primary" id="mig-run-btn" onclick="runMigration()" style="display:none;">Apply migration</button>
+          </div>
+          <div class="mig-results" id="mig-results"></div>
+        </div>
+
         <div class="card" style="padding:0;overflow:hidden;">
           <div style="padding:16px 20px 14px;border-bottom:1px solid var(--stone);">
             <div class="card-title" style="margin:0 0 4px;">Trade companies audit trail <span class="card-count count-muted">(read-only)</span></div>
@@ -1523,6 +1573,107 @@
     renderPhotoRequests();
     renderTradesAudit();
     renderAuditLog();
+  }
+
+  /* ────────────────────────────────────────────────
+     TRADES MIGRATION
+  ──────────────────────────────────────────────── */
+  let _migPreviewData = null;
+
+  function migRowHtml(r) {
+    const changes = [];
+    if (r.old_trade_type !== r.new_trade_type) {
+      changes.push(`<span class="mig-old">${esc(r.old_trade_type)}</span><span class="mig-arrow">→</span><span class="mig-new">${esc(r.new_trade_type)}</span>`);
+    }
+    const oldAreas = (r.old_areas || []).join(', ');
+    const newAreas = (r.new_areas || []).join(', ');
+    if (oldAreas !== newAreas) {
+      const oldDisplay = oldAreas || '(none)';
+      const newDisplay = newAreas || '(none)';
+      changes.push(`<span class="mig-old">${esc(oldDisplay)}</span><span class="mig-arrow">→</span><span class="mig-new">${esc(newDisplay)}</span>`);
+    }
+    return `<div class="mig-row">
+      <span class="mig-company">${esc(r.company_name)}</span>
+      ${changes.map(c => `<div class="mig-change">${c}</div>`).join('')}
+    </div>`;
+  }
+
+  function renderMigrationResults(data, applied) {
+    const el = $('#mig-results');
+    if (!el) return;
+    const { migrated = [], unmatched = [], skipped = [] } = data;
+
+    let html = '';
+
+    if (applied) {
+      if (migrated.length === 0) {
+        html += `<div class="mig-success">Nothing to migrate — all ${skipped.length} companies already use the fixed values.</div>`;
+      } else {
+        html += `<div class="mig-success">${migrated.length} ${migrated.length === 1 ? 'company' : 'companies'} updated successfully.${unmatched.length ? ` ${unmatched.length} could not be matched automatically — see below.` : ''}</div>`;
+      }
+    } else {
+      if (migrated.length === 0 && unmatched.length === 0) {
+        html += `<div class="mig-success">All ${skipped.length} companies already use the fixed values — no migration needed.</div>`;
+      }
+    }
+
+    if (migrated.length > 0) {
+      html += `<div class="mig-section">
+        <div class="mig-section-title">${applied ? 'Updated' : 'Will update'} (${migrated.length})</div>
+        ${migrated.map(migRowHtml).join('')}
+      </div>`;
+    }
+
+    if (unmatched.length > 0) {
+      html += `<div class="mig-section">
+        <div class="mig-section-title">Could not match automatically (${unmatched.length})</div>
+        ${unmatched.map(r => `<div class="mig-row"><span class="mig-company">${esc(r.company_name)}</span><div class="mig-change"><span class="mig-old">${esc(r.trade_type)}</span></div></div>`).join('')}
+      </div>
+      <div class="mig-warn">These companies have trade types that couldn't be mapped to a fixed category. Open each one in the Trades directory and update the category manually.</div>`;
+    }
+
+    el.innerHTML = html;
+    el.classList.add('show');
+  }
+
+  async function previewMigration() {
+    const previewBtn = $('#mig-preview-btn');
+    const runBtn     = $('#mig-run-btn');
+    if (previewBtn) { previewBtn.disabled = true; previewBtn.textContent = 'Previewing…'; }
+    if (runBtn) runBtn.style.display = 'none';
+    _migPreviewData = null;
+    try {
+      const data = await api('POST', '/api/admin/trades/migrate', { dry_run: true });
+      _migPreviewData = data;
+      renderMigrationResults(data, false);
+      if ((data.migrated || []).length > 0 && runBtn) {
+        runBtn.style.display = '';
+      }
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      if (previewBtn) { previewBtn.disabled = false; previewBtn.textContent = 'Preview changes'; }
+    }
+  }
+
+  async function runMigration() {
+    if (!confirm('Apply the migration? This will update the trade type and areas for each company shown in the preview.')) return;
+    const runBtn     = $('#mig-run-btn');
+    const previewBtn = $('#mig-preview-btn');
+    if (runBtn)     { runBtn.disabled = true; runBtn.textContent = 'Applying…'; }
+    if (previewBtn)  previewBtn.disabled = true;
+    try {
+      const data = await api('POST', '/api/admin/trades/migrate', { dry_run: false });
+      renderMigrationResults(data, true);
+      if (runBtn) runBtn.style.display = 'none';
+      _tradesAudit = await api('GET', '/api/admin/trades-audit');
+      renderTradesAudit();
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      if (runBtn)     { runBtn.disabled = false; runBtn.textContent = 'Apply migration'; }
+      if (previewBtn) previewBtn.disabled = false;
+    }
   }
 
   init();

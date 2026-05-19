@@ -1414,6 +1414,123 @@ app.get('/api/admin/trades-audit', isAuthenticated, requireAdmin, async (req, re
   }
 });
 
+// ── Trade Companies Migration ─────────────────────────────────────────────────
+// Keyword → fixed category mappings (order matters: more specific first)
+const TRADE_TYPE_MAP = [
+  { keywords: ['carpet fitting', 'carpet fitter', 'carpet'],                         category: 'Carpet Fitting' },
+  { keywords: ['electrician', 'electrical', 'electric'],                              category: 'Electrical' },
+  { keywords: ['internal joinery', 'joinery', 'joiner', 'cabinet maker',
+               'fitted furniture', 'bespoke furniture', 'kitchen fitter',
+               'kitchen fitting'],                                                    category: 'Internal Joinery' },
+  { keywords: ['landscaping', 'landscape', 'landscaper', 'gardener', 'gardening',
+               'outdoors', 'tree surgeon', 'turf', 'paving', 'decking', 'fencing'], category: 'Landscaping / Outdoors' },
+  { keywords: ['painter & decorator', 'painter and decorator', 'painting & decorating',
+               'painting and decorating', 'paint & dec', 'paint and dec',
+               'painter', 'decorator', 'decorating', 'painting'],                   category: 'Painting + Decorating' },
+  { keywords: ['plasterer', 'plastering', 'skimming', 'skim coat', 'rendering',
+               'render', 'dry lining', 'dry-lining'],                               category: 'Plasterer' },
+  { keywords: ['plumber', 'plumbing', 'heating engineer', 'boiler engineer',
+               'gas engineer', 'heating', 'boiler', 'gas'],                         category: 'Plumbing' },
+  { keywords: ['carpenter', 'carpentry', 'roofer', 'roofing', 'roof',
+               'slater', 'slating', 'timber frame'],                                category: 'Carpentry / Roofing' },
+  { keywords: ['handyman', 'general builder', 'general maintenance',
+               'odd job', 'general'],                                               category: 'Handyman Services' },
+];
+
+// Keyword → fixed area mappings (longer/more specific phrases first)
+const AREA_MAP = [
+  { keywords: ['anglesey', 'ynys môn', 'ynys mon', 'holy island'],                  target: 'Anglesey' },
+  { keywords: ['chester only'],                                                       target: 'Chester Only' },
+  { keywords: ['cheshire', 'warrington', 'macclesfield', 'crewe', 'chester'],        target: 'Cheshire' },
+  { keywords: ['greater manchester', 'manchester', 'salford', 'stockport',
+               'trafford', 'oldham', 'rochdale', 'bolton', 'bury'],                 target: 'Greater Manchester' },
+  { keywords: ['liverpool', 'merseyside', 'knowsley', 'sefton'],                     target: 'Liverpool' },
+  { keywords: ['north wales', 'n. wales', 'n wales', 'gwynedd', 'conwy',
+               'denbighshire', 'flintshire'],                                        target: 'North Wales' },
+  { keywords: ['wirral'],                                                             target: 'Wirral' },
+  { keywords: ['wrexham', 'wrecsam'],                                                target: 'Wrexham' },
+];
+
+function mapTradeType(raw) {
+  if (!raw) return null;
+  const lower = raw.toLowerCase().trim();
+  const exact = TRADE_CATEGORIES.find(c => c.toLowerCase() === lower);
+  if (exact) return exact;
+  for (const { keywords, category } of TRADE_TYPE_MAP) {
+    for (const kw of keywords) {
+      if (lower === kw || lower.includes(kw)) return category;
+    }
+  }
+  return null;
+}
+
+function mapAreaString(raw) {
+  const lower = raw.toLowerCase().trim();
+  const exact = TRADE_AREAS.find(a => a.toLowerCase() === lower);
+  if (exact) return exact;
+  for (const { keywords, target } of AREA_MAP) {
+    for (const kw of keywords) {
+      if (lower === kw || lower.includes(kw)) return target;
+    }
+  }
+  return null;
+}
+
+app.post('/api/admin/trades/migrate', isAuthenticated, requireAdmin, async (req, res) => {
+  const dryRun = req.body?.dry_run !== false;
+  try {
+    const { rows } = await _tradesPool.query(
+      `SELECT id, company_name, trade_type, areas_served FROM trade_companies ORDER BY id`
+    );
+
+    const migrated  = [];
+    const skipped   = [];
+    const unmatched = [];
+
+    for (const row of rows) {
+      const typeValid    = TRADE_CATEGORIES.includes(row.trade_type);
+      const currentAreas = parseAreasServed(row.areas_served);
+      const areasValid   = currentAreas.length === 0
+        ? (row.areas_served === null || row.areas_served === '' || row.areas_served === '[]')
+        : currentAreas.every(a => TRADE_AREAS.includes(a));
+      const areasJson    = !row.areas_served || row.areas_served.startsWith('[');
+
+      if (typeValid && areasValid && areasJson) {
+        skipped.push({ id: row.id, company_name: row.company_name });
+        continue;
+      }
+
+      const newTradeType = typeValid ? row.trade_type : mapTradeType(row.trade_type);
+      if (!newTradeType) {
+        unmatched.push({ id: row.id, company_name: row.company_name, trade_type: row.trade_type });
+        continue;
+      }
+
+      const mappedAreas = [...new Set(currentAreas.map(mapAreaString).filter(Boolean))];
+
+      if (!dryRun) {
+        await _tradesPool.query(
+          `UPDATE trade_companies SET trade_type=$1, areas_served=$2 WHERE id=$3`,
+          [newTradeType, JSON.stringify(mappedAreas), row.id]
+        );
+      }
+
+      migrated.push({
+        id:             row.id,
+        company_name:   row.company_name,
+        old_trade_type: row.trade_type,
+        new_trade_type: newTradeType,
+        old_areas:      currentAreas,
+        new_areas:      mappedAreas,
+      });
+    }
+
+    res.json({ dry_run: dryRun, migrated, skipped, unmatched });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Google Calendar: upcoming events (14-day window) ──────────────────────────
 app.get('/api/calendar/upcoming', async (req, res) => {
   if (!req.session.googleTokens) return res.json({ events: [], connected: false });
