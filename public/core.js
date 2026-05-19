@@ -87,6 +87,12 @@ async function api(method, path, body) {
   if (body !== undefined) opts.body = JSON.stringify(body);
   const r = await fetch(path, opts);
   if (r.status === 401) {
+    const data = await r.json().catch(() => ({}));
+    if (data.code === 'GOOGLE_AUTH' || data.code === 'GOOGLE_ERROR') {
+      const err = new Error(data.error || 'Google authentication required');
+      err.code = data.code;
+      throw err;
+    }
     window.location.href = '/api/login';
     throw new Error('Unauthorized');
   }

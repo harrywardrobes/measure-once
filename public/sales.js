@@ -599,6 +599,7 @@ function renderFullWorkflowView() {
       <div id="room-tabs-section" class="mb-5"></div>
       <div id="invoices-section" class="mb-5"></div>
       <div id="tasks-section" class="mb-6"></div>
+      <div id="google-emails-section" class="mb-5"></div>
       <div id="workflow-stages" class="space-y-2"></div>
     </div>
   `;
@@ -620,12 +621,135 @@ function renderFullWorkflowView() {
   renderRoomTabs();
   renderWorkflowInvoices();
   renderTasks();
+  renderGoogleEmailSection();
   renderWorkflowStages();
   renderComments();
 }
 
 // captureNotes retained as no-op — called before navigation to flush any pending state
 function captureNotes() {}
+
+// ── Google Emails (customer detail) ──────────────────────────────────────────
+function _googleAuthToast() {
+  showToast('Google account disconnected — reconnect in Settings', true);
+}
+
+async function renderGoogleEmailSection() {
+  const el = document.getElementById('google-emails-section');
+  if (!el) return;
+
+  if (!state.authStatus?.google) { el.innerHTML = ''; return; }
+
+  const contactEmail = state.selectedContact?.properties?.email || '';
+  if (!contactEmail) { el.innerHTML = ''; return; }
+
+  el.innerHTML = `
+    <div class="notes-header">
+      <span class="notes-header-label">Gmail</span>
+      <button class="btn-new-note" data-viewer-hide onclick="openEmailCompose()">+ Compose</button>
+    </div>
+    <div id="gmail-list" class="text-sm" style="color:var(--stone-deep)">
+      <div class="flex items-center gap-2" style="padding:8px 0"><div class="spinner" style="width:14px;height:14px"></div> Loading…</div>
+    </div>
+    <div id="gmail-compose" class="hidden" style="margin-top:10px"></div>
+  `;
+
+  try {
+    const { messages } = await GET(`/api/emails?email=${encodeURIComponent(contactEmail)}`);
+    const list = document.getElementById('gmail-list');
+    if (!list) return;
+    if (!messages || messages.length === 0) {
+      list.innerHTML = `<p style="font-size:0.85rem;padding:4px 0;font-style:italic">No emails found with ${escHtml(contactEmail)}</p>`;
+      return;
+    }
+    list.innerHTML = messages.map(m => {
+      const dateStr = m.date ? new Date(m.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+      const from = m.from.replace(/<[^>]+>/, '').trim() || m.from;
+      return `
+        <div class="comment-item" style="margin-bottom:6px">
+          <div class="comment-meta">
+            <span class="comment-author">${escHtml(from)}</span>
+            ${dateStr ? `<span class="comment-meta-sep">·</span><span class="comment-date">${escHtml(dateStr)}</span>` : ''}
+          </div>
+          <div class="comment-text" style="font-weight:500">${escHtml(m.subject || '(no subject)')}</div>
+          ${m.snippet ? `<div class="comment-text" style="font-size:0.8rem;opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(m.snippet)}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    const list = document.getElementById('gmail-list');
+    if (!list) return;
+    if (e.code === 'GOOGLE_AUTH') {
+      list.innerHTML = `<p style="font-size:0.85rem;color:#b91c1c;padding:4px 0">Google account disconnected — <a href="/profile" style="color:var(--orchid);text-decoration:underline">reconnect in Settings</a></p>`;
+    } else {
+      list.innerHTML = `<p style="font-size:0.85rem;color:#b91c1c;padding:4px 0">Could not load emails. Please try again.</p>`;
+    }
+  }
+}
+
+function openEmailCompose() {
+  if (isViewerOnly()) return;
+  const compose = document.getElementById('gmail-compose');
+  if (!compose) return;
+  const to = state.selectedContact?.properties?.email || '';
+  compose.classList.remove('hidden');
+  compose.innerHTML = `
+    <div style="border:1px solid var(--stone-light);border-radius:10px;padding:14px;background:#fff">
+      <div style="margin-bottom:8px;font-size:0.8rem;font-weight:600;color:var(--ink-2)">New email</div>
+      <input id="gmail-to" type="email" value="${escHtml(to)}" placeholder="To"
+        class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:border-blue-400 bg-white" style="font-size:16px">
+      <input id="gmail-subject" type="text" placeholder="Subject"
+        class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:border-blue-400 bg-white" style="font-size:16px">
+      <textarea id="gmail-body" rows="4" placeholder="Message…"
+        class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:border-blue-400 bg-white" style="font-size:16px;resize:vertical"></textarea>
+      <div class="flex gap-2 justify-end">
+        <button onclick="closeEmailCompose()" class="btn-cancel-note">Cancel</button>
+        <button id="gmail-send-btn" onclick="submitEmail()" class="btn-save-note">Send</button>
+      </div>
+      <div id="gmail-send-error" style="display:none;margin-top:6px;font-size:0.8rem;color:#b91c1c"></div>
+    </div>
+  `;
+  document.getElementById('gmail-subject')?.focus();
+}
+
+function closeEmailCompose() {
+  const compose = document.getElementById('gmail-compose');
+  if (compose) { compose.innerHTML = ''; compose.classList.add('hidden'); }
+}
+
+async function submitEmail() {
+  const to      = document.getElementById('gmail-to')?.value.trim();
+  const subject = document.getElementById('gmail-subject')?.value.trim();
+  const body    = document.getElementById('gmail-body')?.value.trim();
+  const errEl   = document.getElementById('gmail-send-error');
+  const sendBtn = document.getElementById('gmail-send-btn');
+
+  if (!to || !subject || !body) {
+    if (errEl) { errEl.textContent = 'Please fill in all fields.'; errEl.style.display = ''; }
+    return;
+  }
+
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
+  if (errEl) errEl.style.display = 'none';
+
+  try {
+    await POST('/api/emails/send', { to, subject, body });
+    closeEmailCompose();
+    showToast('Email sent');
+    renderGoogleEmailSection();
+  } catch (e) {
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
+    let msg;
+    if (e.code === 'GOOGLE_AUTH') {
+      msg = 'Google account disconnected — reconnect in Settings';
+      _googleAuthToast();
+    } else {
+      msg = 'Failed to send email. Please try again.';
+      showToast(msg, true);
+    }
+    if (errEl) { errEl.textContent = msg; errEl.style.display = ''; }
+  }
+}
 
 // ── Room Tabs ─────────────────────────────────────────────────────────────────
 function renderRoomTabs() {

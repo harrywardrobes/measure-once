@@ -393,6 +393,11 @@ function openVisitModal(visitId, prefillDate) {
             </select>
           </label>
         </div>
+        ${!existing && state.authStatus?.google ? `
+        <label class="visit-field" style="flex-direction:row;align-items:center;gap:8px;cursor:pointer">
+          <input id="vm-gcal" type="checkbox" style="width:16px;height:16px;flex-shrink:0;cursor:pointer">
+          <span class="visit-label" style="margin:0;cursor:pointer">Also add to Google Calendar</span>
+        </label>` : ''}
       </div>
       <div class="visit-modal-footer">
         ${existing ? `<button class="visit-delete-btn" onclick="deleteVisit(${existing.id})">Delete</button>` : '<span></span>'}
@@ -421,6 +426,7 @@ async function saveVisit(id) {
   const notes       = document.getElementById('vm-notes').value.trim() || null;
   const assigneeRole = document.getElementById('vm-assignee-role').value || null;
   const assigneeId   = document.getElementById('vm-assignee-id').value || null;
+  const addToGcal    = document.getElementById('vm-gcal')?.checked || false;
   if (!dateStr || !startStr || !endStr) { showToast('Date and times are required', true); return; }
   const startAt = new Date(`${dateStr}T${startStr}`);
   const endAt   = new Date(`${dateStr}T${endStr}`);
@@ -432,7 +438,38 @@ async function saveVisit(id) {
     closeVisitModal();
     showToast(id ? 'Visit updated' : 'Visit created');
     loadTasksView();
+    if (!id && addToGcal) {
+      await createGoogleCalendarEvent({ title, customerName, startAt, endAt, location, notes, type });
+    }
   } catch { showToast('Failed to save visit', true); }
+}
+
+async function createGoogleCalendarEvent({ title, customerName, startAt, endAt, location, notes, type }) {
+  const meta = VISIT_TYPE_META[type] || VISIT_TYPE_META.other;
+  const summary = title
+    ? title
+    : (customerName ? `${meta.label} — ${customerName}` : meta.label);
+  const description = [
+    customerName ? `Customer: ${customerName}` : '',
+    notes || '',
+  ].filter(Boolean).join('\n');
+  const eventBody = {
+    summary,
+    location: location || undefined,
+    description: description || undefined,
+    start: { dateTime: startAt.toISOString() },
+    end:   { dateTime: endAt.toISOString() },
+  };
+  try {
+    await POST('/api/events', eventBody);
+    showToast('Added to Google Calendar');
+  } catch (e) {
+    if (e.code === 'GOOGLE_AUTH') {
+      showToast('Google account disconnected — reconnect in Settings', true);
+    } else {
+      showToast('Could not add to Google Calendar. Please try again.', true);
+    }
+  }
 }
 
 async function deleteVisit(id) {

@@ -799,8 +799,26 @@ function getGoogleClient(tokens) {
   return client;
 }
 
+function classifyGoogleError(e) {
+  const msg = (e.message || '').toLowerCase();
+  const status = e.code || e.response?.status || e.status;
+  const errData = e.response?.data?.error || '';
+  if (
+    status === 401 ||
+    errData === 'invalid_grant' ||
+    msg.includes('invalid_grant') ||
+    msg.includes('token has been expired') ||
+    msg.includes('token has been revoked') ||
+    msg.includes('invalid credentials') ||
+    msg.includes('autherror')
+  ) {
+    return 'GOOGLE_AUTH';
+  }
+  return 'GOOGLE_ERROR';
+}
+
 app.get('/api/emails', async (req, res) => {
-  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google' });
+  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   try {
     const auth = getGoogleClient(req.session.googleTokens);
     const gmail = google.gmail({ version: 'v1', auth });
@@ -830,12 +848,13 @@ app.get('/api/emails', async (req, res) => {
 
     res.json({ messages });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const code = classifyGoogleError(e);
+    res.status(code === 'GOOGLE_AUTH' ? 401 : 500).json({ error: e.message, code });
   }
 });
 
 app.post('/api/emails/send', isAuthenticated, requirePrivilege('member'), async (req, res) => {
-  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google' });
+  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   try {
     const auth = getGoogleClient(req.session.googleTokens);
     const gmail = google.gmail({ version: 'v1', auth });
@@ -848,13 +867,14 @@ app.post('/api/emails/send', isAuthenticated, requirePrivilege('member'), async 
     await gmail.users.messages.send({ userId: 'me', requestBody: { raw } });
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const code = classifyGoogleError(e);
+    res.status(code === 'GOOGLE_AUTH' ? 401 : 500).json({ error: e.message, code });
   }
 });
 
 // ── Google Calendar ───────────────────────────────────────────────────────────
 app.get('/api/events', async (req, res) => {
-  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google' });
+  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   try {
     const auth = getGoogleClient(req.session.googleTokens);
     const calendar = google.calendar({ version: 'v3', auth });
@@ -868,19 +888,21 @@ app.get('/api/events', async (req, res) => {
     });
     res.json(events.data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const code = classifyGoogleError(e);
+    res.status(code === 'GOOGLE_AUTH' ? 401 : 500).json({ error: e.message, code });
   }
 });
 
 app.post('/api/events', isAuthenticated, requirePrivilege('member'), async (req, res) => {
-  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google' });
+  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   try {
     const auth = getGoogleClient(req.session.googleTokens);
     const calendar = google.calendar({ version: 'v3', auth });
     const event = await calendar.events.insert({ calendarId: 'primary', requestBody: req.body });
     res.json(event.data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const code = classifyGoogleError(e);
+    res.status(code === 'GOOGLE_AUTH' ? 401 : 500).json({ error: e.message, code });
   }
 });
 
