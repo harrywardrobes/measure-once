@@ -140,6 +140,17 @@ async function ensureAuthTables() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS privilege_level TEXT NOT NULL DEFAULT 'member';
   `);
 
+  /* Job roles catalogue — admin-managed list of available role labels. */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS job_roles (
+      name VARCHAR PRIMARY KEY,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    INSERT INTO job_roles (name) VALUES
+      ('Site Manager'), ('Fitter'), ('Sales'), ('Admin'), ('Office')
+    ON CONFLICT (name) DO NOTHING;
+  `);
+
   // Seed admin emails from env var.
   const admins = (process.env.ADMIN_EMAILS || '')
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -598,6 +609,42 @@ async function setupAuth(app) {
       );
       if (r.rowCount === 0) return res.status(404).json({ error: 'User not found' });
       res.json(r.rows[0]);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Job Roles catalogue ───────────────────────────────────────────────────
+  app.get('/api/admin/job-roles', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(`SELECT name FROM job_roles ORDER BY name ASC`);
+      res.json(r.rows.map(row => row.name));
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/job-roles', isAuthenticated, requireAdmin, async (req, res) => {
+    const name = (req.body?.name || '').trim();
+    if (!name || name.length > 64) {
+      return res.status(400).json({ error: 'Role name must be 1–64 characters.' });
+    }
+    try {
+      await pool.query(
+        `INSERT INTO job_roles (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
+        [name]
+      );
+      res.json({ ok: true, name });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete('/api/admin/job-roles/:name', isAuthenticated, requireAdmin, async (req, res) => {
+    const name = req.params.name;
+    try {
+      await pool.query(`DELETE FROM job_roles WHERE name = $1`, [name]);
+      res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

@@ -55,6 +55,7 @@ const PAGE_ROUTES = {
   '/calendar': 'calendar.html',
   '/invoices': 'invoices.html',
   '/profile':  'profile.html',
+  '/admin':    'admin.html',
 };
 for (const [route, file] of Object.entries(PAGE_ROUTES)) {
   app.get(route, (_req, res) => res.sendFile(path.join(__dirname, 'public', file)));

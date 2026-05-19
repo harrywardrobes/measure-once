@@ -6,309 +6,990 @@
   <title>Admin · Measure Once</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    * { box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+      --plum:      #200842;
+      --orchid:    #8B2BFF;
+      --ink-1:     #141413;
+      --ink-2:     #3C3A34;
+      --ink-3:     #6B6860;
+      --ink-4:     #97927F;
+      --paper:     #F6F1E7;
+      --chalk:     #FBFAF5;
+      --stone:     #D9D2C2;
+      --stone-soft:#F5F2EB;
+      --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-pill: 999px;
+      --shadow-sm: 0 1px 3px rgba(30,24,14,.10), 0 1px 2px rgba(30,24,14,.06);
+      --shadow-md: 0 4px 12px rgba(30,24,14,.12), 0 2px 4px rgba(30,24,14,.08);
+    }
+
     body {
-      margin: 0; font-family: 'Inter', system-ui, sans-serif;
-      background: #f8fafc; color: #0f172a;
+      margin: 0;
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--paper);
+      color: var(--ink-1);
+      min-height: 100vh;
     }
+
+    /* ── Header ── */
     header {
-      background: #0f172a; color: #fff;
-      padding: 14px 24px; display: flex; align-items: center; gap: 14px;
+      background: var(--plum);
+      color: #fff;
+      padding: 0 24px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
     }
-    header .brand { font-family: 'Anton', sans-serif; letter-spacing: 0.04em; text-transform: uppercase; }
+    .brand {
+      font-family: 'Anton', sans-serif;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      font-size: 1rem;
+    }
+    .brand-sep { color: rgba(255,255,255,.3); font-size: .8rem; }
     header .spacer { flex: 1; }
-    header a { color: #cbd5e1; text-decoration: none; font-size: 0.9rem; }
-    header a:hover { color: #fff; }
-    main { max-width: 920px; margin: 32px auto; padding: 0 24px; }
-    h1 { font-size: 1.4rem; margin: 0 0 4px; }
-    .sub { color: #64748b; font-size: 0.9rem; margin-bottom: 24px; }
-    section {
-      background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
-      padding: 20px; margin-bottom: 24px;
+    header a {
+      color: rgba(255,255,255,.65);
+      text-decoration: none;
+      font-size: .82rem;
+      font-weight: 500;
+      padding: 5px 10px;
+      border-radius: var(--r-sm);
+      transition: background .15s;
     }
-    section h2 {
-      font-size: 1rem; margin: 0 0 14px;
-      text-transform: uppercase; letter-spacing: 0.04em; color: #475569;
+    header a:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+    /* ── Page shell ── */
+    .page { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
+    .page-title { font-size: 1.25rem; font-weight: 700; margin: 0 0 2px; }
+    .page-sub { color: var(--ink-3); font-size: .88rem; margin: 0 0 22px; }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 2px solid var(--stone);
+      margin-bottom: 24px;
     }
-    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-    th, td {
-      text-align: left; padding: 10px 12px;
-      border-bottom: 1px solid #f1f5f9;
+    .tab-btn {
+      padding: 9px 16px;
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--ink-3);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      border-radius: var(--r-sm) var(--r-sm) 0 0;
+      transition: color .15s;
+      white-space: nowrap;
     }
-    th { font-weight: 500; color: #64748b; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .tab-btn:hover { color: var(--ink-1); background: var(--stone-soft); }
+    .tab-btn.active {
+      color: var(--plum);
+      border-bottom-color: var(--plum);
+    }
+    .tab-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      background: var(--orchid);
+      color: #fff;
+      border-radius: var(--r-pill);
+      font-size: .65rem;
+      font-weight: 700;
+      margin-left: 5px;
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Card ── */
+    .card {
+      background: #fff;
+      border: 1px solid var(--stone);
+      border-radius: var(--r-lg);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .card-title {
+      font-size: .78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--ink-3);
+      margin: 0 0 16px;
+    }
+    .card-count { font-weight: 400; color: var(--ink-4); }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--ink-4);
+      border-bottom: 1px solid var(--stone);
+    }
+    td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--stone-soft);
+      vertical-align: middle;
+    }
     tr:last-child td { border-bottom: none; }
-    .empty { color: #94a3b8; font-style: italic; padding: 16px 0; text-align: center; }
-    .badge {
-      display: inline-block; padding: 2px 8px; border-radius: 999px;
-      font-size: 0.72rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em;
+    .table-empty {
+      text-align: center;
+      padding: 28px;
+      color: var(--ink-4);
+      font-style: italic;
+      font-size: .875rem;
     }
-    .badge-pending { background: #fef3c7; color: #92400e; }
+
+    /* ── Privilege badges ── */
+    .lvl {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: var(--r-pill);
+      font-size: .7rem;
+      font-weight: 700;
+      text-transform: capitalize;
+      letter-spacing: .02em;
+    }
+    .lvl-viewer  { background: #f1f5f9; color: #475569; }
+    .lvl-member  { background: #dbeafe; color: #1e40af; }
+    .lvl-manager { background: #fef3c7; color: #92400e; }
+    .lvl-admin   { background: #ede0ff; color: #3d0f7a; }
+
+    /* ── Status badges ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: var(--r-pill);
+      font-size: .7rem;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+    .badge-pending  { background: #fef3c7; color: #92400e; }
     .badge-approved { background: #dcfce7; color: #166534; }
     .badge-rejected { background: #fee2e2; color: #991b1b; }
-    .actions { display: flex; gap: 6px; justify-content: flex-end; }
-    button {
-      border: 1px solid transparent; border-radius: 6px;
-      padding: 6px 12px; font-size: 0.82rem; cursor: pointer;
-      font-family: inherit; transition: background 0.15s;
+
+    /* ── Avatar ── */
+    .avatar {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex-shrink: 0;
     }
-    .btn-approve { background: #059669; color: #fff; }
-    .btn-approve:hover { background: #047857; }
-    .btn-reject  { background: #fff; color: #991b1b; border-color: #fecaca; }
-    .btn-reject:hover { background: #fee2e2; }
-    .btn-revoke  { background: #fff; color: #475569; border-color: #cbd5e1; }
-    .btn-revoke:hover { background: #f1f5f9; }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .avatar-placeholder {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--stone);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .68rem;
+      font-weight: 700;
+      color: var(--ink-3);
+      flex-shrink: 0;
+    }
+    .user-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .user-cell-name { font-weight: 600; font-size: .875rem; }
+    .user-cell-role { font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
+
+    /* ── Buttons ── */
+    button { font-family: inherit; }
+    .btn {
+      border: 1px solid transparent;
+      border-radius: var(--r-sm);
+      padding: 6px 12px;
+      font-size: .8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, opacity .15s;
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-primary  { background: var(--plum); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #2e0f5a; }
+    .btn-danger   { background: #fff; color: #991b1b; border-color: #fecaca; }
+    .btn-danger:hover:not(:disabled)  { background: #fee2e2; }
+    .btn-ghost    { background: #fff; color: var(--ink-2); border-color: var(--stone); }
+    .btn-ghost:hover:not(:disabled)   { background: var(--stone-soft); }
+    .btn-approve  { background: #059669; color: #fff; }
+    .btn-approve:hover:not(:disabled) { background: #047857; }
+    .btn-reject   { background: #fff; color: #991b1b; border-color: #fecaca; }
+    .btn-reject:hover:not(:disabled)  { background: #fee2e2; }
+
+    /* ── Field inputs ── */
+    .field {
+      border: 1px solid var(--stone);
+      border-radius: var(--r-sm);
+      padding: 5px 9px;
+      font-size: .82rem;
+      font-family: inherit;
+      color: var(--ink-1);
+      outline: none;
+      background: #fff;
+      transition: border-color .15s;
+    }
+    .field:focus { border-color: var(--orchid); }
+
+    /* ── Inline edit row ── */
+    .edit-row td { background: var(--stone-soft); padding: 10px 12px; }
+    .edit-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .edit-label { font-size: .72rem; font-weight: 700; color: var(--ink-3); white-space: nowrap; }
+
+    /* ── Actions ── */
+    .actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+    /* ── Permissions Matrix ── */
+    .matrix-wrap { overflow-x: auto; }
+    .matrix {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .82rem;
+    }
+    .matrix th {
+      text-align: center;
+      padding: 10px 14px;
+      font-size: .72rem;
+      white-space: nowrap;
+    }
+    .matrix th.feat-col {
+      text-align: left;
+      color: var(--ink-2);
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: .875rem;
+      min-width: 220px;
+    }
+    .matrix td {
+      text-align: center;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--stone-soft);
+    }
+    .matrix td.feat-name {
+      text-align: left;
+      font-weight: 500;
+      color: var(--ink-2);
+    }
+    .matrix td.feat-desc {
+      font-weight: 400;
+      font-size: .78rem;
+      color: var(--ink-4);
+      display: block;
+      margin-top: 1px;
+    }
+    .matrix-head { background: var(--stone-soft); }
+    .matrix tr:last-child td { border-bottom: none; }
+    .tick { color: #059669; font-size: 1rem; }
+    .cross { color: #cbd5e1; font-size: 1rem; }
+    .matrix-group td, .matrix-group th {
+      background: var(--stone-soft);
+      font-size: .68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--ink-4);
+      padding: 6px 14px;
+    }
+
+    /* ── Job roles manager ── */
+    .roles-add-form { display: flex; gap: 8px; margin-bottom: 14px; }
+    .roles-add-form .field { flex: 1; }
+    .role-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--stone-soft);
+      border: 1px solid var(--stone);
+      border-radius: var(--r-pill);
+      padding: 4px 10px;
+      font-size: .78rem;
+      font-weight: 500;
+      color: var(--ink-2);
+    }
+    .role-del {
+      background: none;
+      border: none;
+      color: var(--ink-4);
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+      font-size: .9rem;
+      font-weight: 700;
+      transition: color .1s;
+    }
+    .role-del:hover { color: #991b1b; }
+    .roles-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .roles-empty { color: var(--ink-4); font-style: italic; font-size: .875rem; }
+
+    /* ── Overview cards ── */
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .ov-card {
+      background: #fff;
+      border: 1px solid var(--stone);
+      border-radius: var(--r-lg);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    .ov-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .ov-name { font-weight: 700; font-size: .9rem; color: var(--ink-1); }
+    .ov-email { font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
+    .ov-access {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+    }
+    .ov-feat {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: .72rem;
+      color: var(--ink-3);
+    }
+    .ov-feat.has { color: var(--ink-2); }
+    .ov-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .ov-dot.has { background: #34d399; }
+    .ov-dot.no  { background: #e2e8f0; }
+
+    /* ── Toast ── */
     .toast {
-      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-      background: #0f172a; color: #fff; padding: 10px 18px; border-radius: 8px;
-      font-size: 0.88rem; opacity: 0; transition: opacity 0.2s;
-      pointer-events: none; z-index: 1000;
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--plum);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: var(--r-md);
+      font-size: .875rem;
+      font-weight: 500;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s;
+      z-index: 1000;
+      white-space: nowrap;
     }
     .toast.show { opacity: 1; }
-    .toast.error { background: #991b1b; }
-    .loading { text-align: center; padding: 48px; color: #94a3b8; }
-    .level-badge {
-      display: inline-block; padding: 2px 8px; border-radius: 999px;
-      font-size: 0.72rem; font-weight: 600; text-transform: capitalize;
+    .toast.err  { background: #991b1b; }
+
+    /* ── Loading / forbidden ── */
+    .loading-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 200px;
+      color: var(--ink-4);
+      font-size: .9rem;
     }
-    .level-viewer  { background: #f1f5f9; color: #475569; }
-    .level-member  { background: #dbeafe; color: #1d4ed8; }
-    .level-manager { background: #fef3c7; color: #b45309; }
-    .level-admin   { background: #ede0ff; color: #3d0f7a; }
-    .inline-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-    .field-input {
-      border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px;
-      font-size: 0.82rem; font-family: inherit; outline: none;
+    .forbidden-card {
+      background: #fff;
+      border: 1px solid #fecaca;
+      border-radius: var(--r-lg);
+      padding: 32px;
+      text-align: center;
+      margin-top: 32px;
     }
-    .field-input:focus { border-color: #6366f1; }
-    .btn-save { background: #200842; color: #fff; }
-    .btn-save:hover { background: #3a0a6e; }
-    .btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+    .forbidden-card h2 { color: #991b1b; margin: 0 0 8px; }
+    .forbidden-card p { color: var(--ink-3); margin: 0; font-size: .9rem; }
   </style>
 </head>
 <body>
-  <header>
-    <span class="brand">Measure Once</span>
-    <span style="color:#64748b;font-size:0.85rem;">Admin</span>
-    <span class="spacer"></span>
-    <a href="/">← Dashboard</a>
-    <a href="/api/logout">Sign out</a>
-  </header>
 
-  <main id="main">
-    <div class="loading">Loading…</div>
-  </main>
+<header>
+  <span class="brand">Measure Once</span>
+  <span class="brand-sep">/ Admin</span>
+  <span class="spacer"></span>
+  <a href="/">← Dashboard</a>
+  <a href="/api/logout">Sign out</a>
+</header>
 
-  <div id="toast" class="toast"></div>
+<div class="page" id="page">
+  <div class="loading-state">Loading…</div>
+</div>
 
-  <script>
-    const $ = sel => document.querySelector(sel);
-    const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+<div id="toast" class="toast"></div>
 
-    function toast(msg, isError) {
-      const t = $('#toast');
-      t.textContent = msg;
-      t.className = 'toast show' + (isError ? ' error' : '');
-      setTimeout(() => t.className = 'toast', 2200);
+<script>
+  const $ = s => document.querySelector(s);
+  const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  /* ── Toast ── */
+  function toast(msg, isErr) {
+    const el = $('#toast');
+    el.textContent = msg;
+    el.className = 'toast show' + (isErr ? ' err' : '');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.className = 'toast', 2400);
+  }
+
+  /* ── API helper ── */
+  async function api(method, path, body) {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    const r = await fetch(path, opts);
+    if (r.status === 401) { window.location.href = '/'; return null; }
+    if (r.status === 403) throw Object.assign(new Error('Forbidden'), { forbidden: true });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || data.message || 'HTTP ' + r.status);
+    return data;
+  }
+
+  /* ── Date formatter ── */
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+  function fmtDateShort(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  /* ── Level badge ── */
+  function lvlBadge(level) {
+    const labels = { viewer: 'Viewer', member: 'Member', manager: 'Manager', admin: 'Admin' };
+    const l = level || 'member';
+    return `<span class="lvl lvl-${esc(l)}">${esc(labels[l] || l)}</span>`;
+  }
+
+  /* ── Tabs ── */
+  function switchTab(id) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + id));
+  }
+
+  /* ── Avatar ── */
+  function avatarEl(u) {
+    const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '?';
+    const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+    if (u.profile_image_url) {
+      return `<img class="avatar" src="${esc(u.profile_image_url)}" alt="" loading="lazy">`;
     }
+    return `<span class="avatar-placeholder">${esc(initials)}</span>`;
+  }
 
-    async function api(method, path, body) {
-      const opts = { method, headers: { 'Content-Type': 'application/json' } };
-      if (body !== undefined) opts.body = JSON.stringify(body);
-      const r = await fetch(path, opts);
-      if (r.status === 401) { window.location.href = '/'; return; }
-      if (r.status === 403) {
-        document.getElementById('main').innerHTML =
-          '<section><h2>Forbidden</h2><p class="sub">You don\'t have admin access. Ask the owner to add your email to <code>ADMIN_EMAILS</code>.</p></section>';
-        throw new Error('Forbidden');
-      }
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
-      return data;
+  /* ────────────────────────────────────────────────
+     State
+  ──────────────────────────────────────────────── */
+  let _users = [];
+  let _jobRoles = [];
+  let _requests = [];
+  let _allowed = [];
+
+  /* ────────────────────────────────────────────────
+     TEAM TAB
+  ──────────────────────────────────────────────── */
+  function jobRoleOptions(current) {
+    const opts = _jobRoles.map(r =>
+      `<option value="${esc(r)}" ${current === r ? 'selected' : ''}>${esc(r)}</option>`
+    ).join('');
+    const hasCustom = current && !_jobRoles.includes(current);
+    return `<option value="">— None —</option>${opts}${hasCustom ? `<option value="${esc(current)}" selected>${esc(current)}</option>` : ''}`;
+  }
+
+  function renderTeam() {
+    const container = $('#team-body');
+    if (!container) return;
+    if (_users.length === 0) {
+      container.innerHTML = `<tr><td colspan="5" class="table-empty">No users yet.</td></tr>`;
+      return;
     }
-
-    function fmtDate(iso) {
-      if (!iso) return '';
-      return new Date(iso).toLocaleString('en-GB', {
-        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-      });
-    }
-
-    async function load() {
-      try {
-        const [requests, allowed, users] = await Promise.all([
-          api('GET', '/api/admin/requests'),
-          api('GET', '/api/admin/allowed'),
-          api('GET', '/api/admin/users'),
-        ]);
-        render(requests, allowed, users);
-      } catch (e) {
-        if (e.message !== 'Forbidden') toast(e.message, true);
-      }
-    }
-
-    function levelBadge(level) {
-      const labels = { viewer: 'Viewer', member: 'Member', manager: 'Manager', admin: 'Admin' };
-      return `<span class="level-badge level-${esc(level || 'member')}">${esc(labels[level] || 'Member')}</span>`;
-    }
-
-    function userRow(u) {
-      const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || '—';
+    container.innerHTML = _users.map(u => {
+      const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '—';
       return `
         <tr id="urow-${esc(u.id)}">
           <td>
-            ${u.profile_image_url
-              ? `<img src="${esc(u.profile_image_url)}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px;">`
-              : ''}
-            ${esc(fullName)}
-            ${u.isAdmin ? '<span class="badge" style="background:#ede0ff;color:#3d0f7a;margin-left:4px;">Admin</span>' : ''}
+            <div class="user-cell">
+              ${avatarEl(u)}
+              <div>
+                <div class="user-cell-name">
+                  ${esc(name)}
+                  ${u.isAdmin ? '<span class="lvl lvl-admin" style="margin-left:4px;">Admin</span>' : ''}
+                </div>
+                <div class="user-cell-role">${esc(u.email || '')}</div>
+              </div>
+            </div>
           </td>
-          <td style="color:#64748b">${esc(u.email || '')}</td>
           <td id="ujob-${esc(u.id)}">${esc(u.job_role || '—')}</td>
-          <td id="ulevel-${esc(u.id)}">${levelBadge(u.privilege_level)}</td>
+          <td id="ulvl-${esc(u.id)}">${lvlBadge(u.privilege_level)}</td>
+          <td style="color:var(--ink-4);font-size:.78rem;">${fmtDateShort(u.created_at)}</td>
           <td class="actions">
-            <button class="btn-save" onclick="openUserEdit('${esc(u.id)}')">Edit</button>
+            <button class="btn btn-ghost" onclick="openEdit('${esc(u.id)}')">Edit</button>
           </td>
         </tr>
-        <tr id="uedit-${esc(u.id)}" style="display:none;background:#f8fafc;">
-          <td colspan="5" style="padding:12px 16px;">
-            <div class="inline-form">
-              <label style="font-size:0.78rem;font-weight:500;color:#475569;">Job role</label>
-              <input class="field-input" id="uinput-job-${esc(u.id)}" type="text" value="${esc(u.job_role || '')}" placeholder="e.g. Site Manager" style="width:160px;">
-              <label style="font-size:0.78rem;font-weight:500;color:#475569;margin-left:8px;">Level</label>
-              <select class="field-input" id="uinput-level-${esc(u.id)}">
+        <tr class="edit-row" id="uedit-${esc(u.id)}" style="display:none;">
+          <td colspan="5">
+            <div class="edit-form">
+              <span class="edit-label">Job role</span>
+              <select class="field" id="usel-job-${esc(u.id)}" style="min-width:140px;">
+                ${jobRoleOptions(u.job_role || '')}
+              </select>
+              <span class="edit-label" style="margin-left:4px;">Privilege</span>
+              <select class="field" id="usel-lvl-${esc(u.id)}">
                 ${['viewer','member','manager','admin'].map(v =>
-                  `<option value="${v}" ${u.privilege_level === v ? 'selected' : ''}>${v.charAt(0).toUpperCase()+v.slice(1)}</option>`
+                  `<option value="${v}" ${(u.privilege_level || 'member') === v ? 'selected' : ''}>${v.charAt(0).toUpperCase()+v.slice(1)}</option>`
                 ).join('')}
               </select>
-              <button class="btn-save" onclick="saveUserEdit('${esc(u.id)}')">Save</button>
-              <button class="btn-revoke" onclick="closeUserEdit('${esc(u.id)}')">Cancel</button>
+              <button class="btn btn-primary" onclick="saveEdit('${esc(u.id)}')">Save</button>
+              <button class="btn btn-ghost"   onclick="closeEdit('${esc(u.id)}')">Cancel</button>
             </div>
           </td>
         </tr>`;
-    }
+    }).join('');
 
-    function openUserEdit(id) {
-      document.getElementById('uedit-' + id).style.display = '';
-      document.getElementById('urow-' + id).querySelector('.btn-save').style.display = 'none';
+    const count = $('#team-count');
+    if (count) count.textContent = _users.length;
+  }
+
+  function openEdit(id) {
+    closeAllEdits();
+    document.getElementById('uedit-' + id).style.display = '';
+    document.getElementById('urow-' + id).querySelector('.btn-ghost').style.display = 'none';
+  }
+  function closeEdit(id) {
+    document.getElementById('uedit-' + id).style.display = 'none';
+    const btn = document.getElementById('urow-' + id)?.querySelector('.btn-ghost');
+    if (btn) btn.style.display = '';
+  }
+  function closeAllEdits() {
+    document.querySelectorAll('[id^="uedit-"]').forEach(el => {
+      const id = el.id.replace('uedit-', '');
+      el.style.display = 'none';
+      const btn = document.getElementById('urow-' + id)?.querySelector('.btn-ghost');
+      if (btn) btn.style.display = '';
+    });
+  }
+
+  async function saveEdit(id) {
+    const job_role       = document.getElementById('usel-job-' + id)?.value || '';
+    const privilege_level = document.getElementById('usel-lvl-' + id)?.value;
+    const saveBtn = document.querySelector(`#uedit-${id} .btn-primary`);
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+    try {
+      await api('PATCH', '/api/users/' + encodeURIComponent(id) + '/profile', { job_role, privilege_level });
+      const u = _users.find(u => u.id === id);
+      if (u) { u.job_role = job_role; u.privilege_level = privilege_level; }
+      document.getElementById('ujob-' + id).textContent = job_role || '—';
+      document.getElementById('ulvl-' + id).innerHTML   = lvlBadge(privilege_level);
+      closeEdit(id);
+      toast('Saved');
+      renderOverview();
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
     }
-    function closeUserEdit(id) {
-      document.getElementById('uedit-' + id).style.display = 'none';
-      document.getElementById('urow-' + id).querySelector('.btn-save').style.display = '';
-    }
-    async function saveUserEdit(id) {
-      const job_role       = document.getElementById('uinput-job-' + id).value.trim();
-      const privilege_level = document.getElementById('uinput-level-' + id).value;
-      const saveBtn = document.querySelector(`#uedit-${id} .btn-save`);
-      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
-      try {
-        await api('PATCH', '/api/users/' + encodeURIComponent(id) + '/profile', { job_role, privilege_level });
-        document.getElementById('ujob-' + id).textContent = job_role || '—';
-        document.getElementById('ulevel-' + id).innerHTML = levelBadge(privilege_level);
-        closeUserEdit(id);
-        toast('Saved');
-      } catch (e) {
-        toast(e.message, true);
-      } finally {
-        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+  }
+
+  /* ────────────────────────────────────────────────
+     PERMISSIONS TAB
+  ──────────────────────────────────────────────── */
+  const MATRIX = [
+    { group: 'General access' },
+    { feat: 'View customers & projects',  desc: 'Browse CRM contacts and project rooms', v:1, m:1, mg:1, a:1 },
+    { feat: 'View invoices',              desc: 'See QuickBooks invoice list and details', v:1, m:1, mg:1, a:1 },
+    { feat: 'View calendar & visits',     desc: 'See the site-visit calendar', v:1, m:1, mg:1, a:1 },
+    { group: 'Member actions' },
+    { feat: 'Add notes & comments',       desc: 'Create notes on customer workflow records', v:0, m:1, mg:1, a:1 },
+    { feat: 'Edit workflow stages',       desc: 'Move customers through workflow stages', v:0, m:1, mg:1, a:1 },
+    { feat: 'Log & manage site visits',   desc: 'Create, edit, and remove visit records', v:0, m:1, mg:1, a:1 },
+    { feat: 'Send invoices',              desc: 'Trigger invoice emails via QuickBooks', v:0, m:1, mg:1, a:1 },
+    { group: 'Manager actions' },
+    { feat: 'Assign fitters to rooms',    desc: 'Set which fitter handles a specific room', v:0, m:0, mg:1, a:1 },
+    { group: 'Admin-only actions' },
+    { feat: 'Access admin panel',         desc: 'View and manage this admin control panel', v:0, m:0, mg:0, a:1 },
+    { feat: 'Approve / reject users',     desc: 'Grant or deny platform access requests', v:0, m:0, mg:0, a:1 },
+    { feat: 'Manage team & privileges',   desc: 'Edit job roles and privilege levels', v:0, m:0, mg:0, a:1 },
+    { feat: 'Manage job role catalogue',  desc: 'Add and remove available job role labels', v:0, m:0, mg:0, a:1 },
+  ];
+
+  function renderMatrix() {
+    const cols = [
+      { key: 'v',  label: 'Viewer',  cls: 'lvl-viewer' },
+      { key: 'm',  label: 'Member',  cls: 'lvl-member' },
+      { key: 'mg', label: 'Manager', cls: 'lvl-manager' },
+      { key: 'a',  label: 'Admin',   cls: 'lvl-admin' },
+    ];
+    const tick = `<span class="tick" aria-label="Yes">✓</span>`;
+    const cross = `<span class="cross" aria-label="No">✗</span>`;
+
+    const rows = MATRIX.map(row => {
+      if (row.group) {
+        return `<tr class="matrix-group"><td colspan="5">${esc(row.group)}</td></tr>`;
       }
-    }
-
-    function render(requests, allowed, users) {
-      const pending = requests.filter(r => r.status === 'pending');
-      const past    = requests.filter(r => r.status !== 'pending').slice(0, 25);
-
-      const reqRow = r => `
-        <tr data-id="${r.id}">
-          <td>${esc(r.name)}</td>
-          <td>${esc(r.email)}</td>
-          <td>${fmtDate(r.created_at)}</td>
-          <td>
-            ${r.status === 'pending'
-              ? `<div class="actions">
-                   <button class="btn-approve" onclick="approve(${r.id})">Approve</button>
-                   <button class="btn-reject"  onclick="reject(${r.id})">Reject</button>
-                 </div>`
-              : `<span class="badge badge-${r.status}">${r.status}</span>`
-            }
-          </td>
-        </tr>`;
-
-      const allowRow = a => `
+      return `
         <tr>
-          <td>${esc(a.email)}</td>
-          <td>${esc(a.note || '')}</td>
-          <td>${fmtDate(a.approved_at)}</td>
-          <td class="actions">
-            ${a.note === 'admin'
-              ? '<span style="color:#94a3b8;font-size:0.78rem;">admin</span>'
-              : `<button class="btn-revoke" onclick="revoke('${esc(a.email)}')">Revoke</button>`}
+          <td class="feat-name">
+            ${esc(row.feat)}
+            <span class="feat-desc">${esc(row.desc)}</span>
           </td>
+          ${cols.map(c => `<td>${row[c.key] ? tick : cross}</td>`).join('')}
         </tr>`;
+    }).join('');
 
-      $('#main').innerHTML = `
-        <h1>Admin panel</h1>
-        <p class="sub">Manage team members, access requests, and the approved email list.</p>
+    return `
+      <div class="matrix-wrap">
+        <table class="matrix">
+          <thead class="matrix-head">
+            <tr>
+              <th class="feat-col">Feature / action</th>
+              ${cols.map(c => `<th><span class="lvl ${c.cls}">${c.label}</span></th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <p style="font-size:.75rem;color:var(--ink-4);margin:12px 0 0;">
+        * Admin access requires the user's email to be listed in the <code>ADMIN_EMAILS</code> environment variable.
+        The "admin" privilege level in the database grants manager-equivalent access only.
+      </p>`;
+  }
 
-        <section>
-          <h2>Team <span style="color:#94a3b8;font-weight:400;">(${users.length})</span></h2>
-          ${users.length === 0
-            ? '<div class="empty">No users yet.</div>'
-            : `<table>
-                 <thead><tr><th>Name</th><th>Email</th><th>Job role</th><th>Level</th><th></th></tr></thead>
-                 <tbody>${users.map(userRow).join('')}</tbody>
-               </table>`}
-        </section>
+  /* ── Job roles manager ── */
+  function renderJobRoles() {
+    const container = $('#roles-list');
+    if (!container) return;
+    if (_jobRoles.length === 0) {
+      container.innerHTML = `<span class="roles-empty">No job roles defined yet.</span>`;
+      return;
+    }
+    container.innerHTML = _jobRoles.map(r => `
+      <span class="role-tag">
+        ${esc(r)}
+        <button class="role-del" onclick="deleteRole('${esc(r)}')" title="Remove">×</button>
+      </span>`).join('');
 
-        <section>
-          <h2>Pending requests <span style="color:#94a3b8;font-weight:400;">(${pending.length})</span></h2>
-          ${pending.length === 0
-            ? '<div class="empty">No pending requests.</div>'
-            : `<table>
-                 <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th></th></tr></thead>
-                 <tbody>${pending.map(reqRow).join('')}</tbody>
-               </table>`}
-        </section>
+    // Re-render team tab job role dropdowns so they stay in sync
+    document.querySelectorAll('[id^="usel-job-"]').forEach(sel => {
+      const uid = sel.id.replace('usel-job-', '');
+      const u   = _users.find(u => u.id === uid);
+      if (u) sel.innerHTML = jobRoleOptions(u.job_role || '');
+    });
+  }
 
-        <section>
-          <h2>Approved emails <span style="color:#94a3b8;font-weight:400;">(${allowed.length})</span></h2>
-          ${allowed.length === 0
-            ? '<div class="empty">No approved emails yet.</div>'
-            : `<table>
-                 <thead><tr><th>Email</th><th>Note</th><th>Approved</th><th></th></tr></thead>
-                 <tbody>${allowed.map(allowRow).join('')}</tbody>
-               </table>`}
-        </section>
+  async function addRole() {
+    const inp = $('#role-input');
+    const name = inp?.value.trim();
+    if (!name) return;
+    try {
+      await api('POST', '/api/admin/job-roles', { name });
+      if (!_jobRoles.includes(name)) _jobRoles.push(name);
+      _jobRoles.sort();
+      inp.value = '';
+      renderJobRoles();
+      toast('Role added');
+    } catch (e) {
+      toast(e.message, true);
+    }
+  }
 
-        ${past.length > 0 ? `
-          <section>
-            <h2>Recent decisions</h2>
-            <table>
-              <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th>Status</th></tr></thead>
-              <tbody>${past.map(reqRow).join('')}</tbody>
-            </table>
-          </section>` : ''}
-      `;
+  async function deleteRole(name) {
+    if (!confirm(`Remove job role "${name}"? This won't change existing users' roles.`)) return;
+    try {
+      await api('DELETE', '/api/admin/job-roles/' + encodeURIComponent(name));
+      _jobRoles = _jobRoles.filter(r => r !== name);
+      renderJobRoles();
+      toast('Role removed');
+    } catch (e) {
+      toast(e.message, true);
+    }
+  }
+
+  /* ────────────────────────────────────────────────
+     REQUESTS TAB
+  ──────────────────────────────────────────────── */
+  function renderRequests() {
+    const pending = _requests.filter(r => r.status === 'pending');
+    const past    = _requests.filter(r => r.status !== 'pending').slice(0, 30);
+
+    const reqRow = r => `
+      <tr data-id="${r.id}">
+        <td>${esc(r.name)}</td>
+        <td style="color:var(--ink-3)">${esc(r.email)}</td>
+        <td style="color:var(--ink-4);font-size:.78rem;">${fmtDate(r.created_at)}</td>
+        <td>
+          ${r.status === 'pending'
+            ? `<div class="actions">
+                 <button class="btn btn-approve" onclick="approve(${r.id})">Approve</button>
+                 <button class="btn btn-reject"  onclick="reject(${r.id})">Reject</button>
+               </div>`
+            : `<span class="badge badge-${r.status}">${r.status}</span>`}
+        </td>
+      </tr>`;
+
+    const allowRow = a => `
+      <tr>
+        <td>${esc(a.email)}</td>
+        <td><span class="badge ${a.note === 'admin' ? 'badge-approved' : ''}">${esc(a.note || '—')}</span></td>
+        <td style="color:var(--ink-4);font-size:.78rem;">${fmtDate(a.approved_at)}</td>
+        <td class="actions">
+          ${a.note === 'admin'
+            ? '<span style="color:var(--ink-4);font-size:.75rem;">Protected</span>'
+            : `<button class="btn btn-danger" onclick="revoke('${esc(a.email)}')">Revoke</button>`}
+        </td>
+      </tr>`;
+
+    const pendingBadge = pending.length > 0 ? `<span class="tab-badge">${pending.length}</span>` : '';
+    const pendingTab = $('#req-tab-badge');
+    if (pendingTab) pendingTab.innerHTML = pendingBadge;
+
+    const container = $('#requests-content');
+    if (!container) return;
+    container.innerHTML = `
+      <div class="card">
+        <div class="card-title">Pending requests <span class="card-count">(${pending.length})</span></div>
+        ${pending.length === 0
+          ? '<div class="table-empty">No pending requests.</div>'
+          : `<table>
+               <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th></th></tr></thead>
+               <tbody>${pending.map(reqRow).join('')}</tbody>
+             </table>`}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Approved emails <span class="card-count">(${_allowed.length})</span></div>
+        ${_allowed.length === 0
+          ? '<div class="table-empty">No approved emails yet.</div>'
+          : `<table>
+               <thead><tr><th>Email</th><th>Note</th><th>Approved</th><th></th></tr></thead>
+               <tbody>${_allowed.map(allowRow).join('')}</tbody>
+             </table>`}
+      </div>
+
+      ${past.length > 0 ? `
+        <div class="card">
+          <div class="card-title">Recent decisions</div>
+          <table>
+            <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th>Status</th></tr></thead>
+            <tbody>${past.map(reqRow).join('')}</tbody>
+          </table>
+        </div>` : ''}`;
+  }
+
+  async function approve(id) {
+    try {
+      await api('POST', '/api/admin/requests/' + id + '/approve');
+      toast('Approved — user can now sign in');
+      await reload();
+    } catch (e) { toast(e.message, true); }
+  }
+  async function reject(id) {
+    if (!confirm('Reject this request?')) return;
+    try {
+      await api('POST', '/api/admin/requests/' + id + '/reject');
+      toast('Rejected');
+      await reload();
+    } catch (e) { toast(e.message, true); }
+  }
+  async function revoke(email) {
+    if (!confirm('Revoke access for ' + email + '?')) return;
+    try {
+      await api('DELETE', '/api/admin/allowed/' + encodeURIComponent(email));
+      toast('Access revoked');
+      await reload();
+    } catch (e) { toast(e.message, true); }
+  }
+
+  /* ────────────────────────────────────────────────
+     OVERVIEW TAB
+  ──────────────────────────────────────────────── */
+  const FEATS = [
+    { label: 'View CRM',        levels: ['viewer','member','manager','admin'] },
+    { label: 'Edit workflow',   levels: ['member','manager','admin'] },
+    { label: 'Assign fitters',  levels: ['manager','admin'] },
+    { label: 'Invoices',        levels: ['member','manager','admin'] },
+    { label: 'Site visits',     levels: ['member','manager','admin'] },
+    { label: 'Admin panel',     levels: ['admin'] },
+  ];
+
+  function renderOverview() {
+    const container = $('#overview-content');
+    if (!container) return;
+    if (_users.length === 0) {
+      container.innerHTML = '<div class="table-empty">No users yet.</div>';
+      return;
+    }
+    container.innerHTML = `<div class="overview-grid">${_users.map(u => {
+      const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—';
+      const level = u.privilege_level || 'member';
+      const feats = FEATS.map(f => {
+        const has = u.isAdmin || f.levels.includes(level);
+        return `<div class="ov-feat ${has ? 'has' : ''}">
+          <span class="ov-dot ${has ? 'has' : 'no'}"></span>
+          ${esc(f.label)}
+        </div>`;
+      }).join('');
+      return `
+        <div class="ov-card">
+          <div class="ov-header">
+            ${avatarEl(u)}
+            <div style="min-width:0;">
+              <div class="ov-name">${esc(name)}</div>
+              <div class="ov-email">${esc(u.email || '')}</div>
+            </div>
+            ${lvlBadge(u.isAdmin ? 'admin' : level)}
+          </div>
+          <div class="ov-access">${feats}</div>
+        </div>`;
+    }).join('')}</div>`;
+  }
+
+  /* ────────────────────────────────────────────────
+     Load & render
+  ──────────────────────────────────────────────── */
+  async function reload() {
+    [_requests, _allowed, _users] = await Promise.all([
+      api('GET', '/api/admin/requests'),
+      api('GET', '/api/admin/allowed'),
+      api('GET', '/api/admin/users'),
+    ]);
+    renderTeam();
+    renderRequests();
+    renderOverview();
+  }
+
+  async function init() {
+    // Auth guard — redirect non-admins
+    let me;
+    try {
+      me = await api('GET', '/api/auth/user');
+    } catch {
+      window.location.href = '/';
+      return;
+    }
+    if (!me?.isAdmin) {
+      window.location.href = '/';
+      return;
     }
 
-    async function approve(id) {
-      try { await api('POST', '/api/admin/requests/' + id + '/approve'); toast('Approved'); load(); }
-      catch (e) { toast(e.message, true); }
-    }
-    async function reject(id) {
-      if (!confirm('Reject this request?')) return;
-      try { await api('POST', '/api/admin/requests/' + id + '/reject'); toast('Rejected'); load(); }
-      catch (e) { toast(e.message, true); }
-    }
-    async function revoke(email) {
-      if (!confirm('Revoke access for ' + email + '?')) return;
-      try { await api('DELETE', '/api/admin/allowed/' + encodeURIComponent(email)); toast('Revoked'); load(); }
-      catch (e) { toast(e.message, true); }
+    try {
+      [_requests, _allowed, _users, _jobRoles] = await Promise.all([
+        api('GET', '/api/admin/requests'),
+        api('GET', '/api/admin/allowed'),
+        api('GET', '/api/admin/users'),
+        api('GET', '/api/admin/job-roles'),
+      ]);
+    } catch (e) {
+      if (e.forbidden) {
+        $('#page').innerHTML = `
+          <div class="forbidden-card">
+            <h2>Access denied</h2>
+            <p>Your account doesn't have admin access. Ask the owner to add your email to <code>ADMIN_EMAILS</code>.</p>
+          </div>`;
+        return;
+      }
+      $('#page').innerHTML = `<div class="loading-state" style="color:#991b1b;">${esc(e.message)}</div>`;
+      return;
     }
 
-    load();
-  </script>
+    const pending = _requests.filter(r => r.status === 'pending');
+    const pendingBadge = pending.length > 0 ? `<span class="tab-badge">${pending.length}</span>` : '';
+
+    $('#page').innerHTML = `
+      <h1 class="page-title">Admin panel</h1>
+      <p class="page-sub">Manage the team, permissions, and access requests.</p>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="team"        onclick="switchTab('team')">Team <span id="team-count" style="color:var(--ink-4);font-weight:400;">${_users.length}</span></button>
+        <button class="tab-btn"        data-tab="permissions"  onclick="switchTab('permissions')">Permissions & roles</button>
+        <button class="tab-btn"        data-tab="requests"     onclick="switchTab('requests')">Access requests <span id="req-tab-badge">${pendingBadge}</span></button>
+        <button class="tab-btn"        data-tab="overview"     onclick="switchTab('overview')">Overview</button>
+      </div>
+
+      <!-- TEAM -->
+      <div class="tab-panel active" id="tab-team">
+        <div class="card" style="padding:0;overflow:hidden;">
+          <table>
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th>Job role</th>
+                <th>Privilege</th>
+                <th>Joined</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="team-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PERMISSIONS -->
+      <div class="tab-panel" id="tab-permissions">
+        <div class="card">
+          <div class="card-title">Permissions matrix</div>
+          ${renderMatrix()}
+        </div>
+
+        <div class="card">
+          <div class="card-title">Manage job roles</div>
+          <p style="font-size:.82rem;color:var(--ink-3);margin:0 0 14px;">
+            These are the role labels available when editing a team member's profile.
+          </p>
+          <div class="roles-add-form">
+            <input class="field" id="role-input" type="text" placeholder="New role name…" maxlength="64"
+              onkeydown="if(event.key==='Enter')addRole()">
+            <button class="btn btn-primary" onclick="addRole()">Add role</button>
+          </div>
+          <div class="roles-list" id="roles-list"></div>
+        </div>
+      </div>
+
+      <!-- REQUESTS -->
+      <div class="tab-panel" id="tab-requests">
+        <div id="requests-content"></div>
+      </div>
+
+      <!-- OVERVIEW -->
+      <div class="tab-panel" id="tab-overview">
+        <div id="overview-content"></div>
+      </div>
+    `;
+
+    renderTeam();
+    renderJobRoles();
+    renderRequests();
+    renderOverview();
+  }
+
+  init();
+</script>
 </body>
 </html>
