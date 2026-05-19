@@ -273,7 +273,16 @@ async function quickLoadAndUpdate(contactId, roomIdx, updater) {
     // Modify in-memory state directly
     updater(state.allRooms, roomIdx);
     updateRoomCache();
-    try { await saveWorkflowData(); } catch { showToast('Failed to save', true); return; }
+    try { await saveWorkflowData(); } catch (e) {
+      if (e.code === 'HUBSPOT_AUTH') {
+        showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+      } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+        showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+      } else {
+        showToast('Failed to save', true);
+      }
+      return;
+    }
     renderCustomerList();
     if (state.selectedRoomIdx === roomIdx) {
       renderWorkflowHeader();
@@ -302,7 +311,16 @@ async function quickLoadAndUpdate(contactId, roomIdx, updater) {
   }));
   if (roomIdx >= rooms.length) roomIdx = rooms.length - 1;
   updater(rooms, roomIdx);
-  try { await POST(`/api/contacts/${contactId}/localdata`, { rooms, notes }); } catch { showToast('Failed to save', true); return; }
+  try { await POST(`/api/contacts/${contactId}/localdata`, { rooms, notes }); } catch (e) {
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else {
+      showToast('Failed to save', true);
+    }
+    return;
+  }
   state.contactStageCache[contactId] = rooms.map(r => ({
     room: r.room, stageKey: r.stageKey, roomStatus: r.roomStatus || 'active'
   }));

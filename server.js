@@ -176,7 +176,14 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
     );
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 
@@ -488,7 +495,14 @@ app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), async (
     );
     res.json(r.data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 
@@ -730,7 +744,14 @@ app.post('/api/deals/:id/checklist', isAuthenticated, requirePrivilege('member')
     );
     res.json(noteR.data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 
@@ -923,7 +944,14 @@ app.post('/api/deals/:id/workflow', isAuthenticated, requirePrivilege('member'),
     );
     res.json(noteR.data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 

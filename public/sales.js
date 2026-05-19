@@ -941,10 +941,16 @@ async function addComment() {
   renderComments();
   try {
     await saveWorkflowData();
-  } catch {
+  } catch (e) {
     state.workflowData.comments.pop();
     renderComments();
-    showToast('Failed to save note', true);
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not save note — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not save note — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else {
+      showToast('Failed to save note', true);
+    }
   }
 }
 
