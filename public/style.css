@@ -2291,6 +2291,17 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .inv-panel-title { font-size: 1.1rem; font-weight: 700; color: var(--ink-1); }
 .inv-panel-sub   { font-size: 0.82rem; color: var(--ink-3); margin-top: 2px; }
+.inv-nav-row     { display: flex; align-items: center; gap: 6px; }
+.inv-nav-label   { font-size: 1.1rem; font-weight: 700; color: var(--ink-1); }
+.inv-nav-docnum  { display: block; font-size: 0.82rem; color: var(--ink-3); margin-top: 2px; font-weight: 400; }
+.inv-nav-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 5px; border: 1px solid var(--stone);
+  background: var(--surface); color: var(--ink-2); cursor: pointer;
+  font-size: 0.9rem; line-height: 1; padding: 0; transition: background 0.15s;
+}
+.inv-nav-btn:hover:not(:disabled) { background: var(--stone); color: var(--ink-1); }
+.inv-nav-btn:disabled { opacity: 0.35; cursor: default; }
 .inv-panel-close {
   padding: 4px; border: none; background: none; cursor: pointer;
   color: var(--ink-3); border-radius: 6px; transition: background 0.15s;

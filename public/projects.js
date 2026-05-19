@@ -257,10 +257,10 @@ function customerCardHtml(contact, rooms, isAdmin) {
     if (invs.length) {
       const total = invs.reduce((s, inv) => s + inv.balance, 0);
       const count = invs.length;
-      const firstInvId = escHtml(invs[0].id);
+      const invIdsAttr = escHtml(JSON.stringify(invs.map(i => i.id)));
       invoiceSection = `
         <div class="project-card-invoices">
-          <button class="qb-badge" title="${count} outstanding invoice${count !== 1 ? 's' : ''}" onclick="openInvoicePanel('${firstInvId}')">${fmtGBP(total)}</button>
+          <button class="qb-badge" title="${count} outstanding invoice${count !== 1 ? 's' : ''}" data-inv-ids="${invIdsAttr}" onclick="openInvoicePanelFromBadge(this)">${fmtGBP(total)}</button>
         </div>`;
     }
   }
@@ -276,6 +276,11 @@ function customerCardHtml(contact, rooms, isAdmin) {
       </div>
       ${invoiceSection}
     </div>`;
+}
+
+function openInvoicePanelFromBadge(btn) {
+  const ids = JSON.parse(btn.dataset.invIds || '[]');
+  if (ids.length) openInvoicePanel(ids[0], ids);
 }
 
 // ── Fitter Picker Modal ───────────────────────────────────────────────────────

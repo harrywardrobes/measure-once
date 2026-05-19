@@ -61,12 +61,16 @@ function fmtQBDate(iso) {
 }
 
 // ── Invoice Detail Panel ───────────────────────────────────────────────────────
-async function openInvoicePanel(invId) {
+async function openInvoicePanel(invId, allInvIds) {
   const panel   = document.getElementById('inv-panel');
   const overlay = document.getElementById('inv-overlay');
   const body    = document.getElementById('inv-panel-body');
   const title   = document.getElementById('inv-panel-title');
   const sub     = document.getElementById('inv-panel-sub');
+
+  const ids = (allInvIds && allInvIds.length > 1) ? allInvIds : [invId];
+  const idx = ids.indexOf(invId);
+  state.qb.panelContext = { ids, index: idx >= 0 ? idx : 0 };
 
   panel.classList.add('inv-panel-open');
   overlay.classList.remove('hidden');
@@ -84,10 +88,21 @@ async function openInvoicePanel(invId) {
   }
 }
 
+async function navigateInvoicePanel(delta) {
+  const ctx = state.qb.panelContext;
+  if (!ctx) return;
+  const newIdx = ctx.index + delta;
+  if (newIdx < 0 || newIdx >= ctx.ids.length) return;
+  ctx.index = newIdx;
+  const ids = ctx.ids;
+  await openInvoicePanel(ids[newIdx], ids);
+}
+
 function closeInvoicePanel() {
   document.getElementById('inv-panel').classList.remove('inv-panel-open');
   document.getElementById('inv-overlay').classList.add('hidden');
   state.qb.panel = null;
+  state.qb.panelContext = null;
 }
 
 function renderInvoicePanelBody() {
@@ -96,8 +111,23 @@ function renderInvoicePanelBody() {
   const title = document.getElementById('inv-panel-title');
   const sub   = document.getElementById('inv-panel-sub');
   const body  = document.getElementById('inv-panel-body');
+  const ctx   = state.qb.panelContext;
 
-  title.textContent = `Invoice #${inv.docNumber || inv.id}`;
+  if (ctx && ctx.ids.length > 1) {
+    const pos    = ctx.index + 1;
+    const total  = ctx.ids.length;
+    const isFirst = ctx.index === 0;
+    const isLast  = ctx.index === total - 1;
+    title.innerHTML = `
+      <span class="inv-nav-row">
+        <button class="inv-nav-btn" onclick="navigateInvoicePanel(-1)" aria-label="Previous invoice" ${isFirst ? 'disabled' : ''}>&#8592;</button>
+        <span class="inv-nav-label">Invoice ${pos} of ${total}</span>
+        <button class="inv-nav-btn" onclick="navigateInvoicePanel(1)" aria-label="Next invoice" ${isLast ? 'disabled' : ''}>&#8594;</button>
+      </span>
+      <span class="inv-nav-docnum">#${escHtml(inv.docNumber || inv.id)}</span>`;
+  } else {
+    title.textContent = `Invoice #${inv.docNumber || inv.id}`;
+  }
   sub.textContent   = inv.customerName;
 
   const overdue = inv.dueDate && new Date(inv.dueDate) < new Date();
