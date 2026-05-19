@@ -2615,6 +2615,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .form-field-full  { grid-column: 1 / -1; }
 .fw-600           { font-weight: 600; }
 .mt-1             { margin-top: 2px; }
+.ml-1             { margin-left: 4px; }
 .text-faint       { color: var(--ink-4); }
 .text-secondary   { color: var(--ink-3); }
 .text-faint-sm    { color: var(--ink-4); font-size: .72rem; }
