@@ -91,6 +91,8 @@ async function openInvoicePanel(invId, allInvIds) {
       if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
       const msg = document.getElementById('inv-save-msg');
       if (msg) { msg.textContent = 'Unsaved changes restored'; msg.className = 'inv-action-msg inv-msg-ok'; }
+      const discardBtn = document.getElementById('inv-discard-btn');
+      if (discardBtn) discardBtn.classList.remove('hidden');
     }
   } catch (e) {
     body.innerHTML = `<div class="inv-panel-error">Failed to load invoice: ${escHtml(e.message)}</div>`;
@@ -113,6 +115,25 @@ function _restoreInvFields(snapshot) {
   if (due   && snapshot.due   !== null) due.value   = snapshot.due;
   if (email && snapshot.email !== null) email.value = snapshot.email;
   if (memo  && snapshot.memo  !== null) memo.value  = snapshot.memo;
+}
+
+function discardInvoiceDraft() {
+  const inv = state.qb.panel;
+  if (!inv) return;
+  if (state.qb.draft) delete state.qb.draft[inv.id];
+  const due   = document.getElementById('inv-edit-due');
+  const email = document.getElementById('inv-edit-email');
+  const memo  = document.getElementById('inv-edit-memo');
+  if (due)   due.value   = inv.dueDate || '';
+  if (email) email.value = inv.email   || '';
+  if (memo)  memo.value  = inv.memo    || '';
+  window._invMemoDirty = false;
+  window._invSendDirty = false;
+  if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+  const discardBtn = document.getElementById('inv-discard-btn');
+  if (discardBtn) discardBtn.classList.add('hidden');
+  const msg = document.getElementById('inv-save-msg');
+  if (msg) { msg.textContent = 'Changes discarded'; msg.className = 'inv-action-msg inv-msg-ok'; }
 }
 
 async function navigateInvoicePanel(delta) {
@@ -324,6 +345,7 @@ function renderInvoicePanelBody() {
         </label>
       </div>
       <button id="inv-save-btn" class="inv-btn inv-btn-primary" onclick="saveInvoiceChanges()" data-viewer-hide>Save changes</button>
+      <button id="inv-discard-btn" class="inv-btn inv-btn-secondary hidden" onclick="discardInvoiceDraft()" data-viewer-hide>Discard changes</button>
       <span id="inv-save-msg" class="inv-action-msg"></span>
     </div>
 
