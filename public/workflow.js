@@ -161,7 +161,6 @@ function renderCustomerList() {
     const leadStatusBadge = (() => {
       if (state.contactsViewMode !== 'all') return '';
       const raw = contact.properties?.hs_lead_status || '';
-      if (!raw) return '';
       const map = {
         'OPEN_DEAL':            { label: 'Open Deal',   cls: 'lsb-open-deal' },
         'NEW':                  { label: 'New',          cls: 'lsb-new' },
@@ -172,8 +171,11 @@ function renderCustomerList() {
         'UNQUALIFIED':          { label: 'Unqualified',  cls: 'lsb-unqualified' },
         'BAD_TIMING':           { label: 'Bad Timing',   cls: 'lsb-bad-timing' },
       };
+      if (!raw) {
+        return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${contact.id}')">+ Lead Status</span>`;
+      }
       const entry = map[raw] || { label: raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()), cls: '' };
-      return `<span class="lead-status-badge ${entry.cls}" title="Lead status">${escHtml(entry.label)}</span>`;
+      return `<span class="lead-status-badge ${entry.cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${contact.id}')">${escHtml(entry.label)}</span>`;
     })();
 
     return `
@@ -311,4 +313,62 @@ async function quickSetRoomStatus(contactId, roomIdx, newStatus) {
     if (rooms[idx]) rooms[idx].roomStatus = newStatus;
   });
   renderCustomerList();
+}
+
+// ── Lead Status Picker ────────────────────────────────────────────────────────
+
+const LEAD_STATUS_OPTIONS = [
+  { value: 'NEW',                  label: 'New' },
+  { value: 'OPEN',                 label: 'Open' },
+  { value: 'IN_PROGRESS',          label: 'In Progress' },
+  { value: 'OPEN_DEAL',            label: 'Open Deal' },
+  { value: 'CONNECTED',            label: 'Connected' },
+  { value: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact' },
+  { value: 'UNQUALIFIED',          label: 'Unqualified' },
+  { value: 'BAD_TIMING',           label: 'Bad Timing' },
+];
+
+function openLeadStatusPicker(event, contactId) {
+  event.stopPropagation();
+  closeCardPicker();
+  const rect = event.currentTarget.getBoundingClientRect();
+  const popup = document.createElement('div');
+  popup.id = 'card-picker-popup';
+  popup.className = 'card-picker-popup';
+  const top = Math.min(rect.bottom + 4, window.innerHeight - 300);
+  popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
+  popup.innerHTML = LEAD_STATUS_OPTIONS.map(({ value, label }) =>
+    `<button class="card-picker-opt" data-lead-status="${escHtml(value)}">${escHtml(label)}</button>`
+  ).join('');
+  popup.querySelectorAll('[data-lead-status]').forEach(btn => {
+    btn.addEventListener('click', () => quickSetLeadStatus(contactId, btn.dataset.leadStatus));
+  });
+  document.body.appendChild(popup);
+  setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
+}
+
+async function quickSetLeadStatus(contactId, newStatus) {
+  closeCardPicker();
+  const contact = state.contacts.find(c => c.id === contactId);
+  const prevStatus = contact?.properties?.hs_lead_status || null;
+  if (prevStatus === newStatus) return;
+
+  // Optimistic update
+  if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: newStatus };
+  renderCustomerList();
+
+  try {
+    await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: newStatus });
+    const newLabel = LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)?.label || newStatus;
+    showBottomUndo(`Lead status set to ${newLabel}`, async () => {
+      if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: prevStatus || '' };
+      renderCustomerList();
+      await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: prevStatus || '' }).catch(() => {});
+    });
+  } catch (e) {
+    // Revert on failure
+    if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: prevStatus || '' };
+    renderCustomerList();
+    showToast('Failed to update lead status', true);
+  }
 }

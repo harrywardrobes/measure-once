@@ -1191,6 +1191,10 @@ body.showing-workflow .workflow-panel { display: flex; }
 .lead-status-badge.lsb-connected   { background: #ede9fe; color: #5b21b6; }
 .lead-status-badge.lsb-unqualified { background: #fee2e2; color: #991b1b; }
 .lead-status-badge.lsb-bad-timing  { background: #f3f4f6; color: #6b7280; }
+.lead-status-badge.lsb-clickable   { cursor: pointer; }
+.lead-status-badge.lsb-clickable:hover { filter: brightness(0.93); }
+.lead-status-badge.lsb-empty       { background: none; color: var(--ink-4); border: 1px dashed var(--stone); cursor: pointer; }
+.lead-status-badge.lsb-empty:hover { background: var(--paper-deep); color: var(--ink-2); }
 
 /* ── Projects stage filter tabs ──────────────────────────────────────────────── */
 .project-stage-tabs-bar {

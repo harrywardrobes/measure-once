@@ -549,6 +549,34 @@ app.get('/api/contacts/:id', async (req, res) => {
   }
 });
 
+app.patch('/api/contacts/:id', isAuthenticated, requireHubspotToken, async (req, res) => {
+  try {
+    const contactId = String(req.params.id || '');
+    if (!/^\d+$/.test(contactId)) {
+      return res.status(400).json({ error: 'Invalid contact id.' });
+    }
+    const allowed = ['hs_lead_status', 'firstname', 'lastname', 'email', 'phone', 'address', 'city', 'zip'];
+    const properties = {};
+    for (const key of allowed) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        properties[key] = req.body[key];
+      }
+    }
+    if (Object.keys(properties).length === 0) {
+      return res.status(400).json({ error: 'No valid properties to update.' });
+    }
+    const safeContactId = encodeURIComponent(contactId);
+    const r = await axios.patch(
+      `${HS}/crm/v3/objects/contacts/${safeContactId}`,
+      { properties },
+      { headers: hsHeaders() }
+    );
+    res.json(r.data);
+  } catch (e) {
+    res.status(e.response?.status || 500).json({ error: e.response?.data?.message || e.message });
+  }
+});
+
 // ── HubSpot: Notes (for checklist storage) ────────────────────────────────────
 app.get('/api/deals/:id/notes', async (req, res) => {
   try {
