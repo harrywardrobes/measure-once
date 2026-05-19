@@ -408,6 +408,14 @@ function openVisitModal(visitId, prefillDate) {
       </div>
     </div>`;
   document.body.appendChild(modal);
+
+  const gcalBox = document.getElementById('vm-gcal');
+  if (gcalBox) {
+    gcalBox.checked = localStorage.getItem('gcal_sync_pref') === 'true';
+    gcalBox.addEventListener('change', () => {
+      localStorage.setItem('gcal_sync_pref', gcalBox.checked);
+    });
+  }
 }
 
 function closeVisitModal() { document.querySelector('.visit-modal-overlay')?.remove(); }
