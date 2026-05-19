@@ -199,6 +199,11 @@ function setStageFilter(value) {
   renderCustomerList();
 }
 
+function setSortBy(value) {
+  state.sortBy = value;
+  renderCustomerList();
+}
+
 function toggleArchived() {
   state.showArchived = !state.showArchived;
   const btn = document.getElementById('archived-toggle');

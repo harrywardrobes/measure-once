@@ -77,6 +77,26 @@ function buildListItems() {
       }
     }
   }
+
+  const sortBy = state.sortBy || 'newest';
+  items.sort((a, b) => {
+    if (sortBy === 'name-asc') {
+      return contactName(a.contact).localeCompare(contactName(b.contact));
+    }
+    if (sortBy === 'name-desc') {
+      return contactName(b.contact).localeCompare(contactName(a.contact));
+    }
+    if (sortBy === 'stage') {
+      const ai = STAGE_KEYS.indexOf(a.stageKey);
+      const bi = STAGE_KEYS.indexOf(b.stageKey);
+      return ai - bi;
+    }
+    // 'newest' — sort by createdate descending (most recent first)
+    const ad = parseInt(a.contact.properties?.createdate || '0');
+    const bd = parseInt(b.contact.properties?.createdate || '0');
+    return bd - ad;
+  });
+
   return items;
 }
 

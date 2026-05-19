@@ -33,6 +33,15 @@
             New
           </button>
         </div>
+        <div class="flex gap-1.5 mt-1.5">
+          <select id="sort-select" onchange="setSortBy(this.value)"
+            class="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-blue-400 transition">
+            <option value="newest">Newest first</option>
+            <option value="name-asc">Name A–Z</option>
+            <option value="name-desc">Name Z–A</option>
+            <option value="stage">Stage order</option>
+          </select>
+        </div>
         <div id="deal-count" class="text-xs text-slate-400 mt-1.5 px-0.5"></div>
       </div>
       <div id="customer-list" class="flex-1 overflow-y-auto">

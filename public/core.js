@@ -20,6 +20,7 @@ async function loadWorkflowStages() {}
 function populateStageFilter() {}
 function filterDeals() {}
 function setStageFilter() {}
+function setSortBy() {}
 function toggleArchived() {}
 async function refreshDeals() {}
 // Invoices-core stubs (real versions in invoices-core.js)
@@ -48,6 +49,7 @@ const state = {
   showAddTask: false,
   addingRoom: false,
   stageFilter: '',
+  sortBy: 'newest',
   showArchived: false,
   projectStageFilter: '',
   salesStageFilter: '',
