@@ -246,10 +246,8 @@ async function selectContact(contactId, roomIdx = 0) {
   state.showAddTask       = false;
   state.addingRoom        = false;
 
-  showWorkflowPanel();
   document.getElementById('empty-state').classList.add('hidden');
   const wv = document.getElementById('workflow-view');
-  wv.classList.remove('hidden');
   wv.innerHTML = `
     <button class="back-btn" onclick="goBack()">
       <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -257,7 +255,7 @@ async function selectContact(contactId, roomIdx = 0) {
       </svg>
       Customers
     </button>
-    <div class="skeleton-workflow-header bg-white border-b border-slate-200 px-4 sm:px-6 py-4 shadow-sm">
+    <div class="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 shadow-sm">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1 min-w-0">
           <div class="skeleton-line skeleton-wf-name"></div>
@@ -278,6 +276,9 @@ async function selectContact(contactId, roomIdx = 0) {
       </div>
     </div>
   `;
+  wv.classList.remove('hidden');
+  void wv.offsetWidth;
+  showWorkflowPanel();
 
   try {
     const [localData, tasksData] = await Promise.all([
