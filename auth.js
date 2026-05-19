@@ -597,11 +597,12 @@ async function setupAuth(app) {
         `INSERT INTO account_requests (name, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING created_at`,
         [name, email]
       );
-      console.log(`  Access request: ${name} <${email}>`);
-      if (insertResult.rowCount > 0) {
-        const createdAt = insertResult.rows[0].created_at;
-        notifyAdminsOfAccessRequest(name, email, createdAt).catch(() => {});
+      if (insertResult.rowCount === 0) {
+        return res.json({ ok: true, alreadyPending: true });
       }
+      console.log(`  Access request: ${name} <${email}>`);
+      const createdAt = insertResult.rows[0].created_at;
+      notifyAdminsOfAccessRequest(name, email, createdAt).catch(() => {});
       res.json({ ok: true });
     } catch (e) {
       console.error('request-access failed:', e.message);
