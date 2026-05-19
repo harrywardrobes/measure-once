@@ -2,10 +2,39 @@
 let _tradeContacts = [];
 let _tradeDeleteId = null;
 
+function tradeSkeletonHtml(namePct, badgeW, areasW, contactRow) {
+  return `
+    <div class="trades-card skeleton-trade-card">
+      <div class="trades-card-top">
+        <div class="trades-card-info">
+          <div class="skeleton-line" style="height:14px;width:${namePct}%;margin-bottom:8px"></div>
+          <div class="trades-card-trade-row">
+            <div class="skeleton-line skeleton-pill" style="width:${badgeW}px;height:20px"></div>
+            <div class="skeleton-line" style="height:11px;width:${areasW}px"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px">
+          <div class="skeleton-action-btn"></div>
+          <div class="skeleton-action-btn"></div>
+        </div>
+      </div>
+      ${contactRow ? `<div class="skeleton-contact-row">
+        <div class="skeleton-line" style="height:11px;width:100px"></div>
+        <div class="skeleton-line" style="height:11px;width:130px"></div>
+      </div>` : ''}
+    </div>`;
+}
+
 async function loadTradeContacts() {
   const list = document.getElementById('trades-list');
   if (!list) return;
-  list.innerHTML = '<div class="trades-loading"><div class="spinner"></div> Loading…</div>';
+  list.innerHTML = [
+    tradeSkeletonHtml(58, 76, 100, true),
+    tradeSkeletonHtml(45, 88, 80,  true),
+    tradeSkeletonHtml(65, 68, 110, false),
+    tradeSkeletonHtml(52, 80, 90,  true),
+    tradeSkeletonHtml(70, 72, 95,  false),
+  ].join('');
   try {
     _tradeContacts = await GET('/api/trades');
     renderTradeContacts(_tradeContacts);
