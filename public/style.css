@@ -2185,6 +2185,36 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .access-footer a { color: #3b82f6; text-decoration: none; }
 .access-footer a:hover { text-decoration: underline; }
+.access-divider {
+  display: flex; align-items: center; gap: 10px;
+  margin: 20px 0 16px; color: #94a3b8; font-size: 0.8rem;
+}
+.access-divider::before,
+.access-divider::after {
+  content: ''; flex: 1; height: 1px; background: #e2e8f0;
+}
+.access-input {
+  display: block; width: 100%; box-sizing: border-box;
+  border: 1px solid #cbd5e1; border-radius: 8px;
+  padding: 10px 12px; font-size: 0.95rem; margin-bottom: 10px;
+  outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.access-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
+}
+.access-email-approved-msg {
+  background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;
+  border-radius: 8px; padding: 10px 13px; font-size: 0.88rem;
+  margin-bottom: 10px; line-height: 1.45;
+}
+.access-email-approved-msg a { color: #15803d; font-weight: 500; }
+.access-email-approved-msg a:hover { text-decoration: underline; }
+.access-req-error {
+  background: #fee2e2; color: #991b1b; border: 1px solid #fecaca;
+  border-radius: 8px; padding: 9px 12px; font-size: 0.88rem;
+  margin-top: 8px;
+}
 
 /* ── QuickBooks ───────────────────────────────────────────────────────────────── */
 .qb-badge {

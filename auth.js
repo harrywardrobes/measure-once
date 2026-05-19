@@ -649,24 +649,46 @@ async function setupAuth(app) {
     });
   });
 
+  // Public: lightweight check — returns whether an email is already approved.
+  // Only reveals approved status (not pending/rejected) to limit information exposure.
+  app.get('/api/check-email', accessRequestLimiter, async (req, res) => {
+    try {
+      const email = (req.query.email || '').trim().toLowerCase();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: 'Invalid email address.' });
+      }
+      const approved = await isEmailApproved(email);
+      res.json({ approved });
+    } catch (e) {
+      console.error('check-email failed:', e.message);
+      res.status(500).json({ error: 'Could not check email. Please try again later.' });
+    }
+  });
+
   // Public: anyone can request access by submitting their name + email.
+  // When called with a JSON body (fetch), always returns JSON.
+  // When called as a plain HTML form, uses redirects for backward compatibility.
   app.post('/api/request-access', accessRequestLimiter, async (req, res) => {
+    const wantsJson = req.is('application/json') || req.headers.accept?.includes('application/json');
     try {
       const name  = (req.body?.name  || '').trim();
       const email = (req.body?.email || '').trim().toLowerCase();
       if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return res.status(400).json({ error: 'Please provide a valid name and email.' });
       }
-      // If already approved, redirect to a clear UI state instead of raw JSON.
       if (await isEmailApproved(email)) {
-        return res.redirect('/?access_approved=1');
+        return wantsJson
+          ? res.status(409).json({ status: 'approved' })
+          : res.redirect('/?access_approved=1');
       }
       const insertResult = await pool.query(
         `INSERT INTO account_requests (name, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING created_at`,
         [name, email]
       );
       if (insertResult.rowCount === 0) {
-        return res.redirect('/?access_pending=1');
+        return wantsJson
+          ? res.status(409).json({ status: 'pending' })
+          : res.redirect('/?access_pending=1');
       }
       console.log(`  Access request: ${name} <${email}>`);
       const createdAt = insertResult.rows[0].created_at;

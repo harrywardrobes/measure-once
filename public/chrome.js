@@ -32,6 +32,19 @@
           <h1 class="access-title">Sign in to continue</h1>
           <p class="access-sub">This dashboard is invite-only. Sign in with your Replit account to request access.</p>
           <a href="/api/login" class="access-submit" style="display:block;text-align:center;text-decoration:none;margin-top:8px;">Sign in with Replit</a>
+          <div class="access-divider"><span>or request access by email</span></div>
+          <form id="access-request-form" onsubmit="handleAccessRequestSubmit(event)" novalidate>
+            <input id="access-req-name" type="text" class="access-input" placeholder="Your name" autocomplete="name" required>
+            <input id="access-req-email" type="email" class="access-input" placeholder="Your email address" autocomplete="email" required
+              onblur="handleAccessEmailBlur(this.value)">
+            <div id="access-email-approved-msg" style="display:none;" class="access-email-approved-msg">
+              Your account is already approved — <a href="/api/login">sign in to get started</a>.
+            </div>
+            <div id="access-req-submit-wrap">
+              <button type="submit" id="access-req-btn" class="access-submit" style="width:100%;border:none;cursor:pointer;margin-top:0;">Request access</button>
+            </div>
+            <div id="access-req-error" style="display:none;" class="access-req-error"></div>
+          </form>
         </div>
         <div id="access-confirmed-state" style="display:none;">
           <div class="access-confirmed-icon">✓</div>
@@ -159,3 +172,82 @@
   document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner);
   document.body.insertAdjacentHTML('beforeend', invoicePanel + bottomNav);
 })();
+
+// ── Access request form ───────────────────────────────────────────────────────
+// Tracks whether the current email field value is already approved so the
+// submit handler can bail out before sending a redundant POST.
+let _accessEmailApproved = false;
+
+async function handleAccessEmailBlur(email) {
+  email = (email || '').trim();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+  const approvedMsg  = document.getElementById('access-email-approved-msg');
+  const submitWrap   = document.getElementById('access-req-submit-wrap');
+  try {
+    const r = await fetch('/api/check-email?email=' + encodeURIComponent(email));
+    if (!r.ok) return;
+    const { approved } = await r.json();
+    _accessEmailApproved = approved;
+    if (approved) {
+      if (approvedMsg) approvedMsg.style.display = '';
+      if (submitWrap)  submitWrap.style.display  = 'none';
+    } else {
+      if (approvedMsg) approvedMsg.style.display = 'none';
+      if (submitWrap)  submitWrap.style.display  = '';
+    }
+  } catch {
+    // Network failure — silently ignore; server will validate on submit
+  }
+}
+
+async function handleAccessRequestSubmit(e) {
+  e.preventDefault();
+  if (_accessEmailApproved) return;
+
+  const name    = (document.getElementById('access-req-name')?.value  || '').trim();
+  const email   = (document.getElementById('access-req-email')?.value || '').trim().toLowerCase();
+  const errEl   = document.getElementById('access-req-error');
+  const btn     = document.getElementById('access-req-btn');
+  const signInEl    = document.getElementById('access-sign-in-state');
+  const confirmedEl = document.getElementById('access-confirmed-state');
+  const pendingEl   = document.getElementById('access-pending-state');
+
+  if (!name || !email) {
+    if (errEl) { errEl.textContent = 'Please enter your name and email address.'; errEl.style.display = ''; }
+    return;
+  }
+  if (errEl) errEl.style.display = 'none';
+  if (btn)   { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+  try {
+    const r = await fetch('/api/request-access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ name, email }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data.ok) {
+      if (signInEl)    signInEl.style.display    = 'none';
+      if (confirmedEl) confirmedEl.style.display = '';
+    } else if (r.status === 409 && data.status === 'approved') {
+      _accessEmailApproved = true;
+      const approvedMsg = document.getElementById('access-email-approved-msg');
+      if (approvedMsg) approvedMsg.style.display = '';
+      const submitWrap  = document.getElementById('access-req-submit-wrap');
+      if (submitWrap)   submitWrap.style.display  = 'none';
+      if (btn) { btn.disabled = false; btn.textContent = 'Request access'; }
+    } else if (r.status === 409 && data.status === 'pending') {
+      if (signInEl)  signInEl.style.display  = 'none';
+      if (pendingEl) pendingEl.style.display = '';
+    } else if (r.status === 429) {
+      if (errEl) { errEl.textContent = 'Too many requests — please try again later.'; errEl.style.display = ''; }
+      if (btn)   { btn.disabled = false; btn.textContent = 'Request access'; }
+    } else {
+      if (errEl) { errEl.textContent = data.error || 'Could not submit request. Please try again.'; errEl.style.display = ''; }
+      if (btn)   { btn.disabled = false; btn.textContent = 'Request access'; }
+    }
+  } catch {
+    if (errEl) { errEl.textContent = 'Network error — please check your connection and try again.'; errEl.style.display = ''; }
+    if (btn)   { btn.disabled = false; btn.textContent = 'Request access'; }
+  }
+}
