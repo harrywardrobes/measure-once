@@ -334,7 +334,14 @@ async function cleanupExpiredSessions() {
 }
 
 function scheduleSessionCleanup() {
-  const intervalMs = parseInt(process.env.SESSION_CLEANUP_INTERVAL_MS, 10) || 60 * 60 * 1000;
+  const raw = parseInt(process.env.SESSION_CLEANUP_INTERVAL_MS, 10);
+  const intervalMs = raw > 0 ? raw : 60 * 60 * 1000;
+  const intervalMin = Math.round(intervalMs / 60000);
+  if (raw > 0) {
+    console.log(`[session cleanup] Interval set to ${intervalMin} min (SESSION_CLEANUP_INTERVAL_MS=${intervalMs})`);
+  } else {
+    console.log(`[session cleanup] Interval set to ${intervalMin} min (fallback default; SESSION_CLEANUP_INTERVAL_MS not set or invalid)`);
+  }
   cleanupExpiredSessions();
   setInterval(cleanupExpiredSessions, intervalMs);
 }
