@@ -1182,9 +1182,13 @@ body.showing-workflow .workflow-panel { display: flex; }
   max-width: 1100px;
   margin: 0 auto;
   padding: 20px 16px calc(40px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
 }
 @media (min-width: 640px) {
-  .projects-inner { padding: 28px 24px 48px; }
+  .projects-inner { padding: 28px 24px 48px; gap: 12px; }
 }
 
 .customer-project-card {
@@ -1192,8 +1196,10 @@ body.showing-workflow .workflow-panel { display: flex; }
   border: 1px solid var(--stone);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  margin-bottom: 10px;
   overflow: hidden;
+  flex: 1 1 260px;
+  min-width: 220px;
+  max-width: 400px;
 }
 .customer-project-header {
   padding: 12px 14px 10px;
