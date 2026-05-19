@@ -716,7 +716,7 @@ async function setupAuth(app) {
   });
 
   // ── Admin: review access requests & manage allow-list ──────────────────────
-  app.get('/api/admin/requests', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+  app.get('/api/admin/requests', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
         `SELECT id, name, email, status, created_at
@@ -730,7 +730,7 @@ async function setupAuth(app) {
     }
   });
 
-  app.post('/api/admin/requests/:id/approve', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+  app.post('/api/admin/requests/:id/approve', isAuthenticated, requireAdmin, async (req, res) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -764,7 +764,7 @@ async function setupAuth(app) {
     }
   });
 
-  app.post('/api/admin/requests/:id/reject', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+  app.post('/api/admin/requests/:id/reject', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
         `SELECT email FROM account_requests WHERE id = $1`,
@@ -1257,7 +1257,7 @@ async function setupAuth(app) {
   });
 
   // ── Profile photo: admin approval queue ──────────────────────────────────────
-  app.get('/api/admin/photo-requests', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+  app.get('/api/admin/photo-requests', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
         `SELECT id, email, first_name, last_name, pending_photo
@@ -1274,7 +1274,7 @@ async function setupAuth(app) {
     }
   });
 
-  app.post('/api/admin/photo-requests/:id/approve', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+  app.post('/api/admin/photo-requests/:id/approve', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
         `UPDATE users
@@ -1291,7 +1291,7 @@ async function setupAuth(app) {
     }
   });
 
-  app.post('/api/admin/photo-requests/:id/reject', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+  app.post('/api/admin/photo-requests/:id/reject', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
         `UPDATE users SET pending_photo = NULL, updated_at = NOW()
