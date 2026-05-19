@@ -110,6 +110,20 @@ function isViewerOnly() {
   return document.body.classList.contains('viewer-mode');
 }
 
+function showViewerBanner() {
+  if (sessionStorage.getItem('viewerBannerDismissed') === '1') return;
+  const banner = document.getElementById('viewer-banner');
+  if (banner) banner.style.display = '';
+  document.body.classList.add('has-viewer-banner');
+}
+
+function dismissViewerBanner() {
+  const banner = document.getElementById('viewer-banner');
+  if (banner) banner.style.display = 'none';
+  document.body.classList.remove('has-viewer-banner');
+  sessionStorage.setItem('viewerBannerDismissed', '1');
+}
+
 function escHtml(str) {
   return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -193,6 +207,7 @@ async function bootstrap() {
 
   if (priv === 'viewer') {
     document.body.classList.add('viewer-mode');
+    showViewerBanner();
   }
 
   if (priv === 'manager' || priv === 'admin') {
