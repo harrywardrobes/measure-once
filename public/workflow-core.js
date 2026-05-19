@@ -513,6 +513,7 @@ function hasActiveInlineEdit() {
   // "Add task" form — present in DOM only while state.showAddTask is true
   if (document.getElementById('task-subject')?.value.trim()) return true;
   if (window._invMemoDirty) return true;
+  if (window._invSendDirty) return true;
   return false;
 }
 

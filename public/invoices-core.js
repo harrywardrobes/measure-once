@@ -133,6 +133,7 @@ function closeInvoicePanel() {
   document.getElementById('inv-panel').classList.remove('inv-panel-open');
   document.getElementById('inv-overlay').classList.add('hidden');
   window._invMemoDirty = false;
+  window._invSendDirty = false;
   if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
   state.qb.panel = null;
   state.qb.panelContext = null;
@@ -253,7 +254,7 @@ function renderInvoicePanelBody() {
         </label>
         <label class="inv-edit-label">
           Customer email
-          <input type="email" id="inv-edit-email" class="inv-edit-input" value="${escHtml(inv.email || '')}" placeholder="customer@example.com" oninput="window._invMemoDirty=true; _updateBeforeUnloadGuard()">
+          <input type="email" id="inv-edit-email" class="inv-edit-input" value="${escHtml(inv.email || '')}" placeholder="customer@example.com" oninput="window._invMemoDirty=true; window._invSendDirty=true; _updateBeforeUnloadGuard()">
         </label>
         <label class="inv-edit-label" style="grid-column:1/-1">
           Message on invoice
@@ -327,6 +328,7 @@ async function saveInvoiceChanges() {
     msg.textContent = 'Saved';
     msg.className = 'inv-action-msg inv-msg-ok';
     window._invMemoDirty = false;
+    window._invSendDirty = false;
     if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
   } catch (e) {
     msg.textContent = e.message;
@@ -362,6 +364,8 @@ async function sendInvoice() {
     if (r.error) throw new Error(r.error);
     msg.textContent = `Sent to ${email || inv.email}`;
     msg.className = 'inv-action-msg inv-msg-ok';
+    window._invSendDirty = false;
+    if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
   } catch (e) {
     msg.textContent = e.message;
     msg.className = 'inv-action-msg inv-msg-err';
