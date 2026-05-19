@@ -735,10 +735,10 @@
     const allowRow = a => `
       <tr>
         <td>${esc(a.email)}</td>
-        <td><span class="badge ${a.note === 'admin' ? 'badge-approved' : ''}">${esc(a.note || '—')}</span></td>
+        <td><span class="badge ${a.protected ? 'badge-approved' : ''}">${esc(a.note || '—')}</span></td>
         <td style="color:var(--ink-4);font-size:.78rem;">${fmtDate(a.approved_at)}</td>
         <td class="actions">
-          ${a.note === 'admin'
+          ${a.protected
             ? '<span style="color:var(--ink-4);font-size:.75rem;">Protected</span>'
             : `<button class="btn btn-danger" onclick="revoke('${esc(a.email)}')">Revoke</button>`}
         </td>
@@ -759,6 +759,27 @@
                <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th></th></tr></thead>
                <tbody>${pending.map(reqRow).join('')}</tbody>
              </table>`}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Add team member</div>
+        <p style="font-size:.82rem;color:var(--ink-3);margin:0 0 14px;">
+          Proactively approve an email address so the person can sign in straight away — no request needed.
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px;">
+            <label style="font-size:.72rem;font-weight:700;color:var(--ink-3);">Email address</label>
+            <input class="field" id="invite-email" type="email" placeholder="colleague@example.com" maxlength="254"
+              onkeydown="if(event.key==='Enter')addAllowed()">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px;">
+            <label style="font-size:.72rem;font-weight:700;color:var(--ink-3);">Note <span style="font-weight:400;">(optional)</span></label>
+            <input class="field" id="invite-note" type="text" placeholder="e.g. New hire, Site manager…" maxlength="200"
+              onkeydown="if(event.key==='Enter')addAllowed()">
+          </div>
+          <button class="btn btn-primary" id="invite-btn" onclick="addAllowed()">Add</button>
+        </div>
+        <div id="invite-err" style="display:none;font-size:.8rem;color:#991b1b;margin-top:8px;"></div>
       </div>
 
       <div class="card">
@@ -803,6 +824,39 @@
       toast('Access revoked');
       await reload();
     } catch (e) { toast(e.message, true); }
+  }
+
+  async function addAllowed() {
+    const emailInp = $('#invite-email');
+    const noteInp  = $('#invite-note');
+    const btn      = $('#invite-btn');
+    const errEl    = $('#invite-err');
+    if (!emailInp) return;
+
+    const email = emailInp.value.trim();
+    const note  = noteInp?.value.trim() || '';
+
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (errEl) { errEl.textContent = 'Please enter a valid email address.'; errEl.style.display = ''; }
+      emailInp.focus();
+      return;
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+    try {
+      await api('POST', '/api/admin/allowed', { email, note });
+      emailInp.value = '';
+      if (noteInp) noteInp.value = '';
+      toast('Email added — they can now sign in');
+      await reload();
+    } catch (e) {
+      if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
+      else toast(e.message, true);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Add'; }
+    }
   }
 
   /* ────────────────────────────────────────────────

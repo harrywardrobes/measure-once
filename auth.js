@@ -502,12 +502,36 @@ async function setupAuth(app) {
     }
   });
 
+  app.post('/api/admin/allowed', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const email = (req.body?.email || '').trim().toLowerCase();
+      const note  = (req.body?.note  || '').trim().slice(0, 200) || null;
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: 'Please provide a valid email address.' });
+      }
+      const r = await pool.query(
+        `INSERT INTO allowed_emails (email, note)
+         VALUES ($1, $2)
+         ON CONFLICT (email) DO NOTHING
+         RETURNING email, approved_at, note`,
+        [email, note]
+      );
+      if (r.rowCount === 0) {
+        return res.status(409).json({ error: 'This email is already on the approved list.' });
+      }
+      res.json({ ok: true, row: r.rows[0] });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get('/api/admin/allowed', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
         `SELECT email, approved_at, note FROM allowed_emails ORDER BY approved_at DESC`
       );
-      res.json(r.rows);
+      const adminSet = getAdminEmails();
+      res.json(r.rows.map(row => ({ ...row, protected: adminSet.has(row.email) })));
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
