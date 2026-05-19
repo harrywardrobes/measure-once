@@ -1,6 +1,7 @@
 // ── Trades Directory ──────────────────────────────────────────────────────────
 let _tradeContacts = [];
 let _tradeDeleteId = null;
+const MAX_CONTACTS = 3;
 
 function tradeSkeletonHtml(namePct, badgeW, areasW, contactRow) {
   return `
@@ -46,12 +47,13 @@ async function loadTradeContacts() {
 function filterTradeContacts(query) {
   const q = (query || '').toLowerCase().trim();
   if (!q) return renderTradeContacts(_tradeContacts);
-  const filtered = _tradeContacts.filter(c =>
-    (c.name        || '').toLowerCase().includes(q) ||
-    (c.trade_type  || '').toLowerCase().includes(q) ||
-    (c.areas_served|| '').toLowerCase().includes(q) ||
-    (c.company_name|| '').toLowerCase().includes(q)
-  );
+  const filtered = _tradeContacts.filter(co => {
+    if ((co.company_name || '').toLowerCase().includes(q)) return true;
+    if ((co.trade_type   || '').toLowerCase().includes(q)) return true;
+    if ((co.areas_served || '').toLowerCase().includes(q)) return true;
+    const cts = co.contacts || [];
+    return cts.some(c => (c.name || '').toLowerCase().includes(q));
+  });
   renderTradeContacts(filtered);
 }
 
@@ -59,28 +61,36 @@ function renderTradeContacts(contacts) {
   const list = document.getElementById('trades-list');
   if (!list) return;
   if (!contacts.length) {
-    list.innerHTML = '<div class="trades-empty">No trade contacts found.</div>';
+    list.innerHTML = '<div class="trades-empty">No trade companies found.</div>';
     return;
   }
   list.innerHTML = contacts.map(tradeCardHtml).join('');
 }
 
-function tradeCardHtml(c) {
-  const name    = escHtml(c.name || '');
-  const trade   = escHtml(c.trade_type || '');
-  const areas   = escHtml(c.areas_served || '');
-  const company = escHtml(c.company_name || '');
-  const phone   = escHtml(c.phone || '');
-  const email   = escHtml(c.email || '');
-  const timescale   = escHtml(c.timescale || '');
-  const payTerms    = escHtml(c.payment_terms || '');
-  const invMethod   = escHtml(c.invoice_method || '');
-  const notes   = escHtml(c.notes || '');
-  const id      = c.id;
+function tradeCardHtml(co) {
+  const company = escHtml(co.company_name || '');
+  const trade   = escHtml(co.trade_type   || '');
+  const areas   = escHtml(co.areas_served || '');
+  const timescale  = escHtml(co.timescale      || '');
+  const payTerms   = escHtml(co.payment_terms  || '');
+  const invMethod  = escHtml(co.invoice_method || '');
+  const notes      = escHtml(co.notes          || '');
+  const id = co.id;
 
-  const phoneLine  = phone  ? `<a href="tel:${phone}" class="trades-card-link">${phone}</a>` : '';
-  const emailLine  = email  ? `<a href="mailto:${email}" class="trades-card-link">${email}</a>` : '';
-  const companyLine = company ? `<span class="trades-card-company">${company}</span>` : '';
+  const contactsHtml = (co.contacts || []).map(c => {
+    const cName  = escHtml(c.name  || '');
+    const cRole  = escHtml(c.role  || '');
+    const cPhone = escHtml(c.phone || '');
+    const cEmail = escHtml(c.email || '');
+    const phoneLink = cPhone ? `<a href="tel:${cPhone}" class="trades-card-link">${cPhone}</a>` : '';
+    const emailLink = cEmail ? `<a href="mailto:${cEmail}" class="trades-card-link">${cEmail}</a>` : '';
+    return `<div class="trades-card-person">
+      <div class="trades-card-person-top">
+        <span class="trades-card-person-name">${cName}</span>${cRole ? `<span class="trades-card-person-role">${cRole}</span>` : ''}
+      </div>
+      ${(phoneLink || emailLink) ? `<div class="trades-card-contact-row">${phoneLink}${emailLink}</div>` : ''}
+    </div>`;
+  }).join('');
 
   const detailParts = [];
   if (timescale)  detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Lead time:</span> ${timescale}</span>`);
@@ -91,35 +101,114 @@ function tradeCardHtml(c) {
     <div class="trades-card" data-id="${id}">
       <div class="trades-card-top">
         <div class="trades-card-info">
-          <div class="trades-card-name">${name}</div>
+          <div class="trades-card-name">${company}</div>
           <div class="trades-card-trade-row">
             <span class="trades-card-trade-badge">${trade}</span>
             ${areas ? `<span class="trades-card-areas">${areas}</span>` : ''}
           </div>
-          ${companyLine}
         </div>
         <div class="trades-card-actions">
-          <button class="trades-card-btn" onclick="openTradesModal(${id})" title="Edit" aria-label="Edit contact">
+          <button class="trades-card-btn" onclick="openTradesModal(${id})" title="Edit" aria-label="Edit company">
             <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
             </svg>
           </button>
-          <button class="trades-card-btn trades-card-btn-danger" onclick="openDeleteConfirm(${id})" title="Delete" aria-label="Delete contact">
+          <button class="trades-card-btn trades-card-btn-danger" onclick="openDeleteConfirm(${id})" title="Delete" aria-label="Delete company">
             <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
             </svg>
           </button>
         </div>
       </div>
-      ${(phoneLine || emailLine) ? `
-      <div class="trades-card-contact-row">
-        ${phoneLine}
-        ${emailLine}
-      </div>` : ''}
+      ${contactsHtml ? `<div class="trades-card-persons">${contactsHtml}</div>` : ''}
       ${detailParts.length ? `<div class="trades-card-details">${detailParts.join('')}</div>` : ''}
       ${notes ? `<div class="trades-card-notes">${notes}</div>` : ''}
     </div>`;
 }
+
+// ── Contact slot management ────────────────────────────────────────────────────
+
+function contactSlotHtml(index, data) {
+  const isFirst = index === 0;
+  const name  = escHtml(data?.name  || '');
+  const role  = escHtml(data?.role  || '');
+  const phone = escHtml(data?.phone || '');
+  const email = escHtml(data?.email || '');
+  return `
+    <div class="trades-contact-slot" data-slot="${index}">
+      <div class="trades-contact-slot-header">
+        <span class="trades-contact-slot-label">Contact ${index + 1}</span>
+        ${!isFirst ? `<button type="button" class="trades-contact-remove-btn" onclick="removeContactSlot(${index})" aria-label="Remove contact ${index + 1}">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>` : ''}
+      </div>
+      <div class="trades-form-row trades-form-row-2">
+        <div class="trades-field">
+          <label class="trades-label" for="tf-cname-${index}">Full name${isFirst ? ' <span class="trades-required">*</span>' : ''}</label>
+          <input class="trades-input" id="tf-cname-${index}" type="text" placeholder="e.g. John Smith" value="${name}"${isFirst ? ' required' : ''}>
+        </div>
+        <div class="trades-field">
+          <label class="trades-label" for="tf-crole-${index}">Role / job title</label>
+          <input class="trades-input" id="tf-crole-${index}" type="text" placeholder="e.g. Director, Site Manager" value="${role}">
+        </div>
+      </div>
+      <div class="trades-form-row trades-form-row-2">
+        <div class="trades-field">
+          <label class="trades-label" for="tf-cphone-${index}">Phone number</label>
+          <input class="trades-input" id="tf-cphone-${index}" type="tel" placeholder="e.g. 07700 900123" value="${phone}">
+        </div>
+        <div class="trades-field">
+          <label class="trades-label" for="tf-cemail-${index}">Email address</label>
+          <input class="trades-input" id="tf-cemail-${index}" type="email" placeholder="e.g. john@example.com" value="${email}">
+        </div>
+      </div>
+    </div>`;
+}
+
+function getSlotCount() {
+  return document.querySelectorAll('#trades-contacts-list .trades-contact-slot').length;
+}
+
+function addContactSlot(data) {
+  const list = document.getElementById('trades-contacts-list');
+  const btn  = document.getElementById('trades-add-contact-btn');
+  if (!list) return;
+  const index = getSlotCount();
+  if (index >= MAX_CONTACTS) return;
+  list.insertAdjacentHTML('beforeend', contactSlotHtml(index, data || {}));
+  if (getSlotCount() >= MAX_CONTACTS) btn.style.display = 'none';
+}
+
+function removeContactSlot(index) {
+  const slot = document.querySelector(`#trades-contacts-list .trades-contact-slot[data-slot="${index}"]`);
+  if (!slot) return;
+  const existingData = collectContactSlots();
+  existingData.splice(index, 1);
+  rebuildContactSlots(existingData);
+}
+
+function rebuildContactSlots(dataArr) {
+  const list = document.getElementById('trades-contacts-list');
+  const btn  = document.getElementById('trades-add-contact-btn');
+  if (!list) return;
+  list.innerHTML = '';
+  dataArr.slice(0, MAX_CONTACTS).forEach((d, i) => list.insertAdjacentHTML('beforeend', contactSlotHtml(i, d)));
+  btn.style.display = getSlotCount() >= MAX_CONTACTS ? 'none' : '';
+}
+
+function collectContactSlots() {
+  const slots = document.querySelectorAll('#trades-contacts-list .trades-contact-slot');
+  return Array.from(slots).map((_, i) => ({
+    name:  (document.getElementById(`tf-cname-${i}`)  || {}).value || '',
+    role:  (document.getElementById(`tf-crole-${i}`)  || {}).value || '',
+    phone: (document.getElementById(`tf-cphone-${i}`) || {}).value || '',
+    email: (document.getElementById(`tf-cemail-${i}`) || {}).value || '',
+  }));
+}
+
+// ── Modal open / close ─────────────────────────────────────────────────────────
 
 function openTradesModal(id) {
   const modal   = document.getElementById('trades-modal');
@@ -130,30 +219,30 @@ function openTradesModal(id) {
   resetTradesForm();
 
   if (id) {
-    const contact = _tradeContacts.find(c => c.id === id);
-    if (!contact) return;
-    title.textContent = 'Edit Contact';
+    const co = _tradeContacts.find(c => c.id === id);
+    if (!co) return;
+    title.textContent = 'Edit Company';
     editId.value = id;
-    document.getElementById('tf-name').value           = contact.name || '';
-    document.getElementById('tf-trade').value          = contact.trade_type || '';
-    document.getElementById('tf-phone').value          = contact.phone || '';
-    document.getElementById('tf-email').value          = contact.email || '';
-    document.getElementById('tf-areas').value          = contact.areas_served || '';
-    document.getElementById('tf-company').value        = contact.company_name || '';
-    document.getElementById('tf-timescale').value      = contact.timescale || '';
-    document.getElementById('tf-invoice-method').value = contact.invoice_method || '';
-    document.getElementById('tf-payment-terms').value  = contact.payment_terms || '';
-    document.getElementById('tf-notes').value          = contact.notes || '';
+    document.getElementById('tf-company').value        = co.company_name    || '';
+    document.getElementById('tf-trade').value          = co.trade_type      || '';
+    document.getElementById('tf-areas').value          = co.areas_served    || '';
+    document.getElementById('tf-timescale').value      = co.timescale       || '';
+    document.getElementById('tf-invoice-method').value = co.invoice_method  || '';
+    document.getElementById('tf-payment-terms').value  = co.payment_terms   || '';
+    document.getElementById('tf-notes').value          = co.notes           || '';
+    const existingContacts = (co.contacts || []).length ? co.contacts : [{}];
+    rebuildContactSlots(existingContacts);
     document.getElementById('trades-submit-btn').textContent = 'Save Changes';
   } else {
-    title.textContent = 'Add Contact';
-    document.getElementById('trades-submit-btn').textContent = 'Save Contact';
+    title.textContent = 'Add Company';
+    document.getElementById('trades-submit-btn').textContent = 'Save Company';
+    rebuildContactSlots([{}]);
   }
 
   overlay.classList.remove('hidden');
   modal.classList.add('trades-modal-open');
   modal.setAttribute('aria-hidden', 'false');
-  document.getElementById('tf-name').focus();
+  document.getElementById('tf-company').focus();
 }
 
 function closeTradesModal() {
@@ -169,24 +258,33 @@ function resetTradesForm() {
   document.getElementById('trades-form').reset();
   document.getElementById('trades-edit-id').value = '';
   const submitBtn = document.getElementById('trades-submit-btn');
-  if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save Contact'; }
+  if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save Company'; }
+  const list = document.getElementById('trades-contacts-list');
+  if (list) list.innerHTML = '';
+  const btn = document.getElementById('trades-add-contact-btn');
+  if (btn) btn.style.display = '';
 }
 
 async function saveTradeContact(e) {
   e.preventDefault();
   const submitBtn = document.getElementById('trades-submit-btn');
   const editId    = document.getElementById('trades-edit-id').value;
+
+  const contacts = collectContactSlots().filter(c => c.name.trim());
+  if (!contacts.length) {
+    showToast('At least one contact with a name is required', true);
+    return;
+  }
+
   const body = {
-    name:           document.getElementById('tf-name').value.trim(),
-    trade_type:     document.getElementById('tf-trade').value.trim(),
-    phone:          document.getElementById('tf-phone').value.trim(),
-    email:          document.getElementById('tf-email').value.trim(),
-    areas_served:   document.getElementById('tf-areas').value.trim(),
     company_name:   document.getElementById('tf-company').value.trim(),
+    trade_type:     document.getElementById('tf-trade').value.trim(),
+    areas_served:   document.getElementById('tf-areas').value.trim(),
     timescale:      document.getElementById('tf-timescale').value.trim(),
     invoice_method: document.getElementById('tf-invoice-method').value.trim(),
     payment_terms:  document.getElementById('tf-payment-terms').value.trim(),
     notes:          document.getElementById('tf-notes').value.trim(),
+    contacts,
   };
 
   submitBtn.disabled = true;
@@ -197,19 +295,19 @@ async function saveTradeContact(e) {
       const updated = await api('PUT', `/api/trades/${editId}`, body);
       const idx = _tradeContacts.findIndex(c => c.id === updated.id);
       if (idx !== -1) _tradeContacts[idx] = updated;
-      showToast('Contact updated');
+      showToast('Company updated');
     } else {
       const created = await POST('/api/trades', body);
       _tradeContacts.unshift(created);
-      showToast('Contact added');
+      showToast('Company added');
     }
     closeTradesModal();
     const searchInput = document.getElementById('trades-search');
     filterTradeContacts(searchInput ? searchInput.value : '');
   } catch (err) {
-    showToast(err.message || 'Failed to save contact', true);
+    showToast(err.message || 'Failed to save company', true);
     submitBtn.disabled = false;
-    submitBtn.textContent = editId ? 'Save Changes' : 'Save Contact';
+    submitBtn.textContent = editId ? 'Save Changes' : 'Save Company';
   }
 }
 
@@ -241,9 +339,9 @@ async function confirmDeleteTrade() {
     closeDeleteConfirm();
     const searchInput = document.getElementById('trades-search');
     filterTradeContacts(searchInput ? searchInput.value : '');
-    showToast('Contact deleted');
+    showToast('Company deleted');
   } catch (err) {
-    showToast(err.message || 'Failed to delete contact', true);
+    showToast(err.message || 'Failed to delete company', true);
     btn.disabled = false;
     btn.textContent = 'Delete';
   }

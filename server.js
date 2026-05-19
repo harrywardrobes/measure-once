@@ -1114,6 +1114,56 @@ async function ensureTradesTable() {
       created_at     TIMESTAMP DEFAULT NOW()
     );
   `);
+  await _tradesPool.query(`
+    CREATE TABLE IF NOT EXISTS trade_companies (
+      id             SERIAL PRIMARY KEY,
+      company_name   VARCHAR NOT NULL,
+      trade_type     VARCHAR NOT NULL,
+      areas_served   TEXT,
+      timescale      VARCHAR,
+      invoice_method VARCHAR,
+      payment_terms  VARCHAR,
+      notes          TEXT,
+      created_by     VARCHAR,
+      created_at     TIMESTAMP DEFAULT NOW(),
+      legacy_id      INTEGER
+    );
+  `);
+  await _tradesPool.query(`
+    CREATE TABLE IF NOT EXISTS trade_company_contacts (
+      id         SERIAL PRIMARY KEY,
+      company_id INTEGER NOT NULL REFERENCES trade_companies(id) ON DELETE CASCADE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      name       VARCHAR NOT NULL,
+      role       VARCHAR,
+      phone      VARCHAR,
+      email      VARCHAR
+    );
+  `);
+  const { rows: unmigratedRows } = await _tradesPool.query(`
+    SELECT * FROM trade_contacts
+    WHERE id NOT IN (
+      SELECT legacy_id FROM trade_companies WHERE legacy_id IS NOT NULL
+    )
+    ORDER BY created_at ASC
+  `);
+  for (const row of unmigratedRows) {
+    const coName = (row.company_name || '').trim() || row.name;
+    const { rows: [co] } = await _tradesPool.query(
+      `INSERT INTO trade_companies
+        (company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, created_by, created_at, legacy_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING id`,
+      [coName, row.trade_type, row.areas_served || '', row.timescale || '',
+       row.invoice_method || '', row.payment_terms || '', row.notes || '',
+       row.created_by, row.created_at, row.id]
+    );
+    await _tradesPool.query(
+      `INSERT INTO trade_company_contacts (company_id, sort_order, name, role, phone, email)
+       VALUES ($1, 0, $2, '', $3, $4)`,
+      [co.id, row.name, row.phone || '', row.email || '']
+    );
+  }
 }
 
 app.get('/trades', isAuthenticated, requireManagerOrAdmin, (_req, res) => {
@@ -1122,66 +1172,107 @@ app.get('/trades', isAuthenticated, requireManagerOrAdmin, (_req, res) => {
 
 app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
   try {
-    const r = await _tradesPool.query(
-      `SELECT * FROM trade_contacts ORDER BY created_at DESC`
+    const { rows: companies } = await _tradesPool.query(
+      `SELECT * FROM trade_companies ORDER BY created_at DESC`
     );
-    res.json(r.rows);
+    const { rows: contacts } = await _tradesPool.query(
+      `SELECT * FROM trade_company_contacts ORDER BY company_id, sort_order, id`
+    );
+    const contactMap = {};
+    for (const c of contacts) {
+      if (!contactMap[c.company_id]) contactMap[c.company_id] = [];
+      contactMap[c.company_id].push(c);
+    }
+    const result = companies.map(co => ({
+      ...co,
+      contacts: contactMap[co.id] || []
+    }));
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
 app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
-  const { name, trade_type, phone, email, areas_served, company_name, timescale, invoice_method, payment_terms, notes } = req.body || {};
-  if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required.' });
+  const { company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, contacts } = req.body || {};
+  if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'Company name is required.' });
   if (!trade_type || !trade_type.trim()) return res.status(400).json({ error: 'Trade type is required.' });
+  const validContacts = (contacts || []).filter(c => c && (c.name || '').trim());
+  if (!validContacts.length) return res.status(400).json({ error: 'At least one contact person with a name is required.' });
+  if (validContacts.length > 3) return res.status(400).json({ error: 'A maximum of 3 contacts per company is allowed.' });
+  const client = await _tradesPool.connect();
   try {
-    const r = await _tradesPool.query(
-      `INSERT INTO trade_contacts
-        (name, trade_type, phone, email, areas_served, company_name, timescale, invoice_method, payment_terms, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+    await client.query('BEGIN');
+    const { rows: [co] } = await client.query(
+      `INSERT INTO trade_companies
+        (company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING *`,
-      [
-        name.trim(), trade_type.trim(),
-        (phone || '').trim(), (email || '').trim(),
-        (areas_served || '').trim(), (company_name || '').trim(),
-        (timescale || '').trim(), (invoice_method || '').trim(),
-        (payment_terms || '').trim(), (notes || '').trim(),
-        req.user?.claims?.sub || null
-      ]
+      [company_name.trim(), trade_type.trim(), (areas_served || '').trim(),
+       (timescale || '').trim(), (invoice_method || '').trim(),
+       (payment_terms || '').trim(), (notes || '').trim(),
+       req.user?.claims?.sub || null]
     );
-    res.status(201).json(r.rows[0]);
+    const insertedContacts = [];
+    for (let i = 0; i < validContacts.length; i++) {
+      const ct = validContacts[i];
+      const { rows: [cc] } = await client.query(
+        `INSERT INTO trade_company_contacts (company_id, sort_order, name, role, phone, email)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [co.id, i, ct.name.trim(), (ct.role || '').trim(), (ct.phone || '').trim(), (ct.email || '').trim()]
+      );
+      insertedContacts.push(cc);
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ ...co, contacts: insertedContacts });
   } catch (e) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
   }
 });
 
 app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid id.' });
-  const { name, trade_type, phone, email, areas_served, company_name, timescale, invoice_method, payment_terms, notes } = req.body || {};
-  if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required.' });
+  const { company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, contacts } = req.body || {};
+  if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'Company name is required.' });
   if (!trade_type || !trade_type.trim()) return res.status(400).json({ error: 'Trade type is required.' });
+  const validContacts = (contacts || []).filter(c => c && (c.name || '').trim());
+  if (!validContacts.length) return res.status(400).json({ error: 'At least one contact person with a name is required.' });
+  if (validContacts.length > 3) return res.status(400).json({ error: 'A maximum of 3 contacts per company is allowed.' });
+  const client = await _tradesPool.connect();
   try {
-    const r = await _tradesPool.query(
-      `UPDATE trade_contacts
-       SET name=$1, trade_type=$2, phone=$3, email=$4, areas_served=$5,
-           company_name=$6, timescale=$7, invoice_method=$8, payment_terms=$9, notes=$10
-       WHERE id=$11
-       RETURNING *`,
-      [
-        name.trim(), trade_type.trim(),
-        (phone || '').trim(), (email || '').trim(),
-        (areas_served || '').trim(), (company_name || '').trim(),
-        (timescale || '').trim(), (invoice_method || '').trim(),
-        (payment_terms || '').trim(), (notes || '').trim(),
-        id
-      ]
+    await client.query('BEGIN');
+    const { rows: [co], rowCount } = await client.query(
+      `UPDATE trade_companies
+       SET company_name=$1, trade_type=$2, areas_served=$3, timescale=$4,
+           invoice_method=$5, payment_terms=$6, notes=$7
+       WHERE id=$8 RETURNING *`,
+      [company_name.trim(), trade_type.trim(), (areas_served || '').trim(),
+       (timescale || '').trim(), (invoice_method || '').trim(),
+       (payment_terms || '').trim(), (notes || '').trim(), id]
     );
-    if (!r.rowCount) return res.status(404).json({ error: 'Contact not found.' });
-    res.json(r.rows[0]);
+    if (!rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Company not found.' }); }
+    await client.query(`DELETE FROM trade_company_contacts WHERE company_id=$1`, [id]);
+    const insertedContacts = [];
+    for (let i = 0; i < validContacts.length; i++) {
+      const ct = validContacts[i];
+      const { rows: [cc] } = await client.query(
+        `INSERT INTO trade_company_contacts (company_id, sort_order, name, role, phone, email)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [id, i, ct.name.trim(), (ct.role || '').trim(), (ct.phone || '').trim(), (ct.email || '').trim()]
+      );
+      insertedContacts.push(cc);
+    }
+    await client.query('COMMIT');
+    res.json({ ...co, contacts: insertedContacts });
   } catch (e) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -1189,8 +1280,8 @@ app.delete('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid id.' });
   try {
-    const r = await _tradesPool.query(`DELETE FROM trade_contacts WHERE id=$1`, [id]);
-    if (!r.rowCount) return res.status(404).json({ error: 'Contact not found.' });
+    const r = await _tradesPool.query(`DELETE FROM trade_companies WHERE id=$1`, [id]);
+    if (!r.rowCount) return res.status(404).json({ error: 'Company not found.' });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

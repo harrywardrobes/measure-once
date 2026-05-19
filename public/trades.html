@@ -23,7 +23,7 @@
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
         </svg>
-        Add Contact
+        Add Company
       </button>
     </div>
 
@@ -31,7 +31,7 @@
       <svg class="trades-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
       </svg>
-      <input id="trades-search" type="text" placeholder="Search by name, trade, or area…"
+      <input id="trades-search" type="text" placeholder="Search by company, trade, area, or contact…"
         class="trades-search-input" autocomplete="off"
         oninput="filterTradeContacts(this.value)">
     </div>
@@ -44,7 +44,7 @@
   <div id="trades-modal-overlay" class="trades-modal-overlay hidden" onclick="closeTradesModal()"></div>
   <div id="trades-modal" class="trades-modal" role="dialog" aria-modal="true" aria-labelledby="trades-modal-title" aria-hidden="true">
     <div class="trades-modal-header">
-      <h2 class="trades-modal-title" id="trades-modal-title">Add Contact</h2>
+      <h2 class="trades-modal-title" id="trades-modal-title">Add Company</h2>
       <button class="trades-modal-close" onclick="closeTradesModal()" aria-label="Close">
         <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -56,8 +56,8 @@
 
       <div class="trades-form-row trades-form-row-2">
         <div class="trades-field">
-          <label class="trades-label" for="tf-name">Full name <span class="trades-required">*</span></label>
-          <input class="trades-input" id="tf-name" type="text" placeholder="e.g. John Smith" required>
+          <label class="trades-label" for="tf-company">Company name <span class="trades-required">*</span></label>
+          <input class="trades-input" id="tf-company" type="text" placeholder="e.g. Cheshire Electrical" required>
         </div>
         <div class="trades-field">
           <label class="trades-label" for="tf-trade">Trade type <span class="trades-required">*</span></label>
@@ -77,28 +77,10 @@
         </div>
       </div>
 
-      <div class="trades-form-row trades-form-row-2">
-        <div class="trades-field">
-          <label class="trades-label" for="tf-phone">Phone number</label>
-          <input class="trades-input" id="tf-phone" type="tel" placeholder="e.g. 07700 900123">
-        </div>
-        <div class="trades-field">
-          <label class="trades-label" for="tf-email">Email address</label>
-          <input class="trades-input" id="tf-email" type="email" placeholder="e.g. john@example.com">
-        </div>
-      </div>
-
       <div class="trades-form-row">
         <div class="trades-field">
           <label class="trades-label" for="tf-areas">Areas served</label>
           <input class="trades-input" id="tf-areas" type="text" placeholder="e.g. Manchester, Salford, Trafford">
-        </div>
-      </div>
-
-      <div class="trades-form-row">
-        <div class="trades-field">
-          <label class="trades-label" for="tf-company">Company name <span class="trades-optional">(optional)</span></label>
-          <input class="trades-input" id="tf-company" type="text" placeholder="e.g. Smith Electrical Ltd">
         </div>
       </div>
 
@@ -127,16 +109,30 @@
         </div>
       </div>
 
+      <div class="trades-contacts-section">
+        <div class="trades-contacts-header">
+          <span class="trades-contacts-title">Points of Contact</span>
+          <span class="trades-contacts-hint">At least one required</span>
+        </div>
+        <div id="trades-contacts-list"></div>
+        <button type="button" class="trades-add-contact-btn" id="trades-add-contact-btn" onclick="addContactSlot()">
+          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+          </svg>
+          Add another contact
+        </button>
+      </div>
+
       <div class="trades-form-footer">
         <button type="button" class="trades-btn-secondary" onclick="closeTradesModal()">Cancel</button>
-        <button type="submit" class="trades-btn-primary" id="trades-submit-btn">Save Contact</button>
+        <button type="submit" class="trades-btn-primary" id="trades-submit-btn">Save Company</button>
       </div>
     </form>
   </div>
 
   <div id="trades-delete-overlay" class="trades-modal-overlay hidden" onclick="closeDeleteConfirm()"></div>
   <div id="trades-delete-modal" class="trades-delete-modal" role="dialog" aria-modal="true" aria-hidden="true">
-    <p class="trades-delete-msg">Delete this contact? This cannot be undone.</p>
+    <p class="trades-delete-msg">Delete this company and all its contacts? This cannot be undone.</p>
     <div class="trades-delete-actions">
       <button class="trades-btn-secondary" onclick="closeDeleteConfirm()">Cancel</button>
       <button class="trades-btn-danger" id="trades-delete-confirm-btn" onclick="confirmDeleteTrade()">Delete</button>

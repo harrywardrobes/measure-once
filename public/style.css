@@ -3187,6 +3187,24 @@ body.showing-workflow .sales-layout #workflow-panel {
   display: block; font-size: 0.8rem; color: var(--ink-3);
   margin-bottom: 2px;
 }
+
+.trades-card-persons {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--stone-light);
+}
+.trades-card-person {}
+.trades-card-person-top {
+  display: flex; align-items: baseline; gap: 6px;
+  margin-bottom: 3px;
+}
+.trades-card-person-name {
+  font-size: 0.85rem; font-weight: 600; color: var(--ink-2);
+}
+.trades-card-person-role {
+  font-size: 0.75rem; color: var(--ink-4);
+}
 .trades-card-actions {
   display: flex; gap: 4px; flex-shrink: 0;
 }
@@ -3278,6 +3296,60 @@ body.showing-workflow .sales-layout #workflow-panel {
 }
 .trades-input:focus { border-color: var(--orchid); }
 .trades-textarea { resize: vertical; min-height: 70px; }
+
+.trades-contacts-section {
+  border-top: 1.5px solid var(--stone-light);
+  margin-top: 4px;
+  padding-top: 14px;
+  margin-bottom: 12px;
+}
+.trades-contacts-header {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-bottom: 12px;
+}
+.trades-contacts-title {
+  font-size: 0.88rem; font-weight: 700; color: var(--ink-1);
+}
+.trades-contacts-hint {
+  font-size: 0.75rem; color: var(--ink-4);
+}
+.trades-contact-slot {
+  background: var(--paper);
+  border: 1.5px solid var(--stone-light);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.trades-contact-slot-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.trades-contact-slot-label {
+  font-size: 0.78rem; font-weight: 700; color: var(--ink-3);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.trades-contact-remove-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: var(--radius-sm);
+  border: 1px solid var(--stone); background: var(--chalk);
+  color: var(--ink-4); cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.trades-contact-remove-btn:hover {
+  background: #fee2e2; color: #dc2626; border-color: #fca5a5;
+}
+.trades-add-contact-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: none; border: 1.5px dashed var(--stone);
+  border-radius: var(--radius-md); color: var(--ink-3);
+  padding: 7px 14px; font-size: 0.82rem; font-weight: 600;
+  font-family: inherit; cursor: pointer; width: 100%;
+  justify-content: center;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.trades-add-contact-btn:hover {
+  border-color: var(--orchid); color: var(--orchid); background: var(--orchid-tint);
+}
 
 .trades-form-footer {
   display: flex; gap: 8px; justify-content: flex-end;
