@@ -422,6 +422,19 @@ function openLeadStatusPicker(event, contactId) {
   setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
 }
 
+function _syncLeadStatusCache(contactId, status) {
+  try {
+    const cached = sessionStorage.getItem('contacts_all_cache');
+    if (!cached) return;
+    const arr = JSON.parse(cached);
+    const ci = arr.findIndex(c => c.id === contactId);
+    if (ci >= 0) {
+      arr[ci].properties = { ...(arr[ci].properties || {}), hs_lead_status: status };
+      sessionStorage.setItem('contacts_all_cache', JSON.stringify(arr));
+    }
+  } catch {}
+}
+
 async function quickSetLeadStatus(contactId, newStatus) {
   closeCardPicker();
   const contact = state.contacts.find(c => c.id === contactId);
@@ -430,23 +443,29 @@ async function quickSetLeadStatus(contactId, newStatus) {
 
   // Optimistic update
   if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: newStatus };
+  _syncLeadStatusCache(contactId, newStatus);
   populateLeadStatusFilter();
   renderCustomerList();
+  if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
 
   try {
     await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: newStatus });
     const newLabel = newStatus ? (LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)?.label || newStatus) : null;
     showBottomUndo(newLabel ? `Lead status set to ${newLabel}` : 'Lead status cleared', async () => {
       if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: prevStatus || '' };
+      _syncLeadStatusCache(contactId, prevStatus || '');
       populateLeadStatusFilter();
       renderCustomerList();
+      if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
       await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: prevStatus || '' }).catch(() => {});
     });
   } catch (e) {
     // Revert on failure
     if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: prevStatus || '' };
+    _syncLeadStatusCache(contactId, prevStatus || '');
     populateLeadStatusFilter();
     renderCustomerList();
+    if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
     showToast('Failed to update lead status', true);
   }
 }

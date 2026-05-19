@@ -563,6 +563,25 @@ function renderWorkflowHeader() {
         <div class="flex flex-wrap items-center gap-2 mt-1.5">
           <span class="text-xs font-semibold px-2.5 py-1 rounded-full"
                 style="background:${colour.light};color:${colour.text}">${escHtml(stageLabel)}</span>
+          ${(() => {
+            const raw = contact?.properties?.hs_lead_status || '';
+            const lsMap = {
+              'OPEN_DEAL':            { label: 'Open Deal',   cls: 'lsb-open-deal' },
+              'NEW':                  { label: 'New',          cls: 'lsb-new' },
+              'IN_PROGRESS':          { label: 'In Progress',  cls: 'lsb-in-progress' },
+              'OPEN':                 { label: 'Open',         cls: 'lsb-new' },
+              'CONNECTED':            { label: 'Connected',    cls: 'lsb-connected' },
+              'ATTEMPTED_TO_CONTACT': { label: 'Attempted',    cls: '' },
+              'UNQUALIFIED':          { label: 'Unqualified',  cls: 'lsb-unqualified' },
+              'BAD_TIMING':           { label: 'Bad Timing',   cls: 'lsb-bad-timing' },
+            };
+            const cid = contact?.id || '';
+            if (!raw) {
+              return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${cid}')">+ Lead Status</span>`;
+            }
+            const entry = lsMap[raw] || { label: raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()), cls: '' };
+            return `<span class="lead-status-badge ${entry.cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(entry.label)}</span>`;
+          })()}
           ${email ? `<a href="mailto:${escHtml(email)}" class="text-sm text-blue-600 hover:underline">${escHtml(email)}</a>` : ''}
           ${phone ? `<span class="text-sm text-slate-500">${escHtml(phone)}</span>` : ''}
           ${city  ? `<span class="text-sm text-slate-400">${escHtml(city)}</span>`  : ''}
