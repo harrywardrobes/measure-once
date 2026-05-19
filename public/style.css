@@ -200,11 +200,11 @@ body {
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(255,255,255,0.12);
   color: #fff;
-  padding: 7px 10px;
+  padding: 8px 16px;
   border-radius: var(--radius-md);
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.8rem;
+  font-size: .88rem;
   font-weight: 600;
   transition: background 0.15s;
   white-space: nowrap;
@@ -225,9 +225,9 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  font-size: .88rem;
   font-weight: 600;
-  padding: 6px 10px;
+  padding: 8px 16px;
   border-radius: var(--radius-md);
   color: #fff;
   white-space: nowrap;
@@ -449,12 +449,12 @@ body.showing-workflow .workflow-panel { display: flex; }
 
 /* ── List filter controls ────────────────────────────────────────────────────── */
 .filter-btn {
-  font-size: 12px;
+  font-size: .88rem;
   font-weight: 600;
   color: var(--ink-3);
   background: var(--paper-deep);
   border: 1px solid var(--stone);
-  padding: 6px 10px;
+  padding: 8px 16px;
   border-radius: var(--radius-md);
   cursor: pointer;
   white-space: nowrap;
@@ -472,9 +472,9 @@ body.showing-workflow .workflow-panel { display: flex; }
 
 /* ── Room tabs ───────────────────────────────────────────────────────────────── */
 .room-tab {
-  font-size: 0.78rem;
+  font-size: .88rem;
   font-weight: 600;
-  padding: 5px 12px;
+  padding: 8px 16px;
   border-radius: var(--radius-md);
   border: 1px solid var(--stone);
   background: var(--chalk);
@@ -492,9 +492,9 @@ body.showing-workflow .workflow-panel { display: flex; }
   border-color: var(--plum);
 }
 .room-tab-add {
-  font-size: 0.75rem;
+  font-size: .88rem;
   font-weight: 600;
-  padding: 5px 10px;
+  padding: 8px 16px;
   border-radius: var(--radius-md);
   border: 1px dashed var(--stone-deep);
   background: transparent;
@@ -509,9 +509,9 @@ body.showing-workflow .workflow-panel { display: flex; }
 .room-tab-wrap { display: inline-flex; align-items: stretch; }
 .room-tab-wrap .room-tab { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none; }
 .room-tab-del {
-  font-size: 0.85rem;
+  font-size: .88rem;
   line-height: 1;
-  padding: 0 8px;
+  padding: 8px 10px;
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
   border: 1px solid var(--stone);
   border-left: none;
@@ -676,21 +676,21 @@ body.showing-workflow .workflow-panel { display: flex; }
 .btn-save-note {
   background: var(--orchid);
   color: #fff;
-  font-size: 0.82rem;
+  font-size: .88rem;
   font-weight: 600;
   border: none;
   border-radius: var(--radius-md);
-  padding: 7px 18px;
+  padding: 8px 16px;
   cursor: pointer;
 }
 .btn-save-note:hover { opacity: 0.88; }
 .btn-cancel-note {
   background: none;
   color: var(--ink-3);
-  font-size: 0.82rem;
+  font-size: .88rem;
   border: none;
   cursor: pointer;
-  padding: 7px 10px;
+  padding: 8px 16px;
 }
 .btn-cancel-note:hover { color: var(--ink-1); }
 .comment-item {
@@ -898,9 +898,9 @@ body.showing-workflow .workflow-panel { display: flex; }
   flex-shrink: 0;
 }
 .bottom-bar-cancel {
-  font-size: 0.8rem;
+  font-size: .88rem;
   font-weight: 600;
-  padding: 7px 14px;
+  padding: 8px 16px;
   border-radius: var(--radius-md);
   border: 1px solid rgba(255,255,255,0.2);
   background: transparent;
@@ -911,9 +911,9 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 .bottom-bar-cancel:hover { background: rgba(255,255,255,0.1); }
 .bottom-bar-confirm {
-  font-size: 0.8rem;
+  font-size: .88rem;
   font-weight: 700;
-  padding: 7px 16px;
+  padding: 8px 16px;
   border-radius: var(--radius-md);
   border: none;
   background: var(--orchid);
@@ -924,9 +924,9 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 .bottom-bar-confirm:hover { background: var(--orchid-deep); }
 .bottom-bar-undo {
-  font-size: 0.8rem;
+  font-size: .88rem;
   font-weight: 700;
-  padding: 7px 16px;
+  padding: 8px 16px;
   border-radius: var(--radius-md);
   border: 1px solid rgba(255,255,255,0.3);
   background: transparent;
@@ -939,13 +939,13 @@ body.showing-workflow .workflow-panel { display: flex; }
 .bottom-bar-undo:hover { background: rgba(255,255,255,0.12); }
 
 .btn-move-back {
-  font-size: 0.75rem;
+  font-size: .88rem;
   font-weight: 600;
   color: var(--orchid);
   background: rgba(139,43,255,0.08);
   border: 1px solid rgba(139,43,255,0.2);
   border-radius: var(--radius-sm);
-  padding: 6px 12px;
+  padding: 8px 16px;
   cursor: pointer;
   font-family: inherit;
   transition: background 0.15s;
@@ -1571,9 +1571,9 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 .ptask-date-input:focus { border-color: var(--orchid-soft); }
 .ptask-cancel-btn {
-  font-size: 0.8rem;
+  font-size: .88rem;
   font-weight: 600;
-  padding: 6px 12px;
+  padding: 8px 16px;
   border-radius: var(--radius-md);
   border: 1px solid var(--stone);
   background: transparent;
@@ -1584,9 +1584,9 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 .ptask-cancel-btn:hover { background: var(--paper-deep); }
 .ptask-confirm-btn {
-  font-size: 0.8rem;
+  font-size: .88rem;
   font-weight: 700;
-  padding: 6px 14px;
+  padding: 8px 16px;
   border-radius: var(--radius-md);
   border: none;
   background: var(--orchid);
@@ -1597,13 +1597,13 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 .ptask-confirm-btn:hover { background: var(--orchid-deep); }
 .ptask-add-btn {
-  font-size: 0.85rem;
+  font-size: .88rem;
   font-weight: 600;
   color: var(--orchid);
   background: none;
   border: 1px dashed var(--orchid-soft);
   border-radius: var(--radius-lg);
-  padding: 10px 16px;
+  padding: 8px 16px;
   cursor: pointer;
   font-family: inherit;
   width: 100%;
@@ -1703,12 +1703,28 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   box-shadow: 0 0 0 3px rgba(139,43,255,0.10);
 }
 
+/* ── Shared button base ──────────────────────────────────────────────────────── */
+.btn {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-size: .88rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .15s, opacity .15s;
+  white-space: nowrap;
+}
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
 /* Primary action buttons (rendered via JS innerHTML) */
 .btn-primary {
   background: var(--orchid);
   color: #fff;
   border: none;
   border-radius: var(--radius-md);
+  padding: 8px 16px;
+  font-size: .88rem;
   font-family: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -1871,14 +1887,14 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .qb-connect-btn {
   display: inline-block; margin-top: 14px;
   background: #2ca01c; color: #fff;
-  padding: 10px 22px; border-radius: var(--radius-md);
-  font-size: 0.85rem; font-weight: 600;
+  padding: 8px 16px; border-radius: var(--radius-md);
+  font-size: .88rem; font-weight: 600;
   text-decoration: none; transition: background 0.15s;
 }
 .qb-connect-btn:hover { background: #208015; }
 .qb-disconnect-btn {
-  font-size: 0.75rem; font-weight: 600;
-  padding: 6px 12px; border-radius: var(--radius-md);
+  font-size: .88rem; font-weight: 600;
+  padding: 8px 16px; border-radius: var(--radius-md);
   border: 1px solid var(--stone-deep); background: transparent;
   color: var(--ink-3); cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; white-space: nowrap;
   font-family: inherit;
@@ -1886,8 +1902,8 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .qb-disconnect-btn:hover { border-color: #dc2626; color: #dc2626; background: #fee2e2; }
 .qb-refresh-btn {
   display: inline-flex; align-items: center; gap: 5px;
-  font-size: 0.75rem; font-weight: 600;
-  padding: 6px 12px; border-radius: var(--radius-md);
+  font-size: .88rem; font-weight: 600;
+  padding: 8px 16px; border-radius: var(--radius-md);
   border: 1px solid var(--stone); background: var(--chalk);
   color: var(--ink-2); cursor: pointer; transition: background 0.15s, border-color 0.15s;
   font-family: inherit;
@@ -1927,8 +1943,8 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   border-radius: var(--radius-md); width: fit-content;
 }
 .qb-filter-btn {
-  font-size: 0.78rem; font-weight: 600; font-family: inherit;
-  padding: 5px 14px; border-radius: calc(var(--radius-md) - 2px);
+  font-size: .88rem; font-weight: 600; font-family: inherit;
+  padding: 8px 16px; border-radius: calc(var(--radius-md) - 2px);
   border: none; background: transparent; color: var(--ink-3);
   cursor: pointer; transition: background 0.15s, color 0.15s; white-space: nowrap;
 }
@@ -2013,7 +2029,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .inv-actions-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 .inv-btn {
   display: inline-flex; align-items: center; gap: 6px;
-  font-size: 0.82rem; font-weight: 600; font-family: inherit;
+  font-size: .88rem; font-weight: 600; font-family: inherit;
   padding: 8px 16px; border-radius: var(--radius-md);
   cursor: pointer; transition: background 0.15s, opacity 0.15s; border: none; white-space: nowrap;
   text-decoration: none;
@@ -2212,8 +2228,8 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   color: #fff;
   border: none;
   border-radius: var(--radius-md);
-  padding: 7px 18px;
-  font-size: 0.82rem;
+  padding: 8px 16px;
+  font-size: .88rem;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -2226,8 +2242,8 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   color: var(--ink-2);
   border: 1px solid var(--stone);
   border-radius: var(--radius-md);
-  padding: 7px 14px;
-  font-size: 0.82rem;
+  padding: 8px 16px;
+  font-size: .88rem;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -2322,8 +2338,8 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .cal-nav-btn:hover { background: var(--stone-soft); }
 .cal-today-btn {
-  height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--stone-light);
-  background: #fff; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  padding: 8px 16px; border-radius: 8px; border: 1px solid var(--stone-light);
+  background: #fff; font-size: .88rem; font-weight: 600; cursor: pointer;
   color: var(--ink-2); font-family: inherit;
 }
 .cal-today-btn:hover { background: var(--stone-soft); }
@@ -2334,8 +2350,8 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   color: var(--ink-2); cursor: pointer;
 }
 .cal-new-btn {
-  height: 32px; padding: 0 14px; border-radius: 8px; border: none;
-  background: var(--orchid); color: #fff; font-size: 0.82rem; font-weight: 600;
+  padding: 8px 16px; border-radius: 8px; border: none;
+  background: var(--orchid); color: #fff; font-size: .88rem; font-weight: 600;
   cursor: pointer; font-family: inherit;
 }
 .cal-new-btn:hover { background: var(--orchid-deep); }
@@ -2389,7 +2405,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   display: flex; align-items: center; justify-content: space-between;
 }
 .visit-cancel-btn, .visit-save-btn, .visit-delete-btn {
-  padding: 8px 14px; border-radius: 6px; font-size: 0.85rem; font-weight: 600;
+  padding: 8px 16px; border-radius: 6px; font-size: .88rem; font-weight: 600;
   cursor: pointer; border: 1px solid var(--stone-light); background: #fff;
   font-family: inherit;
 }
