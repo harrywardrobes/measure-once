@@ -97,6 +97,7 @@ app.use('/api/deals', requireHubspotToken);
 app.use('/api/contacts', requireHubspotToken);
 app.use('/api/account', requireHubspotToken);
 app.use('/api/open-leads', requireHubspotToken);
+app.use('/api/contacts-all', requireHubspotToken);
 app.use('/api/tasks', requireHubspotToken);
 app.use('/api/workflow-stages', requireHubspotToken);
 app.use('/api/localdata', requireHubspotToken);
@@ -186,7 +187,6 @@ async function fetchLocaldataFromHubspot() {
   let after;
   do {
     const body = {
-      filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' }] }],
       properties: ['measure_once_rooms'],
       limit: 100
     };
@@ -415,6 +415,32 @@ app.patch('/api/deals/:id', async (req, res) => {
       { headers: hsHeaders() }
     );
     res.json(r.data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── HubSpot: All Contacts (no lead status filter) ─────────────────────────────
+app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
+  try {
+    const allResults = [];
+    let after = undefined;
+    do {
+      const body = {
+        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number'],
+        sorts: [{ propertyName: 'lastname', direction: 'ASCENDING' }],
+        limit: 100
+      };
+      if (after) body.after = after;
+      const r = await axios.post(
+        `${HS}/crm/v3/objects/contacts/search`,
+        body,
+        { headers: hsHeaders() }
+      );
+      allResults.push(...(r.data.results || []));
+      after = r.data.paging?.next?.after;
+    } while (after);
+    res.json({ results: allResults, total: allResults.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

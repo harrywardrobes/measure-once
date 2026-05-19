@@ -16,6 +16,7 @@ async function saveWorkflowData() {}
 // Workflow-core stubs (real versions in workflow-core.js)
 async function loadWorkflow() {}
 async function loadOpenLeads() {}
+async function loadAllContacts() {}
 async function loadWorkflowStages() {}
 function populateStageFilter() {}
 function filterDeals() {}
@@ -23,6 +24,7 @@ function setStageFilter() {}
 function setSortBy() {}
 function toggleArchived() {}
 async function refreshDeals() {}
+function setContactsViewMode() {}
 // Invoices-core stubs (real versions in invoices-core.js)
 async function loadQBInvoices() {}
 function closeInvoicePanel() {
@@ -34,6 +36,7 @@ function closeInvoicePanel() {
 const state = {
   contacts: [],
   filteredContacts: [],
+  contactsViewMode: 'active',
   workflow: null,
   authStatus: { google: false, hubspot: false },
   selectedContactId: null,

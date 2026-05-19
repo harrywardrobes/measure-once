@@ -167,6 +167,25 @@ async function loadOpenLeads() {
   state.filteredContacts = [...state.contacts];
 }
 
+async function loadAllContacts() {
+  const data = await GET('/api/contacts-all');
+  state.contacts = data.results || [];
+  state.filteredContacts = [...state.contacts];
+}
+
+function setContactsViewMode(mode) {
+  state.contactsViewMode = mode;
+  const activeBtn = document.getElementById('view-active-btn');
+  const allBtn    = document.getElementById('view-all-btn');
+  if (activeBtn) activeBtn.classList.toggle('filter-btn-active', mode === 'active');
+  if (allBtn)    allBtn.classList.toggle('filter-btn-active',   mode === 'all');
+  const loader = (mode === 'all') ? loadAllContacts() : loadOpenLeads();
+  loader.then(() => {
+    state.filteredContacts = [...state.contacts];
+    renderCustomerList();
+  }).catch(() => {});
+}
+
 async function loadWorkflowStages() {
   const data = await GET('/api/localdata/all').catch(() => ({}));
   for (const [contactId, rooms] of Object.entries(data || {})) {
@@ -212,7 +231,8 @@ function toggleArchived() {
 }
 
 async function refreshDeals() {
-  await Promise.all([loadOpenLeads(), loadWorkflowStages()]);
+  const loader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
+  await Promise.all([loader, loadWorkflowStages()]);
   renderCustomerList();
   if (state.selectedContact) {
     state.selectedContact = state.contacts.find(c => c.id === state.selectedContactId);

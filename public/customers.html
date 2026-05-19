@@ -19,6 +19,12 @@
   <div id="tab-customers" class="app-body">
     <aside id="list-panel" class="list-panel">
       <div class="p-3 border-b border-slate-100 flex-shrink-0">
+        <div class="flex gap-1.5 mb-1.5">
+          <button id="view-active-btn" onclick="setContactsViewMode('active')"
+            class="filter-btn flex-1 justify-center">Active</button>
+          <button id="view-all-btn" onclick="setContactsViewMode('all')"
+            class="filter-btn flex-1 justify-center filter-btn-active">All</button>
+        </div>
         <div class="flex gap-1.5">
           <select id="stage-filter" onchange="setStageFilter(this.value)"
             class="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-blue-400 transition">
@@ -118,6 +124,17 @@
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       if (!await bootstrap()) return;
+
+      // Default to "All contacts" view on the customers page.
+      // bootstrap() already called loadOpenLeads; reload with all contacts.
+      state.contactsViewMode = 'all';
+      try {
+        await loadAllContacts();
+        state.filteredContacts = [...state.contacts];
+        renderCustomerList();
+      } catch (e) {
+        console.error('Failed to load all contacts', e);
+      }
 
       const params = new URLSearchParams(location.search);
       const q = params.get('q');

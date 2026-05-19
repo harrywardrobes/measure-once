@@ -49,8 +49,9 @@ async function submitNewCustomer(ev) {
     renderCustomerList();
     const customerNum = contact.properties?.customer_number;
     showToast(`Customer created${customerNum ? ` — ${customerNum}` : ''}`);
-    // Background refresh to pick up server sort order
-    loadOpenLeads().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
+    // Background refresh to pick up server sort order (respect current view mode)
+    const refreshLoader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
+    refreshLoader.then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
   } catch (e) {
     showError(e.message || 'Failed to create customer.');
   } finally {
