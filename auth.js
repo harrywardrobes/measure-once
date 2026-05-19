@@ -342,6 +342,13 @@ function scheduleSessionCleanup() {
   } else {
     console.log(`[session cleanup] Interval set to ${intervalMin} min (fallback default; SESSION_CLEANUP_INTERVAL_MS not set or invalid)`);
   }
+  const ONE_MINUTE_MS = 60 * 1000;
+  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+  if (intervalMs < ONE_MINUTE_MS) {
+    console.warn(`[session cleanup] WARN: Cleanup interval is unusually short (${intervalMs} ms). This may cause excessive database load. Typical range: 15 min – 24 h (SESSION_CLEANUP_INTERVAL_MS=${intervalMs}).`);
+  } else if (intervalMs > TWENTY_FOUR_HOURS_MS) {
+    console.warn(`[session cleanup] WARN: Cleanup interval is unusually long (${intervalMin} min). Expired sessions may accumulate for an extended period. Typical range: 15 min – 24 h (SESSION_CLEANUP_INTERVAL_MS=${intervalMs}).`);
+  }
   cleanupExpiredSessions();
   setInterval(cleanupExpiredSessions, intervalMs);
 }
