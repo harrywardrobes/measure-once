@@ -202,6 +202,13 @@ async function ensureAuthTables() {
       ('Site Manager'), ('Fitter'), ('Sales'), ('Admin'), ('Office')
     ON CONFLICT (name) DO NOTHING;
   `);
+  /* Add privilege_level to job_roles if it doesn't exist yet (idempotent). */
+  await pool.query(`
+    ALTER TABLE job_roles ADD COLUMN IF NOT EXISTS privilege_level TEXT NOT NULL DEFAULT 'member';
+    UPDATE job_roles SET privilege_level = 'admin'   WHERE name = 'Admin'        AND privilege_level = 'member';
+    UPDATE job_roles SET privilege_level = 'manager' WHERE name = 'Office'       AND privilege_level = 'member';
+    UPDATE job_roles SET privilege_level = 'manager' WHERE name = 'Site Manager' AND privilege_level = 'member';
+  `);
 
   /* Admin audit log — immutable record of every admin action. */
   await pool.query(`
@@ -837,8 +844,8 @@ async function setupAuth(app) {
   // ── Job Roles catalogue ───────────────────────────────────────────────────
   app.get('/api/admin/job-roles', isAuthenticated, requireAdmin, async (req, res) => {
     try {
-      const r = await pool.query(`SELECT name FROM job_roles ORDER BY name ASC`);
-      res.json(r.rows.map(row => row.name));
+      const r = await pool.query(`SELECT name, privilege_level FROM job_roles ORDER BY name ASC`);
+      res.json(r.rows.map(row => ({ name: row.name, privilege_level: row.privilege_level || 'member' })));
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -846,17 +853,20 @@ async function setupAuth(app) {
 
   app.post('/api/admin/job-roles', isAuthenticated, requireAdmin, async (req, res) => {
     const name = (req.body?.name || '').trim();
+    const VALID_LEVELS = ['viewer', 'member', 'manager', 'admin'];
+    const privilege_level = VALID_LEVELS.includes(req.body?.privilege_level) ? req.body.privilege_level : 'member';
     if (!name || name.length > 64) {
       return res.status(400).json({ error: 'Role name must be 1–64 characters.' });
     }
     try {
       await pool.query(
-        `INSERT INTO job_roles (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
-        [name]
+        `INSERT INTO job_roles (name, privilege_level) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET privilege_level = EXCLUDED.privilege_level`,
+        [name, privilege_level]
       );
       const adminEmail = req.user?.claims?.email;
-      await logAdminAction(adminEmail, 'add_job_role', null, `Added job role "${name}"`);
-      res.json({ ok: true, name });
+      await logAdminAction(adminEmail, 'add_job_role', null, `Added job role "${name}" (${privilege_level})`);
+      res.json({ ok: true, name, privilege_level });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

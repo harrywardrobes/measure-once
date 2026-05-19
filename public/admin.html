@@ -246,6 +246,7 @@
     /* ── Job roles manager ── */
     .roles-add-form { display: flex; gap: 8px; margin-bottom: 14px; }
     .roles-add-form .field { flex: 1; }
+    .roles-add-form select.field { flex: 0 0 auto; width: 130px; }
     .role-tag {
       display: inline-flex;
       align-items: center;
@@ -587,9 +588,9 @@
   ──────────────────────────────────────────────── */
   function jobRoleOptions(current) {
     const opts = _jobRoles.map(r =>
-      `<option value="${esc(r)}" ${current === r ? 'selected' : ''}>${esc(r)}</option>`
+      `<option value="${esc(r.name)}" ${current === r.name ? 'selected' : ''}>${esc(r.name)}</option>`
     ).join('');
-    const hasCustom = current && !_jobRoles.includes(current);
+    const hasCustom = current && !_jobRoles.find(r => r.name === current);
     return `<option value="">— None —</option>${opts}${hasCustom ? `<option value="${esc(current)}" selected>${esc(current)}</option>` : ''}`;
   }
 
@@ -643,8 +644,8 @@
     $('#modal-fname').value     = u.first_name || '';
     $('#modal-lname').value     = u.last_name  || '';
     $('#modal-jobrole').innerHTML = `<option value="">— None —</option>` +
-      _jobRoles.map(r => `<option value="${esc(r)}" ${u.job_role === r ? 'selected' : ''}>${esc(r)}</option>`).join('') +
-      (u.job_role && !_jobRoles.includes(u.job_role)
+      _jobRoles.map(r => `<option value="${esc(r.name)}" ${u.job_role === r.name ? 'selected' : ''}>${esc(r.name)}</option>`).join('') +
+      (u.job_role && !_jobRoles.find(r => r.name === u.job_role)
         ? `<option value="${esc(u.job_role)}" selected>${esc(u.job_role)}</option>` : '');
 
     $('#modal-privilege').innerHTML = ['viewer','member','manager','admin'].map(v =>
@@ -787,8 +788,9 @@
     }
     container.innerHTML = _jobRoles.map(r => `
       <span class="role-tag">
-        ${esc(r)}
-        <button class="role-del" onclick="deleteRole('${esc(r)}')" title="Remove">×</button>
+        ${esc(r.name)}
+        ${lvlBadge(r.privilege_level || 'member')}
+        <button class="role-del" onclick="deleteRole('${esc(r.name)}')" title="Remove">×</button>
       </span>`).join('');
 
     document.querySelectorAll('[id^="usel-job-"]').forEach(sel => {
@@ -798,17 +800,38 @@
     });
   }
 
+  function syncRoleForm() {
+    const inp  = $('#role-input');
+    const psel = $('#role-privilege-input');
+    const btn  = $('#role-submit-btn');
+    if (!inp || !btn) return;
+    const name = inp.value.trim();
+    const existing = _jobRoles.find(r => r.name.toLowerCase() === name.toLowerCase());
+    btn.textContent = existing ? 'Update role' : 'Add role';
+    if (existing && psel) psel.value = existing.privilege_level || 'member';
+  }
+
   async function addRole() {
-    const inp = $('#role-input');
+    const inp  = $('#role-input');
+    const psel = $('#role-privilege-input');
     const name = inp?.value.trim();
     if (!name) return;
+    const privilege_level = psel?.value || 'member';
     try {
-      await api('POST', '/api/admin/job-roles', { name });
-      if (!_jobRoles.includes(name)) _jobRoles.push(name);
-      _jobRoles.sort();
+      const result = await api('POST', '/api/admin/job-roles', { name, privilege_level });
+      const existing = _jobRoles.findIndex(r => r.name === name);
+      if (existing >= 0) {
+        _jobRoles[existing] = { name, privilege_level: result.privilege_level || privilege_level };
+      } else {
+        _jobRoles.push({ name, privilege_level: result.privilege_level || privilege_level });
+      }
+      _jobRoles.sort((a, b) => a.name.localeCompare(b.name));
       inp.value = '';
+      if (psel) psel.value = 'member';
+      const btn = $('#role-submit-btn');
+      if (btn) btn.textContent = 'Add role';
       renderJobRoles();
-      toast('Role added');
+      toast(existing >= 0 ? 'Role updated' : 'Role added');
     } catch (e) {
       toast(e.message, true);
     }
@@ -818,7 +841,7 @@
     if (!confirm(`Remove job role "${name}"? This won't change existing users' roles.`)) return;
     try {
       await api('DELETE', '/api/admin/job-roles/' + encodeURIComponent(name));
-      _jobRoles = _jobRoles.filter(r => r !== name);
+      _jobRoles = _jobRoles.filter(r => r.name !== name);
       renderJobRoles();
       toast('Role removed');
     } catch (e) {
@@ -1191,20 +1214,27 @@
       <!-- PERMISSIONS -->
       <div class="tab-panel" id="tab-permissions">
         <div class="card">
-          <div class="card-title">Permissions matrix</div>
-          ${renderMatrix()}
-        </div>
-        <div class="card">
           <div class="card-title">Manage job roles</div>
           <p class="card-desc">
             These labels are available when editing a team member's profile.
           </p>
           <div class="roles-add-form">
             <input class="field" id="role-input" type="text" placeholder="New role name…" maxlength="64"
+              oninput="syncRoleForm()"
               onkeydown="if(event.key==='Enter')addRole()">
-            <button class="btn btn-primary" onclick="addRole()">Add role</button>
+            <select class="field" id="role-privilege-input">
+              <option value="viewer">Viewer</option>
+              <option value="member" selected>Member</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button class="btn btn-primary" id="role-submit-btn" onclick="addRole()">Add role</button>
           </div>
           <div class="roles-list" id="roles-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Permissions matrix</div>
+          ${renderMatrix()}
         </div>
       </div>
 
