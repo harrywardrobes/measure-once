@@ -269,8 +269,9 @@ body.has-viewer-banner .app-body { top: calc(52px + 37px); }
   display: inline-block;
   flex-shrink: 0;
 }
-.auth-dot-ok  { background: #34d399; }
-.auth-dot-off { background: #f87171; }
+.auth-dot-ok      { background: #34d399; }
+.auth-dot-off     { background: #f87171; }
+.auth-dot-pending { background: #d1d5db; }
 
 .connect-btn {
   display: flex;

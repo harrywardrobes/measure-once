@@ -8,25 +8,17 @@ async function renderProfileTab() {
   const user = state.user;
   if (!user) { el.innerHTML = ''; return; }
 
-  let profile, hubspotStatus;
+  let profile;
   try {
-    [profile, hubspotStatus] = await Promise.all([
-      GET(`/api/users/${encodeURIComponent(user.id)}/profile`),
-      GET('/api/hubspot/status').catch(() => ({ connected: false, code: 'HUBSPOT_ERROR' })),
-    ]);
+    profile = await GET(`/api/users/${encodeURIComponent(user.id)}/profile`);
   } catch (e) {
     el.innerHTML = `<div class="profile-loading" style="color:#b91c1c;">Failed to load profile. <button onclick="renderProfileTab()" style="color:var(--orchid);background:none;border:none;cursor:pointer;font-size:0.875rem;font-weight:600;padding:0;font-family:inherit;">Retry</button></div>`;
     return;
   }
 
   const { google } = state.authStatus;
-  const hubspotConnected = hubspotStatus?.connected ?? false;
-  const hubspotLabel = hubspotConnected
-    ? 'Connected'
-    : (hubspotStatus?.code === 'NO_TOKEN' ? 'No token set' : 'Not connected');
-  const hubspotBadgeStyle = hubspotConnected
-    ? 'background:#dcfce7;color:#166534;'
-    : 'background:#fee2e2;color:#991b1b;';
+  const hubspotLabel = 'Checking…';
+  const hubspotBadgeStyle = 'background:#f3f4f6;color:#6b7280;';
   const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.email || 'User';
   const initials = [profile.first_name, profile.last_name]
     .filter(Boolean).map(s => s[0]).join('').toUpperCase() || '?';
@@ -108,10 +100,10 @@ async function renderProfileTab() {
       </div>
       <div class="profile-integration-row">
         <span class="profile-int-label">
-          <span class="auth-dot ${hubspotConnected ? 'auth-dot-ok' : 'auth-dot-off'}"></span>
+          <span id="hubspot-status-dot" class="auth-dot auth-dot-pending"></span>
           HubSpot
         </span>
-        <span style="font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:999px;${hubspotBadgeStyle}">${hubspotLabel}</span>
+        <span id="hubspot-status-badge" style="font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:999px;${hubspotBadgeStyle}">${hubspotLabel}</span>
       </div>
       <div class="profile-integration-row">
         <span class="profile-int-label">
@@ -140,6 +132,18 @@ async function renderProfileTab() {
       </a>
     </div>
   `;
+
+  GET('/api/hubspot/status').catch(() => ({ connected: false, code: 'HUBSPOT_ERROR' })).then(hubspotStatus => {
+    const dot = document.getElementById('hubspot-status-dot');
+    const badge = document.getElementById('hubspot-status-badge');
+    if (!dot || !badge) return;
+    const connected = hubspotStatus?.connected ?? false;
+    const label = connected ? 'Connected' : (hubspotStatus?.code === 'NO_TOKEN' ? 'No token set' : 'Not connected');
+    const style = connected ? 'background:#dcfce7;color:#166534;' : 'background:#fee2e2;color:#991b1b;';
+    dot.className = `auth-dot ${connected ? 'auth-dot-ok' : 'auth-dot-off'}`;
+    badge.style.cssText = `font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:999px;${style}`;
+    badge.textContent = label;
+  });
 }
 
 
