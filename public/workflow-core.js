@@ -179,6 +179,14 @@ function setContactsViewMode(mode) {
   const allBtn    = document.getElementById('view-all-btn');
   if (activeBtn) activeBtn.classList.toggle('filter-btn-active', mode === 'active');
   if (allBtn)    allBtn.classList.toggle('filter-btn-active',   mode === 'all');
+
+  // Show lead-status filter only in "All" view; reset it when switching modes
+  const lsRow = document.getElementById('lead-status-filter-row');
+  if (lsRow) lsRow.classList.toggle('hidden', mode !== 'all');
+  state.leadStatusFilter = '';
+  const lsSel = document.getElementById('lead-status-filter');
+  if (lsSel) lsSel.value = '';
+
   const loader = (mode === 'all') ? loadAllContacts() : loadOpenLeads();
   loader.then(() => {
     state.filteredContacts = [...state.contacts];
@@ -215,6 +223,11 @@ function filterDeals(query) {
 
 function setStageFilter(value) {
   state.stageFilter = value;
+  renderCustomerList();
+}
+
+function setLeadStatusFilter(value) {
+  state.leadStatusFilter = value;
   renderCustomerList();
 }
 

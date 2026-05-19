@@ -52,6 +52,7 @@ const state = {
   showAddTask: false,
   addingRoom: false,
   stageFilter: '',
+  leadStatusFilter: '',
   sortBy: 'newest',
   showArchived: false,
   projectStageFilter: '',

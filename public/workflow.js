@@ -63,6 +63,12 @@ async function submitNewCustomer(ev) {
 function buildListItems() {
   const items = [];
   for (const contact of state.filteredContacts) {
+    // Apply lead-status filter (only relevant in "all" view)
+    if (state.leadStatusFilter) {
+      const ls = contact.properties?.hs_lead_status || '';
+      if (ls !== state.leadStatusFilter) continue;
+    }
+
     const cached = state.contactStageCache[contact.id];
     if (cached && cached.length > 0) {
       cached.forEach((r, idx) => {
