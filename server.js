@@ -1143,6 +1143,14 @@ function serializeAreasServed(val) {
   return JSON.stringify([]);
 }
 
+function actorDisplayName(claims) {
+  if (!claims) return null;
+  const name = [claims.first_name, claims.last_name].filter(Boolean).join(' ').trim();
+  if (name) return name;
+  if (claims.email) return claims.email;
+  return claims.sub || null;
+}
+
 async function ensureTradesTable() {
   await _tradesPool.query(`
     CREATE TABLE IF NOT EXISTS trade_contacts (
@@ -1178,6 +1186,8 @@ async function ensureTradesTable() {
   `);
   await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS updated_by VARCHAR`);
   await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP`);
+  await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS created_by_name VARCHAR`);
+  await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS updated_by_name VARCHAR`);
   await _tradesPool.query(`
     CREATE TABLE IF NOT EXISTS trade_company_contacts (
       id         SERIAL PRIMARY KEY,
@@ -1244,8 +1254,8 @@ app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) 
     const result = companies.map(co => ({
       ...co,
       areas_served: parseAreasServed(co.areas_served),
-      created_by_name: [co.created_first, co.created_last].filter(Boolean).join(' ') || co.created_email || null,
-      updated_by_name: [co.updated_first, co.updated_last].filter(Boolean).join(' ') || co.updated_email || null,
+      created_by_name: [co.created_first, co.created_last].filter(Boolean).join(' ') || co.created_email || co.created_by_name || null,
+      updated_by_name: [co.updated_first, co.updated_last].filter(Boolean).join(' ') || co.updated_email || co.updated_by_name || null,
       contacts: contactMap[co.id] || []
     }));
     res.json(result);
@@ -1266,13 +1276,14 @@ app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res)
     await client.query('BEGIN');
     const { rows: [co] } = await client.query(
       `INSERT INTO trade_companies
-        (company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        (company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, created_by, created_by_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        RETURNING *`,
       [company_name.trim(), trade_type.trim(), serializeAreasServed(areas_served),
        (timescale || '').trim(), (invoice_method || '').trim(),
        (payment_terms || '').trim(), (notes || '').trim(),
-       req.user?.claims?.sub || null]
+       req.user?.claims?.sub || null,
+       actorDisplayName(req.user?.claims)]
     );
     const insertedContacts = [];
     for (let i = 0; i < validContacts.length; i++) {
@@ -1310,12 +1321,13 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
       `UPDATE trade_companies
        SET company_name=$1, trade_type=$2, areas_served=$3, timescale=$4,
            invoice_method=$5, payment_terms=$6, notes=$7,
-           updated_by=$8, updated_at=NOW()
+           updated_by=$8, updated_at=NOW(), updated_by_name=$10
        WHERE id=$9 RETURNING *`,
       [company_name.trim(), trade_type.trim(), serializeAreasServed(areas_served),
        (timescale || '').trim(), (invoice_method || '').trim(),
        (payment_terms || '').trim(), (notes || '').trim(),
-       req.user?.claims?.sub || null, id]
+       req.user?.claims?.sub || null, id,
+       actorDisplayName(req.user?.claims)]
     );
     if (!rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Company not found.' }); }
     await client.query(`DELETE FROM trade_company_contacts WHERE company_id=$1`, [id]);
@@ -1356,8 +1368,8 @@ app.get('/api/admin/trades-audit', isAuthenticated, requireAdmin, async (req, re
     const { rows } = await _tradesPool.query(`
       SELECT
         tc.id, tc.company_name, tc.trade_type, tc.areas_served,
-        tc.created_at, tc.created_by,
-        tc.updated_at, tc.updated_by,
+        tc.created_at, tc.created_by, tc.created_by_name,
+        tc.updated_at, tc.updated_by, tc.updated_by_name,
         u_c.email  AS created_email,
         u_c.first_name AS created_first, u_c.last_name AS created_last,
         u_u.email  AS updated_email,
@@ -1373,9 +1385,9 @@ app.get('/api/admin/trades-audit', isAuthenticated, requireAdmin, async (req, re
       trade_type:    r.trade_type,
       areas_served:  r.areas_served,
       created_at:    r.created_at,
-      created_by:    [r.created_first, r.created_last].filter(Boolean).join(' ') || r.created_email || null,
+      created_by:    [r.created_first, r.created_last].filter(Boolean).join(' ') || r.created_email || r.created_by_name || null,
       updated_at:    r.updated_at,
-      updated_by:    [r.updated_first, r.updated_last].filter(Boolean).join(' ') || r.updated_email || null,
+      updated_by:    [r.updated_first, r.updated_last].filter(Boolean).join(' ') || r.updated_email || r.updated_by_name || null,
     })));
   } catch (e) {
     res.status(500).json({ error: e.message });
