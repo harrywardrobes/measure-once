@@ -465,6 +465,7 @@ function hasUnsavedChanges() {
       commentInput && commentInput.value.trim()) return true;
   const taskSubject = document.getElementById('task-subject');
   if (taskSubject && taskSubject.value.trim()) return true;
+  if (window._invMemoDirty) return true;
   return false;
 }
 

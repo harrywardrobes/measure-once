@@ -132,6 +132,8 @@ document.addEventListener('click', function(e) {
 function closeInvoicePanel() {
   document.getElementById('inv-panel').classList.remove('inv-panel-open');
   document.getElementById('inv-overlay').classList.add('hidden');
+  window._invMemoDirty = false;
+  if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
   state.qb.panel = null;
   state.qb.panelContext = null;
 }
@@ -255,7 +257,7 @@ function renderInvoicePanelBody() {
         </label>
         <label class="inv-edit-label" style="grid-column:1/-1">
           Message on invoice
-          <textarea id="inv-edit-memo" class="inv-edit-input inv-edit-textarea" rows="2" placeholder="Thank you for your business">${escHtml(inv.memo || '')}</textarea>
+          <textarea id="inv-edit-memo" class="inv-edit-input inv-edit-textarea" rows="2" placeholder="Thank you for your business" oninput="window._invMemoDirty=true; _updateBeforeUnloadGuard()">${escHtml(inv.memo || '')}</textarea>
         </label>
       </div>
       <button id="inv-save-btn" class="inv-btn inv-btn-primary" onclick="saveInvoiceChanges()" data-viewer-hide>Save changes</button>
@@ -324,6 +326,8 @@ async function saveInvoiceChanges() {
 
     msg.textContent = 'Saved';
     msg.className = 'inv-action-msg inv-msg-ok';
+    window._invMemoDirty = false;
+    if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
   } catch (e) {
     msg.textContent = e.message;
     msg.className = 'inv-action-msg inv-msg-err';
