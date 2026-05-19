@@ -315,6 +315,28 @@ function scheduleRateLimitCleanup() {
   setInterval(cleanupExpiredRateLimitRecords, 60 * 60 * 1000);
 }
 
+// ── Login session cleanup ────────────────────────────────────────────────────
+// Deletes expired rows from the main `sessions` table (used for login sessions).
+// The table already has an index on `expire`, making this DELETE efficient.
+// Called once on startup, then on a 1-hour interval.
+async function cleanupExpiredSessions() {
+  try {
+    const result = await pool.query(
+      `DELETE FROM sessions WHERE expire < NOW()`
+    );
+    if (result.rowCount > 0) {
+      console.log(`[session cleanup] Removed ${result.rowCount} expired session(s).`);
+    }
+  } catch (err) {
+    console.error('[session cleanup] Failed to prune expired sessions:', err.message);
+  }
+}
+
+function scheduleSessionCleanup() {
+  cleanupExpiredSessions();
+  setInterval(cleanupExpiredSessions, 60 * 60 * 1000);
+}
+
 // Audit-failure policy: log errors but do not abort the parent admin action.
 // A database write failure for the audit entry is operationally visible via
 // server logs, but we intentionally avoid propagating the error so that a
@@ -512,6 +534,7 @@ async function setupAuth(app) {
 
   await ensureAuthTables();
   scheduleRateLimitCleanup();
+  scheduleSessionCleanup();
 
   const { client, config } = await getOidcConfig();
   const { Strategy } = await import('openid-client/passport');
