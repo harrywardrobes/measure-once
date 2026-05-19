@@ -209,7 +209,7 @@ function renderCustomerList() {
     const qbInvs    = matchInvoicesForContact(contact);
     const qbTotal   = qbInvs.reduce((s, inv) => s + inv.balance, 0);
     const qbBadge   = qbInvs.length > 0
-      ? `<span class="qb-badge" title="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}">£${qbTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`
+      ? `<button class="qb-badge" title="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}" onclick="event.stopPropagation();openInvoicePanel('${escHtml(qbInvs[0].id)}')">£${qbTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</button>`
       : '';
 
     const stagePillHtml = stageLabel && colour
