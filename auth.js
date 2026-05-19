@@ -91,6 +91,44 @@ async function notifyAdminsOfAccessRequest(name, email, timestamp) {
   }
 }
 
+async function notifyNewTeamMember(email) {
+  const transport = createMailTransport();
+  if (!transport) {
+    console.warn('  SMTP not configured — skipping new team member notification email.');
+    return;
+  }
+
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const appUrl = process.env.REPLIT_DOMAINS
+    ? `https://${process.env.REPLIT_DOMAINS.split(',')[0].trim()}`
+    : 'https://measureonce.replit.app';
+
+  try {
+    await transport.sendMail({
+      from,
+      to: email,
+      subject: "You've been added to Measure Once",
+      text: [
+        "You've been granted access to Measure Once.",
+        '',
+        'Sign in at any time using the link below:',
+        `  ${appUrl}`,
+        '',
+        'If you have any questions, please reach out to your administrator.',
+      ].join('\n'),
+      html: `
+        <p>You've been granted access to <strong>Measure Once</strong>.</p>
+        <p>Sign in at any time using the link below:</p>
+        <p><a href="${appUrl}">${appUrl}</a></p>
+        <p>If you have any questions, please reach out to your administrator.</p>
+      `,
+    });
+    console.log(`  Welcome notification sent to new team member: ${email}`);
+  } catch (err) {
+    console.error('  Failed to send new team member notification email:', err.message);
+  }
+}
+
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // Ensure required tables exist.
@@ -583,6 +621,7 @@ async function setupAuth(app) {
       const nameStr = [meta.first_name, meta.last_name].filter(Boolean).join(' ');
       await logAdminAction(adminEmail, 'add_allowed_email', email,
         [nameStr ? `Name: ${nameStr}` : null, note ? `Note: ${note}` : null].filter(Boolean).join('; ') || null);
+      notifyNewTeamMember(email).catch(() => {});
       res.json({ ok: true, row: r.rows[0] });
     } catch (e) {
       res.status(500).json({ error: e.message });
