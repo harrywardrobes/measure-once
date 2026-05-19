@@ -3331,6 +3331,10 @@ body.showing-workflow .sales-layout #workflow-panel {
 }
 .trades-filter-select:focus { border-color: var(--orchid); }
 
+@media (max-width: 400px) {
+  .trades-filters-wrap { flex-direction: column; gap: 12px; }
+}
+
 .trades-list {
   display: flex; flex-direction: column; gap: 10px;
   padding: 0 12px;
