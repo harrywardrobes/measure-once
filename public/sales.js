@@ -1029,6 +1029,15 @@ async function addComment() {
   renderComments();
   try {
     await saveWorkflowData();
+    // Re-fetch the contact so the list reflects the latest server state (e.g.
+    // HubSpot last-activity timestamp).  Route through _mergeContactIntoState
+    // so any in-flight optimistic lead-status change on the badge is preserved
+    // rather than overwritten by the fresh server value.
+    const freshContact = await GET(`/api/contacts/${state.selectedContactId}`).catch(() => null);
+    if (freshContact) {
+      _mergeContactIntoState(freshContact);
+      renderCustomerList();
+    }
   } catch (e) {
     state.workflowData.comments.pop();
     renderComments();
