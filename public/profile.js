@@ -18,6 +18,8 @@ async function renderProfileTab() {
   const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.email || 'User';
   const initials = [profile.first_name, profile.last_name]
     .filter(Boolean).map(s => s[0]).join('').toUpperCase() || '?';
+  const levelLabels = { viewer: 'Viewer', member: 'Member', manager: 'Manager', admin: 'Admin' };
+  const levelLabel  = levelLabels[profile.privilege_level] || 'Member';
   const isAdmin = user.isAdmin;
 
   el.innerHTML = `
@@ -42,34 +44,18 @@ async function renderProfileTab() {
       </div>
     </div>
 
-    <!-- Personal info card -->
+    <!-- Role & Permissions card — read-only, managed via admin panel -->
     <div class="profile-card">
       <div class="profile-card-header">
         <span class="profile-section-title">Role &amp; Permissions</span>
-        ${isAdmin
-          ? `<button class="profile-edit-btn" id="prof-edit-btn" onclick="toggleProfileEdit()">Edit</button>`
-          : ''}
       </div>
-
-      <!-- Read view -->
-      <div id="prof-read-view">
-        <div class="profile-field">
-          <span class="profile-field-label">Job role</span>
-          <span class="profile-field-value">${escHtml(profile.job_role || '—')}</span>
-        </div>
+      <div class="profile-field">
+        <span class="profile-field-label">Job role</span>
+        <span class="profile-field-value">${escHtml(profile.job_role || '—')}</span>
       </div>
-
-      <!-- Edit view (admins only, hidden by default) -->
-      <div id="prof-edit-view" style="display:none;">
-        <div class="profile-field profile-field-col">
-          <label class="profile-field-label" for="prof-job-role">Job role</label>
-          <input id="prof-job-role" type="text" class="profile-input" value="${escHtml(profile.job_role || '')}" placeholder="e.g. Site Manager">
-        </div>
-        <div id="prof-edit-error" style="display:none;" class="profile-error"></div>
-        <div class="profile-edit-actions">
-          <button class="profile-save-btn" onclick="saveProfileEdit('${escHtml(user.id)}')">Save</button>
-          <button class="profile-cancel-btn" onclick="toggleProfileEdit(false)">Cancel</button>
-        </div>
+      <div class="profile-field">
+        <span class="profile-field-label">Privilege level</span>
+        <span class="profile-level-badge profile-level-${escHtml(profile.privilege_level || 'member')}">${escHtml(levelLabel)}</span>
       </div>
     </div>
 
@@ -114,36 +100,6 @@ async function renderProfileTab() {
   `;
 }
 
-function toggleProfileEdit(forceOpen) {
-  const readEl  = document.getElementById('prof-read-view');
-  const editEl  = document.getElementById('prof-edit-view');
-  const editBtn = document.getElementById('prof-edit-btn');
-  const errEl   = document.getElementById('prof-edit-error');
-  if (!readEl || !editEl) return;
-  const opening = forceOpen !== undefined ? forceOpen : (editEl.style.display === 'none');
-  readEl.style.display  = opening ? 'none' : '';
-  editEl.style.display  = opening ? ''     : 'none';
-  if (editBtn) editBtn.textContent = opening ? 'Cancel' : 'Edit';
-  if (errEl)   { errEl.style.display = 'none'; errEl.textContent = ''; }
-}
-
-async function saveProfileEdit(userId) {
-  const jobRoleEl = document.getElementById('prof-job-role');
-  const errEl     = document.getElementById('prof-edit-error');
-  if (!jobRoleEl) return;
-  const jobRole = jobRoleEl.value.trim();
-  const saveBtn = document.querySelector('.profile-save-btn');
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
-  if (errEl)   { errEl.style.display = 'none'; errEl.textContent = ''; }
-  try {
-    await PATCH_REQ(`/api/users/${encodeURIComponent(userId)}/profile`, { job_role: jobRole });
-    showToast('Profile updated');
-    renderProfileTab();
-  } catch (e) {
-    if (errEl) { errEl.textContent = e.message || 'Failed to save'; errEl.style.display = 'block'; }
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
-  }
-}
 
 async function profileLogoutGoogle() {
   await GET('/auth/logout-google');
