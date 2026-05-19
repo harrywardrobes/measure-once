@@ -3225,14 +3225,30 @@ body.showing-workflow .sales-layout #workflow-panel {
 .trades-card-btn-danger:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
 
 .trades-card-contact-row {
-  display: flex; flex-wrap: wrap; gap: 10px;
+  display: flex; flex-wrap: wrap; gap: 6px;
   margin-top: 8px;
 }
-.trades-card-link {
-  font-size: 0.82rem; color: var(--orchid-deep);
+.trades-contact-action-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px;
+  font-size: 0.78rem; font-weight: 500; line-height: 1;
+  border-radius: 5px; border: 1px solid transparent;
   text-decoration: none;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  cursor: pointer;
 }
-.trades-card-link:hover { text-decoration: underline; }
+.trades-contact-call-btn {
+  background: #f0fdf4; color: #16a34a; border-color: #bbf7d0;
+}
+.trades-contact-call-btn:hover {
+  background: #dcfce7; border-color: #86efac;
+}
+.trades-contact-email-btn {
+  background: #eff6ff; color: #2563eb; border-color: #bfdbfe;
+}
+.trades-contact-email-btn:hover {
+  background: #dbeafe; border-color: #93c5fd;
+}
 
 .trades-card-details {
   display: flex; flex-wrap: wrap; gap: 8px;
