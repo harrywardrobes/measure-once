@@ -318,7 +318,8 @@ function scheduleRateLimitCleanup() {
 // ── Login session cleanup ────────────────────────────────────────────────────
 // Deletes expired rows from the main `sessions` table (used for login sessions).
 // The table already has an index on `expire`, making this DELETE efficient.
-// Called once on startup, then on a 1-hour interval.
+// Called once on startup, then on an interval controlled by the
+// SESSION_CLEANUP_INTERVAL_MS env var (default: 1 hour).
 async function cleanupExpiredSessions() {
   try {
     const result = await pool.query(
@@ -333,8 +334,9 @@ async function cleanupExpiredSessions() {
 }
 
 function scheduleSessionCleanup() {
+  const intervalMs = parseInt(process.env.SESSION_CLEANUP_INTERVAL_MS, 10) || 60 * 60 * 1000;
   cleanupExpiredSessions();
-  setInterval(cleanupExpiredSessions, 60 * 60 * 1000);
+  setInterval(cleanupExpiredSessions, intervalMs);
 }
 
 // Audit-failure policy: log errors but do not abort the parent admin action.
