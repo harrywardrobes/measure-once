@@ -96,6 +96,37 @@ const state = {
   },
 };
 
+// ── User prefs helpers ────────────────────────────────────────────────────────
+// Fetched once per session; cached in state.prefs. Individual keys are updated
+// with patchPref() which keeps the local cache in sync and fire-and-forgets the
+// server write so callers don't have to await it for UI responsiveness.
+
+async function ensurePrefs() {
+  if (state._prefsLoaded) return state.prefs;
+  if (isViewerOnly()) {
+    state.prefs = {};
+    state._prefsLoaded = true;
+    return state.prefs;
+  }
+  try {
+    state.prefs = await GET('/api/users/me/prefs');
+  } catch {
+    state.prefs = {};
+  }
+  state._prefsLoaded = true;
+  return state.prefs;
+}
+
+async function patchPref(key, value) {
+  if (!state.prefs) state.prefs = {};
+  state.prefs[key] = value;
+  try {
+    await PATCH_REQ('/api/users/me/prefs', { [key]: value });
+  } catch (e) {
+    console.warn('Failed to save preference:', key, e);
+  }
+}
+
 // ── API helpers ───────────────────────────────────────────────────────────────
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };

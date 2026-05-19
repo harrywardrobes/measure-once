@@ -1,22 +1,20 @@
 // ── Projects View ─────────────────────────────────────────────────────────────
 
-const PROJECT_SORT_KEY  = 'projectSort';
-const PROJECT_GROUP_KEY = 'projectGroupByStage';
-
-function loadProjectPrefs() {
-  state.projectSort         = localStorage.getItem(PROJECT_SORT_KEY)  || 'stage';
-  state.projectGroupByStage = localStorage.getItem(PROJECT_GROUP_KEY) === 'true';
+async function loadProjectPrefs() {
+  const prefs = await ensurePrefs();
+  state.projectSort         = prefs.projectSort         ?? 'stage';
+  state.projectGroupByStage = prefs.projectGroupByStage ?? false;
 }
 
 function setProjectSort(val) {
   state.projectSort = val;
-  localStorage.setItem(PROJECT_SORT_KEY, val);
+  patchPref('projectSort', val);
   renderProjectsView();
 }
 
 function toggleProjectGroupByStage() {
   state.projectGroupByStage = !state.projectGroupByStage;
-  localStorage.setItem(PROJECT_GROUP_KEY, String(state.projectGroupByStage));
+  patchPref('projectGroupByStage', state.projectGroupByStage);
   renderProjectsView();
 }
 
@@ -38,7 +36,7 @@ async function renderProjectsView() {
   const view = document.getElementById('projects-view');
   if (!view) return;
 
-  loadProjectPrefs();
+  await loadProjectPrefs();
   await ensureProjectPlatformUsers();
 
   const filter    = state.projectStageFilter;

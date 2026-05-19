@@ -32,6 +32,10 @@ function calRange() {
 
 async function loadTasksView() {
   initCalendarState();
+  const prefs = await ensurePrefs();
+  if ('calShowWorkshop' in prefs) {
+    state.calendar.showWorkshop = prefs.calShowWorkshop;
+  }
   const view = document.getElementById('tasks-view');
   view.innerHTML = `<div class="cal-shell"><div class="flex items-center gap-2 text-sm" style="color:var(--stone-deep);padding:16px"><div class="spinner"></div> Loading…</div></div>`;
   const { from, to } = calRange();
@@ -319,7 +323,7 @@ function calNav(dir) {
   loadTasksView();
 }
 function calGoToday()              { state.calendar.cursor = calStartOfDay(new Date()); loadTasksView(); }
-function calToggleWorkshop(checked){ state.calendar.showWorkshop = checked; renderTasksView(); }
+function calToggleWorkshop(checked){ state.calendar.showWorkshop = checked; patchPref('calShowWorkshop', checked); renderTasksView(); }
 function calMiniDayClick(iso)      { state.calendar.cursor = new Date(iso); loadTasksView().then(() => openVisitModal(null, iso)); }
 
 
