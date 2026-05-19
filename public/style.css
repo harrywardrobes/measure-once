@@ -132,19 +132,6 @@ body {
 }
 .header-back-btn:hover { background: rgba(255,255,255,0.14); }
 .header-back-btn:active { background: rgba(255,255,255,0.2); }
-.header-refresh-btn {
-  display: flex;
-  align-items: center;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: rgba(255,255,255,0.7);
-  padding: 6px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
-}
-.header-refresh-btn:hover { background: rgba(255,255,255,0.14); }
 .header-icon-btn {
   display: flex;
   align-items: center;
