@@ -361,11 +361,19 @@ function openLeadStatusPicker(event, contactId) {
   popup.className = 'card-picker-popup';
   const top = Math.min(rect.bottom + 4, window.innerHeight - 300);
   popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
-  popup.innerHTML = LEAD_STATUS_OPTIONS.map(({ value, label }) =>
-    `<button class="card-picker-opt" data-lead-status="${escHtml(value)}">${escHtml(label)}</button>`
-  ).join('');
-  popup.querySelectorAll('[data-lead-status]').forEach(btn => {
-    btn.addEventListener('click', () => quickSetLeadStatus(contactId, btn.dataset.leadStatus));
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'card-picker-opt card-picker-opt--clear';
+  clearBtn.textContent = '✕ Clear status';
+  clearBtn.addEventListener('click', () => quickSetLeadStatus(contactId, ''));
+  popup.appendChild(clearBtn);
+
+  LEAD_STATUS_OPTIONS.forEach(({ value, label }) => {
+    const btn = document.createElement('button');
+    btn.className = 'card-picker-opt';
+    btn.dataset.leadStatus = value;
+    btn.textContent = label;
+    btn.addEventListener('click', () => quickSetLeadStatus(contactId, value));
+    popup.appendChild(btn);
   });
   document.body.appendChild(popup);
   setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
@@ -383,8 +391,8 @@ async function quickSetLeadStatus(contactId, newStatus) {
 
   try {
     await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: newStatus });
-    const newLabel = LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)?.label || newStatus;
-    showBottomUndo(`Lead status set to ${newLabel}`, async () => {
+    const newLabel = newStatus ? (LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)?.label || newStatus) : null;
+    showBottomUndo(newLabel ? `Lead status set to ${newLabel}` : 'Lead status cleared', async () => {
       if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: prevStatus || '' };
       renderCustomerList();
       await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: prevStatus || '' }).catch(() => {});

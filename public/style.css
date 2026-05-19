@@ -603,6 +603,8 @@ body.showing-workflow .workflow-panel { display: flex; }
   transition: background 0.1s;
 }
 .card-picker-opt:hover { background: var(--paper-deep); }
+.card-picker-opt--clear { color: var(--ink-3); border-bottom: 1px solid var(--border); margin-bottom: 2px; padding-bottom: 10px; }
+.card-picker-opt--clear:hover { background: #fee2e2; color: #b91c1c; }
 .card-picker-status-active   { color: #065f46; }
 .card-picker-status-declined { color: #991b1b; }
 .card-picker-status-complete { color: var(--orchid-deep); }
