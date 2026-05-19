@@ -107,6 +107,28 @@ async function jumpToInvoice(idx) {
   await openInvoicePanel(ctx.ids[i], ctx.ids);
 }
 
+function toggleInvoiceJumpDropdown(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('inv-jump-dd');
+  if (!dd) return;
+  const isOpen = dd.classList.toggle('inv-jump-dropdown--open');
+  const btn = dd.querySelector('.inv-jump-trigger');
+  if (btn) btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+}
+
+function closeInvoiceJumpDropdown() {
+  const dd = document.getElementById('inv-jump-dd');
+  if (!dd) return;
+  dd.classList.remove('inv-jump-dropdown--open');
+  const btn = dd.querySelector('.inv-jump-trigger');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+document.addEventListener('click', function(e) {
+  const dd = document.getElementById('inv-jump-dd');
+  if (dd && !dd.contains(e.target)) closeInvoiceJumpDropdown();
+});
+
 function closeInvoicePanel() {
   document.getElementById('inv-panel').classList.remove('inv-panel-open');
   document.getElementById('inv-overlay').classList.add('hidden');
@@ -132,19 +154,28 @@ function renderInvoicePanelBody() {
     const total  = ctx.ids.length;
     const isFirst = ctx.index === 0;
     const isLast  = ctx.index === total - 1;
-    const dropdownOptions = ctx.ids.map((id, i) => {
+    const dropdownItems = ctx.ids.map((id, i) => {
       const match = state.qb.invoices.find(x => x.id === id);
-      let label;
       if (match) {
-        const isPaid   = match.balance != null && Number(match.balance) === 0;
+        const isPaid    = match.balance != null && Number(match.balance) === 0;
         const isOverdue = !isPaid && match.dueDate && new Date(match.dueDate) < new Date();
-        const status   = isPaid ? 'Paid' : isOverdue ? 'Overdue' : 'Open';
-        label = `#${match.docNumber || id} — ${fmtGBP(match.totalAmt)} · ${status}`;
-      } else {
-        label = `Invoice ${i + 1}`;
+        const statusKey = isPaid ? 'paid' : isOverdue ? 'overdue' : 'open';
+        const statusLabel = isPaid ? 'Paid' : isOverdue ? 'Overdue' : 'Open';
+        const label = `#${match.docNumber || id} — ${fmtGBP(match.totalAmt)}`;
+        return { i, label, statusKey, statusLabel, selected: i === ctx.index };
       }
-      return `<option value="${i}"${i === ctx.index ? ' selected' : ''}>${escHtml(label)}</option>`;
-    }).join('');
+      return { i, label: `Invoice ${i + 1}`, statusKey: 'open', statusLabel: '', selected: i === ctx.index };
+    });
+
+    const currentItem = dropdownItems.find(d => d.selected) || dropdownItems[0];
+    const listHtml = dropdownItems.map(d => `
+      <li class="inv-jump-item${d.selected ? ' inv-jump-item--active' : ''}"
+          role="option" aria-selected="${d.selected}"
+          onclick="jumpToInvoice(${d.i}); closeInvoiceJumpDropdown()">
+        ${d.statusLabel ? `<span class="inv-status-badge inv-status-${d.statusKey}">${escHtml(d.statusLabel)}</span>` : ''}
+        <span class="inv-jump-item-label">${escHtml(d.label)}</span>
+      </li>`).join('');
+
     title.innerHTML = `
       <span class="inv-nav-row">
         <button class="inv-nav-btn" onclick="navigateInvoicePanel(-1)" aria-label="Previous invoice" ${isFirst ? 'disabled' : ''}>&#8592;</button>
@@ -152,7 +183,14 @@ function renderInvoicePanelBody() {
         <button class="inv-nav-btn" onclick="navigateInvoicePanel(1)" aria-label="Next invoice" ${isLast ? 'disabled' : ''}>&#8594;</button>
       </span>
       <span class="inv-nav-docnum">#${escHtml(inv.docNumber || inv.id)}</span>
-      <select class="inv-jump-select" aria-label="Jump to invoice" onchange="jumpToInvoice(this.value)">${dropdownOptions}</select>`;
+      <div class="inv-jump-dropdown" id="inv-jump-dd">
+        <button class="inv-jump-trigger" onclick="toggleInvoiceJumpDropdown(event)" aria-haspopup="listbox" aria-expanded="false" aria-label="Jump to invoice">
+          ${currentItem.statusLabel ? `<span class="inv-status-badge inv-status-${currentItem.statusKey}">${escHtml(currentItem.statusLabel)}</span>` : ''}
+          <span class="inv-jump-item-label">${escHtml(currentItem.label)}</span>
+          <span class="inv-jump-caret" aria-hidden="true">&#9662;</span>
+        </button>
+        <ul class="inv-jump-list" role="listbox" aria-label="Invoice list">${listHtml}</ul>
+      </div>`;
   } else {
     title.textContent = `Invoice #${inv.docNumber || inv.id}`;
   }
