@@ -275,6 +275,18 @@ async function ensureAuthTables() {
     CREATE INDEX IF NOT EXISTS "IDX_admin_audit_log_acted_at" ON admin_audit_log (acted_at DESC);
   `);
 
+  /* Role-permissions matrix — stores which privilege levels have each feature enabled.
+     Columns: permission_key (feature name), privilege_level (viewer/member/manager/admin), allowed BOOLEAN.
+     Seeded from the CAPABILITIES constant on first boot; admin UI overrides land here. */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS role_permissions (
+      permission_key  VARCHAR NOT NULL,
+      privilege_level VARCHAR NOT NULL,
+      allowed         BOOLEAN NOT NULL DEFAULT false,
+      PRIMARY KEY (permission_key, privilege_level)
+    );
+  `);
+
   // Seed admin emails from env var.
   const admins = (process.env.ADMIN_EMAILS || '')
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -316,22 +328,40 @@ function isAdminEmail(email) {
   return !!email && getAdminEmails().has(email.toLowerCase());
 }
 
-const requireAdmin = (req, res, next) => {
-  const email = req.user?.claims?.email;
-  if (!isAdminEmail(email)) {
-    return res.status(403).json({ message: 'Admin access required' });
+const requireAdmin = async (req, res, next) => {
+  const email  = req.user?.claims?.email;
+  const userId = req.user?.claims?.sub;
+  if (!email) return res.status(403).json({ message: 'Admin access required' });
+  if (isAdminEmail(email)) return next();
+  try {
+    const r = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
+    if (r.rows[0]?.privilege_level === 'admin') return next();
+  } catch {
+    // fall through to 403
   }
-  next();
+  return res.status(403).json({ message: 'Admin access required' });
 };
 
-const requireAtLeastMember = (req, res, next) => {
-  const email = req.user?.claims?.email;
-  if (isAdminEmail(email)) return next();
-  // Fail-closed: absence of privilege_level is treated as viewer (read-only)
-  const level = req.user?.privilege_level || 'viewer';
-  if (['member', 'manager', 'admin'].includes(level)) return next();
-  return res.status(403).json({ message: 'Read-only access. Members or above can perform this action.' });
-};
+const PRIVILEGE_HIERARCHY = { viewer: 0, member: 1, manager: 2, admin: 3 };
+
+function requirePrivilege(minLevel) {
+  return async (req, res, next) => {
+    const email  = req.user?.claims?.email;
+    const userId = req.user?.claims?.sub;
+    if (!email || !userId) return res.status(403).json({ message: 'Forbidden' });
+    if (isAdminEmail(email)) return next();
+    try {
+      const r = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
+      const level    = r.rows[0]?.privilege_level || 'member';
+      const userRank = PRIVILEGE_HIERARCHY[level]    ?? 1;
+      const minRank  = PRIVILEGE_HIERARCHY[minLevel] ?? 1;
+      if (userRank >= minRank) return next();
+      return res.status(403).json({ message: `${minLevel} privilege or higher is required` });
+    } catch {
+      return res.status(500).json({ message: 'Authorization check failed' });
+    }
+  };
+}
 
 const requireManagerOrAdmin = async (req, res, next) => {
   const email  = req.user?.claims?.email;
@@ -983,17 +1013,34 @@ async function setupAuth(app) {
 
   app.get('/api/admin/capabilities', isAuthenticated, requireAdmin, async (req, res) => {
     try {
+      const LEVELS = ['viewer', 'member', 'manager', 'admin'];
+      /* Read overrides from role_permissions table */
+      const rpRows = await pool.query(
+        `SELECT permission_key, privilege_level, allowed FROM role_permissions`
+      );
+      /* Build a lookup: { [feat]: Set of allowed levels } from DB rows */
+      const dbMap = {};
+      for (const row of rpRows.rows) {
+        if (!dbMap[row.permission_key]) dbMap[row.permission_key] = new Set();
+        if (row.allowed) dbMap[row.permission_key].add(row.privilege_level);
+      }
+      /* Also read legacy admin_settings overrides and merge (DB table wins) */
       const overRow = await pool.query(
         `SELECT value FROM admin_settings WHERE key = 'permission_overrides'`
       );
-      const overrides = overRow.rows[0]?.value || {};
+      const legacyOverrides = overRow.rows[0]?.value || {};
+
       const merged = CAPABILITIES.map(row => {
         if (row.group) return row;
-        return overrides[row.feat] !== undefined
-          ? { ...row, levels: overrides[row.feat] }
-          : row;
+        if (dbMap[row.feat] !== undefined) {
+          return { ...row, levels: LEVELS.filter(l => dbMap[row.feat].has(l)) };
+        }
+        if (legacyOverrides[row.feat] !== undefined) {
+          return { ...row, levels: legacyOverrides[row.feat] };
+        }
+        return row;
       });
-      res.json({ levels: ['viewer', 'member', 'manager', 'admin'], features: merged });
+      res.json({ levels: LEVELS, features: merged });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -1013,6 +1060,20 @@ async function setupAuth(app) {
           return res.status(400).json({ error: `Invalid levels for feature: ${feat}` });
         }
       }
+      /* Write each (feature, level) combination into role_permissions */
+      const allLevels = ['viewer', 'member', 'manager', 'admin'];
+      for (const [feat, allowedLevels] of Object.entries(overrides)) {
+        for (const lvl of allLevels) {
+          await pool.query(
+            `INSERT INTO role_permissions (permission_key, privilege_level, allowed)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (permission_key, privilege_level)
+             DO UPDATE SET allowed = EXCLUDED.allowed`,
+            [feat, lvl, allowedLevels.includes(lvl)]
+          );
+        }
+      }
+      /* Also keep admin_settings in sync for legacy reads */
       await pool.query(
         `INSERT INTO admin_settings (key, value)
          VALUES ('permission_overrides', $1::jsonb)
@@ -1021,7 +1082,7 @@ async function setupAuth(app) {
       );
       const adminEmail = req.user?.claims?.email;
       await logAdminAction(adminEmail, 'edit_permissions', null,
-        `Updated ${Object.keys(overrides).length} feature permission(s)`);
+        `Updated ${Object.keys(overrides).length} feature permission(s) in role_permissions`);
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -1208,4 +1269,4 @@ const isAuthenticated = async (req, res, next) => {
   }
 };
 
-module.exports = { installSession, setupAuth, isAuthenticated, requireAdmin, requireAtLeastMember, requireManagerOrAdmin, isAdminEmail, userIdExists };
+module.exports = { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail, userIdExists };

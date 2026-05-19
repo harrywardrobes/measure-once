@@ -566,11 +566,20 @@
       </div>
     </div>
 
-    <div class="form-section-label">Role &amp; notes</div>
+    <div class="form-section-label">Role &amp; permissions</div>
     <div class="form-grid">
       <div class="form-field-wrap form-field-full">
         <label>Job role</label>
         <select class="field field-full" id="modal-jobrole"></select>
+      </div>
+      <div class="form-field-wrap form-field-full">
+        <label>Privilege level</label>
+        <select class="field field-full" id="modal-privilege">
+          <option value="viewer">Viewer — read-only access</option>
+          <option value="member">Member — standard team access</option>
+          <option value="manager">Manager — can assign fitters &amp; manage trades</option>
+          <option value="admin">Admin — full access including this panel</option>
+        </select>
       </div>
       <div class="form-field-wrap form-field-full">
         <label>Note <span class="opt">(optional)</span></label>
@@ -741,6 +750,9 @@
       (u.job_role && !_jobRoles.find(r => r.name === u.job_role)
         ? `<option value="${esc(u.job_role)}" selected>${esc(u.job_role)}</option>` : '');
 
+    const privSel = $('#modal-privilege');
+    if (privSel) privSel.value = u.privilege_level || 'member';
+
     $('#modal-note').value = u.note || '';
 
     const errEl = $('#modal-err');
@@ -762,17 +774,18 @@
     if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
 
     const payload = {
-      first_name:    ($('#modal-fname')?.value  || '').trim(),
-      last_name:     ($('#modal-lname')?.value  || '').trim(),
-      email:         ($('#modal-email')?.value  || '').trim(),
-      date_of_birth: ($('#modal-dob')?.value    || '').trim(),
-      ni_number:     ($('#modal-ni')?.value     || '').trim(),
-      mobile_number: ($('#modal-mobile')?.value || '').trim(),
-      ec_first_name: ($('#modal-ec-fname')?.value || '').trim(),
-      ec_last_name:  ($('#modal-ec-lname')?.value || '').trim(),
-      ec_phone:      ($('#modal-ec-phone')?.value || '').trim(),
-      job_role:      $('#modal-jobrole')?.value || '',
-      note:          ($('#modal-note')?.value   || '').trim(),
+      first_name:      ($('#modal-fname')?.value     || '').trim(),
+      last_name:       ($('#modal-lname')?.value     || '').trim(),
+      email:           ($('#modal-email')?.value     || '').trim(),
+      date_of_birth:   ($('#modal-dob')?.value       || '').trim(),
+      ni_number:       ($('#modal-ni')?.value        || '').trim(),
+      mobile_number:   ($('#modal-mobile')?.value    || '').trim(),
+      ec_first_name:   ($('#modal-ec-fname')?.value  || '').trim(),
+      ec_last_name:    ($('#modal-ec-lname')?.value  || '').trim(),
+      ec_phone:        ($('#modal-ec-phone')?.value  || '').trim(),
+      job_role:        $('#modal-jobrole')?.value    || '',
+      privilege_level: $('#modal-privilege')?.value  || 'member',
+      note:            ($('#modal-note')?.value      || '').trim(),
     };
 
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
@@ -1020,7 +1033,8 @@
       </tr>`;
     };
 
-    const pendingBadge = pending.length > 0 ? `<span class="tab-badge">${pending.length}</span>` : '';
+    const totalBadgeCount = pending.length + _photoRequests.length;
+    const pendingBadge = totalBadgeCount > 0 ? `<span class="tab-badge">${totalBadgeCount}</span>` : '';
     const pendingTab = $('#req-tab-badge');
     if (pendingTab) pendingTab.innerHTML = pendingBadge;
 
@@ -1302,9 +1316,12 @@
   function renderPhotoRequests() {
     const container = $('#photos-content');
     if (!container) return;
-    const badge = document.getElementById('photo-tab-badge');
-    if (badge) badge.innerHTML = _photoRequests.length > 0
-      ? `<span class="tab-badge">${_photoRequests.length}</span>` : '';
+    const reqBadge = document.getElementById('req-tab-badge');
+    if (reqBadge) {
+      const pendingCount = _requests.filter(r => r.status === 'pending').length;
+      const total = pendingCount + _photoRequests.length;
+      reqBadge.innerHTML = total > 0 ? `<span class="tab-badge">${total}</span>` : '';
+    }
 
     if (_photoRequests.length === 0) {
       container.innerHTML = `
@@ -1447,21 +1464,19 @@
     }
 
     const pending = _requests.filter(r => r.status === 'pending');
-    const pendingBadge = pending.length > 0 ? `<span class="tab-badge">${pending.length}</span>` : '';
-    const photoBadge   = _photoRequests.length > 0 ? `<span class="tab-badge">${_photoRequests.length}</span>` : '';
+    const totalReqBadge = pending.length + _photoRequests.length;
+    const reqBadge = totalReqBadge > 0 ? `<span class="tab-badge">${totalReqBadge}</span>` : '';
 
     $('#page').innerHTML = `
       <h1 class="page-title">Admin Panel</h1>
       <p class="page-sub">Manage the team, permissions, and access requests.</p>
 
       <div class="tabs">
-        <button class="tab-btn active" data-tab="team"       onclick="switchTab('team')">Team <span id="team-count" class="count-muted">${_users.length}</span></button>
-        <button class="tab-btn" data-tab="permissions"       onclick="switchTab('permissions')">Permissions &amp; roles</button>
-        <button class="tab-btn" data-tab="requests"          onclick="switchTab('requests')">Access requests <span id="req-tab-badge">${pendingBadge}</span></button>
-        <button class="tab-btn" data-tab="photos"            onclick="switchTab('photos')">Photos <span id="photo-tab-badge">${photoBadge}</span></button>
-        <button class="tab-btn" data-tab="tradesaudit"        onclick="switchTab('tradesaudit')">Trades audit</button>
-        <button class="tab-btn" data-tab="auditlog"          onclick="switchTab('auditlog')">Audit log</button>
-        <button class="tab-btn" data-tab="settings"          onclick="switchTab('settings');loadHubspotStatus()">Settings</button>
+        <button class="tab-btn active" data-tab="team"        onclick="switchTab('team')">Team <span id="team-count" class="count-muted">${_users.length}</span></button>
+        <button class="tab-btn"        data-tab="permissions" onclick="switchTab('permissions')">Permissions &amp; roles</button>
+        <button class="tab-btn"        data-tab="requests"    onclick="switchTab('requests')">Requests <span id="req-tab-badge">${reqBadge}</span></button>
+        <button class="tab-btn"        data-tab="auditlog"    onclick="switchTab('auditlog')">Audit log</button>
+        <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings');loadHubspotStatus()">Settings</button>
       </div>
 
       <!-- TEAM -->
@@ -1474,7 +1489,7 @@
         </div>
       </div>
 
-      <!-- PERMISSIONS -->
+      <!-- PERMISSIONS & ROLES -->
       <div class="tab-panel" id="tab-permissions">
         <div class="card">
           <div class="card-title">Manage job roles</div>
@@ -1501,18 +1516,14 @@
         </div>
       </div>
 
-      <!-- REQUESTS -->
+      <!-- REQUESTS (access requests + photo approvals) -->
       <div class="tab-panel" id="tab-requests">
         <div id="requests-content"></div>
-      </div>
-
-      <!-- PHOTOS -->
-      <div class="tab-panel" id="tab-photos">
         <div id="photos-content"></div>
       </div>
 
-      <!-- TRADES AUDIT -->
-      <div class="tab-panel" id="tab-tradesaudit">
+      <!-- AUDIT LOG (admin actions + trades audit) -->
+      <div class="tab-panel" id="tab-auditlog">
         <div class="card mig-card">
           <div class="card-title" style="margin:0 0 6px;">Migrate legacy trade data</div>
           <p class="mig-desc">
@@ -1528,23 +1539,19 @@
           <div class="mig-results" id="mig-results"></div>
         </div>
 
-        <div class="card" style="padding:0;overflow:hidden;">
-          <div style="padding:16px 20px 14px;border-bottom:1px solid var(--stone);">
-            <div class="card-title" style="margin:0 0 4px;">Trade companies audit trail <span class="card-count count-muted">(read-only)</span></div>
-            <p class="card-desc" style="margin:0;">Who added or last edited each trade company, and when.</p>
-          </div>
-          <div style="padding:0 4px;" id="trades-audit-content"></div>
-        </div>
-      </div>
-
-      <!-- AUDIT LOG -->
-      <div class="tab-panel" id="tab-auditlog">
         <div class="card">
           <div class="card-title">Admin audit log <span class="card-count count-muted">(read-only)</span></div>
           <p class="card-desc" style="margin-bottom:16px;">
             A time-ordered record of every admin action — who changed what, and when.
           </p>
           <div id="audit-content"></div>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div style="padding:16px 20px 14px;border-bottom:1px solid var(--stone);">
+            <div class="card-title" style="margin:0 0 4px;">Trade companies audit trail <span class="card-count count-muted">(read-only)</span></div>
+            <p class="card-desc" style="margin:0;">Who added or last edited each trade company, and when.</p>
+          </div>
+          <div style="padding:0 4px;" id="trades-audit-content"></div>
         </div>
       </div>
 

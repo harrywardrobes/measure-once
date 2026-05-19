@@ -2,7 +2,7 @@ const express = require('express');
 const axios   = require('axios');
 const crypto  = require('crypto');
 const { Pool } = require('pg');
-const { isAuthenticated, requireAdmin, requireAtLeastMember, isAdminEmail } = require('./auth');
+const { isAuthenticated, requireAdmin, requirePrivilege, isAdminEmail } = require('./auth');
 
 // ── Per-user rate limiter for sensitive send actions (Postgres-backed) ──────────
 // Durable across restarts; safe in multi-instance deployments.
@@ -244,7 +244,7 @@ router.get('/api/quickbooks/invoice/:id', isAuthenticated, async (req, res) => {
 });
 
 // ── API: update invoice (sparse) ───────────────────────────────────────────────
-router.post('/api/quickbooks/invoice/:id', isAuthenticated, requireAtLeastMember, async (req, res) => {
+router.post('/api/quickbooks/invoice/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   try {
     const { syncToken, dueDate, memo, email } = req.body;
     const t = await getValidTokens();
@@ -304,7 +304,7 @@ router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, async (req, res) 
 });
 
 // ── API: send invoice by email ─────────────────────────────────────────────────
-router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requireAtLeastMember, async (req, res) => {
+router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   // Rate-limit: cap sends per authenticated user to SEND_LIMIT per rolling hour.
   const userId = req.user?.claims?.sub || req.user?.id;
   try {

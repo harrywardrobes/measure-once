@@ -214,6 +214,10 @@ async function bootstrap() {
     const tradesBtn = document.getElementById('bnav-trades');
     if (tradesBtn) tradesBtn.style.display = '';
   }
+  if (user.isAdmin) {
+    const adminBtn = document.getElementById('bnav-admin');
+    if (adminBtn) adminBtn.style.display = '';
+  }
 
   try {
     await checkAuthStatus();
