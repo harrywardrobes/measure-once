@@ -4,69 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Admin · Measure Once</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
   <style>
-    *, *::before, *::after { box-sizing: border-box; }
+    /* ── Admin-specific layout ── */
+    body { padding-top: 52px; min-height: 100vh; overscroll-behavior: auto; }
 
-    :root {
-      --plum:      #200842;
-      --orchid:    #8B2BFF;
-      --ink-1:     #141413;
-      --ink-2:     #3C3A34;
-      --ink-3:     #6B6860;
-      --ink-4:     #97927F;
-      --paper:     #F6F1E7;
-      --chalk:     #FBFAF5;
-      --stone:     #D9D2C2;
-      --stone-soft:#F5F2EB;
-      --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-pill: 999px;
-      --shadow-sm: 0 1px 3px rgba(30,24,14,.10), 0 1px 2px rgba(30,24,14,.06);
-      --shadow-md: 0 4px 12px rgba(30,24,14,.12), 0 2px 4px rgba(30,24,14,.08);
-    }
+    .admin-brand-sep { color: rgba(255,255,255,.35); font-size: .8rem; margin-left: 2px; }
 
-    body {
-      margin: 0;
-      font-family: 'Inter', system-ui, sans-serif;
-      background: var(--paper);
-      color: var(--ink-1);
-      min-height: 100vh;
-    }
-
-    /* ── Header ── */
-    header {
-      background: var(--plum);
-      color: #fff;
-      padding: 0 24px;
-      height: 52px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      position: sticky;
-      top: 0;
-      z-index: 50;
-    }
-    .brand {
-      font-family: 'Anton', sans-serif;
-      letter-spacing: .05em;
-      text-transform: uppercase;
-      font-size: 1rem;
-    }
-    .brand-sep { color: rgba(255,255,255,.3); font-size: .8rem; }
-    header .spacer { flex: 1; }
-    header a {
-      color: rgba(255,255,255,.65);
-      text-decoration: none;
-      font-size: .82rem;
-      font-weight: 500;
-      padding: 5px 10px;
-      border-radius: var(--r-sm);
-      transition: background .15s;
-    }
-    header a:hover { background: rgba(255,255,255,.1); color: #fff; }
-
-    /* ── Page shell ── */
     .page { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
     .page-title { font-size: 1.25rem; font-weight: 700; margin: 0 0 2px; }
     .page-sub { color: var(--ink-3); font-size: .88rem; margin: 0 0 22px; }
@@ -74,9 +18,11 @@
     /* ── Tabs ── */
     .tabs {
       display: flex;
-      gap: 4px;
+      gap: 2px;
       border-bottom: 2px solid var(--stone);
       margin-bottom: 24px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
     .tab-btn {
       padding: 9px 16px;
@@ -89,15 +35,14 @@
       font-family: inherit;
       border-bottom: 2px solid transparent;
       margin-bottom: -2px;
-      border-radius: var(--r-sm) var(--r-sm) 0 0;
-      transition: color .15s;
+      border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+      transition: color .15s, background .15s;
       white-space: nowrap;
+      flex-shrink: 0;
     }
     .tab-btn:hover { color: var(--ink-1); background: var(--stone-soft); }
-    .tab-btn.active {
-      color: var(--plum);
-      border-bottom-color: var(--plum);
-    }
+    .tab-btn.active { color: var(--plum); border-bottom-color: var(--plum); }
+
     .tab-badge {
       display: inline-flex;
       align-items: center;
@@ -107,7 +52,7 @@
       padding: 0 5px;
       background: var(--orchid);
       color: #fff;
-      border-radius: var(--r-pill);
+      border-radius: var(--radius-pill);
       font-size: .65rem;
       font-weight: 700;
       margin-left: 5px;
@@ -117,15 +62,15 @@
 
     /* ── Card ── */
     .card {
-      background: #fff;
+      background: var(--chalk);
       border: 1px solid var(--stone);
-      border-radius: var(--r-lg);
+      border-radius: var(--radius-lg);
       padding: 20px;
       margin-bottom: 20px;
       box-shadow: var(--shadow-sm);
     }
     .card-title {
-      font-size: .78rem;
+      font-size: .75rem;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: .06em;
@@ -160,11 +105,11 @@
       font-size: .875rem;
     }
 
-    /* ── Privilege badges ── */
+    /* ── Privilege level badges ── */
     .lvl {
       display: inline-block;
       padding: 2px 9px;
-      border-radius: var(--r-pill);
+      border-radius: var(--radius-pill);
       font-size: .7rem;
       font-weight: 700;
       text-transform: capitalize;
@@ -173,13 +118,13 @@
     .lvl-viewer  { background: #f1f5f9; color: #475569; }
     .lvl-member  { background: #dbeafe; color: #1e40af; }
     .lvl-manager { background: #fef3c7; color: #92400e; }
-    .lvl-admin   { background: #ede0ff; color: #3d0f7a; }
+    .lvl-admin   { background: var(--orchid-tint); color: var(--orchid-deep); }
 
     /* ── Status badges ── */
     .badge {
       display: inline-block;
       padding: 2px 8px;
-      border-radius: var(--r-pill);
+      border-radius: var(--radius-pill);
       font-size: .7rem;
       font-weight: 600;
       text-transform: capitalize;
@@ -189,12 +134,7 @@
     .badge-rejected { background: #fee2e2; color: #991b1b; }
 
     /* ── Avatar ── */
-    .avatar {
-      width: 28px; height: 28px;
-      border-radius: 50%;
-      object-fit: cover;
-      flex-shrink: 0;
-    }
+    .avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
     .avatar-placeholder {
       width: 28px; height: 28px;
       border-radius: 50%;
@@ -207,48 +147,44 @@
       color: var(--ink-3);
       flex-shrink: 0;
     }
-    .user-cell {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+    .user-cell { display: flex; align-items: center; gap: 10px; }
     .user-cell-name { font-weight: 600; font-size: .875rem; }
     .user-cell-role { font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
 
     /* ── Buttons ── */
-    button { font-family: inherit; }
     .btn {
       border: 1px solid transparent;
-      border-radius: var(--r-sm);
+      border-radius: var(--radius-sm);
       padding: 6px 12px;
       font-size: .8rem;
       font-weight: 600;
       cursor: pointer;
+      font-family: inherit;
       transition: background .15s, opacity .15s;
       white-space: nowrap;
     }
     .btn:disabled { opacity: .55; cursor: not-allowed; }
-    .btn-primary  { background: var(--plum); color: #fff; }
+    .btn-primary { background: var(--plum); color: #fff; }
     .btn-primary:hover:not(:disabled) { background: #2e0f5a; }
-    .btn-danger   { background: #fff; color: #991b1b; border-color: #fecaca; }
+    .btn-danger  { background: var(--chalk); color: #991b1b; border-color: #fecaca; }
     .btn-danger:hover:not(:disabled)  { background: #fee2e2; }
-    .btn-ghost    { background: #fff; color: var(--ink-2); border-color: var(--stone); }
+    .btn-ghost   { background: var(--chalk); color: var(--ink-2); border-color: var(--stone); }
     .btn-ghost:hover:not(:disabled)   { background: var(--stone-soft); }
-    .btn-approve  { background: #059669; color: #fff; }
+    .btn-approve { background: #059669; color: #fff; border: none; }
     .btn-approve:hover:not(:disabled) { background: #047857; }
-    .btn-reject   { background: #fff; color: #991b1b; border-color: #fecaca; }
+    .btn-reject  { background: var(--chalk); color: #991b1b; border-color: #fecaca; }
     .btn-reject:hover:not(:disabled)  { background: #fee2e2; }
 
     /* ── Field inputs ── */
     .field {
       border: 1px solid var(--stone);
-      border-radius: var(--r-sm);
-      padding: 5px 9px;
+      border-radius: var(--radius-sm);
+      padding: 6px 10px;
       font-size: .82rem;
       font-family: inherit;
       color: var(--ink-1);
-      outline: none;
       background: #fff;
+      outline: none;
       transition: border-color .15s;
     }
     .field:focus { border-color: var(--orchid); }
@@ -261,13 +197,9 @@
     /* ── Actions ── */
     .actions { display: flex; gap: 6px; justify-content: flex-end; }
 
-    /* ── Permissions Matrix ── */
+    /* ── Permissions matrix ── */
     .matrix-wrap { overflow-x: auto; }
-    .matrix {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: .82rem;
-    }
+    .matrix { width: 100%; border-collapse: collapse; font-size: .82rem; }
     .matrix th {
       text-align: center;
       padding: 10px 14px;
@@ -288,11 +220,7 @@
       padding: 10px 14px;
       border-bottom: 1px solid var(--stone-soft);
     }
-    .matrix td.feat-name {
-      text-align: left;
-      font-weight: 500;
-      color: var(--ink-2);
-    }
+    .matrix td.feat-name { text-align: left; font-weight: 500; color: var(--ink-2); }
     .matrix td.feat-desc {
       font-weight: 400;
       font-size: .78rem;
@@ -302,8 +230,8 @@
     }
     .matrix-head { background: var(--stone-soft); }
     .matrix tr:last-child td { border-bottom: none; }
-    .tick { color: #059669; font-size: 1rem; }
-    .cross { color: #cbd5e1; font-size: 1rem; }
+    .tick  { color: #059669; font-size: 1rem; }
+    .cross { color: var(--stone-deep); font-size: 1rem; }
     .matrix-group td, .matrix-group th {
       background: var(--stone-soft);
       font-size: .68rem;
@@ -312,6 +240,7 @@
       letter-spacing: .07em;
       color: var(--ink-4);
       padding: 6px 14px;
+      text-align: left;
     }
 
     /* ── Job roles manager ── */
@@ -323,7 +252,7 @@
       gap: 6px;
       background: var(--stone-soft);
       border: 1px solid var(--stone);
-      border-radius: var(--r-pill);
+      border-radius: var(--radius-pill);
       padding: 4px 10px;
       font-size: .78rem;
       font-weight: 500;
@@ -339,9 +268,10 @@
       font-size: .9rem;
       font-weight: 700;
       transition: color .1s;
+      font-family: inherit;
     }
     .role-del:hover { color: #991b1b; }
-    .roles-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .roles-list { display: flex; flex-wrap: wrap; gap: 8px; min-height: 32px; }
     .roles-empty { color: var(--ink-4); font-style: italic; font-size: .875rem; }
 
     /* ── Overview cards ── */
@@ -351,40 +281,21 @@
       gap: 14px;
     }
     .ov-card {
-      background: #fff;
+      background: var(--chalk);
       border: 1px solid var(--stone);
-      border-radius: var(--r-lg);
+      border-radius: var(--radius-lg);
       padding: 16px;
       box-shadow: var(--shadow-sm);
     }
-    .ov-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-    .ov-name { font-weight: 700; font-size: .9rem; color: var(--ink-1); }
+    .ov-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .ov-name  { font-weight: 700; font-size: .9rem; color: var(--ink-1); }
     .ov-email { font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
-    .ov-access {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 5px;
-    }
-    .ov-feat {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: .72rem;
-      color: var(--ink-3);
-    }
-    .ov-feat.has { color: var(--ink-2); }
-    .ov-dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
+    .ov-access { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .ov-feat { display: flex; align-items: center; gap: 5px; font-size: .72rem; color: var(--stone-deep); }
+    .ov-feat.has { color: var(--ink-3); }
+    .ov-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
     .ov-dot.has { background: #34d399; }
-    .ov-dot.no  { background: #e2e8f0; }
+    .ov-dot.no  { background: var(--stone); }
 
     /* ── Toast ── */
     .toast {
@@ -395,7 +306,7 @@
       background: var(--plum);
       color: #fff;
       padding: 10px 18px;
-      border-radius: var(--r-md);
+      border-radius: var(--radius-md);
       font-size: .875rem;
       font-weight: 500;
       opacity: 0;
@@ -407,7 +318,7 @@
     .toast.show { opacity: 1; }
     .toast.err  { background: #991b1b; }
 
-    /* ── Loading / forbidden ── */
+    /* ── States ── */
     .loading-state {
       display: flex;
       align-items: center;
@@ -417,25 +328,29 @@
       font-size: .9rem;
     }
     .forbidden-card {
-      background: #fff;
+      background: var(--chalk);
       border: 1px solid #fecaca;
-      border-radius: var(--r-lg);
+      border-radius: var(--radius-lg);
       padding: 32px;
       text-align: center;
       margin-top: 32px;
     }
     .forbidden-card h2 { color: #991b1b; margin: 0 0 8px; }
-    .forbidden-card p { color: var(--ink-3); margin: 0; font-size: .9rem; }
+    .forbidden-card p  { color: var(--ink-3); margin: 0; font-size: .9rem; }
   </style>
 </head>
 <body>
 
-<header>
-  <span class="brand">Measure Once</span>
-  <span class="brand-sep">/ Admin</span>
-  <span class="spacer"></span>
-  <a href="/">← Dashboard</a>
-  <a href="/api/logout">Sign out</a>
+<header class="app-header">
+  <a href="/" class="header-back-btn" aria-label="Back to dashboard" title="Dashboard">
+    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+    </svg>
+  </a>
+  <span style="font-family:'Anton',sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#fff;font-size:1rem;">Measure Once</span>
+  <span class="admin-brand-sep">/ Admin</span>
+  <span style="flex:1"></span>
+  <a href="/api/logout" class="nav-btn" style="font-size:.8rem;">Sign out</a>
 </header>
 
 <div class="page" id="page">
@@ -443,6 +358,9 @@
 </div>
 
 <div id="toast" class="toast"></div>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
 
 <script>
   const $ = s => document.querySelector(s);
@@ -469,7 +387,7 @@
     return data;
   }
 
-  /* ── Date formatter ── */
+  /* ── Date formatters ── */
   function fmtDate(iso) {
     if (!iso) return '—';
     return new Date(iso).toLocaleString('en-GB', {
@@ -599,7 +517,7 @@
   }
 
   async function saveEdit(id) {
-    const job_role       = document.getElementById('usel-job-' + id)?.value || '';
+    const job_role        = document.getElementById('usel-job-' + id)?.value || '';
     const privilege_level = document.getElementById('usel-lvl-' + id)?.value;
     const saveBtn = document.querySelector(`#uedit-${id} .btn-primary`);
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
@@ -655,7 +573,7 @@
         </table>
       </div>
       <p style="font-size:.75rem;color:var(--ink-4);margin:12px 0 0;">
-        * Admin access requires the user's email to be listed in the <code>ADMIN_EMAILS</code> environment variable.
+        * Admin panel access requires the user's email to be in the <code>ADMIN_EMAILS</code> environment variable.
         The "admin" privilege level in the database grants manager-equivalent access only.
       </p>`;
   }
@@ -674,7 +592,6 @@
         <button class="role-del" onclick="deleteRole('${esc(r)}')" title="Remove">×</button>
       </span>`).join('');
 
-    // Re-render team tab job role dropdowns so they stay in sync
     document.querySelectorAll('[id^="usel-job-"]').forEach(sel => {
       const uid = sel.id.replace('usel-job-', '');
       const u   = _users.find(u => u.id === uid);
@@ -860,7 +777,7 @@
   }
 
   /* ────────────────────────────────────────────────
-     OVERVIEW TAB — features derived from capabilities
+     OVERVIEW TAB
   ──────────────────────────────────────────────── */
   function renderOverview() {
     const container = $('#overview-content');
@@ -870,15 +787,13 @@
       return;
     }
 
-    // Pick a representative subset of non-group features for the overview dots
     const feats = _capabilities.features.filter(f => f.feat).slice(0, 6);
 
     container.innerHTML = `<div class="overview-grid">${_users.map(u => {
       const name  = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—';
       const level = u.privilege_level || 'member';
       const dots  = feats.map(f => {
-        const has = u.isAdmin || (f.levels || []).includes(level);
-        // Shorten label: first two words of feat name
+        const has   = u.isAdmin || (f.levels || []).includes(level);
         const label = f.feat.split(' ').slice(0, 2).join(' ');
         return `<div class="ov-feat ${has ? 'has' : ''}">
           <span class="ov-dot ${has ? 'has' : 'no'}"></span>
@@ -889,7 +804,7 @@
         <div class="ov-card">
           <div class="ov-header">
             ${avatarEl(u)}
-            <div style="min-width:0;">
+            <div style="min-width:0;flex:1;">
               <div class="ov-name">${esc(name)}</div>
               <div class="ov-email">${esc(u.email || '')}</div>
             </div>
@@ -915,7 +830,6 @@
   }
 
   async function init() {
-    // Auth guard — redirect non-admins
     let me;
     try {
       me = await api('GET', '/api/auth/user');
@@ -957,25 +871,17 @@
       <p class="page-sub">Manage the team, permissions, and access requests.</p>
 
       <div class="tabs">
-        <button class="tab-btn active" data-tab="team"        onclick="switchTab('team')">Team <span id="team-count" style="color:var(--ink-4);font-weight:400;">${_users.length}</span></button>
-        <button class="tab-btn"        data-tab="permissions"  onclick="switchTab('permissions')">Permissions & roles</button>
-        <button class="tab-btn"        data-tab="requests"     onclick="switchTab('requests')">Access requests <span id="req-tab-badge">${pendingBadge}</span></button>
-        <button class="tab-btn"        data-tab="overview"     onclick="switchTab('overview')">Overview</button>
+        <button class="tab-btn active" data-tab="team"       onclick="switchTab('team')">Team <span id="team-count" style="color:var(--ink-4);font-weight:400;">${_users.length}</span></button>
+        <button class="tab-btn" data-tab="permissions"       onclick="switchTab('permissions')">Permissions &amp; roles</button>
+        <button class="tab-btn" data-tab="requests"          onclick="switchTab('requests')">Access requests <span id="req-tab-badge">${pendingBadge}</span></button>
+        <button class="tab-btn" data-tab="overview"          onclick="switchTab('overview')">Overview</button>
       </div>
 
       <!-- TEAM -->
       <div class="tab-panel active" id="tab-team">
         <div class="card" style="padding:0;overflow:hidden;">
           <table>
-            <thead>
-              <tr>
-                <th>Member</th>
-                <th>Job role</th>
-                <th>Privilege</th>
-                <th>Joined</th>
-                <th></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Member</th><th>Job role</th><th>Privilege</th><th>Joined</th><th></th></tr></thead>
             <tbody id="team-body"></tbody>
           </table>
         </div>
@@ -987,11 +893,10 @@
           <div class="card-title">Permissions matrix</div>
           ${renderMatrix()}
         </div>
-
         <div class="card">
           <div class="card-title">Manage job roles</div>
           <p style="font-size:.82rem;color:var(--ink-3);margin:0 0 14px;">
-            These are the role labels available when editing a team member's profile.
+            These labels are available when editing a team member's profile.
           </p>
           <div class="roles-add-form">
             <input class="field" id="role-input" type="text" placeholder="New role name…" maxlength="64"
