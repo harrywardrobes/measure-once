@@ -409,8 +409,30 @@ async function _doSelectContact(contactId, roomIdx) {
 async function switchRoom(idx) {
   if (idx === state.selectedRoomIdx) return;
   captureNotes();
+
+  if (hasUnsavedChanges()) {
+    showUnsavedChangesBar(
+      async () => {
+        await persistCommentDraft();
+        await flushDeferredSave();
+        try { await saveWorkflowData(); } catch {}
+        _doSwitchRoom(idx);
+      },
+      () => {
+        _clearCommentDraft();
+        discardPendingSave();
+        _doSwitchRoom(idx);
+      }
+    );
+    return;
+  }
+
   await flushDeferredSave();
   try { await saveWorkflowData(); } catch {}
+  _doSwitchRoom(idx);
+}
+
+function _doSwitchRoom(idx) {
   state.selectedRoomIdx = idx;
   state.workflowData = state.allRooms[idx];
   state.expandedStages = new Set();
