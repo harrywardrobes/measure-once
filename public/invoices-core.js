@@ -88,18 +88,37 @@ async function openInvoicePanel(invId, allInvIds) {
   }
 }
 
+function _snapshotInvFields() {
+  return {
+    due:   document.getElementById('inv-edit-due')?.value ?? null,
+    email: document.getElementById('inv-edit-email')?.value ?? null,
+    memo:  document.getElementById('inv-edit-memo')?.value ?? null,
+  };
+}
+
+function _restoreInvFields(snapshot) {
+  if (!snapshot) return;
+  const due   = document.getElementById('inv-edit-due');
+  const email = document.getElementById('inv-edit-email');
+  const memo  = document.getElementById('inv-edit-memo');
+  if (due   && snapshot.due   !== null) due.value   = snapshot.due;
+  if (email && snapshot.email !== null) email.value = snapshot.email;
+  if (memo  && snapshot.memo  !== null) memo.value  = snapshot.memo;
+}
+
 async function navigateInvoicePanel(delta) {
   const ctx = state.qb.panelContext;
   if (!ctx) return;
   const newIdx = ctx.index + delta;
   if (newIdx < 0 || newIdx >= ctx.ids.length) return;
   if (window._invMemoDirty || window._invSendDirty) {
+    const snapshot = _snapshotInvFields();
     const msg = window._invSendDirty && window._invMemoDirty
       ? 'You have unsaved changes and an unsent email update. Discard and continue?'
       : window._invSendDirty
         ? 'The customer email has been changed but not sent. Discard and continue?'
         : 'You have unsaved invoice changes. Discard and continue?';
-    if (!confirm(msg)) return;
+    if (!confirm(msg)) { _restoreInvFields(snapshot); return; }
     window._invMemoDirty = false;
     window._invSendDirty = false;
   }
@@ -114,12 +133,13 @@ async function jumpToInvoice(idx) {
   const i = parseInt(idx, 10);
   if (isNaN(i) || i < 0 || i >= ctx.ids.length || i === ctx.index) return;
   if (window._invMemoDirty || window._invSendDirty) {
+    const snapshot = _snapshotInvFields();
     const msg = window._invSendDirty && window._invMemoDirty
       ? 'You have unsaved changes and an unsent email update. Discard and continue?'
       : window._invSendDirty
         ? 'The customer email has been changed but not sent. Discard and continue?'
         : 'You have unsaved invoice changes. Discard and continue?';
-    if (!confirm(msg)) return;
+    if (!confirm(msg)) { _restoreInvFields(snapshot); return; }
     window._invMemoDirty = false;
     window._invSendDirty = false;
   }
