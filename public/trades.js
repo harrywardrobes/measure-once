@@ -478,7 +478,10 @@ async function saveTradeContact(e) {
     populateTradeFilters();
     applyTradeFilters();
   } catch (err) {
-    showToast(err.message || 'Failed to save company', true);
+    const msg = err.code === 'DB_ERROR'
+      ? 'Couldn\'t save — a database error occurred. Please try again.'
+      : (err.message || 'Failed to save company');
+    showToast(msg, true);
     submitBtn.disabled = false;
     submitBtn.textContent = editId ? 'Save Changes' : 'Save Company';
   }
@@ -514,7 +517,10 @@ async function confirmDeleteTrade() {
     applyTradeFilters();
     showToast('Company deleted');
   } catch (err) {
-    showToast(err.message || 'Failed to delete company', true);
+    const msg = err.code === 'DB_ERROR'
+      ? 'Couldn\'t delete — a database error occurred. Please try again.'
+      : (err.message || 'Failed to delete company');
+    showToast(msg, true);
     btn.disabled = false;
     btn.textContent = 'Delete';
   }

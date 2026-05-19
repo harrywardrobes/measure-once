@@ -1460,7 +1460,7 @@ app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) 
     }));
     res.json(result);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message, code: 'DB_ERROR' });
   }
 });
 
@@ -1503,7 +1503,7 @@ app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res)
     res.status(201).json({ ...co, areas_served: parseAreasServed(co.areas_served), contacts: insertedContacts });
   } catch (e) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message, code: 'DB_ERROR' });
   } finally {
     client.release();
   }
@@ -1572,7 +1572,7 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
     res.json({ ...co, areas_served: parseAreasServed(co.areas_served), contacts: insertedContacts });
   } catch (e) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message, code: 'DB_ERROR' });
   } finally {
     client.release();
   }
@@ -1588,7 +1588,7 @@ app.get('/api/trades/:id/audit', isAuthenticated, requireManagerOrAdmin, async (
     );
     res.json(rows);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message, code: 'DB_ERROR' });
   }
 });
 
@@ -1600,7 +1600,7 @@ app.delete('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req
     if (!r.rowCount) return res.status(404).json({ error: 'Company not found.' });
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message, code: 'DB_ERROR' });
   }
 });
 
@@ -1630,7 +1630,7 @@ app.get('/api/admin/trades-audit', isAuthenticated, requireAdmin, async (req, re
       changed_at:   r.changed_at,
     })));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: e.message, code: 'DB_ERROR' });
   }
 });
 
