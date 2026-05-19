@@ -483,6 +483,12 @@ async function quickSetLeadStatus(contactId, newStatus) {
       const fresh = state.contacts.find(c => c.id === state.selectedContactId);
       if (fresh) state.selectedContact = fresh;
     }
+    // Record pending optimistic status (including '' for a clear) so any
+    // contact refresh that replaces state.contacts can re-apply it before
+    // the PATCH response arrives. The entry is only removed once the PATCH
+    // resolves, not when the status value is empty.
+    state.pendingLeadStatus = state.pendingLeadStatus || {};
+    state.pendingLeadStatus[contactId] = status;
     _syncLeadStatusCache(contactId, status);
     populateLeadStatusFilter();
     renderCustomerList();
@@ -494,14 +500,21 @@ async function quickSetLeadStatus(contactId, newStatus) {
 
   try {
     await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: newStatus });
+    // PATCH succeeded — server now has the new value, so no longer pending.
+    if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
     const newLabel = newStatus ? (LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)?.label || newStatus) : null;
     showBottomUndo(newLabel ? `Lead status set to ${newLabel}` : 'Lead status cleared', async () => {
       _applyLeadStatus(prevStatus || '');
-      await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: prevStatus || '' }).catch(() => {});
+      await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: prevStatus || '' })
+        .catch(() => {})
+        .finally(() => { if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId]; });
     });
   } catch (e) {
-    // Revert on failure
+    // Revert on failure: update pending to the reverted value, then clear once
+    // we know the PATCH round-trip is done (no second request needed since we
+    // never sent a successful change).
     _applyLeadStatus(prevStatus || '');
+    if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
     showToast('Failed to update lead status', true);
   }
 }

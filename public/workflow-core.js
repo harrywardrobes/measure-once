@@ -162,15 +162,33 @@ async function loadWorkflow() {
   }
 }
 
+// Re-apply any in-flight optimistic lead-status changes after state.contacts is
+// replaced by a server refresh. Prevents the badge from reverting while the
+// PATCH response is still in-flight.
+function _reapplyPendingLeadStatuses() {
+  const pending = state.pendingLeadStatus;
+  if (!pending || !Object.keys(pending).length) return;
+  for (const [contactId, status] of Object.entries(pending)) {
+    const c = state.contacts.find(c => c.id === contactId);
+    if (c) c.properties = { ...(c.properties || {}), hs_lead_status: status };
+  }
+  if (state.selectedContactId) {
+    const fresh = state.contacts.find(c => c.id === state.selectedContactId);
+    if (fresh) state.selectedContact = fresh;
+  }
+}
+
 async function loadOpenLeads() {
   const data = await GET('/api/open-leads');
   state.contacts = data.results || [];
+  _reapplyPendingLeadStatuses();
   state.filteredContacts = [...state.contacts];
 }
 
 async function loadAllContacts() {
   const data = await GET('/api/contacts-all');
   state.contacts = data.results || [];
+  _reapplyPendingLeadStatuses();
   state.filteredContacts = [...state.contacts];
   try { sessionStorage.setItem('contacts_all_cache', JSON.stringify(state.contacts)); } catch {}
 }
