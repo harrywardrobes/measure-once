@@ -1241,6 +1241,37 @@ function writePersonalTasks(tasks) {
   fs.writeFileSync(PERSONAL_TASKS_FILE, JSON.stringify(tasks, null, 2));
 }
 
+app.get('/api/users/me/prefs', isAuthenticated, async (req, res) => {
+  try {
+    const userId = req.user.claims.sub;
+    const r = await pool.query('SELECT prefs FROM users WHERE id = $1', [userId]);
+    res.json(r.rows[0]?.prefs || {});
+  } catch (e) {
+    console.error('GET /api/users/me/prefs error:', e);
+    res.status(500).json({ error: 'Failed to load preferences' });
+  }
+});
+
+app.patch('/api/users/me/prefs', isAuthenticated, async (req, res) => {
+  try {
+    const userId = req.user.claims.sub;
+    const patch = req.body;
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      return res.status(400).json({ error: 'Body must be a JSON object' });
+    }
+    const r = await pool.query(
+      `UPDATE users SET prefs = prefs || $1::jsonb, updated_at = NOW()
+       WHERE id = $2 RETURNING prefs`,
+      [JSON.stringify(patch), userId]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+    res.json(r.rows[0].prefs);
+  } catch (e) {
+    console.error('PATCH /api/users/me/prefs error:', e);
+    res.status(500).json({ error: 'Failed to save preferences' });
+  }
+});
+
 app.get('/api/personal-tasks', (req, res) => {
   const userId = req.user.claims.sub;
   res.json(readPersonalTasks().filter(t => t.userId === userId));

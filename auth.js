@@ -250,6 +250,11 @@ async function ensureAuthTables() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_photo  TEXT;
   `);
 
+  /* Per-user preferences stored as a JSONB blob (e.g. gcal_sync_pref). */
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS prefs JSONB NOT NULL DEFAULT '{}';
+  `);
+
   /* Admin audit log — immutable record of every admin action. */
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_audit_log (

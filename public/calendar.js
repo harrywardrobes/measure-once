@@ -426,9 +426,19 @@ function openVisitModal(visitId, prefillDate) {
 
   const gcalBox = document.getElementById('vm-gcal');
   if (gcalBox) {
-    gcalBox.checked = localStorage.getItem('gcal_sync_pref') === 'true';
+    gcalBox.checked = false;
+    fetch('/api/users/me/prefs')
+      .then(r => r.ok ? r.json() : null)
+      .then(prefs => {
+        gcalBox.checked = prefs?.gcal_sync_pref === true;
+      })
+      .catch(() => { gcalBox.checked = false; });
     gcalBox.addEventListener('change', () => {
-      localStorage.setItem('gcal_sync_pref', gcalBox.checked);
+      fetch('/api/users/me/prefs', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gcal_sync_pref: gcalBox.checked })
+      }).catch(() => {});
     });
   }
 }
