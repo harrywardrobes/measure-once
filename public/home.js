@@ -42,7 +42,7 @@ function renderHomeTab() {
 
   const calEvents = (state.calendarEvents || []).slice(0, 3);
 
-  const qbLoading  = state.qb.connected && (state.qb.loading || !state.qb.loaded);
+  const qbLoading  = !state.qb.statusKnown || (state.qb.connected && (state.qb.loading || !state.qb.loaded));
   const overdueInvs = state.qb.connected && state.qb.loaded
     ? state.qb.invoices.filter(inv => inv.dueDate && new Date(inv.dueDate).getTime() < todayMs).slice(0, 4)
     : [];

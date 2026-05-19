@@ -1005,15 +1005,32 @@ function renderWorkflowInvoices() {
   const el = document.getElementById('invoices-section');
   if (!el) return;
 
+  if (!state.qb.statusKnown || state.qb.loading || (state.qb.connected && !state.qb.loaded)) {
+    el.innerHTML = `
+      <div class="qb-section">
+        <div class="qb-section-title">Invoices</div>
+        <div class="qb-invoice-row" style="pointer-events:none">
+          <div class="qb-invoice-meta">
+            <div class="skeleton-line" style="height:11px;width:90px"></div>
+            <div class="skeleton-line" style="height:9px;width:64px;margin-top:4px"></div>
+          </div>
+          <div class="skeleton-line" style="height:13px;width:48px;flex-shrink:0"></div>
+        </div>
+        <div class="qb-invoice-row" style="pointer-events:none">
+          <div class="qb-invoice-meta">
+            <div class="skeleton-line" style="height:11px;width:74px"></div>
+            <div class="skeleton-line" style="height:9px;width:56px;margin-top:4px"></div>
+          </div>
+          <div class="skeleton-line" style="height:13px;width:42px;flex-shrink:0"></div>
+        </div>
+      </div>`;
+    return;
+  }
+
   if (!state.qb.connected) { el.innerHTML = ''; return; }
 
   const contact = state.selectedContact;
   if (!contact) { el.innerHTML = ''; return; }
-
-  if (!state.qb.loaded) {
-    el.innerHTML = `<div class="qb-section"><div class="qb-section-title">Invoices</div><p class="text-sm text-slate-400">Loading…</p></div>`;
-    return;
-  }
 
   const invoices = matchInvoicesForContact(contact);
   if (!invoices.length) {
