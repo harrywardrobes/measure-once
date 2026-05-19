@@ -102,7 +102,23 @@
   <script src="/sales.js"></script>
   <script>
     // Override goBack so the back button in the workflow returns to the customers list.
-    function goBack() {
+    async function goBack() {
+      if (hasUnsavedChanges()) {
+        showUnsavedChangesBar(
+          async () => {
+            await persistCommentDraft();
+            await flushDeferredSave();
+            location.href = '/customers';
+          },
+          () => {
+            _clearCommentDraft();
+            discardPendingSave();
+            location.href = '/customers';
+          }
+        );
+        return;
+      }
+      await flushDeferredSave();
       location.href = '/customers';
     }
 

@@ -155,11 +155,7 @@ function showWorkflowPanel() {
   if (wp) wp.scrollTop = 0;
 }
 
-async function goBack() {
-  captureNotes();
-  await flushDeferredSave();
-  if (state.selectedContactId) { try { await saveWorkflowData(); } catch {} }
-
+function _performGoBack() {
   // On the Sales pipeline page (no list panel) navigate back to the customer directory.
   if (location.pathname === '/sales') {
     location.href = '/customers';
@@ -177,6 +173,31 @@ async function goBack() {
   state.customerNotes     = '';
   state.tasks             = [];
   document.querySelectorAll('.customer-card').forEach(el => el.classList.remove('selected'));
+}
+
+async function goBack() {
+  captureNotes();
+
+  if (hasUnsavedChanges()) {
+    showUnsavedChangesBar(
+      async () => {
+        await persistCommentDraft();
+        await flushDeferredSave();
+        if (state.selectedContactId) { try { await saveWorkflowData(); } catch {} }
+        _performGoBack();
+      },
+      () => {
+        _clearCommentDraft();
+        discardPendingSave();
+        _performGoBack();
+      }
+    );
+    return;
+  }
+
+  await flushDeferredSave();
+  if (state.selectedContactId) { try { await saveWorkflowData(); } catch {} }
+  _performGoBack();
 }
 
 // ── HubSpot lead status → Sales stage sync ───────────────────────────────────
@@ -227,6 +248,27 @@ function syncRoomFromHubSpot(room, leadStatus) {
 
 // ── Contact Selection ─────────────────────────────────────────────────────────
 async function selectContact(contactId, roomIdx = 0) {
+  // Guard for unsaved changes when switching to a different contact
+  if (state.selectedContactId && state.selectedContactId !== contactId && hasUnsavedChanges()) {
+    showUnsavedChangesBar(
+      async () => {
+        await persistCommentDraft();
+        await flushDeferredSave();
+        try { await saveWorkflowData(); } catch {}
+        _doSelectContact(contactId, roomIdx);
+      },
+      () => {
+        _clearCommentDraft();
+        discardPendingSave();
+        _doSelectContact(contactId, roomIdx);
+      }
+    );
+    return;
+  }
+  _doSelectContact(contactId, roomIdx);
+}
+
+async function _doSelectContact(contactId, roomIdx) {
   // Always flush unsaved notes/workflow for current contact before switching
   captureNotes();
   if (state.selectedContactId && state.selectedContactId !== contactId) {
@@ -829,6 +871,22 @@ function renderComments() {
       }
     </div>
   `;
+}
+
+// Persist a typed-but-not-yet-saved comment draft before navigating away.
+// Appends the draft to state.workflowData.comments so the subsequent
+// saveWorkflowData() call in the save path persists it to the server.
+async function persistCommentDraft() {
+  const area  = document.getElementById('comment-input-area');
+  const input = document.getElementById('comment-input');
+  if (!area || area.classList.contains('hidden') || !input) return;
+  const text = input.value.trim();
+  if (!text || !state.workflowData) return;
+  if (!state.workflowData.comments) state.workflowData.comments = [];
+  const u = state.user;
+  const author = [u?.first_name, u?.last_name].filter(Boolean).join(' ') || u?.email || '';
+  state.workflowData.comments.push({ text, date: new Date().toISOString(), author });
+  _clearCommentDraft();
 }
 
 function showAddComment() {

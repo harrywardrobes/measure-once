@@ -406,3 +406,52 @@ async function runBottomAction() {
   closeBottomBar();
   if (fn) await fn();
 }
+
+// ── Unsaved-changes guard ─────────────────────────────────────────────────────
+
+function hasUnsavedChanges() {
+  if (_deferredSave) return true;
+  const commentArea  = document.getElementById('comment-input-area');
+  const commentInput = document.getElementById('comment-input');
+  if (commentArea && !commentArea.classList.contains('hidden') &&
+      commentInput && commentInput.value.trim()) return true;
+  return false;
+}
+
+function discardPendingSave() {
+  if (_deferredSave) {
+    clearTimeout(_deferredSave.timerId);
+    _deferredSave    = null;
+    _deferredSnapshot = null;
+  }
+}
+
+function _clearCommentDraft() {
+  const area  = document.getElementById('comment-input-area');
+  const input = document.getElementById('comment-input');
+  if (area)  area.classList.add('hidden');
+  if (input) input.value = '';
+}
+
+function showUnsavedChangesBar(onSave, onDiscard) {
+  closeBottomBar();
+  const el = document.createElement('div');
+  el.id = 'bottom-bar';
+  el.className = 'bottom-bar';
+  el.innerHTML = `
+    <span class="bottom-bar-msg">You have unsaved changes</span>
+    <div class="bottom-bar-btns">
+      <button class="bottom-bar-cancel" id="unsaved-discard-btn">Discard</button>
+      <button class="bottom-bar-confirm" id="unsaved-save-btn">Save &amp; leave</button>
+    </div>
+  `;
+  document.body.appendChild(el);
+  document.getElementById('unsaved-save-btn').addEventListener('click', async () => {
+    closeBottomBar();
+    await onSave();
+  });
+  document.getElementById('unsaved-discard-btn').addEventListener('click', async () => {
+    closeBottomBar();
+    await onDiscard();
+  });
+}
