@@ -670,6 +670,11 @@ app.get('/api/contacts/:id/notes', async (req, res) => {
 app.post('/api/contacts/:id/workflow', async (req, res) => {
   try {
     const { data, existingNoteId } = req.body;
+    const contactId = String(req.params.id || '');
+    if (!/^\d+$/.test(contactId)) {
+      return res.status(400).json({ error: 'Invalid contact id' });
+    }
+
     const noteBody = `WORKFLOW_DATA:${JSON.stringify(data)}`;
     const contactId = String(req.params.id || '');
     if (!/^\d+$/.test(contactId)) {
