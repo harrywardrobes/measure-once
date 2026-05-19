@@ -133,27 +133,34 @@
       // Default to "All contacts" view on the customers page.
       state.contactsViewMode = 'all';
 
-      // Render from cache immediately so back-navigation feels instant.
-      let renderedFromCache = false;
-      try {
-        const cached = sessionStorage.getItem('contacts_all_cache');
-        if (cached) {
-          state.contacts = JSON.parse(cached);
-          state.filteredContacts = [...state.contacts];
-          renderCustomerList();
-          restoreCustomerListScroll();
-          renderedFromCache = true;
-        }
-      } catch {}
+      // Restore any filter/sort state saved when the user navigated to a profile.
+      const hadSavedFilters = restoreCustomerListFilters();
 
-      // Always fetch fresh data; skip scroll restore if already done from cache.
+      // Render from cache immediately so back-navigation feels instant.
+      // Only use the all-contacts cache when we are (or restored to) 'all' mode.
+      let renderedFromCache = false;
+      if (state.contactsViewMode === 'all') {
+        try {
+          const cached = sessionStorage.getItem('contacts_all_cache');
+          if (cached) {
+            state.contacts = JSON.parse(cached);
+            state.filteredContacts = [...state.contacts];
+            renderCustomerList();
+            restoreCustomerListScroll();
+            renderedFromCache = true;
+          }
+        } catch {}
+      }
+
+      // Always fetch fresh data using the correct loader for the current view mode.
       try {
-        await loadAllContacts();
+        const loader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
+        await loader;
         state.filteredContacts = [...state.contacts];
         renderCustomerList();
         if (!renderedFromCache) restoreCustomerListScroll();
       } catch (e) {
-        console.error('Failed to load all contacts', e);
+        console.error('Failed to load contacts', e);
         const list = document.getElementById('customer-list');
         if (list) list.innerHTML = `<div class="p-4 text-sm text-red-500">Failed to load contacts: ${escHtml(e.message)}<br><button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button></div>`;
       }

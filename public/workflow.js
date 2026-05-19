@@ -113,6 +113,15 @@ function goToCustomer(contactId) {
   if (list) {
     try { sessionStorage.setItem('customers_scroll', String(list.scrollTop)); } catch {}
   }
+  try {
+    sessionStorage.setItem('customers_filters', JSON.stringify({
+      contactsViewMode:  state.contactsViewMode   || 'all',
+      stageFilter:       state.stageFilter         || '',
+      sortBy:            state.sortBy              || 'newest',
+      showArchived:      !!state.showArchived,
+      leadStatusFilter:  state.leadStatusFilter    || '',
+    }));
+  } catch {}
   location.href = '/customers/' + contactId;
 }
 
@@ -122,6 +131,45 @@ function restoreCustomerListScroll() {
   sessionStorage.removeItem('customers_scroll');
   const list = document.getElementById('customer-list');
   if (list) list.scrollTop = parseInt(saved, 10) || 0;
+}
+
+// Restore filter/sort state saved by goToCustomer before navigating away.
+// Returns true if any saved state was found and applied.
+function restoreCustomerListFilters() {
+  let saved;
+  try { saved = JSON.parse(sessionStorage.getItem('customers_filters')); } catch {}
+  sessionStorage.removeItem('customers_filters');
+  if (!saved) return false;
+
+  // Apply state values
+  state.contactsViewMode  = saved.contactsViewMode  || 'all';
+  state.stageFilter       = saved.stageFilter        || '';
+  state.sortBy            = saved.sortBy             || 'newest';
+  state.showArchived      = !!saved.showArchived;
+  state.leadStatusFilter  = saved.leadStatusFilter   || '';
+
+  // Sync UI elements to restored state
+  const activeBtn = document.getElementById('view-active-btn');
+  const allBtn    = document.getElementById('view-all-btn');
+  if (activeBtn) activeBtn.classList.toggle('filter-btn-active', state.contactsViewMode === 'active');
+  if (allBtn)    allBtn.classList.toggle('filter-btn-active',   state.contactsViewMode === 'all');
+
+  const stageSelect = document.getElementById('stage-filter');
+  if (stageSelect) stageSelect.value = state.stageFilter;
+
+  const sortSelect = document.getElementById('sort-select');
+  if (sortSelect) sortSelect.value = state.sortBy;
+
+  const archivedBtn = document.getElementById('archived-toggle');
+  if (archivedBtn) archivedBtn.classList.toggle('filter-btn-active', state.showArchived);
+
+  const lsSelect = document.getElementById('lead-status-filter');
+  if (lsSelect) lsSelect.value = state.leadStatusFilter;
+
+  const lsRow = document.getElementById('lead-status-filter-row');
+  if (lsRow) lsRow.classList.toggle('hidden', state.contactsViewMode !== 'all');
+
+  return true;
 }
 
 // ── Customer List ─────────────────────────────────────────────────────────────
