@@ -209,7 +209,13 @@ async function goBack() {
         await _commitActiveInlineEdit();
         await persistCommentDraft();
         await flushDeferredSave();
-        if (state.selectedContactId) { try { await saveWorkflowData(); } catch {} }
+        if (state.selectedContactId) { try { await saveWorkflowData(); } catch (e) {
+          if (e.code === 'HUBSPOT_AUTH') {
+            showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+          } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+            showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+          }
+        } }
         _performGoBack();
       },
       () => {
@@ -223,7 +229,13 @@ async function goBack() {
   }
 
   await flushDeferredSave();
-  if (state.selectedContactId) { try { await saveWorkflowData(); } catch {} }
+  if (state.selectedContactId) { try { await saveWorkflowData(); } catch (e) {
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+    }
+  } }
   _performGoBack();
 }
 
@@ -282,7 +294,13 @@ async function selectContact(contactId, roomIdx = 0) {
         await _commitActiveInlineEdit();
         await persistCommentDraft();
         await flushDeferredSave();
-        try { await saveWorkflowData(); } catch {}
+        try { await saveWorkflowData(); } catch (e) {
+          if (e.code === 'HUBSPOT_AUTH') {
+            showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+          } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+            showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+          }
+        }
         _doSelectContact(contactId, roomIdx);
       },
       () => {
@@ -302,7 +320,13 @@ async function _doSelectContact(contactId, roomIdx) {
   captureNotes();
   if (state.selectedContactId && state.selectedContactId !== contactId) {
     await flushDeferredSave();
-    try { await saveWorkflowData(); } catch {}
+    try { await saveWorkflowData(); } catch (e) {
+      if (e.code === 'HUBSPOT_AUTH') {
+        showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+      } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+        showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+      }
+    }
   }
   if (state.loadingContact) return;
   state.loadingContact = true;
@@ -445,7 +469,13 @@ async function switchRoom(idx) {
         await _commitActiveInlineEdit();
         await persistCommentDraft();
         await flushDeferredSave();
-        try { await saveWorkflowData(); } catch {}
+        try { await saveWorkflowData(); } catch (e) {
+          if (e.code === 'HUBSPOT_AUTH') {
+            showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+          } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+            showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+          }
+        }
         _doSwitchRoom(idx);
       },
       () => {
@@ -459,7 +489,13 @@ async function switchRoom(idx) {
   }
 
   await flushDeferredSave();
-  try { await saveWorkflowData(); } catch {}
+  try { await saveWorkflowData(); } catch (e) {
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+    }
+  }
   _doSwitchRoom(idx);
 }
 
@@ -490,7 +526,15 @@ async function submitAddRoom() {
   state.addingRoom = false;
   updateRoomCache();
   renderCustomerList();
-  try { await saveWorkflowData(); } catch { showToast('Failed to save room', true); }
+  try { await saveWorkflowData(); } catch (e) {
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else {
+      showToast('Failed to save room', true);
+    }
+  }
   renderFullWorkflowView();
 }
 
