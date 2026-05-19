@@ -643,6 +643,13 @@ function _googleAuthToast() {
   showToast('Google account disconnected — reconnect in Settings', true);
 }
 
+function showGmailListLoading(label = 'Loading…') {
+  const list = document.getElementById('gmail-list');
+  if (list) {
+    list.innerHTML = `<div class="flex items-center gap-2" style="padding:8px 0"><div class="spinner" style="width:14px;height:14px"></div> ${escHtml(label)}</div>`;
+  }
+}
+
 async function renderGoogleEmailSection() {
   const el = document.getElementById('google-emails-section');
   if (!el) return;
@@ -657,11 +664,10 @@ async function renderGoogleEmailSection() {
       <span class="notes-header-label">Gmail</span>
       <button class="btn-new-note" data-viewer-hide onclick="openEmailCompose()">+ Compose</button>
     </div>
-    <div id="gmail-list" class="text-sm" style="color:var(--stone-deep)">
-      <div class="flex items-center gap-2" style="padding:8px 0"><div class="spinner" style="width:14px;height:14px"></div> Loading…</div>
-    </div>
+    <div id="gmail-list" class="text-sm" style="color:var(--stone-deep)"></div>
     <div id="gmail-compose" class="hidden" style="margin-top:10px"></div>
   `;
+  showGmailListLoading();
 
   try {
     const { messages } = await GET(`/api/emails?email=${encodeURIComponent(contactEmail)}`);
@@ -745,10 +751,7 @@ async function submitEmail() {
     await POST('/api/emails/send', { to, subject, body });
     closeEmailCompose();
     showToast('Email sent');
-    const gmailList = document.getElementById('gmail-list');
-    if (gmailList) {
-      gmailList.innerHTML = `<div class="flex items-center gap-2" style="padding:8px 0"><div class="spinner" style="width:14px;height:14px"></div> Refreshing…</div>`;
-    }
+    showGmailListLoading('Refreshing…');
     setTimeout(() => renderGoogleEmailSection(), 2000);
   } catch (e) {
     if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
