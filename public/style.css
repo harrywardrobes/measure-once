@@ -3242,6 +3242,17 @@ body.showing-workflow .sales-layout #workflow-panel {
   transition: background 0.12s, color 0.12s, border-color 0.12s;
   cursor: pointer;
 }
+.trades-contact-btn-inner {
+  display: flex; flex-direction: column; gap: 1px;
+}
+.trades-contact-btn-label {
+  font-size: 0.78rem; font-weight: 500; line-height: 1;
+}
+.trades-contact-btn-sub {
+  font-size: 0.68rem; font-weight: 400; opacity: 0.72;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 160px;
+}
 .trades-contact-call-btn {
   background: #f0fdf4; color: #16a34a; border-color: #bbf7d0;
 }
