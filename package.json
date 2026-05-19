@@ -10,6 +10,7 @@
     "watch:css": "tailwindcss -i ./src/tailwind.css -o ./public/tailwind.css --watch"
   },
   "dependencies": {
+    "@acpr/rate-limit-postgresql": "^1.4.1",
     "@types/connect-pg-simple": "^7.0.3",
     "@types/express-session": "^1.19.0",
     "@types/memoizee": "^0.4.12",

@@ -1,18 +1,7 @@
 // Replit Auth (OpenID Connect) — JavaScript adaptation for plain Express app.
 const session = require('express-session');
 const rateLimit = require('express-rate-limit');
-
-// ── Rate limiter for POST /api/request-access ──────────────────────────────
-// At most 5 requests per IP per hour; excess gets a plain-text 429.
-const accessRequestLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: (req, res) => {
-    res.status(429).type('text').send('Too many requests. Please try again later.');
-  },
-});
+const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
 const passport = require('passport');
 const memoize = require('memoizee');
 const connectPg = require('connect-pg-simple');
@@ -112,6 +101,23 @@ async function notifyNewTeamMember(email) {
 }
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+// ── Rate limiter for POST /api/request-access ──────────────────────────────
+// At most 5 requests per IP per hour; backed by PostgreSQL so counts survive
+// server restarts, deploys, and crash-loops.
+const accessRequestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: new PostgresStoreIndividualIP(
+    { connectionString: process.env.DATABASE_URL },
+    'access_request'
+  ),
+  handler: (req, res) => {
+    res.status(429).type('text').send('Too many requests. Please try again later.');
+  },
+});
 
 // Ensure required tables exist.
 async function ensureAuthTables() {
