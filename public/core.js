@@ -50,6 +50,7 @@ const state = {
   stageFilter: '',
   showArchived: false,
   projectStageFilter: '',
+  salesStageFilter: '',
   customerNotes: '',
   personalTasks: [],
   calendarEvents: [],
@@ -170,11 +171,14 @@ async function bootstrap() {
     await loadWorkflow();
     await Promise.all([loadOpenLeads(), loadWorkflowStages()]);
     populateStageFilter();
-    if (document.getElementById('customer-list')) renderCustomerList();
+    if (document.getElementById('customer-list') || document.getElementById('sales-view')) renderCustomerList();
     loadQBInvoices();
   } catch (e) {
     const list = document.getElementById('customer-list');
+    const salesView = document.getElementById('sales-view');
     if (list) list.innerHTML =
+      `<div class="p-4 text-sm text-red-500">Failed to load: ${escHtml(e.message)}</div>`;
+    else if (salesView) salesView.innerHTML =
       `<div class="p-4 text-sm text-red-500">Failed to load: ${escHtml(e.message)}</div>`;
     else console.error('Bootstrap failed', e);
   }
