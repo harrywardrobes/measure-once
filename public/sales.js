@@ -460,7 +460,16 @@ async function _doSelectContact(contactId, roomIdx) {
     renderCustomerList();
     renderFullWorkflowView();
   } catch (e) {
-    wv.innerHTML = `<div class="p-6 text-red-500 text-sm">Failed to load: ${escHtml(e.message)}</div>`;
+    const isDbError = e.code === 'DB_ERROR';
+    const msg = isDbError
+      ? 'This customer couldn\'t be loaded — there was a problem reaching the database.'
+      : `Failed to load: ${escHtml(e.message)}`;
+    wv.innerHTML = `
+      <div class="p-6 text-red-500 text-sm" style="text-align:center">
+        <p>${msg}</p>
+        <button onclick="selectContact(state.selectedContactId, state.selectedRoomIdx ?? 0)" style="margin-top:0.75rem;padding:0.4rem 1rem;border:1px solid #6b7280;border-radius:0.375rem;background:#f9fafb;cursor:pointer;font-size:0.875rem;color:#374151;">Retry</button>
+        ${isDbError ? '<p style="margin-top:0.5rem;font-size:0.8rem;color:#6b7280;">If this keeps happening, try refreshing the page.</p>' : ''}
+      </div>`;
   } finally {
     state.loadingContact = false;
   }

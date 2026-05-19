@@ -251,6 +251,9 @@ async function bootstrap() {
       } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
         msg = 'HubSpot rate limit reached.';
         action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Try again</button>`;
+      } else if (e.code === 'DB_ERROR') {
+        msg = 'The list couldn\'t be loaded — there was a problem reaching the database.';
+        action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button>`;
       } else if (e.code === 'HUBSPOT_ERROR' || e.code) {
         msg = 'Could not load data from HubSpot. This may be a temporary issue.';
         action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button>`;

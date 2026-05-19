@@ -35,15 +35,30 @@ async function loadTasksView() {
   const view = document.getElementById('tasks-view');
   view.innerHTML = `<div class="cal-shell"><div class="flex items-center gap-2 text-sm" style="color:var(--stone-deep);padding:16px"><div class="spinner"></div> Loading…</div></div>`;
   const { from, to } = calRange();
-  const [visits, tasks, platformUsers] = await Promise.all([
-    GET(`/api/visits?from=${from.toISOString()}&to=${to.toISOString()}`).catch(() => []),
-    GET('/api/personal-tasks').catch(() => []),
-    state.platformUsers?.length ? Promise.resolve(state.platformUsers) : GET('/api/platform-users').catch(() => [])
-  ]);
-  state.calendar.visits = visits || [];
-  state.personalTasks   = tasks || [];
-  state.platformUsers   = platformUsers || [];
-  renderTasksView();
+  try {
+    const [visits, tasks, platformUsers] = await Promise.all([
+      GET(`/api/visits?from=${from.toISOString()}&to=${to.toISOString()}`),
+      GET('/api/personal-tasks'),
+      state.platformUsers?.length ? Promise.resolve(state.platformUsers) : GET('/api/platform-users').catch(() => [])
+    ]);
+    state.calendar.visits = visits || [];
+    state.personalTasks   = tasks || [];
+    state.platformUsers   = platformUsers || [];
+    renderTasksView();
+  } catch (e) {
+    const isDbError = e.code === 'DB_ERROR';
+    const msg = isDbError
+      ? 'The calendar couldn\'t be loaded — there was a problem reaching the database.'
+      : `Failed to load calendar: ${escHtml(e.message)}`;
+    view.innerHTML = `
+      <div class="cal-shell">
+        <div style="padding:2rem;text-align:center;color:#b91c1c;font-size:0.875rem">
+          <p>${msg}</p>
+          <button onclick="loadTasksView()" style="margin-top:0.75rem;padding:0.4rem 1rem;border:1px solid #6b7280;border-radius:0.375rem;background:#f9fafb;cursor:pointer;font-size:0.875rem;">Retry</button>
+          ${isDbError ? '<p style="margin-top:0.5rem;font-size:0.8rem;color:#6b7280;">If this keeps happening, try refreshing the page.</p>' : ''}
+        </div>
+      </div>`;
+  }
 }
 
 function renderTasksView() {
