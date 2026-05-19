@@ -355,7 +355,19 @@ async function flushDeferredSave() {
     _deferredSnapshot = null;
     closeBottomBar();
     _updateBeforeUnloadGuard();
-    try { await saveWorkflowData(); } catch (e) {
+    const cid = state.selectedContactId;
+    try {
+      await saveWorkflowData();
+      // Re-fetch the contact so the list badge reflects the latest server state
+      // after the flush (mirrors the same pattern in scheduleSave / Task 215).
+      if (cid) {
+        const freshContact = await GET(`/api/contacts/${cid}`).catch(() => null);
+        if (freshContact) {
+          _mergeContactIntoState(freshContact);
+          renderCustomerList();
+        }
+      }
+    } catch (e) {
       if (e.code === 'HUBSPOT_AUTH') {
         showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
       } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
