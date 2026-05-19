@@ -130,6 +130,14 @@ document.addEventListener('click', function(e) {
 });
 
 function closeInvoicePanel() {
+  if (window._invMemoDirty || window._invSendDirty) {
+    const msg = window._invSendDirty && window._invMemoDirty
+      ? 'You have unsaved changes and an unsent email update. Discard and close?'
+      : window._invSendDirty
+        ? 'The customer email has been changed but not sent. Discard and close?'
+        : 'You have unsaved invoice changes. Discard and close?';
+    if (!confirm(msg)) return;
+  }
   document.getElementById('inv-panel').classList.remove('inv-panel-open');
   document.getElementById('inv-overlay').classList.add('hidden');
   window._invMemoDirty = false;
