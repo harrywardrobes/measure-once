@@ -86,7 +86,11 @@ async function api(method, path, body) {
     throw new Error('Unauthorized');
   }
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  if (!r.ok) {
+    const err = new Error(data.error || `HTTP ${r.status}`);
+    if (data.code) err.code = data.code;
+    throw err;
+  }
   return data;
 }
 const GET        = path      => api('GET',    path);

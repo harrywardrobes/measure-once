@@ -155,7 +155,23 @@
       } catch (e) {
         console.error('Failed to load contacts', e);
         const list = document.getElementById('customer-list');
-        if (list) list.innerHTML = `<div class="p-4 text-sm text-red-500">Failed to load contacts: ${escHtml(e.message)}<br><button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button></div>`;
+        if (list) {
+          let msg, action;
+          if (e.code === 'HUBSPOT_AUTH') {
+            msg = 'Could not connect to HubSpot — the API token is invalid or expired. An admin needs to update the <strong>HUBSPOT_ACCESS_TOKEN</strong> in the environment settings and restart the app.';
+            action = '';
+          } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+            msg = 'HubSpot rate limit reached.';
+            action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Try again</button>`;
+          } else if (e.code === 'HUBSPOT_ERROR' || e.code) {
+            msg = 'Could not load contacts from HubSpot. This may be a temporary issue.';
+            action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button>`;
+          } else {
+            msg = `Failed to load contacts: ${escHtml(e.message)}`;
+            action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button>`;
+          }
+          list.innerHTML = `<div class="p-4 text-sm text-red-500">${msg}<br>${action}</div>`;
+        }
       }
 
       const params = new URLSearchParams(location.search);
