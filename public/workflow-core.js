@@ -178,6 +178,42 @@ function _reapplyPendingLeadStatuses() {
   }
 }
 
+// Merge a single freshly-fetched contact object into state.contacts, honouring
+// any in-flight optimistic lead-status change recorded in state.pendingLeadStatus.
+// Use this instead of a direct array splice whenever a single contact is
+// re-fetched from the server (e.g. after saving a note or updating a deal field)
+// so the badge never reverts while a PATCH is still in-flight.
+//
+// Usage:
+//   _mergeContactIntoState(freshContactObject);
+function _mergeContactIntoState(freshContact) {
+  if (!freshContact || !freshContact.id) return;
+
+  // Preserve any pending optimistic lead-status override.
+  const pending = state.pendingLeadStatus;
+  if (pending && Object.prototype.hasOwnProperty.call(pending, freshContact.id)) {
+    freshContact = {
+      ...freshContact,
+      properties: {
+        ...(freshContact.properties || {}),
+        hs_lead_status: pending[freshContact.id]
+      }
+    };
+  }
+
+  const idx = state.contacts.findIndex(c => c.id === freshContact.id);
+  if (idx !== -1) {
+    state.contacts[idx] = freshContact;
+  } else {
+    state.contacts.push(freshContact);
+  }
+
+  // Keep the detail-panel reference current if this contact is selected.
+  if (state.selectedContactId === freshContact.id) {
+    state.selectedContact = freshContact;
+  }
+}
+
 async function loadOpenLeads() {
   const data = await GET('/api/open-leads');
   state.contacts = data.results || [];
