@@ -83,6 +83,15 @@ async function openInvoicePanel(invId, allInvIds) {
     if (inv.error) throw new Error(inv.error);
     state.qb.panel = inv;
     renderInvoicePanelBody();
+    const draft = state.qb.draft && state.qb.draft[invId];
+    if (draft) {
+      _restoreInvFields(draft);
+      window._invMemoDirty = true;
+      if (draft.email !== null && draft.email !== (inv.email || '')) window._invSendDirty = true;
+      if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+      const msg = document.getElementById('inv-save-msg');
+      if (msg) { msg.textContent = 'Unsaved changes restored'; msg.className = 'inv-action-msg inv-msg-ok'; }
+    }
   } catch (e) {
     body.innerHTML = `<div class="inv-panel-error">Failed to load invoice: ${escHtml(e.message)}</div>`;
   }
@@ -177,6 +186,11 @@ function closeInvoicePanel() {
         ? 'The customer email has been changed but not sent. Discard and close?'
         : 'You have unsaved invoice changes. Discard and close?';
     if (!confirm(msg)) return;
+    const invId = state.qb.panel && state.qb.panel.id;
+    if (invId) {
+      if (!state.qb.draft) state.qb.draft = {};
+      state.qb.draft[invId] = _snapshotInvFields();
+    }
   }
   document.getElementById('inv-panel').classList.remove('inv-panel-open');
   document.getElementById('inv-overlay').classList.add('hidden');
@@ -377,6 +391,7 @@ async function saveInvoiceChanges() {
     msg.className = 'inv-action-msg inv-msg-ok';
     window._invMemoDirty = false;
     window._invSendDirty = false;
+    if (state.qb.draft && inv.id) delete state.qb.draft[inv.id];
     if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
   } catch (e) {
     msg.textContent = e.message;
