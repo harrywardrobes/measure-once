@@ -142,16 +142,23 @@ async function renderProfileTab() {
     badge.textContent = label;
   });
 
-  Promise.resolve(state.authStatus?.google).then(googleConnected => {
+  GET('/api/google/status').then(data => {
     const dot = document.getElementById('google-status-dot');
     const badge = document.getElementById('google-status-badge');
     if (!dot || !badge) return;
+    const googleConnected = data?.connected === true;
     dot.className = `auth-dot ${googleConnected ? 'auth-dot-ok' : 'auth-dot-off'}`;
     if (googleConnected) {
       badge.outerHTML = `<button class="profile-int-action" onclick="profileLogoutGoogle()">Disconnect</button>`;
     } else {
       badge.outerHTML = `<a href="/auth/google" class="profile-int-action profile-int-connect">Connect</a>`;
     }
+  }).catch(() => {
+    const dot = document.getElementById('google-status-dot');
+    const badge = document.getElementById('google-status-badge');
+    if (!dot || !badge) return;
+    dot.className = 'auth-dot auth-dot-off';
+    badge.outerHTML = `<a href="/auth/google" class="profile-int-action profile-int-connect">Connect</a>`;
   });
 }
 

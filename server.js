@@ -339,6 +339,30 @@ app.get('/auth/logout-google', (req, res) => {
   res.json({ success: true });
 });
 
+// ── Google: Connection status (live token check) ───────────────────────────────
+app.get('/api/google/status', isAuthenticated, async (req, res) => {
+  if (!req.session.googleTokens) {
+    return res.json({ connected: false, code: 'NO_TOKEN' });
+  }
+  try {
+    const auth = getGoogleClient(req.session.googleTokens);
+    const { token } = await auth.getAccessToken();
+    if (!token) return res.json({ connected: false, code: 'NO_TOKEN' });
+    req.session.googleTokens = auth.credentials;
+    res.json({ connected: true });
+  } catch (e) {
+    const msg = (e.message || '').toLowerCase();
+    if (msg.includes('invalid_grant') || msg.includes('token has been expired') || msg.includes('token has been revoked')) {
+      delete req.session.googleTokens;
+      return res.json({ connected: false, code: 'TOKEN_EXPIRED' });
+    }
+    if (e.response?.status === 401 || msg.includes('invalid_client')) {
+      return res.json({ connected: false, code: 'GOOGLE_AUTH' });
+    }
+    res.json({ connected: false, code: 'GOOGLE_ERROR' });
+  }
+});
+
 
 app.get('/auth/status', (req, res) => {
   res.json({
