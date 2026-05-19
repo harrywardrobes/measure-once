@@ -457,7 +457,13 @@ async function quickSetLeadStatus(contactId, newStatus) {
   function _applyLeadStatus(status) {
     if (contact) {
       contact.properties = { ...(contact.properties || {}), hs_lead_status: status };
-      if (state.selectedContactId === contactId) state.selectedContact = contact;
+    }
+    // Defensive refresh: re-read selectedContact from the contacts array so the
+    // detail panel always sees the freshly-mutated object, regardless of which
+    // direction the change came from (list → detail or detail → list).
+    if (state.selectedContactId) {
+      const fresh = state.contacts.find(c => c.id === state.selectedContactId);
+      if (fresh) state.selectedContact = fresh;
     }
     _syncLeadStatusCache(contactId, status);
     populateLeadStatusFilter();
