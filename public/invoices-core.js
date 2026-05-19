@@ -6,9 +6,15 @@
 async function loadQBInvoices() {
   try {
     const status = await fetch('/api/quickbooks/status').then(r => r.json()).catch(() => ({ connected: false }));
-    state.qb.connected = status.connected;
-    state.qb.company   = status.company || null;
-    if (!status.connected) return;
+    state.qb.connected  = status.connected;
+    state.qb.company    = status.company || null;
+    state.qb.statusKnown = true;
+
+    if (!status.connected) {
+      const invEl = document.getElementById('invoices-view');
+      if (invEl) renderInvoicesTab();
+      return;
+    }
 
     state.qb.loading = true;
     const data = await fetch('/api/quickbooks/invoices').then(r => r.json()).catch(() => ({ invoices: [] }));

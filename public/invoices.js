@@ -2,24 +2,7 @@ function renderInvoicesTab() {
   const el = document.getElementById('invoices-view');
   if (!el) return;
 
-  if (!state.qb.connected) {
-    el.innerHTML = `
-      <div class="qb-tab-empty">
-        <div class="qb-tab-empty-icon">
-          <svg width="40" height="40" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity:0.35">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/>
-          </svg>
-        </div>
-        <p class="qb-tab-empty-title">Connect QuickBooks</p>
-        <p class="qb-tab-empty-sub">See outstanding invoices matched to your customers.</p>
-        <a href="/auth/quickbooks" class="qb-connect-btn">Connect QuickBooks</a>
-      </div>
-    `;
-    return;
-  }
-
-  if (state.qb.loading || !state.qb.loaded) {
+  if (!state.qb.statusKnown || state.qb.loading || (state.qb.connected && !state.qb.loaded)) {
     const skRow = (w1 = '42%', w2 = '58px', w3 = '44px') => `
       <div class="qb-row skeleton-qb-row">
         <div class="qb-row-customer">
@@ -44,6 +27,23 @@ function renderInvoicesTab() {
         ${skRow('52%', '60px', '44px')}
         ${skRow('33%', '56px', '42px')}
         ${skRow('44%', '58px', '46px')}
+      </div>
+    `;
+    return;
+  }
+
+  if (!state.qb.connected) {
+    el.innerHTML = `
+      <div class="qb-tab-empty">
+        <div class="qb-tab-empty-icon">
+          <svg width="40" height="40" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity:0.35">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/>
+          </svg>
+        </div>
+        <p class="qb-tab-empty-title">Connect QuickBooks</p>
+        <p class="qb-tab-empty-sub">See outstanding invoices matched to your customers.</p>
+        <a href="/auth/quickbooks" class="qb-connect-btn">Connect QuickBooks</a>
       </div>
     `;
     return;
@@ -159,7 +159,7 @@ function renderInvoicesTab() {
 
 async function disconnectQB() {
   await fetch('/auth/quickbooks/disconnect').catch(() => {});
-  state.qb = { connected: false, company: null, invoices: [], loaded: false, loading: false, showMatchedOnly: true, panel: null, panelSaving: false, panelSending: false };
+  state.qb = { statusKnown: true, connected: false, company: null, invoices: [], loaded: false, loading: false, showMatchedOnly: true, panel: null, panelSaving: false, panelSending: false };
   renderCustomerList();
   renderInvoicesTab();
 }

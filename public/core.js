@@ -63,6 +63,7 @@ const state = {
   calendarConnected: false,
   showAddPersonalTask: false,
   qb: {
+    statusKnown: false, // true once the first /api/quickbooks/status fetch resolves
     connected: false,
     company: null,
     invoices: [],
