@@ -399,10 +399,15 @@ function openLeadStatusPicker(event, contactId) {
   popup.className = 'card-picker-popup';
   const top = Math.min(rect.bottom + 4, window.innerHeight - 300);
   popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
+  const currentLeadStatus = state.contacts.find(c => c.id === contactId)?.properties?.hs_lead_status || '';
   const clearBtn = document.createElement('button');
-  clearBtn.className = 'card-picker-opt card-picker-opt--clear';
+  clearBtn.className = 'card-picker-opt card-picker-opt--clear' + (currentLeadStatus ? '' : ' card-picker-opt--disabled');
   clearBtn.textContent = '✕ Clear status';
-  clearBtn.addEventListener('click', () => quickSetLeadStatus(contactId, ''));
+  if (currentLeadStatus) {
+    clearBtn.addEventListener('click', () => quickSetLeadStatus(contactId, ''));
+  } else {
+    clearBtn.disabled = true;
+  }
   popup.appendChild(clearBtn);
 
   LEAD_STATUS_OPTIONS.forEach(({ value, label }) => {
