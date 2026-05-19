@@ -250,21 +250,25 @@ function showAccessGate(params) {
   const gate = document.getElementById('access-gate');
   if (gate) gate.style.display = 'flex';
 
-  const isEmailConflict = params.get('email_conflict') === '1';
-  const isPending       = params.get('access_pending') === '1';
-  const isConfirmed     = params.get('access_requested') === '1'
+  const isEmailConflict  = params.get('email_conflict')  === '1';
+  const isPending        = params.get('access_pending')   === '1';
+  const isAlreadyApproved = params.get('access_approved') === '1';
+  const isConfirmed      = params.get('access_requested') === '1'
     || params.get('denied') === '1'
     || params.has('error');
 
-  const signInEl        = document.getElementById('access-sign-in-state');
-  const confirmedEl     = document.getElementById('access-confirmed-state');
-  const emailConflictEl = document.getElementById('access-email-conflict-state');
-  const pendingEl       = document.getElementById('access-pending-state');
+  const signInEl            = document.getElementById('access-sign-in-state');
+  const confirmedEl         = document.getElementById('access-confirmed-state');
+  const emailConflictEl     = document.getElementById('access-email-conflict-state');
+  const pendingEl           = document.getElementById('access-pending-state');
+  const alreadyApprovedEl   = document.getElementById('access-already-approved-state');
 
-  if (signInEl)        signInEl.style.display        = (!isConfirmed && !isEmailConflict && !isPending) ? '' : 'none';
-  if (confirmedEl)     confirmedEl.style.display     = (isConfirmed && !isEmailConflict && !isPending) ? '' : 'none';
-  if (emailConflictEl) emailConflictEl.style.display = isEmailConflict ? '' : 'none';
-  if (pendingEl)       pendingEl.style.display       = isPending ? '' : 'none';
+  const anySpecial = isConfirmed || isEmailConflict || isPending || isAlreadyApproved;
+  if (signInEl)          signInEl.style.display          = !anySpecial ? '' : 'none';
+  if (confirmedEl)       confirmedEl.style.display       = (isConfirmed && !isEmailConflict && !isPending && !isAlreadyApproved) ? '' : 'none';
+  if (emailConflictEl)   emailConflictEl.style.display   = isEmailConflict ? '' : 'none';
+  if (pendingEl)         pendingEl.style.display         = isPending ? '' : 'none';
+  if (alreadyApprovedEl) alreadyApprovedEl.style.display = isAlreadyApproved ? '' : 'none';
 }
 
 async function checkAuthStatus() {

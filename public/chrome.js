@@ -57,6 +57,14 @@
             Already approved? <a href="/api/login">Sign in</a>
           </div>
         </div>
+        <div id="access-already-approved-state" style="display:none;">
+          <div class="access-confirmed-icon" style="background:#dcfce7;color:#16a34a;">✓</div>
+          <h1 class="access-title">Your account is already approved</h1>
+          <p class="access-sub">Your account is already approved — sign in to get started.</p>
+          <div class="access-footer" style="margin-top:20px;">
+            <a href="/api/login" class="access-submit" style="display:block;text-align:center;text-decoration:none;">Sign in with Replit</a>
+          </div>
+        </div>
       </div>
     </div>`;
 

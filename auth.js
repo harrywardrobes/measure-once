@@ -650,9 +650,9 @@ async function setupAuth(app) {
       if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return res.status(400).json({ error: 'Please provide a valid name and email.' });
       }
-      // If already approved, tell the user to just sign in.
+      // If already approved, redirect to a clear UI state instead of raw JSON.
       if (await isEmailApproved(email)) {
-        return res.json({ ok: true, alreadyApproved: true });
+        return res.redirect('/?access_approved=1');
       }
       const insertResult = await pool.query(
         `INSERT INTO account_requests (name, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING created_at`,
