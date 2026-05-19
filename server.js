@@ -1210,6 +1210,16 @@ async function ensureTradesTable() {
   await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS created_by_name VARCHAR`);
   await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS updated_by_name VARCHAR`);
   await _tradesPool.query(`
+    CREATE TABLE IF NOT EXISTS trade_audit_log (
+      id         SERIAL PRIMARY KEY,
+      company_id INTEGER NOT NULL REFERENCES trade_companies(id) ON DELETE CASCADE,
+      actor_id   VARCHAR,
+      actor_name VARCHAR,
+      action     VARCHAR NOT NULL,
+      changed_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+  await _tradesPool.query(`
     CREATE TABLE IF NOT EXISTS trade_company_contacts (
       id         SERIAL PRIMARY KEY,
       company_id INTEGER NOT NULL REFERENCES trade_companies(id) ON DELETE CASCADE,
@@ -1316,6 +1326,10 @@ app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res)
       );
       insertedContacts.push(cc);
     }
+    await client.query(
+      `INSERT INTO trade_audit_log (company_id, actor_id, actor_name, action) VALUES ($1,$2,$3,$4)`,
+      [co.id, req.user?.claims?.sub || null, actorDisplayName(req.user?.claims), 'Company created']
+    );
     await client.query('COMMIT');
     res.status(201).json({ ...co, areas_served: parseAreasServed(co.areas_served), contacts: insertedContacts });
   } catch (e) {
@@ -1338,6 +1352,11 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
   const client = await _tradesPool.connect();
   try {
     await client.query('BEGIN');
+    const { rows: [prev] } = await client.query(`SELECT * FROM trade_companies WHERE id=$1`, [id]);
+    if (!prev) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Company not found.' }); }
+    const { rows: prevContacts } = await client.query(
+      `SELECT name, role, phone, email FROM trade_company_contacts WHERE company_id=$1 ORDER BY sort_order, id`, [id]
+    );
     const { rows: [co], rowCount } = await client.query(
       `UPDATE trade_companies
        SET company_name=$1, trade_type=$2, areas_served=$3, timescale=$4,
@@ -1362,6 +1381,24 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
       );
       insertedContacts.push(cc);
     }
+    const changedFields = [];
+    if (prev.company_name !== company_name.trim()) changedFields.push('company name');
+    if (prev.trade_type !== trade_type.trim()) changedFields.push('category');
+    if (prev.timescale !== (timescale || '').trim()) changedFields.push('lead time');
+    if (prev.invoice_method !== (invoice_method || '').trim()) changedFields.push('invoice method');
+    if (prev.payment_terms !== (payment_terms || '').trim()) changedFields.push('payment terms');
+    if (prev.notes !== (notes || '').trim()) changedFields.push('notes');
+    const prevAreasStr = serializeAreasServed(parseAreasServed(prev.areas_served));
+    const newAreasStr  = serializeAreasServed(areas_served);
+    if (prevAreasStr !== newAreasStr) changedFields.push('areas served');
+    const prevContactsSig = prevContacts.map(c => `${c.name}|${c.role}|${c.phone}|${c.email}`).join(';');
+    const newContactsSig  = validContacts.map(c => `${c.name.trim()}|${(c.role||'').trim()}|${(c.phone||'').trim()}|${(c.email||'').trim()}`).join(';');
+    if (prevContactsSig !== newContactsSig) changedFields.push('contacts');
+    const action = changedFields.length ? `Updated ${changedFields.join(', ')}` : 'Saved (no changes)';
+    await client.query(
+      `INSERT INTO trade_audit_log (company_id, actor_id, actor_name, action) VALUES ($1,$2,$3,$4)`,
+      [id, req.user?.claims?.sub || null, actorDisplayName(req.user?.claims), action]
+    );
     await client.query('COMMIT');
     res.json({ ...co, areas_served: parseAreasServed(co.areas_served), contacts: insertedContacts });
   } catch (e) {
@@ -1369,6 +1406,20 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
+  }
+});
+
+app.get('/api/trades/:id/audit', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id.' });
+  try {
+    const { rows } = await _tradesPool.query(
+      `SELECT actor_name, action, changed_at FROM trade_audit_log WHERE company_id=$1 ORDER BY changed_at DESC LIMIT 50`,
+      [id]
+    );
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

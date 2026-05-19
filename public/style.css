@@ -3420,6 +3420,69 @@ body.showing-workflow .sales-layout #workflow-panel {
 .trades-modal-audit strong { color: var(--ink-3); font-weight: 600; }
 .trades-modal-audit-sep { color: var(--stone); }
 
+.trades-history-section {
+  margin-top: 8px;
+  border-top: 1px solid var(--stone-light);
+  padding-top: 6px;
+}
+.trades-history-summary {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-4);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 0;
+  outline: none;
+}
+.trades-history-summary::-webkit-details-marker { display: none; }
+.trades-history-summary::before {
+  content: '';
+  display: inline-block;
+  width: 0; height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--ink-4);
+  transition: transform 0.15s;
+}
+details[open] .trades-history-summary::before { transform: rotate(90deg); }
+.trades-history-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.trades-history-loading,
+.trades-history-empty {
+  font-size: 0.75rem;
+  color: var(--ink-4);
+  padding: 2px 0 4px;
+}
+.trades-history-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface-2, #f7f6f9);
+}
+.trades-history-action {
+  color: var(--ink-2);
+  flex: 1;
+  min-width: 0;
+}
+.trades-history-meta {
+  color: var(--ink-4);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.trades-history-meta strong { color: var(--ink-3); font-weight: 600; }
+
 /* ── Trades modal ─────────────────────────────────────────────────────────── */
 .trades-modal-overlay {
   position: fixed; inset: 0; z-index: 200;

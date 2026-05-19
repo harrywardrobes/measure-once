@@ -326,6 +326,15 @@ function openTradesModal(id) {
       auditEl.innerHTML = parts.join('<span class="trades-modal-audit-sep"> · </span>');
       auditEl.classList.remove('hidden');
     }
+
+    const historySection = document.getElementById('trades-history-section');
+    const historyList    = document.getElementById('trades-history-list');
+    if (historySection && historyList) {
+      historySection.classList.remove('hidden');
+      historySection.removeAttribute('open');
+      historyList.innerHTML = '<div class="trades-history-loading"><div class="spinner spinner-sm"></div> Loading…</div>';
+      loadTradeAuditLog(id, historyList);
+    }
   } else {
     title.textContent = 'Add Company';
     document.getElementById('trades-submit-btn').textContent = 'Save Company';
@@ -358,6 +367,41 @@ function resetTradesForm() {
   if (btn) btn.style.display = '';
   const auditEl = document.getElementById('trades-modal-audit');
   if (auditEl) { auditEl.innerHTML = ''; auditEl.classList.add('hidden'); }
+  const historySection = document.getElementById('trades-history-section');
+  if (historySection) {
+    historySection.classList.add('hidden');
+    historySection.removeAttribute('open');
+  }
+  const historyList = document.getElementById('trades-history-list');
+  if (historyList) {
+    historyList.dataset.auditFor = '';
+    historyList.innerHTML = '<div class="trades-history-loading"><div class="spinner spinner-sm"></div> Loading…</div>';
+  }
+}
+
+async function loadTradeAuditLog(companyId, containerEl) {
+  containerEl.dataset.auditFor = companyId;
+  try {
+    const entries = await fetch(`/api/trades/${companyId}/audit`).then(r => r.json());
+    if (containerEl.dataset.auditFor !== String(companyId)) return;
+    if (!entries || entries.error) {
+      containerEl.innerHTML = '<div class="trades-history-empty">Could not load history.</div>';
+      return;
+    }
+    if (!entries.length) {
+      containerEl.innerHTML = '<div class="trades-history-empty">No history recorded yet.</div>';
+      return;
+    }
+    containerEl.innerHTML = entries.map(e => `
+      <div class="trades-history-entry">
+        <span class="trades-history-action">${escHtml(e.action)}</span>
+        <span class="trades-history-meta">${e.actor_name ? `<strong>${escHtml(e.actor_name)}</strong> · ` : ''}${fmtTradeDate(e.changed_at)}</span>
+      </div>
+    `).join('');
+  } catch {
+    if (containerEl.dataset.auditFor !== String(companyId)) return;
+    containerEl.innerHTML = '<div class="trades-history-empty">Could not load history.</div>';
+  }
 }
 
 async function saveTradeContact(e) {
