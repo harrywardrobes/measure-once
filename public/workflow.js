@@ -324,10 +324,14 @@ function openStagePicker(event, contactId, roomIdx) {
   // Use viewport coords (position: fixed)
   const top = Math.min(rect.bottom + 4, window.innerHeight - 320);
   popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
-  popup.innerHTML = Object.entries(state.workflow?.stages || {}).map(([key, s]) =>
-    `<button class="card-picker-opt" data-stage-key="${escHtml(key)}">${escHtml(s.label)}</button>`
-  ).join('');
-  popup.querySelectorAll('[data-stage-key]').forEach(btn => {
+  const currentStageKey = state.contactStageCache[contactId]?.[roomIdx]?.stageKey || null;
+  popup.innerHTML = Object.entries(state.workflow?.stages || {}).map(([key, s]) => {
+    const isActive = key === currentStageKey;
+    const classes = `card-picker-opt${isActive ? ' card-picker-opt--active' : ''}`;
+    const disabled = isActive ? 'disabled' : '';
+    return `<button class="${classes}" data-stage-key="${escHtml(key)}" ${disabled}>${isActive ? '✓ ' : ''}${escHtml(s.label)}</button>`;
+  }).join('');
+  popup.querySelectorAll('[data-stage-key]:not([disabled])').forEach(btn => {
     const k = btn.dataset.stageKey;
     btn.addEventListener('click', () => quickSetStage(contactId, roomIdx, k));
   });
