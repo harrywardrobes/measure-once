@@ -16,6 +16,8 @@ async function loadQBInvoices() {
     state.qb.loaded   = true;
     state.qb.loading  = false;
     renderCustomerList();
+    const homeEl = document.getElementById('home-view');
+    if (homeEl) renderHomeTab();
     const invEl = document.getElementById('invoices-view');
     if (invEl) renderInvoicesTab();
     const wfInvEl = document.getElementById('invoices-section');
