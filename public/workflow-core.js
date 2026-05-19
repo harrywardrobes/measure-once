@@ -355,7 +355,15 @@ async function flushDeferredSave() {
     _deferredSnapshot = null;
     closeBottomBar();
     _updateBeforeUnloadGuard();
-    try { await saveWorkflowData(); } catch { showToast('Failed to save', true); }
+    try { await saveWorkflowData(); } catch (e) {
+      if (e.code === 'HUBSPOT_AUTH') {
+        showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+      } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+        showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+      } else {
+        showToast('Failed to save', true);
+      }
+    }
   }
 }
 
@@ -375,7 +383,15 @@ function scheduleSave(undoMessage, snapshotRooms) {
     _deferredSnapshot = null;
     closeBottomBar();
     _updateBeforeUnloadGuard();
-    try { await saveWorkflowData(); } catch { showToast('Failed to save', true); }
+    try { await saveWorkflowData(); } catch (e) {
+      if (e.code === 'HUBSPOT_AUTH') {
+        showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+      } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+        showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+      } else {
+        showToast('Failed to save', true);
+      }
+    }
   }, 5000);
   _deferredSave = { timerId };
   _updateBeforeUnloadGuard();

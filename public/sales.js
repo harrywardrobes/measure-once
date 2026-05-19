@@ -214,6 +214,8 @@ async function goBack() {
             showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
           } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
             showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+          } else {
+            showToast('Failed to save', true);
           }
         } }
         _performGoBack();
@@ -234,6 +236,8 @@ async function goBack() {
       showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
     } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
       showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else {
+      showToast('Failed to save', true);
     }
   } }
   _performGoBack();
@@ -299,6 +303,8 @@ async function selectContact(contactId, roomIdx = 0) {
             showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
           } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
             showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+          } else {
+            showToast('Failed to save', true);
           }
         }
         _doSelectContact(contactId, roomIdx);
@@ -325,6 +331,8 @@ async function _doSelectContact(contactId, roomIdx) {
         showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
       } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
         showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+      } else {
+        showToast('Failed to save', true);
       }
     }
   }
@@ -474,6 +482,8 @@ async function switchRoom(idx) {
             showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
           } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
             showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+          } else {
+            showToast('Failed to save', true);
           }
         }
         _doSwitchRoom(idx);
@@ -494,6 +504,8 @@ async function switchRoom(idx) {
       showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
     } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
       showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else {
+      showToast('Failed to save', true);
     }
   }
   _doSwitchRoom(idx);
