@@ -356,14 +356,19 @@ function openStatusPicker(event, contactId, roomIdx) {
   popup.className = 'card-picker-popup';
   const top = Math.min(rect.bottom + 4, window.innerHeight - 140);
   popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
+  const currentStatus = state.contactStageCache[contactId]?.[roomIdx]?.roomStatus || 'active';
   popup.innerHTML = [
     { value: 'active',   label: 'Active' },
     { value: 'declined', label: 'Declined' },
     { value: 'complete', label: 'Complete' },
     { value: 'remedial', label: 'Remedial' }
-  ].map(({ value, label }) =>
-    `<button class="card-picker-opt card-picker-status-${value}" onclick="confirmStatusChange('${contactId}',${roomIdx},'${value}')">${label}</button>`
-  ).join('');
+  ].map(({ value, label }) => {
+    const isActive = value === currentStatus;
+    const classes = `card-picker-opt card-picker-status-${value}${isActive ? ' card-picker-opt--active' : ''}`;
+    const onclick = isActive ? '' : `onclick="confirmStatusChange('${contactId}',${roomIdx},'${value}')"`;
+    const disabled = isActive ? 'disabled' : '';
+    return `<button class="${classes}" ${onclick} ${disabled}>${isActive ? '✓ ' : ''}${label}</button>`;
+  }).join('');
   document.body.appendChild(popup);
   setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
 }

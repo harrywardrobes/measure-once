@@ -607,6 +607,8 @@ body.showing-workflow .workflow-panel { display: flex; }
 .card-picker-opt--clear:hover { background: #fee2e2; color: #b91c1c; }
 .card-picker-opt--disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 .card-picker-opt--disabled:hover { background: transparent; color: var(--ink-3); }
+.card-picker-opt--active { font-weight: 600; background: var(--paper-deep); cursor: default; pointer-events: none; }
+.card-picker-opt--active:hover { background: var(--paper-deep); }
 .card-picker-status-active   { color: #065f46; }
 .card-picker-status-declined { color: #991b1b; }
 .card-picker-status-complete { color: var(--orchid-deep); }
