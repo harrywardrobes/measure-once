@@ -145,6 +145,22 @@ body {
   flex-shrink: 0;
 }
 .header-refresh-btn:hover { background: rgba(255,255,255,0.14); }
+.header-icon-btn {
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.7);
+  padding: 6px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.header-icon-btn:hover { background: rgba(255,255,255,0.14); }
+.header-icon-btn:active { background: rgba(255,255,255,0.2); }
 
 /* ── Bottom Navigation ───────────────────────────────────────────────────────── */
 .bottom-nav {
@@ -2708,6 +2724,21 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .empty-state-icon    { display: block; margin: 0 auto 16px; opacity: 0.4; }
 .empty-state-heading { font-weight: 600; color: var(--ink-3); font-size: 1rem; margin: 0; }
 .empty-state-sub     { font-size: 0.875rem; margin-top: 4px; color: var(--stone-deep); margin-bottom: 0; }
+.sales-goto-customers-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 9px 20px;
+  background: var(--plum);
+  color: #fff;
+  border-radius: var(--radius-pill);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.sales-goto-customers-btn:hover { background: #3d0f7a; }
 #stage-filter        { font-size: 13px; }
 
 /* ── Profile photo upload ──────────────────────────────────────────────────── */

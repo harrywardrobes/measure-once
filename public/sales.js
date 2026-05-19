@@ -159,6 +159,13 @@ async function goBack() {
   captureNotes();
   await flushDeferredSave();
   if (state.selectedContactId) { try { await saveWorkflowData(); } catch {} }
+
+  // On the Sales pipeline page (no list panel) navigate back to the customer directory.
+  if (location.pathname === '/sales') {
+    location.href = '/customers';
+    return;
+  }
+
   document.body.classList.remove('showing-workflow');
   document.getElementById('empty-state').classList.remove('hidden');
   document.getElementById('workflow-view').classList.add('hidden');

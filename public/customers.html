@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#200842">
+  <meta name="color-scheme" content="light">
+  <title>Customers · Measure Once</title>
+  <link rel="stylesheet" href="/tailwind.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <div id="tab-customers" class="app-body">
+    <aside id="list-panel" class="list-panel">
+      <div class="p-3 border-b border-slate-100 flex-shrink-0">
+        <div class="flex gap-1.5">
+          <select id="stage-filter" onchange="setStageFilter(this.value)"
+            class="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-blue-400 transition">
+            <option value="">All stages</option>
+          </select>
+          <button id="archived-toggle" onclick="toggleArchived()" class="filter-btn">Archived</button>
+          <button onclick="openNewCustomerModal()" title="New Customer"
+            class="flex-shrink-0 flex items-center gap-1 filter-btn bg-[#200842] hover:bg-[#3d0f7a] text-white border-transparent">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+            </svg>
+            New
+          </button>
+        </div>
+        <div id="deal-count" class="text-xs text-slate-400 mt-1.5 px-0.5"></div>
+      </div>
+      <div id="customer-list" class="flex-1 overflow-y-auto">
+        <div class="flex items-center gap-2 p-4 text-slate-400 text-sm">
+          <div class="spinner"></div> Loading…
+        </div>
+      </div>
+    </aside>
+
+    <main id="workflow-panel" class="workflow-panel">
+      <div id="empty-state" class="flex items-center justify-center h-full">
+        <div class="text-center px-6 empty-state-text">
+          <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="empty-state-icon">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          <p class="empty-state-heading">Select a customer</p>
+          <p class="empty-state-sub">Choose a customer from the list to view their project workflow</p>
+        </div>
+      </div>
+      <div id="workflow-view" class="hidden"></div>
+    </main>
+  </div>
+
+  <!-- New Customer Modal -->
+  <div id="new-customer-overlay" class="inv-overlay hidden" onclick="closeNewCustomerModal()"></div>
+  <div id="new-customer-modal" class="nc-modal-wrap hidden" style="display:none;">
+    <div class="nc-modal-box" onclick="event.stopPropagation()">
+      <div class="nc-modal-header">
+        <h2 class="nc-modal-title">New Customer</h2>
+        <button onclick="closeNewCustomerModal()" class="nc-modal-close" title="Close">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <form id="new-customer-form" onsubmit="submitNewCustomer(event)" novalidate>
+        <div class="nc-form-grid">
+          <label class="nc-form-row">
+            <span class="nc-label-text">First name <span class="nc-required">*</span></span>
+            <input id="nc-firstname" type="text" required autocomplete="given-name" class="nc-input">
+          </label>
+          <label class="nc-form-row">
+            <span class="nc-label-text">Last name</span>
+            <input id="nc-lastname" type="text" autocomplete="family-name" class="nc-input">
+          </label>
+        </div>
+        <label class="nc-form-row">
+          <span class="nc-label-text">Email <span class="nc-required">*</span></span>
+          <input id="nc-email" type="email" required autocomplete="email" class="nc-input">
+        </label>
+        <label class="nc-form-row">
+          <span class="nc-label-text">Phone</span>
+          <input id="nc-phone" type="tel" autocomplete="tel" class="nc-input">
+        </label>
+        <label class="nc-form-row nc-form-row-last">
+          <span class="nc-label-text">Postcode <span class="nc-required">*</span></span>
+          <input id="nc-postcode" type="text" required autocomplete="postal-code" class="nc-input nc-postcode">
+        </label>
+        <div id="nc-error" class="nc-error"></div>
+        <div class="nc-actions">
+          <button type="button" onclick="closeNewCustomerModal()" class="nc-btn-cancel">Cancel</button>
+          <button type="submit" id="nc-submit" class="nc-btn-submit">Create Customer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/chrome.js"></script>
+  <script src="/core.js"></script>
+  <script src="/workflow-core.js"></script>
+  <script src="/invoices-core.js"></script>
+  <script src="/workflow.js"></script>
+  <script src="/sales.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (!await bootstrap()) return;
+
+      const params = new URLSearchParams(location.search);
+      const q = params.get('q');
+      const openModal = params.get('new') === '1';
+
+      if (q) {
+        const inp = document.getElementById('search');
+        if (inp) inp.value = q;
+        const clear = document.getElementById('search-clear');
+        if (clear) clear.classList.remove('hidden');
+        filterDeals(q);
+
+        // Auto-open the first matching customer
+        setTimeout(() => {
+          const firstCard = document.querySelector('.customer-card');
+          if (firstCard) firstCard.click();
+        }, 300);
+      }
+
+      if (openModal) {
+        openNewCustomerModal();
+      }
+
+      // Open a contact requested from another page (e.g. Projects → openProject).
+      try {
+        const pending = sessionStorage.getItem('pendingOpenContact');
+        if (pending) {
+          sessionStorage.removeItem('pendingOpenContact');
+          const { contactId, roomIdx } = JSON.parse(pending);
+          if (contactId) selectContact(contactId, roomIdx || 0);
+        }
+      } catch {}
+    });
+  </script>
+</body>
+</html>

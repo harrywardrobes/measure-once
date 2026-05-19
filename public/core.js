@@ -215,14 +215,32 @@ async function checkAuthStatus() {
 
 // ── Header Search ─────────────────────────────────────────────────────────────
 function onHeaderSearch(val) {
-  // On non-sales pages, redirect to /sales with the search pre-applied.
-  if (location.pathname !== '/sales') {
-    if (val) location.href = '/sales?q=' + encodeURIComponent(val);
-    return;
-  }
   const clear = document.getElementById('search-clear');
   if (clear) clear.classList.toggle('hidden', !val);
-  filterDeals(val);
+  if (location.pathname === '/customers') {
+    filterDeals(val);
+  }
+}
+
+function onHeaderSearchSubmit(val) {
+  if (!val) return;
+  if (location.pathname === '/customers') {
+    filterDeals(val);
+    setTimeout(() => {
+      const firstCard = document.querySelector('.customer-card');
+      if (firstCard) firstCard.click();
+    }, 50);
+  } else {
+    location.href = '/customers?q=' + encodeURIComponent(val);
+  }
+}
+
+function onHeaderPlusBtn() {
+  if (location.pathname === '/customers') {
+    if (typeof openNewCustomerModal === 'function') openNewCustomerModal();
+  } else {
+    location.href = '/customers?new=1';
+  }
 }
 
 function clearHeaderSearch() {

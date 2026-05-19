@@ -27,56 +27,13 @@
           <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="empty-state-icon">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
           </svg>
-          <p class="empty-state-heading">Select a customer</p>
-          <p class="empty-state-sub">Choose a customer from the list to view their project workflow</p>
+          <p class="empty-state-heading">No customer selected</p>
+          <p class="empty-state-sub">Go to the Customers page to browse and select a customer.</p>
+          <a href="/customers" class="sales-goto-customers-btn">Browse Customers</a>
         </div>
       </div>
       <div id="workflow-view" class="hidden"></div>
     </main>
-  </div>
-
-  <!-- New Customer Modal (sales page only) -->
-  <div id="new-customer-overlay" class="inv-overlay hidden" onclick="closeNewCustomerModal()"></div>
-  <div id="new-customer-modal" class="nc-modal-wrap hidden" style="display:none;">
-    <div class="nc-modal-box" onclick="event.stopPropagation()">
-      <div class="nc-modal-header">
-        <h2 class="nc-modal-title">New Customer</h2>
-        <button onclick="closeNewCustomerModal()" class="nc-modal-close" title="Close">
-          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </button>
-      </div>
-      <form id="new-customer-form" onsubmit="submitNewCustomer(event)" novalidate>
-        <div class="nc-form-grid">
-          <label class="nc-form-row">
-            <span class="nc-label-text">First name <span class="nc-required">*</span></span>
-            <input id="nc-firstname" type="text" required autocomplete="given-name" class="nc-input">
-          </label>
-          <label class="nc-form-row">
-            <span class="nc-label-text">Last name</span>
-            <input id="nc-lastname" type="text" autocomplete="family-name" class="nc-input">
-          </label>
-        </div>
-        <label class="nc-form-row">
-          <span class="nc-label-text">Email <span class="nc-required">*</span></span>
-          <input id="nc-email" type="email" required autocomplete="email" class="nc-input">
-        </label>
-        <label class="nc-form-row">
-          <span class="nc-label-text">Phone</span>
-          <input id="nc-phone" type="tel" autocomplete="tel" class="nc-input">
-        </label>
-        <label class="nc-form-row nc-form-row-last">
-          <span class="nc-label-text">Postcode <span class="nc-required">*</span></span>
-          <input id="nc-postcode" type="text" required autocomplete="postal-code" class="nc-input nc-postcode">
-        </label>
-        <div id="nc-error" class="nc-error"></div>
-        <div class="nc-actions">
-          <button type="button" onclick="closeNewCustomerModal()" class="nc-btn-cancel">Cancel</button>
-          <button type="submit" id="nc-submit" class="nc-btn-submit">Create Customer</button>
-        </div>
-      </form>
-    </div>
   </div>
 
   <script src="/chrome.js"></script>
@@ -90,17 +47,7 @@
     document.addEventListener('DOMContentLoaded', async () => {
       if (!await bootstrap()) return;
 
-      // Apply header search deep-link (?q= from cross-page search redirect).
-      const q = new URLSearchParams(location.search).get('q');
-      if (q) {
-        const inp = document.getElementById('search');
-        if (inp) inp.value = q;
-        const clr = document.getElementById('search-clear');
-        if (clr) clr.classList.remove('hidden');
-        filterDeals(q);
-      }
-
-      // Open a contact requested from another page (e.g. Projects → openProject).
+      // Open a contact navigated here from Customers or Projects page.
       try {
         const pending = sessionStorage.getItem('pendingOpenContact');
         if (pending) {
