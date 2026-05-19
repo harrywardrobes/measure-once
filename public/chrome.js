@@ -50,8 +50,16 @@
       </div>
     </div>`;
 
+  const backBtn = path !== '/' ? `
+    <button onclick="history.back()" class="header-back-btn" aria-label="Go back" title="Back">
+      <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+      </svg>
+    </button>` : '';
+
   const header = `
     <header class="app-header">
+      ${backBtn}
       <a href="/" class="flex-shrink-0" style="background:none;border:none;padding:0;cursor:pointer;display:flex;align-items:center;" title="Home" aria-label="Go to home">
         <img src="/assets/logo-mark-paper.png" alt="Harry Wardrobes" width="26" height="26" style="height:26px;width:auto;">
       </a>
