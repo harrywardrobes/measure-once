@@ -880,6 +880,24 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 .btn-new-note:hover { opacity: 0.75; }
 .comment-input-area { margin-bottom: 10px; }
+.draft-resume-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: var(--radius-md);
+  padding: 7px 12px;
+  margin-bottom: 8px;
+}
+.draft-resume-banner::before {
+  content: '↩';
+  font-size: 1rem;
+  flex-shrink: 0;
+}
 .comment-input-actions {
   display: flex;
   gap: 8px;

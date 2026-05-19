@@ -345,6 +345,8 @@ async function _doSelectContact(contactId, roomIdx) {
   state.tasks             = [];
   state.showAddTask       = false;
   state.addingRoom        = false;
+  _cancelNoteAutosaveTimer();
+  _noteAutosaveDraft      = null;
 
   document.getElementById('empty-state').classList.add('hidden');
   const wv = document.getElementById('workflow-view');
@@ -456,6 +458,7 @@ async function _doSelectContact(contactId, roomIdx) {
     updateRoomCache();
     renderCustomerList();
     renderFullWorkflowView();
+    _restoreNoteDraftIfPresent();
   } catch (e) {
     const isDbError = e.code === 'DB_ERROR';
     const msg = isDbError
@@ -522,6 +525,7 @@ function _doSwitchRoom(idx) {
   state.workflowData = state.allRooms[idx];
   state.expandedStages = new Set();
   renderFullWorkflowView();
+  _restoreNoteDraftIfPresent();
 }
 
 function showAddRoomForm() {
@@ -1117,7 +1121,7 @@ function _scheduleNoteAutosave() {
     _removeAutosaveDraftFromState();
     const u = state.user;
     const author = [u?.first_name, u?.last_name].filter(Boolean).join(' ') || u?.email || '';
-    const draft = { text, date: new Date().toISOString(), author };
+    const draft = { text, date: new Date().toISOString(), author, isDraft: true };
     if (!state.workflowData.comments) state.workflowData.comments = [];
     state.workflowData.comments.push(draft);
     _noteAutosaveDraft = draft;
@@ -1144,7 +1148,8 @@ function _scheduleNoteAutosave() {
 function renderComments() {
   const el = document.getElementById('comments-section');
   if (!el) return;
-  const comments = state.workflowData?.comments || [];
+  const allComments = state.workflowData?.comments || [];
+  const comments = allComments.filter(c => !c.isDraft);
   el.innerHTML = `
     <div class="notes-header">
       <span class="notes-header-label">Notes</span>
@@ -1152,6 +1157,9 @@ function renderComments() {
       <button class="btn-new-note" onclick="showAddComment()" data-viewer-hide>+ New note</button>
     </div>
     <div id="comment-input-area" class="comment-input-area hidden">
+      <div id="draft-resume-banner" class="draft-resume-banner hidden">
+        Draft restored — review and save or cancel to discard.
+      </div>
       <textarea id="comment-input" rows="3" class="notes-textarea"
         placeholder="Add a note..."
         onkeydown="if(event.ctrlKey&&event.key==='Enter')addComment()"
@@ -1179,6 +1187,25 @@ function renderComments() {
   `;
 }
 
+function _restoreNoteDraftIfPresent() {
+  if (!state.workflowData?.comments) return;
+  const draft = state.workflowData.comments.find(c => c.isDraft);
+  if (!draft) return;
+  // Keep the draft entry in comments (isDraft:true) so unrelated saves
+  // (stage/task/room changes) continue to persist it to HubSpot until the
+  // user explicitly saves or cancels.  _removeAutosaveDraftFromState() will
+  // remove it by reference on Save/Cancel.
+  _noteAutosaveDraft = draft;
+  const area   = document.getElementById('comment-input-area');
+  const input  = document.getElementById('comment-input');
+  const banner = document.getElementById('draft-resume-banner');
+  if (!area || !input) return;
+  input.value = draft.text;
+  area.classList.remove('hidden');
+  if (banner) banner.classList.remove('hidden');
+  _updateBeforeUnloadGuard();
+}
+
 // Persist a typed-but-not-yet-saved comment draft before navigating away.
 // Appends the draft to state.workflowData.comments so the subsequent
 // saveWorkflowData() call in the save path persists it to the server.
@@ -1200,7 +1227,7 @@ async function persistCommentDraft() {
   _removeAutosaveDraftFromState();
   const u = state.user;
   const author = [u?.first_name, u?.last_name].filter(Boolean).join(' ') || u?.email || '';
-  state.workflowData.comments.push({ text, date: new Date().toISOString(), author });
+  state.workflowData.comments.push({ text, date: new Date().toISOString(), author, isDraft: true });
   _clearCommentDraft();
 }
 
@@ -1208,6 +1235,7 @@ function showAddComment() {
   const area = document.getElementById('comment-input-area');
   if (!area) return;
   area.classList.remove('hidden');
+  document.getElementById('draft-resume-banner')?.classList.add('hidden');
   document.getElementById('comment-input')?.focus();
   _updateBeforeUnloadGuard();
 }
