@@ -736,7 +736,7 @@ async function submitEmail() {
     await POST('/api/emails/send', { to, subject, body });
     closeEmailCompose();
     showToast('Email sent');
-    renderGoogleEmailSection();
+    setTimeout(() => renderGoogleEmailSection(), 2000);
   } catch (e) {
     if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
     let msg;
