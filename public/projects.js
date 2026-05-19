@@ -51,14 +51,7 @@ function renderProjectsView() {
 
   const bodyHtml = !rows.length
     ? `<p style="color:var(--stone-deep);font-size:0.875rem;padding:8px 0;">No projects at this stage.</p>`
-    : rows.map(({ contact, rooms }) => `
-        <div class="project-row">
-          <div class="project-row-name">${escHtml(contactName(contact))}</div>
-          <div class="project-cards-scroll">
-            ${rooms.map(r => projectCardHtml(contact.id, r)).join('')}
-          </div>
-        </div>
-      `).join('');
+    : rows.map(({ contact, rooms }) => customerCardHtml(contact, rooms)).join('');
 
   view.innerHTML = `
     <div class="project-stage-tabs-bar">
@@ -76,20 +69,29 @@ function renderProjectsView() {
   });
 }
 
-function projectCardHtml(contactId, room) {
-  const colour     = stageColour(room.stageKey);
-  const stageLabel = state.workflow?.stages?.[room.stageKey]?.label || room.stageKey;
-  const stageIdx   = STAGE_KEYS.indexOf(room.stageKey);
-  const progress   = Math.round((stageIdx + 1) / STAGE_KEYS.length * 100);
-  return `
-    <div class="project-card" onclick="openProject('${contactId}', ${room.roomIdx})">
-      <div class="project-card-room">${escHtml(room.room || 'Main')}</div>
-      <span class="stage-pill" style="background:${colour.light};color:${colour.text}">${escHtml(stageLabel)}</span>
-      <div class="project-progress-bar">
-        <div class="project-progress-fill" style="width:${progress}%;background:${colour.bg}"></div>
-      </div>
-      <div class="project-progress-label">${stageIdx + 1} of ${STAGE_KEYS.length} stages</div>
-    </div>
-  `;
-}
+function customerCardHtml(contact, rooms) {
+  const name = escHtml(contactName(contact));
+  const contactId = escHtml(contact.id || '');
 
+  const roomRows = rooms.map(r => {
+    const colour     = stageColour(r.stageKey);
+    const stageLabel = escHtml(state.workflow?.stages?.[r.stageKey]?.label || r.stageKey);
+    const roomLabel  = escHtml(r.room || 'Main');
+    return `
+      <div class="project-room-row" onclick="openProject('${contact.id}', ${r.roomIdx})">
+        <span class="project-room-row-name">${roomLabel}</span>
+        <span class="stage-pill" style="background:${colour.light};color:${colour.text}">${stageLabel}</span>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="customer-project-card">
+      <div class="customer-project-header">
+        <div class="customer-project-name">${name}</div>
+        <div class="customer-project-id">#${contactId}</div>
+      </div>
+      <div class="project-room-list">
+        ${roomRows}
+      </div>
+    </div>`;
+}
