@@ -3376,6 +3376,41 @@ body.showing-workflow .sales-layout #workflow-panel {
   background: #dbeafe; border-color: #93c5fd;
 }
 
+.trades-contact-action-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.trades-copy-btn {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px;
+  border: none; background: transparent;
+  cursor: pointer; padding: 3px; border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+.trades-copy-btn-call  { color: #16a34a; }
+.trades-copy-btn-email { color: #2563eb; }
+.trades-contact-action-group:hover .trades-copy-btn,
+.trades-copy-btn:focus-visible,
+.trades-copy-btn.copied { opacity: 1; }
+.trades-copy-btn:hover { background: rgba(0,0,0,0.07); }
+.trades-copy-btn.copied { color: #16a34a !important; }
+.trades-copy-btn.copied::after {
+  content: 'Copied!';
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%; transform: translateX(-50%);
+  background: #1e293b; color: #fff;
+  font-size: 0.63rem; font-weight: 500;
+  padding: 2px 7px; border-radius: 4px;
+  white-space: nowrap; pointer-events: none;
+  z-index: 20;
+}
+
 .trades-card-details {
   display: flex; flex-wrap: wrap; gap: 8px;
   margin-top: 8px;

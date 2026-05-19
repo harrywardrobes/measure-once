@@ -119,6 +119,18 @@ function renderTradeContacts(contacts) {
     return;
   }
   list.innerHTML = contacts.map(tradeCardHtml).join('');
+  list.querySelectorAll('.trades-copy-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const value = btn.dataset.copy;
+      if (!value) return;
+      navigator.clipboard.writeText(value).then(() => {
+        btn.classList.add('copied');
+        setTimeout(() => btn.classList.remove('copied'), 1500);
+      }).catch(() => {});
+    });
+  });
 }
 
 function tradeCardHtml(co) {
@@ -137,12 +149,22 @@ function tradeCardHtml(co) {
     const cRole  = escHtml(c.role  || '');
     const cPhone = escHtml(c.phone || '');
     const cEmail = escHtml(c.email || '');
-    const callBtn  = cPhone ? `<a href="tel:${cPhone}" class="trades-contact-action-btn trades-contact-call-btn" aria-label="Call ${cName} at ${cPhone}">
+    const callBtn  = cPhone ? `<div class="trades-contact-action-group">
+      <a href="tel:${cPhone}" class="trades-contact-action-btn trades-contact-call-btn" aria-label="Call ${cName} at ${cPhone}">
         <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
-        <span class="trades-contact-btn-inner"><span class="trades-contact-btn-label">Call</span><span class="trades-contact-btn-sub">${cPhone}</span></span></a>` : '';
-    const emailBtn = cEmail ? `<a href="mailto:${cEmail}" class="trades-contact-action-btn trades-contact-email-btn" aria-label="Email ${cName} at ${cEmail}">
+        <span class="trades-contact-btn-inner"><span class="trades-contact-btn-label">Call</span><span class="trades-contact-btn-sub">${cPhone}</span></span></a>
+      <button class="trades-copy-btn trades-copy-btn-call" data-copy="${cPhone}" aria-label="Copy phone number" title="Copy number" type="button">
+        <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
+    </div>` : '';
+    const emailBtn = cEmail ? `<div class="trades-contact-action-group">
+      <a href="mailto:${cEmail}" class="trades-contact-action-btn trades-contact-email-btn" aria-label="Email ${cName} at ${cEmail}">
         <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-        <span class="trades-contact-btn-inner"><span class="trades-contact-btn-label">Email</span><span class="trades-contact-btn-sub">${cEmail}</span></span></a>` : '';
+        <span class="trades-contact-btn-inner"><span class="trades-contact-btn-label">Email</span><span class="trades-contact-btn-sub">${cEmail}</span></span></a>
+      <button class="trades-copy-btn trades-copy-btn-email" data-copy="${cEmail}" aria-label="Copy email address" title="Copy email" type="button">
+        <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
+    </div>` : '';
     return `<div class="trades-card-person">
       <div class="trades-card-person-top">
         <span class="trades-card-person-name">${cName}</span>${cRole ? `<span class="trades-card-person-role">${cRole}</span>` : ''}
