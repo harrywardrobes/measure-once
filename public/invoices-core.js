@@ -93,6 +93,16 @@ async function navigateInvoicePanel(delta) {
   if (!ctx) return;
   const newIdx = ctx.index + delta;
   if (newIdx < 0 || newIdx >= ctx.ids.length) return;
+  if (window._invMemoDirty || window._invSendDirty) {
+    const msg = window._invSendDirty && window._invMemoDirty
+      ? 'You have unsaved changes and an unsent email update. Discard and continue?'
+      : window._invSendDirty
+        ? 'The customer email has been changed but not sent. Discard and continue?'
+        : 'You have unsaved invoice changes. Discard and continue?';
+    if (!confirm(msg)) return;
+    window._invMemoDirty = false;
+    window._invSendDirty = false;
+  }
   ctx.index = newIdx;
   const ids = ctx.ids;
   await openInvoicePanel(ids[newIdx], ids);
@@ -103,6 +113,16 @@ async function jumpToInvoice(idx) {
   if (!ctx) return;
   const i = parseInt(idx, 10);
   if (isNaN(i) || i < 0 || i >= ctx.ids.length || i === ctx.index) return;
+  if (window._invMemoDirty || window._invSendDirty) {
+    const msg = window._invSendDirty && window._invMemoDirty
+      ? 'You have unsaved changes and an unsent email update. Discard and continue?'
+      : window._invSendDirty
+        ? 'The customer email has been changed but not sent. Discard and continue?'
+        : 'You have unsaved invoice changes. Discard and continue?';
+    if (!confirm(msg)) return;
+    window._invMemoDirty = false;
+    window._invSendDirty = false;
+  }
   ctx.index = i;
   await openInvoicePanel(ctx.ids[i], ctx.ids);
 }
