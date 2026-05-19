@@ -51,7 +51,7 @@
     </div>`;
 
   const backBtn = path !== '/' ? `
-    <button onclick="history.back()" class="header-back-btn" aria-label="Go back" title="Back">
+    <button onclick="history.length > 1 ? history.back() : location.href = '/'" class="header-back-btn" aria-label="Go back" title="Back">
       <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
       </svg>
