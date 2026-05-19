@@ -342,7 +342,7 @@
     .audit-chip {
       display: inline-block;
       padding: 1px 7px;
-      border-radius: var(--r-pill);
+      border-radius: var(--radius-pill);
       font-size: .68rem;
       font-weight: 700;
       text-transform: uppercase;
@@ -356,6 +356,66 @@
     .chip-edit_user_profile { background: #ede0ff; color: #3d0f7a; }
     .chip-add_job_role      { background: #f0fdf4; color: #166534; }
     .chip-delete_job_role   { background: #fff7ed; color: #9a3412; }
+
+    /* ── Add member form ── */
+    .form-section-label {
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--ink-4);
+      margin: 18px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--stone);
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 10px;
+    }
+    .form-field-wrap { display: flex; flex-direction: column; gap: 4px; }
+    .form-field-wrap label { font-size: .72rem; font-weight: 600; color: var(--ink-3); }
+    .form-field-wrap .opt { font-weight: 400; color: var(--ink-4); }
+    .form-actions { margin-top: 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    /* ── Offline checklist reminder ── */
+    .checklist-box {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: var(--radius-lg);
+      padding: 16px 18px;
+      margin-top: 22px;
+    }
+    .checklist-box-title {
+      font-size: .78rem;
+      font-weight: 700;
+      color: #92400e;
+      margin: 0 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .checklist-cols {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px 20px;
+    }
+    .checklist-group-title {
+      font-size: .72rem;
+      font-weight: 700;
+      color: #78350f;
+      margin: 0 0 5px;
+    }
+    .checklist-items { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 3px; }
+    .checklist-items li {
+      font-size: .78rem;
+      color: #92400e;
+      padding-left: 14px;
+      position: relative;
+      line-height: 1.4;
+    }
+    .checklist-items li::before { content: '•'; position: absolute; left: 0; color: #d97706; }
+    .checklist-items li span { color: #78350f; font-weight: 400; display: block; font-size: .72rem; opacity: .85; }
 
     /* ── Loading / forbidden ── */
     .loading-state {
@@ -689,9 +749,23 @@
         </td>
       </tr>`;
 
-    const allowRow = a => `
+    const allowRow = a => {
+      const m    = a.metadata || {};
+      const name = [m.first_name, m.last_name].filter(Boolean).join(' ');
+      const ec   = [m.ec_first_name, m.ec_last_name].filter(Boolean).join(' ');
+      const ecPhone = m.ec_phone || '';
+      return `
       <tr>
-        <td>${esc(a.email)}</td>
+        <td>
+          <div style="font-weight:600;">${esc(name || a.email)}</div>
+          ${name ? `<div style="font-size:.72rem;color:var(--ink-4);">${esc(a.email)}</div>` : ''}
+        </td>
+        <td style="font-size:.78rem;">
+          ${m.date_of_birth ? `<div style="color:var(--ink-3);">DOB: ${esc(m.date_of_birth)}</div>` : ''}
+          ${m.ni_number     ? `<div style="color:var(--ink-3);">NI: ${esc(m.ni_number)}</div>` : ''}
+          ${ec ? `<div style="color:var(--ink-4);margin-top:2px;">EC: ${esc(ec)}${ecPhone ? ` · ${esc(ecPhone)}` : ''}</div>` : ''}
+          ${!m.date_of_birth && !m.ni_number && !ec ? '<span style="color:var(--ink-4);">—</span>' : ''}
+        </td>
         <td><span class="badge ${a.protected ? 'badge-approved' : ''}">${esc(a.note || '—')}</span></td>
         <td style="color:var(--ink-4);font-size:.78rem;">${fmtDate(a.approved_at)}</td>
         <td class="actions">
@@ -700,6 +774,7 @@
             : `<button class="btn btn-danger" onclick="revoke('${esc(a.email)}')">Revoke</button>`}
         </td>
       </tr>`;
+    };
 
     const pendingBadge = pending.length > 0 ? `<span class="tab-badge">${pending.length}</span>` : '';
     const pendingTab = $('#req-tab-badge');
@@ -720,31 +795,98 @@
 
       <div class="card">
         <div class="card-title">Add team member</div>
-        <p style="font-size:.82rem;color:var(--ink-3);margin:0 0 14px;">
-          Proactively approve an email address so the person can sign in straight away — no request needed.
+        <p style="font-size:.82rem;color:var(--ink-3);margin:0 0 4px;">
+          Approve an email address so this person can sign in straight away, and capture their key details at the same time.
         </p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
-          <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px;">
-            <label style="font-size:.72rem;font-weight:700;color:var(--ink-3);">Email address</label>
-            <input class="field" id="invite-email" type="email" placeholder="colleague@example.com" maxlength="254"
-              onkeydown="if(event.key==='Enter')addAllowed()">
+
+        <div class="form-section-label">Personal details</div>
+        <div class="form-grid">
+          <div class="form-field-wrap" style="grid-column:1/-1;">
+            <label>Work email address</label>
+            <input class="field" id="invite-email" type="email" placeholder="colleague@example.com" maxlength="254" autocomplete="off">
           </div>
-          <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px;">
-            <label style="font-size:.72rem;font-weight:700;color:var(--ink-3);">Note <span style="font-weight:400;">(optional)</span></label>
-            <input class="field" id="invite-note" type="text" placeholder="e.g. New hire, Site manager…" maxlength="200"
-              onkeydown="if(event.key==='Enter')addAllowed()">
+          <div class="form-field-wrap">
+            <label>First name</label>
+            <input class="field" id="invite-fname" type="text" placeholder="Jane" maxlength="100" autocomplete="off">
           </div>
-          <button class="btn btn-primary" id="invite-btn" onclick="addAllowed()">Add</button>
+          <div class="form-field-wrap">
+            <label>Last name</label>
+            <input class="field" id="invite-lname" type="text" placeholder="Smith" maxlength="100" autocomplete="off">
+          </div>
+          <div class="form-field-wrap">
+            <label>Date of birth</label>
+            <input class="field" id="invite-dob" type="date" maxlength="20">
+          </div>
+          <div class="form-field-wrap">
+            <label>National Insurance number</label>
+            <input class="field" id="invite-ni" type="text" placeholder="AB 12 34 56 C" maxlength="20" autocomplete="off"
+              style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+          </div>
         </div>
-        <div id="invite-err" style="display:none;font-size:.8rem;color:#991b1b;margin-top:8px;"></div>
+
+        <div class="form-section-label">Emergency contact</div>
+        <div class="form-grid">
+          <div class="form-field-wrap">
+            <label>First name</label>
+            <input class="field" id="invite-ec-fname" type="text" placeholder="John" maxlength="100" autocomplete="off">
+          </div>
+          <div class="form-field-wrap">
+            <label>Last name</label>
+            <input class="field" id="invite-ec-lname" type="text" placeholder="Smith" maxlength="100" autocomplete="off">
+          </div>
+          <div class="form-field-wrap">
+            <label>Mobile number</label>
+            <input class="field" id="invite-ec-phone" type="tel" placeholder="+44 7700 900000" maxlength="30" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="form-section-label">Note <span style="text-transform:none;font-weight:400;letter-spacing:0;">(optional)</span></div>
+        <input class="field" id="invite-note" type="text" placeholder="e.g. New hire · Site manager" maxlength="200" style="width:100%;">
+
+        <div class="form-actions">
+          <button class="btn btn-primary" id="invite-btn" onclick="addAllowed()">Add team member</button>
+          <div id="invite-err" style="display:none;font-size:.8rem;color:#991b1b;"></div>
+        </div>
+
+        <div class="checklist-box">
+          <div class="checklist-box-title">
+            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0;">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+            Still to collect offline before their first day
+          </div>
+          <div class="checklist-cols">
+            <div>
+              <div class="checklist-group-title">Payroll &amp; Tax</div>
+              <ul class="checklist-items">
+                <li>P45 or HMRC Starter Checklist<span>Mandatory — needed to set the correct tax code</span></li>
+                <li>Bank details<span>Account number and sort code for salary payments</span></li>
+              </ul>
+            </div>
+            <div>
+              <div class="checklist-group-title">Legal &amp; Compliance</div>
+              <ul class="checklist-items">
+                <li>Right to work proof<span>Passport or digital share code check</span></li>
+                <li>Home address<span>Required for contracts, pension enrolment, and P60s</span></li>
+              </ul>
+            </div>
+            <div>
+              <div class="checklist-group-title">Professional</div>
+              <ul class="checklist-items">
+                <li>Signed contract<span>Formal acceptance of your terms</span></li>
+                <li>Reference contacts<span>If your policy requires background checks</span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="card">
-        <div class="card-title">Approved emails <span class="card-count">(${_allowed.length})</span></div>
+        <div class="card-title">Approved team members <span class="card-count">(${_allowed.length})</span></div>
         ${_allowed.length === 0
           ? '<div class="table-empty">No approved emails yet.</div>'
           : `<table>
-               <thead><tr><th>Email</th><th>Note</th><th>Approved</th><th></th></tr></thead>
+               <thead><tr><th>Name / Email</th><th>HR details</th><th>Note</th><th>Approved</th><th></th></tr></thead>
                <tbody>${_allowed.map(allowRow).join('')}</tbody>
              </table>`}
       </div>
@@ -784,15 +926,12 @@
   }
 
   async function addAllowed() {
-    const emailInp = $('#invite-email');
-    const noteInp  = $('#invite-note');
-    const btn      = $('#invite-btn');
-    const errEl    = $('#invite-err');
+    const emailInp  = $('#invite-email');
+    const btn       = $('#invite-btn');
+    const errEl     = $('#invite-err');
     if (!emailInp) return;
 
     const email = emailInp.value.trim();
-    const note  = noteInp?.value.trim() || '';
-
     if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -801,18 +940,33 @@
       return;
     }
 
+    const g = id => (document.getElementById(id)?.value || '').trim();
+    const payload = {
+      email,
+      note:          g('invite-note'),
+      first_name:    g('invite-fname'),
+      last_name:     g('invite-lname'),
+      date_of_birth: g('invite-dob'),
+      ni_number:     g('invite-ni'),
+      ec_first_name: g('invite-ec-fname'),
+      ec_last_name:  g('invite-ec-lname'),
+      ec_phone:      g('invite-ec-phone'),
+    };
+
     if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
     try {
-      await api('POST', '/api/admin/allowed', { email, note });
-      emailInp.value = '';
-      if (noteInp) noteInp.value = '';
-      toast('Email added — they can now sign in');
+      await api('POST', '/api/admin/allowed', payload);
+      ['invite-email','invite-fname','invite-lname','invite-dob','invite-ni',
+       'invite-note','invite-ec-fname','invite-ec-lname','invite-ec-phone']
+        .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      const name = [payload.first_name, payload.last_name].filter(Boolean).join(' ');
+      toast(name ? `${name} added — they can now sign in` : 'Email added — they can now sign in');
       await reload();
     } catch (e) {
       if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
       else toast(e.message, true);
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Add'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Add team member'; }
     }
   }
 

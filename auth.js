@@ -140,6 +140,11 @@ async function ensureAuthTables() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS privilege_level TEXT NOT NULL DEFAULT 'member';
   `);
 
+  /* Extra HR fields captured when an admin pre-approves a team member. */
+  await pool.query(`
+    ALTER TABLE allowed_emails ADD COLUMN IF NOT EXISTS metadata JSONB;
+  `);
+
   /* Job roles catalogue — admin-managed list of available role labels. */
   await pool.query(`
     CREATE TABLE IF NOT EXISTS job_roles (
@@ -545,23 +550,39 @@ async function setupAuth(app) {
 
   app.post('/api/admin/allowed', isAuthenticated, requireAdmin, async (req, res) => {
     try {
-      const email = (req.body?.email || '').trim().toLowerCase();
-      const note  = (req.body?.note  || '').trim().slice(0, 200) || null;
+      const body  = req.body || {};
+      const email = (body.email || '').trim().toLowerCase();
+      const note  = (body.note  || '').trim().slice(0, 200) || null;
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return res.status(400).json({ error: 'Please provide a valid email address.' });
       }
+
+      // Collect optional HR fields into a metadata object (stored as JSONB).
+      const meta = {};
+      const str  = (v, max) => (v || '').toString().trim().slice(0, max) || null;
+      if (str(body.first_name,    100)) meta.first_name    = str(body.first_name, 100);
+      if (str(body.last_name,     100)) meta.last_name     = str(body.last_name,  100);
+      if (str(body.date_of_birth,  20)) meta.date_of_birth = str(body.date_of_birth, 20);
+      if (str(body.ni_number,      20)) meta.ni_number     = str(body.ni_number,  20);
+      if (str(body.ec_first_name,  100)) meta.ec_first_name  = str(body.ec_first_name, 100);
+      if (str(body.ec_last_name,   100)) meta.ec_last_name   = str(body.ec_last_name,  100);
+      if (str(body.ec_phone,        30)) meta.ec_phone        = str(body.ec_phone, 30);
+      const metaJson = Object.keys(meta).length ? JSON.stringify(meta) : null;
+
       const r = await pool.query(
-        `INSERT INTO allowed_emails (email, note)
-         VALUES ($1, $2)
+        `INSERT INTO allowed_emails (email, note, metadata)
+         VALUES ($1, $2, $3::jsonb)
          ON CONFLICT (email) DO NOTHING
-         RETURNING email, approved_at, note`,
-        [email, note]
+         RETURNING email, approved_at, note, metadata`,
+        [email, note, metaJson]
       );
       if (r.rowCount === 0) {
         return res.status(409).json({ error: 'This email is already on the approved list.' });
       }
       const adminEmail = req.user?.claims?.email;
-      await logAdminAction(adminEmail, 'add_allowed_email', email, note ? `Note: ${note}` : null);
+      const nameStr = [meta.first_name, meta.last_name].filter(Boolean).join(' ');
+      await logAdminAction(adminEmail, 'add_allowed_email', email,
+        [nameStr ? `Name: ${nameStr}` : null, note ? `Note: ${note}` : null].filter(Boolean).join('; ') || null);
       res.json({ ok: true, row: r.rows[0] });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -571,7 +592,7 @@ async function setupAuth(app) {
   app.get('/api/admin/allowed', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
-        `SELECT email, approved_at, note FROM allowed_emails ORDER BY approved_at DESC`
+        `SELECT email, approved_at, note, metadata FROM allowed_emails ORDER BY approved_at DESC`
       );
       const adminSet = getAdminEmails();
       res.json(r.rows.map(row => ({ ...row, protected: adminSet.has(row.email) })));
