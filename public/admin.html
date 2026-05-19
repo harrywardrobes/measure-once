@@ -1281,20 +1281,16 @@
     const container = $('#trades-audit-content');
     if (!container) return;
     if (!_tradesAudit.length) {
-      container.innerHTML = '<div class="table-empty" style="padding:28px 0;">No trade companies recorded yet.</div>';
+      container.innerHTML = '<div class="table-empty" style="padding:28px 0;">No change history recorded yet.</div>';
       return;
     }
     const rows = _tradesAudit.map(r => {
-      const added   = r.created_by ? `${esc(r.created_by)}<br><span style="color:var(--ink-4);font-size:.73rem;">${fmtDate(r.created_at)}</span>` : `<span style="color:var(--ink-4);">—</span><br><span style="color:var(--ink-4);font-size:.73rem;">${fmtDate(r.created_at)}</span>`;
-      const edited  = r.updated_by
-        ? `${esc(r.updated_by)}<br><span style="color:var(--ink-4);font-size:.73rem;">${fmtDate(r.updated_at)}</span>`
-        : `<span style="color:var(--ink-4);font-size:.73rem;">Not yet edited</span>`;
       return `<tr>
         <td><strong>${esc(r.company_name)}</strong></td>
         <td><span class="trades-audit-badge">${esc(r.trade_type)}</span></td>
-        <td>${r.areas_served ? esc(r.areas_served) : '<span style="color:var(--ink-4)">—</span>'}</td>
-        <td style="line-height:1.5;">${added}</td>
-        <td style="line-height:1.5;">${edited}</td>
+        <td>${esc(r.action)}</td>
+        <td>${r.actor_name ? esc(r.actor_name) : '<span style="color:var(--ink-4)">—</span>'}</td>
+        <td style="color:var(--ink-4);font-size:.8rem;white-space:nowrap;">${fmtDate(r.changed_at)}</td>
       </tr>`;
     }).join('');
     container.innerHTML = `
@@ -1302,9 +1298,9 @@
         <thead><tr>
           <th>Company</th>
           <th>Trade</th>
-          <th>Areas</th>
-          <th>Added by</th>
-          <th>Last edited by</th>
+          <th>Action</th>
+          <th>By</th>
+          <th>When</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
@@ -1539,19 +1535,23 @@
           <div class="mig-results" id="mig-results"></div>
         </div>
 
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div style="padding:16px 20px 14px;border-bottom:1px solid var(--stone);">
+            <div class="card-title" style="margin:0 0 4px;">Trade companies change history <span class="card-count count-muted">(read-only)</span></div>
+            <p class="card-desc" style="margin:0;">Every recorded change to a trade company — action, actor, and timestamp.</p>
+          </div>
+          <div style="padding:0 4px;" id="trades-audit-content"></div>
+        </div>
+      </div>
+
+      <!-- AUDIT LOG -->
+      <div class="tab-panel" id="tab-auditlog">
         <div class="card">
           <div class="card-title">Admin audit log <span class="card-count count-muted">(read-only)</span></div>
           <p class="card-desc" style="margin-bottom:16px;">
             A time-ordered record of every admin action — who changed what, and when.
           </p>
           <div id="audit-content"></div>
-        </div>
-        <div class="card" style="padding:0;overflow:hidden;">
-          <div style="padding:16px 20px 14px;border-bottom:1px solid var(--stone);">
-            <div class="card-title" style="margin:0 0 4px;">Trade companies audit trail <span class="card-count count-muted">(read-only)</span></div>
-            <p class="card-desc" style="margin:0;">Who added or last edited each trade company, and when.</p>
-          </div>
-          <div style="padding:0 4px;" id="trades-audit-content"></div>
         </div>
       </div>
 

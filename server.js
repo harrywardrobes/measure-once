@@ -1495,27 +1495,26 @@ app.get('/api/admin/trades-audit', isAuthenticated, requireAdmin, async (req, re
   try {
     const { rows } = await _tradesPool.query(`
       SELECT
-        tc.id, tc.company_name, tc.trade_type, tc.areas_served,
-        tc.created_at, tc.created_by, tc.created_by_name,
-        tc.updated_at, tc.updated_by, tc.updated_by_name,
-        u_c.email  AS created_email,
-        u_c.first_name AS created_first, u_c.last_name AS created_last,
-        u_u.email  AS updated_email,
-        u_u.first_name AS updated_first, u_u.last_name AS updated_last
-      FROM trade_companies tc
-      LEFT JOIN users u_c ON u_c.id = tc.created_by
-      LEFT JOIN users u_u ON u_u.id = tc.updated_by
-      ORDER BY COALESCE(tc.updated_at, tc.created_at) DESC
+        tal.id,
+        tal.action,
+        tal.actor_name,
+        tal.changed_at,
+        tc.id          AS company_id,
+        tc.company_name,
+        tc.trade_type
+      FROM trade_audit_log tal
+      JOIN trade_companies tc ON tc.id = tal.company_id
+      ORDER BY tal.changed_at DESC
+      LIMIT 500
     `);
     res.json(rows.map(r => ({
-      id:            r.id,
-      company_name:  r.company_name,
-      trade_type:    r.trade_type,
-      areas_served:  r.areas_served,
-      created_at:    r.created_at,
-      created_by:    [r.created_first, r.created_last].filter(Boolean).join(' ') || r.created_email || r.created_by_name || null,
-      updated_at:    r.updated_at,
-      updated_by:    [r.updated_first, r.updated_last].filter(Boolean).join(' ') || r.updated_email || r.updated_by_name || null,
+      id:           r.id,
+      company_id:   r.company_id,
+      company_name: r.company_name,
+      trade_type:   r.trade_type,
+      action:       r.action,
+      actor_name:   r.actor_name,
+      changed_at:   r.changed_at,
     })));
   } catch (e) {
     res.status(500).json({ error: e.message });
