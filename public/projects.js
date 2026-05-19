@@ -32,7 +32,10 @@ async function ensureProjectPlatformUsers() {
   }
 }
 
-async function renderProjectsView() {
+// Registered below as the renderer for pages that carry #projects-view.
+// sales.js registers renderSalesView on the sales page (see registerProjectsViewRenderer
+// call at the top of sales.js), which overrides this registration on that page.
+async function _renderProjectsViewImpl() {
   const view = document.getElementById('projects-view');
   if (!view) return;
 
@@ -411,3 +414,4 @@ async function assignFitter(fitterId) {
     }
   }
 }
+registerProjectsViewRenderer(_renderProjectsViewImpl);

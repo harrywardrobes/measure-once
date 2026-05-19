@@ -2,18 +2,15 @@
 const SALES_TAB_STAGES = ['sales', 'designvisit', 'survey'];
 
 // ── Sales Card List View ──────────────────────────────────────────────────────
+// On the sales page both renderCustomerList() and renderProjectsView() should
+// update the sales grid.  Register explicitly so the wiring is clear and safe
+// regardless of script load order (workflow.js and projects.js register their
+// own impls first; these calls replace those registrations for this page).
+registerCustomerListRenderer(() => renderSalesView());
+registerProjectsViewRenderer(() => renderSalesView());
+
 function setSalesStageFilter(key) {
   state.salesStageFilter = key;
-  renderSalesView();
-}
-
-// Override: keep projects-style fitter assignment refreshing this view too
-function renderProjectsView() {
-  renderSalesView();
-}
-
-// Override: all calls to renderCustomerList() update the sales card grid
-function renderCustomerList() {
   renderSalesView();
 }
 

@@ -20,15 +20,18 @@ function renderWorkflowStages() {}
 function renderRoomTabs() {}
 async function saveWorkflowData() {}
 
-// workflow-core.js (line ~431) and invoices-core.js (line ~17, ~34) call this;
-// pages without projects.js or sales.js need the no-op. Real impl in projects.js
-// (overridden by sales.js on pages that load both).
-function renderProjectsView() {}
+// Renderer registry — page modules call registerCustomerListRenderer /
+// registerProjectsViewRenderer with their implementation instead of silently
+// re-declaring the global function.  The dispatcher below is stable from the
+// moment core.js loads, so call order across modules no longer matters.
+// Pages that load neither workflow.js nor sales.js keep the default no-op.
+let _customerListRenderer = function() {};
+function renderCustomerList() { _customerListRenderer(); }
+function registerCustomerListRenderer(fn) { _customerListRenderer = fn; }
 
-// workflow-core.js and invoices-core.js call renderCustomerList() unconditionally
-// on pages such as calendar, index, and invoices that load neither workflow.js
-// nor sales.js. Real implementations live in workflow.js (overridden by sales.js).
-function renderCustomerList() {}
+let _projectsViewRenderer = function() {};
+function renderProjectsView() { _projectsViewRenderer(); }
+function registerProjectsViewRenderer(fn) { _projectsViewRenderer = fn; }
 
 // Workflow-core stubs — kept because bootstrap() and clearHeaderSearch() in
 // this file call them unconditionally; pages that don't load workflow-core.js

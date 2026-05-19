@@ -180,7 +180,10 @@ function restoreCustomerListFilters() {
 }
 
 // ── Customer List ─────────────────────────────────────────────────────────────
-function renderCustomerList() {
+// Registered below as the renderer for pages that carry #customer-list.
+// sales.js registers renderSalesView on the sales page (see registerCustomerListRenderer
+// call at the top of sales.js), which overrides this registration on that page.
+function _renderCustomerListImpl() {
   const list  = document.getElementById('customer-list');
   if (!list) return; // Sales-only DOM; safe no-op on other pages
   const count = document.getElementById('deal-count');
@@ -270,6 +273,7 @@ function renderCustomerList() {
     `;
   }).join('');
 }
+registerCustomerListRenderer(_renderCustomerListImpl);
 
 // ── Quick Card Actions ────────────────────────────────────────────────────────
 
