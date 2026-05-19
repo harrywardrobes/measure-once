@@ -51,7 +51,7 @@ async function submitNewCustomer(ev) {
     showToast(`Customer created${customerNum ? ` — ${customerNum}` : ''}`);
     // Background refresh to pick up server sort order (respect current view mode)
     const refreshLoader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
-    refreshLoader.then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
+    refreshLoader.then(() => { state.filteredContacts = [...state.contacts]; if (state.contactsViewMode === 'all') populateLeadStatusFilter(); renderCustomerList(); }).catch(() => {});
   } catch (e) {
     showError(e.message || 'Failed to create customer.');
   } finally {
@@ -390,17 +390,6 @@ async function quickSetRoomStatus(contactId, roomIdx, newStatus) {
 
 // ── Lead Status Picker ────────────────────────────────────────────────────────
 
-const LEAD_STATUS_OPTIONS = [
-  { value: 'NEW',                  label: 'New' },
-  { value: 'OPEN',                 label: 'Open' },
-  { value: 'IN_PROGRESS',          label: 'In Progress' },
-  { value: 'OPEN_DEAL',            label: 'Open Deal' },
-  { value: 'CONNECTED',            label: 'Connected' },
-  { value: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact' },
-  { value: 'UNQUALIFIED',          label: 'Unqualified' },
-  { value: 'BAD_TIMING',           label: 'Bad Timing' },
-];
-
 function openLeadStatusPicker(event, contactId) {
   event.stopPropagation();
   closeCardPicker();
@@ -436,6 +425,7 @@ async function quickSetLeadStatus(contactId, newStatus) {
 
   // Optimistic update
   if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: newStatus };
+  populateLeadStatusFilter();
   renderCustomerList();
 
   try {
@@ -443,12 +433,14 @@ async function quickSetLeadStatus(contactId, newStatus) {
     const newLabel = newStatus ? (LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)?.label || newStatus) : null;
     showBottomUndo(newLabel ? `Lead status set to ${newLabel}` : 'Lead status cleared', async () => {
       if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: prevStatus || '' };
+      populateLeadStatusFilter();
       renderCustomerList();
       await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: prevStatus || '' }).catch(() => {});
     });
   } catch (e) {
     // Revert on failure
     if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: prevStatus || '' };
+    populateLeadStatusFilter();
     renderCustomerList();
     showToast('Failed to update lead status', true);
   }

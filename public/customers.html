@@ -43,14 +43,6 @@
           <select id="lead-status-filter" onchange="setLeadStatusFilter(this.value)"
             class="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-blue-400 transition">
             <option value="">All statuses</option>
-            <option value="NEW">New</option>
-            <option value="OPEN">Open</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="OPEN_DEAL">Open Deal</option>
-            <option value="CONNECTED">Connected</option>
-            <option value="ATTEMPTED_TO_CONTACT">Attempted to Contact</option>
-            <option value="UNQUALIFIED">Unqualified</option>
-            <option value="BAD_TIMING">Bad Timing</option>
           </select>
         </div>
         <div class="flex gap-1.5 mt-1.5">
@@ -157,6 +149,7 @@
         const loader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
         await loader;
         state.filteredContacts = [...state.contacts];
+        populateLeadStatusFilter();
         renderCustomerList();
         if (!renderedFromCache) restoreCustomerListScroll();
       } catch (e) {

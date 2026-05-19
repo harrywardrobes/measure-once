@@ -191,6 +191,7 @@ function setContactsViewMode(mode) {
   const loader = (mode === 'all') ? loadAllContacts() : loadOpenLeads();
   loader.then(() => {
     state.filteredContacts = [...state.contacts];
+    if (mode === 'all') populateLeadStatusFilter();
     renderCustomerList();
   }).catch(() => {});
 }
@@ -209,6 +210,38 @@ function populateStageFilter() {
     Object.entries(state.workflow.stages).map(([key, s]) =>
       `<option value="${escHtml(key)}">${escHtml(s.label)}</option>`
     ).join('');
+}
+
+const LEAD_STATUS_OPTIONS = [
+  { value: 'NEW',                  label: 'New' },
+  { value: 'OPEN',                 label: 'Open' },
+  { value: 'IN_PROGRESS',          label: 'In Progress' },
+  { value: 'OPEN_DEAL',            label: 'Open Deal' },
+  { value: 'CONNECTED',            label: 'Connected' },
+  { value: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact' },
+  { value: 'UNQUALIFIED',          label: 'Unqualified' },
+  { value: 'BAD_TIMING',           label: 'Bad Timing' },
+];
+
+function populateLeadStatusFilter() {
+  const sel = document.getElementById('lead-status-filter');
+  if (!sel) return;
+
+  const counts = {};
+  for (const c of state.contacts) {
+    const s = c.properties?.hs_lead_status || '';
+    if (s) counts[s] = (counts[s] || 0) + 1;
+  }
+
+  const prevValue = sel.value;
+  sel.innerHTML = `<option value="">All statuses</option>` +
+    LEAD_STATUS_OPTIONS.map(({ value, label }) => {
+      const n = counts[value] || 0;
+      const attrs = n === 0 ? ' disabled style="color:#cbd5e1"' : '';
+      return `<option value="${escHtml(value)}"${attrs}>${escHtml(label)} (${n})</option>`;
+    }).join('');
+
+  if (prevValue) sel.value = prevValue;
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
@@ -247,6 +280,7 @@ function toggleArchived() {
 async function refreshDeals() {
   const loader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
   await Promise.all([loader, loadWorkflowStages()]);
+  if (state.contactsViewMode === 'all') populateLeadStatusFilter();
   renderCustomerList();
   if (state.selectedContact) {
     state.selectedContact = state.contacts.find(c => c.id === state.selectedContactId);
