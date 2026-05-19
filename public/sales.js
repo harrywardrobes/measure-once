@@ -1014,7 +1014,8 @@ function renderTasks() {
       <div class="add-task-form">
         <input id="task-subject" type="text" placeholder="Task description..."
           class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm mb-2 focus:outline-none focus:border-blue-400 bg-white"
-          style="font-size:16px" onkeydown="if(event.key==='Enter')saveNewTask()">
+          style="font-size:16px" onkeydown="if(event.key==='Enter')saveNewTask()"
+          oninput="_updateBeforeUnloadGuard()">
         <div class="flex gap-2 mb-2">
           <input id="task-due" type="date"
             class="flex-1 min-w-0 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 bg-white"
@@ -1042,6 +1043,7 @@ function renderTasks() {
 function toggleAddTask() {
   state.showAddTask = !state.showAddTask;
   renderTasks();
+  _updateBeforeUnloadGuard();
 }
 
 async function saveNewTask() {
@@ -1061,6 +1063,7 @@ async function saveNewTask() {
     state.contactUrgencyCache[state.selectedContactId] = getTaskUrgency(state.tasks);
     renderCustomerList();
     renderTasks();
+    _updateBeforeUnloadGuard();
   } catch {
     showToast('Failed to create task', true);
     if (btn) { btn.disabled = false; btn.textContent = 'Save task'; }

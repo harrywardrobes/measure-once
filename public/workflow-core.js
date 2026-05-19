@@ -445,6 +445,8 @@ function hasUnsavedChanges() {
   const commentInput = document.getElementById('comment-input');
   if (commentArea && !commentArea.classList.contains('hidden') &&
       commentInput && commentInput.value.trim()) return true;
+  const taskSubject = document.getElementById('task-subject');
+  if (taskSubject && taskSubject.value.trim()) return true;
   return false;
 }
 
