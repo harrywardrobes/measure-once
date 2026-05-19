@@ -16,7 +16,6 @@ async function renderProfileTab() {
     return;
   }
 
-  const { google } = state.authStatus;
   const hubspotLabel = 'Checking…';
   const hubspotBadgeStyle = 'background:#f3f4f6;color:#6b7280;';
   const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.email || 'User';
@@ -107,12 +106,10 @@ async function renderProfileTab() {
       </div>
       <div class="profile-integration-row">
         <span class="profile-int-label">
-          <span class="auth-dot ${google ? 'auth-dot-ok' : 'auth-dot-off'}"></span>
+          <span id="google-status-dot" class="auth-dot auth-dot-pending"></span>
           Google
         </span>
-        ${google
-          ? `<button class="profile-int-action" onclick="profileLogoutGoogle()">Disconnect</button>`
-          : `<a href="/auth/google" class="profile-int-action profile-int-connect">Connect</a>`}
+        <span id="google-status-badge" style="font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:999px;background:#f3f4f6;color:#6b7280;">Checking…</span>
       </div>
     </div>
 
@@ -143,6 +140,18 @@ async function renderProfileTab() {
     dot.className = `auth-dot ${connected ? 'auth-dot-ok' : 'auth-dot-off'}`;
     badge.style.cssText = `font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:999px;${style}`;
     badge.textContent = label;
+  });
+
+  Promise.resolve(state.authStatus?.google).then(googleConnected => {
+    const dot = document.getElementById('google-status-dot');
+    const badge = document.getElementById('google-status-badge');
+    if (!dot || !badge) return;
+    dot.className = `auth-dot ${googleConnected ? 'auth-dot-ok' : 'auth-dot-off'}`;
+    if (googleConnected) {
+      badge.outerHTML = `<button class="profile-int-action" onclick="profileLogoutGoogle()">Disconnect</button>`;
+    } else {
+      badge.outerHTML = `<a href="/auth/google" class="profile-int-action profile-int-connect">Connect</a>`;
+    }
   });
 }
 
