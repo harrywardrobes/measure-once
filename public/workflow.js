@@ -450,31 +450,30 @@ async function quickSetLeadStatus(contactId, newStatus) {
   const prevStatus = contact?.properties?.hs_lead_status || null;
   if (prevStatus === newStatus) return;
 
+  function _applyLeadStatus(status) {
+    if (contact) {
+      contact.properties = { ...(contact.properties || {}), hs_lead_status: status };
+      if (state.selectedContactId === contactId) state.selectedContact = contact;
+    }
+    _syncLeadStatusCache(contactId, status);
+    populateLeadStatusFilter();
+    renderCustomerList();
+    if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+  }
+
   // Optimistic update
-  if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: newStatus };
-  _syncLeadStatusCache(contactId, newStatus);
-  populateLeadStatusFilter();
-  renderCustomerList();
-  if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+  _applyLeadStatus(newStatus);
 
   try {
     await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: newStatus });
     const newLabel = newStatus ? (LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)?.label || newStatus) : null;
     showBottomUndo(newLabel ? `Lead status set to ${newLabel}` : 'Lead status cleared', async () => {
-      if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: prevStatus || '' };
-      _syncLeadStatusCache(contactId, prevStatus || '');
-      populateLeadStatusFilter();
-      renderCustomerList();
-      if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+      _applyLeadStatus(prevStatus || '');
       await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: prevStatus || '' }).catch(() => {});
     });
   } catch (e) {
     // Revert on failure
-    if (contact) contact.properties = { ...(contact.properties || {}), hs_lead_status: prevStatus || '' };
-    _syncLeadStatusCache(contactId, prevStatus || '');
-    populateLeadStatusFilter();
-    renderCustomerList();
-    if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+    _applyLeadStatus(prevStatus || '');
     showToast('Failed to update lead status', true);
   }
 }
