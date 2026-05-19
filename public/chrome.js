@@ -49,6 +49,14 @@
             <a href="/api/login">Try a different account</a>
           </div>
         </div>
+        <div id="access-pending-state" style="display:none;">
+          <div class="access-confirmed-icon" style="background:#fef3c7;color:#d97706;">⏳</div>
+          <h1 class="access-title">Request already under review</h1>
+          <p class="access-sub">Your request is already under review — you'll hear back soon. You don't need to submit again.</p>
+          <div class="access-footer" style="margin-top:20px;">
+            Already approved? <a href="/api/login">Sign in</a>
+          </div>
+        </div>
       </div>
     </div>`;
 

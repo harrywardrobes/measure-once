@@ -652,7 +652,7 @@ async function setupAuth(app) {
         [name, email]
       );
       if (insertResult.rowCount === 0) {
-        return res.json({ ok: true, alreadyPending: true });
+        return res.redirect('/?access_pending=1');
       }
       console.log(`  Access request: ${name} <${email}>`);
       const createdAt = insertResult.rows[0].created_at;
