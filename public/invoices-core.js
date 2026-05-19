@@ -98,6 +98,15 @@ async function navigateInvoicePanel(delta) {
   await openInvoicePanel(ids[newIdx], ids);
 }
 
+async function jumpToInvoice(idx) {
+  const ctx = state.qb.panelContext;
+  if (!ctx) return;
+  const i = parseInt(idx, 10);
+  if (isNaN(i) || i < 0 || i >= ctx.ids.length || i === ctx.index) return;
+  ctx.index = i;
+  await openInvoicePanel(ctx.ids[i], ctx.ids);
+}
+
 function closeInvoicePanel() {
   document.getElementById('inv-panel').classList.remove('inv-panel-open');
   document.getElementById('inv-overlay').classList.add('hidden');
@@ -123,13 +132,21 @@ function renderInvoicePanelBody() {
     const total  = ctx.ids.length;
     const isFirst = ctx.index === 0;
     const isLast  = ctx.index === total - 1;
+    const dropdownOptions = ctx.ids.map((id, i) => {
+      const match = state.qb.invoices.find(x => x.id === id);
+      const label = match
+        ? `#${match.docNumber || id} — ${fmtGBP(match.totalAmt)}`
+        : `Invoice ${i + 1}`;
+      return `<option value="${i}"${i === ctx.index ? ' selected' : ''}>${escHtml(label)}</option>`;
+    }).join('');
     title.innerHTML = `
       <span class="inv-nav-row">
         <button class="inv-nav-btn" onclick="navigateInvoicePanel(-1)" aria-label="Previous invoice" ${isFirst ? 'disabled' : ''}>&#8592;</button>
         <span class="inv-nav-label">Invoice ${pos} of ${total}</span>
         <button class="inv-nav-btn" onclick="navigateInvoicePanel(1)" aria-label="Next invoice" ${isLast ? 'disabled' : ''}>&#8594;</button>
       </span>
-      <span class="inv-nav-docnum">#${escHtml(inv.docNumber || inv.id)}</span>`;
+      <span class="inv-nav-docnum">#${escHtml(inv.docNumber || inv.id)}</span>
+      <select class="inv-jump-select" aria-label="Jump to invoice" onchange="jumpToInvoice(this.value)">${dropdownOptions}</select>`;
   } else {
     title.textContent = `Invoice #${inv.docNumber || inv.id}`;
   }

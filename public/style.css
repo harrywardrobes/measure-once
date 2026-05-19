@@ -2339,6 +2339,13 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .inv-nav-btn:hover:not(:disabled) { background: var(--stone); color: var(--ink-1); }
 .inv-nav-btn:disabled { opacity: 0.35; cursor: default; }
+.inv-jump-select {
+  display: block; margin-top: 6px; font-size: 0.78rem;
+  color: var(--ink-2); background: var(--surface);
+  border: 1px solid var(--stone); border-radius: 5px;
+  padding: 3px 6px; cursor: pointer; max-width: 100%;
+}
+.inv-jump-select:focus { outline: none; border-color: var(--accent); }
 .inv-panel-close {
   padding: 4px; border: none; background: none; cursor: pointer;
   color: var(--ink-3); border-radius: 6px; transition: background 0.15s;
