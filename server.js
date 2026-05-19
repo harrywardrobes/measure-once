@@ -1583,6 +1583,36 @@ function mapAreaString(raw) {
   return null;
 }
 
+app.patch('/api/trades/:id/category', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id.' });
+  const { trade_type } = req.body || {};
+  if (!trade_type || !trade_type.trim()) return res.status(400).json({ error: 'trade_type is required.' });
+  if (!TRADE_CATEGORIES.includes(trade_type.trim())) return res.status(400).json({ error: 'Invalid trade category.' });
+  const client = await _tradesPool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [prev] } = await client.query(`SELECT id, company_name, trade_type FROM trade_companies WHERE id=$1`, [id]);
+    if (!prev) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Company not found.' }); }
+    await client.query(
+      `UPDATE trade_companies SET trade_type=$1, updated_by=$2, updated_at=NOW(), updated_by_name=$3 WHERE id=$4`,
+      [trade_type.trim(), req.user?.claims?.sub || null, actorDisplayName(req.user?.claims), id]
+    );
+    await client.query(
+      `INSERT INTO trade_audit_log (company_id, actor_id, actor_name, action) VALUES ($1,$2,$3,$4)`,
+      [id, req.user?.claims?.sub || null, actorDisplayName(req.user?.claims),
+       `Updated category: ${prev.trade_type} → ${trade_type.trim()} (migration quick-fix)`]
+    );
+    await client.query('COMMIT');
+    res.json({ id, trade_type: trade_type.trim() });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.post('/api/admin/trades/migrate', isAuthenticated, requireAdmin, async (req, res) => {
   const dryRun = req.body?.dry_run !== false;
   try {
