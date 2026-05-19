@@ -2533,6 +2533,21 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .agenda-day-card--clickable { cursor: pointer; }
 .agenda-day-card--clickable:hover { background: var(--stone-soft); }
 
+/* "+ Add visit" affordance */
+.agenda-add-hint {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 14px 10px; font-size: 0.75rem; font-weight: 500;
+  color: var(--stone-deep); letter-spacing: 0.01em;
+  user-select: none;
+}
+.agenda-add-hint--visits {
+  max-height: 0; overflow: hidden; opacity: 0; padding-top: 0; padding-bottom: 0;
+  transition: max-height 0.15s ease, opacity 0.15s ease, padding-bottom 0.15s ease;
+}
+.agenda-day-card--clickable:hover .agenda-add-hint--visits {
+  max-height: 2rem; opacity: 1; padding-bottom: 8px;
+}
+
 /* Mini timeline bar */
 .agenda-mini-timeline {
   position: relative; height: 20px; margin: 10px 14px 0;

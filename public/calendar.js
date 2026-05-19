@@ -156,6 +156,10 @@ function renderAgendaView() {
           </div>
         </div>
         <div class="agenda-empty">No visits scheduled</div>
+        <div class="agenda-add-hint">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Add visit
+        </div>
       </div>`;
     }
     const miniBlks = dayVisits.map(v => {
@@ -184,6 +188,10 @@ function renderAgendaView() {
         <span>${DAY_START_HOUR}:00</span><span>${Math.floor((DAY_START_HOUR+DAY_END_HOUR)/2)}:00</span><span>${DAY_END_HOUR}:00</span>
       </div>
       <div class="agenda-rows">${rows}</div>
+      <div class="agenda-add-hint agenda-add-hint--visits">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Add visit
+      </div>
     </div>`;
   }).join('');
 }
