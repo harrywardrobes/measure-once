@@ -1077,6 +1077,60 @@ async function saveWorkflowData() {
   });
 }
 
+// ── Note auto-save ─────────────────────────────────────────────────────────
+let _noteAutosaveTimer = null;
+let _noteAutosaveDraft = null; // comment object most recently auto-saved into state
+
+function _setNoteAutosaveStatus(text) {
+  const el = document.getElementById('note-autosave-status');
+  if (el) el.textContent = text;
+}
+
+function _cancelNoteAutosaveTimer() {
+  if (_noteAutosaveTimer) { clearTimeout(_noteAutosaveTimer); _noteAutosaveTimer = null; }
+}
+
+function _removeAutosaveDraftFromState() {
+  if (_noteAutosaveDraft && state.workflowData?.comments) {
+    const idx = state.workflowData.comments.indexOf(_noteAutosaveDraft);
+    if (idx !== -1) state.workflowData.comments.splice(idx, 1);
+  }
+  _noteAutosaveDraft = null;
+}
+
+function _scheduleNoteAutosave() {
+  _cancelNoteAutosaveTimer();
+  _noteAutosaveTimer = setTimeout(async () => {
+    _noteAutosaveTimer = null;
+    const input = document.getElementById('comment-input');
+    const text = input?.value.trim();
+    if (!text || !state.workflowData) return;
+    _removeAutosaveDraftFromState();
+    const u = state.user;
+    const author = [u?.first_name, u?.last_name].filter(Boolean).join(' ') || u?.email || '';
+    const draft = { text, date: new Date().toISOString(), author };
+    if (!state.workflowData.comments) state.workflowData.comments = [];
+    state.workflowData.comments.push(draft);
+    _noteAutosaveDraft = draft;
+    _setNoteAutosaveStatus('Saving…');
+    try {
+      await saveWorkflowData();
+      _setNoteAutosaveStatus('Saved');
+      setTimeout(() => _setNoteAutosaveStatus(''), 3000);
+    } catch (e) {
+      _removeAutosaveDraftFromState();
+      _setNoteAutosaveStatus('');
+      if (e.code === 'HUBSPOT_AUTH') {
+        showToast('Could not save note — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+      } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+        showToast('Could not save note — HubSpot rate limit reached. Please try again in a moment.', true);
+      } else {
+        showToast('Failed to save note', true);
+      }
+    }
+  }, 4000);
+}
+
 // ── Notes / Comments ──────────────────────────────────────────────────────────
 function renderComments() {
   const el = document.getElementById('comments-section');
@@ -1085,13 +1139,14 @@ function renderComments() {
   el.innerHTML = `
     <div class="notes-header">
       <span class="notes-header-label">Notes</span>
+      <span id="note-autosave-status" class="note-autosave-status"></span>
       <button class="btn-new-note" onclick="showAddComment()" data-viewer-hide>+ New note</button>
     </div>
     <div id="comment-input-area" class="comment-input-area hidden">
       <textarea id="comment-input" rows="3" class="notes-textarea"
         placeholder="Add a note..."
         onkeydown="if(event.ctrlKey&&event.key==='Enter')addComment()"
-        oninput="_updateBeforeUnloadGuard()"
+        oninput="_updateBeforeUnloadGuard();_scheduleNoteAutosave()"
         style="font-size:16px;min-height:80px"></textarea>
       <div class="comment-input-actions">
         <button class="btn-save-note" onclick="addComment()">Save</button>
@@ -1119,12 +1174,21 @@ function renderComments() {
 // Appends the draft to state.workflowData.comments so the subsequent
 // saveWorkflowData() call in the save path persists it to the server.
 async function persistCommentDraft() {
+  _cancelNoteAutosaveTimer();
   const area  = document.getElementById('comment-input-area');
   const input = document.getElementById('comment-input');
   if (!area || area.classList.contains('hidden') || !input) return;
   const text = input.value.trim();
   if (!text || !state.workflowData) return;
   if (!state.workflowData.comments) state.workflowData.comments = [];
+  // If the auto-save already committed this exact draft, don't push a duplicate
+  if (_noteAutosaveDraft && _noteAutosaveDraft.text === text) {
+    _noteAutosaveDraft = null;
+    _clearCommentDraft();
+    return;
+  }
+  // Remove any stale auto-saved draft before pushing the final version
+  _removeAutosaveDraftFromState();
   const u = state.user;
   const author = [u?.first_name, u?.last_name].filter(Boolean).join(' ') || u?.email || '';
   state.workflowData.comments.push({ text, date: new Date().toISOString(), author });
@@ -1139,13 +1203,21 @@ function showAddComment() {
   _updateBeforeUnloadGuard();
 }
 
-function hideAddComment() {
+async function hideAddComment() {
+  _cancelNoteAutosaveTimer();
+  const hadAutosave = _noteAutosaveDraft !== null;
+  _removeAutosaveDraftFromState();
   const area = document.getElementById('comment-input-area');
   if (area) area.classList.add('hidden');
   _updateBeforeUnloadGuard();
+  if (hadAutosave) {
+    try { await saveWorkflowData(); } catch { /* silent — draft already removed from state */ }
+  }
 }
 
 async function addComment() {
+  _cancelNoteAutosaveTimer();
+  _removeAutosaveDraftFromState();
   const input = document.getElementById('comment-input');
   const text  = input?.value.trim();
   if (!text) return;

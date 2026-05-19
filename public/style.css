@@ -862,6 +862,13 @@ body.showing-workflow .workflow-panel { display: flex; }
   font-weight: 600;
   color: var(--ink-2);
 }
+.note-autosave-status {
+  font-size: 0.75rem;
+  color: var(--ink-3);
+  margin-right: auto;
+  padding-left: 8px;
+  transition: opacity 0.3s;
+}
 .btn-new-note {
   font-size: 0.78rem;
   font-weight: 600;
