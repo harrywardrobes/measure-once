@@ -191,7 +191,7 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
 // Cache: one shared result, refreshed at most every 60 seconds.
 // Concurrency guard: if a scan is already in progress, new requests wait for
 // the same promise rather than each launching an independent HubSpot crawl.
-const LOCALDATA_CACHE_TTL_MS = 60_000;
+const LOCALDATA_CACHE_TTL_MS = 300_000; // 5 minutes
 let _localdataCache = null;       // { data, expiresAt }
 let _localdataInflight = null;    // Promise while a scan is running
 
@@ -282,7 +282,7 @@ app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireMan
   }
 });
 
-app.get('/api/localdata/all', async (req, res) => {
+app.get('/api/localdata/all', isAuthenticated, async (req, res) => {
   try {
     // Serve from cache if still fresh
     if (_localdataCache && Date.now() < _localdataCache.expiresAt) {
@@ -1141,58 +1141,80 @@ app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async 
 });
 
 // ── HubSpot: Batch Workflow Stages (for customer list pre-population) ─────────
-app.get('/api/workflow-stages', async (req, res) => {
+const WORKFLOW_STAGES_CACHE_TTL_MS = 300_000; // 5 minutes
+let _workflowStagesCache = null;    // { data, expiresAt }
+let _workflowStagesInflight = null; // Promise while a scan is running
+
+async function fetchWorkflowStagesFromHubspot() {
+  // Search for all notes that store workflow data
+  const searchR = await axios.post(
+    `${HS}/crm/v3/objects/notes/search`,
+    {
+      filterGroups: [{ filters: [{ propertyName: 'hs_note_body', operator: 'CONTAINS_TOKEN', value: 'WORKFLOW_DATA' }] }],
+      properties: ['hs_note_body'],
+      limit: 200
+    },
+    { headers: hsHeaders() }
+  );
+
+  const notes = (searchR.data.results || []).filter(n =>
+    n.properties?.hs_note_body?.startsWith('WORKFLOW_DATA:')
+  );
+  if (!notes.length) return {};
+
+  // Batch read note → contact associations
+  const assocR = await axios.post(
+    `${HS}/crm/v4/associations/notes/contacts/batch/read`,
+    { inputs: notes.map(n => ({ id: n.id })) },
+    { headers: hsHeaders() }
+  );
+
+  // Parse each note into rooms array
+  const noteData = {};
+  notes.forEach(n => {
+    try {
+      const json = JSON.parse(n.properties.hs_note_body.slice('WORKFLOW_DATA:'.length));
+      const arr = Array.isArray(json)
+        ? json
+        : [{ room: 'Main', stageKey: json.stageKey || 'sales', roomStatus: json.roomStatus || 'active' }];
+      noteData[n.id] = arr.map(r => ({
+        room:       r.room       || 'Main',
+        stageKey:   r.stageKey   || 'sales',
+        roomStatus: r.roomStatus || 'active'
+      }));
+    } catch {}
+  });
+
+  // Build contactId → rooms map
+  const result = {};
+  (assocR.data.results || []).forEach(r => {
+    const noteId    = r.from?.id;
+    const contactId = r.to?.[0]?.toObjectId;
+    if (noteId && contactId && noteData[noteId]) {
+      result[String(contactId)] = noteData[noteId];
+    }
+  });
+
+  return result;
+}
+
+app.get('/api/workflow-stages', isAuthenticated, async (req, res) => {
   try {
-    // Search for all notes that store workflow data
-    const searchR = await axios.post(
-      `${HS}/crm/v3/objects/notes/search`,
-      {
-        filterGroups: [{ filters: [{ propertyName: 'hs_note_body', operator: 'CONTAINS_TOKEN', value: 'WORKFLOW_DATA' }] }],
-        properties: ['hs_note_body'],
-        limit: 200
-      },
-      { headers: hsHeaders() }
-    );
+    // Serve from cache if still fresh
+    if (_workflowStagesCache && Date.now() < _workflowStagesCache.expiresAt) {
+      return res.json(_workflowStagesCache.data);
+    }
 
-    const notes = (searchR.data.results || []).filter(n =>
-      n.properties?.hs_note_body?.startsWith('WORKFLOW_DATA:')
-    );
-    if (!notes.length) return res.json({});
+    // If a scan is already running, piggyback on it
+    if (!_workflowStagesInflight) {
+      _workflowStagesInflight = fetchWorkflowStagesFromHubspot().finally(() => {
+        _workflowStagesInflight = null;
+      });
+    }
 
-    // Batch read note → contact associations
-    const assocR = await axios.post(
-      `${HS}/crm/v4/associations/notes/contacts/batch/read`,
-      { inputs: notes.map(n => ({ id: n.id })) },
-      { headers: hsHeaders() }
-    );
-
-    // Parse each note into rooms array
-    const noteData = {};
-    notes.forEach(n => {
-      try {
-        const json = JSON.parse(n.properties.hs_note_body.slice('WORKFLOW_DATA:'.length));
-        const arr = Array.isArray(json)
-          ? json
-          : [{ room: 'Main', stageKey: json.stageKey || 'sales', roomStatus: json.roomStatus || 'active' }];
-        noteData[n.id] = arr.map(r => ({
-          room:       r.room       || 'Main',
-          stageKey:   r.stageKey   || 'sales',
-          roomStatus: r.roomStatus || 'active'
-        }));
-      } catch {}
-    });
-
-    // Build contactId → rooms map
-    const result = {};
-    (assocR.data.results || []).forEach(r => {
-      const noteId    = r.from?.id;
-      const contactId = r.to?.[0]?.toObjectId;
-      if (noteId && contactId && noteData[noteId]) {
-        result[String(contactId)] = noteData[noteId];
-      }
-    });
-
-    res.json(result);
+    const data = await _workflowStagesInflight;
+    _workflowStagesCache = { data, expiresAt: Date.now() + WORKFLOW_STAGES_CACHE_TTL_MS };
+    res.json(data);
   } catch (e) {
     res.json({});
   }
