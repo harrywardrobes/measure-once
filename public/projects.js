@@ -244,9 +244,22 @@ function fitterInitials(fitter) {
   return (fitter.email || '?')[0].toUpperCase();
 }
 
+function fmtInstallDate(isoStr) {
+  if (!isoStr) return null;
+  const d = new Date(isoStr);
+  if (isNaN(d)) return null;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
 function customerCardHtml(contact, rooms, isAdmin) {
   const name      = escHtml(contactName(contact));
   const contactId = escHtml(contact.id || '');
+
+  const earliestInstall = rooms
+    .map(r => r.installStart)
+    .filter(Boolean)
+    .sort()[0] || null;
+  const installLabel = earliestInstall ? fmtInstallDate(earliestInstall) : null;
 
   const roomRows = rooms.map(r => {
     const colour     = stageColour(r.stageKey);
@@ -281,10 +294,17 @@ function customerCardHtml(contact, rooms, isAdmin) {
     }
   }
 
+  const installHtml = installLabel
+    ? `<span class="project-card-install-date">Install: ${escHtml(installLabel)}</span>`
+    : '';
+
   return `
     <div class="customer-project-card">
       <div class="customer-project-header">
-        <div class="customer-project-name">${name}</div>
+        <div class="customer-project-name-row">
+          <div class="customer-project-name">${name}</div>
+          ${installHtml}
+        </div>
         <div class="customer-project-id">#${contactId}</div>
       </div>
       <div class="project-room-list">
