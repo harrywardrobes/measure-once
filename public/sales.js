@@ -1153,14 +1153,20 @@ function renderWorkflowInvoices() {
 
   const total = invoices.reduce((s, inv) => s + inv.balance, 0);
   const rows  = invoices.sort((a, b) => b.balance - a.balance).map(inv => {
-    const overdue = inv.dueDate && new Date(inv.dueDate) < new Date();
+    const isPaid      = inv.balance != null && Number(inv.balance) === 0;
+    const overdue     = !isPaid && inv.dueDate && new Date(inv.dueDate) < new Date();
+    const statusKey   = isPaid ? 'paid' : overdue ? 'overdue' : 'open';
+    const statusLabel = isPaid ? 'Paid' : overdue ? 'Overdue' : 'Open';
     return `
       <div class="qb-invoice-row">
         <div class="qb-invoice-meta">
           <span class="qb-invoice-num">Invoice #${escHtml(inv.docNumber || inv.id)}</span>
-          ${inv.dueDate ? `<span class="qb-invoice-date ${overdue ? 'qb-overdue' : ''}">${overdue ? 'Overdue ' : 'Due '}${fmtQBDate(inv.dueDate)}</span>` : ''}
+          ${inv.dueDate ? `<span class="qb-invoice-date">Due ${fmtQBDate(inv.dueDate)}</span>` : ''}
         </div>
-        <span class="qb-invoice-amount ${overdue ? 'qb-overdue' : ''}">${fmtGBP(inv.balance)}</span>
+        <div class="flex items-center gap-1" style="flex-shrink:0">
+          <span class="inv-status-badge inv-status-${statusKey}">${statusLabel}</span>
+          <span class="qb-invoice-amount">${fmtGBP(inv.balance)}</span>
+        </div>
       </div>
     `;
   }).join('');

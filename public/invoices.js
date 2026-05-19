@@ -109,7 +109,10 @@ function renderInvoicesTab() {
   }
 
   const rows = visible.map(({ inv, matched }) => {
-    const overdue = inv.dueDate && new Date(inv.dueDate) < new Date();
+    const isPaid      = inv.balance != null && Number(inv.balance) === 0;
+    const overdue     = !isPaid && inv.dueDate && new Date(inv.dueDate) < new Date();
+    const statusKey   = isPaid ? 'paid' : overdue ? 'overdue' : 'open';
+    const statusLabel = isPaid ? 'Paid' : overdue ? 'Overdue' : 'Open';
     return `
       <div class="qb-row" onclick="openInvoicePanel('${escHtml(inv.id)}')" title="Open invoice">
         <div class="qb-row-customer">
@@ -123,10 +126,11 @@ function renderInvoicesTab() {
         </div>
         <div class="qb-row-meta">
           <span class="qb-row-num">Inv #${escHtml(inv.docNumber || inv.id)}</span>
-          ${inv.dueDate ? `<span class="qb-row-date ${overdue ? 'qb-overdue' : ''}">Due ${fmtQBDate(inv.dueDate)}</span>` : ''}
+          ${inv.dueDate ? `<span class="qb-row-date">Due ${fmtQBDate(inv.dueDate)}</span>` : ''}
         </div>
         <div class="flex items-center gap-2">
-          <span class="qb-row-amount ${overdue ? 'qb-overdue' : ''}">${fmtGBP(inv.balance)}</span>
+          <span class="inv-status-badge inv-status-${statusKey}">${statusLabel}</span>
+          <span class="qb-row-amount">${fmtGBP(inv.balance)}</span>
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:var(--stone-deep);flex-shrink:0">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
