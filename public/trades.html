@@ -28,12 +28,18 @@
     </div>
 
     <div id="trades-filters-wrap" class="trades-filters-wrap">
-      <select id="trades-filter-type" class="trades-filter-select" onchange="applyTradeFilters()">
-        <option value="">All services</option>
-      </select>
-      <select id="trades-filter-area" class="trades-filter-select" onchange="applyTradeFilters()">
-        <option value="">All areas</option>
-      </select>
+      <label class="trades-filter-group">
+        <span class="trades-filter-label">Service Provided</span>
+        <select id="trades-filter-type" class="trades-filter-select" onchange="applyTradeFilters()">
+          <option value="">All services</option>
+        </select>
+      </label>
+      <label class="trades-filter-group">
+        <span class="trades-filter-label">Area Served</span>
+        <select id="trades-filter-area" class="trades-filter-select" onchange="applyTradeFilters()">
+          <option value="">All areas</option>
+        </select>
+      </label>
     </div>
 
     <div id="trades-list" class="trades-list">
