@@ -245,6 +245,7 @@ async function quickLoadAndUpdate(contactId, roomIdx, updater) {
     rooms = [{ room: 'Main', stageKey: 'sales', statusId: null, comments: [], roomStatus: 'active' }];
   }
   rooms = rooms.map(r => ({
+    ...r,
     room: r.room || 'Main', stageKey: r.stageKey || 'sales',
     statusId: r.statusId || null, comments: r.comments || [],
     roomStatus: r.roomStatus || 'active'
