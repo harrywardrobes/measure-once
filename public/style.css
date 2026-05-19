@@ -3363,8 +3363,24 @@ body.showing-workflow .sales-layout #workflow-panel {
 }
 .trades-filter-select:focus { border-color: var(--orchid); }
 
+.trades-search-group { flex: 1.4; }
+.trades-search-input-wrap {
+  position: relative; display: flex; align-items: center;
+}
+.trades-search-icon {
+  position: absolute; left: 11px; width: 15px; height: 15px;
+  color: var(--ink-3); pointer-events: none; flex-shrink: 0;
+}
+.trades-search-input {
+  padding-left: 34px;
+  cursor: text;
+  appearance: none;
+}
+.trades-search-input::-webkit-search-cancel-button { display: none; }
+
 @media (max-width: 480px) {
-  .trades-filters-wrap { flex-direction: column; gap: 12px; }
+  .trades-filters-wrap { flex-direction: column; gap: 10px; }
+  .trades-search-group { flex: none; }
 }
 
 @media (hover: none) and (pointer: coarse) {
@@ -3374,6 +3390,7 @@ body.showing-workflow .sales-layout #workflow-panel {
     font-size: 1rem;
     border-radius: var(--radius-pill);
   }
+  .trades-search-input { padding-left: 36px; }
   .trades-filter-group {
     gap: 6px;
   }

@@ -95,10 +95,15 @@ function populateTradeFilters() {
 function applyTradeFilters() {
   const typeSelect = document.getElementById('trades-filter-type');
   const areaSelect = document.getElementById('trades-filter-area');
+  const searchInput = document.getElementById('trades-search');
   _tradeTypeFilter = typeSelect ? typeSelect.value : '';
   _tradeAreaFilter = areaSelect ? areaSelect.value : '';
+  const searchQuery = searchInput ? searchInput.value.trim().toLowerCase() : '';
 
   let filtered = _tradeContacts;
+  if (searchQuery) {
+    filtered = filtered.filter(co => (co.company_name || '').toLowerCase().includes(searchQuery));
+  }
   if (_tradeTypeFilter) {
     filtered = filtered.filter(co => (co.trade_type || '').trim() === _tradeTypeFilter);
   }
