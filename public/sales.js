@@ -736,6 +736,10 @@ async function submitEmail() {
     await POST('/api/emails/send', { to, subject, body });
     closeEmailCompose();
     showToast('Email sent');
+    const gmailList = document.getElementById('gmail-list');
+    if (gmailList) {
+      gmailList.innerHTML = `<div class="flex items-center gap-2" style="padding:8px 0"><div class="spinner" style="width:14px;height:14px"></div> Refreshing…</div>`;
+    }
     setTimeout(() => renderGoogleEmailSection(), 2000);
   } catch (e) {
     if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
