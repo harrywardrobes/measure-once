@@ -144,7 +144,8 @@ function updateRoomCache() {
   if (!state.selectedContactId) return;
   state.contactStageCache[state.selectedContactId] = state.allRooms.map(r => ({
     room: r.room, stageKey: r.stageKey, roomStatus: r.roomStatus || 'active',
-    assignedFitterId: r.assignedFitterId || null
+    assignedFitterId: r.assignedFitterId || null,
+    installStart: r.installStart || null
   }));
 }
 

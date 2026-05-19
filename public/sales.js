@@ -572,6 +572,7 @@ function saveInstallDate(field, value) {
   if (!state.workflowData) return;
   const snapshot = JSON.parse(JSON.stringify(state.allRooms));
   state.workflowData[field] = value || null;
+  updateRoomCache();
   const label = field === 'installStart' ? 'Installation start' : 'Installation finish';
   scheduleSave(`${label} updated`, snapshot);
 }

@@ -212,7 +212,8 @@ async function fetchLocaldataFromHubspot() {
       if (Array.isArray(rooms)) {
         result[contact.id] = rooms.map(r => ({
           room: r.room || 'Main', stageKey: r.stageKey || 'sales', roomStatus: r.roomStatus || 'active',
-          assignedFitterId: r.assignedFitterId || null
+          assignedFitterId: r.assignedFitterId || null,
+          installStart: r.installStart || null
         }));
       }
     } catch {}

@@ -77,6 +77,22 @@ async function renderProjectsView() {
       if (!db) return -1;
       return da - db;
     });
+  } else if (sortBy === 'install') {
+    const earliestInstall = row => {
+      const dates = row.rooms
+        .map(r => r.installStart)
+        .filter(Boolean)
+        .sort();
+      return dates[0] || null;
+    };
+    rows.sort((a, b) => {
+      const da = earliestInstall(a);
+      const db = earliestInstall(b);
+      if (!da && !db) return contactName(a.contact).localeCompare(contactName(b.contact));
+      if (!da) return 1;
+      if (!db) return -1;
+      return da.localeCompare(db);
+    });
   } else {
     // Default: stage — most advanced room first
     rows.sort((a, b) => maxStageIdx(b) - maxStageIdx(a));
@@ -104,7 +120,7 @@ async function renderProjectsView() {
   }).join('');
 
   // ── Sort / group bar ──────────────────────────────────────────────────────
-  const sortLabels = { stage: 'Stage', name: 'Name', date: 'Close date' };
+  const sortLabels = { stage: 'Stage', name: 'Name', date: 'Close date', install: 'Install date' };
   const sortOptions = Object.entries(sortLabels)
     .map(([val, lbl]) => `<option value="${val}"${sortBy === val ? ' selected' : ''}>${escHtml(lbl)}</option>`)
     .join('');
