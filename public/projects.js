@@ -167,9 +167,10 @@ function customerCardHtml(contact, rooms, isAdmin) {
     if (invs.length) {
       const total = invs.reduce((s, inv) => s + inv.balance, 0);
       const count = invs.length;
+      const firstInvId = escHtml(invs[0].id);
       invoiceSection = `
         <div class="project-card-invoices">
-          <span class="qb-badge" title="${count} outstanding invoice${count !== 1 ? 's' : ''}">${fmtGBP(total)}</span>
+          <button class="qb-badge" title="${count} outstanding invoice${count !== 1 ? 's' : ''}" onclick="openInvoicePanel('${firstInvId}')">${fmtGBP(total)}</button>
         </div>`;
     }
   }

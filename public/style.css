@@ -2043,10 +2043,13 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .qb-badge {
   display: inline-flex; align-items: center;
   font-size: 0.68rem; font-weight: 700;
+  font-family: inherit;
   padding: 2px 7px; border-radius: 999px;
   background: #fef3c7; color: #92400e;
   border: 1px solid #fde68a;
   white-space: nowrap;
+  cursor: pointer;
+  line-height: 1.4;
 }
 
 /* Workflow view — invoices section */
