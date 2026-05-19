@@ -179,9 +179,9 @@ function renderCustomerList() {
     })();
 
     return `
-      <div class="customer-card ${isSelected ? 'selected' : ''} ${isArchived ? 'card-archived' : ''}"
+      <div class="customer-card ${isArchived ? 'card-archived' : ''}"
            data-contact-id="${contact.id}" data-room-idx="${roomIdx}"
-           onclick="selectContact('${contact.id}', ${roomIdx})">
+           onclick="location.href='/customers/${contact.id}'">
         <div class="customer-card-name">
           ${urgencyDot}<span class="name-text">${escHtml(displayName)}</span>
           ${statusMini}

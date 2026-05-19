@@ -17,7 +17,7 @@
 <body>
 
   <div id="tab-customers" class="app-body">
-    <aside id="list-panel" class="list-panel">
+    <div id="list-panel" class="list-panel list-panel-fw">
       <div class="p-3 border-b border-slate-100 flex-shrink-0">
         <div class="flex gap-1.5 mb-1.5">
           <button id="view-active-btn" onclick="setContactsViewMode('active')"
@@ -69,20 +69,7 @@
           <div class="spinner"></div> Loading…
         </div>
       </div>
-    </aside>
-
-    <main id="workflow-panel" class="workflow-panel">
-      <div id="empty-state" class="flex items-center justify-center h-full">
-        <div class="text-center px-6 empty-state-text">
-          <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="empty-state-icon">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
-          </svg>
-          <p class="empty-state-heading">Select a customer</p>
-          <p class="empty-state-sub">Choose a customer from the list to view their project workflow</p>
-        </div>
-      </div>
-      <div id="workflow-view" class="hidden"></div>
-    </main>
+    </div>
   </div>
 
   <!-- New Customer Modal -->
@@ -134,7 +121,6 @@
   <script src="/workflow-core.js"></script>
   <script src="/invoices-core.js"></script>
   <script src="/workflow.js"></script>
-  <script src="/sales.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       if (!await bootstrap()) return;
@@ -160,25 +146,22 @@
         const clear = document.getElementById('search-clear');
         if (clear) clear.classList.remove('hidden');
         filterDeals(q);
-
-        // Auto-open the first matching customer
-        setTimeout(() => {
-          const firstCard = document.querySelector('.customer-card');
-          if (firstCard) firstCard.click();
-        }, 300);
       }
 
       if (openModal) {
         openNewCustomerModal();
       }
 
-      // Open a contact requested from another page (e.g. Projects → openProject).
+      // Open a contact requested from another page — navigate to their profile.
       try {
         const pending = sessionStorage.getItem('pendingOpenContact');
         if (pending) {
           sessionStorage.removeItem('pendingOpenContact');
           const { contactId, roomIdx } = JSON.parse(pending);
-          if (contactId) selectContact(contactId, roomIdx || 0);
+          if (contactId) {
+            const url = roomIdx ? `/customers/${contactId}?room=${roomIdx}` : `/customers/${contactId}`;
+            location.href = url;
+          }
         }
       } catch {}
     });

@@ -62,6 +62,11 @@ for (const [route, file] of Object.entries(PAGE_ROUTES)) {
   app.get(route, (_req, res) => res.sendFile(path.join(__dirname, 'public', file)));
 }
 
+// Dynamic customer detail page
+app.get('/customers/:id', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'customer-detail.html'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 installSession(app);
 
@@ -427,8 +432,8 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     let after = undefined;
     do {
       const body = {
-        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number'],
-        sorts: [{ propertyName: 'lastname', direction: 'ASCENDING' }],
+        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate'],
+        sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
         limit: 100
       };
       if (after) body.after = after;
@@ -456,8 +461,8 @@ app.get('/api/open-leads', async (req, res) => {
         filterGroups: [{
           filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' }]
         }],
-        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number'],
-        sorts: [{ propertyName: 'lastname', direction: 'ASCENDING' }],
+        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate'],
+        sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
         limit: 100
       };
       if (after) body.after = after;
@@ -541,7 +546,7 @@ app.get('/api/contacts/:id', async (req, res) => {
     const safeContactId = encodeURIComponent(contactId);
     const r = await axios.get(`${HS}/crm/v3/objects/contacts/${safeContactId}`, {
       headers: hsHeaders(),
-      params: { properties: 'firstname,lastname,email,phone,address,city,zip,customer_number' }
+      params: { properties: 'firstname,lastname,email,phone,address,city,zip,customer_number,hs_lead_status,createdate' }
     });
     res.json(r.data);
   } catch (e) {

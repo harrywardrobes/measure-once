@@ -267,6 +267,21 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Full-width list panel — used on the standalone customers list page */
+.list-panel-fw {
+  flex: 1;
+  border-right: none;
+}
+@media (min-width: 768px) {
+  .list-panel-fw { width: 100% !important; }
+}
+
+/* Standalone workflow panel — used on the customer detail page */
+.workflow-panel-detail {
+  display: flex !important;
+  flex: 1;
+}
+
 /* ── Workflow Panel ──────────────────────────────────────────────────────────── */
 .workflow-panel {
   flex: 1;
