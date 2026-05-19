@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="style.css">
   <style>
     /* ── Admin-specific layout ── */
-    body { padding-top: 52px; min-height: 100vh; overscroll-behavior: auto; }
+    body { padding-top: 52px; height: 100vh; overflow: hidden; overscroll-behavior: none; }
 
     .admin-brand-sep { color: rgba(255,255,255,.35); font-size: .8rem; margin-left: 2px; }
 
@@ -273,29 +273,6 @@
     .role-del:hover { color: #991b1b; }
     .roles-list { display: flex; flex-wrap: wrap; gap: 8px; min-height: 32px; }
     .roles-empty { color: var(--ink-4); font-style: italic; font-size: .875rem; }
-
-    /* ── Overview cards ── */
-    .overview-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 14px;
-    }
-    .ov-card {
-      background: var(--chalk);
-      border: 1px solid var(--stone);
-      border-radius: var(--radius-lg);
-      padding: 16px;
-      box-shadow: var(--shadow-sm);
-    }
-    .ov-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-    .ov-name  { font-weight: 700; font-size: .9rem; color: var(--ink-1); }
-    .ov-email { font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
-    .ov-access { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-    .ov-feat { display: flex; align-items: center; gap: 5px; font-size: .72rem; color: var(--stone-deep); }
-    .ov-feat.has { color: var(--ink-3); }
-    .ov-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-    .ov-dot.has { background: #34d399; }
-    .ov-dot.no  { background: var(--stone); }
 
     /* ── Toast ── */
     .toast {
@@ -705,7 +682,6 @@
       const u = _users.find(u => u.id === id);
       if (u) Object.assign(u, updated);
       renderTeam();
-      renderOverview();
       closeModal();
       toast('Changes saved');
     } catch (e) {
@@ -1100,45 +1076,6 @@
   }
 
   /* ────────────────────────────────────────────────
-     OVERVIEW TAB
-  ──────────────────────────────────────────────── */
-  function renderOverview() {
-    const container = $('#overview-content');
-    if (!container) return;
-    if (_users.length === 0) {
-      container.innerHTML = '<div class="table-empty">No users yet.</div>';
-      return;
-    }
-
-    const feats = _capabilities.features.filter(f => f.feat).slice(0, 6);
-
-    container.innerHTML = `<div class="overview-grid">${_users.map(u => {
-      const name  = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—';
-      const level = u.privilege_level || 'member';
-      const dots  = feats.map(f => {
-        const has   = u.isAdmin || (f.levels || []).includes(level);
-        const label = f.feat.split(' ').slice(0, 2).join(' ');
-        return `<div class="ov-feat ${has ? 'has' : ''}">
-          <span class="ov-dot ${has ? 'has' : 'no'}"></span>
-          ${esc(label)}
-        </div>`;
-      }).join('');
-      return `
-        <div class="ov-card">
-          <div class="ov-header">
-            ${avatarEl(u)}
-            <div class="flex-fill">
-              <div class="ov-name">${esc(name)}</div>
-              <div class="ov-email">${esc(u.email || '')}</div>
-            </div>
-            ${lvlBadge(u.isAdmin ? 'admin' : level)}
-          </div>
-          <div class="ov-access">${dots}</div>
-        </div>`;
-    }).join('')}</div>`;
-  }
-
-  /* ────────────────────────────────────────────────
      AUDIT LOG TAB
   ──────────────────────────────────────────────── */
   const ACTION_LABELS = {
@@ -1189,7 +1126,6 @@
     ]);
     renderTeam();
     renderRequests();
-    renderOverview();
     renderAuditLog();
   }
 
@@ -1239,7 +1175,6 @@
         <button class="tab-btn active" data-tab="team"       onclick="switchTab('team')">Team <span id="team-count" class="count-muted">${_users.length}</span></button>
         <button class="tab-btn" data-tab="permissions"       onclick="switchTab('permissions')">Permissions &amp; roles</button>
         <button class="tab-btn" data-tab="requests"          onclick="switchTab('requests')">Access requests <span id="req-tab-badge">${pendingBadge}</span></button>
-        <button class="tab-btn" data-tab="overview"          onclick="switchTab('overview')">Overview</button>
         <button class="tab-btn" data-tab="auditlog"          onclick="switchTab('auditlog')">Audit log</button>
       </div>
 
@@ -1278,11 +1213,6 @@
         <div id="requests-content"></div>
       </div>
 
-      <!-- OVERVIEW -->
-      <div class="tab-panel" id="tab-overview">
-        <div id="overview-content"></div>
-      </div>
-
       <!-- AUDIT LOG -->
       <div class="tab-panel" id="tab-auditlog">
         <div class="card">
@@ -1298,7 +1228,6 @@
     renderTeam();
     renderJobRoles();
     renderRequests();
-    renderOverview();
     renderAuditLog();
   }
 
