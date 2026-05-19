@@ -171,6 +171,7 @@ async function loadAllContacts() {
   const data = await GET('/api/contacts-all');
   state.contacts = data.results || [];
   state.filteredContacts = [...state.contacts];
+  try { sessionStorage.setItem('contacts_all_cache', JSON.stringify(state.contacts)); } catch {}
 }
 
 function setContactsViewMode(mode) {

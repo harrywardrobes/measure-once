@@ -126,12 +126,27 @@
       if (!await bootstrap()) return;
 
       // Default to "All contacts" view on the customers page.
-      // bootstrap() already called loadOpenLeads; reload with all contacts.
       state.contactsViewMode = 'all';
+
+      // Render from cache immediately so back-navigation feels instant.
+      let renderedFromCache = false;
+      try {
+        const cached = sessionStorage.getItem('contacts_all_cache');
+        if (cached) {
+          state.contacts = JSON.parse(cached);
+          state.filteredContacts = [...state.contacts];
+          renderCustomerList();
+          restoreCustomerListScroll();
+          renderedFromCache = true;
+        }
+      } catch {}
+
+      // Always fetch fresh data; skip scroll restore if already done from cache.
       try {
         await loadAllContacts();
         state.filteredContacts = [...state.contacts];
         renderCustomerList();
+        if (!renderedFromCache) restoreCustomerListScroll();
       } catch (e) {
         console.error('Failed to load all contacts', e);
         const list = document.getElementById('customer-list');

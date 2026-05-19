@@ -107,6 +107,23 @@ function buildListItems() {
   return items;
 }
 
+// ── Customer List Navigation ──────────────────────────────────────────────────
+function goToCustomer(contactId) {
+  const list = document.getElementById('customer-list');
+  if (list) {
+    try { sessionStorage.setItem('customers_scroll', String(list.scrollTop)); } catch {}
+  }
+  location.href = '/customers/' + contactId;
+}
+
+function restoreCustomerListScroll() {
+  const saved = sessionStorage.getItem('customers_scroll');
+  if (!saved) return;
+  sessionStorage.removeItem('customers_scroll');
+  const list = document.getElementById('customer-list');
+  if (list) list.scrollTop = parseInt(saved, 10) || 0;
+}
+
 // ── Customer List ─────────────────────────────────────────────────────────────
 function renderCustomerList() {
   const list  = document.getElementById('customer-list');
@@ -181,7 +198,7 @@ function renderCustomerList() {
     return `
       <div class="customer-card ${isArchived ? 'card-archived' : ''}"
            data-contact-id="${contact.id}" data-room-idx="${roomIdx}"
-           onclick="location.href='/customers/${contact.id}'">
+           onclick="goToCustomer(this.dataset.contactId)">
         <div class="customer-card-name">
           ${urgencyDot}<span class="name-text">${escHtml(displayName)}</span>
           ${statusMini}
