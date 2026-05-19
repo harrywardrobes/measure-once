@@ -402,7 +402,7 @@
       background: var(--chalk);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-lg);
-      width: 100%; max-width: 460px;
+      width: 100%; max-width: 640px;
       padding: 24px;
       max-height: 90vh; overflow-y: auto;
     }
@@ -473,26 +473,64 @@
   <div class="modal">
     <div class="modal-title" id="modal-title">Edit team member</div>
     <div class="modal-sub"   id="modal-sub"></div>
+
+    <div class="form-section-label">Personal details</div>
     <div class="form-grid">
       <div class="form-field-wrap">
         <label>First name</label>
-        <input class="field" id="modal-fname" type="text" maxlength="100" autocomplete="off"
-          onkeydown="if(event.key==='Enter')saveModal()">
+        <input class="field" id="modal-fname" type="text" maxlength="100" autocomplete="off">
       </div>
       <div class="form-field-wrap">
         <label>Last name</label>
-        <input class="field" id="modal-lname" type="text" maxlength="100" autocomplete="off"
-          onkeydown="if(event.key==='Enter')saveModal()">
+        <input class="field" id="modal-lname" type="text" maxlength="100" autocomplete="off">
       </div>
+      <div class="form-field-wrap form-field-full">
+        <label>Work email address</label>
+        <input class="field field-full" id="modal-email" type="email" maxlength="254" autocomplete="off">
+      </div>
+      <div class="form-field-wrap">
+        <label>Date of birth</label>
+        <input class="field" id="modal-dob" type="date">
+      </div>
+      <div class="form-field-wrap">
+        <label>National Insurance number</label>
+        <input class="field" id="modal-ni" type="text" maxlength="20" autocomplete="off"
+          style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+      </div>
+      <div class="form-field-wrap">
+        <label>Mobile number</label>
+        <input class="field" id="modal-mobile" type="tel" maxlength="30" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="form-section-label">Emergency contact</div>
+    <div class="form-grid">
+      <div class="form-field-wrap">
+        <label>First name</label>
+        <input class="field" id="modal-ec-fname" type="text" maxlength="100" autocomplete="off">
+      </div>
+      <div class="form-field-wrap">
+        <label>Last name</label>
+        <input class="field" id="modal-ec-lname" type="text" maxlength="100" autocomplete="off">
+      </div>
+      <div class="form-field-wrap">
+        <label>Mobile number</label>
+        <input class="field" id="modal-ec-phone" type="tel" maxlength="30" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="form-section-label">Role &amp; notes</div>
+    <div class="form-grid">
       <div class="form-field-wrap form-field-full">
         <label>Job role</label>
         <select class="field field-full" id="modal-jobrole"></select>
       </div>
       <div class="form-field-wrap form-field-full">
-        <label>Privilege level</label>
-        <select class="field field-full" id="modal-privilege"></select>
+        <label>Note <span class="opt">(optional)</span></label>
+        <input class="field field-full" id="modal-note" type="text" maxlength="200" autocomplete="off">
       </div>
     </div>
+
     <div class="modal-err" id="modal-err"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -633,16 +671,25 @@
     $('#modal-title').textContent = 'Edit team member';
     $('#modal-sub').textContent   = name + (u.email && name !== u.email ? ' · ' + u.email : '');
 
-    $('#modal-fname').value     = u.first_name || '';
-    $('#modal-lname').value     = u.last_name  || '';
+    const meta = u.metadata || {};
+
+    $('#modal-fname').value  = u.first_name || '';
+    $('#modal-lname').value  = u.last_name  || '';
+    $('#modal-email').value  = u.email      || '';
+    $('#modal-dob').value    = meta.date_of_birth  || '';
+    $('#modal-ni').value     = meta.ni_number      || '';
+    $('#modal-mobile').value = meta.mobile_number  || '';
+
+    $('#modal-ec-fname').value = meta.ec_first_name || '';
+    $('#modal-ec-lname').value = meta.ec_last_name  || '';
+    $('#modal-ec-phone').value = meta.ec_phone      || '';
+
     $('#modal-jobrole').innerHTML = `<option value="">— None —</option>` +
       _jobRoles.map(r => `<option value="${esc(r.name)}" ${u.job_role === r.name ? 'selected' : ''}>${esc(r.name)}</option>`).join('') +
       (u.job_role && !_jobRoles.find(r => r.name === u.job_role)
         ? `<option value="${esc(u.job_role)}" selected>${esc(u.job_role)}</option>` : '');
 
-    $('#modal-privilege').innerHTML = ['viewer','member','manager','admin'].map(v =>
-      `<option value="${v}" ${(u.privilege_level || 'member') === v ? 'selected' : ''}>${v.charAt(0).toUpperCase()+v.slice(1)}</option>`
-    ).join('');
+    $('#modal-note').value = u.note || '';
 
     const errEl = $('#modal-err');
     if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
@@ -663,10 +710,17 @@
     if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
 
     const payload = {
-      first_name:     $('#modal-fname')?.value.trim()     || '',
-      last_name:      $('#modal-lname')?.value.trim()     || '',
-      job_role:       $('#modal-jobrole')?.value          || '',
-      privilege_level: $('#modal-privilege')?.value,
+      first_name:    ($('#modal-fname')?.value  || '').trim(),
+      last_name:     ($('#modal-lname')?.value  || '').trim(),
+      email:         ($('#modal-email')?.value  || '').trim(),
+      date_of_birth: ($('#modal-dob')?.value    || '').trim(),
+      ni_number:     ($('#modal-ni')?.value     || '').trim(),
+      mobile_number: ($('#modal-mobile')?.value || '').trim(),
+      ec_first_name: ($('#modal-ec-fname')?.value || '').trim(),
+      ec_last_name:  ($('#modal-ec-lname')?.value || '').trim(),
+      ec_phone:      ($('#modal-ec-phone')?.value || '').trim(),
+      job_role:      $('#modal-jobrole')?.value || '',
+      note:          ($('#modal-note')?.value   || '').trim(),
     };
 
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
@@ -675,6 +729,8 @@
       const u = _users.find(u => u.id === id);
       if (u) Object.assign(u, updated);
       renderTeam();
+      _allowed = await api('GET', '/api/admin/allowed') || _allowed;
+      renderRequests();
       closeModal();
       toast('Changes saved');
     } catch (e) {

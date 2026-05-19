@@ -765,12 +765,16 @@ async function setupAuth(app) {
     }
   });
 
-  // Admin: list all users with profile fields.
+  // Admin: list all users with profile fields (including HR metadata from allowed_emails).
   app.get('/api/admin/users', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
-        `SELECT id, email, first_name, last_name, profile_image_url, job_role, privilege_level, created_at
-         FROM users ORDER BY created_at DESC LIMIT 500`
+        `SELECT u.id, u.email, u.first_name, u.last_name, u.profile_image_url,
+                u.job_role, u.privilege_level, u.created_at,
+                ae.note, ae.metadata
+         FROM users u
+         LEFT JOIN allowed_emails ae ON LOWER(u.email) = ae.email
+         ORDER BY u.created_at DESC LIMIT 500`
       );
       res.json(r.rows.map(u => ({ ...u, isAdmin: isAdminEmail(u.email) })));
     } catch (e) {
@@ -781,40 +785,147 @@ async function setupAuth(app) {
   const ALLOWED_PRIVILEGE_LEVELS = ['viewer', 'member', 'manager', 'admin'];
 
   app.patch('/api/users/:id/profile', isAuthenticated, requireAdmin, async (req, res) => {
-    const { job_role, first_name, last_name } = req.body || {};
-    const privilege_level = typeof req.body?.privilege_level === 'string'
-      ? req.body.privilege_level.trim().toLowerCase()
-      : req.body?.privilege_level;
+    const body = req.body || {};
+    const { job_role, first_name, last_name,
+            date_of_birth, ni_number, mobile_number,
+            ec_first_name, ec_last_name, ec_phone, note } = body;
+    const newEmail = body.email !== undefined ? (body.email || '').trim().toLowerCase() : undefined;
+
+    const privilege_level = typeof body.privilege_level === 'string'
+      ? body.privilege_level.trim().toLowerCase()
+      : body.privilege_level;
     if (privilege_level !== undefined && !ALLOWED_PRIVILEGE_LEVELS.includes(privilege_level)) {
       return res.status(400).json({ error: 'Invalid privilege level' });
     }
+    if (newEmail !== undefined && newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
+
+    const client = await pool.connect();
     try {
-      const cols = [];
-      const vals = [];
-      if (first_name !== undefined)     { cols.push(`first_name = $${cols.length + 1}`);     vals.push(first_name?.trim() || null); }
-      if (last_name !== undefined)      { cols.push(`last_name = $${cols.length + 1}`);      vals.push(last_name?.trim() || null); }
-      if (job_role !== undefined)       { cols.push(`job_role = $${cols.length + 1}`);       vals.push(job_role || null); }
-      if (privilege_level !== undefined) { cols.push(`privilege_level = $${cols.length + 1}`); vals.push(privilege_level); }
-      if (!cols.length) return res.status(400).json({ error: 'Nothing to update' });
-      vals.push(req.params.id);
-      const r = await pool.query(
-        `UPDATE users SET ${cols.join(', ')}, updated_at = NOW()
-         WHERE id = $${vals.length}
-         RETURNING id, email, first_name, last_name, profile_image_url, job_role, privilege_level`,
-        vals
-      );
-      if (r.rowCount === 0) return res.status(404).json({ error: 'User not found' });
-      const updated = r.rows[0];
+      await client.query('BEGIN');
+
+      // Fetch current user to get their current email
+      const curR = await client.query('SELECT email FROM users WHERE id = $1', [req.params.id]);
+      if (curR.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'User not found' });
+      }
+      const currentEmail = (curR.rows[0].email || '').toLowerCase();
+
+      // Build update for users table
+      const userCols = [];
+      const userVals = [];
+      if (first_name !== undefined)      { userCols.push(`first_name = $${userCols.length+1}`);      userVals.push(first_name?.trim() || null); }
+      if (last_name !== undefined)       { userCols.push(`last_name = $${userCols.length+1}`);       userVals.push(last_name?.trim() || null); }
+      if (job_role !== undefined)        { userCols.push(`job_role = $${userCols.length+1}`);        userVals.push(job_role || null); }
+      if (privilege_level !== undefined) { userCols.push(`privilege_level = $${userCols.length+1}`); userVals.push(privilege_level); }
+      if (newEmail !== undefined)        { userCols.push(`email = $${userCols.length+1}`);           userVals.push(newEmail || null); }
+
+      let updated;
+      if (userCols.length > 0) {
+        userVals.push(req.params.id);
+        const r = await client.query(
+          `UPDATE users SET ${userCols.join(', ')}, updated_at = NOW()
+           WHERE id = $${userVals.length}
+           RETURNING id, email, first_name, last_name, profile_image_url, job_role, privilege_level`,
+          userVals
+        );
+        if (r.rowCount === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'User not found' });
+        }
+        updated = r.rows[0];
+      } else {
+        const r = await client.query(
+          `SELECT id, email, first_name, last_name, profile_image_url, job_role, privilege_level
+           FROM users WHERE id = $1`,
+          [req.params.id]
+        );
+        if (r.rowCount === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'User not found' });
+        }
+        updated = r.rows[0];
+      }
+
+      // Determine the email key for allowed_emails lookups
+      const targetEmail = (updated.email || currentEmail).toLowerCase();
+
+      // If email changed, rename the allowed_emails row
+      if (newEmail !== undefined && currentEmail && targetEmail && currentEmail !== targetEmail) {
+        await client.query(
+          `UPDATE allowed_emails SET email = $1 WHERE email = $2`,
+          [targetEmail, currentEmail]
+        );
+      }
+
+      // Update metadata / note in allowed_emails
+      const hasMetaUpdate = [date_of_birth, ni_number, mobile_number, ec_first_name, ec_last_name, ec_phone].some(v => v !== undefined);
+      const hasNoteUpdate  = note !== undefined;
+      const hasNameUpdate  = first_name !== undefined || last_name !== undefined;
+
+      if (hasMetaUpdate || hasNoteUpdate || hasNameUpdate) {
+        const str = (v, max) => (v || '').toString().trim().slice(0, max) || null;
+
+        const existingR = await client.query(
+          `SELECT metadata, note FROM allowed_emails WHERE email = $1`, [targetEmail]
+        );
+        const existingMeta = existingR.rows[0]?.metadata || {};
+        const existingNote = existingR.rows[0]?.note ?? null;
+
+        const newMeta = { ...existingMeta };
+        if (date_of_birth !== undefined) { const v = str(date_of_birth, 20);  if (v) newMeta.date_of_birth = v; else delete newMeta.date_of_birth; }
+        if (ni_number !== undefined)     { const v = str(ni_number, 20);       if (v) newMeta.ni_number = v;     else delete newMeta.ni_number; }
+        if (mobile_number !== undefined) { const v = str(mobile_number, 30);   if (v) newMeta.mobile_number = v; else delete newMeta.mobile_number; }
+        if (ec_first_name !== undefined) { const v = str(ec_first_name, 100);  if (v) newMeta.ec_first_name = v; else delete newMeta.ec_first_name; }
+        if (ec_last_name !== undefined)  { const v = str(ec_last_name, 100);   if (v) newMeta.ec_last_name = v;  else delete newMeta.ec_last_name; }
+        if (ec_phone !== undefined)      { const v = str(ec_phone, 30);        if (v) newMeta.ec_phone = v;      else delete newMeta.ec_phone; }
+        // Keep metadata first_name / last_name in sync with users table
+        if (first_name !== undefined) { const v = (first_name || '').trim(); if (v) newMeta.first_name = v; else delete newMeta.first_name; }
+        if (last_name !== undefined)  { const v = (last_name || '').trim();  if (v) newMeta.last_name = v;  else delete newMeta.last_name; }
+
+        const noteVal = hasNoteUpdate ? (str(note, 200)) : existingNote;
+
+        await client.query(
+          `INSERT INTO allowed_emails (email, metadata, note)
+           VALUES ($1, $2::jsonb, $3)
+           ON CONFLICT (email) DO UPDATE SET metadata = $2::jsonb, note = $3`,
+          [targetEmail, JSON.stringify(newMeta), noteVal]
+        );
+
+        // Return metadata in response so the frontend can update locally
+        updated = { ...updated, metadata: newMeta, note: noteVal };
+      } else {
+        // Fetch existing metadata/note to include in response
+        const metaR = await client.query(
+          `SELECT metadata, note FROM allowed_emails WHERE email = $1`, [targetEmail]
+        );
+        updated = { ...updated, metadata: metaR.rows[0]?.metadata || null, note: metaR.rows[0]?.note ?? null };
+      }
+
+      await client.query('COMMIT');
+
       const adminEmail = req.user?.claims?.email;
       const parts = [];
-      if (first_name !== undefined)     parts.push(`first_name="${first_name?.trim() || 'none'}"`);
-      if (last_name !== undefined)      parts.push(`last_name="${last_name?.trim() || 'none'}"`);
-      if (job_role !== undefined)       parts.push(`job_role="${job_role || 'none'}"`);
+      if (first_name !== undefined)      parts.push(`first_name="${first_name?.trim() || 'none'}"`);
+      if (last_name !== undefined)       parts.push(`last_name="${last_name?.trim() || 'none'}"`);
+      if (job_role !== undefined)        parts.push(`job_role="${job_role || 'none'}"`);
       if (privilege_level !== undefined) parts.push(`privilege_level="${privilege_level}"`);
+      if (newEmail !== undefined)        parts.push(`email="${newEmail}"`);
+      if (date_of_birth !== undefined)   parts.push('date_of_birth updated');
+      if (ni_number !== undefined)       parts.push('ni_number updated');
+      if (mobile_number !== undefined)   parts.push('mobile_number updated');
+      if (ec_first_name !== undefined || ec_last_name !== undefined || ec_phone !== undefined) parts.push('emergency_contact updated');
+      if (note !== undefined)            parts.push(`note="${note}"`);
       await logAdminAction(adminEmail, 'edit_user_profile', updated.email, parts.join(', '));
+
       res.json(updated);
     } catch (e) {
+      await client.query('ROLLBACK');
       res.status(500).json({ error: e.message });
+    } finally {
+      client.release();
     }
   });
 
