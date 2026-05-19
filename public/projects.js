@@ -67,6 +67,12 @@ function renderProjectsView() {
     if (!btn) return;
     setProjectStageFilter(btn.dataset.stageFilter);
   });
+
+  view.addEventListener('click', function(e) {
+    const row = e.target.closest('[data-contact-id]');
+    if (!row) return;
+    openProject(row.dataset.contactId, parseInt(row.dataset.roomIdx, 10));
+  });
 }
 
 function customerCardHtml(contact, rooms) {
@@ -78,7 +84,7 @@ function customerCardHtml(contact, rooms) {
     const stageLabel = escHtml(state.workflow?.stages?.[r.stageKey]?.label || r.stageKey);
     const roomLabel  = escHtml(r.room || 'Main');
     return `
-      <div class="project-room-row" onclick="openProject('${contact.id}', ${r.roomIdx})">
+      <div class="project-room-row" data-contact-id="${escHtml(contact.id)}" data-room-idx="${r.roomIdx}">
         <span class="project-room-row-name">${roomLabel}</span>
         <span class="stage-pill" style="background:${colour.light};color:${colour.text}">${stageLabel}</span>
       </div>`;
