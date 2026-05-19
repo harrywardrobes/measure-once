@@ -58,6 +58,8 @@ const PAGE_ROUTES = {
   '/profile':   'profile.html',
   '/admin':     'admin.html',
 };
+
+// /trades is protected — handled below after auth middleware is set up
 for (const [route, file] of Object.entries(PAGE_ROUTES)) {
   app.get(route, (_req, res) => res.sendFile(path.join(__dirname, 'public', file)));
 }
@@ -1091,6 +1093,110 @@ app.delete('/api/personal-tasks/:id', (req, res) => {
   res.json({ success: true });
 });
 
+// ── Trades Directory ──────────────────────────────────────────────────────────
+const _tradesPool = new (require('pg').Pool)({ connectionString: process.env.DATABASE_URL });
+
+async function ensureTradesTable() {
+  await _tradesPool.query(`
+    CREATE TABLE IF NOT EXISTS trade_contacts (
+      id             SERIAL PRIMARY KEY,
+      name           VARCHAR NOT NULL,
+      trade_type     VARCHAR NOT NULL,
+      phone          VARCHAR,
+      email          VARCHAR,
+      areas_served   TEXT,
+      company_name   VARCHAR,
+      timescale      VARCHAR,
+      invoice_method VARCHAR,
+      payment_terms  VARCHAR,
+      notes          TEXT,
+      created_by     VARCHAR,
+      created_at     TIMESTAMP DEFAULT NOW()
+    );
+  `);
+}
+
+app.get('/trades', isAuthenticated, requireManagerOrAdmin, (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'trades.html'));
+});
+
+app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+  try {
+    const r = await _tradesPool.query(
+      `SELECT * FROM trade_contacts ORDER BY created_at DESC`
+    );
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+  const { name, trade_type, phone, email, areas_served, company_name, timescale, invoice_method, payment_terms, notes } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required.' });
+  if (!trade_type || !trade_type.trim()) return res.status(400).json({ error: 'Trade type is required.' });
+  try {
+    const r = await _tradesPool.query(
+      `INSERT INTO trade_contacts
+        (name, trade_type, phone, email, areas_served, company_name, timescale, invoice_method, payment_terms, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING *`,
+      [
+        name.trim(), trade_type.trim(),
+        (phone || '').trim(), (email || '').trim(),
+        (areas_served || '').trim(), (company_name || '').trim(),
+        (timescale || '').trim(), (invoice_method || '').trim(),
+        (payment_terms || '').trim(), (notes || '').trim(),
+        req.user?.claims?.sub || null
+      ]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id.' });
+  const { name, trade_type, phone, email, areas_served, company_name, timescale, invoice_method, payment_terms, notes } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required.' });
+  if (!trade_type || !trade_type.trim()) return res.status(400).json({ error: 'Trade type is required.' });
+  try {
+    const r = await _tradesPool.query(
+      `UPDATE trade_contacts
+       SET name=$1, trade_type=$2, phone=$3, email=$4, areas_served=$5,
+           company_name=$6, timescale=$7, invoice_method=$8, payment_terms=$9, notes=$10
+       WHERE id=$11
+       RETURNING *`,
+      [
+        name.trim(), trade_type.trim(),
+        (phone || '').trim(), (email || '').trim(),
+        (areas_served || '').trim(), (company_name || '').trim(),
+        (timescale || '').trim(), (invoice_method || '').trim(),
+        (payment_terms || '').trim(), (notes || '').trim(),
+        id
+      ]
+    );
+    if (!r.rowCount) return res.status(404).json({ error: 'Contact not found.' });
+    res.json(r.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id.' });
+  try {
+    const r = await _tradesPool.query(`DELETE FROM trade_contacts WHERE id=$1`, [id]);
+    if (!r.rowCount) return res.status(404).json({ error: 'Contact not found.' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Google Calendar: upcoming events (14-day window) ──────────────────────────
 app.get('/api/calendar/upcoming', async (req, res) => {
   if (!req.session.googleTokens) return res.json({ events: [], connected: false });
@@ -1128,5 +1234,7 @@ app.get('/api/calendar/upcoming', async (req, res) => {
     await ensureHubSpotProperties();
     try { await ensureVisitsTable(); console.log('  Visits table ready'); }
     catch (e) { console.error('  Visits table setup failed:', e.message); }
+    try { await ensureTradesTable(); console.log('  Trades table ready'); }
+    catch (e) { console.error('  Trades table setup failed:', e.message); }
   });
 })();

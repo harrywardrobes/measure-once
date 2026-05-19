@@ -172,6 +172,12 @@ async function bootstrap() {
 
   state.user = user;
 
+  const priv = user.privilege_level || 'member';
+  if (priv === 'manager' || priv === 'admin') {
+    const tradesBtn = document.getElementById('bnav-trades');
+    if (tradesBtn) tradesBtn.style.display = '';
+  }
+
   try {
     await checkAuthStatus();
     await loadWorkflow();

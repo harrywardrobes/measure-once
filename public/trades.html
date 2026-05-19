@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#200842">
+  <meta name="color-scheme" content="light">
+  <title>Trades · Measure Once</title>
+  <link rel="stylesheet" href="/tailwind.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <div id="trades-view" class="trades-page-wrap">
+    <div class="trades-header-bar">
+      <h1 class="trades-page-title">Trades</h1>
+      <button class="trades-add-btn" id="trades-add-btn" onclick="openTradesModal()">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+        </svg>
+        Add Contact
+      </button>
+    </div>
+
+    <div id="trades-search-wrap" class="trades-search-wrap">
+      <svg class="trades-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
+      </svg>
+      <input id="trades-search" type="text" placeholder="Search by name, trade, or area…"
+        class="trades-search-input" autocomplete="off"
+        oninput="filterTradeContacts(this.value)">
+    </div>
+
+    <div id="trades-list" class="trades-list">
+      <div class="trades-loading"><div class="spinner"></div> Loading…</div>
+    </div>
+  </div>
+
+  <div id="trades-modal-overlay" class="trades-modal-overlay hidden" onclick="closeTradesModal()"></div>
+  <div id="trades-modal" class="trades-modal" role="dialog" aria-modal="true" aria-labelledby="trades-modal-title" aria-hidden="true">
+    <div class="trades-modal-header">
+      <h2 class="trades-modal-title" id="trades-modal-title">Add Contact</h2>
+      <button class="trades-modal-close" onclick="closeTradesModal()" aria-label="Close">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <form id="trades-form" class="trades-form" onsubmit="saveTradeContact(event)">
+      <input type="hidden" id="trades-edit-id">
+
+      <div class="trades-form-row trades-form-row-2">
+        <div class="trades-field">
+          <label class="trades-label" for="tf-name">Full name <span class="trades-required">*</span></label>
+          <input class="trades-input" id="tf-name" type="text" placeholder="e.g. John Smith" required>
+        </div>
+        <div class="trades-field">
+          <label class="trades-label" for="tf-trade">Trade type <span class="trades-required">*</span></label>
+          <input class="trades-input" id="tf-trade" type="text" placeholder="e.g. Electrician, Plasterer" list="trades-type-list" required>
+          <datalist id="trades-type-list">
+            <option value="Carpet Fitter">
+            <option value="Electrician">
+            <option value="Plasterer">
+            <option value="Plumber">
+            <option value="Painter & Decorator">
+            <option value="Joiner">
+            <option value="Tiler">
+            <option value="Roofer">
+            <option value="Builder">
+            <option value="Gas Engineer">
+          </datalist>
+        </div>
+      </div>
+
+      <div class="trades-form-row trades-form-row-2">
+        <div class="trades-field">
+          <label class="trades-label" for="tf-phone">Phone number</label>
+          <input class="trades-input" id="tf-phone" type="tel" placeholder="e.g. 07700 900123">
+        </div>
+        <div class="trades-field">
+          <label class="trades-label" for="tf-email">Email address</label>
+          <input class="trades-input" id="tf-email" type="email" placeholder="e.g. john@example.com">
+        </div>
+      </div>
+
+      <div class="trades-form-row">
+        <div class="trades-field">
+          <label class="trades-label" for="tf-areas">Areas served</label>
+          <input class="trades-input" id="tf-areas" type="text" placeholder="e.g. Manchester, Salford, Trafford">
+        </div>
+      </div>
+
+      <div class="trades-form-row">
+        <div class="trades-field">
+          <label class="trades-label" for="tf-company">Company name <span class="trades-optional">(optional)</span></label>
+          <input class="trades-input" id="tf-company" type="text" placeholder="e.g. Smith Electrical Ltd">
+        </div>
+      </div>
+
+      <div class="trades-form-row trades-form-row-2">
+        <div class="trades-field">
+          <label class="trades-label" for="tf-timescale">Typical lead time</label>
+          <input class="trades-input" id="tf-timescale" type="text" placeholder="e.g. 1–2 weeks">
+        </div>
+        <div class="trades-field">
+          <label class="trades-label" for="tf-invoice-method">Preferred invoice method</label>
+          <input class="trades-input" id="tf-invoice-method" type="text" placeholder="e.g. Email, Bank transfer">
+        </div>
+      </div>
+
+      <div class="trades-form-row">
+        <div class="trades-field">
+          <label class="trades-label" for="tf-payment-terms">Payment terms</label>
+          <input class="trades-input" id="tf-payment-terms" type="text" placeholder="e.g. 30 days, on completion">
+        </div>
+      </div>
+
+      <div class="trades-form-row">
+        <div class="trades-field">
+          <label class="trades-label" for="tf-notes">Notes</label>
+          <textarea class="trades-input trades-textarea" id="tf-notes" rows="3" placeholder="Any extra details…"></textarea>
+        </div>
+      </div>
+
+      <div class="trades-form-footer">
+        <button type="button" class="trades-btn-secondary" onclick="closeTradesModal()">Cancel</button>
+        <button type="submit" class="trades-btn-primary" id="trades-submit-btn">Save Contact</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="trades-delete-overlay" class="trades-modal-overlay hidden" onclick="closeDeleteConfirm()"></div>
+  <div id="trades-delete-modal" class="trades-delete-modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <p class="trades-delete-msg">Delete this contact? This cannot be undone.</p>
+    <div class="trades-delete-actions">
+      <button class="trades-btn-secondary" onclick="closeDeleteConfirm()">Cancel</button>
+      <button class="trades-btn-danger" id="trades-delete-confirm-btn" onclick="confirmDeleteTrade()">Delete</button>
+    </div>
+  </div>
+
+  <script src="/chrome.js"></script>
+  <script src="/core.js"></script>
+  <script src="/trades.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (!await bootstrap()) return;
+      const priv = (state.user?.privilege_level || 'member');
+      if (priv !== 'manager' && priv !== 'admin') {
+        window.location.href = '/';
+        return;
+      }
+      loadTradeContacts();
+    });
+  </script>
+</body>
+</html>
