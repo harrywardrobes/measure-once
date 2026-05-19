@@ -245,9 +245,12 @@ function renderAuthStatus() {
   if (!user) { el.innerHTML = ''; return; }
   const initials = [user.first_name, user.last_name]
     .filter(Boolean).map(s => s[0]).join('').toUpperCase() || '?';
-  el.innerHTML = user.profile_image_url
+  const photoSrc = user.has_custom_photo
+    ? `/api/users/${encodeURIComponent(user.id)}/photo`
+    : (user.profile_image_url || null);
+  el.innerHTML = photoSrc
     ? `<a href="/profile" class="header-avatar-btn" title="Profile" aria-label="Open profile">
-         <img src="${escHtml(user.profile_image_url)}" alt="" class="header-avatar-img">
+         <img src="${escHtml(photoSrc)}" alt="" class="header-avatar-img">
        </a>`
     : `<a href="/profile" class="header-avatar-btn header-avatar-initials" title="Profile" aria-label="Open profile">
          ${escHtml(initials)}

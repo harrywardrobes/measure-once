@@ -256,6 +256,12 @@ async function ensureAuthTables() {
     $$;
   `);
 
+  /* Profile photo storage — pending awaiting approval, custom is approved & served. */
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_photo TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_photo  TEXT;
+  `);
+
   /* Admin audit log — immutable record of every admin action. */
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_audit_log (
@@ -383,7 +389,14 @@ async function upsertUser(claims) {
 }
 
 async function getUser(id) {
-  const r = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+  const r = await pool.query(
+    `SELECT id, email, first_name, last_name, profile_image_url,
+            job_role, privilege_level, created_at, updated_at,
+            (custom_photo  IS NOT NULL) AS has_custom_photo,
+            (pending_photo IS NOT NULL) AS has_pending_photo
+     FROM users WHERE id = $1`,
+    [id]
+  );
   return r.rows[0];
 }
 
@@ -732,7 +745,9 @@ async function setupAuth(app) {
     }
     try {
       const r = await pool.query(
-        `SELECT id, email, first_name, last_name, profile_image_url, job_role, privilege_level, created_at
+        `SELECT id, email, first_name, last_name, profile_image_url, job_role, privilege_level, created_at,
+                (custom_photo  IS NOT NULL) AS has_custom_photo,
+                (pending_photo IS NOT NULL) AS has_pending_photo
          FROM users WHERE id = $1`,
         [targetId]
       );
@@ -748,7 +763,8 @@ async function setupAuth(app) {
   app.get('/api/platform-users', isAuthenticated, async (req, res) => {
     try {
       const r = await pool.query(
-        `SELECT id, first_name, last_name, email, profile_image_url, job_role
+        `SELECT id, first_name, last_name, email, profile_image_url, job_role,
+                (custom_photo IS NOT NULL) AS has_custom_photo
          FROM users ORDER BY first_name ASC, last_name ASC LIMIT 200`
       );
       res.json(r.rows.map(u => ({
@@ -757,7 +773,8 @@ async function setupAuth(app) {
         lastName:        u.last_name   || '',
         email:           u.email       || '',
         profileImageUrl: u.profile_image_url || null,
-        jobRole:         u.job_role    || null
+        jobRole:         u.job_role    || null,
+        hasCustomPhoto:  u.has_custom_photo  || false,
       })));
     } catch (e) {
       console.error('GET /api/platform-users failed:', e.message);
@@ -771,6 +788,8 @@ async function setupAuth(app) {
       const r = await pool.query(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.profile_image_url,
                 u.job_role, u.privilege_level, u.created_at,
+                (u.custom_photo  IS NOT NULL) AS has_custom_photo,
+                (u.pending_photo IS NOT NULL) AS has_pending_photo,
                 ae.note, ae.metadata
          FROM users u
          LEFT JOIN allowed_emails ae ON LOWER(u.email) = ae.email
@@ -1037,6 +1056,95 @@ async function setupAuth(app) {
         const adminEmail = req.user?.claims?.email;
         await logAdminAction(adminEmail, 'delete_job_role', null, `Deleted job role "${name}"`);
       }
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Profile photo: upload (self) ─────────────────────────────────────────────
+  app.post('/api/users/me/photo', isAuthenticated, async (req, res) => {
+    const userId = req.user?.claims?.sub;
+    const { data } = req.body || {};
+    if (!data || typeof data !== 'string' || !data.startsWith('data:image/')) {
+      return res.status(400).json({ error: 'Invalid image data.' });
+    }
+    if (data.length > 4 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Image is too large. Max ~3 MB after compression.' });
+    }
+    try {
+      await pool.query(
+        `UPDATE users SET pending_photo = $1, updated_at = NOW() WHERE id = $2`,
+        [data, userId]
+      );
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Profile photo: serve approved photo ──────────────────────────────────────
+  app.get('/api/users/:id/photo', isAuthenticated, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT custom_photo FROM users WHERE id = $1`, [req.params.id]
+      );
+      const photo = r.rows[0]?.custom_photo;
+      if (!photo) return res.status(404).end();
+      const [header, b64] = photo.split(',');
+      const mime = (header.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+      res.set('Content-Type', mime);
+      res.set('Cache-Control', 'public, max-age=3600');
+      res.send(Buffer.from(b64, 'base64'));
+    } catch (e) {
+      res.status(500).end();
+    }
+  });
+
+  // ── Profile photo: admin approval queue ──────────────────────────────────────
+  app.get('/api/admin/photo-requests', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT id, email, first_name, last_name, pending_photo
+         FROM users WHERE pending_photo IS NOT NULL
+         ORDER BY updated_at DESC`
+      );
+      res.json(r.rows.map(u => ({
+        id: u.id, email: u.email,
+        first_name: u.first_name, last_name: u.last_name,
+        pending_photo: u.pending_photo,
+      })));
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/photo-requests/:id/approve', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `UPDATE users
+           SET custom_photo = pending_photo, pending_photo = NULL, updated_at = NOW()
+         WHERE id = $1 AND pending_photo IS NOT NULL
+         RETURNING email`,
+        [req.params.id]
+      );
+      if (r.rowCount === 0) return res.status(404).json({ error: 'No pending photo found.' });
+      await logAdminAction(req.user?.claims?.email, 'approve_profile_photo', r.rows[0].email, 'Profile photo approved');
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/photo-requests/:id/reject', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `UPDATE users SET pending_photo = NULL, updated_at = NOW()
+         WHERE id = $1 RETURNING email`,
+        [req.params.id]
+      );
+      if (r.rowCount === 0) return res.status(404).json({ error: 'User not found.' });
+      await logAdminAction(req.user?.claims?.email, 'reject_profile_photo', r.rows[0].email, 'Profile photo rejected');
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });

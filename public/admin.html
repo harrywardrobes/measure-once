@@ -597,6 +597,9 @@
   function avatarEl(u) {
     const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '?';
     const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+    if (u.has_custom_photo) {
+      return `<img class="avatar" src="/api/users/${esc(u.id)}/photo" alt="" loading="lazy">`;
+    }
     if (u.profile_image_url) {
       return `<img class="avatar" src="${esc(u.profile_image_url)}" alt="" loading="lazy">`;
     }
@@ -611,6 +614,7 @@
   let _requests = [];
   let _allowed = [];
   let _auditLog = [];
+  let _photoRequests = [];
   let _capabilities = { levels: ['viewer','member','manager','admin'], features: [] };
 
   /* ────────────────────────────────────────────────
@@ -1171,14 +1175,16 @@
      AUDIT LOG TAB
   ──────────────────────────────────────────────── */
   const ACTION_LABELS = {
-    approve_request:     'Approved access request',
-    reject_request:      'Rejected access request',
-    add_allowed_email:   'Added email to allow-list',
-    revoke_allowed_email:'Revoked email from allow-list',
-    edit_user_profile:   'Edited user profile',
-    add_job_role:        'Added job role',
-    delete_job_role:     'Deleted job role',
-    edit_permissions:    'Updated permission matrix',
+    approve_request:      'Approved access request',
+    reject_request:       'Rejected access request',
+    add_allowed_email:    'Added email to allow-list',
+    revoke_allowed_email: 'Revoked email from allow-list',
+    edit_user_profile:    'Edited user profile',
+    add_job_role:         'Added job role',
+    delete_job_role:      'Deleted job role',
+    edit_permissions:     'Updated permission matrix',
+    approve_profile_photo:'Approved profile photo',
+    reject_profile_photo: 'Rejected profile photo',
   };
 
   function renderAuditLog() {
@@ -1207,18 +1213,84 @@
   }
 
   /* ────────────────────────────────────────────────
+     PHOTOS TAB
+  ──────────────────────────────────────────────── */
+  function renderPhotoRequests() {
+    const container = $('#photos-content');
+    if (!container) return;
+    const badge = document.getElementById('photo-tab-badge');
+    if (badge) badge.innerHTML = _photoRequests.length > 0
+      ? `<span class="tab-badge">${_photoRequests.length}</span>` : '';
+
+    if (_photoRequests.length === 0) {
+      container.innerHTML = `
+        <div class="card">
+          <div class="card-title">Photo approvals</div>
+          <div class="table-empty" style="padding:28px 0;">No pending photo submissions.</div>
+        </div>`;
+      return;
+    }
+    container.innerHTML = `
+      <div class="card">
+        <div class="card-title">Pending photo approvals <span class="card-count">(${_photoRequests.length})</span></div>
+        <p class="card-desc">Review profile photo submissions. Approved photos appear in the header and across the app.</p>
+        <div class="photo-approval-grid">
+          ${_photoRequests.map(u => {
+            const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—';
+            return `
+              <div class="photo-approval-card" id="pcard-${esc(u.id)}">
+                <img class="photo-approval-img" src="${esc(u.pending_photo)}" alt="">
+                <div class="photo-approval-info">
+                  <div class="photo-approval-name">${esc(name)}</div>
+                  <div class="photo-approval-email">${esc(u.email || '')}</div>
+                </div>
+                <div class="photo-approval-btns">
+                  <button class="btn btn-primary btn-sm" onclick="approvePhoto('${esc(u.id)}')">Approve</button>
+                  <button class="btn btn-outline btn-sm" onclick="rejectPhoto('${esc(u.id)}')">Reject</button>
+                </div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }
+
+  async function approvePhoto(id) {
+    try {
+      await api('POST', `/api/admin/photo-requests/${id}/approve`);
+      toast('Photo approved — now live');
+      _photoRequests = _photoRequests.filter(r => r.id !== id);
+      renderPhotoRequests();
+      const users = await api('GET', '/api/admin/users');
+      _users = users;
+      renderTeam();
+    } catch (e) { toast(e.message, true); }
+  }
+
+  async function rejectPhoto(id) {
+    if (!confirm('Reject this photo? The user will need to submit a new one.')) return;
+    try {
+      await api('POST', `/api/admin/photo-requests/${id}/reject`);
+      toast('Photo rejected');
+      _photoRequests = _photoRequests.filter(r => r.id !== id);
+      renderPhotoRequests();
+    } catch (e) { toast(e.message, true); }
+  }
+
+  /* ────────────────────────────────────────────────
      Load & render
   ──────────────────────────────────────────────── */
   async function reload() {
-    [_requests, _allowed, _users, _auditLog] = await Promise.all([
+    [_requests, _allowed, _users, _auditLog, _photoRequests] = await Promise.all([
       api('GET', '/api/admin/requests'),
       api('GET', '/api/admin/allowed'),
       api('GET', '/api/admin/users'),
       api('GET', '/api/admin/audit-log'),
+      api('GET', '/api/admin/photo-requests'),
     ]);
     renderTeam();
     renderRequests();
     renderAuditLog();
+    renderPhotoRequests();
   }
 
   async function init() {
@@ -1235,13 +1307,14 @@
     }
 
     try {
-      [_requests, _allowed, _users, _jobRoles, _capabilities, _auditLog] = await Promise.all([
+      [_requests, _allowed, _users, _jobRoles, _capabilities, _auditLog, _photoRequests] = await Promise.all([
         api('GET', '/api/admin/requests'),
         api('GET', '/api/admin/allowed'),
         api('GET', '/api/admin/users'),
         api('GET', '/api/admin/job-roles'),
         api('GET', '/api/admin/capabilities'),
         api('GET', '/api/admin/audit-log'),
+        api('GET', '/api/admin/photo-requests'),
       ]);
     } catch (e) {
       if (e.forbidden) {
@@ -1258,6 +1331,7 @@
 
     const pending = _requests.filter(r => r.status === 'pending');
     const pendingBadge = pending.length > 0 ? `<span class="tab-badge">${pending.length}</span>` : '';
+    const photoBadge   = _photoRequests.length > 0 ? `<span class="tab-badge">${_photoRequests.length}</span>` : '';
 
     $('#page').innerHTML = `
       <h1 class="page-title">Admin Panel</h1>
@@ -1267,6 +1341,7 @@
         <button class="tab-btn active" data-tab="team"       onclick="switchTab('team')">Team <span id="team-count" class="count-muted">${_users.length}</span></button>
         <button class="tab-btn" data-tab="permissions"       onclick="switchTab('permissions')">Permissions &amp; roles</button>
         <button class="tab-btn" data-tab="requests"          onclick="switchTab('requests')">Access requests <span id="req-tab-badge">${pendingBadge}</span></button>
+        <button class="tab-btn" data-tab="photos"            onclick="switchTab('photos')">Photos <span id="photo-tab-badge">${photoBadge}</span></button>
         <button class="tab-btn" data-tab="auditlog"          onclick="switchTab('auditlog')">Audit log</button>
       </div>
 
@@ -1312,6 +1387,11 @@
         <div id="requests-content"></div>
       </div>
 
+      <!-- PHOTOS -->
+      <div class="tab-panel" id="tab-photos">
+        <div id="photos-content"></div>
+      </div>
+
       <!-- AUDIT LOG -->
       <div class="tab-panel" id="tab-auditlog">
         <div class="card">
@@ -1327,6 +1407,7 @@
     renderTeam();
     renderJobRoles();
     renderRequests();
+    renderPhotoRequests();
     renderAuditLog();
   }
 
