@@ -115,12 +115,12 @@ async function openInvoicePanel(invId, allInvIds) {
       _restoreInvFields(draft);
       window._invMemoDirty = true;
       if (draft.email !== null && draft.email !== (inv.email || '')) window._invSendDirty = true;
-      if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
       const msg = document.getElementById('inv-save-msg');
       if (msg) { msg.textContent = 'Unsaved changes restored'; msg.className = 'inv-action-msg inv-msg-ok'; }
       const discardBtn = document.getElementById('inv-discard-btn');
       if (discardBtn) discardBtn.classList.remove('hidden');
     }
+    if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
   } catch (e) {
     body.innerHTML = `<div class="inv-panel-error">Failed to load invoice: ${escHtml(e.message)}</div>`;
   }
@@ -186,6 +186,7 @@ async function navigateInvoicePanel(delta) {
     if (!confirm(msg)) { _restoreInvFields(snapshot); return; }
     window._invMemoDirty = false;
     window._invSendDirty = false;
+    if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
   }
   ctx.index = newIdx;
   const ids = ctx.ids;
@@ -207,6 +208,7 @@ async function jumpToInvoice(idx) {
     if (!confirm(msg)) { _restoreInvFields(snapshot); return; }
     window._invMemoDirty = false;
     window._invSendDirty = false;
+    if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
   }
   ctx.index = i;
   await openInvoicePanel(ctx.ids[i], ctx.ids);
