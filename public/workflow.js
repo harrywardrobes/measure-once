@@ -215,9 +215,16 @@ async function quickLoadAndUpdate(contactId, roomIdx, updater) {
     }
     return;
   }
+  let rawData;
+  try { rawData = await GET(`/api/contacts/${contactId}/localdata`); } catch { rawData = null; }
   let rooms;
-  try { rooms = await GET(`/api/contacts/${contactId}/localdata`); } catch { rooms = null; }
-  if (!Array.isArray(rooms) || rooms.length === 0) {
+  let notes = '';
+  if (Array.isArray(rawData) && rawData.length > 0) {
+    rooms = rawData;
+  } else if (rawData && Array.isArray(rawData.rooms) && rawData.rooms.length > 0) {
+    rooms = rawData.rooms;
+    notes = rawData.notes || '';
+  } else {
     rooms = [{ room: 'Main', stageKey: 'sales', statusId: null, comments: [], roomStatus: 'active' }];
   }
   rooms = rooms.map(r => ({
@@ -227,7 +234,7 @@ async function quickLoadAndUpdate(contactId, roomIdx, updater) {
   }));
   if (roomIdx >= rooms.length) roomIdx = rooms.length - 1;
   updater(rooms, roomIdx);
-  try { await POST(`/api/contacts/${contactId}/localdata`, rooms); } catch { showToast('Failed to save', true); return; }
+  try { await POST(`/api/contacts/${contactId}/localdata`, { rooms, notes }); } catch { showToast('Failed to save', true); return; }
   state.contactStageCache[contactId] = rooms.map(r => ({
     room: r.room, stageKey: r.stageKey, roomStatus: r.roomStatus || 'active'
   }));

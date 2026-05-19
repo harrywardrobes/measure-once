@@ -134,6 +134,8 @@
         renderCustomerList();
       } catch (e) {
         console.error('Failed to load all contacts', e);
+        const list = document.getElementById('customer-list');
+        if (list) list.innerHTML = `<div class="p-4 text-sm text-red-500">Failed to load contacts: ${escHtml(e.message)}<br><button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button></div>`;
       }
 
       const params = new URLSearchParams(location.search);
