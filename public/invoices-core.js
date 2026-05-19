@@ -107,6 +107,14 @@ function _snapshotInvFields() {
   };
 }
 
+function _invMarkDirty(sendDirty) {
+  window._invMemoDirty = true;
+  if (sendDirty) window._invSendDirty = true;
+  const discardBtn = document.getElementById('inv-discard-btn');
+  if (discardBtn) discardBtn.classList.remove('hidden');
+  if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+}
+
 function _restoreInvFields(snapshot) {
   if (!snapshot) return;
   const due   = document.getElementById('inv-edit-due');
@@ -333,15 +341,15 @@ function renderInvoicePanelBody() {
       <div class="inv-edit-grid">
         <label class="inv-edit-label">
           Due date
-          <input type="date" id="inv-edit-due" class="inv-edit-input" value="${escHtml(inv.dueDate || '')}" oninput="window._invMemoDirty=true; _updateBeforeUnloadGuard()" onchange="window._invMemoDirty=true; _updateBeforeUnloadGuard()">
+          <input type="date" id="inv-edit-due" class="inv-edit-input" value="${escHtml(inv.dueDate || '')}" oninput="_invMarkDirty(false)" onchange="_invMarkDirty(false)">
         </label>
         <label class="inv-edit-label">
           Customer email
-          <input type="email" id="inv-edit-email" class="inv-edit-input" value="${escHtml(inv.email || '')}" placeholder="customer@example.com" oninput="window._invMemoDirty=true; window._invSendDirty=true; _updateBeforeUnloadGuard()">
+          <input type="email" id="inv-edit-email" class="inv-edit-input" value="${escHtml(inv.email || '')}" placeholder="customer@example.com" oninput="_invMarkDirty(true)">
         </label>
         <label class="inv-edit-label" style="grid-column:1/-1">
           Message on invoice
-          <textarea id="inv-edit-memo" class="inv-edit-input inv-edit-textarea" rows="2" placeholder="Thank you for your business" oninput="window._invMemoDirty=true; _updateBeforeUnloadGuard()">${escHtml(inv.memo || '')}</textarea>
+          <textarea id="inv-edit-memo" class="inv-edit-input inv-edit-textarea" rows="2" placeholder="Thank you for your business" oninput="_invMarkDirty(false)">${escHtml(inv.memo || '')}</textarea>
         </label>
       </div>
       <button id="inv-save-btn" class="inv-btn inv-btn-primary" onclick="saveInvoiceChanges()" data-viewer-hide>Save changes</button>
@@ -415,6 +423,8 @@ async function saveInvoiceChanges() {
     window._invSendDirty = false;
     if (state.qb.draft && inv.id) delete state.qb.draft[inv.id];
     if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+    const discardBtn = document.getElementById('inv-discard-btn');
+    if (discardBtn) discardBtn.classList.add('hidden');
   } catch (e) {
     msg.textContent = e.message;
     msg.className = 'inv-action-msg inv-msg-err';
