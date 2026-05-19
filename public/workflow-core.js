@@ -311,6 +311,7 @@ async function flushDeferredSave() {
     _deferredSave = null;
     _deferredSnapshot = null;
     closeBottomBar();
+    _updateBeforeUnloadGuard();
     try { await saveWorkflowData(); } catch { showToast('Failed to save', true); }
   }
 }
@@ -330,9 +331,11 @@ function scheduleSave(undoMessage, snapshotRooms) {
     _deferredSave = null;
     _deferredSnapshot = null;
     closeBottomBar();
+    _updateBeforeUnloadGuard();
     try { await saveWorkflowData(); } catch { showToast('Failed to save', true); }
   }, 5000);
   _deferredSave = { timerId };
+  _updateBeforeUnloadGuard();
 
   const el = document.createElement('div');
   el.id = 'bottom-bar';
@@ -350,6 +353,7 @@ async function undoLastChange() {
     clearTimeout(_deferredSave.timerId);
     _deferredSave = null;
   }
+  _updateBeforeUnloadGuard();
   if (!_deferredSnapshot) { closeBottomBar(); return; }
   const snapshot = _deferredSnapshot;
   _deferredSnapshot = null;
@@ -410,6 +414,31 @@ async function runBottomAction() {
 
 // ── Unsaved-changes guard ─────────────────────────────────────────────────────
 
+// Browser-tab close / refresh guard — fires the built-in "Leave site?" dialog
+// whenever there is a pending deferred save or an unsaved comment draft.
+function _beforeUnloadHandler(e) {
+  if (hasUnsavedChanges()) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+}
+
+let _beforeUnloadAttached = false;
+
+function _updateBeforeUnloadGuard() {
+  if (hasUnsavedChanges()) {
+    if (!_beforeUnloadAttached) {
+      window.addEventListener('beforeunload', _beforeUnloadHandler);
+      _beforeUnloadAttached = true;
+    }
+  } else {
+    if (_beforeUnloadAttached) {
+      window.removeEventListener('beforeunload', _beforeUnloadHandler);
+      _beforeUnloadAttached = false;
+    }
+  }
+}
+
 function hasUnsavedChanges() {
   if (_deferredSave) return true;
   const commentArea  = document.getElementById('comment-input-area');
@@ -425,6 +454,7 @@ function discardPendingSave() {
     _deferredSave    = null;
     _deferredSnapshot = null;
   }
+  _updateBeforeUnloadGuard();
 }
 
 function _clearCommentDraft() {
@@ -432,6 +462,7 @@ function _clearCommentDraft() {
   const input = document.getElementById('comment-input');
   if (area)  area.classList.add('hidden');
   if (input) input.value = '';
+  _updateBeforeUnloadGuard();
 }
 
 function showUnsavedChangesBar(onSave, onDiscard) {

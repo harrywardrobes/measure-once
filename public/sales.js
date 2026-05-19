@@ -851,6 +851,7 @@ function renderComments() {
       <textarea id="comment-input" rows="3" class="notes-textarea"
         placeholder="Add a note..."
         onkeydown="if(event.ctrlKey&&event.key==='Enter')addComment()"
+        oninput="_updateBeforeUnloadGuard()"
         style="font-size:16px;min-height:80px"></textarea>
       <div class="comment-input-actions">
         <button class="btn-save-note" onclick="addComment()">Save</button>
@@ -895,11 +896,13 @@ function showAddComment() {
   if (!area) return;
   area.classList.remove('hidden');
   document.getElementById('comment-input')?.focus();
+  _updateBeforeUnloadGuard();
 }
 
 function hideAddComment() {
   const area = document.getElementById('comment-input-area');
   if (area) area.classList.add('hidden');
+  _updateBeforeUnloadGuard();
 }
 
 async function addComment() {
