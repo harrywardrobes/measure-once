@@ -512,6 +512,7 @@
   let _jobRoles = [];
   let _requests = [];
   let _allowed = [];
+  let _capabilities = { levels: ['viewer','member','manager','admin'], features: [] };
 
   /* ────────────────────────────────────────────────
      TEAM TAB
@@ -621,38 +622,15 @@
   /* ────────────────────────────────────────────────
      PERMISSIONS TAB
   ──────────────────────────────────────────────── */
-  const MATRIX = [
-    { group: 'General access' },
-    { feat: 'View customers & projects',  desc: 'Browse CRM contacts and project rooms', v:1, m:1, mg:1, a:1 },
-    { feat: 'View invoices',              desc: 'See QuickBooks invoice list and details', v:1, m:1, mg:1, a:1 },
-    { feat: 'View calendar & visits',     desc: 'See the site-visit calendar', v:1, m:1, mg:1, a:1 },
-    { group: 'Member actions' },
-    { feat: 'Add notes & comments',       desc: 'Create notes on customer workflow records', v:0, m:1, mg:1, a:1 },
-    { feat: 'Edit workflow stages',       desc: 'Move customers through workflow stages', v:0, m:1, mg:1, a:1 },
-    { feat: 'Log & manage site visits',   desc: 'Create, edit, and remove visit records', v:0, m:1, mg:1, a:1 },
-    { feat: 'Send invoices',              desc: 'Trigger invoice emails via QuickBooks', v:0, m:1, mg:1, a:1 },
-    { group: 'Manager actions' },
-    { feat: 'Assign fitters to rooms',    desc: 'Set which fitter handles a specific room', v:0, m:0, mg:1, a:1 },
-    { group: 'Admin-only actions' },
-    { feat: 'Access admin panel',         desc: 'View and manage this admin control panel', v:0, m:0, mg:0, a:1 },
-    { feat: 'Approve / reject users',     desc: 'Grant or deny platform access requests', v:0, m:0, mg:0, a:1 },
-    { feat: 'Manage team & privileges',   desc: 'Edit job roles and privilege levels', v:0, m:0, mg:0, a:1 },
-    { feat: 'Manage job role catalogue',  desc: 'Add and remove available job role labels', v:0, m:0, mg:0, a:1 },
-  ];
-
   function renderMatrix() {
-    const cols = [
-      { key: 'v',  label: 'Viewer',  cls: 'lvl-viewer' },
-      { key: 'm',  label: 'Member',  cls: 'lvl-member' },
-      { key: 'mg', label: 'Manager', cls: 'lvl-manager' },
-      { key: 'a',  label: 'Admin',   cls: 'lvl-admin' },
-    ];
-    const tick = `<span class="tick" aria-label="Yes">✓</span>`;
+    const levels = _capabilities.levels;
+    const lvlCls = { viewer:'lvl-viewer', member:'lvl-member', manager:'lvl-manager', admin:'lvl-admin' };
+    const tick  = `<span class="tick" aria-label="Yes">✓</span>`;
     const cross = `<span class="cross" aria-label="No">✗</span>`;
 
-    const rows = MATRIX.map(row => {
+    const rows = _capabilities.features.map(row => {
       if (row.group) {
-        return `<tr class="matrix-group"><td colspan="5">${esc(row.group)}</td></tr>`;
+        return `<tr class="matrix-group"><td colspan="${levels.length + 1}">${esc(row.group)}</td></tr>`;
       }
       return `
         <tr>
@@ -660,7 +638,7 @@
             ${esc(row.feat)}
             <span class="feat-desc">${esc(row.desc)}</span>
           </td>
-          ${cols.map(c => `<td>${row[c.key] ? tick : cross}</td>`).join('')}
+          ${levels.map(l => `<td>${(row.levels || []).includes(l) ? tick : cross}</td>`).join('')}
         </tr>`;
     }).join('');
 
@@ -670,7 +648,7 @@
           <thead class="matrix-head">
             <tr>
               <th class="feat-col">Feature / action</th>
-              ${cols.map(c => `<th><span class="lvl ${c.cls}">${c.label}</span></th>`).join('')}
+              ${levels.map(l => `<th><span class="lvl ${lvlCls[l] || ''}">${l.charAt(0).toUpperCase()+l.slice(1)}</span></th>`).join('')}
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -828,17 +806,8 @@
   }
 
   /* ────────────────────────────────────────────────
-     OVERVIEW TAB
+     OVERVIEW TAB — features derived from capabilities
   ──────────────────────────────────────────────── */
-  const FEATS = [
-    { label: 'View CRM',        levels: ['viewer','member','manager','admin'] },
-    { label: 'Edit workflow',   levels: ['member','manager','admin'] },
-    { label: 'Assign fitters',  levels: ['manager','admin'] },
-    { label: 'Invoices',        levels: ['member','manager','admin'] },
-    { label: 'Site visits',     levels: ['member','manager','admin'] },
-    { label: 'Admin panel',     levels: ['admin'] },
-  ];
-
   function renderOverview() {
     const container = $('#overview-content');
     if (!container) return;
@@ -846,14 +815,20 @@
       container.innerHTML = '<div class="table-empty">No users yet.</div>';
       return;
     }
+
+    // Pick a representative subset of non-group features for the overview dots
+    const feats = _capabilities.features.filter(f => f.feat).slice(0, 6);
+
     container.innerHTML = `<div class="overview-grid">${_users.map(u => {
-      const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—';
+      const name  = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—';
       const level = u.privilege_level || 'member';
-      const feats = FEATS.map(f => {
-        const has = u.isAdmin || f.levels.includes(level);
+      const dots  = feats.map(f => {
+        const has = u.isAdmin || (f.levels || []).includes(level);
+        // Shorten label: first two words of feat name
+        const label = f.feat.split(' ').slice(0, 2).join(' ');
         return `<div class="ov-feat ${has ? 'has' : ''}">
           <span class="ov-dot ${has ? 'has' : 'no'}"></span>
-          ${esc(f.label)}
+          ${esc(label)}
         </div>`;
       }).join('');
       return `
@@ -866,7 +841,7 @@
             </div>
             ${lvlBadge(u.isAdmin ? 'admin' : level)}
           </div>
-          <div class="ov-access">${feats}</div>
+          <div class="ov-access">${dots}</div>
         </div>`;
     }).join('')}</div>`;
   }
@@ -900,11 +875,12 @@
     }
 
     try {
-      [_requests, _allowed, _users, _jobRoles] = await Promise.all([
+      [_requests, _allowed, _users, _jobRoles, _capabilities] = await Promise.all([
         api('GET', '/api/admin/requests'),
         api('GET', '/api/admin/allowed'),
         api('GET', '/api/admin/users'),
         api('GET', '/api/admin/job-roles'),
+        api('GET', '/api/admin/capabilities'),
       ]);
     } catch (e) {
       if (e.forbidden) {

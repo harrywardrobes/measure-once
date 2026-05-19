@@ -614,6 +614,35 @@ async function setupAuth(app) {
     }
   });
 
+  // ── Capabilities map — single source of truth for the permissions matrix ──
+  // Mirrors the actual middleware rules (isAuthenticated / requireManagerOrAdmin
+  // / requireAdmin) so the admin UI always reflects what the server enforces.
+  const CAPABILITIES = [
+    { group: 'General access' },
+    { feat: 'View customers & projects',  desc: 'Browse CRM contacts and project rooms',    levels: ['viewer','member','manager','admin'] },
+    { feat: 'View invoices',              desc: 'See QuickBooks invoice list and details',   levels: ['viewer','member','manager','admin'] },
+    { feat: 'View calendar & visits',     desc: 'See the site-visit calendar',               levels: ['viewer','member','manager','admin'] },
+    { group: 'Member actions' },
+    { feat: 'Add notes & comments',       desc: 'Create notes on customer workflow records', levels: ['member','manager','admin'] },
+    { feat: 'Edit workflow stages',       desc: 'Move customers through workflow stages',    levels: ['member','manager','admin'] },
+    { feat: 'Log & manage site visits',   desc: 'Create, edit, and remove visit records',   levels: ['member','manager','admin'] },
+    { feat: 'Send invoices',              desc: 'Trigger invoice emails via QuickBooks',     levels: ['member','manager','admin'] },
+    { group: 'Manager actions' },
+    { feat: 'Assign fitters to rooms',    desc: 'Set which fitter handles a specific room', levels: ['manager','admin'] },
+    { group: 'Admin-only actions' },
+    { feat: 'Access admin panel',         desc: 'View and manage this admin control panel', levels: ['admin'] },
+    { feat: 'Approve / reject users',     desc: 'Grant or deny platform access requests',   levels: ['admin'] },
+    { feat: 'Manage team & privileges',   desc: 'Edit job roles and privilege levels',       levels: ['admin'] },
+    { feat: 'Manage job role catalogue',  desc: 'Add and remove available job role labels',  levels: ['admin'] },
+  ];
+
+  app.get('/api/admin/capabilities', isAuthenticated, requireAdmin, (req, res) => {
+    res.json({
+      levels: ['viewer', 'member', 'manager', 'admin'],
+      features: CAPABILITIES,
+    });
+  });
+
   // ── Job Roles catalogue ───────────────────────────────────────────────────
   app.get('/api/admin/job-roles', isAuthenticated, requireAdmin, async (req, res) => {
     try {
