@@ -19,8 +19,6 @@ async function renderProfileTab() {
   const initials = [profile.first_name, profile.last_name]
     .filter(Boolean).map(s => s[0]).join('').toUpperCase() || '?';
   const isAdmin = user.isAdmin;
-  const levelLabels = { viewer: 'Viewer', member: 'Member', manager: 'Manager', admin: 'Admin' };
-  const levelLabel  = levelLabels[profile.privilege_level] || 'Member';
 
   el.innerHTML = `
     <!-- Back button -->
@@ -59,10 +57,6 @@ async function renderProfileTab() {
           <span class="profile-field-label">Job role</span>
           <span class="profile-field-value">${escHtml(profile.job_role || '—')}</span>
         </div>
-        <div class="profile-field">
-          <span class="profile-field-label">Privilege level</span>
-          <span class="profile-level-badge profile-level-${escHtml(profile.privilege_level || 'member')}">${escHtml(levelLabel)}</span>
-        </div>
       </div>
 
       <!-- Edit view (admins only, hidden by default) -->
@@ -70,14 +64,6 @@ async function renderProfileTab() {
         <div class="profile-field profile-field-col">
           <label class="profile-field-label" for="prof-job-role">Job role</label>
           <input id="prof-job-role" type="text" class="profile-input" value="${escHtml(profile.job_role || '')}" placeholder="e.g. Site Manager">
-        </div>
-        <div class="profile-field profile-field-col" style="margin-top:12px;">
-          <label class="profile-field-label" for="prof-priv-level">Privilege level</label>
-          <select id="prof-priv-level" class="profile-input">
-            ${['viewer','member','manager','admin'].map(v =>
-              `<option value="${v}" ${profile.privilege_level === v ? 'selected' : ''}>${levelLabels[v]}</option>`
-            ).join('')}
-          </select>
         </div>
         <div id="prof-edit-error" style="display:none;" class="profile-error"></div>
         <div class="profile-edit-actions">
@@ -142,17 +128,15 @@ function toggleProfileEdit(forceOpen) {
 }
 
 async function saveProfileEdit(userId) {
-  const jobRoleEl   = document.getElementById('prof-job-role');
-  const privLevelEl = document.getElementById('prof-priv-level');
-  const errEl       = document.getElementById('prof-edit-error');
-  if (!jobRoleEl || !privLevelEl) return;
-  const jobRole      = jobRoleEl.value.trim();
-  const privLevel    = privLevelEl.value;
+  const jobRoleEl = document.getElementById('prof-job-role');
+  const errEl     = document.getElementById('prof-edit-error');
+  if (!jobRoleEl) return;
+  const jobRole = jobRoleEl.value.trim();
   const saveBtn = document.querySelector('.profile-save-btn');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
   if (errEl)   { errEl.style.display = 'none'; errEl.textContent = ''; }
   try {
-    await PATCH_REQ(`/api/users/${encodeURIComponent(userId)}/profile`, { job_role: jobRole, privilege_level: privLevel });
+    await PATCH_REQ(`/api/users/${encodeURIComponent(userId)}/profile`, { job_role: jobRole });
     showToast('Profile updated');
     renderProfileTab();
   } catch (e) {
