@@ -328,6 +328,18 @@
     .chip-delete_job_role   { background: #fff7ed; color: #9a3412; }
     .chip-edit_permissions  { background: #ede0ff; color: #3d0f7a; }
 
+    /* ── Trades audit badge ── */
+    .trades-audit-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      background: var(--plum-soft, #ede0ff);
+      color: var(--plum, #3d0f7a);
+      font-size: .72rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
     /* ── Add member form ── */
     .form-section-label {
       font-size: .72rem;
@@ -616,6 +628,7 @@
   let _auditLog = [];
   let _photoRequests = [];
   let _capabilities = { levels: ['viewer','member','manager','admin'], features: [] };
+  let _tradesAudit = [];
 
   /* ────────────────────────────────────────────────
      TEAM TAB
@@ -1213,6 +1226,42 @@
   }
 
   /* ────────────────────────────────────────────────
+     TRADES AUDIT TAB
+  ──────────────────────────────────────────────── */
+  function renderTradesAudit() {
+    const container = $('#trades-audit-content');
+    if (!container) return;
+    if (!_tradesAudit.length) {
+      container.innerHTML = '<div class="table-empty" style="padding:28px 0;">No trade companies recorded yet.</div>';
+      return;
+    }
+    const rows = _tradesAudit.map(r => {
+      const added   = r.created_by ? `${esc(r.created_by)}<br><span style="color:var(--ink-4);font-size:.73rem;">${fmtDate(r.created_at)}</span>` : `<span style="color:var(--ink-4);">—</span><br><span style="color:var(--ink-4);font-size:.73rem;">${fmtDate(r.created_at)}</span>`;
+      const edited  = r.updated_by
+        ? `${esc(r.updated_by)}<br><span style="color:var(--ink-4);font-size:.73rem;">${fmtDate(r.updated_at)}</span>`
+        : `<span style="color:var(--ink-4);font-size:.73rem;">Not yet edited</span>`;
+      return `<tr>
+        <td><strong>${esc(r.company_name)}</strong></td>
+        <td><span class="trades-audit-badge">${esc(r.trade_type)}</span></td>
+        <td>${r.areas_served ? esc(r.areas_served) : '<span style="color:var(--ink-4)">—</span>'}</td>
+        <td style="line-height:1.5;">${added}</td>
+        <td style="line-height:1.5;">${edited}</td>
+      </tr>`;
+    }).join('');
+    container.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Company</th>
+          <th>Trade</th>
+          <th>Areas</th>
+          <th>Added by</th>
+          <th>Last edited by</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  /* ────────────────────────────────────────────────
      PHOTOS TAB
   ──────────────────────────────────────────────── */
   function renderPhotoRequests() {
@@ -1280,17 +1329,19 @@
      Load & render
   ──────────────────────────────────────────────── */
   async function reload() {
-    [_requests, _allowed, _users, _auditLog, _photoRequests] = await Promise.all([
+    [_requests, _allowed, _users, _auditLog, _photoRequests, _tradesAudit] = await Promise.all([
       api('GET', '/api/admin/requests'),
       api('GET', '/api/admin/allowed'),
       api('GET', '/api/admin/users'),
       api('GET', '/api/admin/audit-log'),
       api('GET', '/api/admin/photo-requests'),
+      api('GET', '/api/admin/trades-audit'),
     ]);
     renderTeam();
     renderRequests();
     renderAuditLog();
     renderPhotoRequests();
+    renderTradesAudit();
   }
 
   async function init() {
@@ -1307,7 +1358,7 @@
     }
 
     try {
-      [_requests, _allowed, _users, _jobRoles, _capabilities, _auditLog, _photoRequests] = await Promise.all([
+      [_requests, _allowed, _users, _jobRoles, _capabilities, _auditLog, _photoRequests, _tradesAudit] = await Promise.all([
         api('GET', '/api/admin/requests'),
         api('GET', '/api/admin/allowed'),
         api('GET', '/api/admin/users'),
@@ -1315,6 +1366,7 @@
         api('GET', '/api/admin/capabilities'),
         api('GET', '/api/admin/audit-log'),
         api('GET', '/api/admin/photo-requests'),
+        api('GET', '/api/admin/trades-audit'),
       ]);
     } catch (e) {
       if (e.forbidden) {
@@ -1342,6 +1394,7 @@
         <button class="tab-btn" data-tab="permissions"       onclick="switchTab('permissions')">Permissions &amp; roles</button>
         <button class="tab-btn" data-tab="requests"          onclick="switchTab('requests')">Access requests <span id="req-tab-badge">${pendingBadge}</span></button>
         <button class="tab-btn" data-tab="photos"            onclick="switchTab('photos')">Photos <span id="photo-tab-badge">${photoBadge}</span></button>
+        <button class="tab-btn" data-tab="tradesaudit"        onclick="switchTab('tradesaudit')">Trades audit</button>
         <button class="tab-btn" data-tab="auditlog"          onclick="switchTab('auditlog')">Audit log</button>
       </div>
 
@@ -1392,6 +1445,17 @@
         <div id="photos-content"></div>
       </div>
 
+      <!-- TRADES AUDIT -->
+      <div class="tab-panel" id="tab-tradesaudit">
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div style="padding:16px 20px 14px;border-bottom:1px solid var(--stone);">
+            <div class="card-title" style="margin:0 0 4px;">Trade companies audit trail <span class="card-count count-muted">(read-only)</span></div>
+            <p class="card-desc" style="margin:0;">Who added or last edited each trade company, and when.</p>
+          </div>
+          <div style="padding:0 4px;" id="trades-audit-content"></div>
+        </div>
+      </div>
+
       <!-- AUDIT LOG -->
       <div class="tab-panel" id="tab-auditlog">
         <div class="card">
@@ -1408,6 +1472,7 @@
     renderJobRoles();
     renderRequests();
     renderPhotoRequests();
+    renderTradesAudit();
     renderAuditLog();
   }
 

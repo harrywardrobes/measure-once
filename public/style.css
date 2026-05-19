@@ -3244,6 +3244,19 @@ body.showing-workflow .sales-layout #workflow-panel {
   border-top: 1px solid var(--stone-light); padding-top: 8px;
   white-space: pre-wrap; line-height: 1.5;
 }
+.trades-card-audit {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--stone-light);
+  font-size: 0.72rem;
+  color: var(--ink-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.trades-card-audit strong { color: var(--ink-3); font-weight: 600; }
+.trades-card-audit-sep { color: var(--stone); }
 
 /* ── Trades modal ─────────────────────────────────────────────────────────── */
 .trades-modal-overlay {

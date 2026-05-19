@@ -3,6 +3,11 @@ let _tradeContacts = [];
 let _tradeDeleteId = null;
 const MAX_CONTACTS = 3;
 
+function fmtTradeDate(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 function tradeSkeletonHtml(namePct, badgeW, areasW, contactRow) {
   return `
     <div class="trades-card skeleton-trade-card">
@@ -123,6 +128,14 @@ function tradeCardHtml(co) {
       ${contactsHtml ? `<div class="trades-card-persons">${contactsHtml}</div>` : ''}
       ${detailParts.length ? `<div class="trades-card-details">${detailParts.join('')}</div>` : ''}
       ${notes ? `<div class="trades-card-notes">${notes}</div>` : ''}
+      <div class="trades-card-audit">
+        ${co.created_by_name
+          ? `<span>Added by <strong>${escHtml(co.created_by_name)}</strong>${co.created_at ? ` · ${fmtTradeDate(co.created_at)}` : ''}</span>`
+          : co.created_at ? `<span>Added ${fmtTradeDate(co.created_at)}</span>` : ''}
+        ${co.updated_by_name
+          ? `<span class="trades-card-audit-sep">·</span><span>Edited by <strong>${escHtml(co.updated_by_name)}</strong>${co.updated_at ? ` · ${fmtTradeDate(co.updated_at)}` : ''}</span>`
+          : ''}
+      </div>
     </div>`;
 }
 
