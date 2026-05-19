@@ -54,7 +54,13 @@ async function submitNewCustomer(ev) {
     const refreshLoader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
     refreshLoader.then(() => { state.filteredContacts = [...state.contacts]; if (state.contactsViewMode === 'all') populateLeadStatusFilter(); renderCustomerList(); }).catch(() => {});
   } catch (e) {
-    showError(e.message || 'Failed to create customer.');
+    if (e.code === 'HUBSPOT_AUTH') {
+      showError('HubSpot token is invalid or expired — ask an admin to update the token.');
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showError('HubSpot rate limit reached — please wait a moment and try again.');
+    } else {
+      showError(e.message || 'Failed to create customer.');
+    }
   } finally {
     if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Create Customer'; }
   }
@@ -515,6 +521,12 @@ async function quickSetLeadStatus(contactId, newStatus) {
     // never sent a successful change).
     _applyLeadStatus(prevStatus || '');
     if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
-    showToast('Failed to update lead status', true);
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not update lead status — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not update lead status — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else {
+      showToast('Failed to update lead status', true);
+    }
   }
 }

@@ -1146,8 +1146,14 @@ async function saveNewTask() {
     renderCustomerList();
     renderTasks();
     _updateBeforeUnloadGuard();
-  } catch {
-    showToast('Failed to create task', true);
+  } catch (e) {
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not create task — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not create task — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else {
+      showToast('Failed to create task', true);
+    }
     if (btn) { btn.disabled = false; btn.textContent = 'Save task'; }
   }
 }
@@ -1163,12 +1169,18 @@ async function toggleTaskDone(taskId, currentlyDone) {
   renderTasks();
   try {
     await PATCH_REQ(`/api/tasks/${taskId}`, { hs_task_status: newStatus });
-  } catch {
+  } catch (e) {
     task.properties.hs_task_status = prevStatus;
     state.contactUrgencyCache[state.selectedContactId] = getTaskUrgency(state.tasks);
     renderCustomerList();
     renderTasks();
-    showToast('Failed to update task', true);
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not update task — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not update task — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else {
+      showToast('Failed to update task', true);
+    }
   }
 }
 
@@ -1181,12 +1193,18 @@ async function deleteTask(taskId) {
   renderTasks();
   try {
     await DELETE_REQ(`/api/tasks/${taskId}`);
-  } catch {
+  } catch (e) {
     state.tasks.splice(idx, 0, removed);
     state.contactUrgencyCache[state.selectedContactId] = getTaskUrgency(state.tasks);
     renderCustomerList();
     renderTasks();
-    showToast('Failed to delete task', true);
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not delete task — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not delete task — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else {
+      showToast('Failed to delete task', true);
+    }
   }
 }
 

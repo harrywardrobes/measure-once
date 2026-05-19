@@ -404,6 +404,12 @@ async function assignFitter(fitterId) {
     renderProjectsView();
     showToast(fitterId ? 'Fitter assigned' : 'Assignment removed');
   } catch (e) {
-    showToast('Failed to save assignment', true);
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not save assignment — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not save assignment — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else {
+      showToast('Failed to save assignment', true);
+    }
   }
 }

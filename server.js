@@ -271,7 +271,14 @@ app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireMan
 
     res.json({ success: true, rooms });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 
@@ -404,7 +411,14 @@ app.get('/api/account', async (req, res) => {
     const r = await axios.get(`${HS}/account-info/v3/details`, { headers: hsHeaders() });
     res.json(r.data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 
@@ -627,8 +641,13 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), async (re
     if (status === 409) {
       return res.status(409).json({ error: 'A contact with this email address already exists in HubSpot.' });
     }
-    const msg = e.response?.data?.message || e.message;
-    return res.status(500).json({ error: msg });
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.response?.data?.message || e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 
@@ -645,7 +664,14 @@ app.get('/api/contacts/:id', async (req, res) => {
     });
     res.json(r.data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 
@@ -673,7 +699,14 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     );
     res.json(r.data);
   } catch (e) {
-    res.status(e.response?.status || 500).json({ error: e.response?.data?.message || e.message });
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.response?.data?.message || e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 
@@ -911,7 +944,14 @@ app.post('/api/contacts/:id/workflow', isAuthenticated, requirePrivilege('member
     );
     res.json(noteR.data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 
@@ -1012,7 +1052,14 @@ app.post('/api/contacts/:id/tasks', isAuthenticated, requirePrivilege('member'),
     );
     res.json(taskR.data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 
@@ -1030,7 +1077,14 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (
     );
     res.json(r.data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 
@@ -1047,7 +1101,14 @@ app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async 
     );
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
 
