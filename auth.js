@@ -324,6 +324,15 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+const requireAtLeastMember = (req, res, next) => {
+  const email = req.user?.claims?.email;
+  if (isAdminEmail(email)) return next();
+  // Fail-closed: absence of privilege_level is treated as viewer (read-only)
+  const level = req.user?.privilege_level || 'viewer';
+  if (['member', 'manager', 'admin'].includes(level)) return next();
+  return res.status(403).json({ message: 'Read-only access. Members or above can perform this action.' });
+};
+
 const requireManagerOrAdmin = async (req, res, next) => {
   const email  = req.user?.claims?.email;
   const userId = req.user?.claims?.sub;
@@ -484,6 +493,8 @@ async function setupAuth(app) {
       const user = {};
       updateUserSession(user, tokens);
       await upsertUser(claims);
+      const dbUser = await getUser(claims.sub);
+      user.privilege_level = dbUser?.privilege_level || 'member';
       verified(null, user);
     } catch (e) {
       if (e.code === 'EMAIL_CONFLICT') {
@@ -592,7 +603,7 @@ async function setupAuth(app) {
   });
 
   // ── Admin: review access requests & manage allow-list ──────────────────────
-  app.get('/api/admin/requests', isAuthenticated, requireAdmin, async (req, res) => {
+  app.get('/api/admin/requests', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
     try {
       const r = await pool.query(
         `SELECT id, name, email, status, created_at
@@ -606,7 +617,7 @@ async function setupAuth(app) {
     }
   });
 
-  app.post('/api/admin/requests/:id/approve', isAuthenticated, requireAdmin, async (req, res) => {
+  app.post('/api/admin/requests/:id/approve', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -640,7 +651,7 @@ async function setupAuth(app) {
     }
   });
 
-  app.post('/api/admin/requests/:id/reject', isAuthenticated, requireAdmin, async (req, res) => {
+  app.post('/api/admin/requests/:id/reject', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
     try {
       const r = await pool.query(
         `SELECT email FROM account_requests WHERE id = $1`,
@@ -965,7 +976,7 @@ async function setupAuth(app) {
     { feat: 'Assign fitters to rooms',    desc: 'Set which fitter handles a specific room', levels: ['manager','admin'] },
     { group: 'Admin-only actions' },
     { feat: 'Access admin panel',         desc: 'View and manage this admin control panel', levels: ['admin'] },
-    { feat: 'Approve / reject users',     desc: 'Grant or deny platform access requests',   levels: ['admin'] },
+    { feat: 'Approve / reject users',     desc: 'Grant or deny platform access requests',   levels: ['manager','admin'] },
     { feat: 'Manage team & privileges',   desc: 'Edit job roles and privilege levels',       levels: ['admin'] },
     { feat: 'Manage job role catalogue',  desc: 'Add and remove available job role labels',  levels: ['admin'] },
   ];
@@ -1187,10 +1198,14 @@ const isAuthenticated = async (req, res, next) => {
     const { client, config } = await getOidcConfig();
     const tokens = await client.refreshTokenGrant(config, refreshToken);
     updateUserSession(user, tokens);
+    try {
+      const dbUser = await getUser(user.claims?.sub);
+      if (dbUser) user.privilege_level = dbUser.privilege_level || 'member';
+    } catch {}
     return next();
   } catch (e) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 };
 
-module.exports = { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, isAdminEmail, userIdExists };
+module.exports = { installSession, setupAuth, isAuthenticated, requireAdmin, requireAtLeastMember, requireManagerOrAdmin, isAdminEmail, userIdExists };

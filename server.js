@@ -4,7 +4,7 @@ const axios = require('axios').create({ timeout: 10000 });
 const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
-const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, userIdExists } = require('./auth');
+const { installSession, setupAuth, isAuthenticated, requireAdmin, requireAtLeastMember, requireManagerOrAdmin, userIdExists } = require('./auth');
 const qbRoutes = require('./quickbooks');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 
@@ -156,7 +156,7 @@ app.get('/api/contacts/:id/localdata', async (req, res) => {
 });
 
 // Save one contact's workflow data to HubSpot custom properties
-app.post('/api/contacts/:id/localdata', async (req, res) => {
+app.post('/api/contacts/:id/localdata', isAuthenticated, requireAtLeastMember, async (req, res) => {
   try {
     const { rooms, notes, stage, substage } = req.body;
     const contactId = req.params.id;
@@ -410,7 +410,7 @@ app.get('/api/deals/:id', async (req, res) => {
   }
 });
 
-app.patch('/api/deals/:id', async (req, res) => {
+app.patch('/api/deals/:id', isAuthenticated, requireAtLeastMember, async (req, res) => {
   try {
     const safeDealId = normalizeHubspotObjectId(req.params.id);
     if (!safeDealId) {
@@ -492,7 +492,7 @@ app.get('/api/open-leads', async (req, res) => {
 // ── HubSpot: Contacts ─────────────────────────────────────────────────────────
 
 // Create a new contact in HubSpot and generate a customer number
-app.post('/api/contacts', async (req, res) => {
+app.post('/api/contacts', isAuthenticated, requireAtLeastMember, async (req, res) => {
   const { firstname, lastname, email, phone, postcode } = req.body || {};
 
   if (!firstname || !email || !postcode) {
@@ -563,7 +563,7 @@ app.get('/api/contacts/:id', async (req, res) => {
   }
 });
 
-app.patch('/api/contacts/:id', isAuthenticated, requireHubspotToken, async (req, res) => {
+app.patch('/api/contacts/:id', isAuthenticated, requireAtLeastMember, requireHubspotToken, async (req, res) => {
   try {
     const contactId = String(req.params.id || '');
     if (!/^\d+$/.test(contactId)) {
@@ -620,7 +620,7 @@ app.get('/api/deals/:id/notes', async (req, res) => {
   }
 });
 
-app.post('/api/deals/:id/checklist', async (req, res) => {
+app.post('/api/deals/:id/checklist', isAuthenticated, requireAtLeastMember, async (req, res) => {
   try {
     const { checklistData, existingNoteId } = req.body;
     const noteBody = `WORKFLOW_CHECKLIST:${JSON.stringify(checklistData)}`;
@@ -708,7 +708,7 @@ app.get('/api/emails', async (req, res) => {
   }
 });
 
-app.post('/api/emails/send', async (req, res) => {
+app.post('/api/emails/send', isAuthenticated, requireAtLeastMember, async (req, res) => {
   if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google' });
   try {
     const auth = getGoogleClient(req.session.googleTokens);
@@ -746,7 +746,7 @@ app.get('/api/events', async (req, res) => {
   }
 });
 
-app.post('/api/events', async (req, res) => {
+app.post('/api/events', isAuthenticated, requireAtLeastMember, async (req, res) => {
   if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google' });
   try {
     const auth = getGoogleClient(req.session.googleTokens);
@@ -786,7 +786,7 @@ app.get('/api/contacts/:id/notes', async (req, res) => {
   }
 });
 
-app.post('/api/contacts/:id/workflow', async (req, res) => {
+app.post('/api/contacts/:id/workflow', isAuthenticated, requireAtLeastMember, async (req, res) => {
   try {
     const { data, existingNoteId } = req.body;
     const contactId = String(req.params.id || '');
@@ -823,7 +823,7 @@ app.post('/api/contacts/:id/workflow', async (req, res) => {
 });
 
 // ── Workflow Data (per-deal status + comments) ────────────────────────────────
-app.post('/api/deals/:id/workflow', async (req, res) => {
+app.post('/api/deals/:id/workflow', isAuthenticated, requireAtLeastMember, async (req, res) => {
   try {
     const { data, existingNoteId } = req.body;
     const safeDealId = validateHsObjectId(req.params.id, 'id');
@@ -884,7 +884,7 @@ app.get('/api/contacts/:id/tasks', async (req, res) => {
   }
 });
 
-app.post('/api/contacts/:id/tasks', async (req, res) => {
+app.post('/api/contacts/:id/tasks', isAuthenticated, requireAtLeastMember, async (req, res) => {
   try {
     const { subject, dueDate, stageKey } = req.body;
     const contactId = req.params.id;
@@ -916,7 +916,7 @@ app.post('/api/contacts/:id/tasks', async (req, res) => {
   }
 });
 
-app.patch('/api/tasks/:id', async (req, res) => {
+app.patch('/api/tasks/:id', isAuthenticated, requireAtLeastMember, async (req, res) => {
   try {
     const taskId = req.params.id;
     if (!/^\d+$/.test(taskId)) {
@@ -934,7 +934,7 @@ app.patch('/api/tasks/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/tasks/:id', async (req, res) => {
+app.delete('/api/tasks/:id', isAuthenticated, requireAtLeastMember, async (req, res) => {
   try {
     const taskId = req.params.id;
     if (!/^\d+$/.test(taskId)) {
@@ -1041,7 +1041,7 @@ function validateWorkflow(body) {
   return null;
 }
 
-app.post('/api/workflow', requireAdmin, (req, res) => {
+app.post('/api/workflow', isAuthenticated, requireManagerOrAdmin, (req, res) => {
   const err = validateWorkflow(req.body);
   if (err) return res.status(400).json({ error: err });
   fs.writeFileSync(WORKFLOW_FILE, JSON.stringify(req.body, null, 2));

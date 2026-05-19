@@ -1,5 +1,6 @@
 // ── New Customer Modal ────────────────────────────────────────────────────────
 function openNewCustomerModal() {
+  if (isViewerOnly()) return;
   const overlay = document.getElementById('new-customer-overlay');
   const modal   = document.getElementById('new-customer-modal');
   const form    = document.getElementById('new-customer-form');
@@ -347,6 +348,7 @@ async function quickSetStage(contactId, roomIdx, stageKey, showUndo = true) {
 
 function openStatusPicker(event, contactId, roomIdx) {
   event.stopPropagation();
+  if (isViewerOnly()) return;
   closeCardPicker();
   const rect = event.currentTarget.getBoundingClientRect();
   const popup = document.createElement('div');
@@ -392,6 +394,7 @@ async function quickSetRoomStatus(contactId, roomIdx, newStatus) {
 
 function openLeadStatusPicker(event, contactId) {
   event.stopPropagation();
+  if (isViewerOnly()) return;
   closeCardPicker();
   const rect = event.currentTarget.getBoundingClientRect();
   const popup = document.createElement('div');

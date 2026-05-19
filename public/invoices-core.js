@@ -192,7 +192,7 @@ function renderInvoicePanelBody() {
           <textarea id="inv-edit-memo" class="inv-edit-input inv-edit-textarea" rows="2" placeholder="Thank you for your business">${escHtml(inv.memo || '')}</textarea>
         </label>
       </div>
-      <button id="inv-save-btn" class="inv-btn inv-btn-primary" onclick="saveInvoiceChanges()">Save changes</button>
+      <button id="inv-save-btn" class="inv-btn inv-btn-primary" onclick="saveInvoiceChanges()" data-viewer-hide>Save changes</button>
       <span id="inv-save-msg" class="inv-action-msg"></span>
     </div>
 
@@ -208,7 +208,7 @@ function renderInvoicePanelBody() {
             </svg>
             Download PDF
           </a>
-          <button class="inv-btn inv-btn-secondary" id="inv-send-btn" onclick="sendInvoice()">
+          <button class="inv-btn inv-btn-secondary" id="inv-send-btn" onclick="sendInvoice()" data-viewer-hide>
             <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>

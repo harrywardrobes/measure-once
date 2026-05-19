@@ -1,7 +1,7 @@
 const express = require('express');
 const { Pool } = require('pg');
 const rateLimit = require('express-rate-limit');
-const { isAuthenticated } = require('./auth');
+const { isAuthenticated, requireAtLeastMember } = require('./auth');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
@@ -130,7 +130,7 @@ router.get('/api/visits', isAuthenticated, visitsRateLimiter, async (req, res) =
   }
 });
 
-router.post('/api/visits', isAuthenticated, async (req, res) => {
+router.post('/api/visits', isAuthenticated, requireAtLeastMember, async (req, res) => {
   const userId = req.user.claims.sub;
   if (!checkVisitsRateLimit(userId)) {
     return res.status(429).json({ error: 'Too many requests. Please wait before creating more visits.' });
@@ -151,7 +151,7 @@ router.post('/api/visits', isAuthenticated, async (req, res) => {
   }
 });
 
-router.patch('/api/visits/:id', isAuthenticated, async (req, res) => {
+router.patch('/api/visits/:id', isAuthenticated, requireAtLeastMember, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   const v = validatePayload(req.body);
@@ -173,7 +173,7 @@ router.patch('/api/visits/:id', isAuthenticated, async (req, res) => {
   }
 });
 
-router.delete('/api/visits/:id', isAuthenticated, async (req, res) => {
+router.delete('/api/visits/:id', isAuthenticated, requireAtLeastMember, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   try {

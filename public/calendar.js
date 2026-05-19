@@ -91,7 +91,7 @@ function renderCalendarHeader() {
           <input type="checkbox" ${c.showWorkshop?'checked':''} onchange="calToggleWorkshop(this.checked)">
           <span>Workshop time</span>
         </label>
-        <button class="cal-new-btn" onclick="openVisitModal()">+ New visit</button>
+        <button class="cal-new-btn" onclick="openVisitModal()" data-viewer-hide>+ New visit</button>
       </div>
     </div>
   `;
@@ -315,6 +315,7 @@ function contactDisplayName(c) {
 }
 
 function openVisitModal(visitId, prefillDate) {
+  if (isViewerOnly()) return;
   const existing = visitId ? state.calendar.visits.find(v => v.id === visitId) : null;
   const start = existing ? new Date(existing.startAt) : (prefillDate ? new Date(prefillDate) : new Date());
   const end   = existing ? new Date(existing.endAt)   : new Date(start.getTime() + 60*60*1000);

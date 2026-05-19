@@ -487,7 +487,7 @@ function renderRoomTabs() {
         class="room-tab ${idx === state.selectedRoomIdx ? 'room-tab-active' : ''}">
         ${escHtml(r.room || `Room ${idx + 1}`)}
       </button>
-      ${canDelete ? `<button class="room-tab-del" title="Delete room"
+      ${canDelete ? `<button class="room-tab-del" title="Delete room" data-viewer-hide
         onclick="event.stopPropagation();deleteRoom(${idx})">×</button>` : ''}
     </span>
   `).join('');
@@ -508,7 +508,7 @@ function renderRoomTabs() {
   el.innerHTML = `
     <div class="flex items-center gap-1.5 flex-wrap">
       ${tabs}
-      <button onclick="showAddRoomForm()" class="room-tab-add">+ Room</button>
+      <button onclick="showAddRoomForm()" class="room-tab-add" data-viewer-hide>+ Room</button>
     </div>
     ${addForm}
     <div class="install-dates-row">
@@ -776,6 +776,7 @@ function moveBackToStage(stageKey) {
 
 // ── Save Workflow Data ────────────────────────────────────────────────────────
 async function saveWorkflowData() {
+  if (isViewerOnly()) return;
   // Compute primary room's current stage + most recently completed substage
   const primary = state.allRooms[0];
   const stageKey = primary?.stageKey || 'sales';
@@ -801,7 +802,7 @@ function renderComments() {
   el.innerHTML = `
     <div class="notes-header">
       <span class="notes-header-label">Notes</span>
-      <button class="btn-new-note" onclick="showAddComment()">+ New note</button>
+      <button class="btn-new-note" onclick="showAddComment()" data-viewer-hide>+ New note</button>
     </div>
     <div id="comment-input-area" class="comment-input-area hidden">
       <textarea id="comment-input" rows="3" class="notes-textarea"
@@ -920,7 +921,7 @@ function renderTasks() {
   el.innerHTML = `
     <div class="flex items-center justify-between mb-3">
       <h3 class="text-sm font-semibold text-slate-700">Tasks</h3>
-      <button onclick="toggleAddTask()" id="add-task-btn"
+      <button onclick="toggleAddTask()" id="add-task-btn" data-viewer-hide
         class="text-xs font-semibold text-blue-600 hover:text-blue-700 px-2.5 py-1 rounded-lg hover:bg-blue-50 transition">
         ${state.showAddTask ? 'Cancel' : '+ Add task'}
       </button>

@@ -1,3 +1,11 @@
+// ── Viewer-mode CSS ───────────────────────────────────────────────────────────
+// Injected once; hides elements marked data-viewer-hide when body.viewer-mode
+(function () {
+  const s = document.createElement('style');
+  s.textContent = 'body.viewer-mode [data-viewer-hide]{display:none!important}';
+  document.head.appendChild(s);
+}());
+
 // ── Cross-module stubs ────────────────────────────────────────────────────────
 // No-ops so core code can call them safely on any page. Page modules
 // (workflow-core.js, invoices-core.js, sales.js, projects.js, invoices.js)
@@ -98,6 +106,10 @@ const POST       = (path, b) => api('POST',   path, b);
 const PATCH_REQ  = (path, b) => api('PATCH',  path, b);
 const DELETE_REQ = path      => api('DELETE', path);
 
+function isViewerOnly() {
+  return document.body.classList.contains('viewer-mode');
+}
+
 function escHtml(str) {
   return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -178,6 +190,11 @@ async function bootstrap() {
   state.user = user;
 
   const priv = user.privilege_level || 'member';
+
+  if (priv === 'viewer') {
+    document.body.classList.add('viewer-mode');
+  }
+
   if (priv === 'manager' || priv === 'admin') {
     const tradesBtn = document.getElementById('bnav-trades');
     if (tradesBtn) tradesBtn.style.display = '';
