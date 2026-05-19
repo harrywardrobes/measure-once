@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="style.css">
   <style>
     /* ── Admin-specific layout ── */
-    body { padding-top: 52px; height: 100vh; overflow: hidden; overscroll-behavior: none; }
+    body { padding-top: 52px; min-height: 100vh; }
 
     .admin-brand-sep { color: rgba(255,255,255,.35); font-size: .8rem; margin-left: 2px; }
 
@@ -247,33 +247,25 @@
     .roles-add-form { display: flex; gap: 8px; margin-bottom: 14px; }
     .roles-add-form .field { flex: 1; }
     .roles-add-form select.field { flex: 0 0 auto; width: 130px; }
-    .role-tag {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: var(--stone-soft);
-      border: 1px solid var(--stone);
-      border-radius: var(--radius-pill);
-      padding: 4px 10px;
-      font-size: .78rem;
-      font-weight: 500;
-      color: var(--ink-2);
+    .roles-list  { display: flex; flex-direction: column; min-height: 32px; }
+    .roles-empty { color: var(--ink-4); font-style: italic; font-size: .875rem; padding: 6px 0; }
+    .role-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--stone);
     }
+    .role-row:last-child { border-bottom: none; }
+    .role-row-name {
+      flex: 1; font-size: .88rem; font-weight: 600; color: var(--ink-1);
+    }
+    .role-row-select { width: 130px; flex-shrink: 0; }
     .role-del {
-      background: none;
-      border: none;
-      color: var(--ink-4);
-      cursor: pointer;
-      padding: 0;
-      line-height: 1;
-      font-size: .9rem;
-      font-weight: 700;
-      transition: color .1s;
-      font-family: inherit;
+      background: none; border: none; color: var(--ink-4);
+      cursor: pointer; padding: 0; line-height: 1;
+      font-size: .9rem; font-weight: 700;
+      transition: color .1s; font-family: inherit;
     }
     .role-del:hover { color: #991b1b; }
-    .roles-list { display: flex; flex-wrap: wrap; gap: 8px; min-height: 32px; }
-    .roles-empty { color: var(--ink-4); font-style: italic; font-size: .875rem; }
 
     /* ── Toast ── */
     .toast {
@@ -786,18 +778,39 @@
       container.innerHTML = `<span class="roles-empty">No job roles defined yet.</span>`;
       return;
     }
-    container.innerHTML = _jobRoles.map(r => `
-      <span class="role-tag">
-        ${esc(r.name)}
-        ${lvlBadge(r.privilege_level || 'member')}
-        <button class="role-del" onclick="deleteRole('${esc(r.name)}')" title="Remove">×</button>
-      </span>`).join('');
+    const lvlOption = (val, current) =>
+      `<option value="${val}" ${current === val ? 'selected' : ''}>${
+        { viewer: 'Viewer', member: 'Member', manager: 'Manager', admin: 'Admin' }[val]
+      }</option>`;
+    container.innerHTML = _jobRoles.map(r => {
+      const cur = r.privilege_level || 'member';
+      return `
+        <div class="role-row">
+          <span class="role-row-name">${esc(r.name)}</span>
+          <select class="field role-row-select" onchange="updateRolePrivilege('${esc(r.name)}', this.value)">
+            ${['viewer','member','manager','admin'].map(v => lvlOption(v, cur)).join('')}
+          </select>
+          <button class="role-del" onclick="deleteRole('${esc(r.name)}')" title="Remove role">×</button>
+        </div>`;
+    }).join('');
 
     document.querySelectorAll('[id^="usel-job-"]').forEach(sel => {
       const uid = sel.id.replace('usel-job-', '');
       const u   = _users.find(u => u.id === uid);
       if (u) sel.innerHTML = jobRoleOptions(u.job_role || '');
     });
+  }
+
+  async function updateRolePrivilege(name, privilege_level) {
+    try {
+      await api('POST', '/api/admin/job-roles', { name, privilege_level });
+      const idx = _jobRoles.findIndex(r => r.name === name);
+      if (idx >= 0) _jobRoles[idx] = { ..._jobRoles[idx], privilege_level };
+      toast('Role updated');
+    } catch (e) {
+      toast(e.message, true);
+      renderJobRoles();
+    }
   }
 
   function syncRoleForm() {
