@@ -105,6 +105,11 @@ function closeInvoicePanel() {
   state.qb.panelContext = null;
 }
 
+function openInvoicePanelFromBadge(btn) {
+  const ids = JSON.parse(btn.dataset.invIds || '[]');
+  if (ids.length) openInvoicePanel(ids[0], ids);
+}
+
 function renderInvoicePanelBody() {
   const inv   = state.qb.panel;
   if (!inv) return;

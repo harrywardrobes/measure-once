@@ -209,8 +209,9 @@ function renderCustomerList() {
 
     const qbInvs    = matchInvoicesForContact(contact);
     const qbTotal   = qbInvs.reduce((s, inv) => s + inv.balance, 0);
+    const qbInvIdsAttr = escHtml(JSON.stringify(qbInvs.map(inv => inv.id)));
     const qbBadge   = qbInvs.length > 0
-      ? `<button class="qb-badge" title="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}" onclick="event.stopPropagation();openInvoicePanel('${escHtml(qbInvs[0].id)}')">£${qbTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</button>`
+      ? `<button class="qb-badge" title="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}" data-inv-ids="${qbInvIdsAttr}" onclick="event.stopPropagation();openInvoicePanelFromBadge(this)">£${qbTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</button>`
       : '';
 
     const stagePillHtml = stageLabel && colour

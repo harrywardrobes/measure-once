@@ -278,10 +278,6 @@ function customerCardHtml(contact, rooms, isAdmin) {
     </div>`;
 }
 
-function openInvoicePanelFromBadge(btn) {
-  const ids = JSON.parse(btn.dataset.invIds || '[]');
-  if (ids.length) openInvoicePanel(ids[0], ids);
-}
 
 // ── Fitter Picker Modal ───────────────────────────────────────────────────────
 let _fitterPickerContactId = null;
