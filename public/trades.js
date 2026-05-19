@@ -309,6 +309,23 @@ function openTradesModal(id) {
     const existingContacts = (co.contacts || []).length ? co.contacts : [{}];
     rebuildContactSlots(existingContacts);
     document.getElementById('trades-submit-btn').textContent = 'Save Changes';
+
+    const auditEl = document.getElementById('trades-modal-audit');
+    const parts = [];
+    if (co.created_by_name) {
+      parts.push(`Added by <strong>${escHtml(co.created_by_name)}</strong>${co.created_at ? ` · ${fmtTradeDate(co.created_at)}` : ''}`);
+    } else if (co.created_at) {
+      parts.push(`Added ${fmtTradeDate(co.created_at)}`);
+    }
+    if (co.updated_by_name) {
+      parts.push(`Edited by <strong>${escHtml(co.updated_by_name)}</strong>${co.updated_at ? ` · ${fmtTradeDate(co.updated_at)}` : ''}`);
+    } else if (co.updated_at) {
+      parts.push(`Edited ${fmtTradeDate(co.updated_at)}`);
+    }
+    if (parts.length) {
+      auditEl.innerHTML = parts.join('<span class="trades-modal-audit-sep"> · </span>');
+      auditEl.classList.remove('hidden');
+    }
   } else {
     title.textContent = 'Add Company';
     document.getElementById('trades-submit-btn').textContent = 'Save Company';
@@ -339,6 +356,8 @@ function resetTradesForm() {
   if (list) list.innerHTML = '';
   const btn = document.getElementById('trades-add-contact-btn');
   if (btn) btn.style.display = '';
+  const auditEl = document.getElementById('trades-modal-audit');
+  if (auditEl) { auditEl.innerHTML = ''; auditEl.classList.add('hidden'); }
 }
 
 async function saveTradeContact(e) {
