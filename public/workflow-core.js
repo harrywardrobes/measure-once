@@ -499,8 +499,19 @@ function hasUnsavedChanges() {
   const commentInput = document.getElementById('comment-input');
   if (commentArea && !commentArea.classList.contains('hidden') &&
       commentInput && commentInput.value.trim()) return true;
-  const taskSubject = document.getElementById('task-subject');
-  if (taskSubject && taskSubject.value.trim()) return true;
+  if (hasActiveInlineEdit()) return true;
+  return false;
+}
+
+// Returns true when a known inline form is open and has content.
+// Uses DOM-presence checks rather than document.activeElement because focus
+// has already shifted to the clicked element (room tab, back button, etc.)
+// by the time click handlers run, making activeElement unreliable here.
+function hasActiveInlineEdit() {
+  // "Add room" form — present in DOM only while state.addingRoom is true
+  if (document.getElementById('new-room-name')?.value.trim()) return true;
+  // "Add task" form — present in DOM only while state.showAddTask is true
+  if (document.getElementById('task-subject')?.value.trim()) return true;
   if (window._invMemoDirty) return true;
   return false;
 }

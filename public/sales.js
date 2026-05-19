@@ -175,18 +175,45 @@ function _performGoBack() {
   document.querySelectorAll('.customer-card').forEach(el => el.classList.remove('selected'));
 }
 
+// ── Inline-edit commit / discard helpers ─────────────────────────────────────
+// These know about sales.js-specific forms (new-room-name, task-subject) so
+// they live here rather than in workflow-core.js.
+
+async function _commitActiveInlineEdit() {
+  // Query by element ID so this works whether or not the field is focused.
+  if (document.getElementById('new-room-name')?.value.trim()) {
+    await submitAddRoom();
+  }
+  if (document.getElementById('task-subject')?.value.trim()) {
+    await saveNewTask();
+  }
+}
+
+function _discardActiveInlineEdit() {
+  // Hide whichever inline form(s) are currently open with content.
+  if (document.getElementById('new-room-name')) {
+    hideAddRoomForm();
+  }
+  if (document.getElementById('task-subject')) {
+    state.showAddTask = false;
+    renderTasks();
+  }
+}
+
 async function goBack() {
   captureNotes();
 
   if (hasUnsavedChanges()) {
     showUnsavedChangesBar(
       async () => {
+        await _commitActiveInlineEdit();
         await persistCommentDraft();
         await flushDeferredSave();
         if (state.selectedContactId) { try { await saveWorkflowData(); } catch {} }
         _performGoBack();
       },
       () => {
+        _discardActiveInlineEdit();
         _clearCommentDraft();
         discardPendingSave();
         _performGoBack();
@@ -252,12 +279,14 @@ async function selectContact(contactId, roomIdx = 0) {
   if (state.selectedContactId && state.selectedContactId !== contactId && hasUnsavedChanges()) {
     showUnsavedChangesBar(
       async () => {
+        await _commitActiveInlineEdit();
         await persistCommentDraft();
         await flushDeferredSave();
         try { await saveWorkflowData(); } catch {}
         _doSelectContact(contactId, roomIdx);
       },
       () => {
+        _discardActiveInlineEdit();
         _clearCommentDraft();
         discardPendingSave();
         _doSelectContact(contactId, roomIdx);
@@ -413,12 +442,14 @@ async function switchRoom(idx) {
   if (hasUnsavedChanges()) {
     showUnsavedChangesBar(
       async () => {
+        await _commitActiveInlineEdit();
         await persistCommentDraft();
         await flushDeferredSave();
         try { await saveWorkflowData(); } catch {}
         _doSwitchRoom(idx);
       },
       () => {
+        _discardActiveInlineEdit();
         _clearCommentDraft();
         discardPendingSave();
         _doSwitchRoom(idx);
@@ -560,7 +591,8 @@ function renderRoomTabs() {
     <div class="flex gap-2 mt-2">
       <input id="new-room-name" type="text" placeholder="e.g. Master bedroom..."
         class="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400 bg-white"
-        style="font-size:16px" onkeydown="if(event.key==='Enter')submitAddRoom();if(event.key==='Escape')hideAddRoomForm()">
+        style="font-size:16px" oninput="_updateBeforeUnloadGuard()"
+        onkeydown="if(event.key==='Enter')submitAddRoom();if(event.key==='Escape')hideAddRoomForm()">
       <button onclick="submitAddRoom()" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 transition whitespace-nowrap">Add</button>
       <button onclick="hideAddRoomForm()" class="text-xs text-slate-500 px-2 hover:text-slate-700">✕</button>
     </div>
@@ -1020,8 +1052,8 @@ function renderTasks() {
       <div class="add-task-form">
         <input id="task-subject" type="text" placeholder="Task description..."
           class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm mb-2 focus:outline-none focus:border-blue-400 bg-white"
-          style="font-size:16px" onkeydown="if(event.key==='Enter')saveNewTask()"
-          oninput="_updateBeforeUnloadGuard()">
+          style="font-size:16px" oninput="_updateBeforeUnloadGuard()"
+          onkeydown="if(event.key==='Enter')saveNewTask()">
         <div class="flex gap-2 mb-2">
           <input id="task-due" type="date"
             class="flex-1 min-w-0 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 bg-white"
