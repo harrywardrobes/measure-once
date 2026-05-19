@@ -159,7 +159,7 @@
           let msg, action;
           if (e.code === 'HUBSPOT_AUTH') {
             msg = 'Could not connect to HubSpot — the API token is invalid or expired. An admin needs to update the <strong>HUBSPOT_ACCESS_TOKEN</strong> in the environment settings and restart the app.';
-            action = '';
+            action = `<a href="/settings" class="mt-2 inline-block text-blue-600 underline text-xs">Go to Settings</a>`;
           } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
             msg = 'HubSpot rate limit reached.';
             action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Try again</button>`;

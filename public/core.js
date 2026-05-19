@@ -208,13 +208,28 @@ async function bootstrap() {
     if (document.getElementById('customer-list') || document.getElementById('sales-view')) renderCustomerList();
     loadQBInvoices();
   } catch (e) {
-    const list = document.getElementById('customer-list');
-    const salesView = document.getElementById('sales-view');
-    if (list) list.innerHTML =
-      `<div class="p-4 text-sm text-red-500">Failed to load: ${escHtml(e.message)}</div>`;
-    else if (salesView) salesView.innerHTML =
-      `<div class="p-4 text-sm text-red-500">Failed to load: ${escHtml(e.message)}</div>`;
-    else console.error('Bootstrap failed', e);
+    console.error('Bootstrap failed', e);
+    const list        = document.getElementById('customer-list');
+    const salesView   = document.getElementById('sales-view');
+    const projectView = document.getElementById('projects-view');
+    const target = list || salesView || projectView;
+    if (target) {
+      let msg, action;
+      if (e.code === 'HUBSPOT_AUTH') {
+        msg = 'Could not connect to HubSpot — the API token is invalid or expired. An admin needs to update the <strong>HUBSPOT_ACCESS_TOKEN</strong> in the environment settings and restart the app.';
+        action = `<a href="/settings" class="mt-2 inline-block text-blue-600 underline text-xs">Go to Settings</a>`;
+      } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+        msg = 'HubSpot rate limit reached.';
+        action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Try again</button>`;
+      } else if (e.code === 'HUBSPOT_ERROR' || e.code) {
+        msg = 'Could not load data from HubSpot. This may be a temporary issue.';
+        action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button>`;
+      } else {
+        msg = `Failed to load: ${escHtml(e.message)}`;
+        action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button>`;
+      }
+      target.innerHTML = `<div class="p-4 text-sm text-red-500">${msg}${action ? `<br>${action}` : ''}</div>`;
+    }
   }
   return true;
 }
