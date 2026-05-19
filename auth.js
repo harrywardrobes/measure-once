@@ -287,6 +287,34 @@ async function ensureAuthTables() {
   }
 }
 
+// ── Rate-limit record cleanup ───────────────────────────────────────────────
+// Deletes expired sessions from rate_limit.sessions. Because individual_records
+// and records_aggregated reference sessions with ON DELETE CASCADE, removing
+// an expired session automatically removes all of its associated records.
+// Called once on startup, then on a 1-hour interval.
+async function cleanupExpiredRateLimitRecords() {
+  try {
+    const result = await pool.query(
+      `DELETE FROM rate_limit.sessions WHERE expires_at < NOW()`
+    );
+    if (result.rowCount > 0) {
+      console.log(`[rate-limit cleanup] Removed ${result.rowCount} expired session(s).`);
+    }
+  } catch (err) {
+    // 42P01 = undefined_table: rate_limit schema not yet created by the store.
+    // This is expected on a fresh database; silently skip until the first
+    // rate-limited request causes the store to run its own migrations.
+    if (err.code !== '42P01') {
+      console.error('[rate-limit cleanup] Failed to prune expired records:', err.message);
+    }
+  }
+}
+
+function scheduleRateLimitCleanup() {
+  cleanupExpiredRateLimitRecords();
+  setInterval(cleanupExpiredRateLimitRecords, 60 * 60 * 1000);
+}
+
 // Audit-failure policy: log errors but do not abort the parent admin action.
 // A database write failure for the audit entry is operationally visible via
 // server logs, but we intentionally avoid propagating the error so that a
@@ -483,6 +511,7 @@ async function setupAuth(app) {
   }
 
   await ensureAuthTables();
+  scheduleRateLimitCleanup();
 
   const { client, config } = await getOidcConfig();
   const { Strategy } = await import('openid-client/passport');
