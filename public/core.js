@@ -7,20 +7,29 @@
 }());
 
 // ── Cross-module stubs ────────────────────────────────────────────────────────
-// No-ops so core code can call them safely on any page. Page modules
-// (workflow-core.js, invoices-core.js, sales.js, projects.js, invoices.js)
-// redeclare them with real implementations; the later function declaration
-// wins in global scope.
-function renderProjectsView() {}
-function renderInvoicesTab() {}
-function renderWorkflowInvoices() {}
+// No-ops so shared modules can call these safely on pages that don't load the
+// module containing the real implementation. The later function declaration
+// wins in global scope, so page modules simply redeclare to override.
+
+// workflow-core.js calls these unconditionally (lines ~427-431, ~358, ~386,
+// ~433); pages that load workflow-core.js but NOT sales.js (calendar, customers,
+// index, invoices, projects) need these no-ops to avoid ReferenceErrors.
+// Real implementations live in sales.js.
 function renderWorkflowHeader() {}
 function renderWorkflowStages() {}
 function renderRoomTabs() {}
-function renderFullWorkflowView() {}
-function selectContact() {}
-function renderCustomerList() {}
 async function saveWorkflowData() {}
+
+// workflow-core.js (line ~431) and invoices-core.js (line ~17, ~34) call this;
+// pages without projects.js or sales.js need the no-op. Real impl in projects.js
+// (overridden by sales.js on pages that load both).
+function renderProjectsView() {}
+
+// workflow-core.js and invoices-core.js call renderCustomerList() unconditionally
+// on pages such as calendar, index, and invoices that load neither workflow.js
+// nor sales.js. Real implementations live in workflow.js (overridden by sales.js).
+function renderCustomerList() {}
+
 // Workflow-core stubs — kept because bootstrap() and clearHeaderSearch() in
 // this file call them unconditionally; pages that don't load workflow-core.js
 // (e.g. /profile, /trades) need these no-ops to avoid ReferenceErrors.
@@ -30,7 +39,10 @@ async function loadOpenLeads() {}
 async function loadWorkflowStages() {}
 function populateStageFilter() {}
 function filterDeals() {}
-// Invoices-core stubs (real versions in invoices-core.js)
+
+// loadQBInvoices() is called unconditionally in bootstrap() below; pages that
+// don't load invoices-core.js (calendar, profile, trades) need this no-op.
+// Real implementation in invoices-core.js overrides when that file loads.
 async function loadQBInvoices() {}
 function closeInvoicePanel() {
   document.getElementById('inv-panel')?.classList.remove('inv-panel-open');
