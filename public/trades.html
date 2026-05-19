@@ -27,13 +27,13 @@
       </button>
     </div>
 
-    <div id="trades-search-wrap" class="trades-search-wrap">
-      <svg class="trades-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
-      </svg>
-      <input id="trades-search" type="text" placeholder="Search by company, trade, area, or contact…"
-        class="trades-search-input" autocomplete="off"
-        oninput="filterTradeContacts(this.value)">
+    <div id="trades-filters-wrap" class="trades-filters-wrap">
+      <select id="trades-filter-type" class="trades-filter-select" onchange="applyTradeFilters()">
+        <option value="">All services</option>
+      </select>
+      <select id="trades-filter-area" class="trades-filter-select" onchange="applyTradeFilters()">
+        <option value="">All areas</option>
+      </select>
     </div>
 
     <div id="trades-list" class="trades-list">

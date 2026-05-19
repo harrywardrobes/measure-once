@@ -1,6 +1,8 @@
 // ── Trades Directory ──────────────────────────────────────────────────────────
 let _tradeContacts = [];
 let _tradeDeleteId = null;
+let _tradeTypeFilter = '';
+let _tradeAreaFilter = '';
 const MAX_CONTACTS = 3;
 
 function fmtTradeDate(iso) {
@@ -43,22 +45,52 @@ async function loadTradeContacts() {
   ].join('');
   try {
     _tradeContacts = await GET('/api/trades');
-    renderTradeContacts(_tradeContacts);
+    populateTradeFilters();
+    applyTradeFilters();
   } catch (e) {
     list.innerHTML = `<div class="trades-empty">Failed to load contacts: ${escHtml(e.message)}</div>`;
   }
 }
 
-function filterTradeContacts(query) {
-  const q = (query || '').toLowerCase().trim();
-  if (!q) return renderTradeContacts(_tradeContacts);
-  const filtered = _tradeContacts.filter(co => {
-    if ((co.company_name || '').toLowerCase().includes(q)) return true;
-    if ((co.trade_type   || '').toLowerCase().includes(q)) return true;
-    if ((co.areas_served || '').toLowerCase().includes(q)) return true;
-    const cts = co.contacts || [];
-    return cts.some(c => (c.name || '').toLowerCase().includes(q));
-  });
+function populateTradeFilters() {
+  const typeSelect = document.getElementById('trades-filter-type');
+  const areaSelect = document.getElementById('trades-filter-area');
+
+  const types = [...new Set(_tradeContacts.map(co => (co.trade_type || '').trim()).filter(Boolean))].sort();
+  if (typeSelect) {
+    const cur = typeSelect.value;
+    typeSelect.innerHTML = `<option value="">All services</option>` +
+      types.map(t => `<option value="${escHtml(t)}"${t === cur ? ' selected' : ''}>${escHtml(t)}</option>`).join('');
+  }
+
+  const areas = [...new Set(
+    _tradeContacts.flatMap(co =>
+      (co.areas_served || '').split(',').map(a => a.trim()).filter(Boolean)
+    )
+  )].sort();
+  if (areaSelect) {
+    const cur = areaSelect.value;
+    areaSelect.innerHTML = `<option value="">All areas</option>` +
+      areas.map(a => `<option value="${escHtml(a)}"${a === cur ? ' selected' : ''}>${escHtml(a)}</option>`).join('');
+  }
+}
+
+function applyTradeFilters() {
+  const typeSelect = document.getElementById('trades-filter-type');
+  const areaSelect = document.getElementById('trades-filter-area');
+  _tradeTypeFilter = typeSelect ? typeSelect.value : '';
+  _tradeAreaFilter = areaSelect ? areaSelect.value : '';
+
+  let filtered = _tradeContacts;
+  if (_tradeTypeFilter) {
+    filtered = filtered.filter(co => (co.trade_type || '').trim() === _tradeTypeFilter);
+  }
+  if (_tradeAreaFilter) {
+    filtered = filtered.filter(co => {
+      const areas = (co.areas_served || '').split(',').map(a => a.trim());
+      return areas.includes(_tradeAreaFilter);
+    });
+  }
   renderTradeContacts(filtered);
 }
 
@@ -315,8 +347,8 @@ async function saveTradeContact(e) {
       showToast('Company added');
     }
     closeTradesModal();
-    const searchInput = document.getElementById('trades-search');
-    filterTradeContacts(searchInput ? searchInput.value : '');
+    populateTradeFilters();
+    applyTradeFilters();
   } catch (err) {
     showToast(err.message || 'Failed to save company', true);
     submitBtn.disabled = false;
@@ -350,8 +382,8 @@ async function confirmDeleteTrade() {
     await DELETE_REQ(`/api/trades/${id}`);
     _tradeContacts = _tradeContacts.filter(c => c.id !== id);
     closeDeleteConfirm();
-    const searchInput = document.getElementById('trades-search');
-    filterTradeContacts(searchInput ? searchInput.value : '');
+    populateTradeFilters();
+    applyTradeFilters();
     showToast('Company deleted');
   } catch (err) {
     showToast(err.message || 'Failed to delete company', true);

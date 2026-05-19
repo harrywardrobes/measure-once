@@ -3127,20 +3127,19 @@ body.showing-workflow .sales-layout #workflow-panel {
 .trades-add-btn:hover { opacity: 0.85; }
 .trades-add-btn svg { flex-shrink: 0; }
 
-.trades-search-wrap {
-  position: relative; margin: 0 16px 12px;
+.trades-filters-wrap {
+  display: flex; gap: 8px;
+  padding: 0 16px 14px;
 }
-.trades-search-icon {
-  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-  width: 16px; height: 16px; color: var(--ink-4); pointer-events: none;
-}
-.trades-search-input {
-  width: 100%; padding: 8px 12px 8px 34px;
+.trades-filter-select {
+  flex: 1; min-width: 0;
+  padding: 8px 10px;
   border: 1.5px solid var(--stone); border-radius: var(--radius-pill);
   background: var(--chalk); font-size: 0.875rem; font-family: inherit;
-  color: var(--ink-1); outline: none; box-sizing: border-box;
+  color: var(--ink-1); outline: none; cursor: pointer;
+  box-sizing: border-box; appearance: auto;
 }
-.trades-search-input:focus { border-color: var(--orchid); }
+.trades-filter-select:focus { border-color: var(--orchid); }
 
 .trades-list {
   display: flex; flex-direction: column; gap: 10px;
@@ -3366,8 +3365,12 @@ body.showing-workflow .sales-layout #workflow-panel {
 
 .trades-form-footer {
   display: flex; gap: 8px; justify-content: flex-end;
-  padding-top: 10px; margin-top: 4px;
+  padding: 12px 18px 14px;
   border-top: 1px solid var(--stone-light);
+  position: sticky; bottom: 0;
+  background: var(--chalk);
+  z-index: 2;
+  margin: 8px -18px 0;
 }
 .trades-btn-primary {
   background: var(--plum); color: #fff;
