@@ -250,7 +250,34 @@ async function selectContact(contactId, roomIdx = 0) {
   document.getElementById('empty-state').classList.add('hidden');
   const wv = document.getElementById('workflow-view');
   wv.classList.remove('hidden');
-  wv.innerHTML = `<div class="flex items-center justify-center h-64 text-slate-400 gap-3"><div class="spinner"></div> Loading…</div>`;
+  wv.innerHTML = `
+    <button class="back-btn" onclick="goBack()">
+      <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+      </svg>
+      Customers
+    </button>
+    <div class="skeleton-workflow-header bg-white border-b border-slate-200 px-4 sm:px-6 py-4 shadow-sm">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1 min-w-0">
+          <div class="skeleton-line skeleton-wf-name"></div>
+          <div class="flex items-center gap-2 mt-3">
+            <div class="skeleton-line skeleton-wf-badge"></div>
+            <div class="skeleton-line skeleton-wf-email"></div>
+            <div class="skeleton-line skeleton-wf-phone"></div>
+          </div>
+        </div>
+        <div class="skeleton-line skeleton-wf-select"></div>
+      </div>
+    </div>
+    <div class="workflow-inner">
+      <div class="space-y-2">
+        <div class="skeleton-stage-row"><div class="flex items-center gap-3 flex-1"><div class="skeleton-line skeleton-stage-dot"></div><div class="skeleton-line skeleton-stage-label"></div></div><div class="skeleton-line skeleton-stage-count"></div></div>
+        <div class="skeleton-stage-row"><div class="flex items-center gap-3 flex-1"><div class="skeleton-line skeleton-stage-dot"></div><div class="skeleton-line skeleton-stage-label skeleton-stage-label-md"></div></div><div class="skeleton-line skeleton-stage-count"></div></div>
+        <div class="skeleton-stage-row"><div class="flex items-center gap-3 flex-1"><div class="skeleton-line skeleton-stage-dot"></div><div class="skeleton-line skeleton-stage-label skeleton-stage-label-sm"></div></div><div class="skeleton-line skeleton-stage-count"></div></div>
+      </div>
+    </div>
+  `;
 
   try {
     const [localData, tasksData] = await Promise.all([

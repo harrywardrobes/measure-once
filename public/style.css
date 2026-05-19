@@ -475,6 +475,68 @@ body.showing-workflow .workflow-panel { display: flex; }
   margin-top: 10px;
 }
 
+/* ── Workflow detail panel skeleton ──────────────────────────────────────────── */
+.skeleton-wf-name {
+  height: 22px;
+  width: 52%;
+  border-radius: var(--radius-sm);
+}
+.skeleton-wf-badge {
+  height: 22px;
+  width: 80px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+.skeleton-wf-email {
+  height: 14px;
+  width: 34%;
+  border-radius: var(--radius-sm);
+}
+.skeleton-wf-phone {
+  height: 14px;
+  width: 18%;
+  border-radius: var(--radius-sm);
+}
+.skeleton-wf-select {
+  height: 32px;
+  width: 96px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+.skeleton-stage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-md);
+}
+.skeleton-stage-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.skeleton-stage-label {
+  height: 13px;
+  width: 120px;
+  border-radius: var(--radius-sm);
+}
+.skeleton-stage-label-md {
+  width: 90px;
+}
+.skeleton-stage-label-sm {
+  width: 140px;
+}
+.skeleton-stage-count {
+  height: 13px;
+  width: 36px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
 /* ── Stage pill button ───────────────────────────────────────────────────────── */
 .stage-pill-btn {
   cursor: pointer;
