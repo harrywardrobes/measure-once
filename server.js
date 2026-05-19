@@ -434,7 +434,7 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     let after = undefined;
     do {
       const body = {
-        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate'],
+        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate', 'closedate'],
         sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
         limit: 100
       };
@@ -470,7 +470,7 @@ app.get('/api/open-leads', async (req, res) => {
         filterGroups: [{
           filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' }]
         }],
-        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate'],
+        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate', 'closedate'],
         sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
         limit: 100
       };

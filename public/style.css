@@ -1411,6 +1411,103 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 .projects-tab.hidden { display: none; }
 
+/* ── Projects sort / group bar ───────────────────────────────────────────────── */
+.project-sort-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--chalk);
+  border-bottom: 1px solid var(--stone);
+  flex-shrink: 0;
+}
+.project-sort-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+.project-sort-select {
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--ink-2);
+  background: var(--paper);
+  border: 1.5px solid var(--stone);
+  border-radius: 99px;
+  padding: 4px 10px;
+  cursor: pointer;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+.project-sort-select:focus {
+  border-color: var(--plum);
+}
+.project-group-btn {
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--ink-3);
+  background: transparent;
+  border: 1.5px solid var(--stone);
+  border-radius: 99px;
+  padding: 4px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  margin-left: auto;
+}
+.project-group-btn:hover:not(:disabled) {
+  background: var(--stone);
+  color: var(--ink-2);
+}
+.project-group-btn-active {
+  background: var(--plum);
+  color: #fff;
+  border-color: var(--plum);
+}
+.project-group-btn-active:hover:not(:disabled) {
+  background: var(--plum-dark, #3a0f6e);
+  border-color: var(--plum-dark, #3a0f6e);
+  color: #fff;
+}
+.project-group-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Project stage group headings ────────────────────────────────────────────── */
+.project-group-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 2px 10px;
+  border-left: 3px solid var(--stone);
+  margin-top: 8px;
+}
+.project-group-heading:first-child {
+  margin-top: 0;
+}
+.project-group-heading-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+.project-group-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-4);
+}
+
 .projects-inner {
   max-width: 1100px;
   margin: 0 auto;

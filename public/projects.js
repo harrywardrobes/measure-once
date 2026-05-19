@@ -1,4 +1,25 @@
 // ── Projects View ─────────────────────────────────────────────────────────────
+
+const PROJECT_SORT_KEY  = 'projectSort';
+const PROJECT_GROUP_KEY = 'projectGroupByStage';
+
+function loadProjectPrefs() {
+  state.projectSort         = localStorage.getItem(PROJECT_SORT_KEY)  || 'stage';
+  state.projectGroupByStage = localStorage.getItem(PROJECT_GROUP_KEY) === 'true';
+}
+
+function setProjectSort(val) {
+  state.projectSort = val;
+  localStorage.setItem(PROJECT_SORT_KEY, val);
+  renderProjectsView();
+}
+
+function toggleProjectGroupByStage() {
+  state.projectGroupByStage = !state.projectGroupByStage;
+  localStorage.setItem(PROJECT_GROUP_KEY, String(state.projectGroupByStage));
+  renderProjectsView();
+}
+
 function setProjectStageFilter(key) {
   state.projectStageFilter = key;
   renderProjectsView();
@@ -17,6 +38,7 @@ async function renderProjectsView() {
   const view = document.getElementById('projects-view');
   if (!view) return;
 
+  loadProjectPrefs();
   await ensureProjectPlatformUsers();
 
   const filter    = state.projectStageFilter;
@@ -25,6 +47,8 @@ async function renderProjectsView() {
   const currentId = state.user?.id;
   const privLevel = state.user?.privilege_level || 'member';
   const canAssign = !!state.user?.isAdmin || privLevel === 'manager' || privLevel === 'admin';
+  const sortBy    = state.projectSort || 'stage';
+  const groupBy   = !!state.projectGroupByStage && !stageKey && !myRooms;
 
   // Collect contacts that have at least one active room with saved data
   const rows = [];
@@ -40,11 +64,23 @@ async function renderProjectsView() {
     rows.push({ contact, rooms: activeRooms });
   }
 
-  // Sort by most advanced room stage, later stages first
-  rows.sort((a, b) => {
-    const maxStage = row => Math.max(...row.rooms.map(r => STAGE_KEYS.indexOf(r.stageKey)));
-    return maxStage(b) - maxStage(a);
-  });
+  // Sort rows
+  const maxStageIdx = row => Math.max(...row.rooms.map(r => STAGE_KEYS.indexOf(r.stageKey)));
+  if (sortBy === 'name') {
+    rows.sort((a, b) => contactName(a.contact).localeCompare(contactName(b.contact)));
+  } else if (sortBy === 'date') {
+    rows.sort((a, b) => {
+      const da = parseInt(a.contact.properties?.closedate || '0', 10);
+      const db = parseInt(b.contact.properties?.closedate || '0', 10);
+      if (!da && !db) return contactName(a.contact).localeCompare(contactName(b.contact));
+      if (!da) return 1;
+      if (!db) return -1;
+      return da - db;
+    });
+  } else {
+    // Default: stage — most advanced room first
+    rows.sort((a, b) => maxStageIdx(b) - maxStageIdx(a));
+  }
 
   // Within each row, sort rooms by stage descending
   rows.forEach(row => row.rooms.sort((a, b) =>
@@ -67,17 +103,65 @@ async function renderProjectsView() {
       style="${style}" data-stage-filter="${escHtml(key)}">${escHtml(label)}</button>`;
   }).join('');
 
+  // ── Sort / group bar ──────────────────────────────────────────────────────
+  const sortLabels = { stage: 'Stage', name: 'Name', date: 'Close date' };
+  const sortOptions = Object.entries(sortLabels)
+    .map(([val, lbl]) => `<option value="${val}"${sortBy === val ? ' selected' : ''}>${escHtml(lbl)}</option>`)
+    .join('');
+  const groupActive = groupBy ? ' project-group-btn-active' : '';
+  const groupDisabled = (stageKey || myRooms) ? ' disabled title="Clear the stage filter to enable grouping"' : '';
+  const sortBar = `
+    <div class="project-sort-bar">
+      <label class="project-sort-label" for="project-sort-select">Sort by</label>
+      <select id="project-sort-select" class="project-sort-select">
+        ${sortOptions}
+      </select>
+      <button id="project-group-btn" class="project-group-btn${groupActive}"${groupDisabled}
+        title="${groupBy ? 'Ungroup stages' : 'Group by stage'}">
+        Group by stage
+      </button>
+    </div>`;
+
+  // ── Body HTML ──────────────────────────────────────────────────────────────
   const emptyMsg = myRooms
     ? 'No rooms are currently assigned to you.'
     : 'No projects at this stage.';
-  const bodyHtml = !rows.length
-    ? `<p class="projects-empty-msg">${emptyMsg}</p>`
-    : rows.map(({ contact, rooms }) => customerCardHtml(contact, rooms, canAssign)).join('');
+
+  let bodyHtml;
+  if (!rows.length) {
+    bodyHtml = `<p class="projects-empty-msg">${emptyMsg}</p>`;
+  } else if (groupBy) {
+    // Group cards by the contact's most-advanced stage
+    const groups = new Map();
+    for (const row of rows) {
+      const idx = Math.max(...row.rooms.map(r => STAGE_KEYS.indexOf(r.stageKey)));
+      const key = idx >= 0 ? STAGE_KEYS[idx] : (row.rooms[0]?.stageKey || '');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(row);
+    }
+    // Render groups in stage order (most advanced first for stage sort, else natural order)
+    const orderedKeys = sortBy === 'stage'
+      ? [...groups.keys()].sort((a, b) => STAGE_KEYS.indexOf(b) - STAGE_KEYS.indexOf(a))
+      : [...groups.keys()];
+    bodyHtml = orderedKeys.map(key => {
+      const label   = escHtml(state.workflow?.stages?.[key]?.label || key);
+      const colour  = stageColour(key);
+      const heading = `<div class="project-group-heading" style="border-left-color:${colour.bg}">
+        <span class="project-group-heading-pill" style="background:${colour.light};color:${colour.text}">${label}</span>
+        <span class="project-group-count">${groups.get(key).length}</span>
+      </div>`;
+      const cards = groups.get(key).map(({ contact, rooms }) => customerCardHtml(contact, rooms, canAssign)).join('');
+      return heading + cards;
+    }).join('');
+  } else {
+    bodyHtml = rows.map(({ contact, rooms }) => customerCardHtml(contact, rooms, canAssign)).join('');
+  }
 
   view.innerHTML = `
     <div class="project-stage-tabs-bar">
       ${stageTabs}
     </div>
+    ${sortBar}
     <div class="projects-inner">
       ${bodyHtml}
     </div>
@@ -88,6 +172,12 @@ async function renderProjectsView() {
     if (!btn) return;
     setProjectStageFilter(btn.dataset.stageFilter);
   });
+
+  const sortSelect = view.querySelector('#project-sort-select');
+  if (sortSelect) sortSelect.addEventListener('change', () => setProjectSort(sortSelect.value));
+
+  const groupBtn = view.querySelector('#project-group-btn');
+  if (groupBtn) groupBtn.addEventListener('click', toggleProjectGroupByStage);
 
   view.addEventListener('click', function(e) {
     // Fitter chip click — open assignment picker (admin only)
