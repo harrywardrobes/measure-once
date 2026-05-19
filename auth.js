@@ -151,6 +151,19 @@ async function ensureAuthTables() {
     ON CONFLICT (name) DO NOTHING;
   `);
 
+  /* Admin audit log — immutable record of every admin action. */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_audit_log (
+      id SERIAL PRIMARY KEY,
+      acted_at TIMESTAMP DEFAULT NOW(),
+      admin_email VARCHAR NOT NULL,
+      action_type VARCHAR NOT NULL,
+      target_email VARCHAR,
+      details TEXT
+    );
+    CREATE INDEX IF NOT EXISTS "IDX_admin_audit_log_acted_at" ON admin_audit_log (acted_at DESC);
+  `);
+
   // Seed admin emails from env var.
   const admins = (process.env.ADMIN_EMAILS || '')
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -160,6 +173,24 @@ async function ensureAuthTables() {
        ON CONFLICT (email) DO NOTHING`,
       [email]
     );
+  }
+}
+
+// Audit-failure policy: log errors but do not abort the parent admin action.
+// A database write failure for the audit entry is operationally visible via
+// server logs, but we intentionally avoid propagating the error so that a
+// transient DB blip does not prevent valid admin operations.  If strict
+// auditability is required in future, replace with a transaction that rolls
+// back the parent mutation on audit-write failure.
+async function logAdminAction(adminEmail, actionType, targetEmail, details) {
+  try {
+    await pool.query(
+      `INSERT INTO admin_audit_log (admin_email, action_type, target_email, details)
+       VALUES ($1, $2, $3, $4)`,
+      [adminEmail || 'unknown', actionType, targetEmail || null, details || null]
+    );
+  } catch (err) {
+    console.error('Failed to write admin audit log:', err.message);
   }
 }
 
@@ -480,6 +511,8 @@ async function setupAuth(app) {
         [req.params.id]
       );
       await client.query('COMMIT');
+      const adminEmail = req.user?.claims?.email;
+      await logAdminAction(adminEmail, 'approve_request', email, `Approved access request id=${req.params.id}`);
       res.json({ ok: true, email });
     } catch (e) {
       await client.query('ROLLBACK');
@@ -492,10 +525,18 @@ async function setupAuth(app) {
   app.post('/api/admin/requests/:id/reject', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
-        `UPDATE account_requests SET status = 'rejected' WHERE id = $1`,
+        `SELECT email FROM account_requests WHERE id = $1`,
         [req.params.id]
       );
       if (r.rowCount === 0) return res.status(404).json({ error: 'Request not found' });
+      const email = r.rows[0].email;
+      const upd = await pool.query(
+        `UPDATE account_requests SET status = 'rejected' WHERE id = $1`,
+        [req.params.id]
+      );
+      if (upd.rowCount === 0) return res.status(404).json({ error: 'Request not found' });
+      const adminEmail = req.user?.claims?.email;
+      await logAdminAction(adminEmail, 'reject_request', email, `Rejected access request id=${req.params.id}`);
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -519,6 +560,8 @@ async function setupAuth(app) {
       if (r.rowCount === 0) {
         return res.status(409).json({ error: 'This email is already on the approved list.' });
       }
+      const adminEmail = req.user?.claims?.email;
+      await logAdminAction(adminEmail, 'add_allowed_email', email, note ? `Note: ${note}` : null);
       res.json({ ok: true, row: r.rows[0] });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -544,7 +587,11 @@ async function setupAuth(app) {
       if (isAdminEmail(email)) {
         return res.status(400).json({ error: 'Cannot revoke an ADMIN_EMAILS address.' });
       }
-      await pool.query(`DELETE FROM allowed_emails WHERE email = $1`, [email]);
+      const del = await pool.query(`DELETE FROM allowed_emails WHERE email = $1`, [email]);
+      if (del.rowCount > 0) {
+        const adminEmail = req.user?.claims?.email;
+        await logAdminAction(adminEmail, 'revoke_allowed_email', email, null);
+      }
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -632,7 +679,13 @@ async function setupAuth(app) {
         vals
       );
       if (r.rowCount === 0) return res.status(404).json({ error: 'User not found' });
-      res.json(r.rows[0]);
+      const updated = r.rows[0];
+      const adminEmail = req.user?.claims?.email;
+      const parts = [];
+      if (job_role !== undefined)       parts.push(`job_role="${job_role || 'none'}"`);
+      if (privilege_level !== undefined) parts.push(`privilege_level="${privilege_level}"`);
+      await logAdminAction(adminEmail, 'edit_user_profile', updated.email, parts.join(', '));
+      res.json(updated);
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -687,6 +740,8 @@ async function setupAuth(app) {
         `INSERT INTO job_roles (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
         [name]
       );
+      const adminEmail = req.user?.claims?.email;
+      await logAdminAction(adminEmail, 'add_job_role', null, `Added job role "${name}"`);
       res.json({ ok: true, name });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -696,8 +751,30 @@ async function setupAuth(app) {
   app.delete('/api/admin/job-roles/:name', isAuthenticated, requireAdmin, async (req, res) => {
     const name = req.params.name;
     try {
-      await pool.query(`DELETE FROM job_roles WHERE name = $1`, [name]);
+      const del = await pool.query(`DELETE FROM job_roles WHERE name = $1`, [name]);
+      if (del.rowCount > 0) {
+        const adminEmail = req.user?.claims?.email;
+        await logAdminAction(adminEmail, 'delete_job_role', null, `Deleted job role "${name}"`);
+      }
       res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Admin audit log ─────────────────────────────────────────────────────────
+  app.get('/api/admin/audit-log', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const limit  = Math.min(Math.max(parseInt(req.query.limit,  10) || 200, 1), 500);
+      const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+      const r = await pool.query(
+        `SELECT id, acted_at, admin_email, action_type, target_email, details
+         FROM admin_audit_log
+         ORDER BY acted_at DESC
+         LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      );
+      res.json(r.rows);
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

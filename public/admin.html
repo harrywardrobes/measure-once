@@ -319,6 +319,45 @@
     .toast.err  { background: #991b1b; }
 
     /* ── States ── */
+    .audit-feed { display: flex; flex-direction: column; gap: 0; }
+    .audit-entry {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 0 16px;
+      padding: 11px 0;
+      border-bottom: 1px solid var(--stone-soft);
+      font-size: .82rem;
+      align-items: start;
+    }
+    .audit-entry:last-child { border-bottom: none; }
+    .audit-time {
+      color: var(--ink-4);
+      font-size: .75rem;
+      white-space: nowrap;
+      padding-top: 1px;
+    }
+    .audit-body { display: flex; flex-direction: column; gap: 2px; }
+    .audit-action { font-weight: 600; color: var(--ink-1); }
+    .audit-meta { font-size: .75rem; color: var(--ink-3); }
+    .audit-chip {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: var(--r-pill);
+      font-size: .68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-right: 4px;
+    }
+    .chip-approve_request   { background: #dcfce7; color: #166534; }
+    .chip-reject_request    { background: #fee2e2; color: #991b1b; }
+    .chip-add_allowed_email { background: #dbeafe; color: #1e40af; }
+    .chip-revoke_allowed_email { background: #fef3c7; color: #92400e; }
+    .chip-edit_user_profile { background: #ede0ff; color: #3d0f7a; }
+    .chip-add_job_role      { background: #f0fdf4; color: #166534; }
+    .chip-delete_job_role   { background: #fff7ed; color: #9a3412; }
+
+    /* ── Loading / forbidden ── */
     .loading-state {
       display: flex;
       align-items: center;
@@ -430,6 +469,7 @@
   let _jobRoles = [];
   let _requests = [];
   let _allowed = [];
+  let _auditLog = [];
   let _capabilities = { levels: ['viewer','member','manager','admin'], features: [] };
 
   /* ────────────────────────────────────────────────
@@ -816,17 +856,57 @@
   }
 
   /* ────────────────────────────────────────────────
+     AUDIT LOG TAB
+  ──────────────────────────────────────────────── */
+  const ACTION_LABELS = {
+    approve_request:    'Approved access request',
+    reject_request:     'Rejected access request',
+    add_allowed_email:  'Added email to allow-list',
+    revoke_allowed_email: 'Revoked email from allow-list',
+    edit_user_profile:  'Edited user profile',
+    add_job_role:       'Added job role',
+    delete_job_role:    'Deleted job role',
+  };
+
+  function renderAuditLog() {
+    const container = $('#audit-content');
+    if (!container) return;
+    if (_auditLog.length === 0) {
+      container.innerHTML = '<div class="table-empty" style="padding:28px 0;">No admin actions recorded yet.</div>';
+      return;
+    }
+    container.innerHTML = `<div class="audit-feed">${_auditLog.map(e => {
+      const label = ACTION_LABELS[e.action_type] || e.action_type;
+      const chip  = `<span class="audit-chip chip-${esc(e.action_type)}">${esc(e.action_type.replace(/_/g,' '))}</span>`;
+      const meta  = [
+        e.target_email ? `Target: ${esc(e.target_email)}` : '',
+        e.details      ? esc(e.details) : '',
+      ].filter(Boolean).join(' · ');
+      return `
+        <div class="audit-entry">
+          <div class="audit-time">${fmtDate(e.acted_at)}</div>
+          <div class="audit-body">
+            <div class="audit-action">${chip}${esc(label)}</div>
+            <div class="audit-meta">By <strong>${esc(e.admin_email)}</strong>${meta ? ' · ' + meta : ''}</div>
+          </div>
+        </div>`;
+    }).join('')}</div>`;
+  }
+
+  /* ────────────────────────────────────────────────
      Load & render
   ──────────────────────────────────────────────── */
   async function reload() {
-    [_requests, _allowed, _users] = await Promise.all([
+    [_requests, _allowed, _users, _auditLog] = await Promise.all([
       api('GET', '/api/admin/requests'),
       api('GET', '/api/admin/allowed'),
       api('GET', '/api/admin/users'),
+      api('GET', '/api/admin/audit-log'),
     ]);
     renderTeam();
     renderRequests();
     renderOverview();
+    renderAuditLog();
   }
 
   async function init() {
@@ -843,12 +923,13 @@
     }
 
     try {
-      [_requests, _allowed, _users, _jobRoles, _capabilities] = await Promise.all([
+      [_requests, _allowed, _users, _jobRoles, _capabilities, _auditLog] = await Promise.all([
         api('GET', '/api/admin/requests'),
         api('GET', '/api/admin/allowed'),
         api('GET', '/api/admin/users'),
         api('GET', '/api/admin/job-roles'),
         api('GET', '/api/admin/capabilities'),
+        api('GET', '/api/admin/audit-log'),
       ]);
     } catch (e) {
       if (e.forbidden) {
@@ -875,6 +956,7 @@
         <button class="tab-btn" data-tab="permissions"       onclick="switchTab('permissions')">Permissions &amp; roles</button>
         <button class="tab-btn" data-tab="requests"          onclick="switchTab('requests')">Access requests <span id="req-tab-badge">${pendingBadge}</span></button>
         <button class="tab-btn" data-tab="overview"          onclick="switchTab('overview')">Overview</button>
+        <button class="tab-btn" data-tab="auditlog"          onclick="switchTab('auditlog')">Audit log</button>
       </div>
 
       <!-- TEAM -->
@@ -916,12 +998,24 @@
       <div class="tab-panel" id="tab-overview">
         <div id="overview-content"></div>
       </div>
+
+      <!-- AUDIT LOG -->
+      <div class="tab-panel" id="tab-auditlog">
+        <div class="card">
+          <div class="card-title">Admin audit log <span class="card-count" style="font-size:.72rem;font-weight:400;">(read-only)</span></div>
+          <p style="font-size:.82rem;color:var(--ink-3);margin:0 0 16px;">
+            A time-ordered record of every admin action — who changed what, and when.
+          </p>
+          <div id="audit-content"></div>
+        </div>
+      </div>
     `;
 
     renderTeam();
     renderJobRoles();
     renderRequests();
     renderOverview();
+    renderAuditLog();
   }
 
   init();
