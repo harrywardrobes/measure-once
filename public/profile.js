@@ -121,12 +121,12 @@ async function renderProfileTab() {
         </svg>
         Admin panel
       </a>` : ''}
-      <a href="/api/logout" class="profile-action-row profile-action-signout">
+      <button onclick="signOut()" class="profile-action-row profile-action-signout" style="background:none;border:none;width:100%;text-align:left;cursor:pointer;font-family:inherit;font-size:inherit;padding:0;">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="flex-shrink-0">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
         </svg>
         Sign out
-      </a>
+      </button>
     </div>
   `;
 
@@ -230,14 +230,22 @@ async function submitProfilePhoto() {
   }
 }
 
+function signOut() {
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/api/logout';
+  document.body.appendChild(form);
+  form.submit();
+}
+
 async function profileLogoutGoogle() {
-  await GET('/auth/logout-google');
+  await POST('/auth/logout-google');
   state.authStatus.google = false;
   renderProfileTab();
 }
 
 async function logoutGoogle() {
-  await GET('/auth/logout-google');
+  await POST('/auth/logout-google');
   state.authStatus.google = false;
   renderAuthStatus();
 }

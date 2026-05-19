@@ -643,7 +643,7 @@ async function setupAuth(app) {
     })(req, res, next);
   });
 
-  app.get('/api/logout', (req, res) => {
+  app.post('/api/logout', (req, res) => {
     req.logout(() => {
       res.redirect(
         client.buildEndSessionUrl(config, {

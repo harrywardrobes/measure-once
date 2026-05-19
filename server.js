@@ -325,30 +325,36 @@ const GOOGLE_SCOPES = [
 ];
 
 // ── Auth Routes ───────────────────────────────────────────────────────────────
-app.get('/auth/google', (req, res) => {
+const crypto = require('crypto');
+
+app.get('/auth/google', isAuthenticated, (req, res) => {
+  const state = crypto.randomBytes(16).toString('hex');
+  req.session.googleOAuthState = state;
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: GOOGLE_SCOPES,
-    prompt: 'consent'
+    prompt: 'consent',
+    state,
   });
   res.redirect(url);
 });
 
-app.get('/auth/google/callback', async (req, res) => {
+app.get('/auth/google/callback', isAuthenticated, async (req, res) => {
+  const expectedState = req.session.googleOAuthState;
+  delete req.session.googleOAuthState;
+  if (!expectedState || req.query.state !== expectedState) {
+    return res.redirect('/?error=google_auth_failed');
+  }
   try {
     const { tokens } = await oauth2Client.getToken(req.query.code);
     req.session.googleTokens = tokens;
     res.redirect('/?connected=true');
   } catch (e) {
-    if (req.isAuthenticated && req.isAuthenticated()) {
-      res.redirect('/?error=google_auth_failed');
-    } else {
-      res.redirect('/?access_requested=1');
-    }
+    res.redirect('/?error=google_auth_failed');
   }
 });
 
-app.get('/auth/logout-google', (req, res) => {
+app.post('/auth/logout-google', isAuthenticated, (req, res) => {
   delete req.session.googleTokens;
   res.json({ success: true });
 });

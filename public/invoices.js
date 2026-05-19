@@ -162,7 +162,7 @@ function renderInvoicesTab() {
 }
 
 async function disconnectQB() {
-  await fetch('/auth/quickbooks/disconnect').catch(() => {});
+  await fetch('/auth/quickbooks/disconnect', { method: 'POST' }).catch(() => {});
   state.qb = { statusKnown: true, connected: false, company: null, invoices: [], loaded: false, loading: false, showMatchedOnly: true, panel: null, panelSaving: false, panelSending: false };
   renderCustomerList();
   renderInvoicesTab();

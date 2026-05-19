@@ -164,7 +164,7 @@ router.get('/auth/quickbooks/callback', isAuthenticated, requireAdmin, async (re
 });
 
 // ── OAuth: disconnect ──────────────────────────────────────────────────────────
-router.get('/auth/quickbooks/disconnect', isAuthenticated, requireAdmin, async (req, res) => {
+router.post('/auth/quickbooks/disconnect', isAuthenticated, requireAdmin, async (req, res) => {
   try { await pool.query('DELETE FROM qb_tokens'); } catch {}
   res.json({ success: true });
 });

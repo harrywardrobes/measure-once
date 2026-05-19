@@ -512,7 +512,7 @@
 <header class="app-header">
   <a href="/" class="nav-btn">← Home</a>
   <span class="flex-spacer"></span>
-  <a href="/api/logout" class="nav-btn">Sign out</a>
+  <button onclick="(function(){var f=document.createElement('form');f.method='POST';f.action='/api/logout';document.body.appendChild(f);f.submit();})()" class="nav-btn" style="background:none;border:none;cursor:pointer;font-family:inherit;font-size:inherit;">Sign out</button>
 </header>
 
 <div class="page" id="page">

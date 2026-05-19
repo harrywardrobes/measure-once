@@ -16,7 +16,7 @@ Project management dashboard (HubSpot CRM integration).
 Replit Auth (OpenID Connect) is wired in via `auth.js`. Login/logout endpoints:
 - `GET /api/login` — start login
 - `GET /api/callback` — OIDC callback
-- `GET /api/logout` — log out
+- `POST /api/logout` — log out
 - `GET /api/auth/user` — current user (requires session)
 
 Sessions and users are stored in PostgreSQL (`sessions` and `users` tables, auto-created on boot). Protect routes by importing `isAuthenticated` from `./auth` and adding it as middleware.
