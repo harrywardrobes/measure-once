@@ -522,11 +522,13 @@ function showAddRoomForm() {
   state.addingRoom = true;
   renderRoomTabs();
   setTimeout(() => document.getElementById('new-room-name')?.focus(), 30);
+  _updateBeforeUnloadGuard();
 }
 
 function hideAddRoomForm() {
   state.addingRoom = false;
   renderRoomTabs();
+  _updateBeforeUnloadGuard();
 }
 
 async function submitAddRoom() {

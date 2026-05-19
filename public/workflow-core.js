@@ -508,15 +508,17 @@ function hasUnsavedChanges() {
   return false;
 }
 
-// Returns true when a known inline form is open and has content.
+// Returns true when a known inline form is open (with or without content).
 // Uses DOM-presence checks rather than document.activeElement because focus
 // has already shifted to the clicked element (room tab, back button, etc.)
 // by the time click handlers run, making activeElement unreliable here.
+// The "Add room" and "Add task" elements are only rendered while their
+// respective state flags are true, so element presence == form open.
 function hasActiveInlineEdit() {
   // "Add room" form — present in DOM only while state.addingRoom is true
-  if (document.getElementById('new-room-name')?.value.trim()) return true;
+  if (document.getElementById('new-room-name') !== null) return true;
   // "Add task" form — present in DOM only while state.showAddTask is true
-  if (document.getElementById('task-subject')?.value.trim()) return true;
+  if (document.getElementById('task-subject') !== null) return true;
   if (window._invMemoDirty) return true;
   if (window._invSendDirty) return true;
   return false;
