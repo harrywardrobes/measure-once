@@ -192,22 +192,68 @@ async function ensureAuthTables() {
     );
   `);
 
-  /* Job roles catalogue — admin-managed list of available role labels. */
+  /* Job roles catalogue — admin-managed list of available role labels.
+     Schema: job_id SERIAL PK, name UNIQUE, privilege_level, created_at.
+     Migration is fully idempotent: safe to run against both fresh DBs and
+     the legacy schema where name was the primary key. */
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS job_roles (
-      name VARCHAR PRIMARY KEY,
-      created_at TIMESTAMP DEFAULT NOW()
-    );
-    INSERT INTO job_roles (name) VALUES
-      ('Site Manager'), ('Fitter'), ('Sales'), ('Admin'), ('Office')
-    ON CONFLICT (name) DO NOTHING;
-  `);
-  /* Add privilege_level to job_roles if it doesn't exist yet (idempotent). */
-  await pool.query(`
-    ALTER TABLE job_roles ADD COLUMN IF NOT EXISTS privilege_level TEXT NOT NULL DEFAULT 'member';
-    UPDATE job_roles SET privilege_level = 'admin'   WHERE name = 'Admin'        AND privilege_level = 'member';
-    UPDATE job_roles SET privilege_level = 'manager' WHERE name = 'Office'       AND privilege_level = 'member';
-    UPDATE job_roles SET privilege_level = 'manager' WHERE name = 'Site Manager' AND privilege_level = 'member';
+    DO $$
+    BEGIN
+      /* ── 1. Create table with new schema if it does not exist yet ── */
+      CREATE TABLE IF NOT EXISTS job_roles (
+        job_id         SERIAL PRIMARY KEY,
+        name           VARCHAR NOT NULL UNIQUE,
+        privilege_level TEXT    NOT NULL DEFAULT 'member',
+        created_at     TIMESTAMP DEFAULT NOW()
+      );
+
+      /* ── 2. Add job_id column if missing (legacy table had name as PK) ── */
+      BEGIN
+        ALTER TABLE job_roles ADD COLUMN job_id SERIAL;
+      EXCEPTION WHEN duplicate_column THEN NULL;
+      END;
+
+      /* ── 3. Add privilege_level column if missing ── */
+      BEGIN
+        ALTER TABLE job_roles ADD COLUMN privilege_level TEXT NOT NULL DEFAULT 'member';
+      EXCEPTION WHEN duplicate_column THEN NULL;
+      END;
+
+      /* ── 4. Promote job_id to PRIMARY KEY if name is still the PK ── */
+      IF EXISTS (
+        SELECT 1
+        FROM   information_schema.key_column_usage kcu
+        JOIN   information_schema.table_constraints tc
+               ON  tc.constraint_name = kcu.constraint_name
+               AND tc.table_name      = kcu.table_name
+        WHERE  tc.table_name      = 'job_roles'
+          AND  tc.constraint_type = 'PRIMARY KEY'
+          AND  kcu.column_name    = 'name'
+      ) THEN
+        ALTER TABLE job_roles DROP CONSTRAINT job_roles_pkey;
+        ALTER TABLE job_roles ADD  PRIMARY KEY (job_id);
+        /* name should already be unique via old PK; add explicit constraint if absent */
+        BEGIN
+          ALTER TABLE job_roles ADD CONSTRAINT job_roles_name_key UNIQUE (name);
+        EXCEPTION WHEN duplicate_table THEN NULL;
+        END;
+      END IF;
+
+      /* ── 5. Seed default roles with correct privilege levels ── */
+      INSERT INTO job_roles (name, privilege_level) VALUES
+        ('Site Manager', 'manager'),
+        ('Fitter',       'member'),
+        ('Sales',        'member'),
+        ('Admin',        'admin'),
+        ('Office',       'manager')
+      ON CONFLICT (name) DO NOTHING;
+
+      /* ── 6. Back-fill privilege levels that were left at the default ── */
+      UPDATE job_roles SET privilege_level = 'admin'   WHERE name = 'Admin'        AND privilege_level = 'member';
+      UPDATE job_roles SET privilege_level = 'manager' WHERE name = 'Office'       AND privilege_level = 'member';
+      UPDATE job_roles SET privilege_level = 'manager' WHERE name = 'Site Manager' AND privilege_level = 'member';
+    END
+    $$;
   `);
 
   /* Admin audit log — immutable record of every admin action. */
