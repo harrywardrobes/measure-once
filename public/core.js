@@ -31,7 +31,6 @@ function filterDeals() {}
 function setStageFilter() {}
 function setSortBy() {}
 function toggleArchived() {}
-async function refreshDeals() {}
 function setContactsViewMode() {}
 // Invoices-core stubs (real versions in invoices-core.js)
 async function loadQBInvoices() {}

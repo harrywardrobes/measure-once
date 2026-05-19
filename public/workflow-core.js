@@ -332,17 +332,6 @@ function toggleArchived() {
   renderCustomerList();
 }
 
-async function refreshDeals() {
-  const loader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
-  await Promise.all([loader, loadWorkflowStages()]);
-  if (state.contactsViewMode === 'all') populateLeadStatusFilter();
-  renderCustomerList();
-  if (state.selectedContact) {
-    state.selectedContact = state.contacts.find(c => c.id === state.selectedContactId);
-    renderWorkflowHeader();
-  }
-}
-
 // ── Bottom action bar ─────────────────────────────────────────────────────────
 // Card-list operations: save immediately, undo reverts with a second save
 let _bottomAction = null;
