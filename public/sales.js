@@ -1472,7 +1472,7 @@ function renderWorkflowInvoices() {
   const el = document.getElementById('invoices-section');
   if (!el) return;
 
-  if (!state.qb.statusKnown || state.qb.loading || (state.qb.connected && !state.qb.loaded)) {
+  if (!state.qb.loadError && (!state.qb.statusKnown || state.qb.loading || (state.qb.connected && !state.qb.loaded))) {
     el.innerHTML = `
       <div class="qb-section">
         <div class="qb-section-title">Invoices</div>
@@ -1490,6 +1490,26 @@ function renderWorkflowInvoices() {
           </div>
           <div class="skeleton-line" style="height:13px;width:42px;flex-shrink:0"></div>
         </div>
+      </div>`;
+    return;
+  }
+
+  if (state.qb.loadError) {
+    const isDbError = state.qb.errorCode === 'DB_ERROR';
+    const msg = isDbError
+      ? 'Database unreachable'
+      : (state.qb.error || 'QuickBooks error');
+    el.innerHTML = `
+      <div class="qb-section">
+        <div class="qb-section-title">Invoices</div>
+        <p class="text-sm" style="color:#ef4444;margin-bottom:6px">${escHtml(msg)}</p>
+        <button onclick="loadQBInvoices()" class="qb-refresh-btn" style="font-size:12px;padding:5px 10px">
+          <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Retry
+        </button>
       </div>`;
     return;
   }

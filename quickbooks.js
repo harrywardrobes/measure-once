@@ -201,7 +201,8 @@ router.get('/api/quickbooks/invoices', isAuthenticated, async (req, res) => {
     res.json({ invoices });
   } catch (e) {
     console.error('QB invoices error:', e.response?.data || e.message);
-    res.status(503).json({ error: e.message });
+    const isDb = !!(e.severity || e.routine || e.code === 'ECONNREFUSED' || e.code === 'ENOTFOUND');
+    res.status(503).json({ error: e.message, code: isDb ? 'DB_ERROR' : 'QB_ERROR' });
   }
 });
 

@@ -4,14 +4,31 @@
 
 // ── QuickBooks ────────────────────────────────────────────────────────────────
 async function loadQBInvoices() {
+  state.qb.loadError  = false;
+  state.qb.error      = null;
+  state.qb.errorCode  = null;
+
+  function _refreshInvoiceViews() {
+    renderCustomerList();
+    const homeEl  = document.getElementById('home-view');
+    if (homeEl) renderHomeTab();
+    const invEl   = document.getElementById('invoices-view');
+    if (invEl) renderInvoicesTab();
+    const wfInvEl = document.getElementById('invoices-section');
+    if (wfInvEl) renderWorkflowInvoices();
+    const projEl  = document.getElementById('projects-view');
+    if (projEl) renderProjectsView();
+  }
+
   try {
-    const status = await fetch('/api/quickbooks/status').then(r => r.json()).catch(() => ({ connected: false }));
-    state.qb.connected  = status.connected;
-    state.qb.company    = status.company || null;
+    const statusRes = await fetch('/api/quickbooks/status').catch(() => null);
+    const status    = statusRes ? await statusRes.json().catch(() => ({ connected: false })) : { connected: false };
+    state.qb.connected   = status.connected;
+    state.qb.company     = status.company || null;
     state.qb.statusKnown = true;
 
     if (!status.connected) {
-      const invEl = document.getElementById('invoices-view');
+      const invEl  = document.getElementById('invoices-view');
       if (invEl) renderInvoicesTab();
       const projEl = document.getElementById('projects-view');
       if (projEl) renderProjectsView();
@@ -19,21 +36,31 @@ async function loadQBInvoices() {
     }
 
     state.qb.loading = true;
-    const data = await fetch('/api/quickbooks/invoices').then(r => r.json()).catch(() => ({ invoices: [] }));
+
+    const res  = await fetch('/api/quickbooks/invoices');
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data.error) {
+      const err  = new Error(data.error || `Server error ${res.status}`);
+      err.code   = data.code || null;
+      throw err;
+    }
+
     state.qb.invoices = data.invoices || [];
     state.qb.loaded   = true;
     state.qb.loading  = false;
-    renderCustomerList();
-    const homeEl = document.getElementById('home-view');
-    if (homeEl) renderHomeTab();
-    const invEl = document.getElementById('invoices-view');
+    _refreshInvoiceViews();
+  } catch (e) {
+    state.qb.loading   = false;
+    state.qb.loadError = true;
+    state.qb.error     = e.message || 'Failed to load invoices';
+    state.qb.errorCode = e.code   || null;
+    const invEl  = document.getElementById('invoices-view');
     if (invEl) renderInvoicesTab();
     const wfInvEl = document.getElementById('invoices-section');
     if (wfInvEl) renderWorkflowInvoices();
     const projEl = document.getElementById('projects-view');
     if (projEl) renderProjectsView();
-  } catch {
-    state.qb.loading = false;
   }
 }
 

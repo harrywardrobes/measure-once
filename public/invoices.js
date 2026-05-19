@@ -2,7 +2,7 @@ function renderInvoicesTab() {
   const el = document.getElementById('invoices-view');
   if (!el) return;
 
-  if (!state.qb.statusKnown || state.qb.loading || (state.qb.connected && !state.qb.loaded)) {
+  if (!state.qb.loadError && (!state.qb.statusKnown || state.qb.loading || (state.qb.connected && !state.qb.loaded))) {
     const skRow = (w1 = '42%', w2 = '58px', w3 = '44px') => `
       <div class="qb-row skeleton-qb-row">
         <div class="qb-row-customer">
@@ -27,6 +27,33 @@ function renderInvoicesTab() {
         ${skRow('52%', '60px', '44px')}
         ${skRow('33%', '56px', '42px')}
         ${skRow('44%', '58px', '46px')}
+      </div>
+    `;
+    return;
+  }
+
+  if (state.qb.loadError) {
+    const isDbError = state.qb.errorCode === 'DB_ERROR';
+    const msg = isDbError
+      ? 'The database could not be reached. Check your connection and try again.'
+      : (state.qb.error || 'QuickBooks returned an unexpected error.');
+    el.innerHTML = `
+      <div class="qb-tab-empty" style="gap:12px">
+        <div class="qb-tab-empty-icon">
+          <svg width="40" height="40" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity:0.35;color:#ef4444">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          </svg>
+        </div>
+        <p class="qb-tab-empty-title" style="color:#ef4444">Invoices couldn't be loaded</p>
+        <p class="qb-tab-empty-sub">${escHtml(msg)}</p>
+        <button onclick="loadQBInvoices()" class="qb-refresh-btn" style="margin-top:4px;padding:8px 16px;font-size:13px">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Retry
+        </button>
       </div>
     `;
     return;
