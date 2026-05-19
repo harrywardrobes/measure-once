@@ -537,6 +537,12 @@ body.showing-workflow .workflow-panel { display: flex; }
   flex-shrink: 0;
 }
 
+/* ── Invoice list skeleton ───────────────────────────────────────────────────── */
+.skeleton-qb-row {
+  pointer-events: none;
+  cursor: default;
+}
+
 /* ── Stage pill button ───────────────────────────────────────────────────────── */
 .stage-pill-btn {
   cursor: pointer;

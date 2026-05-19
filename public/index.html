@@ -27,6 +27,10 @@
   <script src="/home.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
+      // Show skeleton immediately while data loads.
+      state.homeLoading = true;
+      renderHomeTab();
+
       if (!await bootstrap()) return;
       // Home needs personal tasks and upcoming calendar events for its cards.
       try {
@@ -38,6 +42,7 @@
         state.calendarEvents   = cal.events || [];
         state.calendarConnected = !!cal.connected;
       } catch {}
+      state.homeLoading = false;
       renderHomeTab();
     });
   </script>

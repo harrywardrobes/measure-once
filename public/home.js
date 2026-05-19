@@ -2,6 +2,34 @@ function renderHomeTab() {
   const el = document.getElementById('home-view');
   if (!el) return;
 
+  // ── Full-page loading skeleton ─────────────────────────────────────────────
+  if (state.homeLoading) {
+    const skLine = (w, h = 13, extra = '') =>
+      `<div class="skeleton-line" style="height:${h}px;width:${w}${extra ? ';' + extra : ''}"></div>`;
+    const skCard = (w1 = '50%', w2 = '44px') => `
+      <div class="home-card" style="pointer-events:none;cursor:default">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          ${skLine(w1, 13)}
+          ${skLine(w2, 18, 'border-radius:999px;flex-shrink:0')}
+        </div>
+        ${skLine('30%', 10, 'margin-top:5px')}
+      </div>`;
+    const skSection = (labelW, cards) => `
+      <div class="home-section">
+        <div class="home-section-header">${skLine(labelW, 10)}</div>
+        ${cards.map(([w1, w2]) => skCard(w1, w2)).join('')}
+      </div>`;
+    el.innerHTML = `
+      <div class="home-date-header">
+        ${skLine('130px', 22)}
+        <div style="margin-top:5px">${skLine('170px', 12)}</div>
+      </div>
+      ${skSection('80px', [['48%', '44px'], ['54%', '44px']])}
+      ${skSection('102px', [['44%', '52px'], ['50%', '52px'], ['38%', '52px']])}
+    `;
+    return;
+  }
+
   const now     = new Date();
   const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
@@ -14,7 +42,8 @@ function renderHomeTab() {
 
   const calEvents = (state.calendarEvents || []).slice(0, 3);
 
-  const overdueInvs = state.qb.connected
+  const qbLoading  = state.qb.connected && (state.qb.loading || !state.qb.loaded);
+  const overdueInvs = state.qb.connected && state.qb.loaded
     ? state.qb.invoices.filter(inv => inv.dueDate && new Date(inv.dueDate).getTime() < todayMs).slice(0, 4)
     : [];
 
@@ -99,7 +128,20 @@ function renderHomeTab() {
       ${calEvents.map(eventCard).join('')}
     </div>` : ''}
 
-    ${overdueInvs.length > 0 ? `
+    ${qbLoading ? `
+    <div class="home-section">
+      <div class="home-section-header">
+        <span class="home-section-title">Overdue Invoices</span>
+      </div>
+      ${[['52%', '56px'], ['40%', '48px']].map(([w1, w2]) => `
+        <div class="home-card" style="pointer-events:none;cursor:default">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+            <div class="skeleton-line" style="height:13px;width:${w1}"></div>
+            <div class="skeleton-line" style="height:18px;width:${w2};border-radius:999px;flex-shrink:0"></div>
+          </div>
+          <div class="skeleton-line" style="height:10px;width:88px;margin-top:5px"></div>
+        </div>`).join('')}
+    </div>` : overdueInvs.length > 0 ? `
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-title">Overdue Invoices</span>

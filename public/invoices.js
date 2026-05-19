@@ -20,7 +20,32 @@ function renderInvoicesTab() {
   }
 
   if (state.qb.loading || !state.qb.loaded) {
-    el.innerHTML = `<div class="qb-tab-loading"><div class="spinner"></div> Loading invoices…</div>`;
+    const skRow = (w1 = '42%', w2 = '58px', w3 = '44px') => `
+      <div class="qb-row skeleton-qb-row">
+        <div class="qb-row-customer">
+          <div class="skeleton-line" style="height:13px;width:${w1}"></div>
+        </div>
+        <div class="qb-row-meta">
+          <div class="skeleton-line" style="height:10px;width:${w2}"></div>
+          <div class="skeleton-line" style="height:9px;width:${w3};margin-top:3px"></div>
+        </div>
+        <div class="skeleton-line" style="height:15px;width:54px;flex-shrink:0"></div>
+      </div>`;
+    el.innerHTML = `
+      <div class="qb-tab-header">
+        <div>
+          <div class="skeleton-line" style="height:18px;width:165px;margin-bottom:8px"></div>
+          <div class="skeleton-line" style="height:11px;width:110px"></div>
+        </div>
+      </div>
+      <div class="qb-list">
+        ${skRow('48%', '62px', '48px')}
+        ${skRow('38%', '54px', '40px')}
+        ${skRow('52%', '60px', '44px')}
+        ${skRow('33%', '56px', '42px')}
+        ${skRow('44%', '58px', '46px')}
+      </div>
+    `;
     return;
   }
 
