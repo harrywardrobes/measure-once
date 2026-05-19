@@ -143,8 +143,9 @@ function renderAgendaView() {
     const isToday   = dayStart.getTime() === todayMs;
     const dayVisits = visibleVisits(dayStart, dayEnd);
     const headCls   = isToday ? ' agenda-day-today' : '';
+    const isoDay = dayStart.toISOString();
     if (dayVisits.length === 0) {
-      return `<div class="agenda-day-card${headCls}">
+      return `<div class="agenda-day-card${headCls} agenda-day-card--clickable" onclick="openVisitModal(null,'${isoDay}')" title="Click to add a visit">
         <div class="agenda-day-head">
           <div class="agenda-day-meta">
             <span class="agenda-day-num${isToday?' agenda-day-num-today':''}">${day.getDate()}</span>
@@ -167,7 +168,7 @@ function renderAgendaView() {
       return `<div class="agenda-mini-blk" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;background:${m.color}"></div>`;
     }).join('');
     const rows = dayVisits.map(v => renderAgendaRow(v)).join('');
-    return `<div class="agenda-day-card${headCls}">
+    return `<div class="agenda-day-card${headCls} agenda-day-card--clickable" onclick="openVisitModal(null,'${isoDay}')" title="Click empty area to add a visit">
       <div class="agenda-day-head">
         <div class="agenda-day-meta">
           <span class="agenda-day-num${isToday?' agenda-day-num-today':''}">${day.getDate()}</span>
@@ -197,7 +198,7 @@ function renderAgendaRow(v) {
   const assigneeHtml = v.assigneeRole
     ? `<span class="agenda-assignee-chip">${v.assigneeRole.charAt(0).toUpperCase()+v.assigneeRole.slice(1)}${assigneeName ? ' · '+escHtml(assigneeName) : ''}</span>`
     : (assigneeName ? `<span class="agenda-assignee-chip">${escHtml(assigneeName)}</span>` : '');
-  return `<div class="agenda-row" onclick="openVisitModal(${v.id})">
+  return `<div class="agenda-row" onclick="event.stopPropagation();openVisitModal(${v.id})">
     <div class="agenda-row-pill" style="background:${meta.color}"></div>
     <div class="agenda-row-time">${fmt(s)}<span class="agenda-row-end"> – ${fmt(e)}</span></div>
     <div class="agenda-row-body">
@@ -296,7 +297,7 @@ function calNav(dir) {
 }
 function calGoToday()              { state.calendar.cursor = calStartOfDay(new Date()); loadTasksView(); }
 function calToggleWorkshop(checked){ state.calendar.showWorkshop = checked; renderTasksView(); }
-function calMiniDayClick(iso)      { state.calendar.cursor = new Date(iso); loadTasksView(); }
+function calMiniDayClick(iso)      { state.calendar.cursor = new Date(iso); loadTasksView().then(() => openVisitModal(null, iso)); }
 
 
 function contactDisplayName(c) {
@@ -305,9 +306,9 @@ function contactDisplayName(c) {
   return n || p.email || `Contact ${c?.id || ''}`;
 }
 
-function openVisitModal(visitId, prefillStart) {
+function openVisitModal(visitId, prefillDate) {
   const existing = visitId ? state.calendar.visits.find(v => v.id === visitId) : null;
-  const start = existing ? new Date(existing.startAt) : (prefillStart || new Date());
+  const start = existing ? new Date(existing.startAt) : (prefillDate ? new Date(prefillDate) : new Date());
   const end   = existing ? new Date(existing.endAt)   : new Date(start.getTime() + 60*60*1000);
   const fmtDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const fmtTime = d => `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
