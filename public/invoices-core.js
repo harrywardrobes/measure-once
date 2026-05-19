@@ -249,11 +249,11 @@ function renderInvoicePanelBody() {
       <div class="inv-edit-grid">
         <label class="inv-edit-label">
           Due date
-          <input type="date" id="inv-edit-due" class="inv-edit-input" value="${escHtml(inv.dueDate || '')}">
+          <input type="date" id="inv-edit-due" class="inv-edit-input" value="${escHtml(inv.dueDate || '')}" oninput="window._invMemoDirty=true; _updateBeforeUnloadGuard()" onchange="window._invMemoDirty=true; _updateBeforeUnloadGuard()">
         </label>
         <label class="inv-edit-label">
           Customer email
-          <input type="email" id="inv-edit-email" class="inv-edit-input" value="${escHtml(inv.email || '')}" placeholder="customer@example.com">
+          <input type="email" id="inv-edit-email" class="inv-edit-input" value="${escHtml(inv.email || '')}" placeholder="customer@example.com" oninput="window._invMemoDirty=true; _updateBeforeUnloadGuard()">
         </label>
         <label class="inv-edit-label" style="grid-column:1/-1">
           Message on invoice
