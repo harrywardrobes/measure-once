@@ -21,17 +21,15 @@ function renderFullWorkflowView() {}
 function selectContact() {}
 function renderCustomerList() {}
 async function saveWorkflowData() {}
-// Workflow-core stubs (real versions in workflow-core.js)
+// Workflow-core stubs — kept because bootstrap() and clearHeaderSearch() in
+// this file call them unconditionally; pages that don't load workflow-core.js
+// (e.g. /profile, /trades) need these no-ops to avoid ReferenceErrors.
+// Real implementations in workflow-core.js override these when that file loads.
 async function loadWorkflow() {}
 async function loadOpenLeads() {}
-async function loadAllContacts() {}
 async function loadWorkflowStages() {}
 function populateStageFilter() {}
 function filterDeals() {}
-function setStageFilter() {}
-function setSortBy() {}
-function toggleArchived() {}
-function setContactsViewMode() {}
 // Invoices-core stubs (real versions in invoices-core.js)
 async function loadQBInvoices() {}
 function closeInvoicePanel() {
