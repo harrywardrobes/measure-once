@@ -1,0 +1,33 @@
+#105 - Trades: Company-First Structure with Multiple Contacts
+What & Why
+Restructure the Trades directory so that a company is the primary record (e.g. "Cheshire Electrical"), with up to three named points of contact beneath it. Each contact has their own name, role in the company, phone number, and email address. The existing person-first model (one row per individual, optional company name) is replaced entirely.
+
+Done looks like
+The "Add Contact" button opens a form titled "Add Company"
+The form prompts for: company name (required), trade type (required), areas served, typical lead time, preferred invoice method, payment terms, and notes — these belong to the company
+Below those fields is a "Points of Contact" section with up to 3 contact slots; each slot has: full name, role/job title, phone number, email address
+At least one contact person is required before saving
+Additional contacts can be added (up to 3) with an "+ Add another contact" button; each extra contact can also be removed
+Saved companies appear as cards with the company name as the heading, the trade badge and areas served below it, and each contact person listed with their role and click-to-call/click-to-email links
+Editing a company pre-fills all company fields and all existing contacts
+Deleting a company removes it and all its contacts
+Existing records in the database are migrated: each current trade_contacts row becomes a company with the person's name as the first (and only) contact, using the existing name, phone, email, and whatever company_name was stored becomes the company heading (or the person's name if company_name was blank)
+Search continues to work across company name, trade type, areas, and any contact's name
+Out of scope
+More than 3 contacts per company
+Deleting individual contacts from a company without deleting the whole company (edit replaces all contacts)
+Separate contact detail pages or slide-in panels
+Steps
+Database migration — Add two new tables: trade_companies (company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, created_by, created_at) and trade_company_contacts (id, company_id FK, sort_order, name, role, phone, email). Migrate existing trade_contacts rows into the new tables: use company_name (or name if blank) as the company heading, and move the person fields into one trade_company_contacts row. Leave the old trade_contacts table in place for safety but stop using it.
+
+API layer — Replace the four /api/trades endpoints with company-aware versions. GET /api/trades returns companies with their contacts embedded as an array. POST /api/trades and PUT /api/trades/:id accept a contacts array alongside company-level fields, and write both tables in a transaction. DELETE /api/trades/:id deletes the company and its contacts (cascade). Validate that company name and trade type are present, and that at least one contact with a name is provided.
+
+Form UI — Rework trades.html and the modal: company fields first (company name required, trade type required, areas served, lead time, invoice method, payment terms, notes), then a "Points of Contact" section. Render up to 3 contact slots dynamically; the first is always shown, extra ones appear when the user clicks "+ Add another contact" and can be removed with a small × button. Update openTradesModal to populate all contact slots when editing. Update saveTradeContact to collect the contacts array and send it to the API.
+
+Card rendering — Update tradeCardHtml so the company name is the bold heading, the trade badge and areas sit below it, and each contact person is shown in their own row with their name, role label, and clickable phone/email links. Update filterTradeContacts to also search across contact names.
+
+Relevant files
+server.js:1096-1200
+public/trades.html
+public/trades.js
+public/style.css
