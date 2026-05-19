@@ -13,6 +13,8 @@ async function loadQBInvoices() {
     if (!status.connected) {
       const invEl = document.getElementById('invoices-view');
       if (invEl) renderInvoicesTab();
+      const projEl = document.getElementById('projects-view');
+      if (projEl) renderProjectsView();
       return;
     }
 
@@ -28,6 +30,8 @@ async function loadQBInvoices() {
     if (invEl) renderInvoicesTab();
     const wfInvEl = document.getElementById('invoices-section');
     if (wfInvEl) renderWorkflowInvoices();
+    const projEl = document.getElementById('projects-view');
+    if (projEl) renderProjectsView();
   } catch {
     state.qb.loading = false;
   }

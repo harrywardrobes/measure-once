@@ -155,6 +155,25 @@ function customerCardHtml(contact, rooms, isAdmin) {
       </div>`;
   }).join('');
 
+  let invoiceSection = '';
+  if (!state.qb.statusKnown || state.qb.loading || (state.qb.connected && !state.qb.loaded)) {
+    invoiceSection = `
+      <div class="project-card-invoices" style="pointer-events:none">
+        <div class="skeleton-line" style="height:10px;width:72px"></div>
+        <div class="skeleton-line" style="height:10px;width:48px;margin-top:4px"></div>
+      </div>`;
+  } else if (state.qb.connected) {
+    const invs  = matchInvoicesForContact(contact);
+    if (invs.length) {
+      const total = invs.reduce((s, inv) => s + inv.balance, 0);
+      const count = invs.length;
+      invoiceSection = `
+        <div class="project-card-invoices">
+          <span class="qb-badge" title="${count} outstanding invoice${count !== 1 ? 's' : ''}">${fmtGBP(total)}</span>
+        </div>`;
+    }
+  }
+
   return `
     <div class="customer-project-card">
       <div class="customer-project-header">
@@ -164,6 +183,7 @@ function customerCardHtml(contact, rooms, isAdmin) {
       <div class="project-room-list">
         ${roomRows}
       </div>
+      ${invoiceSection}
     </div>`;
 }
 

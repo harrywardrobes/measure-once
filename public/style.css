@@ -1430,6 +1430,14 @@ body.showing-workflow .workflow-panel { display: flex; }
   min-width: 220px;
   max-width: 400px;
 }
+.project-card-invoices {
+  padding: 8px 14px;
+  border-top: 1px solid var(--stone);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
 .customer-project-header {
   padding: 12px 14px 10px;
   border-bottom: 1px solid var(--stone);
