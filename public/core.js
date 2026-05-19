@@ -40,6 +40,9 @@ async function loadWorkflowStages() {}
 function populateStageFilter() {}
 function filterDeals() {}
 
+// Sales stubs — safe no-ops on pages that don't load sales.js
+function renderGoogleEmailSection() {}
+
 // loadQBInvoices() is called unconditionally in bootstrap() below; pages that
 // don't load invoices-core.js (calendar, profile, trades) need this no-op.
 // Real implementation in invoices-core.js overrides when that file loads.
@@ -293,6 +296,7 @@ function showAccessGate(params) {
 }
 
 async function checkAuthStatus() {
+  const prevGoogle = state.authStatus.google;
   const [status, user] = await Promise.all([
     GET('/auth/status'),
     fetch('/api/auth/user').then(r => r.ok ? r.json() : null).catch(() => null),
@@ -300,6 +304,9 @@ async function checkAuthStatus() {
   state.authStatus = status;
   state.user = user;
   renderAuthStatus();
+  if (!prevGoogle && state.authStatus.google && state.selectedContact) {
+    renderGoogleEmailSection();
+  }
 }
 
 // ── Header Search ─────────────────────────────────────────────────────────────
