@@ -761,10 +761,11 @@
           ${name ? `<div style="font-size:.72rem;color:var(--ink-4);">${esc(a.email)}</div>` : ''}
         </td>
         <td style="font-size:.78rem;">
-          ${m.date_of_birth ? `<div style="color:var(--ink-3);">DOB: ${esc(m.date_of_birth)}</div>` : ''}
-          ${m.ni_number     ? `<div style="color:var(--ink-3);">NI: ${esc(m.ni_number)}</div>` : ''}
+          ${m.date_of_birth  ? `<div style="color:var(--ink-3);">DOB: ${esc(m.date_of_birth)}</div>` : ''}
+          ${m.ni_number      ? `<div style="color:var(--ink-3);">NI: ${esc(m.ni_number)}</div>` : ''}
+          ${m.mobile_number  ? `<div style="color:var(--ink-3);">Mobile: ${esc(m.mobile_number)}</div>` : ''}
           ${ec ? `<div style="color:var(--ink-4);margin-top:2px;">EC: ${esc(ec)}${ecPhone ? ` · ${esc(ecPhone)}` : ''}</div>` : ''}
-          ${!m.date_of_birth && !m.ni_number && !ec ? '<span style="color:var(--ink-4);">—</span>' : ''}
+          ${!m.date_of_birth && !m.ni_number && !m.mobile_number && !ec ? '<span style="color:var(--ink-4);">—</span>' : ''}
         </td>
         <td><span class="badge ${a.protected ? 'badge-approved' : ''}">${esc(a.note || '—')}</span></td>
         <td style="color:var(--ink-4);font-size:.78rem;">${fmtDate(a.approved_at)}</td>
@@ -821,6 +822,10 @@
             <label>National Insurance number</label>
             <input class="field" id="invite-ni" type="text" placeholder="AB 12 34 56 C" maxlength="20" autocomplete="off"
               style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+          </div>
+          <div class="form-field-wrap">
+            <label>Mobile number</label>
+            <input class="field" id="invite-mobile" type="tel" placeholder="+44 7700 900000" maxlength="30" autocomplete="off">
           </div>
         </div>
 
@@ -948,6 +953,7 @@
       last_name:     g('invite-lname'),
       date_of_birth: g('invite-dob'),
       ni_number:     g('invite-ni'),
+      mobile_number: g('invite-mobile'),
       ec_first_name: g('invite-ec-fname'),
       ec_last_name:  g('invite-ec-lname'),
       ec_phone:      g('invite-ec-phone'),
@@ -956,7 +962,7 @@
     if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
     try {
       await api('POST', '/api/admin/allowed', payload);
-      ['invite-email','invite-fname','invite-lname','invite-dob','invite-ni',
+      ['invite-email','invite-fname','invite-lname','invite-dob','invite-ni','invite-mobile',
        'invite-note','invite-ec-fname','invite-ec-lname','invite-ec-phone']
         .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
       const name = [payload.first_name, payload.last_name].filter(Boolean).join(' ');

@@ -602,6 +602,7 @@ async function setupAuth(app) {
       if (str(body.last_name,     100)) meta.last_name     = str(body.last_name,  100);
       if (str(body.date_of_birth,  20)) meta.date_of_birth = str(body.date_of_birth, 20);
       if (str(body.ni_number,      20)) meta.ni_number     = str(body.ni_number,  20);
+      if (str(body.mobile_number,  30)) meta.mobile_number = str(body.mobile_number, 30);
       if (str(body.ec_first_name,  100)) meta.ec_first_name  = str(body.ec_first_name, 100);
       if (str(body.ec_last_name,   100)) meta.ec_last_name   = str(body.ec_last_name,  100);
       if (str(body.ec_phone,        30)) meta.ec_phone        = str(body.ec_phone, 30);
