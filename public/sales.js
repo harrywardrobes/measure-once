@@ -612,7 +612,10 @@ function renderComments() {
       ${comments.length
         ? comments.slice().reverse().map(c => `
             <div class="comment-item">
-              <div class="comment-date">${escHtml(formatDate(c.date))}</div>
+              <div class="comment-meta">
+                ${c.author ? `<span class="comment-author">${escHtml(c.author)}</span><span class="comment-meta-sep">·</span>` : ''}
+                <span class="comment-date">${escHtml(formatDate(c.date))}</span>
+              </div>
               <div class="comment-text">${escHtml(c.text)}</div>
             </div>
           `).join('')
@@ -639,7 +642,9 @@ async function addComment() {
   const text  = input?.value.trim();
   if (!text) return;
   if (!state.workflowData.comments) state.workflowData.comments = [];
-  const comment = { text, date: new Date().toISOString() };
+  const u = state.user;
+  const author = [u?.first_name, u?.last_name].filter(Boolean).join(' ') || u?.email || '';
+  const comment = { text, date: new Date().toISOString(), author };
   state.workflowData.comments.push(comment);
   input.value = '';
   hideAddComment();
