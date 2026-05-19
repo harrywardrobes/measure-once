@@ -383,7 +383,21 @@ function scheduleSave(undoMessage, snapshotRooms) {
     _deferredSnapshot = null;
     closeBottomBar();
     _updateBeforeUnloadGuard();
-    try { await saveWorkflowData(); } catch (e) {
+    try {
+      await saveWorkflowData();
+      // Re-fetch the contact so the list reflects the latest server state
+      // (e.g. HubSpot last-activity timestamp after the PATCH).  Route through
+      // _mergeContactIntoState so any in-flight optimistic lead-status change
+      // on the badge is preserved rather than overwritten by the fresh value.
+      const cid = state.selectedContactId;
+      if (cid) {
+        const freshContact = await GET(`/api/contacts/${cid}`).catch(() => null);
+        if (freshContact) {
+          _mergeContactIntoState(freshContact);
+          renderCustomerList();
+        }
+      }
+    } catch (e) {
       if (e.code === 'HUBSPOT_AUTH') {
         showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
       } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
