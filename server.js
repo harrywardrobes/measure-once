@@ -347,6 +347,26 @@ app.get('/auth/status', (req, res) => {
   });
 });
 
+// ── HubSpot: Connection status (lightweight ping, no requireHubspotToken guard) ─
+app.get('/api/hubspot/status', async (req, res) => {
+  if (!process.env.HUBSPOT_ACCESS_TOKEN) {
+    return res.json({ connected: false, code: 'NO_TOKEN' });
+  }
+  try {
+    await axios.get(`${HS}/account-info/v3/details`, { headers: hsHeaders(), timeout: 8000 });
+    res.json({ connected: true });
+  } catch (e) {
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.json({ connected: false, code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.json({ connected: false, code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.json({ connected: false, code: 'HUBSPOT_ERROR' });
+  }
+});
+
 // ── HubSpot: Account ──────────────────────────────────────────────────────────
 app.get('/api/account', async (req, res) => {
   try {
