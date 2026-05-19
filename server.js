@@ -726,10 +726,6 @@ app.post('/api/contacts/:id/workflow', async (req, res) => {
     }
 
     const noteBody = `WORKFLOW_DATA:${JSON.stringify(data)}`;
-    const contactId = String(req.params.id || '');
-    if (!/^\d+$/.test(contactId)) {
-      return res.status(400).json({ error: 'Invalid contact id' });
-    }
 
     if (existingNoteId) {
       const safeExistingNoteId = validateHsObjectId(existingNoteId, 'existingNoteId');
