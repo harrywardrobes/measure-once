@@ -183,6 +183,15 @@ async function ensureAuthTables() {
     ALTER TABLE allowed_emails ADD COLUMN IF NOT EXISTS metadata JSONB;
   `);
 
+  /* Key/value store for admin-configurable settings (e.g. permission overrides). */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_settings (
+      key VARCHAR PRIMARY KEY,
+      value JSONB NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
   /* Job roles catalogue — admin-managed list of available role labels. */
   await pool.query(`
     CREATE TABLE IF NOT EXISTS job_roles (
@@ -719,7 +728,7 @@ async function setupAuth(app) {
   const ALLOWED_PRIVILEGE_LEVELS = ['viewer', 'member', 'manager', 'admin'];
 
   app.patch('/api/users/:id/profile', isAuthenticated, requireAdmin, async (req, res) => {
-    const { job_role } = req.body || {};
+    const { job_role, first_name, last_name } = req.body || {};
     const privilege_level = typeof req.body?.privilege_level === 'string'
       ? req.body.privilege_level.trim().toLowerCase()
       : req.body?.privilege_level;
@@ -729,6 +738,8 @@ async function setupAuth(app) {
     try {
       const cols = [];
       const vals = [];
+      if (first_name !== undefined)     { cols.push(`first_name = $${cols.length + 1}`);     vals.push(first_name?.trim() || null); }
+      if (last_name !== undefined)      { cols.push(`last_name = $${cols.length + 1}`);      vals.push(last_name?.trim() || null); }
       if (job_role !== undefined)       { cols.push(`job_role = $${cols.length + 1}`);       vals.push(job_role || null); }
       if (privilege_level !== undefined) { cols.push(`privilege_level = $${cols.length + 1}`); vals.push(privilege_level); }
       if (!cols.length) return res.status(400).json({ error: 'Nothing to update' });
@@ -743,6 +754,8 @@ async function setupAuth(app) {
       const updated = r.rows[0];
       const adminEmail = req.user?.claims?.email;
       const parts = [];
+      if (first_name !== undefined)     parts.push(`first_name="${first_name?.trim() || 'none'}"`);
+      if (last_name !== undefined)      parts.push(`last_name="${last_name?.trim() || 'none'}"`);
       if (job_role !== undefined)       parts.push(`job_role="${job_role || 'none'}"`);
       if (privilege_level !== undefined) parts.push(`privilege_level="${privilege_level}"`);
       await logAdminAction(adminEmail, 'edit_user_profile', updated.email, parts.join(', '));
@@ -774,11 +787,51 @@ async function setupAuth(app) {
     { feat: 'Manage job role catalogue',  desc: 'Add and remove available job role labels',  levels: ['admin'] },
   ];
 
-  app.get('/api/admin/capabilities', isAuthenticated, requireAdmin, (req, res) => {
-    res.json({
-      levels: ['viewer', 'member', 'manager', 'admin'],
-      features: CAPABILITIES,
-    });
+  app.get('/api/admin/capabilities', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const overRow = await pool.query(
+        `SELECT value FROM admin_settings WHERE key = 'permission_overrides'`
+      );
+      const overrides = overRow.rows[0]?.value || {};
+      const merged = CAPABILITIES.map(row => {
+        if (row.group) return row;
+        return overrides[row.feat] !== undefined
+          ? { ...row, levels: overrides[row.feat] }
+          : row;
+      });
+      res.json({ levels: ['viewer', 'member', 'manager', 'admin'], features: merged });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch('/api/admin/capabilities', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const overrides = req.body?.overrides;
+      if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+        return res.status(400).json({ error: 'overrides must be an object' });
+      }
+      const validLevels = new Set(['viewer', 'member', 'manager', 'admin']);
+      const validFeats  = new Set(CAPABILITIES.filter(f => f.feat).map(f => f.feat));
+      for (const [feat, levels] of Object.entries(overrides)) {
+        if (!validFeats.has(feat)) return res.status(400).json({ error: `Unknown feature: ${feat}` });
+        if (!Array.isArray(levels) || !levels.every(l => validLevels.has(l))) {
+          return res.status(400).json({ error: `Invalid levels for feature: ${feat}` });
+        }
+      }
+      await pool.query(
+        `INSERT INTO admin_settings (key, value)
+         VALUES ('permission_overrides', $1::jsonb)
+         ON CONFLICT (key) DO UPDATE SET value = $1::jsonb, updated_at = NOW()`,
+        [JSON.stringify(overrides)]
+      );
+      const adminEmail = req.user?.claims?.email;
+      await logAdminAction(adminEmail, 'edit_permissions', null,
+        `Updated ${Object.keys(overrides).length} feature permission(s)`);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // ── Job Roles catalogue ───────────────────────────────────────────────────

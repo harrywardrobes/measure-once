@@ -115,10 +115,10 @@
       text-transform: capitalize;
       letter-spacing: .02em;
     }
-    .lvl-viewer  { background: #f1f5f9; color: #475569; }
-    .lvl-member  { background: #dbeafe; color: #1e40af; }
-    .lvl-manager { background: #fef3c7; color: #92400e; }
-    .lvl-admin   { background: var(--orchid-tint); color: var(--orchid-deep); }
+    .lvl-viewer  { background: #f3f4f6; color: #6b7280; }
+    .lvl-member  { background: #e5e7eb; color: #374151; }
+    .lvl-manager { background: #6b7280; color: #fff; }
+    .lvl-admin   { background: #111827; color: #fff; }
 
     /* ── Status badges ── */
     .badge {
@@ -356,6 +356,7 @@
     .chip-edit_user_profile { background: #ede0ff; color: #3d0f7a; }
     .chip-add_job_role      { background: #f0fdf4; color: #166534; }
     .chip-delete_job_role   { background: #fff7ed; color: #9a3412; }
+    .chip-edit_permissions  { background: #ede0ff; color: #3d0f7a; }
 
     /* ── Add member form ── */
     .form-section-label {
@@ -417,6 +418,49 @@
     .checklist-items li::before { content: '•'; position: absolute; left: 0; color: #d97706; }
     .checklist-items li span { color: #78350f; font-weight: 400; display: block; font-size: .72rem; opacity: .85; }
 
+    /* ── Edit user modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(20,20,19,.52);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 400; padding: 16px;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal {
+      background: var(--chalk);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      width: 100%; max-width: 460px;
+      padding: 24px;
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal-title { font-size: 1rem; font-weight: 700; margin: 0 0 2px; color: var(--ink-1); }
+    .modal-sub   { font-size: .78rem; color: var(--ink-4); margin: 0 0 18px; }
+    .modal-err   { font-size: .8rem; color: #991b1b; margin-top: 10px; display: none; }
+    .modal-actions {
+      display: flex; gap: 8px; justify-content: flex-end;
+      margin-top: 20px; padding-top: 16px;
+      border-top: 1px solid var(--stone);
+    }
+
+    /* ── Permissions toggle ── */
+    .perm-toggle {
+      width: 30px; height: 30px;
+      border-radius: var(--radius-md);
+      border: 1.5px solid var(--stone);
+      background: var(--chalk);
+      cursor: pointer;
+      font-size: .85rem;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background .12s, border-color .12s, color .12s;
+      font-family: inherit;
+    }
+    .perm-toggle.on  { background: #f0fdf4; border-color: #86efac; color: #166534; }
+    .perm-toggle.off { color: var(--stone-deep); }
+    .perm-toggle:hover { border-color: var(--orchid-soft); }
+    .perm-save-row { display: flex; align-items: center; gap: 10px; padding-top: 12px; }
+    .perm-unsaved  { font-size: .75rem; color: var(--orchid); font-style: italic; }
+
     /* ── Loading / forbidden ── */
     .loading-state {
       display: flex;
@@ -451,6 +495,38 @@
 </div>
 
 <div id="toast" class="toast"></div>
+
+<div id="modal-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">Edit team member</div>
+    <div class="modal-sub"   id="modal-sub"></div>
+    <div class="form-grid">
+      <div class="form-field-wrap">
+        <label>First name</label>
+        <input class="field" id="modal-fname" type="text" maxlength="100" autocomplete="off"
+          onkeydown="if(event.key==='Enter')saveModal()">
+      </div>
+      <div class="form-field-wrap">
+        <label>Last name</label>
+        <input class="field" id="modal-lname" type="text" maxlength="100" autocomplete="off"
+          onkeydown="if(event.key==='Enter')saveModal()">
+      </div>
+      <div class="form-field-wrap" style="grid-column:1/-1;">
+        <label>Job role</label>
+        <select class="field" id="modal-jobrole" style="width:100%;"></select>
+      </div>
+      <div class="form-field-wrap" style="grid-column:1/-1;">
+        <label>Privilege level</label>
+        <select class="field" id="modal-privilege" style="width:100%;"></select>
+      </div>
+    </div>
+    <div class="modal-err" id="modal-err"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="modal-save-btn" onclick="saveModal()">Save changes</button>
+    </div>
+  </div>
+</div>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
@@ -547,7 +623,7 @@
     container.innerHTML = _users.map(u => {
       const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '—';
       return `
-        <tr id="urow-${esc(u.id)}">
+        <tr>
           <td>
             <div class="user-cell">
               ${avatarEl(u)}
@@ -560,29 +636,11 @@
               </div>
             </div>
           </td>
-          <td id="ujob-${esc(u.id)}">${esc(u.job_role || '—')}</td>
-          <td id="ulvl-${esc(u.id)}">${lvlBadge(u.privilege_level)}</td>
+          <td>${esc(u.job_role || '—')}</td>
+          <td>${lvlBadge(u.privilege_level)}</td>
           <td style="color:var(--ink-4);font-size:.78rem;">${fmtDateShort(u.created_at)}</td>
           <td class="actions">
-            <button class="btn btn-ghost" onclick="openEdit('${esc(u.id)}')">Edit</button>
-          </td>
-        </tr>
-        <tr class="edit-row" id="uedit-${esc(u.id)}" style="display:none;">
-          <td colspan="5">
-            <div class="edit-form">
-              <span class="edit-label">Job role</span>
-              <select class="field" id="usel-job-${esc(u.id)}" style="min-width:140px;">
-                ${jobRoleOptions(u.job_role || '')}
-              </select>
-              <span class="edit-label" style="margin-left:4px;">Privilege</span>
-              <select class="field" id="usel-lvl-${esc(u.id)}">
-                ${['viewer','member','manager','admin'].map(v =>
-                  `<option value="${v}" ${(u.privilege_level || 'member') === v ? 'selected' : ''}>${v.charAt(0).toUpperCase()+v.slice(1)}</option>`
-                ).join('')}
-              </select>
-              <button class="btn btn-primary" onclick="saveEdit('${esc(u.id)}')">Save</button>
-              <button class="btn btn-ghost"   onclick="closeEdit('${esc(u.id)}')">Cancel</button>
-            </div>
+            <button class="btn btn-ghost" onclick="openEditModal('${esc(u.id)}')">Edit</button>
           </td>
         </tr>`;
     }).join('');
@@ -591,54 +649,85 @@
     if (count) count.textContent = _users.length;
   }
 
-  function openEdit(id) {
-    closeAllEdits();
-    document.getElementById('uedit-' + id).style.display = '';
-    document.getElementById('urow-' + id).querySelector('.btn-ghost').style.display = 'none';
-  }
-  function closeEdit(id) {
-    document.getElementById('uedit-' + id).style.display = 'none';
-    const btn = document.getElementById('urow-' + id)?.querySelector('.btn-ghost');
-    if (btn) btn.style.display = '';
-  }
-  function closeAllEdits() {
-    document.querySelectorAll('[id^="uedit-"]').forEach(el => {
-      const id = el.id.replace('uedit-', '');
-      el.style.display = 'none';
-      const btn = document.getElementById('urow-' + id)?.querySelector('.btn-ghost');
-      if (btn) btn.style.display = '';
-    });
+  /* ── Edit user modal ── */
+  let _editingUserId = null;
+
+  function openEditModal(id) {
+    const u = _users.find(u => u.id === id);
+    if (!u) return;
+    _editingUserId = id;
+
+    const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—';
+    $('#modal-title').textContent = 'Edit team member';
+    $('#modal-sub').textContent   = name + (u.email && name !== u.email ? ' · ' + u.email : '');
+
+    $('#modal-fname').value     = u.first_name || '';
+    $('#modal-lname').value     = u.last_name  || '';
+    $('#modal-jobrole').innerHTML = `<option value="">— None —</option>` +
+      _jobRoles.map(r => `<option value="${esc(r)}" ${u.job_role === r ? 'selected' : ''}>${esc(r)}</option>`).join('') +
+      (u.job_role && !_jobRoles.includes(u.job_role)
+        ? `<option value="${esc(u.job_role)}" selected>${esc(u.job_role)}</option>` : '');
+
+    $('#modal-privilege').innerHTML = ['viewer','member','manager','admin'].map(v =>
+      `<option value="${v}" ${(u.privilege_level || 'member') === v ? 'selected' : ''}>${v.charAt(0).toUpperCase()+v.slice(1)}</option>`
+    ).join('');
+
+    const errEl = $('#modal-err');
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    $('#modal-overlay').classList.remove('hidden');
+    setTimeout(() => $('#modal-fname')?.focus(), 50);
   }
 
-  async function saveEdit(id) {
-    const job_role        = document.getElementById('usel-job-' + id)?.value || '';
-    const privilege_level = document.getElementById('usel-lvl-' + id)?.value;
-    const saveBtn = document.querySelector(`#uedit-${id} .btn-primary`);
+  function closeModal() {
+    $('#modal-overlay').classList.add('hidden');
+    _editingUserId = null;
+  }
+
+  async function saveModal() {
+    const id = _editingUserId;
+    if (!id) return;
+    const saveBtn = $('#modal-save-btn');
+    const errEl   = $('#modal-err');
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+
+    const payload = {
+      first_name:     $('#modal-fname')?.value.trim()     || '',
+      last_name:      $('#modal-lname')?.value.trim()     || '',
+      job_role:       $('#modal-jobrole')?.value          || '',
+      privilege_level: $('#modal-privilege')?.value,
+    };
+
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
     try {
-      await api('PATCH', '/api/users/' + encodeURIComponent(id) + '/profile', { job_role, privilege_level });
+      const updated = await api('PATCH', '/api/users/' + encodeURIComponent(id) + '/profile', payload);
       const u = _users.find(u => u.id === id);
-      if (u) { u.job_role = job_role; u.privilege_level = privilege_level; }
-      document.getElementById('ujob-' + id).textContent = job_role || '—';
-      document.getElementById('ulvl-' + id).innerHTML   = lvlBadge(privilege_level);
-      closeEdit(id);
-      toast('Saved');
+      if (u) Object.assign(u, updated);
+      renderTeam();
       renderOverview();
+      closeModal();
+      toast('Changes saved');
     } catch (e) {
-      toast(e.message, true);
+      if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
+      else toast(e.message, true);
     } finally {
-      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save changes'; }
     }
   }
 
   /* ────────────────────────────────────────────────
      PERMISSIONS TAB
   ──────────────────────────────────────────────── */
+  let _permEdits = {};
+
   function renderMatrix() {
     const levels = _capabilities.levels;
     const lvlCls = { viewer:'lvl-viewer', member:'lvl-member', manager:'lvl-manager', admin:'lvl-admin' };
-    const tick  = `<span class="tick" aria-label="Yes">✓</span>`;
-    const cross = `<span class="cross" aria-label="No">✗</span>`;
+
+    // Seed _permEdits from current capabilities
+    _permEdits = {};
+    _capabilities.features.forEach(row => {
+      if (!row.group) _permEdits[row.feat] = [...(row.levels || [])];
+    });
 
     const rows = _capabilities.features.map(row => {
       if (row.group) {
@@ -650,7 +739,12 @@
             ${esc(row.feat)}
             <span class="feat-desc">${esc(row.desc)}</span>
           </td>
-          ${levels.map(l => `<td>${(row.levels || []).includes(l) ? tick : cross}</td>`).join('')}
+          ${levels.map(l => {
+            const on = (row.levels || []).includes(l);
+            return `<td><button class="perm-toggle ${on ? 'on' : 'off'}"
+              onclick="togglePerm(this,'${esc(row.feat)}','${esc(l)}')"
+              title="${on ? 'Remove' : 'Grant'} ${esc(l)} access">${on ? '✓' : '✗'}</button></td>`;
+          }).join('')}
         </tr>`;
     }).join('');
 
@@ -666,10 +760,43 @@
           <tbody>${rows}</tbody>
         </table>
       </div>
-      <p style="font-size:.75rem;color:var(--ink-4);margin:12px 0 0;">
-        * Admin panel access requires the user's email to be in the <code>ADMIN_EMAILS</code> environment variable.
-        The "admin" privilege level in the database grants manager-equivalent access only.
+      <div class="perm-save-row">
+        <button class="btn btn-primary" id="perm-save-btn" onclick="savePerms()">Save permissions</button>
+        <span class="perm-unsaved" id="perm-unsaved-note" style="display:none;">Unsaved changes</span>
+      </div>
+      <p style="font-size:.75rem;color:var(--ink-4);margin:10px 0 0;">
+        * Toggles update the documented permission policy stored in the database.
+        Server-side middleware enforces a minimum security floor independently —
+        admin panel access always requires the <code>ADMIN_EMAILS</code> environment variable.
       </p>`;
+  }
+
+  function togglePerm(btn, feat, level) {
+    const cur = _permEdits[feat] || [];
+    const has = cur.includes(level);
+    _permEdits[feat] = has ? cur.filter(l => l !== level) : [...cur, level];
+    const nowOn = _permEdits[feat].includes(level);
+    btn.className    = 'perm-toggle ' + (nowOn ? 'on' : 'off');
+    btn.textContent  = nowOn ? '✓' : '✗';
+    btn.title        = (nowOn ? 'Remove' : 'Grant') + ' ' + level + ' access';
+    const note = $('#perm-unsaved-note');
+    if (note) note.style.display = '';
+  }
+
+  async function savePerms() {
+    const btn = $('#perm-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      await api('PATCH', '/api/admin/capabilities', { overrides: _permEdits });
+      _capabilities = await api('GET', '/api/admin/capabilities');
+      const note = $('#perm-unsaved-note');
+      if (note) note.style.display = 'none';
+      toast('Permissions saved');
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save permissions'; }
+    }
   }
 
   /* ── Job roles manager ── */
@@ -1013,13 +1140,14 @@
      AUDIT LOG TAB
   ──────────────────────────────────────────────── */
   const ACTION_LABELS = {
-    approve_request:    'Approved access request',
-    reject_request:     'Rejected access request',
-    add_allowed_email:  'Added email to allow-list',
-    revoke_allowed_email: 'Revoked email from allow-list',
-    edit_user_profile:  'Edited user profile',
-    add_job_role:       'Added job role',
-    delete_job_role:    'Deleted job role',
+    approve_request:     'Approved access request',
+    reject_request:      'Rejected access request',
+    add_allowed_email:   'Added email to allow-list',
+    revoke_allowed_email:'Revoked email from allow-list',
+    edit_user_profile:   'Edited user profile',
+    add_job_role:        'Added job role',
+    delete_job_role:     'Deleted job role',
+    edit_permissions:    'Updated permission matrix',
   };
 
   function renderAuditLog() {
