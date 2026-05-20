@@ -714,6 +714,9 @@
       const resendBtn = u.email
         ? `<button class="btn btn-ghost" data-resend-email="${esc(u.email)}" title="Email this user a new set-password link">Resend set-password</button>`
         : '';
+      const forceResetBtn = (u.email && u.has_password)
+        ? `<button class="btn btn-ghost" data-force-reset-email="${esc(u.email)}" title="Invalidate this user's password, sign them out, and email a new set-password link">Force password reset</button>`
+        : '';
       return `
         <tr>
           <td>
@@ -733,6 +736,7 @@
           <td class="td-date">${fmtDateShort(u.created_at)}</td>
           <td class="actions" style="white-space:nowrap;">
             ${resendBtn}
+            ${forceResetBtn}
             <button class="btn btn-ghost" onclick="openEditModal('${esc(u.id)}')">Edit</button>
           </td>
         </tr>`;
@@ -798,6 +802,29 @@
       toast(`Set-password email sent to ${email}`);
     } catch (e) {
       toast(e.message || 'Could not send email', true);
+    } finally {
+      btn.disabled = false; btn.textContent = original;
+    }
+  }
+
+  async function forcePasswordReset(email, btn) {
+    if (!email) return;
+    if (!confirm(
+      `Force a password reset for ${email}?\n\n` +
+      `Their current password will be invalidated, all of their active sessions will be signed out, ` +
+      `and they'll receive an email with a new set-password link.`
+    )) return;
+    const original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Resetting…';
+    try {
+      await api('POST', `/api/admin/users/${encodeURIComponent(email)}/force-password-reset`);
+      toast(`Password reset — email sent to ${email}`);
+      try {
+        _users = await api('GET', '/api/admin/users') || _users;
+        renderTeam();
+      } catch {}
+    } catch (e) {
+      toast(e.message || 'Could not force password reset', true);
     } finally {
       btn.disabled = false; btn.textContent = original;
     }
@@ -1900,6 +1927,12 @@
     if (resendBtn) {
       e.preventDefault();
       await resendSetPassword(resendBtn.dataset.resendEmail, resendBtn);
+      return;
+    }
+    const forceResetBtn = e.target.closest('[data-force-reset-email]');
+    if (forceResetBtn) {
+      e.preventDefault();
+      await forcePasswordReset(forceResetBtn.dataset.forceResetEmail, forceResetBtn);
       return;
     }
     const revokeBtn = e.target.closest('[data-revoke-email]');

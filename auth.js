@@ -1335,6 +1335,42 @@ async function setupAuth(app) {
     }
   });
 
+  // Admin: force a password reset for a team member whose password may be
+  // compromised. Clears the existing password hash, issues a fresh single-use
+  // set-password token, emails the link, and destroys the target user's
+  // active sessions so they cannot continue using the app with the old
+  // credentials.
+  app.post('/api/admin/users/:email/force-password-reset', isAuthenticated, requireAdmin, async (req, res) => {
+    const email = (req.params.email || '').toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Invalid email.' });
+    }
+    if (!(await isEmailApproved(email))) {
+      return res.status(404).json({ error: 'This email is not on the approved list.' });
+    }
+    const adminEmail = req.user?.claims?.email;
+    if (adminEmail && adminEmail.toLowerCase() === email) {
+      return res.status(400).json({ error: 'Use the change-password flow to reset your own password.' });
+    }
+    try {
+      await pool.query(
+        `UPDATE users SET password_hash = NULL, updated_at = NOW() WHERE LOWER(email) = LOWER($1)`,
+        [email]
+      );
+      await pool.query(
+        `DELETE FROM sessions WHERE sess->'passport'->'user'->'claims'->>'email' = $1`,
+        [email]
+      );
+      const token = await issuePasswordSetToken(email, { purpose: 'reset' });
+      await sendSetPasswordEmail(email, token, { reset: true });
+      await logAdminAction(adminEmail, 'force_password_reset', email, null);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error('force password reset failed:', e.message);
+      res.status(500).json({ error: 'Could not force password reset. Please try again.' });
+    }
+  });
+
   // ── User Profile ─────────────────────────────────────────────────────────────
   app.get('/api/users/:id/profile', isAuthenticated, async (req, res) => {
     const requestingId    = req.user?.claims?.sub;
