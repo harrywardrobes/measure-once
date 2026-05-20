@@ -38,15 +38,11 @@ jobs:
       PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "false"
 
       # ── Optional pass-throughs ──────────────────────────────────────────
-      # Set these as GitHub Actions secrets to make gated matrix cells
-      # deterministic and enable the captcha-tampering probe block.
+      # TURNSTILE_SECRET_KEY and HUBSPOT_TOKEN are wired in via repo secrets
+      # (see the "Run privilege test suite" step below) so the captcha-tampering
+      # probe block and all HubSpot-gated matrix cells give deterministic results.
       #
-      # TURNSTILE_SECRET_KEY  — enables captcha-tampering probes
-      #   Add as repo secret and set PRIVTEST_USE_TURNSTILE_SECRET_KEY=1
-      #
-      # HUBSPOT_TOKEN         — resolves 12 "inconclusive" matrix cells
-      #   Add as repo secret and set PRIVTEST_USE_HUBSPOT_TOKEN=1
-      #
+      # Additional secrets that can be added to resolve further gated cells:
       # GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET — Google OAuth probe cells
       # QB_CLIENT_ID / QB_CLIENT_SECRET         — QuickBooks OAuth probe cells
 
@@ -83,11 +79,11 @@ jobs:
           DATABASE_URL_TEST: postgres://privtest:privtest@localhost:5432/privtest
           SESSION_SECRET: ci-test-session-secret-not-used-in-prod
 
-          # Uncomment and configure these repo secrets to opt into gated probes:
-          # PRIVTEST_USE_TURNSTILE_SECRET_KEY: "1"
-          # TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
-          # PRIVTEST_USE_HUBSPOT_TOKEN: "1"
-          # HUBSPOT_TOKEN: ${{ secrets.HUBSPOT_TOKEN }}
+          # Opt into gated probes using repo secrets:
+          PRIVTEST_USE_TURNSTILE_SECRET_KEY: "1"
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+          PRIVTEST_USE_HUBSPOT_TOKEN: "1"
+          HUBSPOT_TOKEN: ${{ secrets.HUBSPOT_TOKEN }}
 
       - name: Upload test report
         if: always()
