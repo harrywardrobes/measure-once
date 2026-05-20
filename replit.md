@@ -13,15 +13,46 @@ Project management dashboard (HubSpot CRM integration).
 - Deployment: VM target, `node server.js`
 
 ## Authentication
-Replit Auth (OpenID Connect) is wired in via `auth.js`. Login/logout endpoints:
-- `GET /api/login` — start login
-- `GET /api/callback` — OIDC callback
-- `POST /api/logout` — log out
-- `GET /api/auth/user` — current user (requires session)
+Email + password sign-in is wired in via `auth.js` (bcrypt + passport session, no
+Replit OIDC). Public auth pages: `/login`, `/set-password`, `/onboarding`. API:
+- `POST /api/login` — `{ email, password }`; returns `{ ok, next }` on success
+- `POST /api/logout` — destroys the session; redirects to `/login` (or JSON if `Accept: application/json`)
+- `GET  /api/auth/user` — current user (requires session); shape unchanged
+- `GET  /api/set-password/validate?token=…` — public, checks a token's freshness
+- `POST /api/set-password` — `{ token, password }`; consumes a single-use token
+- `POST /api/onboarding/complete` — first-login profile form
+- `POST /api/admin/users/:email/resend-set-password` — admin re-issues the link
 
-Sessions and users are stored in PostgreSQL (`sessions` and `users` tables, auto-created on boot). Protect routes by importing `isAuthenticated` from `./auth` and adding it as middleware.
+### Approval & onboarding flow
+1. Admin approves an access request (or adds a team member directly).
+2. Server creates the `users` row with `onboarding_status = 'more_info_required'`
+   and emails a one-time set-password link (24h TTL, hash stored in
+   `password_set_tokens`). The user shows up on the Team list with a
+   **More info required** badge.
+3. User sets a password via the link, then signs in at `/login`.
+4. On first login, an onboarding gate forces them to `/onboarding` to fill in
+   the same fields as the admin "Add team member" form before any other API
+   call succeeds (gate returns 403 `ONBOARDING_REQUIRED`).
+5. Completing onboarding flips status to `active`; subsequent logins land on
+   the dashboard.
+
+### Migration note
+Users that existed before this change are backfilled to `active` (no onboarding
+prompt) but have **no password set**. An admin must click **Resend
+set-password** on the Team tab for each of them before they can log in again.
+
+Sessions and users are stored in PostgreSQL (`sessions`, `users`,
+`password_set_tokens` — all auto-created on boot). Protect routes by importing
+`isAuthenticated` from `./auth`.
 
 ## Required Secrets
-- `DATABASE_URL`, `SESSION_SECRET`, `REPL_ID`, `REPLIT_DOMAINS` — provided by Replit; required for auth
+- `DATABASE_URL`, `SESSION_SECRET` — required
+- `ADMIN_EMAILS` — comma-separated bootstrap admins
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` — used to send
+  the "set your password" email; if missing, the link is logged to the server
+  console for manual delivery
+- `APP_URL` (or `REPLIT_DOMAINS`) — used to build the absolute link in emails
 - `HUBSPOT_TOKEN` — HubSpot private app token (otherwise `/api/*` HubSpot endpoints return 503)
 - `GOOGLE_*` — Google OAuth credentials for calendar integration
+
+`REPL_ID` and Replit OIDC are no longer used.

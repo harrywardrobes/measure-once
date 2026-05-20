@@ -4,7 +4,7 @@ const axios = require('axios').create({ timeout: 10000 });
 const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
-const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, userIdExists, isAdminEmail, pool } = require('./auth');
+const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool } = require('./auth');
 const {
   hubspotMutationLimiter,
   gmailSendLimiter,
@@ -80,6 +80,11 @@ app.get('/customers/:id', (req, res) => {
 // below is the single entry point (and static can't serve the page directly).
 app.get('/admin.html', (req, res) => res.redirect(301, '/admin'));
 
+// Public auth pages (no Replit/OIDC anymore — email + password handled in-app).
+app.get('/login', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
+app.get('/set-password', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'set-password.html')));
+app.get('/onboarding', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'onboarding.html')));
+
 app.use(express.static(path.join(__dirname, 'public')));
 installSession(app);
 
@@ -103,11 +108,24 @@ function requireHubspotToken(req, res, next) {
 app.use(qbRoutes);
 app.use(visitsRouter);
 
-// Replit Auth gate for all /api/* routes (whitelist auth-flow endpoints).
-const AUTH_WHITELIST = new Set(['/login', '/callback', '/auth/user', '/request-access']);
+// Auth gate for all /api/* routes (whitelist endpoints reachable while
+// signed-out: login, account requests, the public set-password flow).
+const AUTH_WHITELIST = new Set([
+  '/login', '/auth/user', '/request-access', '/check-email',
+  '/set-password', '/set-password/validate',
+]);
+// Endpoints a logged-in user can still reach while in `more_info_required`
+// (so they can read their session, complete onboarding, or sign back out).
+const ONBOARDING_ALLOWED = new Set([
+  '/auth/user', '/logout', '/onboarding/complete', '/onboarding/me', '/job-roles',
+]);
 app.use('/api', (req, res, next) => {
   if (AUTH_WHITELIST.has(req.path)) return next();
   return isAuthenticated(req, res, next);
+});
+app.use('/api', (req, res, next) => {
+  if (!req.user || ONBOARDING_ALLOWED.has(req.path)) return next();
+  return requireOnboardingComplete(req, res, next);
 });
 
 app.use('/api/pipeline', requireHubspotToken);
@@ -1610,7 +1628,7 @@ async function ensureTradesTable() {
 app.get('/admin', async (req, res) => {
   const isAuthed = req.isAuthenticated && req.isAuthenticated();
   if (!isAuthed || !req.user?.claims) {
-    return res.redirect('/api/login');
+    return res.redirect('/login');
   }
   const email = req.user.claims.email;
   const userId = req.user.claims.sub;
@@ -2186,9 +2204,9 @@ app.get('/api/calendar/upcoming', async (req, res) => {
 (async () => {
   try {
     const ok = await setupAuth(app);
-    if (ok) console.log('  Replit Auth initialized');
+    if (ok) console.log('  Auth (email + password) initialized');
   } catch (e) {
-    console.error('  Replit Auth setup failed:', e.message);
+    console.error('  Auth setup failed:', e.message);
   }
 
   app.listen(PORT, HOST, async () => {

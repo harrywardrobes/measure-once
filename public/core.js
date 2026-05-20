@@ -164,7 +164,7 @@ async function api(method, path, body) {
       err.code = data.code;
       throw err;
     }
-    window.location.href = '/api/login';
+    window.location.href = '/login';
     throw new Error('Unauthorized');
   }
   const data = await r.json().catch(() => ({}));
@@ -271,7 +271,16 @@ async function bootstrap() {
     .catch(() => null);
 
   if (!user) {
-    showAccessGate(params);
+    // Preserve any query-string flags so /login can still show them.
+    const qs = window.location.search ? window.location.search : '';
+    window.location.href = '/login' + qs;
+    return false;
+  }
+
+  // First-time users must finish their profile before they can use the app.
+  if (user.onboarding_status === 'more_info_required'
+      && window.location.pathname !== '/onboarding') {
+    window.location.href = '/onboarding';
     return false;
   }
 

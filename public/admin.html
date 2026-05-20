@@ -702,11 +702,18 @@
     const container = $('#team-body');
     if (!container) return;
     if (_users.length === 0) {
-      container.innerHTML = `<tr><td colspan="5" class="table-empty">No users yet.</td></tr>`;
+      container.innerHTML = `<tr><td colspan="6" class="table-empty">No users yet.</td></tr>`;
       return;
     }
     container.innerHTML = _users.map(u => {
       const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '—';
+      const needsInfo = u.onboarding_status === 'more_info_required';
+      const statusBadge = needsInfo
+        ? `<span class="lvl" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">More info required</span>`
+        : `<span class="lvl" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">Active</span>`;
+      const resendBtn = u.email
+        ? `<button class="btn btn-ghost" onclick="resendSetPassword('${esc(u.email)}', this)" title="Email this user a new set-password link">Resend set-password</button>`
+        : '';
       return `
         <tr>
           <td>
@@ -722,8 +729,10 @@
           </td>
           <td>${esc(u.job_role || '—')}</td>
           <td>${lvlBadge(u.privilege_level)}</td>
+          <td>${statusBadge}</td>
           <td class="td-date">${fmtDateShort(u.created_at)}</td>
-          <td class="actions">
+          <td class="actions" style="white-space:nowrap;">
+            ${resendBtn}
             <button class="btn btn-ghost" onclick="openEditModal('${esc(u.id)}')">Edit</button>
           </td>
         </tr>`;
@@ -777,6 +786,21 @@
   function closeModal() {
     $('#modal-overlay').classList.add('hidden');
     _editingUserId = null;
+  }
+
+  async function resendSetPassword(email, btn) {
+    if (!email) return;
+    if (!confirm(`Send a new "set your password" email to ${email}?\n\nAny previous link for this user will be invalidated.`)) return;
+    const original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      await api('POST', `/api/admin/users/${encodeURIComponent(email)}/resend-set-password`);
+      toast(`Set-password email sent to ${email}`);
+    } catch (e) {
+      toast(e.message || 'Could not send email', true);
+    } finally {
+      btn.disabled = false; btn.textContent = original;
+    }
   }
 
   async function saveModal() {
@@ -1509,7 +1533,7 @@
       <div class="tab-panel active" id="tab-team">
         <div class="card" style="padding:0;overflow:hidden;">
           <table>
-            <thead><tr><th>Member</th><th>Job role</th><th>Privilege</th><th>Joined</th><th></th></tr></thead>
+            <thead><tr><th>Member</th><th>Job role</th><th>Privilege</th><th>Status</th><th>Joined</th><th></th></tr></thead>
             <tbody id="team-body"></tbody>
           </table>
         </div>

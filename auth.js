@@ -1,13 +1,20 @@
-// Replit Auth (OpenID Connect) — JavaScript adaptation for plain Express app.
+// Email/password auth — replaces the prior Replit OIDC integration.
+// Sessions are still managed by passport + connect-pg-simple, and req.user
+// keeps its shape (`{ claims: { sub, email, ... }, expires_at, privilege_level,
+// onboarding_status }`) so the rest of the app continues to work unchanged.
 const session = require('express-session');
 const rateLimit = require('express-rate-limit');
 const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
 const { photoUploadLimiter } = require('./rate-limiters');
 const passport = require('passport');
-const memoize = require('memoizee');
 const connectPg = require('connect-pg-simple');
 const { Pool } = require('pg');
 const nodemailer = require('nodemailer');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+
+const PASSWORD_SET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 function createMailTransport() {
   if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
@@ -17,6 +24,12 @@ function createMailTransport() {
     secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
   });
+}
+
+function appBaseUrl() {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, '');
+  if (process.env.REPLIT_DOMAINS) return `https://${process.env.REPLIT_DOMAINS.split(',')[0].trim()}`;
+  return 'https://measureonce.replit.app';
 }
 
 async function notifyAdminsOfAccessRequest(name, email, timestamp) {
@@ -63,49 +76,49 @@ async function notifyAdminsOfAccessRequest(name, email, timestamp) {
   }
 }
 
-async function notifyNewTeamMember(email) {
+async function sendSetPasswordEmail(email, token, { resend = false } = {}) {
   const transport = createMailTransport();
   if (!transport) {
-    console.warn('  SMTP not configured — skipping new team member notification email.');
+    console.warn(`  SMTP not configured — skipping set-password email for ${email}.`);
+    console.warn(`  Set-password link (manual delivery): ${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`);
     return;
   }
-
+  const link = `${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`;
   const from = process.env.SMTP_FROM || process.env.SMTP_USER;
-  const appUrl = process.env.REPLIT_DOMAINS
-    ? `https://${process.env.REPLIT_DOMAINS.split(',')[0].trim()}`
-    : 'https://measureonce.replit.app';
-
+  const subject = resend
+    ? 'Set your Measure Once password (new link)'
+    : 'Welcome to Measure Once — set your password';
   try {
     await transport.sendMail({
-      from,
-      to: email,
-      subject: "You've been added to Measure Once",
+      from, to: email, subject,
       text: [
-        "You've been granted access to Measure Once.",
+        resend
+          ? 'A new password setup link has been issued for your Measure Once account.'
+          : "You've been granted access to Measure Once.",
         '',
-        'Sign in at any time using the link below:',
-        `  ${appUrl}`,
+        'Set your password by clicking the link below (valid for 24 hours):',
+        `  ${link}`,
         '',
-        'If you have any questions, please reach out to your administrator.',
+        "If you didn't expect this email, you can safely ignore it.",
       ].join('\n'),
       html: `
-        <p>You've been granted access to <strong>Measure Once</strong>.</p>
-        <p>Sign in at any time using the link below:</p>
-        <p><a href="${appUrl}">${appUrl}</a></p>
-        <p>If you have any questions, please reach out to your administrator.</p>
+        <p>${resend
+          ? 'A new password setup link has been issued for your Measure Once account.'
+          : "You've been granted access to <strong>Measure Once</strong>."}</p>
+        <p>Set your password by clicking the link below (valid for 24 hours):</p>
+        <p><a href="${link}">${link}</a></p>
+        <p>If you didn't expect this email, you can safely ignore it.</p>
       `,
     });
-    console.log(`  Welcome notification sent to new team member: ${email}`);
+    console.log(`  Set-password email sent to ${email}`);
   } catch (err) {
-    console.error('  Failed to send new team member notification email:', err.message);
+    console.error('  Failed to send set-password email:', err.message);
   }
 }
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-// ── Rate limiter for POST /api/request-access ──────────────────────────────
-// At most 5 requests per IP per hour; backed by PostgreSQL so counts survive
-// server restarts, deploys, and crash-loops.
+// ── Rate limiters ────────────────────────────────────────────────────────────
 const accessRequestLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
@@ -120,7 +133,24 @@ const accessRequestLimiter = rateLimit({
   },
 });
 
-// Ensure required tables exist.
+// Per-IP login throttle: 20 failed attempts/15 min. Successful logins are
+// not counted (skipSuccessfulRequests).
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  store: new PostgresStoreIndividualIP(
+    { connectionString: process.env.DATABASE_URL },
+    'login_attempt'
+  ),
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Too many login attempts. Please try again later.' });
+  },
+});
+
+// ── Schema bootstrap ─────────────────────────────────────────────────────────
 async function ensureAuthTables() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (
@@ -152,8 +182,6 @@ async function ensureAuthTables() {
     );
     CREATE INDEX IF NOT EXISTS "IDX_account_requests_email" ON account_requests (email);
   `);
-  /* Deduplicate account_requests by email before enforcing uniqueness — keeps
-     the earliest record per email so existing data is not lost. */
   await pool.query(`
     DELETE FROM account_requests a
       USING account_requests b
@@ -161,18 +189,38 @@ async function ensureAuthTables() {
     CREATE UNIQUE INDEX IF NOT EXISTS "IDX_account_requests_email_unique" ON account_requests (email);
   `);
 
-  /* Add profile columns to users if they don't exist yet (idempotent). */
   await pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS job_role TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS privilege_level TEXT NOT NULL DEFAULT 'member';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_status TEXT NOT NULL DEFAULT 'active';
   `);
 
-  /* Extra HR fields captured when an admin pre-approves a team member. */
+  /* Existing users (migrated from Replit Auth) are treated as already-active
+     so they don't get pushed through the new "Complete your profile" flow,
+     but they will still need to set a password via the emailed link before
+     they can sign in again. */
+  await pool.query(`
+    UPDATE users SET onboarding_status = 'active'
+     WHERE onboarding_status IS NULL OR onboarding_status NOT IN ('active','more_info_required');
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS password_set_tokens (
+      token_hash TEXT PRIMARY KEY,
+      email      VARCHAR NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      used_at    TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS "IDX_password_set_tokens_email" ON password_set_tokens (email);
+    CREATE INDEX IF NOT EXISTS "IDX_password_set_tokens_expire" ON password_set_tokens (expires_at);
+  `);
+
   await pool.query(`
     ALTER TABLE allowed_emails ADD COLUMN IF NOT EXISTS metadata JSONB;
   `);
 
-  /* Key/value store for admin-configurable settings (e.g. permission overrides). */
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_settings (
       key VARCHAR PRIMARY KEY,
@@ -181,14 +229,9 @@ async function ensureAuthTables() {
     );
   `);
 
-  /* Job roles catalogue — admin-managed list of available role labels.
-     Schema: job_id SERIAL PK, name UNIQUE, privilege_level, created_at.
-     Migration is fully idempotent: safe to run against both fresh DBs and
-     the legacy schema where name was the primary key. */
   await pool.query(`
     DO $$
     BEGIN
-      /* ── 1. Create table with new schema if it does not exist yet ── */
       CREATE TABLE IF NOT EXISTS job_roles (
         job_id         SERIAL PRIMARY KEY,
         name           VARCHAR NOT NULL UNIQUE,
@@ -196,19 +239,16 @@ async function ensureAuthTables() {
         created_at     TIMESTAMP DEFAULT NOW()
       );
 
-      /* ── 2. Add job_id column if missing (legacy table had name as PK) ── */
       BEGIN
         ALTER TABLE job_roles ADD COLUMN job_id SERIAL;
       EXCEPTION WHEN duplicate_column THEN NULL;
       END;
 
-      /* ── 3. Add privilege_level column if missing ── */
       BEGIN
         ALTER TABLE job_roles ADD COLUMN privilege_level TEXT NOT NULL DEFAULT 'member';
       EXCEPTION WHEN duplicate_column THEN NULL;
       END;
 
-      /* ── 4. Promote job_id to PRIMARY KEY if name is still the PK ── */
       IF EXISTS (
         SELECT 1
         FROM   information_schema.key_column_usage kcu
@@ -221,14 +261,12 @@ async function ensureAuthTables() {
       ) THEN
         ALTER TABLE job_roles DROP CONSTRAINT job_roles_pkey;
         ALTER TABLE job_roles ADD  PRIMARY KEY (job_id);
-        /* name should already be unique via old PK; add explicit constraint if absent */
         BEGIN
           ALTER TABLE job_roles ADD CONSTRAINT job_roles_name_key UNIQUE (name);
         EXCEPTION WHEN duplicate_table THEN NULL;
         END;
       END IF;
 
-      /* ── 5. Seed default roles with correct privilege levels ── */
       INSERT INTO job_roles (name, privilege_level) VALUES
         ('Site Manager', 'manager'),
         ('Fitter',       'member'),
@@ -237,7 +275,6 @@ async function ensureAuthTables() {
         ('Office',       'manager')
       ON CONFLICT (name) DO NOTHING;
 
-      /* ── 6. Back-fill privilege levels that were left at the default ── */
       UPDATE job_roles SET privilege_level = 'admin'   WHERE name = 'Admin'        AND privilege_level = 'member';
       UPDATE job_roles SET privilege_level = 'manager' WHERE name = 'Office'       AND privilege_level = 'member';
       UPDATE job_roles SET privilege_level = 'manager' WHERE name = 'Site Manager' AND privilege_level = 'member';
@@ -245,18 +282,15 @@ async function ensureAuthTables() {
     $$;
   `);
 
-  /* Profile photo storage — pending awaiting approval, custom is approved & served. */
   await pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_photo TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_photo  TEXT;
   `);
 
-  /* Per-user preferences stored as a JSONB blob (e.g. gcal_sync_pref). */
   await pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS prefs JSONB NOT NULL DEFAULT '{}';
   `);
 
-  /* Admin audit log — immutable record of every admin action. */
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_audit_log (
       id SERIAL PRIMARY KEY,
@@ -269,9 +303,6 @@ async function ensureAuthTables() {
     CREATE INDEX IF NOT EXISTS "IDX_admin_audit_log_acted_at" ON admin_audit_log (acted_at DESC);
   `);
 
-  /* Role-permissions matrix — stores which privilege levels have each feature enabled.
-     Columns: permission_key (feature name), privilege_level (viewer/member/manager/admin), allowed BOOLEAN.
-     Seeded from the CAPABILITIES constant on first boot; admin UI overrides land here. */
   await pool.query(`
     CREATE TABLE IF NOT EXISTS role_permissions (
       permission_key  VARCHAR NOT NULL,
@@ -281,7 +312,8 @@ async function ensureAuthTables() {
     );
   `);
 
-  // Seed admin emails from env var.
+  // Seed admin emails from env var + create user rows for them so the very
+  // first admin can sign in once they set a password via the emailed link.
   const admins = (process.env.ADMIN_EMAILS || '')
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   for (const email of admins) {
@@ -290,26 +322,23 @@ async function ensureAuthTables() {
        ON CONFLICT (email) DO NOTHING`,
       [email]
     );
+    await pool.query(
+      `INSERT INTO users (email, privilege_level, onboarding_status)
+       VALUES ($1, 'admin', 'active')
+       ON CONFLICT (email) DO UPDATE SET privilege_level = 'admin'`,
+      [email]
+    );
   }
 }
 
-// ── Rate-limit record cleanup ───────────────────────────────────────────────
-// Deletes expired sessions from rate_limit.sessions. Because individual_records
-// and records_aggregated reference sessions with ON DELETE CASCADE, removing
-// an expired session automatically removes all of its associated records.
-// Called once on startup, then on a 1-hour interval.
+// ── Session / rate-limit cleanup (unchanged from before) ─────────────────────
 async function cleanupExpiredRateLimitRecords() {
   try {
-    const result = await pool.query(
-      `DELETE FROM rate_limit.sessions WHERE expires_at < NOW()`
-    );
+    const result = await pool.query(`DELETE FROM rate_limit.sessions WHERE expires_at < NOW()`);
     if (result.rowCount > 0) {
       console.log(`[rate-limit cleanup] Removed ${result.rowCount} expired session(s).`);
     }
   } catch (err) {
-    // 42P01 = undefined_table: rate_limit schema not yet created by the store.
-    // This is expected on a fresh database; silently skip until the first
-    // rate-limited request causes the store to run its own migrations.
     if (err.code !== '42P01') {
       console.error('[rate-limit cleanup] Failed to prune expired records:', err.message);
     }
@@ -321,16 +350,9 @@ function scheduleRateLimitCleanup() {
   setInterval(cleanupExpiredRateLimitRecords, 60 * 60 * 1000);
 }
 
-// ── Login session cleanup ────────────────────────────────────────────────────
-// Deletes expired rows from the main `sessions` table (used for login sessions).
-// The table already has an index on `expire`, making this DELETE efficient.
-// Called once on startup, then on an interval controlled by the
-// SESSION_CLEANUP_INTERVAL_MS env var (default: 1 hour).
 async function cleanupExpiredSessions() {
   try {
-    const result = await pool.query(
-      `DELETE FROM sessions WHERE expire < NOW()`
-    );
+    const result = await pool.query(`DELETE FROM sessions WHERE expire < NOW()`);
     if (result.rowCount > 0) {
       console.log(`[session cleanup] Removed ${result.rowCount} expired session(s).`);
     }
@@ -339,32 +361,24 @@ async function cleanupExpiredSessions() {
   }
 }
 
+async function cleanupExpiredPasswordTokens() {
+  try {
+    const r = await pool.query(`DELETE FROM password_set_tokens WHERE expires_at < NOW() - INTERVAL '7 days'`);
+    if (r.rowCount > 0) console.log(`[password-token cleanup] Removed ${r.rowCount} expired token(s).`);
+  } catch (err) {
+    console.error('[password-token cleanup] Failed:', err.message);
+  }
+}
+
 function scheduleSessionCleanup() {
   const raw = parseInt(process.env.SESSION_CLEANUP_INTERVAL_MS, 10);
   const intervalMs = raw > 0 ? raw : 60 * 60 * 1000;
-  const intervalMin = Math.round(intervalMs / 60000);
-  if (raw > 0) {
-    console.log(`[session cleanup] Interval set to ${intervalMin} min (SESSION_CLEANUP_INTERVAL_MS=${intervalMs})`);
-  } else {
-    console.log(`[session cleanup] Interval set to ${intervalMin} min (fallback default; SESSION_CLEANUP_INTERVAL_MS not set or invalid)`);
-  }
-  const ONE_MINUTE_MS = 60 * 1000;
-  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
-  if (intervalMs < ONE_MINUTE_MS) {
-    console.warn(`[session cleanup] WARN: Cleanup interval is unusually short (${intervalMs} ms). This may cause excessive database load. Typical range: 15 min – 24 h (SESSION_CLEANUP_INTERVAL_MS=${intervalMs}).`);
-  } else if (intervalMs > TWENTY_FOUR_HOURS_MS) {
-    console.warn(`[session cleanup] WARN: Cleanup interval is unusually long (${intervalMin} min). Expired sessions may accumulate for an extended period. Typical range: 15 min – 24 h (SESSION_CLEANUP_INTERVAL_MS=${intervalMs}).`);
-  }
   cleanupExpiredSessions();
-  setInterval(cleanupExpiredSessions, intervalMs);
+  cleanupExpiredPasswordTokens();
+  setInterval(() => { cleanupExpiredSessions(); cleanupExpiredPasswordTokens(); }, intervalMs);
 }
 
-// Audit-failure policy: log errors but do not abort the parent admin action.
-// A database write failure for the audit entry is operationally visible via
-// server logs, but we intentionally avoid propagating the error so that a
-// transient DB blip does not prevent valid admin operations.  If strict
-// auditability is required in future, replace with a transaction that rolls
-// back the parent mutation on audit-write failure.
+// ── Audit log helper ─────────────────────────────────────────────────────────
 async function logAdminAction(adminEmail, actionType, targetEmail, details) {
   try {
     await pool.query(
@@ -429,9 +443,7 @@ const requireManagerOrAdmin = async (req, res, next) => {
   if (!email || !userId) return res.status(403).json({ message: 'Forbidden' });
   if (isAdminEmail(email)) return next();
   try {
-    const r = await pool.query(
-      `SELECT privilege_level FROM users WHERE id = $1`, [userId]
-    );
+    const r = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
     const level = r.rows[0]?.privilege_level || 'member';
     if (level === 'manager' || level === 'admin') return next();
     return res.status(403).json({ message: 'Manager or admin access required' });
@@ -439,6 +451,26 @@ const requireManagerOrAdmin = async (req, res, next) => {
     return res.status(500).json({ message: 'Authorization check failed' });
   }
 };
+
+// ── Onboarding gate ──────────────────────────────────────────────────────────
+// Used after isAuthenticated to block users still in 'more_info_required'
+// from any API except the small set of onboarding/logout endpoints. The list
+// of allowed paths is enforced by the caller in server.js, so this middleware
+// only checks the user's current status.
+async function requireOnboardingComplete(req, res, next) {
+  const userId = req.user?.claims?.sub;
+  if (!userId) return next();
+  if (req.user.onboarding_status === 'active') return next();
+  try {
+    const r = await pool.query(`SELECT onboarding_status FROM users WHERE id = $1`, [userId]);
+    const status = r.rows[0]?.onboarding_status || 'active';
+    req.user.onboarding_status = status;
+    if (status === 'active') return next();
+    return res.status(403).json({ message: 'Complete your profile to continue.', code: 'ONBOARDING_REQUIRED' });
+  } catch {
+    return res.status(500).json({ message: 'Authorization check failed' });
+  }
+}
 
 async function userIdExists(id) {
   if (!id) return false;
@@ -457,40 +489,10 @@ async function isEmailApproved(email) {
   return r.rowCount > 0;
 }
 
-async function upsertUser(claims) {
-  const email = claims.email || null;
-  try {
-    await pool.query(
-      `INSERT INTO users (id, email, first_name, last_name, profile_image_url, updated_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())
-       ON CONFLICT (id) DO UPDATE
-         SET email = EXCLUDED.email,
-             first_name = EXCLUDED.first_name,
-             last_name = EXCLUDED.last_name,
-             profile_image_url = EXCLUDED.profile_image_url,
-             updated_at = NOW()`,
-      [
-        claims.sub,
-        email,
-        claims.first_name || null,
-        claims.last_name || null,
-        claims.profile_image_url || null,
-      ]
-    );
-  } catch (err) {
-    if (err.code === '23505' && err.constraint === 'users_email_key') {
-      const conflict = new Error('This email address is already registered to another account.');
-      conflict.code = 'EMAIL_CONFLICT';
-      throw conflict;
-    }
-    throw err;
-  }
-}
-
 async function getUser(id) {
   const r = await pool.query(
     `SELECT id, email, first_name, last_name, profile_image_url,
-            job_role, privilege_level, created_at, updated_at,
+            job_role, privilege_level, onboarding_status, created_at, updated_at,
             (custom_photo  IS NOT NULL) AS has_custom_photo,
             (pending_photo IS NOT NULL) AS has_pending_photo
      FROM users WHERE id = $1`,
@@ -499,22 +501,88 @@ async function getUser(id) {
   return r.rows[0];
 }
 
-const getOidcConfig = memoize(
-  async () => {
-    const client = await import('openid-client');
-    return {
-      client,
-      config: await client.discovery(
-        new URL(process.env.ISSUER_URL || 'https://replit.com/oidc'),
-        process.env.REPL_ID
-      ),
-    };
-  },
-  { maxAge: 3600 * 1000, promise: true }
-);
+async function getUserByEmail(email) {
+  if (!email) return null;
+  const r = await pool.query(
+    `SELECT id, email, first_name, last_name, profile_image_url,
+            job_role, privilege_level, onboarding_status, password_hash
+     FROM users WHERE LOWER(email) = LOWER($1)`,
+    [email]
+  );
+  return r.rows[0] || null;
+}
 
+// ── Password / onboarding helpers ────────────────────────────────────────────
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+async function issuePasswordSetToken(email) {
+  const lower = email.toLowerCase();
+  const raw = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(raw);
+  const expiresAt = new Date(Date.now() + PASSWORD_SET_TOKEN_TTL_MS);
+  // Invalidate any prior unused tokens for this email so only the newest link works.
+  await pool.query(
+    `UPDATE password_set_tokens SET used_at = NOW()
+       WHERE email = $1 AND used_at IS NULL`,
+    [lower]
+  );
+  await pool.query(
+    `INSERT INTO password_set_tokens (token_hash, email, expires_at)
+     VALUES ($1, $2, $3)`,
+    [tokenHash, lower, expiresAt]
+  );
+  return raw;
+}
+
+async function lookupPasswordSetToken(rawToken) {
+  if (!rawToken || typeof rawToken !== 'string') return null;
+  const r = await pool.query(
+    `SELECT email, expires_at, used_at FROM password_set_tokens WHERE token_hash = $1`,
+    [hashToken(rawToken)]
+  );
+  const row = r.rows[0];
+  if (!row) return null;
+  if (row.used_at) return { ...row, invalid: 'used' };
+  if (new Date(row.expires_at).getTime() < Date.now()) return { ...row, invalid: 'expired' };
+  return { ...row, invalid: null };
+}
+
+async function ensureUserForApprovedEmail(client, email, meta) {
+  const lower = email.toLowerCase();
+  const m = meta || {};
+  const first = m.first_name || null;
+  const last  = m.last_name  || null;
+  const isAdmin = isAdminEmail(lower);
+  const privilege = isAdmin ? 'admin' : 'member';
+  // INSERT or update names if user already exists from prior approval/edit.
+  const r = await client.query(
+    `INSERT INTO users (email, first_name, last_name, privilege_level, onboarding_status)
+     VALUES ($1, $2, $3, $4, 'more_info_required')
+     ON CONFLICT (email) DO UPDATE
+       SET first_name = COALESCE(EXCLUDED.first_name, users.first_name),
+           last_name  = COALESCE(EXCLUDED.last_name,  users.last_name),
+           updated_at = NOW()
+     RETURNING id, email, password_hash, onboarding_status`,
+    [lower, first, last, privilege]
+  );
+  return r.rows[0];
+}
+
+function validatePasswordPolicy(pw) {
+  if (typeof pw !== 'string') return 'Password is required.';
+  if (pw.length < 8)  return 'Password must be at least 8 characters.';
+  if (pw.length > 200) return 'Password is too long.';
+  if (!/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) {
+    return 'Password must contain both letters and numbers.';
+  }
+  return null;
+}
+
+// ── Session install / setup ──────────────────────────────────────────────────
 function getSession() {
-  const ttl = 7 * 24 * 60 * 60 * 1000;
+  const ttl = SESSION_TTL_SECONDS * 1000;
   const PgStore = connectPg(session);
   const store = new PgStore({
     conString: process.env.DATABASE_URL,
@@ -527,20 +595,13 @@ function getSession() {
     store,
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, secure: true, maxAge: ttl },
+    cookie: { httpOnly: true, secure: true, sameSite: 'lax', maxAge: ttl },
   });
-}
-
-function updateUserSession(user, tokens) {
-  user.claims = tokens.claims();
-  user.access_token = tokens.access_token;
-  user.refresh_token = tokens.refresh_token;
-  user.expires_at = user.claims && user.claims.exp;
 }
 
 function installSession(app) {
   if (!process.env.SESSION_SECRET) {
-    throw new Error('SESSION_SECRET is required for Replit Auth.');
+    throw new Error('SESSION_SECRET is required.');
   }
   app.set('trust proxy', 1);
   app.use(getSession());
@@ -548,118 +609,87 @@ function installSession(app) {
   app.use(passport.session());
 }
 
-async function setupAuth(app) {
-  if (!process.env.REPL_ID) {
-    console.warn('  REPL_ID not set — Replit Auth will not initialize.');
-    return false;
-  }
+function buildSessionUser(dbUser) {
+  return {
+    claims: {
+      sub: dbUser.id,
+      email: dbUser.email,
+      first_name: dbUser.first_name || null,
+      last_name: dbUser.last_name || null,
+      profile_image_url: dbUser.profile_image_url || null,
+    },
+    privilege_level: dbUser.privilege_level || 'member',
+    onboarding_status: dbUser.onboarding_status || 'active',
+    expires_at: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
+  };
+}
 
+function loginSessionUser(req, sessionUser) {
+  return new Promise((resolve, reject) => {
+    req.login(sessionUser, (err) => err ? reject(err) : resolve(sessionUser));
+  });
+}
+
+async function setupAuth(app) {
   await ensureAuthTables();
   scheduleRateLimitCleanup();
   scheduleSessionCleanup();
 
-  const { client, config } = await getOidcConfig();
-  const { Strategy } = await import('openid-client/passport');
-
-  const verify = async (tokens, verified) => {
-    try {
-      const claims = tokens.claims();
-      const email = (claims.email || '').toLowerCase();
-      if (!(await isEmailApproved(email))) {
-        const name = [claims.first_name, claims.last_name].filter(Boolean).join(' ')
-          || claims.name || email;
-        const insertResult = await pool.query(
-          `INSERT INTO account_requests (name, email)
-           VALUES ($1, $2)
-           ON CONFLICT (email) DO NOTHING
-           RETURNING created_at`,
-          [name, email]
-        );
-        console.log(`  Auto access request: ${name} <${email}>`);
-        if (insertResult.rowCount > 0) {
-          const createdAt = insertResult.rows[0].created_at;
-          notifyAdminsOfAccessRequest(name, email, createdAt).catch(() => {});
-        }
-        return verified(null, false, { message: 'not_approved' });
-      }
-      const user = {};
-      updateUserSession(user, tokens);
-      await upsertUser(claims);
-      const dbUser = await getUser(claims.sub);
-      user.privilege_level = dbUser?.privilege_level || 'member';
-      verified(null, user);
-    } catch (e) {
-      if (e.code === 'EMAIL_CONFLICT') {
-        return verified(null, false, { message: 'email_conflict' });
-      }
-      verified(e);
-    }
-  };
-
-  const registered = new Set();
-  const ensureStrategy = (domain) => {
-    const name = `replitauth:${domain}`;
-    if (registered.has(name)) return;
-    passport.use(
-      new Strategy(
-        {
-          name,
-          config,
-          scope: 'openid email profile offline_access',
-          callbackURL: `https://${domain}/api/callback`,
-        },
-        verify
-      )
-    );
-    registered.add(name);
-  };
-
   passport.serializeUser((user, cb) => cb(null, user));
   passport.deserializeUser((user, cb) => cb(null, user));
 
-  app.get('/api/login', (req, res, next) => {
-    ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
-      prompt: 'login consent',
-      scope: ['openid', 'email', 'profile', 'offline_access'],
-    })(req, res, next);
-  });
-
-  app.get('/api/callback', (req, res, next) => {
-    ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, (err, user, info) => {
-      if (err) return next(err);
-      if (!user) {
-        if (info?.message === 'email_conflict') {
-          return res.redirect('/?email_conflict=1');
-        }
-        return res.redirect('/?access_requested=1');
+  // ── Login / logout ─────────────────────────────────────────────────────────
+  app.post('/api/login', loginLimiter, async (req, res) => {
+    const email = (req.body?.email || '').trim().toLowerCase();
+    const password = req.body?.password;
+    if (!email || !password || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Please enter your email and password.' });
+    }
+    try {
+      if (!(await isEmailApproved(email))) {
+        return res.status(401).json({ error: 'Invalid email or password.' });
       }
-      req.logIn(user, (loginErr) => {
-        if (loginErr) return next(loginErr);
-        if (req.session) {
-          req.session.photoVersion = Date.now().toString(36);
-        }
-        const returnTo = req.session?.returnTo || '/';
-        delete req.session?.returnTo;
-        res.redirect(returnTo);
+      const dbUser = await getUserByEmail(email);
+      if (!dbUser || !dbUser.password_hash) {
+        return res.status(401).json({
+          error: "This account hasn't set a password yet. Ask an admin to send you the set-password link.",
+          code: 'NO_PASSWORD',
+        });
+      }
+      const ok = await bcrypt.compare(password, dbUser.password_hash);
+      if (!ok) return res.status(401).json({ error: 'Invalid email or password.' });
+
+      const sessionUser = buildSessionUser(dbUser);
+      await loginSessionUser(req, sessionUser);
+      if (req.session) req.session.photoVersion = Date.now().toString(36);
+      res.json({
+        ok: true,
+        onboarding_status: sessionUser.onboarding_status,
+        next: sessionUser.onboarding_status === 'more_info_required' ? '/onboarding' : '/',
       });
-    })(req, res, next);
+    } catch (e) {
+      console.error('Login failed:', e.message);
+      res.status(500).json({ error: 'Could not sign in. Please try again later.' });
+    }
   });
 
   app.post('/api/logout', (req, res) => {
-    req.logout(() => {
-      res.redirect(
-        client.buildEndSessionUrl(config, {
-          client_id: process.env.REPL_ID,
-          post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
-        }).href
-      );
-    });
+    const wantsJson = req.get('accept')?.includes('application/json')
+                   && !req.get('accept')?.includes('text/html');
+    const finish = () => {
+      const done = () => {
+        res.clearCookie('connect.sid');
+        if (wantsJson) return res.json({ ok: true });
+        return res.redirect('/login?signed_out=1');
+      };
+      if (req.session) req.session.destroy(done);
+      else done();
+    };
+    if (req.logout) req.logout(() => finish());
+    else finish();
   });
 
-  // Public: lightweight check — returns whether an email is already approved.
-  // Only reveals approved status (not pending/rejected) to limit information exposure.
+  // ── Public: email helpers / access requests (unchanged behaviour) ──────────
   app.get('/api/check-email', accessRequestLimiter, async (req, res) => {
     try {
       const email = (req.query.email || '').trim().toLowerCase();
@@ -674,9 +704,6 @@ async function setupAuth(app) {
     }
   });
 
-  // Public: anyone can request access by submitting their name + email.
-  // When called with a JSON body (fetch), always returns JSON.
-  // When called as a plain HTML form, uses redirects for backward compatibility.
   app.post('/api/request-access', accessRequestLimiter, async (req, res) => {
     const wantsJson = req.is('application/json') || req.headers.accept?.includes('application/json');
     try {
@@ -688,7 +715,7 @@ async function setupAuth(app) {
       if (await isEmailApproved(email)) {
         return wantsJson
           ? res.status(409).json({ status: 'approved' })
-          : res.redirect('/?access_approved=1');
+          : res.redirect('/login?access_approved=1');
       }
       const insertResult = await pool.query(
         `INSERT INTO account_requests (name, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING created_at`,
@@ -697,7 +724,7 @@ async function setupAuth(app) {
       if (insertResult.rowCount === 0) {
         return wantsJson
           ? res.status(409).json({ status: 'pending' })
-          : res.redirect('/?access_pending=1');
+          : res.redirect('/login?access_pending=1');
       }
       console.log(`  Access request: ${name} <${email}>`);
       const createdAt = insertResult.rows[0].created_at;
@@ -709,6 +736,65 @@ async function setupAuth(app) {
     }
   });
 
+  // ── Public: set-password flow ──────────────────────────────────────────────
+  app.get('/api/set-password/validate', async (req, res) => {
+    const token = (req.query?.token || '').toString();
+    const row = await lookupPasswordSetToken(token);
+    if (!row) return res.status(404).json({ valid: false, reason: 'invalid' });
+    if (row.invalid) return res.status(410).json({ valid: false, reason: row.invalid, email: row.email });
+    res.json({ valid: true, email: row.email });
+  });
+
+  app.post('/api/set-password', async (req, res) => {
+    const token = (req.body?.token || '').toString();
+    const password = req.body?.password;
+    const policyErr = validatePasswordPolicy(password);
+    if (policyErr) return res.status(400).json({ error: policyErr });
+    const row = await lookupPasswordSetToken(token);
+    if (!row || row.invalid) {
+      return res.status(410).json({ error: 'This password link is no longer valid. Ask an admin to send a new one.' });
+    }
+    const lower = row.email.toLowerCase();
+    if (!(await isEmailApproved(lower))) {
+      return res.status(403).json({ error: 'This account is no longer approved. Contact an admin.' });
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const hash = await bcrypt.hash(password, 10);
+      // Ensure user row exists (it should — created at approval time).
+      const u = await client.query(
+        `SELECT id FROM users WHERE LOWER(email) = LOWER($1)`,
+        [lower]
+      );
+      if (u.rowCount === 0) {
+        await client.query(
+          `INSERT INTO users (email, password_hash, onboarding_status, privilege_level)
+           VALUES ($1, $2, 'more_info_required', $3)`,
+          [lower, hash, isAdminEmail(lower) ? 'admin' : 'member']
+        );
+      } else {
+        await client.query(
+          `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+          [hash, u.rows[0].id]
+        );
+      }
+      await client.query(
+        `UPDATE password_set_tokens SET used_at = NOW() WHERE token_hash = $1`,
+        [hashToken(token)]
+      );
+      await client.query('COMMIT');
+      res.json({ ok: true });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error('set-password failed:', e.message);
+      res.status(500).json({ error: 'Could not set password. Please try again.' });
+    } finally {
+      client.release();
+    }
+  });
+
+  // ── Current user / onboarding status ───────────────────────────────────────
   app.get('/api/auth/user', isAuthenticated, async (req, res) => {
     try {
       const user = await getUser(req.user.claims.sub);
@@ -717,6 +803,116 @@ async function setupAuth(app) {
       res.json(user ? { ...user, isAdmin, photo_v } : null);
     } catch (e) {
       res.status(500).json({ message: 'Failed to fetch user' });
+    }
+  });
+
+  // List job roles for the onboarding form (auth required, names + privilege only).
+  app.get('/api/job-roles', isAuthenticated, async (req, res) => {
+    try {
+      const r = await pool.query(`SELECT name FROM job_roles ORDER BY name ASC`);
+      res.json(r.rows.map(row => row.name));
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to load job roles' });
+    }
+  });
+
+  app.get('/api/onboarding/me', isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const r = await pool.query(
+        `SELECT u.id, u.email, u.first_name, u.last_name, u.job_role, u.onboarding_status,
+                ae.metadata
+           FROM users u
+           LEFT JOIN allowed_emails ae ON LOWER(u.email) = ae.email
+          WHERE u.id = $1`,
+        [userId]
+      );
+      const row = r.rows[0];
+      if (!row) return res.status(404).json({ error: 'User not found' });
+      res.json(row);
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to load profile' });
+    }
+  });
+
+  app.post('/api/onboarding/complete', isAuthenticated, async (req, res) => {
+    const userId = req.user.claims.sub;
+    const body = req.body || {};
+    const str  = (v, max) => (v || '').toString().trim().slice(0, max) || null;
+
+    const first_name = str(body.first_name, 100);
+    const last_name  = str(body.last_name, 100);
+    const job_role   = str(body.job_role, 64);
+    const date_of_birth = str(body.date_of_birth, 20);
+    const ni_number     = str(body.ni_number, 20);
+    const mobile_number = str(body.mobile_number, 30);
+    const ec_first_name = str(body.ec_first_name, 100);
+    const ec_last_name  = str(body.ec_last_name, 100);
+    const ec_phone      = str(body.ec_phone, 30);
+
+    const missing = [];
+    if (!first_name)    missing.push('first name');
+    if (!last_name)     missing.push('last name');
+    if (!job_role)      missing.push('job role');
+    if (!date_of_birth) missing.push('date of birth');
+    if (!ni_number)     missing.push('National Insurance number');
+    if (!mobile_number) missing.push('mobile number');
+    if (!ec_first_name) missing.push('emergency contact first name');
+    if (!ec_last_name)  missing.push('emergency contact last name');
+    if (!ec_phone)      missing.push('emergency contact phone');
+    if (missing.length) {
+      return res.status(400).json({ error: `Please fill in: ${missing.join(', ')}.` });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const cur = await client.query(`SELECT email FROM users WHERE id = $1`, [userId]);
+      if (cur.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'User not found' });
+      }
+      const email = (cur.rows[0].email || '').toLowerCase();
+
+      await client.query(
+        `UPDATE users
+            SET first_name = $1, last_name = $2, job_role = $3,
+                onboarding_status = 'active', updated_at = NOW()
+          WHERE id = $4`,
+        [first_name, last_name, job_role, userId]
+      );
+
+      const existingR = await client.query(
+        `SELECT metadata FROM allowed_emails WHERE email = $1`, [email]
+      );
+      const existingMeta = existingR.rows[0]?.metadata || {};
+      const newMeta = {
+        ...existingMeta,
+        first_name, last_name,
+        date_of_birth, ni_number, mobile_number,
+        ec_first_name, ec_last_name, ec_phone,
+      };
+      await client.query(
+        `INSERT INTO allowed_emails (email, metadata)
+         VALUES ($1, $2::jsonb)
+         ON CONFLICT (email) DO UPDATE SET metadata = $2::jsonb`,
+        [email, JSON.stringify(newMeta)]
+      );
+
+      await client.query('COMMIT');
+      // Refresh session copy so subsequent requests aren't blocked by the gate.
+      if (req.user) {
+        req.user.onboarding_status = 'active';
+        req.user.claims.first_name = first_name;
+        req.user.claims.last_name  = last_name;
+      }
+      res.json({ ok: true });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error('onboarding-complete failed:', e.message);
+      res.status(500).json({ error: 'Could not save your profile. Please try again.' });
+    } finally {
+      client.release();
     }
   });
 
@@ -740,7 +936,7 @@ async function setupAuth(app) {
     try {
       await client.query('BEGIN');
       const r = await client.query(
-        `SELECT email FROM account_requests WHERE id = $1`,
+        `SELECT name, email FROM account_requests WHERE id = $1`,
         [req.params.id]
       );
       if (r.rowCount === 0) {
@@ -748,16 +944,37 @@ async function setupAuth(app) {
         return res.status(404).json({ error: 'Request not found' });
       }
       const email = r.rows[0].email.toLowerCase();
+      const name  = r.rows[0].name || '';
+      const [firstGuess, ...rest] = name.split(/\s+/).filter(Boolean);
+      const lastGuess = rest.join(' ') || null;
+      const meta = {};
+      if (firstGuess) meta.first_name = firstGuess;
+      if (lastGuess)  meta.last_name  = lastGuess;
+
       await client.query(
-        `INSERT INTO allowed_emails (email, note) VALUES ($1, 'approved via admin')
-         ON CONFLICT (email) DO NOTHING`,
-        [email]
+        `INSERT INTO allowed_emails (email, note, metadata)
+         VALUES ($1, 'approved via admin', $2::jsonb)
+         ON CONFLICT (email) DO UPDATE
+           SET note = COALESCE(allowed_emails.note, EXCLUDED.note),
+               metadata = COALESCE(allowed_emails.metadata, EXCLUDED.metadata)`,
+        [email, Object.keys(meta).length ? JSON.stringify(meta) : null]
       );
       await client.query(
         `UPDATE account_requests SET status = 'approved' WHERE id = $1`,
         [req.params.id]
       );
+      await ensureUserForApprovedEmail(client, email, meta);
       await client.query('COMMIT');
+
+      // Issue token + email outside the transaction so a mailer hiccup doesn't
+      // roll back the approval. Admin can always resend.
+      try {
+        const token = await issuePasswordSetToken(email);
+        await sendSetPasswordEmail(email, token);
+      } catch (mailErr) {
+        console.error('  Failed to issue/send set-password email after approval:', mailErr.message);
+      }
+
       const adminEmail = req.user?.claims?.email;
       await logAdminAction(adminEmail, 'approve_request', email, `Approved access request id=${req.params.id}`);
       res.json({ ok: true, email });
@@ -791,6 +1008,7 @@ async function setupAuth(app) {
   });
 
   app.post('/api/admin/allowed', isAuthenticated, requireAdmin, async (req, res) => {
+    const client = await pool.connect();
     try {
       const body  = req.body || {};
       const email = (body.email || '').trim().toLowerCase();
@@ -799,7 +1017,6 @@ async function setupAuth(app) {
         return res.status(400).json({ error: 'Please provide a valid email address.' });
       }
 
-      // Collect optional HR fields into a metadata object (stored as JSONB).
       const meta = {};
       const str  = (v, max) => (v || '').toString().trim().slice(0, max) || null;
       if (str(body.first_name,    100)) meta.first_name    = str(body.first_name, 100);
@@ -812,7 +1029,8 @@ async function setupAuth(app) {
       if (str(body.ec_phone,        30)) meta.ec_phone        = str(body.ec_phone, 30);
       const metaJson = Object.keys(meta).length ? JSON.stringify(meta) : null;
 
-      const r = await pool.query(
+      await client.query('BEGIN');
+      const r = await client.query(
         `INSERT INTO allowed_emails (email, note, metadata)
          VALUES ($1, $2, $3::jsonb)
          ON CONFLICT (email) DO NOTHING
@@ -820,16 +1038,29 @@ async function setupAuth(app) {
         [email, note, metaJson]
       );
       if (r.rowCount === 0) {
+        await client.query('ROLLBACK');
         return res.status(409).json({ error: 'This email is already on the approved list.' });
       }
+      await ensureUserForApprovedEmail(client, email, meta);
+      await client.query('COMMIT');
+
+      try {
+        const token = await issuePasswordSetToken(email);
+        await sendSetPasswordEmail(email, token);
+      } catch (mailErr) {
+        console.error('  Failed to issue/send set-password email after add-allowed:', mailErr.message);
+      }
+
       const adminEmail = req.user?.claims?.email;
       const nameStr = [meta.first_name, meta.last_name].filter(Boolean).join(' ');
       await logAdminAction(adminEmail, 'add_allowed_email', email,
         [nameStr ? `Name: ${nameStr}` : null, note ? `Note: ${note}` : null].filter(Boolean).join('; ') || null);
-      notifyNewTeamMember(email).catch(() => {});
       res.json({ ok: true, row: r.rows[0] });
     } catch (e) {
+      try { await client.query('ROLLBACK'); } catch {}
       res.status(500).json({ error: e.message });
+    } finally {
+      client.release();
     }
   });
 
@@ -848,7 +1079,6 @@ async function setupAuth(app) {
   app.delete('/api/admin/allowed/:email', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const email = req.params.email.toLowerCase();
-      // Don't let admins lock themselves out by removing their own admin email.
       if (isAdminEmail(email)) {
         return res.status(400).json({ error: 'Cannot revoke an ADMIN_EMAILS address.' });
       }
@@ -863,8 +1093,28 @@ async function setupAuth(app) {
     }
   });
 
+  // Admin: re-issue a set-password link for any approved team member.
+  app.post('/api/admin/users/:email/resend-set-password', isAuthenticated, requireAdmin, async (req, res) => {
+    const email = (req.params.email || '').toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Invalid email.' });
+    }
+    if (!(await isEmailApproved(email))) {
+      return res.status(404).json({ error: 'This email is not on the approved list.' });
+    }
+    try {
+      const token = await issuePasswordSetToken(email);
+      await sendSetPasswordEmail(email, token, { resend: true });
+      const adminEmail = req.user?.claims?.email;
+      await logAdminAction(adminEmail, 'resend_set_password_email', email, null);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error('resend set-password failed:', e.message);
+      res.status(500).json({ error: 'Could not send the email. Please try again.' });
+    }
+  });
+
   // ── User Profile ─────────────────────────────────────────────────────────────
-  // Accessible only by the user themselves or an admin.
   app.get('/api/users/:id/profile', isAuthenticated, async (req, res) => {
     const requestingId    = req.user?.claims?.sub;
     const requestingEmail = req.user?.claims?.email;
@@ -874,7 +1124,8 @@ async function setupAuth(app) {
     }
     try {
       const r = await pool.query(
-        `SELECT id, email, first_name, last_name, profile_image_url, job_role, privilege_level, created_at,
+        `SELECT id, email, first_name, last_name, profile_image_url, job_role, privilege_level,
+                onboarding_status, created_at,
                 (custom_photo  IS NOT NULL) AS has_custom_photo,
                 (pending_photo IS NOT NULL) AS has_pending_photo
          FROM users WHERE id = $1`,
@@ -888,7 +1139,6 @@ async function setupAuth(app) {
     }
   });
 
-  // Platform users — all registered users, for the visit assignee picker.
   app.get('/api/platform-users', isAuthenticated, async (req, res) => {
     try {
       const r = await pool.query(
@@ -911,12 +1161,12 @@ async function setupAuth(app) {
     }
   });
 
-  // Admin: list all users with profile fields (including HR metadata from allowed_emails).
   app.get('/api/admin/users', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.profile_image_url,
-                u.job_role, u.privilege_level, u.created_at,
+                u.job_role, u.privilege_level, u.onboarding_status, u.created_at,
+                (u.password_hash IS NOT NULL) AS has_password,
                 (u.custom_photo  IS NOT NULL) AS has_custom_photo,
                 (u.pending_photo IS NOT NULL) AS has_pending_photo,
                 ae.note, ae.metadata
@@ -953,7 +1203,6 @@ async function setupAuth(app) {
     try {
       await client.query('BEGIN');
 
-      // Fetch current user to get their current email
       const curR = await client.query('SELECT email FROM users WHERE id = $1', [req.params.id]);
       if (curR.rowCount === 0) {
         await client.query('ROLLBACK');
@@ -961,7 +1210,6 @@ async function setupAuth(app) {
       }
       const currentEmail = (curR.rows[0].email || '').toLowerCase();
 
-      // Build update for users table
       const userCols = [];
       const userVals = [];
       if (first_name !== undefined)      { userCols.push(`first_name = $${userCols.length+1}`);      userVals.push(first_name?.trim() || null); }
@@ -976,7 +1224,7 @@ async function setupAuth(app) {
         const r = await client.query(
           `UPDATE users SET ${userCols.join(', ')}, updated_at = NOW()
            WHERE id = $${userVals.length}
-           RETURNING id, email, first_name, last_name, profile_image_url, job_role, privilege_level`,
+           RETURNING id, email, first_name, last_name, profile_image_url, job_role, privilege_level, onboarding_status`,
           userVals
         );
         if (r.rowCount === 0) {
@@ -986,7 +1234,7 @@ async function setupAuth(app) {
         updated = r.rows[0];
       } else {
         const r = await client.query(
-          `SELECT id, email, first_name, last_name, profile_image_url, job_role, privilege_level
+          `SELECT id, email, first_name, last_name, profile_image_url, job_role, privilege_level, onboarding_status
            FROM users WHERE id = $1`,
           [req.params.id]
         );
@@ -997,10 +1245,7 @@ async function setupAuth(app) {
         updated = r.rows[0];
       }
 
-      // Determine the email key for allowed_emails lookups
       const targetEmail = (updated.email || currentEmail).toLowerCase();
-
-      // If email changed, rename the allowed_emails row
       if (newEmail !== undefined && currentEmail && targetEmail && currentEmail !== targetEmail) {
         await client.query(
           `UPDATE allowed_emails SET email = $1 WHERE email = $2`,
@@ -1008,14 +1253,12 @@ async function setupAuth(app) {
         );
       }
 
-      // Update metadata / note in allowed_emails
       const hasMetaUpdate = [date_of_birth, ni_number, mobile_number, ec_first_name, ec_last_name, ec_phone].some(v => v !== undefined);
       const hasNoteUpdate  = note !== undefined;
       const hasNameUpdate  = first_name !== undefined || last_name !== undefined;
 
       if (hasMetaUpdate || hasNoteUpdate || hasNameUpdate) {
         const str = (v, max) => (v || '').toString().trim().slice(0, max) || null;
-
         const existingR = await client.query(
           `SELECT metadata, note FROM allowed_emails WHERE email = $1`, [targetEmail]
         );
@@ -1029,7 +1272,6 @@ async function setupAuth(app) {
         if (ec_first_name !== undefined) { const v = str(ec_first_name, 100);  if (v) newMeta.ec_first_name = v; else delete newMeta.ec_first_name; }
         if (ec_last_name !== undefined)  { const v = str(ec_last_name, 100);   if (v) newMeta.ec_last_name = v;  else delete newMeta.ec_last_name; }
         if (ec_phone !== undefined)      { const v = str(ec_phone, 30);        if (v) newMeta.ec_phone = v;      else delete newMeta.ec_phone; }
-        // Keep metadata first_name / last_name in sync with users table
         if (first_name !== undefined) { const v = (first_name || '').trim(); if (v) newMeta.first_name = v; else delete newMeta.first_name; }
         if (last_name !== undefined)  { const v = (last_name || '').trim();  if (v) newMeta.last_name = v;  else delete newMeta.last_name; }
 
@@ -1042,10 +1284,8 @@ async function setupAuth(app) {
           [targetEmail, JSON.stringify(newMeta), noteVal]
         );
 
-        // Return metadata in response so the frontend can update locally
         updated = { ...updated, metadata: newMeta, note: noteVal };
       } else {
-        // Fetch existing metadata/note to include in response
         const metaR = await client.query(
           `SELECT metadata, note FROM allowed_emails WHERE email = $1`, [targetEmail]
         );
@@ -1077,9 +1317,7 @@ async function setupAuth(app) {
     }
   });
 
-  // ── Capabilities map — single source of truth for the permissions matrix ──
-  // Mirrors the actual middleware rules (isAuthenticated / requireManagerOrAdmin
-  // / requireAdmin) so the admin UI always reflects what the server enforces.
+  // ── Capabilities matrix ───────────────────────────────────────────────────
   const CAPABILITIES = [
     { group: 'General access' },
     { feat: 'View customers & projects',  desc: 'Browse CRM contacts and project rooms',    levels: ['viewer','member','manager','admin'] },
@@ -1102,17 +1340,14 @@ async function setupAuth(app) {
   app.get('/api/admin/capabilities', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const LEVELS = ['viewer', 'member', 'manager', 'admin'];
-      /* Read overrides from role_permissions table */
       const rpRows = await pool.query(
         `SELECT permission_key, privilege_level, allowed FROM role_permissions`
       );
-      /* Build a lookup: { [feat]: Set of allowed levels } from DB rows */
       const dbMap = {};
       for (const row of rpRows.rows) {
         if (!dbMap[row.permission_key]) dbMap[row.permission_key] = new Set();
         if (row.allowed) dbMap[row.permission_key].add(row.privilege_level);
       }
-      /* Also read legacy admin_settings overrides and merge (DB table wins) */
       const overRow = await pool.query(
         `SELECT value FROM admin_settings WHERE key = 'permission_overrides'`
       );
@@ -1148,7 +1383,6 @@ async function setupAuth(app) {
           return res.status(400).json({ error: `Invalid levels for feature: ${feat}` });
         }
       }
-      /* Write each (feature, level) combination into role_permissions */
       const allLevels = ['viewer', 'member', 'manager', 'admin'];
       for (const [feat, allowedLevels] of Object.entries(overrides)) {
         for (const lvl of allLevels) {
@@ -1161,7 +1395,6 @@ async function setupAuth(app) {
           );
         }
       }
-      /* Also keep admin_settings in sync for legacy reads */
       await pool.query(
         `INSERT INTO admin_settings (key, value)
          VALUES ('permission_overrides', $1::jsonb)
@@ -1222,7 +1455,7 @@ async function setupAuth(app) {
     }
   });
 
-  // ── Profile photo: upload (self) ─────────────────────────────────────────────
+  // ── Profile photo ────────────────────────────────────────────────────────────
   app.post('/api/users/me/photo', isAuthenticated, photoUploadLimiter, async (req, res) => {
     const userId = req.user?.claims?.sub;
     const { data } = req.body || {};
@@ -1243,7 +1476,6 @@ async function setupAuth(app) {
     }
   });
 
-  // ── Profile photo: serve approved photo ──────────────────────────────────────
   app.get('/api/users/:id/photo', isAuthenticated, async (req, res) => {
     try {
       const r = await pool.query(
@@ -1261,7 +1493,6 @@ async function setupAuth(app) {
     }
   });
 
-  // ── Profile photo: admin approval queue ──────────────────────────────────────
   app.get('/api/admin/photo-requests', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
@@ -1311,7 +1542,6 @@ async function setupAuth(app) {
     }
   });
 
-  // ── Admin audit log ─────────────────────────────────────────────────────────
   app.get('/api/admin/audit-log', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const limit  = Math.min(Math.max(parseInt(req.query.limit,  10) || 200, 1), 500);
@@ -1333,28 +1563,14 @@ async function setupAuth(app) {
 }
 
 const isAuthenticated = async (req, res, next) => {
-  const user = req.user;
-  if (!req.isAuthenticated || !req.isAuthenticated() || !user || !user.expires_at) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-  const now = Math.floor(Date.now() / 1000);
-  if (now <= user.expires_at) return next();
-
-  const refreshToken = user.refresh_token;
-  if (!refreshToken) return res.status(401).json({ message: 'Unauthorized' });
-
-  try {
-    const { client, config } = await getOidcConfig();
-    const tokens = await client.refreshTokenGrant(config, refreshToken);
-    updateUserSession(user, tokens);
-    try {
-      const dbUser = await getUser(user.claims?.sub);
-      if (dbUser) user.privilege_level = dbUser.privilege_level || 'member';
-    } catch {}
+  if (req.isAuthenticated && req.isAuthenticated() && req.user && req.user.claims?.sub) {
     return next();
-  } catch (e) {
-    return res.status(401).json({ message: 'Unauthorized' });
   }
+  return res.status(401).json({ message: 'Unauthorized' });
 };
 
-module.exports = { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail, userIdExists, pool };
+module.exports = {
+  installSession, setupAuth, isAuthenticated, requireAdmin,
+  requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete,
+  isAdminEmail, userIdExists, pool,
+};

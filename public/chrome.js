@@ -35,7 +35,7 @@
             <input id="access-req-email" type="email" class="access-input" placeholder="Email address" autocomplete="email" required
               onblur="handleAccessEmailBlur(this.value)">
             <div id="access-email-approved-msg" style="display:none;" class="access-email-approved-msg">
-              Your account is already approved — <a href="/api/login">sign in to get started</a>.
+              Your account is already approved — <a href="/login">sign in to get started</a>.
             </div>
             <div id="access-req-submit-wrap">
               <button type="submit" id="access-req-btn" class="access-submit" style="width:100%;border:none;cursor:pointer;margin-top:0;">Request access</button>
@@ -43,7 +43,7 @@
             <div id="access-req-error" style="display:none;" class="access-req-error"></div>
           </form>
           <div class="access-footer" style="margin-top:20px;text-align:center;">
-            Already have access? <a href="/api/login">Sign in</a>
+            Already have access? <a href="/login">Sign in</a>
           </div>
         </div>
         <div id="access-confirmed-state" style="display:none;">
@@ -51,7 +51,7 @@
           <h1 class="access-title">Request received</h1>
           <p class="access-sub">Your access request has been submitted. We'll review it and be in touch — you don't need to do anything else.</p>
           <div class="access-footer" style="margin-top:20px;">
-            Already approved? <a href="/api/login">Sign in</a>
+            Already approved? <a href="/login">Sign in</a>
           </div>
         </div>
         <div id="access-email-conflict-state" style="display:none;">
@@ -59,7 +59,7 @@
           <h1 class="access-title">Email already in use</h1>
           <p class="access-sub">This email address is already registered to a different account here. Please contact an admin if you think this is an error.</p>
           <div class="access-footer" style="margin-top:20px;">
-            <a href="/api/login">Try a different account</a>
+            <a href="/login">Try a different account</a>
           </div>
         </div>
         <div id="access-pending-state" style="display:none;">
@@ -67,7 +67,7 @@
           <h1 class="access-title">Request already under review</h1>
           <p class="access-sub">Your request is already under review — you'll hear back soon. You don't need to submit again.</p>
           <div class="access-footer" style="margin-top:20px;">
-            Already approved? <a href="/api/login">Sign in</a>
+            Already approved? <a href="/login">Sign in</a>
           </div>
         </div>
         <div id="access-already-approved-state" style="display:none;">
@@ -75,7 +75,7 @@
           <h1 class="access-title">Your account is already approved</h1>
           <p class="access-sub">Your account is already approved — sign in to get started.</p>
           <div class="access-footer" style="margin-top:20px;">
-            <a href="/api/login" class="access-submit" style="display:block;text-align:center;text-decoration:none;">Sign in</a>
+            <a href="/login" class="access-submit" style="display:block;text-align:center;text-decoration:none;">Sign in</a>
           </div>
         </div>
       </div>
