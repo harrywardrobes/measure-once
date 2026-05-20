@@ -838,6 +838,25 @@ async function setupAuth(app) {
         `UPDATE password_set_tokens SET used_at = NOW() WHERE token_hash = $1`,
         [hashToken(token)]
       );
+      const userIdRow = u.rowCount === 0
+        ? await client.query(`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`, [lower])
+        : u;
+      const userId = userIdRow.rows[0]?.id;
+      const currentSid = req.sessionID || null;
+      if (userId) {
+        const del = await client.query(
+          `DELETE FROM sessions
+             WHERE sid <> COALESCE($2, '')
+               AND (
+                 (sess #>> '{passport,user,claims,sub}') = $1::text
+                 OR LOWER(sess #>> '{passport,user,claims,email}') = LOWER($3)
+               )`,
+          [String(userId), currentSid, lower]
+        );
+        if (del.rowCount) {
+          console.log(`[set-password] Cleared ${del.rowCount} other session(s) for ${lower}.`);
+        }
+      }
       await client.query('COMMIT');
       res.json({ ok: true });
     } catch (e) {
