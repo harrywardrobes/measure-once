@@ -1076,36 +1076,41 @@
     if (pendingTab) pendingTab.innerHTML = pendingBadge;
 
     const container = $('#requests-content');
-    if (!container) return;
-    container.innerHTML = `
-      <div class="card">
-        <div class="card-title">Pending requests <span class="card-count">(${pending.length})</span></div>
-        ${pending.length === 0
-          ? '<div class="table-empty">No pending requests.</div>'
-          : `<table>
-               <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th></th></tr></thead>
-               <tbody>${pending.map(reqRow).join('')}</tbody>
-             </table>`}
-      </div>
-
-      <div class="card">
-        <div class="card-title">Approved team members <span class="card-count">(${_allowed.length})</span></div>
-        ${_allowed.length === 0
-          ? '<div class="table-empty">No approved emails yet.</div>'
-          : `<table>
-               <thead><tr><th>Name / Email</th><th>HR details</th><th>Note</th><th>Approved</th><th></th></tr></thead>
-               <tbody>${_allowed.map(allowRow).join('')}</tbody>
-             </table>`}
-      </div>
-
-      ${past.length > 0 ? `
+    if (container) {
+      container.innerHTML = `
         <div class="card">
-          <div class="card-title">Recent decisions</div>
-          <table>
-            <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th>Status</th></tr></thead>
-            <tbody>${past.map(reqRow).join('')}</tbody>
-          </table>
-        </div>` : ''}`;
+          <div class="card-title">Pending requests <span class="card-count">(${pending.length})</span></div>
+          ${pending.length === 0
+            ? '<div class="table-empty">No pending requests.</div>'
+            : `<table>
+                 <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th></th></tr></thead>
+                 <tbody>${pending.map(reqRow).join('')}</tbody>
+               </table>`}
+        </div>
+
+        ${past.length > 0 ? `
+          <div class="card">
+            <div class="card-title">Recent decisions</div>
+            <table>
+              <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th>Status</th></tr></thead>
+              <tbody>${past.map(reqRow).join('')}</tbody>
+            </table>
+          </div>` : ''}`;
+    }
+
+    const allowedContainer = $('#team-allowed-content');
+    if (allowedContainer) {
+      allowedContainer.innerHTML = `
+        <div class="card">
+          <div class="card-title">Approved team members <span class="card-count">(${_allowed.length})</span></div>
+          ${_allowed.length === 0
+            ? '<div class="table-empty">No approved emails yet.</div>'
+            : `<table>
+                 <thead><tr><th>Name / Email</th><th>HR details</th><th>Note</th><th>Approved</th><th></th></tr></thead>
+                 <tbody>${_allowed.map(allowRow).join('')}</tbody>
+               </table>`}
+        </div>`;
+    }
   }
 
   async function approve(id) {
@@ -1629,6 +1634,8 @@
             </div>
           </div>
         </div>
+
+        <div id="team-allowed-content"></div>
       </div>
 
       <!-- PERMISSIONS & ROLES -->
