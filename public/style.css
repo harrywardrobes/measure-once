@@ -76,6 +76,7 @@ body {
   margin: 0 auto;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
 }
 
@@ -102,7 +103,7 @@ body {
   border: 1px solid rgba(255,255,255,0.14);
   border-radius: var(--radius-pill);
   color: #fff;
-  padding: 7px 30px 7px 30px;
+  padding: 7px 36px 7px 30px;
   font-size: 0.82rem;
   font-family: inherit;
   outline: none;
@@ -110,17 +111,26 @@ body {
 }
 .header-search-customers {
   position: absolute;
-  right: 8px;
+  right: 5px;
   display: flex;
   align-items: center;
-  color: rgba(255,255,255,0.5);
+  justify-content: center;
+  color: rgba(255,255,255,0.9);
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
   text-decoration: none;
-  padding: 2px;
-  transition: color 0.15s;
+  padding: 4px 5px;
+  transition: background 0.15s, color 0.15s;
   -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
 }
-.header-search-customers:hover { color: rgba(255,255,255,0.85); }
-.header-search-input::placeholder { color: rgba(255,255,255,0.38); }
+.header-search-customers:hover {
+  background: rgba(255,255,255,0.28);
+  color: #fff;
+}
+.header-search-customers:active { background: rgba(255,255,255,0.35); }
+.header-search-input::placeholder { color: rgba(255,255,255,0.58); }
 .header-search-input:focus {
   background: rgba(255,255,255,0.17);
   border-color: rgba(255,255,255,0.28);
