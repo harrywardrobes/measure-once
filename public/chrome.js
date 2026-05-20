@@ -24,18 +24,15 @@
   const accessGate = `
     <div id="access-gate" class="access-gate" style="display:none;">
       <div class="access-card">
-        <div class="access-brand">
-          <img src="/assets/logo-mark-paper.png" alt="" width="32" height="32" style="height:32px;width:auto;">
-          <span style="font-family:'Anton',sans-serif;font-size:1.05rem;letter-spacing:0.04em;text-transform:uppercase;color:#0f172a;">Measure Once</span>
+        <div class="access-brand" style="justify-content:center;">
+          <span style="font-family:'Anton',sans-serif;font-size:1.35rem;letter-spacing:0.06em;text-transform:uppercase;color:#0f172a;">Measure Once</span>
         </div>
         <div id="access-sign-in-state">
-          <h1 class="access-title">Sign in to continue</h1>
-          <p class="access-sub">This dashboard is invite-only. Sign in with your Replit account to request access.</p>
-          <a href="/api/login" class="access-submit" style="display:block;text-align:center;text-decoration:none;margin-top:8px;">Sign in with Replit</a>
-          <div class="access-divider"><span>or request access by email</span></div>
+          <h1 class="access-title">Request access</h1>
+          <p class="access-sub">Enter your details below and we'll review your request.</p>
           <form id="access-request-form" onsubmit="handleAccessRequestSubmit(event)" novalidate>
-            <input id="access-req-name" type="text" class="access-input" placeholder="Your name" autocomplete="name" required>
-            <input id="access-req-email" type="email" class="access-input" placeholder="Your email address" autocomplete="email" required
+            <input id="access-req-name" type="text" class="access-input" placeholder="Full name" autocomplete="name" required>
+            <input id="access-req-email" type="email" class="access-input" placeholder="Email address" autocomplete="email" required
               onblur="handleAccessEmailBlur(this.value)">
             <div id="access-email-approved-msg" style="display:none;" class="access-email-approved-msg">
               Your account is already approved — <a href="/api/login">sign in to get started</a>.
@@ -45,6 +42,9 @@
             </div>
             <div id="access-req-error" style="display:none;" class="access-req-error"></div>
           </form>
+          <div class="access-footer" style="margin-top:20px;text-align:center;">
+            Already have access? <a href="/api/login">Sign in</a>
+          </div>
         </div>
         <div id="access-confirmed-state" style="display:none;">
           <div class="access-confirmed-icon">✓</div>
@@ -57,7 +57,7 @@
         <div id="access-email-conflict-state" style="display:none;">
           <div class="access-confirmed-icon" style="background:#fee2e2;color:#dc2626;">✕</div>
           <h1 class="access-title">Email already in use</h1>
-          <p class="access-sub">The email address on your Replit account is already registered to a different account here. Please contact an admin if you think this is an error.</p>
+          <p class="access-sub">This email address is already registered to a different account here. Please contact an admin if you think this is an error.</p>
           <div class="access-footer" style="margin-top:20px;">
             <a href="/api/login">Try a different account</a>
           </div>
@@ -75,7 +75,7 @@
           <h1 class="access-title">Your account is already approved</h1>
           <p class="access-sub">Your account is already approved — sign in to get started.</p>
           <div class="access-footer" style="margin-top:20px;">
-            <a href="/api/login" class="access-submit" style="display:block;text-align:center;text-decoration:none;">Sign in with Replit</a>
+            <a href="/api/login" class="access-submit" style="display:block;text-align:center;text-decoration:none;">Sign in</a>
           </div>
         </div>
       </div>
