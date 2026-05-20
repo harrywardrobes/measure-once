@@ -37,6 +37,18 @@
     .hidden { display:none !important; }
     .cf-turnstile { margin: 4px 0 14px; min-height: 65px; }
   </style>
+  <script>
+    // Must be defined BEFORE the Turnstile loader so the async script can find
+    // it when it fires onload. The real renderTurnstileWidgets() lives further
+    // down once the rest of the page script has set _turnstileSiteKey.
+    window._turnstileApiReady = false;
+    window.onTurnstileReady = function () {
+      window._turnstileApiReady = true;
+      if (typeof window.renderTurnstileWidgets === 'function') {
+        window.renderTurnstileWidgets();
+      }
+    };
+  </script>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady" async defer></script>
 </head>
 <body>
@@ -148,7 +160,6 @@
   // configured), the widget containers stay empty and forms submit as before.
   const _turnstileWidgets = { login: null, forgot: null, request: null };
   let _turnstileSiteKey = null;
-  let _turnstileApiReady = false;
   function getTurnstileToken(formName) {
     const id = _turnstileWidgets[formName];
     if (!_turnstileSiteKey || id == null || !window.turnstile) return '';
@@ -158,7 +169,7 @@
     const id = _turnstileWidgets[formName];
     if (_turnstileSiteKey && id != null && window.turnstile) window.turnstile.reset(id);
   }
-  function renderTurnstileWidgets() {
+  window.renderTurnstileWidgets = function () {
     if (!_turnstileSiteKey || !window.turnstile) return;
     [['login', 'turnstile-login'], ['forgot', 'turnstile-forgot'], ['request', 'turnstile-request']]
       .forEach(([name, elId]) => {
@@ -170,18 +181,13 @@
           appearance: 'always',
         });
       });
-  }
-  // Called by the Turnstile script via the ?onload= query param.
-  window.onTurnstileReady = function () {
-    _turnstileApiReady = true;
-    renderTurnstileWidgets();
   };
   fetch('/api/turnstile-config')
     .then(r => r.json())
     .then(cfg => {
       if (cfg && cfg.enabled && cfg.siteKey) {
         _turnstileSiteKey = cfg.siteKey;
-        if (_turnstileApiReady) renderTurnstileWidgets();
+        if (window._turnstileApiReady) window.renderTurnstileWidgets();
       }
     })
     .catch(() => {});
