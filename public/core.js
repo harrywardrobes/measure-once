@@ -1,8 +1,12 @@
-// ── Viewer-mode CSS ───────────────────────────────────────────────────────────
-// Injected once; hides elements marked data-viewer-hide when body.viewer-mode
+// ── Viewer-mode and privilege-gated CSS ───────────────────────────────────────
+// Injected once; hides elements based on role body classes.
 (function () {
   const s = document.createElement('style');
-  s.textContent = 'body.viewer-mode [data-viewer-hide]{display:none!important}';
+  s.textContent = [
+    'body.viewer-mode [data-viewer-hide]{display:none!important}',
+    'body:not(.admin-mode) [data-admin-only]{display:none!important}',
+    'body:not(.manager-mode):not(.admin-mode) [data-manager-only]{display:none!important}',
+  ].join('\n');
   document.head.appendChild(s);
 }());
 
@@ -294,8 +298,13 @@ async function bootstrap() {
   }
 
   if (priv === 'manager' || priv === 'admin') {
+    document.body.classList.add('manager-mode');
     const tradesBtn = document.getElementById('bnav-trades');
     if (tradesBtn) tradesBtn.style.display = '';
+  }
+
+  if (priv === 'admin') {
+    document.body.classList.add('admin-mode');
   }
 
   try {
@@ -304,7 +313,7 @@ async function bootstrap() {
     await Promise.all([loadOpenLeads(), loadWorkflowStages(), ensurePrefs()]);
     populateStageFilter();
     if (document.getElementById('customer-list') || document.getElementById('sales-view')) renderCustomerList();
-    loadQBInvoices();
+    if (priv === 'manager' || priv === 'admin') loadQBInvoices();
   } catch (e) {
     console.error('Bootstrap failed', e);
     const list        = document.getElementById('customer-list');

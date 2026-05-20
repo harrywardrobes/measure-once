@@ -183,7 +183,7 @@ router.get('/api/quickbooks/status', isAuthenticated, async (req, res) => {
 });
 
 // ── API: all outstanding invoices ──────────────────────────────────────────────
-router.get('/api/quickbooks/invoices', isAuthenticated, quickbooksReadWriteLimiter, async (req, res) => {
+router.get('/api/quickbooks/invoices', isAuthenticated, requirePrivilege('manager'), quickbooksReadWriteLimiter, async (req, res) => {
   try {
     const data = await qbGet('/query', {
       query: "SELECT * FROM Invoice WHERE Balance > '0.0' MAXRESULTS 1000"
@@ -208,7 +208,7 @@ router.get('/api/quickbooks/invoices', isAuthenticated, quickbooksReadWriteLimit
 });
 
 // ── API: single invoice detail ─────────────────────────────────────────────────
-router.get('/api/quickbooks/invoice/:id', isAuthenticated, quickbooksReadWriteLimiter, async (req, res) => {
+router.get('/api/quickbooks/invoice/:id', isAuthenticated, requirePrivilege('manager'), quickbooksReadWriteLimiter, async (req, res) => {
   try {
     const data = await qbGet(`/invoice/${req.params.id}`);
     const inv  = data.Invoice;
@@ -246,7 +246,7 @@ router.get('/api/quickbooks/invoice/:id', isAuthenticated, quickbooksReadWriteLi
 });
 
 // ── API: update invoice (sparse) ───────────────────────────────────────────────
-router.post('/api/quickbooks/invoice/:id', isAuthenticated, requirePrivilege('member'), quickbooksReadWriteLimiter, async (req, res) => {
+router.post('/api/quickbooks/invoice/:id', isAuthenticated, requireAdmin, quickbooksReadWriteLimiter, async (req, res) => {
   try {
     const { syncToken, dueDate, memo, email } = req.body;
     const t = await getValidTokens();
@@ -279,7 +279,7 @@ router.post('/api/quickbooks/invoice/:id', isAuthenticated, requirePrivilege('me
 });
 
 // ── API: download invoice PDF ──────────────────────────────────────────────────
-router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, quickbooksReadWriteLimiter, async (req, res) => {
+router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, requirePrivilege('manager'), quickbooksReadWriteLimiter, async (req, res) => {
   try {
     const t = await getValidTokens();
     if (!t) return res.status(503).json({ error: 'QuickBooks not connected' });
@@ -306,7 +306,7 @@ router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, quickbooksReadWri
 });
 
 // ── API: send invoice by email ─────────────────────────────────────────────────
-router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requireAdmin, async (req, res) => {
   // Rate-limit: cap sends per authenticated user to SEND_LIMIT per rolling hour.
   const userId = req.user?.claims?.sub || req.user?.id;
   try {
@@ -329,10 +329,6 @@ router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requirePrivileg
 
     const params = { minorversion: 65 };
     if (email) {
-      // Only admins may redirect the invoice to an arbitrary email address.
-      if (!isAdminEmail(req.user?.claims?.email)) {
-        return res.status(403).json({ error: 'Only admins may override the recipient email.' });
-      }
       params.sendTo = email;
     }
 
