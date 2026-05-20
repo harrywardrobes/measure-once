@@ -54,7 +54,8 @@ function turnstileError(res) {
 
 const MIN_PASSWORD_STRENGTH_SCORE = 2;
 
-const PASSWORD_SET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const PASSWORD_SET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h (admin-issued)
+const PASSWORD_RESET_TOKEN_TTL_MS = 15 * 60 * 1000;    // 15m (self-service reset)
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 function createMailTransport() {
@@ -158,7 +159,7 @@ async function sendSetPasswordEmail(email, token, { resend = false, reset = fals
       ? 'A new password setup link has been issued for your Measure Once account.'
       : "You've been granted access to <strong>Measure Once</strong>.";
   const action = reset
-    ? 'Reset your password by clicking the link below (valid for 24 hours):'
+    ? 'Reset your password by clicking the link below (valid for 15 minutes):'
     : 'Set your password by clicking the link below (valid for 24 hours):';
   try {
     await transport.sendMail({
@@ -283,6 +284,7 @@ async function ensureAuthTables() {
     );
     CREATE INDEX IF NOT EXISTS "IDX_password_set_tokens_email" ON password_set_tokens (email);
     CREATE INDEX IF NOT EXISTS "IDX_password_set_tokens_expire" ON password_set_tokens (expires_at);
+    ALTER TABLE password_set_tokens ADD COLUMN IF NOT EXISTS purpose TEXT;
   `);
 
   await pool.query(`
@@ -585,11 +587,12 @@ function hashToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-async function issuePasswordSetToken(email) {
+async function issuePasswordSetToken(email, { purpose = 'set' } = {}) {
   const lower = email.toLowerCase();
   const raw = crypto.randomBytes(32).toString('hex');
   const tokenHash = hashToken(raw);
-  const expiresAt = new Date(Date.now() + PASSWORD_SET_TOKEN_TTL_MS);
+  const ttlMs = purpose === 'reset' ? PASSWORD_RESET_TOKEN_TTL_MS : PASSWORD_SET_TOKEN_TTL_MS;
+  const expiresAt = new Date(Date.now() + ttlMs);
   // Invalidate any prior unused tokens for this email so only the newest link works.
   await pool.query(
     `UPDATE password_set_tokens SET used_at = NOW()
@@ -597,9 +600,9 @@ async function issuePasswordSetToken(email) {
     [lower]
   );
   await pool.query(
-    `INSERT INTO password_set_tokens (token_hash, email, expires_at)
-     VALUES ($1, $2, $3)`,
-    [tokenHash, lower, expiresAt]
+    `INSERT INTO password_set_tokens (token_hash, email, expires_at, purpose)
+     VALUES ($1, $2, $3, $4)`,
+    [tokenHash, lower, expiresAt, purpose]
   );
   return raw;
 }
@@ -607,7 +610,7 @@ async function issuePasswordSetToken(email) {
 async function lookupPasswordSetToken(rawToken) {
   if (!rawToken || typeof rawToken !== 'string') return null;
   const r = await pool.query(
-    `SELECT email, expires_at, used_at FROM password_set_tokens WHERE token_hash = $1`,
+    `SELECT email, expires_at, used_at, purpose FROM password_set_tokens WHERE token_hash = $1`,
     [hashToken(rawToken)]
   );
   const row = r.rows[0];
@@ -844,7 +847,7 @@ async function setupAuth(app) {
     try {
       if (await isEmailApproved(email)) {
         try {
-          const token = await issuePasswordSetToken(email);
+          const token = await issuePasswordSetToken(email, { purpose: 'reset' });
           await sendSetPasswordEmail(email, token, { reset: true });
           console.log(`  Password reset link issued for ${email}`);
         } catch (mailErr) {
@@ -865,8 +868,8 @@ async function setupAuth(app) {
     const token = (req.query?.token || '').toString();
     const row = await lookupPasswordSetToken(token);
     if (!row) return res.status(404).json({ valid: false, reason: 'invalid' });
-    if (row.invalid) return res.status(410).json({ valid: false, reason: row.invalid, email: row.email });
-    res.json({ valid: true, email: row.email });
+    if (row.invalid) return res.status(410).json({ valid: false, reason: row.invalid, email: row.email, purpose: row.purpose || null });
+    res.json({ valid: true, email: row.email, purpose: row.purpose || null });
   });
 
   app.post('/api/set-password', async (req, res) => {

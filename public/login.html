@@ -115,6 +115,8 @@
     document.getElementById('view-request').classList.toggle('hidden', name !== 'request');
     document.getElementById('view-forgot').classList.toggle('hidden', name !== 'forgot');
   }
+  if (location.hash === '#forgot') showView('forgot');
+  else if (location.hash === '#request') showView('request');
   function show(el, msg) { el.textContent = msg; el.style.display = 'block'; }
   function hide(el) { el.style.display = 'none'; el.textContent = ''; }
 
