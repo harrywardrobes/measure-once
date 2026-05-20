@@ -21,8 +21,6 @@ async function renderProfileTab() {
   const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.email || 'User';
   const initials = [profile.first_name, profile.last_name]
     .filter(Boolean).map(s => s[0]).join('').toUpperCase() || '?';
-  const levelLabels = { viewer: 'Viewer', member: 'Member', manager: 'Manager', admin: 'Admin' };
-  const levelLabel  = levelLabels[profile.privilege_level] || 'Member';
   const isAdmin = user.isAdmin;
 
   let photoSrc = profile.has_custom_photo
@@ -88,10 +86,6 @@ async function renderProfileTab() {
       <div class="profile-field">
         <span class="profile-field-label">Job role</span>
         <span class="profile-field-value">${escHtml(profile.job_role || '—')}</span>
-      </div>
-      <div class="profile-field">
-        <span class="profile-field-label">Privilege level</span>
-        <span class="profile-level-badge profile-level-${escHtml(profile.privilege_level || 'member')}">${escHtml(levelLabel)}</span>
       </div>
     </div>
 
