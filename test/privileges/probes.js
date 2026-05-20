@@ -815,96 +815,6 @@ async function runProbes({ clients, users, pool, runId }) {
     clients.manager = await login(users.manager.email, PASSWORD);
   }
 
-  // ── Rate-limit hammering ──────────────────────────────────────────────────
-  // loginLimiter = 20 attempts per 15min keyed on req.ip (auth.js:207-209).
-  // accessRequestLimiter = 5/hr, shared with /api/forgot-password
-  // (auth.js:191-193, 839). Hammer past each cap and assert the limiter
-  // returns 429. Always reset the rate_limit schema before AND after this
-  // probe so it doesn't leak into / from other probes.
-  {
-    const { resetRateLimitStore } = require('./harness');
-    await resetRateLimitStore(pool);
-
-    // Login: 25 bad-password attempts. First ~20 should be 401, then 429.
-    // Defensive: under load Node's undici can surface ECONNRESET when the
-    // server preemptively closes the socket on a 429 — count those as
-    // limiter engagements rather than crashing the whole run.
-    let firstLimited = -1;
-    let lastStatus = 0;
-    for (let i = 0; i < 25; i++) {
-      const c = makeClient(null);
-      try {
-        const r = await c.post('/api/login', { email: users.viewer.email, password: 'definitely-wrong' });
-        lastStatus = r.status;
-        if (r.status === 429 && firstLimited < 0) firstLimited = i + 1;
-      } catch (e) {
-        lastStatus = 429;
-        if (firstLimited < 0) firstLimited = i + 1;
-      }
-    }
-    // loginLimiter is max:20/15min with skipSuccessfulRequests=true, keyed
-    // on req.ip. Aggregated bucket counts from the @acpr Postgres store can
-    // trip a few attempts earlier than the nominal 21 (the store flushes
-    // counters on a tick boundary). The security property under test is
-    // simply that the limiter *does* engage well before 25 bad attempts.
-    await record('rate-limit', 'loginLimiter engages within 25 bad-password attempts',
-      'first 429 ≤ attempt 25, last status = 429',
-      `firstLimited=${firstLimited} lastStatus=${lastStatus}`,
-      'critical', firstLimited > 0 && firstLimited <= 25 && lastStatus === 429);
-
-    await resetRateLimitStore(pool);
-
-    // Access-request: 7 attempts. First ~5 should be 200, then 429.
-    let firstLimited2 = -1;
-    for (let i = 0; i < 7; i++) {
-      const c = makeClient(null);
-      try {
-        const r = await c.post('/api/request-access',
-          { name: 'rate test', email: `privtest-rl${i}-${runId}@privtest.local` });
-        if (r.status === 429 && firstLimited2 < 0) firstLimited2 = i + 1;
-      } catch (e) {
-        if (firstLimited2 < 0) firstLimited2 = i + 1;
-      }
-    }
-    await record('rate-limit', 'accessRequestLimiter blocks the 6th request within 1 hour',
-      'first 429 between attempts 4 and 7',
-      `firstLimited=${firstLimited2}`,
-      'critical', firstLimited2 >= 4 && firstLimited2 <= 7);
-
-    await resetRateLimitStore(pool);
-
-    // /api/forgot-password shares the same accessRequestLimiter bucket
-    // (auth.js:839). Hammer it independently to confirm the cap also engages
-    // on this path (a regression where forgot-password got its own ungated
-    // limiter would only show up here, not in the access-request probe).
-    let firstLimited3 = -1;
-    for (let i = 0; i < 7; i++) {
-      const c = makeClient(null);
-      try {
-        const r = await c.post('/api/forgot-password',
-          { email: users.viewer.email });
-        if (r.status === 429 && firstLimited3 < 0) firstLimited3 = i + 1;
-      } catch (e) {
-        if (firstLimited3 < 0) firstLimited3 = i + 1;
-      }
-    }
-    await record('rate-limit', '/api/forgot-password engages the accessRequestLimiter within 7 attempts',
-      'first 429 between attempts 4 and 7',
-      `firstLimited=${firstLimited3}`,
-      'critical', firstLimited3 >= 4 && firstLimited3 <= 7);
-
-    await resetRateLimitStore(pool);
-
-    // Cleanup the synthetic access-request rows this probe created.
-    await pool.query(`DELETE FROM account_requests WHERE email LIKE $1`,
-      [`privtest-rl%-${runId}@privtest.local`]);
-
-    // Refresh long-lived viewer client — the hammer above tripped the
-    // limiter on the viewer's email IP, but the post-probe reset clears
-    // the bucket. Login should now succeed again.
-    clients.viewer = await login(users.viewer.email, PASSWORD);
-  }
-
   // ── Turnstile tampering (key enabled) ─────────────────────────────────────
   // When TURNSTILE_SECRET_KEY is unset *in the spawned server* the captcha
   // gate is a documented no-op (see auth.js verifyTurnstile). To exercise
@@ -958,6 +868,98 @@ async function runProbes({ clients, users, pool, runId }) {
         'medium', false,
         'Run with PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 TURNSTILE_SECRET_KEY=… npm run test:privileges to exercise the captcha gate path.');
     }
+  }
+
+  // ── Rate-limit hammering (runs last) ──────────────────────────────────────
+  // loginLimiter    = 20 attempts / 15 min keyed on req.ip (auth.js:207-209).
+  // accessRequestLimiter = 5/hr, shared with /api/forgot-password
+  // (auth.js:191-193, 839). Hammer past each cap and assert 429. Reset the
+  // rate_limit store before AND after so neither the Turnstile probe's login
+  // attempts nor these hammer loops leak into subsequent runs.
+  {
+    await resetRateLimitStore(pool);
+
+    // ── /api/login — loginLimiter (max 20 / 15 min) ─────────────────────────
+    // Send 25 bad-password attempts from a fresh IP-less client. The first
+    // ≤20 should be 401 (wrong password), then 429 (rate limited). Node's
+    // undici can surface ECONNRESET when the server preemptively closes the
+    // socket on a 429 — treat those as limiter engagements.
+    let firstLimited = -1;
+    let lastStatus = 0;
+    for (let i = 0; i < 25; i++) {
+      const c = makeClient(null);
+      try {
+        const r = await c.post('/api/login', { email: users.viewer.email, password: 'definitely-wrong' });
+        lastStatus = r.status;
+        if (r.status === 429 && firstLimited < 0) firstLimited = i + 1;
+      } catch (e) {
+        lastStatus = 429;
+        if (firstLimited < 0) firstLimited = i + 1;
+      }
+    }
+    // The security property: the limiter engages well before 25 bad attempts.
+    // Aggregated-bucket flushing means the first 429 may arrive a couple
+    // attempts earlier than the nominal attempt 21 — both are acceptable.
+    await record('rate-limit', 'loginLimiter engages within 25 bad-password attempts on /api/login',
+      'first 429 ≤ attempt 25, last status = 429',
+      `firstLimited=${firstLimited} lastStatus=${lastStatus}`,
+      'critical', firstLimited > 0 && firstLimited <= 25 && lastStatus === 429,
+      'Configured cap: max 20 attempts per 15 minutes (auth.js loginLimiter). ' +
+      'A cap deviation means unauthenticated login hammering is not blocked.');
+
+    await resetRateLimitStore(pool);
+
+    // ── /api/request-access — accessRequestLimiter (max 5 / 1 hr) ───────────
+    // 7 attempts with distinct synthetic emails (each is a unique access
+    // request, so we are not blocked by duplicate-email logic). Attempts 1–5
+    // should succeed (2xx), attempt 6 should be 429.
+    let firstLimited2 = -1;
+    for (let i = 0; i < 7; i++) {
+      const c = makeClient(null);
+      try {
+        const r = await c.post('/api/request-access',
+          { name: 'rate test', email: `privtest-rl${i}-${runId}@privtest.local` });
+        if (r.status === 429 && firstLimited2 < 0) firstLimited2 = i + 1;
+      } catch (e) {
+        if (firstLimited2 < 0) firstLimited2 = i + 1;
+      }
+    }
+    await record('rate-limit', 'accessRequestLimiter blocks the 6th request within 1 hour on /api/request-access',
+      'first 429 between attempts 4 and 7 (cap = 5/hr)',
+      `firstLimited=${firstLimited2}`,
+      'critical', firstLimited2 >= 4 && firstLimited2 <= 7,
+      'Configured cap: max 5 attempts per hour (auth.js accessRequestLimiter). ' +
+      'A cap deviation means the access-request flood path is unprotected.');
+
+    await resetRateLimitStore(pool);
+
+    // ── /api/forgot-password — accessRequestLimiter (same 5 / 1 hr bucket) ──
+    // Hammer independently to confirm the shared limiter also fires on this
+    // path. A regression where forgot-password got its own ungated limiter
+    // would only surface here, not in the access-request probe above.
+    let firstLimited3 = -1;
+    for (let i = 0; i < 7; i++) {
+      const c = makeClient(null);
+      try {
+        const r = await c.post('/api/forgot-password', { email: users.viewer.email });
+        if (r.status === 429 && firstLimited3 < 0) firstLimited3 = i + 1;
+      } catch (e) {
+        if (firstLimited3 < 0) firstLimited3 = i + 1;
+      }
+    }
+    await record('rate-limit', '/api/forgot-password engages the accessRequestLimiter within 7 attempts',
+      'first 429 between attempts 4 and 7 (cap = 5/hr)',
+      `firstLimited=${firstLimited3}`,
+      'critical', firstLimited3 >= 4 && firstLimited3 <= 7,
+      'Configured cap: max 5 attempts per hour shared with /api/request-access. ' +
+      'A cap deviation means the forgot-password flood path is unprotected.');
+
+    // Final reset: leave the store clean for the next harness run.
+    await resetRateLimitStore(pool);
+
+    // Cleanup synthetic access-request rows created by the hammering loop.
+    await pool.query(`DELETE FROM account_requests WHERE email LIKE $1`,
+      [`privtest-rl%-${runId}@privtest.local`]);
   }
 
   return findings;
