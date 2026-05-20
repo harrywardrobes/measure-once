@@ -1208,7 +1208,7 @@ async function setupAuth(app) {
         console.error('  Failed to issue/send set-password email after approval:', mailErr.message);
       }
 
-      const adminEmail = req.user?.claims?.email;
+      const adminEmail = req.user?.claims?.email || req.user?.email || null;
       const approveRoleDetail = chosenRole
         ? `Role: ${chosenRole} · Privilege: ${chosenPrivilege}`
         : `Privilege: ${chosenPrivilege}`;
@@ -1235,7 +1235,7 @@ async function setupAuth(app) {
         [req.params.id]
       );
       if (upd.rowCount === 0) return res.status(404).json({ error: 'Request not found' });
-      const adminEmail = req.user?.claims?.email;
+      const adminEmail = req.user?.claims?.email || req.user?.email || null;
       await logAdminAction(adminEmail, 'reject_request', email, `Rejected access request id=${req.params.id}`);
       res.json({ ok: true });
     } catch (e) {
@@ -1303,7 +1303,7 @@ async function setupAuth(app) {
         console.error('  Failed to issue/send set-password email after add-allowed:', mailErr.message);
       }
 
-      const adminEmail = req.user?.claims?.email;
+      const adminEmail = req.user?.claims?.email || req.user?.email || null;
       const nameStr = [meta.first_name, meta.last_name].filter(Boolean).join(' ');
       const inviteRoleDetail = chosenRole
         ? `Role: ${chosenRole} · Privilege: ${chosenPrivilege}`
@@ -1339,7 +1339,7 @@ async function setupAuth(app) {
       }
       const del = await pool.query(`DELETE FROM allowed_emails WHERE email = $1`, [email]);
       if (del.rowCount > 0) {
-        const adminEmail = req.user?.claims?.email;
+        const adminEmail = req.user?.claims?.email || req.user?.email || null;
         await logAdminAction(adminEmail, 'revoke_allowed_email', email, null);
         // Immediately invalidate all active sessions for the revoked user so they
         // cannot continue using the application until the session naturally expires.
@@ -1366,7 +1366,7 @@ async function setupAuth(app) {
     try {
       const token = await issuePasswordSetToken(email);
       await sendSetPasswordEmail(email, token, { resend: true });
-      const adminEmail = req.user?.claims?.email;
+      const adminEmail = req.user?.claims?.email || req.user?.email || null;
       await logAdminAction(adminEmail, 'resend_set_password_email', email, null);
       res.json({ ok: true });
     } catch (e) {
@@ -1388,7 +1388,7 @@ async function setupAuth(app) {
     if (!(await isEmailApproved(email))) {
       return res.status(404).json({ error: 'This email is not on the approved list.' });
     }
-    const adminEmail = req.user?.claims?.email;
+    const adminEmail = req.user?.claims?.email || req.user?.email || null;
     if (adminEmail && adminEmail.toLowerCase() === email) {
       return res.status(400).json({ error: 'Use the change-password flow to reset your own password.' });
     }
@@ -1626,7 +1626,7 @@ async function setupAuth(app) {
         }
       }
 
-      const adminEmail = req.user?.claims?.email;
+      const adminEmail = req.user?.claims?.email || req.user?.email || null;
       const parts = [];
       if (first_name !== undefined)      parts.push(`first_name="${first_name?.trim() || 'none'}"`);
       if (last_name !== undefined)       parts.push(`last_name="${last_name?.trim() || 'none'}"`);
@@ -1733,7 +1733,7 @@ async function setupAuth(app) {
          ON CONFLICT (key) DO UPDATE SET value = $1::jsonb, updated_at = NOW()`,
         [JSON.stringify(overrides)]
       );
-      const adminEmail = req.user?.claims?.email;
+      const adminEmail = req.user?.claims?.email || req.user?.email || null;
       await logAdminAction(adminEmail, 'edit_permissions', null,
         `Updated ${Object.keys(overrides).length} feature permission(s) in role_permissions`);
       res.json({ ok: true });
@@ -1765,7 +1765,7 @@ async function setupAuth(app) {
          ON CONFLICT (name) DO UPDATE SET privilege_level = EXCLUDED.privilege_level`,
         [name, privilege_level]
       );
-      const adminEmail = req.user?.claims?.email;
+      const adminEmail = req.user?.claims?.email || req.user?.email || null;
       await logAdminAction(adminEmail, 'add_job_role', null, `Added job role "${name}" (${privilege_level})`);
       res.json({ ok: true, name, privilege_level });
     } catch (e) {
@@ -1778,7 +1778,7 @@ async function setupAuth(app) {
     try {
       const del = await pool.query(`DELETE FROM job_roles WHERE name = $1`, [name]);
       if (del.rowCount > 0) {
-        const adminEmail = req.user?.claims?.email;
+        const adminEmail = req.user?.claims?.email || req.user?.email || null;
         await logAdminAction(adminEmail, 'delete_job_role', null, `Deleted job role "${name}"`);
       }
       res.json({ ok: true });
@@ -1852,7 +1852,7 @@ async function setupAuth(app) {
         [req.params.id]
       );
       if (r.rowCount === 0) return res.status(404).json({ error: 'No pending photo found.' });
-      await logAdminAction(req.user?.claims?.email, 'approve_profile_photo', r.rows[0].email, 'Profile photo approved');
+      await logAdminAction(req.user?.claims?.email || req.user?.email || null, 'approve_profile_photo', r.rows[0].email, 'Profile photo approved');
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -1867,7 +1867,7 @@ async function setupAuth(app) {
         [req.params.id]
       );
       if (r.rowCount === 0) return res.status(404).json({ error: 'User not found.' });
-      await logAdminAction(req.user?.claims?.email, 'reject_profile_photo', r.rows[0].email, 'Profile photo rejected');
+      await logAdminAction(req.user?.claims?.email || req.user?.email || null, 'reject_profile_photo', r.rows[0].email, 'Profile photo rejected');
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });

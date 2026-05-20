@@ -631,6 +631,10 @@
   function switchTab(id) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + id));
+    if (id === 'auditlog' && !_auditLogInitialized) {
+      _auditLogInitialized = true;
+      initAuditLog();
+    }
   }
 
   /* ── Pending Requests badge (access requests + photo approvals + trade submissions) ── */
@@ -670,6 +674,7 @@
   let _auditEntries = [];
   let _auditOffset  = 0;
   let _auditHasMore = false;
+  let _auditLogInitialized = false;
   let _photoRequests = [];
   let _capabilities = { levels: ['viewer','member','manager','admin'], features: [] };
   let _tradeSubmissions = [];
@@ -1331,16 +1336,18 @@
      AUDIT LOG TAB
   ──────────────────────────────────────────────── */
   const ACTION_LABELS = {
-    approve_request:      'Approved access request',
-    reject_request:       'Rejected access request',
-    add_allowed_email:    'Added email to allow-list',
-    revoke_allowed_email: 'Revoked email from allow-list',
-    edit_user_profile:    'Edited user profile',
-    add_job_role:         'Added job role',
-    delete_job_role:      'Deleted job role',
-    edit_permissions:     'Updated permission matrix',
-    approve_profile_photo:'Approved profile photo',
-    reject_profile_photo: 'Rejected profile photo',
+    approve_request:          'Approved access request',
+    reject_request:           'Rejected access request',
+    add_allowed_email:        'Added email to allow-list',
+    revoke_allowed_email:     'Revoked email from allow-list',
+    edit_user_profile:        'Edited user profile',
+    add_job_role:             'Added job role',
+    delete_job_role:          'Deleted job role',
+    edit_permissions:         'Updated permission matrix',
+    approve_profile_photo:    'Approved profile photo',
+    reject_profile_photo:     'Rejected profile photo',
+    resend_set_password_email:'Resent set-password email',
+    force_password_reset:     'Forced password reset',
   };
 
   function auditEntryHtml(e) {
@@ -1373,25 +1380,16 @@
       </div>`;
   }
 
-  function renderUnifiedAuditLog(append) {
+  function renderUnifiedAuditLog() {
     const feed = $('#audit-feed');
     const btn  = $('#audit-load-more');
     if (!feed) return;
-    if (!append && _auditEntries.length === 0) {
+    if (_auditEntries.length === 0) {
       feed.innerHTML = '<div class="table-empty" style="padding:28px 0;">No audit entries recorded yet.</div>';
       if (btn) btn.style.display = 'none';
       return;
     }
-    if (append) {
-      const frag = document.createDocumentFragment();
-      const tmp  = document.createElement('div');
-      const startIdx = _auditOffset - _auditEntries.slice(-(_auditEntries.length - (_auditOffset - 25 < 0 ? 0 : _auditOffset - 25))).length;
-      const newEntries = _auditEntries.slice(_auditOffset - 25 < 0 ? 0 : _auditOffset - 25);
-      newEntries.forEach(e => { tmp.innerHTML = auditEntryHtml(e); frag.appendChild(tmp.firstElementChild); });
-      feed.appendChild(frag);
-    } else {
-      feed.innerHTML = _auditEntries.map(auditEntryHtml).join('');
-    }
+    feed.innerHTML = _auditEntries.map(auditEntryHtml).join('');
     if (btn) btn.style.display = _auditHasMore ? '' : 'none';
   }
 
@@ -1427,8 +1425,10 @@
       _auditEntries = data.items || [];
       _auditHasMore = data.hasMore;
       _auditOffset  = _auditEntries.length;
-    } catch {}
-    renderUnifiedAuditLog(false);
+    } catch (e) {
+      toast(e.message || 'Failed to load audit log', true);
+    }
+    renderUnifiedAuditLog();
   }
 
   /* ────────────────────────────────────────────────
@@ -1510,7 +1510,6 @@
     renderRequests();
     renderPhotoRequests();
     renderTradeSubmissions();
-    await initAuditLog();
   }
 
   let _hubspotStatusLoaded = false;
