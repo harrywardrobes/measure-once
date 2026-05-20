@@ -10,13 +10,19 @@ const { buildReport, writeReport } = require('./report');
 require('dotenv').config();
 
 async function main() {
-  if (!process.env.DATABASE_URL) {
-    console.error('DATABASE_URL is required to run the privilege test suite.');
+  const connStr = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL;
+  if (!connStr) {
+    console.error('DATABASE_URL (or DATABASE_URL_TEST) is required to run the privilege test suite.');
     process.exit(2);
   }
   const runId = Math.random().toString(36).slice(2, 8);
   const startedAt = new Date().toISOString();
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new Pool({ connectionString: connStr });
+  if (process.env.DATABASE_URL_TEST) {
+    console.log(`  Using DATABASE_URL_TEST (isolated test DB).`);
+  } else {
+    console.log(`  Using shared DATABASE_URL with prefix cleanup (privtest-*).`);
+  }
 
   console.log(`\n  Privilege test run ${runId}`);
   console.log(`  Booting test server on a separate port…\n`);
@@ -77,23 +83,31 @@ async function main() {
     console.log(`  Logged in as all four roles.`);
 
     console.log(`  Running capability matrix (${ROUTES.length} routes × 5 actors)…`);
+    // For `self-or-admin` routes, target the *admin* user id so non-admins
+    // are exercising the cross-user (IDOR) path. A separate probe block
+    // covers the self-access happy path.
+    const foreignId = users.admin.id;
     for (const route of ROUTES) {
+      const path = route.path.replace('__FOREIGN__', String(foreignId));
       for (const actorLevel of ['unauth', ...ROLES]) {
         const c = clients[actorLevel];
         let res;
         try {
-          res = await c.req(route.method, route.path, { body: route.body });
+          res = await c.req(route.method, path, { body: route.body });
         } catch (e) {
           res = { status: 0, text: String(e.message) };
         }
+        const actorIsTargetUser =
+          actorLevel !== 'unauth' && users[actorLevel]?.id === foreignId;
         const outcome = classifyOutcome({
           requiredLevel: route.level,
           actorLevel,
           status: res.status,
           route,
+          actorIsTargetUser,
         });
         matrixResults.push({
-          method: route.method, path: route.path,
+          method: route.method, path,
           requiredLevel: route.level, actorLevel,
           status: res.status,
           ok: outcome.ok, kind: outcome.kind,

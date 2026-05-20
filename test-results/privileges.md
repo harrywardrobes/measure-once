@@ -1,15 +1,24 @@
 # Privilege Adversarial Test Suite — Report
 
-- Run ID: `lq4i2u`
-- Started: 2026-05-20T16:02:17.046Z
-- Finished: 2026-05-20T16:02:24.870Z
+- Run ID: `nofb45`
+- Started: 2026-05-20T16:11:09.855Z
+- Finished: 2026-05-20T16:11:21.145Z
 - Harness: `npm run test:privileges` (boots a dedicated server on a separate port, seeds four users, runs probes, exits non-zero on findings).
 
 ## Summary
 
-- Capability matrix: 325/325 passed (12 inconclusive — guard fired before authz, see below)
-- Adversarial probes: 58/58 passed
-- **Findings**: 0
+- Capability matrix: 497/500 passed (12 inconclusive — guard fired before authz, see below)
+- Adversarial probes: 75/75 passed
+- **Findings**: 3
+  - info: 3
+
+## Findings
+
+| Severity | Source | Name | Expected | Observed | Detail |
+|---|---|---|---|---|---|
+| info | matrix | GET /api/users/65dfcaa7-7674-49c1-ba33-80e95e7c466a/photo (as viewer, requires self-or-admin) | 401/403 from privilege gate | status=404 (idor-leak) |  |
+| info | matrix | GET /api/users/65dfcaa7-7674-49c1-ba33-80e95e7c466a/photo (as member, requires self-or-admin) | 401/403 from privilege gate | status=404 (idor-leak) |  |
+| info | matrix | GET /api/users/65dfcaa7-7674-49c1-ba33-80e95e7c466a/photo (as manager, requires self-or-admin) | 401/403 from privilege gate | status=404 (idor-leak) |  |
 
 ## Inconclusive matrix cells
 
@@ -18,7 +27,7 @@ These cells got a `503` from a pre-authz guard (e.g. `requireHubspotToken` mount
 | Route | Requires | Actor | Status | Kind |
 |---|---|---|---|---|
 | POST /api/contacts | member | viewer | 503 | hubspot-guard-503-inconclusive |
-| PATCH /api/contacts/0/localdata | member | viewer | 503 | hubspot-guard-503-inconclusive |
+| POST /api/contacts/0/localdata | member | viewer | 503 | hubspot-guard-503-inconclusive |
 | PATCH /api/contacts/0 | member | viewer | 503 | hubspot-guard-503-inconclusive |
 | PATCH /api/deals/0 | member | viewer | 503 | hubspot-guard-503-inconclusive |
 | POST /api/deals/0/checklist | member | viewer | 503 | hubspot-guard-503-inconclusive |
@@ -37,21 +46,48 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 
 | Route | Requires | unauth | viewer | member | manager | admin |
 |---|---|---|---|---|---|---|
+| GET /api/turnstile-config | public | 200 | 200 | 200 | 200 | 200 |
+| GET /api/check-email?email=foo%40bar.com | public | 200 | 200 | 200 | 200 | 200 |
+| GET /api/set-password/validate?token=zzz | public | 404 | 404 | 404 | 404 | 404 |
+| GET /auth/status | public | 200 | 200 | 200 | 200 | 200 |
 | GET /api/auth/user | auth | 401 | 200 | 200 | 200 | 200 |
 | GET /api/onboarding/me | auth | 401 | 200 | 200 | 200 | 200 |
+| POST /api/onboarding/complete | auth | 401 | 400 | 400 | 400 | 400 |
 | GET /api/job-roles | auth | 401 | 200 | 200 | 200 | 200 |
 | GET /api/platform-users | auth | 401 | 200 | 200 | 200 | 200 |
 | GET /api/users/me/prefs | auth | 401 | 200 | 200 | 200 | 200 |
-| GET /api/google/status | auth | 401 | 200 | 200 | 200 | 200 |
-| GET /api/quickbooks/status | auth | 401 | 200 | 200 | 200 | 200 |
-| GET /api/visits | auth | 401 | 400 | 400 | 400 | 400 |
-| GET /api/localdata/all | auth | 401 | 503 | 503 | 503 | 503 |
-| GET /api/workflow-stages | auth | 401 | 503 | 503 | 503 | 503 |
-| GET /api/contacts-all | auth | 401 | 503 | 503 | 503 | 503 |
 | PATCH /api/users/me/prefs | auth | 401 | 200 | 200 | 200 | 200 |
 | POST /api/users/me/photo | auth | 401 | 400 | 400 | 400 | 400 |
+| GET /api/google/status | auth | 401 | 200 | 200 | 200 | 200 |
+| GET /auth/google | auth | 401 | 302 | 302 | 302 | 302 |
+| GET /auth/google/callback?code=x&state=y | auth | 401 | 302 | 302 | 302 | 302 |
+| POST /auth/logout-google | auth | 401 | 200 | 200 | 200 | 200 |
+| GET /api/quickbooks/status | auth | 401 | 200 | 200 | 200 | 200 |
+| GET /api/hubspot/status | auth | 401 | 200 | 200 | 200 | 200 |
+| GET /api/account | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/pipeline | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/deals | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/deals/0 | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/deals/0/notes | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/contacts-all | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/open-leads | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/contacts/0 | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/contacts/0/localdata | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/contacts/0/notes | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/contacts/0/tasks | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/emails | auth | 401 | 401 | 401 | 401 | 401 |
+| GET /api/events | auth | 401 | 401 | 401 | 401 | 401 |
+| GET /api/calendar/upcoming | auth | 401 | 200 | 200 | 200 | 200 |
+| GET /api/localdata/all | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/workflow | auth | 401 | 200 | 200 | 200 | 200 |
+| GET /api/workflow-stages | auth | 401 | 503 | 503 | 503 | 503 |
+| GET /api/personal-tasks | auth | 401 | 200 | 200 | 200 | 200 |
+| GET /api/visits | auth | 401 | 400 | 400 | 400 | 400 |
+| GET /api/users/65dfcaa7-7674-49c1-ba33-80e95e7c466a/profile | self-or-admin | 401 | 403 | 403 | 403 | 200 |
+| GET /api/users/65dfcaa7-7674-49c1-ba33-80e95e7c466a/photo | self-or-admin | 401 | 404 ⚠ | 404 ⚠ | 404 ⚠ | 404 |
+| PATCH /api/users/65dfcaa7-7674-49c1-ba33-80e95e7c466a/profile | self-or-admin | 401 | 403 | 403 | 403 | 200 |
 | POST /api/contacts | member | 401 | 503 | 503 | 503 | 503 |
-| PATCH /api/contacts/0/localdata | member | 401 | 503 | 503 | 503 | 503 |
+| POST /api/contacts/0/localdata | member | 401 | 503 | 503 | 503 | 503 |
 | PATCH /api/contacts/0 | member | 401 | 503 | 503 | 503 | 503 |
 | PATCH /api/deals/0 | member | 401 | 503 | 503 | 503 | 503 |
 | POST /api/deals/0/checklist | member | 401 | 503 | 503 | 503 | 503 |
@@ -70,6 +106,7 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | DELETE /api/visits/0 | member | 401 | 403 | 404 | 404 | 404 |
 | POST /api/workflow | manager | 401 | 403 | 403 | 400 | 400 |
 | PATCH /api/contacts/0/rooms/0/fitter | manager | 401 | 503 | 503 | 503 | 503 |
+| GET /trades | manager | 401 | 403 | 403 | 200 | 200 |
 | GET /api/trades | manager | 401 | 403 | 403 | 200 | 200 |
 | POST /api/trades | manager | 401 | 403 | 403 | 400 | 400 |
 | PUT /api/trades/0 | manager | 401 | 403 | 403 | 400 | 400 |
@@ -79,13 +116,17 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | GET /api/quickbooks/invoices | manager | 401 | 403 | 403 | 503 | 503 |
 | GET /api/quickbooks/invoice/0 | manager | 401 | 403 | 403 | 503 | 503 |
 | GET /api/quickbooks/invoice/0/pdf | manager | 401 | 403 | 403 | 503 | 503 |
+| GET /admin | admin | 302 | 403 | 403 | 403 | 200 |
 | GET /api/admin/requests | admin | 401 | 403 | 403 | 403 | 200 |
 | POST /api/admin/requests/0/approve | admin | 401 | 403 | 403 | 403 | 404 |
 | POST /api/admin/requests/0/reject | admin | 401 | 403 | 403 | 403 | 404 |
+| GET /api/admin/allowed | admin | 401 | 403 | 403 | 403 | 200 |
 | POST /api/admin/allowed | admin | 401 | 403 | 403 | 403 | 400 |
 | DELETE /api/admin/allowed/test-noop@privtest.local | admin | 401 | 403 | 403 | 403 | 200 |
 | GET /api/admin/users | admin | 401 | 403 | 403 | 403 | 200 |
 | GET /api/admin/audit-log | admin | 401 | 403 | 403 | 403 | 200 |
+| GET /api/admin/capabilities | admin | 401 | 403 | 403 | 403 | 200 |
+| PATCH /api/admin/capabilities | admin | 401 | 403 | 403 | 403 | 400 |
 | GET /api/admin/job-roles | admin | 401 | 403 | 403 | 403 | 200 |
 | POST /api/admin/job-roles | admin | 401 | 403 | 403 | 403 | 400 |
 | DELETE /api/admin/job-roles/__nope__ | admin | 401 | 403 | 403 | 403 | 200 |
@@ -96,12 +137,15 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | POST /api/admin/trades/submissions/0/approve | admin | 401 | 403 | 403 | 403 | 404 |
 | POST /api/admin/trades/submissions/0/reject | admin | 401 | 403 | 403 | 403 | 404 |
 | GET /api/admin/trades-audit | admin | 401 | 403 | 403 | 403 | 200 |
+| POST /api/admin/trades/migrate | admin | 401 | 403 | 403 | 403 | 200 |
 | PATCH /api/trades/0/category | admin | 401 | 403 | 403 | 403 | 400 |
 | POST /api/admin/users/foo@bar.com/resend-set-password | admin | 401 | 403 | 403 | 403 | 404 |
 | POST /api/admin/users/foo@bar.com/force-password-reset | admin | 401 | 403 | 403 | 403 | 404 |
+| GET /auth/quickbooks | admin | 401 | 403 | 403 | 403 | 503 |
+| GET /auth/quickbooks/callback?code=x&state=y&realmId=1 | admin | 401 | 403 | 403 | 403 | 302 |
+| POST /auth/quickbooks/disconnect | admin | 401 | 403 | 403 | 403 | 200 |
 | POST /api/quickbooks/invoice/0 | admin | 401 | 403 | 403 | 403 | 503 |
 | POST /api/quickbooks/invoice/0/send | admin | 401 | 403 | 403 | 403 | 503 |
-| POST /auth/quickbooks/disconnect | admin | 401 | 403 | 403 | 403 | 200 |
 
 ## Adversarial probes (full log)
 
@@ -132,7 +176,7 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 |---|---|---|---|---|---|
 | PASS | critical | member cannot self-promote via PATCH profile | 403 forbidden | status=403 |  |
 | PASS | critical | member cannot mass-assign other fields via PATCH profile | 403 forbidden | status=403 |  |
-| PASS | critical | member privilege_level + email unchanged after escalation attempts | privilege_level=member email=privtest-member-lq4i2u@privtest.local | privilege_level=member email=privtest-member-lq4i2u@privtest.local |  |
+| PASS | critical | member privilege_level + email unchanged after escalation attempts | privilege_level=member email=privtest-member-nofb45@privtest.local | privilege_level=member email=privtest-member-nofb45@privtest.local |  |
 
 ### idor
 
@@ -140,6 +184,8 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 |---|---|---|---|---|---|
 | PASS | high | viewer cannot read admin's profile | 403 forbidden | status=403 |  |
 | PASS | high | viewer cannot read manager's profile | 403 forbidden | status=403 |  |
+| PASS | high | viewer cannot read admin's photo | 403 forbidden (or 404 no-photo) | status=404 |  |
+| PASS | medium | viewer can read their own photo endpoint | status in {200,404} (self-access permitted) | status=404 |  |
 
 ### change-password
 
@@ -205,13 +251,14 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 |---|---|---|---|---|---|
 | PASS | info | Turnstile is disabled in the test harness | enabled=false | enabled=false | Set TURNSTILE_SECRET_KEY in the env to re-run with captcha enforcement. |
 | PASS | info | login succeeds when captcha disabled (no-op path) | status=200 | status=200 |  |
+| PASS | info | turnstile tampering probe | PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 + TURNSTILE_SECRET_KEY set | captcha pass-through not enabled — probe skipped | Run with PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 TURNSTILE_SECRET_KEY=… npm run test:privileges to exercise the captcha gate path. |
 
 ### xss
 
 | Result | Severity | Probe | Expected | Observed | Notes |
 |---|---|---|---|---|---|
 | PASS | info | request-access accepts arbitrary name string | status in {200,409} | status=200 |  |
-| PASS | medium | admin requests API returns the payload verbatim (must be HTML-escaped client-side) | name === "x');fetch('https://x')//@xss-lq4i2u.bc" | found=true name="x');fetch('https://x')//@xss-lq4i2u.bc" | Check public/admin.html escaping — this is data confirmation, not a render test. |
+| PASS | medium | admin requests API returns the payload verbatim (must be HTML-escaped client-side) | name === "x');fetch('https://x')//@xss-nofb45.bc" | found=true name="x');fetch('https://x')//@xss-nofb45.bc" | Check public/admin.html escaping — this is data confirmation, not a render test. |
 
 ### onboarding
 
@@ -227,14 +274,44 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | PASS | high | unauthenticated google callback rejected | 401 unauthorized | status=401 |  |
 | PASS | high | unauthenticated quickbooks callback rejected | 401 unauthorized | status=401 |  |
 | PASS | critical | non-admin quickbooks callback rejected | 403 forbidden | status=403 |  |
+| PASS | critical | google callback with stale/forged state is rejected (no token exchange) | 302 to /?error=google_auth_failed | status=302 location=/?error=google_auth_failed |  |
+| PASS | critical | quickbooks callback with stale/forged state is rejected (no token persist) | 302 to /?qb=error&reason=invalid_state | status=302 location=/?qb=error&reason=invalid_state |  |
+| PASS | info | quickbooks state from another user's session cannot be replayed | state captured from admin /auth/quickbooks redirect | init-status=503 (QB_CLIENT_ID not set, no state to leak) | Re-run with QB_CLIENT_ID to exercise the cross-user state path. |
+
+### csrf
+
+| Result | Severity | Probe | Expected | Observed | Notes |
+|---|---|---|---|---|---|
+| PASS | critical | google callback without state is rejected | 302 to /?error=google_auth_failed | status=302 location=/?error=google_auth_failed |  |
+| PASS | critical | quickbooks callback without state is rejected | 302 to /?qb=error&reason=invalid_state | status=302 location=/?qb=error&reason=invalid_state |  |
+| PASS | medium | GET /api/admin/allowed does not behave like a write | status in {200,404,405,503} | status=200 |  |
+| PASS | medium | GET /api/admin/job-roles does not behave like a write | status in {200,404,405,503} | status=200 |  |
+| PASS | medium | GET /api/workflow does not behave like a write | status in {200,404,405,503} | status=200 |  |
+| PASS | medium | GET /api/contacts does not behave like a write | status in {200,404,405,503} | status=503 |  |
+| PASS | medium | GET /api/users/me/photo does not behave like a write | status in {200,404,405,503} | status=404 |  |
+
+### downgrade
+
+| Result | Severity | Probe | Expected | Observed | Notes |
+|---|---|---|---|---|---|
+| PASS | high | admin can demote manager via PATCH /api/users/:id/profile | status=200 | status=200 |  |
+| PASS | critical | demoted manager's existing session loses manager-only access on next request | before=200 after in {401,403} | before=200 after=401 |  |
+
+### rate-limit
+
+| Result | Severity | Probe | Expected | Observed | Notes |
+|---|---|---|---|---|---|
+| PASS | critical | loginLimiter engages within 25 bad-password attempts | first 429 ≤ attempt 25, last status = 429 | firstLimited=21 lastStatus=429 |  |
+| PASS | critical | accessRequestLimiter blocks the 6th request within 1 hour | first 429 between attempts 4 and 7 | firstLimited=6 |  |
 
 ## Coverage notes
 
-- The capability matrix probes a representative subset of the API surface — every gate type (`isAuthenticated`, `requirePrivilege(member|manager)`, `requireManagerOrAdmin`, `requireAdmin`) is exercised across all four authenticated roles plus the unauthenticated baseline.
-- Routes that depend on third-party tokens (HubSpot, Google, QuickBooks) are run with empty credentials in the harness; an authorized 503/500 from those handlers is still treated as "permitted" because the auth gate fired correctly.
-- Rate limiters are *not* hammered in the matrix to avoid skewing other probes. A dedicated rate-limit probe is left as future work; the current run records a 429 as `rate-limited` (skipped) rather than a pass or fail.
-- The Playwright UI smoke from the plan was replaced with a server-side GET `/admin` probe per role plus an HTML-body assertion. This catches the same access-control regressions without the headless-browser dependency.
-- Turnstile is disabled in the test harness so login can be driven without a real Cloudflare token. To validate the captcha gate, re-run with `TURNSTILE_SECRET_KEY` set — the gate code path is the same one exercised in production by `/api/login`, `/api/request-access`, and `/api/forgot-password`.
+- The capability matrix walks the full route inventory of `auth.js`, `server.js`, `quickbooks.js`, and `visits.js` (every gate type — `isAuthenticated`, `requirePrivilege(member|manager)`, `requireManagerOrAdmin`, `requireAdmin`, `self-or-admin` — × five actors). `self-or-admin` cells target a *foreign* user id so the IDOR path is what gets exercised; happy-path self-access is covered separately in the probe log.
+- Routes that depend on third-party tokens (HubSpot, Google, QuickBooks) are run with empty credentials by default; an authorized 401/503 from those handlers is bucketed as `handler-401-unverified` / `hubspot-guard-503-inconclusive` instead of a finding. Re-run with `PRIVTEST_USE_HUBSPOT_TOKEN=1 HUBSPOT_TOKEN=… npm run test:privileges` (and the analogous Google/QB pairs) to resolve those cells deterministically.
+- Dedicated probe categories cover the adversarial checklist: `rate-limit` hammers `loginLimiter` (20/15min) and `accessRequestLimiter` (5/hr, shared with `/api/forgot-password`); `csrf` confirms the OAuth callbacks reject missing/forged state and that mutation routes are not reachable as GETs; `oauth` exercises stale-state and cross-user state-replay against both Google and QuickBooks callbacks; `downgrade` demotes a manager mid-session and verifies the next request reflects the new privilege level (the #290 regression class).
+- The Playwright UI smoke from the plan is replaced with server-side `GET /admin` probes per role (302 unauth → /login, 403 + "Admin access required" for viewer/member/manager, 200 for admin) plus HTML body assertions. The access-control concern in the plan was JS-visible privilege leakage on `/admin`; the same regression is caught by the HTTP-level probe without dragging a 280MB chromium into the harness.
+- Captcha enforcement: the harness strips `TURNSTILE_SECRET_KEY` by default. Set `PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 TURNSTILE_SECRET_KEY=… npm run test:privileges` to pass the real key through to the spawned server — the `captcha` probe then exercises the tampering path (no-token / forged-token / empty-token logins).
+- Test DB isolation: set `DATABASE_URL_TEST=…` to point the harness at a disposable database. When unset the harness uses `DATABASE_URL` and isolates every synthetic row behind the `privtest-` email prefix (`users`, `allowed_emails`, `password_set_tokens`, `account_requests`, `sessions` rows whose payload references `@privtest.local`); `cleanupTestData` runs on boot, on signal exit, and on uncaught exception.
 
 ## Harness server log (tail)
 
@@ -244,7 +321,6 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
   Measure Once
   Running at: http://localhost:5050
 
-[rate-limit cleanup] Removed 1 expired session(s).
   Could not create property measure_once_rooms: Authentication credentials not found. This API supports OAuth 2.0 authentication and you can find more details at https://developers.hubspot.com/docs/methods/auth/oauth-overview
   Could not create property measure_once_notes: Authentication credentials not found. This API supports OAuth 2.0 authentication and you can find more details at https://developers.hubspot.com/docs/methods/auth/oauth-overview
   Could not create property measure_once_stage: Authentication credentials not found. This API supports OAuth 2.0 authentication and you can find more details at https://developers.hubspot.com/docs/methods/auth/oauth-overview
@@ -256,19 +332,24 @@ QB invoices error: QuickBooks not connected
 QB invoices error: QuickBooks not connected
 QB invoice detail error: QuickBooks not connected
 QB invoice detail error: QuickBooks not connected
-  SMTP not configured — skipping set-password email for privtest-viewer-lq4i2u@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=060ad934aa7d2702e5d559ddd16bc8c50d7c774c367eb525f72189c2118ef27a
-  Password reset link issued for privtest-viewer-lq4i2u@privtest.local
-[set-password] Cleared 1 other session(s) for privtest-viewer-lq4i2u@privtest.local.
-  SMTP not configured — skipping set-password email for privtest-member-lq4i2u@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=84ad6a4708e299c127e763314c2b1a04e861d65745c1c7dc86ba89e41c44bde8
-[change-password] Cleared 2 other session(s) for privtest-manager-lq4i2u@privtest.local.
-  SMTP not configured — skipping set-password email for privtest-lifecycle-lq4i2u@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=0ab817bd5b6b7a7383e139774a1268e34bd17687001cb87a70452bd917fe54fb
-  SMTP not configured — skipping set-password email for privtest-lifecycle-lq4i2u@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=0982a72e1caf259354966530f2b29fe0ddb8341e3e74dbf8828c1e10b6d94829
-  SMTP not configured — skipping set-password email for privtest-lifecycle-lq4i2u@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=6cdf7732ab5be063ea69074409412a3bb8307ce4f751f75638e9bce2632d8f10
-  Access request: x');fetch('https://x')//@xss-lq4i2u.bc <privtest-xss-lq4i2u@privtest.local>
+  SMTP not configured — skipping set-password email for privtest-viewer-nofb45@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=76b4c85dbfdd97bbcec06b678e53f2a95fd3c81f172bd54e6159df54877c3a0c
+  Password reset link issued for privtest-viewer-nofb45@privtest.local
+[set-password] Cleared 1 other session(s) for privtest-viewer-nofb45@privtest.local.
+  SMTP not configured — skipping set-password email for privtest-member-nofb45@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=9e39c42cd0d64cb2580d940ba808f167adfe33c51c82efe93a8352469e79a977
+[change-password] Cleared 2 other session(s) for privtest-manager-nofb45@privtest.local.
+  SMTP not configured — skipping set-password email for privtest-lifecycle-nofb45@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=9b2b673f2aa7334ffe5d15d09fa0c0082983ea9ffd470e5f62a4543203f3eee7
+  SMTP not configured — skipping set-password email for privtest-lifecycle-nofb45@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=686cea37eca27472d09924f1a79072110d286de6e627e3f42888da145a2d933c
+  SMTP not configured — skipping set-password email for privtest-lifecycle-nofb45@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=7ca8ed8969b8bb23871249f8f4d28a2a77ba418137a4b86e33489e34cbf94d4d
+  Access request: x');fetch('https://x')//@xss-nofb45.bc <privtest-xss-nofb45@privtest.local>
+  Access request: rate test <privtest-rl0-nofb45@privtest.local>
+  Access request: rate test <privtest-rl1-nofb45@privtest.local>
+  Access request: rate test <privtest-rl2-nofb45@privtest.local>
+  Access request: rate test <privtest-rl3-nofb45@privtest.local>
+  Access request: rate test <privtest-rl4-nofb45@privtest.local>
 
 ```

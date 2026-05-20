@@ -61,23 +61,32 @@ async function seedUsers(pool, runId) {
 }
 
 function spawnServer() {
+  // External credentials are stripped by default so the harness runs without
+  // third-party access. Each can be *opted back in* by exporting it before
+  // invoking the suite (e.g. `TURNSTILE_SECRET_KEY=… npm run test:privileges`)
+  // — the harness then passes it through verbatim so the relevant gate path
+  // (captcha tampering, HubSpot-token authz cells, etc.) is exercised live.
+  const optionalPassthrough = (name) =>
+    process.env[`PRIVTEST_USE_${name}`] === '1' && process.env[name]
+      ? process.env[name]
+      : '';
   const env = {
     ...process.env,
+    // Allow callers to point the test server at an isolated database
+    // (DATABASE_URL_TEST) — when unset, falls back to DATABASE_URL with
+    // prefix-based cleanup (`privtest-`) for synthetic rows.
+    DATABASE_URL: process.env.DATABASE_URL_TEST || process.env.DATABASE_URL,
     PORT: String(TEST_PORT),
     NODE_ENV: 'development',
-    TURNSTILE_SECRET_KEY: '',
-    TURNSTILE_SITE_KEY: '',
-    HUBSPOT_ACCESS_TOKEN: '',
-    HUBSPOT_TOKEN: '',
-    SMTP_HOST: '',
-    SMTP_PORT: '',
-    SMTP_USER: '',
-    SMTP_PASS: '',
-    SMTP_FROM: '',
-    GOOGLE_CLIENT_ID: '',
-    GOOGLE_CLIENT_SECRET: '',
-    QB_CLIENT_ID: '',
-    QB_CLIENT_SECRET: '',
+    TURNSTILE_SECRET_KEY: optionalPassthrough('TURNSTILE_SECRET_KEY'),
+    TURNSTILE_SITE_KEY:   optionalPassthrough('TURNSTILE_SITE_KEY'),
+    HUBSPOT_ACCESS_TOKEN: optionalPassthrough('HUBSPOT_ACCESS_TOKEN'),
+    HUBSPOT_TOKEN:        optionalPassthrough('HUBSPOT_TOKEN'),
+    SMTP_HOST: '', SMTP_PORT: '', SMTP_USER: '', SMTP_PASS: '', SMTP_FROM: '',
+    GOOGLE_CLIENT_ID:     optionalPassthrough('GOOGLE_CLIENT_ID'),
+    GOOGLE_CLIENT_SECRET: optionalPassthrough('GOOGLE_CLIENT_SECRET'),
+    QB_CLIENT_ID:         optionalPassthrough('QB_CLIENT_ID'),
+    QB_CLIENT_SECRET:     optionalPassthrough('QB_CLIENT_SECRET'),
     APP_URL: BASE,
     ADMIN_EMAILS: '',
   };

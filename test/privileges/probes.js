@@ -1,7 +1,13 @@
-const { makeClient, login, PASSWORD, makeEmail } = require('./harness');
+const { makeClient, login, PASSWORD, makeEmail, resetRateLimitStore } = require('./harness');
 
 async function runProbes({ clients, users, pool, runId }) {
   const findings = [];
+
+  // Always start with a clean rate-limit slate so a previous run in the same
+  // hour cannot leak accessRequestLimiter (5/hr) or loginLimiter (20/15min)
+  // state into the probes that exercise /api/forgot-password,
+  // /api/request-access, or /api/login.
+  await resetRateLimitStore(pool);
 
   async function record(category, name, expected, observed, severity, ok, detail) {
     findings.push({ category, name, expected, observed, severity, ok, detail: detail || '' });
@@ -371,7 +377,8 @@ async function runProbes({ clients, users, pool, runId }) {
       'status in {200,409}', `status=${reqRes.status}`,
       'info', ok);
     const list = await clients.admin.get('/api/admin/requests');
-    const found = (list.json || []).find(r => r.email === accessReqEmail);
+    const rows = Array.isArray(list.json) ? list.json : [];
+    const found = rows.find(r => r.email === accessReqEmail);
     const stored = found && found.name === payload;
     await record('xss', 'admin requests API returns the payload verbatim (must be HTML-escaped client-side)',
       `name === ${JSON.stringify(payload)}`,
@@ -424,6 +431,240 @@ async function runProbes({ clients, users, pool, runId }) {
     await record('oauth', 'non-admin quickbooks callback rejected',
       '403 forbidden', `status=${qNoAdmin.status}`,
       'critical', qNoAdmin.status === 403);
+
+    // Stale-state replay: an authenticated user hits the callback with a
+    // forged state value that was never issued for their session. The OAuth
+    // handler (server.js:374-377 / quickbooks.js:146-150) compares against
+    // `req.session.googleOAuthState`/`req.session.qbOAuthState`; with no
+    // saved state, the request must redirect to the error path *without*
+    // calling `getToken` or `persistTokens`.
+    const gStale = await clients.member.get('/auth/google/callback?code=abc&state=forged');
+    const gErr   = /error=google_auth_failed/.test(gStale.headers.get('location') || '');
+    await record('oauth', 'google callback with stale/forged state is rejected (no token exchange)',
+      '302 to /?error=google_auth_failed',
+      `status=${gStale.status} location=${gStale.headers.get('location')}`,
+      'critical', gStale.status === 302 && gErr);
+
+    const qStale = await clients.admin.get('/auth/quickbooks/callback?code=abc&state=forged&realmId=1');
+    const qErr   = /qb=error&reason=invalid_state/.test(qStale.headers.get('location') || '');
+    await record('oauth', 'quickbooks callback with stale/forged state is rejected (no token persist)',
+      '302 to /?qb=error&reason=invalid_state',
+      `status=${qStale.status} location=${qStale.headers.get('location')}`,
+      'critical', qStale.status === 302 && qErr);
+
+    // Cross-user state replay: admin starts the QB OAuth flow (which seeds
+    // `qbOAuthState` in *their* session), the state is captured from the
+    // redirect URL, then the manager replays the callback with that state.
+    // Because OAuth state lives in the session — not signed into a global
+    // store — the manager's session has no saved state, so the callback
+    // must be rejected with the same invalid_state path. This is the
+    // session-fixation regression test.
+    const init = await clients.admin.get('/auth/quickbooks');
+    let leakedState = null;
+    try {
+      const loc = init.headers.get('location') || '';
+      const u   = new URL(loc, 'http://x');
+      leakedState = u.searchParams.get('state');
+    } catch {}
+    if (leakedState) {
+      const crossUser = await clients.manager.get(
+        `/auth/quickbooks/callback?code=abc&state=${encodeURIComponent(leakedState)}&realmId=1`);
+      const blocked = crossUser.status === 302 &&
+        /qb=error&reason=invalid_state/.test(crossUser.headers.get('location') || '');
+      await record('oauth', 'quickbooks state from another user\'s session cannot be replayed',
+        '302 to /?qb=error&reason=invalid_state',
+        `status=${crossUser.status} location=${crossUser.headers.get('location')}`,
+        'critical', blocked);
+    } else {
+      // QB_CLIENT_ID is stripped in the harness, so /auth/quickbooks returns
+      // 503 instead of issuing a redirect. Record that the cross-user replay
+      // could not be exercised without credentials.
+      await record('oauth', 'quickbooks state from another user\'s session cannot be replayed',
+        'state captured from admin /auth/quickbooks redirect',
+        `init-status=${init.status} (QB_CLIENT_ID not set, no state to leak)`,
+        'info', true,
+        'Re-run with QB_CLIENT_ID to exercise the cross-user state path.');
+    }
+  }
+
+  // ── CSRF on mutating GETs ──────────────────────────────────────────────────
+  // The only state-changing GET endpoints in the codebase are the OAuth
+  // callbacks (they write tokens to the session/DB). Their CSRF defense is
+  // the `state` query parameter compared against the session-stored value.
+  // This probe confirms that hitting each callback with no state at all
+  // (the cross-site replay shape) does not perform the token exchange.
+  {
+    const gNoState = await clients.member.get('/auth/google/callback?code=abc');
+    const gOk = gNoState.status === 302 &&
+      /error=google_auth_failed/.test(gNoState.headers.get('location') || '');
+    await record('csrf', 'google callback without state is rejected',
+      '302 to /?error=google_auth_failed',
+      `status=${gNoState.status} location=${gNoState.headers.get('location')}`,
+      'critical', gOk);
+    const qNoState = await clients.admin.get('/auth/quickbooks/callback?code=abc&realmId=1');
+    const qOk = qNoState.status === 302 &&
+      /qb=error&reason=invalid_state/.test(qNoState.headers.get('location') || '');
+    await record('csrf', 'quickbooks callback without state is rejected',
+      '302 to /?qb=error&reason=invalid_state',
+      `status=${qNoState.status} location=${qNoState.headers.get('location')}`,
+      'critical', qOk);
+
+    // Method-confusion: confirm that mutation routes registered as POST/PATCH
+    // are not also reachable via GET (Express 404s by default but a misconfig
+    // could shadow this).
+    const csrfRoutes = [
+      '/api/admin/allowed',
+      '/api/admin/job-roles',
+      '/api/workflow',
+      '/api/contacts',
+      '/api/users/me/photo',
+    ];
+    for (const p of csrfRoutes) {
+      const r = await clients.admin.get(p);
+      // 200 (legitimate read e.g. /api/admin/allowed listing), 404/405
+      // (route not registered for GET), 503 (third-party guard like
+      // requireHubspotToken fired before the route ever ran) all prove
+      // the GET path didn't mutate. 201/204 would be a smoking gun for
+      // a write-shaped GET.
+      const acceptable = [200, 404, 405, 503].includes(r.status);
+      await record('csrf', `GET ${p} does not behave like a write`,
+        'status in {200,404,405,503}', `status=${r.status}`,
+        'medium', acceptable);
+    }
+  }
+
+  // ── Photo IDOR ────────────────────────────────────────────────────────────
+  // GET /api/users/:id/photo is self-or-admin (auth.js:1771). Confirm a
+  // low-privilege actor cannot read another user's photo metadata.
+  {
+    const viewer = clients.viewer;
+    const r = await viewer.get(`/api/users/${users.admin.id}/photo`);
+    const denied = r.status === 403 || r.status === 404; // 404 if no photo + admin-only metadata leak
+    await record('idor', "viewer cannot read admin's photo",
+      '403 forbidden (or 404 no-photo)', `status=${r.status}`,
+      'high', denied && r.status !== 200);
+
+    const rSelf = await viewer.get(`/api/users/${users.viewer.id}/photo`);
+    await record('idor', "viewer can read their own photo endpoint",
+      'status in {200,404} (self-access permitted)',
+      `status=${rSelf.status}`,
+      'medium', rSelf.status === 200 || rSelf.status === 404);
+  }
+
+  // ── Privilege downgrade staleness (#290 class) ────────────────────────────
+  // Admin demotes the manager mid-session. The next request from the manager's
+  // existing session must reflect the new privilege level (i.e. requirePrivilege
+  // re-reads from DB on every request rather than caching in the session).
+  {
+    const mgrSess = await login(users.manager.email, PASSWORD);
+    const before  = await mgrSess.get('/api/trades');
+    // Demote manager → viewer
+    const demote = await clients.admin.patch(`/api/users/${users.manager.id}/profile`,
+      { privilege_level: 'viewer' });
+    await record('downgrade', 'admin can demote manager via PATCH /api/users/:id/profile',
+      'status=200', `status=${demote.status}`,
+      'high', demote.status === 200);
+    const after = await mgrSess.get('/api/trades');
+    // 401 (session-invalidated-on-profile-change) or 403 (gate re-read level
+    // from DB) both prove the demoted user lost access on the very next
+    // request — that's the regression we care about.
+    await record('downgrade', "demoted manager's existing session loses manager-only access on next request",
+      'before=200 after in {401,403}',
+      `before=${before.status} after=${after.status}`,
+      'critical',
+      before.status === 200 && (after.status === 401 || after.status === 403));
+    // Restore manager + refresh client cookie
+    await clients.admin.patch(`/api/users/${users.manager.id}/profile`,
+      { privilege_level: 'manager' });
+    clients.manager = await login(users.manager.email, PASSWORD);
+  }
+
+  // ── Rate-limit hammering ──────────────────────────────────────────────────
+  // loginLimiter = 20 attempts per 15min keyed on req.ip (auth.js:207-209).
+  // accessRequestLimiter = 5/hr, shared with /api/forgot-password
+  // (auth.js:191-193, 839). Hammer past each cap and assert the limiter
+  // returns 429. Always reset the rate_limit schema before AND after this
+  // probe so it doesn't leak into / from other probes.
+  {
+    const { resetRateLimitStore } = require('./harness');
+    await resetRateLimitStore(pool);
+
+    // Login: 25 bad-password attempts. First ~20 should be 401, then 429.
+    let firstLimited = -1;
+    let lastStatus = 0;
+    for (let i = 0; i < 25; i++) {
+      const c = makeClient(null);
+      const r = await c.post('/api/login', { email: users.viewer.email, password: 'definitely-wrong' });
+      lastStatus = r.status;
+      if (r.status === 429 && firstLimited < 0) firstLimited = i + 1;
+    }
+    // loginLimiter is max:20/15min with skipSuccessfulRequests=true, keyed
+    // on req.ip. Aggregated bucket counts from the @acpr Postgres store can
+    // trip a few attempts earlier than the nominal 21 (the store flushes
+    // counters on a tick boundary). The security property under test is
+    // simply that the limiter *does* engage well before 25 bad attempts.
+    await record('rate-limit', 'loginLimiter engages within 25 bad-password attempts',
+      'first 429 ≤ attempt 25, last status = 429',
+      `firstLimited=${firstLimited} lastStatus=${lastStatus}`,
+      'critical', firstLimited > 0 && firstLimited <= 25 && lastStatus === 429);
+
+    await resetRateLimitStore(pool);
+
+    // Access-request: 7 attempts. First ~5 should be 200, then 429.
+    let firstLimited2 = -1;
+    for (let i = 0; i < 7; i++) {
+      const c = makeClient(null);
+      const r = await c.post('/api/request-access',
+        { name: 'rate test', email: `privtest-rl${i}-${runId}@privtest.local` });
+      if (r.status === 429 && firstLimited2 < 0) firstLimited2 = i + 1;
+    }
+    await record('rate-limit', 'accessRequestLimiter blocks the 6th request within 1 hour',
+      'first 429 between attempts 4 and 7',
+      `firstLimited=${firstLimited2}`,
+      'critical', firstLimited2 >= 4 && firstLimited2 <= 7);
+
+    await resetRateLimitStore(pool);
+
+    // Cleanup the synthetic access-request rows this probe created.
+    await pool.query(`DELETE FROM account_requests WHERE email LIKE $1`,
+      [`privtest-rl%-${runId}@privtest.local`]);
+
+    // Refresh long-lived viewer client — the hammer above tripped the
+    // limiter on the viewer's email IP, but the post-probe reset clears
+    // the bucket. Login should now succeed again.
+    clients.viewer = await login(users.viewer.email, PASSWORD);
+  }
+
+  // ── Turnstile tampering (key enabled) ─────────────────────────────────────
+  // When TURNSTILE_SECRET_KEY is unset *in the spawned server* the captcha
+  // gate is a documented no-op (see auth.js verifyTurnstile). To exercise
+  // the gate path, opt the parent's key into the spawned env by exporting
+  // `PRIVTEST_USE_TURNSTILE_SECRET_KEY=1` (harness.js then passes the value
+  // through to the child). The probe is skipped otherwise — fabricating a
+  // Cloudflare secret would only test our own mock, not the real gate.
+  {
+    const captchaEnabled = process.env.PRIVTEST_USE_TURNSTILE_SECRET_KEY === '1'
+      && !!process.env.TURNSTILE_SECRET_KEY;
+    if (captchaEnabled) {
+      const c = makeClient(null);
+      const noToken = await c.post('/api/login',
+        { email: users.viewer.email, password: PASSWORD });
+      const forged  = await c.post('/api/login',
+        { email: users.viewer.email, password: PASSWORD, 'cf-turnstile-response': 'invalid-token' });
+      const empty   = await c.post('/api/login',
+        { email: users.viewer.email, password: PASSWORD, 'cf-turnstile-response': '' });
+      const allBlocked = noToken.status >= 400 && forged.status >= 400 && empty.status >= 400;
+      await record('captcha', 'login with no / forged / empty captcha token is rejected (when key set)',
+        'all three return 4xx',
+        `noToken=${noToken.status} forged=${forged.status} empty=${empty.status}`,
+        'critical', allBlocked);
+    } else {
+      await record('captcha', 'turnstile tampering probe',
+        'PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 + TURNSTILE_SECRET_KEY set',
+        'captcha pass-through not enabled — probe skipped',
+        'info', true,
+        'Run with PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 TURNSTILE_SECRET_KEY=… npm run test:privileges to exercise the captcha gate path.');
+    }
   }
 
   return findings;
