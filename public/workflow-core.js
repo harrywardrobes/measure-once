@@ -341,6 +341,12 @@ let _bottomTimer  = null;
 let _deferredSave     = null; // { timerId }
 let _deferredSnapshot = null; // deep copy of allRooms BEFORE latest change
 
+// Monotonic sequence number for contact re-fetches triggered after a save.
+// When the user navigates rapidly between contacts, multiple re-fetches can be
+// in flight concurrently; we only apply the result of the most recent one so a
+// late-arriving stale response can't overwrite the badge.
+let _contactRefetchSeq = 0;
+
 function closeBottomBar() {
   document.getElementById('bottom-bar')?.remove();
   if (_bottomTimer) { clearTimeout(_bottomTimer); _bottomTimer = null; }
@@ -361,8 +367,11 @@ async function flushDeferredSave() {
       // Re-fetch the contact so the list badge reflects the latest server state
       // after the flush (mirrors the same pattern in scheduleSave / Task 215).
       if (cid) {
+        const mySeq = ++_contactRefetchSeq;
         const freshContact = await GET(`/api/contacts/${cid}`).catch(() => null);
-        if (freshContact) {
+        // Drop the response if a newer re-fetch has been started in the meantime
+        // (e.g. user clicked through to another contact while this was in flight).
+        if (freshContact && mySeq === _contactRefetchSeq) {
           _mergeContactIntoState(freshContact);
           renderCustomerList();
         }
@@ -403,8 +412,10 @@ function scheduleSave(undoMessage, snapshotRooms) {
       // on the badge is preserved rather than overwritten by the fresh value.
       const cid = state.selectedContactId;
       if (cid) {
+        const mySeq = ++_contactRefetchSeq;
         const freshContact = await GET(`/api/contacts/${cid}`).catch(() => null);
-        if (freshContact) {
+        // Drop the response if a newer re-fetch has been started in the meantime.
+        if (freshContact && mySeq === _contactRefetchSeq) {
           _mergeContactIntoState(freshContact);
           renderCustomerList();
         }
