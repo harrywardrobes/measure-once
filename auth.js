@@ -1214,6 +1214,12 @@ async function setupAuth(app) {
       if (del.rowCount > 0) {
         const adminEmail = req.user?.claims?.email;
         await logAdminAction(adminEmail, 'revoke_allowed_email', email, null);
+        // Immediately invalidate all active sessions for the revoked user so they
+        // cannot continue using the application until the session naturally expires.
+        await pool.query(
+          `DELETE FROM sessions WHERE sess->'passport'->'user'->'claims'->>'email' = $1`,
+          [email]
+        );
       }
       res.json({ ok: true });
     } catch (e) {
@@ -1692,6 +1698,20 @@ async function setupAuth(app) {
 
 const isAuthenticated = async (req, res, next) => {
   if (req.isAuthenticated && req.isAuthenticated() && req.user && req.user.claims?.sub) {
+    // Defense-in-depth: re-verify the user is still on the allow-list on every
+    // request. ADMIN_EMAILS addresses are exempt (they are never in allowed_emails).
+    const email = req.user.claims?.email;
+    if (email && !isAdminEmail(email)) {
+      try {
+        const approved = await isEmailApproved(email);
+        if (!approved) {
+          req.logout(() => {});
+          return res.status(401).json({ message: 'Unauthorized' });
+        }
+      } catch {
+        return res.status(500).json({ message: 'Authorization check failed' });
+      }
+    }
     return next();
   }
   return res.status(401).json({ message: 'Unauthorized' });
