@@ -1,17 +1,14 @@
 const express = require('express');
 const { Pool } = require('pg');
-const rateLimit = require('express-rate-limit');
 const { isAuthenticated, requirePrivilege } = require('./auth');
+const { visitsReadLimiter } = require('./rate-limiters');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
 
-const visitsRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  standardHeaders: true,
-  legacyHeaders: false
-});
+// Per-user read limiter (replaces the previous IP-based limiter so that users
+// sharing a NAT/proxy do not share a single budget).
+const visitsRateLimiter = visitsReadLimiter;
 
 const VALID_TYPES = ['design', 'survey', 'installation', 'remedial', 'workshop', 'other'];
 const VALID_ROLES = ['designer', 'surveyor', 'fitter', 'manager'];

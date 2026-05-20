@@ -5,6 +5,14 @@ const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
 const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, userIdExists } = require('./auth');
+const {
+  hubspotMutationLimiter,
+  gmailSendLimiter,
+  calendarEventLimiter,
+  personalTaskCreateLimiter,
+  tradesCreateLimiter,
+  prefsWriteLimiter,
+} = require('./rate-limiters');
 const qbRoutes = require('./quickbooks');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 
@@ -155,7 +163,7 @@ app.get('/api/contacts/:id/localdata', async (req, res) => {
 });
 
 // Save one contact's workflow data to HubSpot custom properties
-app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
   try {
     const { rooms, notes, stage, substage } = req.body;
     const contactId = req.params.id;
@@ -502,7 +510,7 @@ app.get('/api/deals/:id', async (req, res) => {
   }
 });
 
-app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
   try {
     const safeDealId = normalizeHubspotObjectId(req.params.id);
     if (!safeDealId) {
@@ -598,7 +606,7 @@ app.get('/api/open-leads', async (req, res) => {
 // ── HubSpot: Contacts ─────────────────────────────────────────────────────────
 
 // Create a new contact in HubSpot and generate a customer number
-app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
   const { firstname, lastname, email, phone, postcode } = req.body || {};
 
   if (!firstname || !email || !postcode) {
@@ -681,7 +689,7 @@ app.get('/api/contacts/:id', async (req, res) => {
   }
 });
 
-app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requireHubspotToken, async (req, res) => {
+app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   try {
     const contactId = String(req.params.id || '');
     if (!/^\d+$/.test(contactId)) {
@@ -745,7 +753,7 @@ app.get('/api/deals/:id/notes', async (req, res) => {
   }
 });
 
-app.post('/api/deals/:id/checklist', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+app.post('/api/deals/:id/checklist', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
   try {
     const { checklistData, existingNoteId } = req.body;
     const noteBody = `WORKFLOW_CHECKLIST:${JSON.stringify(checklistData)}`;
@@ -859,7 +867,7 @@ app.get('/api/emails', async (req, res) => {
   }
 });
 
-app.post('/api/emails/send', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+app.post('/api/emails/send', isAuthenticated, requirePrivilege('member'), gmailSendLimiter, async (req, res) => {
   if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   try {
     const auth = getGoogleClient(req.session.googleTokens);
@@ -899,7 +907,7 @@ app.get('/api/events', async (req, res) => {
   }
 });
 
-app.post('/api/events', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+app.post('/api/events', isAuthenticated, requirePrivilege('member'), calendarEventLimiter, async (req, res) => {
   if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   try {
     const auth = getGoogleClient(req.session.googleTokens);
@@ -940,7 +948,7 @@ app.get('/api/contacts/:id/notes', async (req, res) => {
   }
 });
 
-app.post('/api/contacts/:id/workflow', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+app.post('/api/contacts/:id/workflow', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
   try {
     const { data, existingNoteId } = req.body;
     const contactId = String(req.params.id || '');
@@ -984,7 +992,7 @@ app.post('/api/contacts/:id/workflow', isAuthenticated, requirePrivilege('member
 });
 
 // ── Workflow Data (per-deal status + comments) ────────────────────────────────
-app.post('/api/deals/:id/workflow', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+app.post('/api/deals/:id/workflow', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
   try {
     const { data, existingNoteId } = req.body;
     const safeDealId = validateHsObjectId(req.params.id, 'id');
@@ -1052,7 +1060,7 @@ app.get('/api/contacts/:id/tasks', async (req, res) => {
   }
 });
 
-app.post('/api/contacts/:id/tasks', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+app.post('/api/contacts/:id/tasks', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
   try {
     const { subject, dueDate, stageKey } = req.body;
     const contactId = req.params.id;
@@ -1091,7 +1099,7 @@ app.post('/api/contacts/:id/tasks', isAuthenticated, requirePrivilege('member'),
   }
 });
 
-app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
   try {
     const taskId = req.params.id;
     if (!/^\d+$/.test(taskId)) {
@@ -1116,7 +1124,7 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (
   }
 });
 
-app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
   try {
     const taskId = req.params.id;
     if (!/^\d+$/.test(taskId)) {
@@ -1280,7 +1288,7 @@ app.get('/api/users/me/prefs', isAuthenticated, async (req, res) => {
   }
 });
 
-app.patch('/api/users/me/prefs', isAuthenticated, async (req, res) => {
+app.patch('/api/users/me/prefs', isAuthenticated, prefsWriteLimiter, async (req, res) => {
   try {
     const userId = req.user.claims.sub;
     const patch = req.body;
@@ -1305,7 +1313,7 @@ app.get('/api/personal-tasks', (req, res) => {
   res.json(readPersonalTasks().filter(t => t.userId === userId));
 });
 
-app.post('/api/personal-tasks', isAuthenticated, requirePrivilege('member'), (req, res) => {
+app.post('/api/personal-tasks', isAuthenticated, requirePrivilege('member'), personalTaskCreateLimiter, (req, res) => {
   const userId = req.user.claims.sub;
   const tasks = readPersonalTasks();
   const task = {
@@ -1545,7 +1553,7 @@ app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) 
   }
 });
 
-app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, tradesCreateLimiter, async (req, res) => {
   const { company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, contacts } = req.body || {};
   if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'Company name is required.' });
   if (!trade_type || !trade_type.trim()) return res.status(400).json({ error: 'Trade type is required.' });

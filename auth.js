@@ -2,6 +2,7 @@
 const session = require('express-session');
 const rateLimit = require('express-rate-limit');
 const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
+const { photoUploadLimiter } = require('./rate-limiters');
 const passport = require('passport');
 const memoize = require('memoizee');
 const connectPg = require('connect-pg-simple');
@@ -1218,7 +1219,7 @@ async function setupAuth(app) {
   });
 
   // ── Profile photo: upload (self) ─────────────────────────────────────────────
-  app.post('/api/users/me/photo', isAuthenticated, async (req, res) => {
+  app.post('/api/users/me/photo', isAuthenticated, photoUploadLimiter, async (req, res) => {
     const userId = req.user?.claims?.sub;
     const { data } = req.body || {};
     if (!data || typeof data !== 'string' || !data.startsWith('data:image/')) {

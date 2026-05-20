@@ -3,6 +3,7 @@ const axios   = require('axios');
 const crypto  = require('crypto');
 const { Pool } = require('pg');
 const { isAuthenticated, requireAdmin, requirePrivilege, isAdminEmail } = require('./auth');
+const { quickbooksReadWriteLimiter } = require('./rate-limiters');
 
 // ── Per-user rate limiter for sensitive send actions (Postgres-backed) ──────────
 // Durable across restarts; safe in multi-instance deployments.
@@ -182,7 +183,7 @@ router.get('/api/quickbooks/status', isAuthenticated, async (req, res) => {
 });
 
 // ── API: all outstanding invoices ──────────────────────────────────────────────
-router.get('/api/quickbooks/invoices', isAuthenticated, async (req, res) => {
+router.get('/api/quickbooks/invoices', isAuthenticated, quickbooksReadWriteLimiter, async (req, res) => {
   try {
     const data = await qbGet('/query', {
       query: "SELECT * FROM Invoice WHERE Balance > '0.0' MAXRESULTS 1000"
@@ -207,7 +208,7 @@ router.get('/api/quickbooks/invoices', isAuthenticated, async (req, res) => {
 });
 
 // ── API: single invoice detail ─────────────────────────────────────────────────
-router.get('/api/quickbooks/invoice/:id', isAuthenticated, async (req, res) => {
+router.get('/api/quickbooks/invoice/:id', isAuthenticated, quickbooksReadWriteLimiter, async (req, res) => {
   try {
     const data = await qbGet(`/invoice/${req.params.id}`);
     const inv  = data.Invoice;
@@ -245,7 +246,7 @@ router.get('/api/quickbooks/invoice/:id', isAuthenticated, async (req, res) => {
 });
 
 // ── API: update invoice (sparse) ───────────────────────────────────────────────
-router.post('/api/quickbooks/invoice/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+router.post('/api/quickbooks/invoice/:id', isAuthenticated, requirePrivilege('member'), quickbooksReadWriteLimiter, async (req, res) => {
   try {
     const { syncToken, dueDate, memo, email } = req.body;
     const t = await getValidTokens();
@@ -278,7 +279,7 @@ router.post('/api/quickbooks/invoice/:id', isAuthenticated, requirePrivilege('me
 });
 
 // ── API: download invoice PDF ──────────────────────────────────────────────────
-router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, async (req, res) => {
+router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, quickbooksReadWriteLimiter, async (req, res) => {
   try {
     const t = await getValidTokens();
     if (!t) return res.status(503).json({ error: 'QuickBooks not connected' });
