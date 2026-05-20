@@ -1365,12 +1365,13 @@ async function setupAuth(app) {
     try {
       await client.query('BEGIN');
 
-      const curR = await client.query('SELECT email FROM users WHERE id = $1', [req.params.id]);
+      const curR = await client.query('SELECT email, privilege_level FROM users WHERE id = $1', [req.params.id]);
       if (curR.rowCount === 0) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'User not found' });
       }
       const currentEmail = (curR.rows[0].email || '').toLowerCase();
+      const currentPrivilegeLevel = curR.rows[0].privilege_level || 'member';
 
       const userCols = [];
       const userVals = [];
@@ -1455,6 +1456,34 @@ async function setupAuth(app) {
       }
 
       await client.query('COMMIT');
+
+      // If the privilege level changed, immediately invalidate the target
+      // user's active sessions so cached `state.user` in their browser cannot
+      // keep showing admin/manager affordances after a downgrade (or stale
+      // reduced UI after an upgrade). They'll be bounced to /login on the
+      // next request and pick up the new level on sign-in.
+      if (privilege_level !== undefined && privilege_level !== currentPrivilegeLevel) {
+        const actorId = req.user?.claims?.sub;
+        if (actorId !== req.params.id) {
+          const sessionEmail = (updated.email || currentEmail || '').toLowerCase();
+          if (sessionEmail) {
+            try {
+              await pool.query(
+                `DELETE FROM sessions WHERE sess->'passport'->'user'->'claims'->>'email' = $1`,
+                [sessionEmail]
+              );
+              if (currentEmail && currentEmail !== sessionEmail) {
+                await pool.query(
+                  `DELETE FROM sessions WHERE sess->'passport'->'user'->'claims'->>'email' = $1`,
+                  [currentEmail]
+                );
+              }
+            } catch (e) {
+              console.error('Failed to invalidate sessions after role change:', e.message);
+            }
+          }
+        }
+      }
 
       const adminEmail = req.user?.claims?.email;
       const parts = [];
