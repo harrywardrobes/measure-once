@@ -1676,7 +1676,7 @@ app.get('/admin', async (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-app.get('/trades', isAuthenticated, requireManagerOrAdmin, (_req, res) => {
+app.get('/trades', isAuthenticated, (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'trades.html'));
 });
 
@@ -1717,7 +1717,7 @@ app.get('/invoices', isAuthenticated, requireManagerOrAdminPage, (_req, res) => 
   res.sendFile(path.join(__dirname, 'public', 'invoices.html'));
 });
 
-app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+app.get('/api/trades', isAuthenticated, async (req, res) => {
   try {
     const { rows: companies } = await _tradesPool.query(`
       SELECT

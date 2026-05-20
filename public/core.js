@@ -309,9 +309,13 @@ async function bootstrap() {
     showViewerBanner();
   }
 
+  // Show the Trades nav link for all authenticated users
+  const bnavTrades = document.getElementById('bnav-trades');
+  if (bnavTrades) bnavTrades.style.display = '';
+
   if (priv === 'manager' || priv === 'admin') {
     document.body.classList.add('manager-mode');
-    ['bnav-trades', 'bnav-sales', 'bnav-projects', 'bnav-invoices'].forEach(id => {
+    ['bnav-sales', 'bnav-projects', 'bnav-invoices'].forEach(id => {
       const btn = document.getElementById(id);
       if (btn) btn.style.display = '';
     });
