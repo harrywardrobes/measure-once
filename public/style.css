@@ -3181,6 +3181,15 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .nc-btn-submit:hover { background: #3d0f7a; }
 .nc-form-grid .nc-form-row { margin-bottom: 0; }
 
+/* ── Contact edit button (workflow header) ───────────────────────────────────── */
+.contact-edit-btn {
+  background: none; border: none; cursor: pointer;
+  color: #94a3b8; padding: 2px 4px; border-radius: 4px;
+  display: inline-flex; align-items: center; flex-shrink: 0;
+  transition: color 0.15s;
+}
+.contact-edit-btn:hover { color: var(--orchid); }
+
 /* ── Empty state (sales workflow panel) ──────────────────────────────────────── */
 .empty-state-text    { color: var(--stone-deep); }
 .empty-state-icon    { display: block; margin: 0 auto 16px; opacity: 0.4; }

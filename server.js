@@ -739,38 +739,40 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
       }
     }
 
-    // If lead status was set, verify by reading back from HubSpot.
-    if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status')) {
-      const expected = properties.hs_lead_status || '';
-      let verifyResp;
-      let verifyErr;
-      for (let attempt = 0; attempt <= delays.length; attempt++) {
-        try {
-          verifyResp = await axios.get(
-            `${HS}/crm/v3/objects/contacts/${safeContactId}`,
-            { headers: hsHeaders(), params: { properties: 'hs_lead_status' } }
-          );
-          verifyErr = null;
-          break;
-        } catch (err) {
-          verifyErr = err;
-          if (attempt < delays.length && isTransient(err)) {
-            await sleep(delays[attempt]);
-            continue;
-          }
-          break;
+    // Verify all submitted properties were saved by reading back from HubSpot.
+    const propsToVerify = Object.keys(properties);
+    let verifyResp;
+    let verifyErr;
+    for (let attempt = 0; attempt <= delays.length; attempt++) {
+      try {
+        verifyResp = await axios.get(
+          `${HS}/crm/v3/objects/contacts/${safeContactId}`,
+          { headers: hsHeaders(), params: { properties: propsToVerify.join(',') } }
+        );
+        verifyErr = null;
+        break;
+      } catch (err) {
+        verifyErr = err;
+        if (attempt < delays.length && isTransient(err)) {
+          await sleep(delays[attempt]);
+          continue;
         }
+        break;
       }
-      if (verifyErr) {
-        return res.status(502).json({
-          error: 'HubSpot accepted the update but could not be re-read to confirm. Please try again.',
-          code: 'HUBSPOT_VERIFY_FAILED'
-        });
-      }
-      const actual = verifyResp.data?.properties?.hs_lead_status || '';
+    }
+    if (verifyErr) {
+      return res.status(502).json({
+        error: 'HubSpot accepted the update but could not be re-read to confirm. Please try again.',
+        code: 'HUBSPOT_VERIFY_FAILED'
+      });
+    }
+    const returnedProps = verifyResp.data?.properties || {};
+    for (const key of propsToVerify) {
+      const expected = (properties[key] ?? '').trim();
+      const actual   = (returnedProps[key] ?? '').trim();
       if (actual !== expected) {
         return res.status(502).json({
-          error: 'HubSpot did not save the new lead status. Please try again.',
+          error: 'HubSpot did not save the updated contact details. Please try again.',
           code: 'HUBSPOT_VERIFY_FAILED'
         });
       }

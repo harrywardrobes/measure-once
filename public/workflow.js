@@ -511,6 +511,143 @@ async function openLeadStatusPicker(event, contactId) {
   }
 }
 
+// ── Contact Detail Edit ───────────────────────────────────────────────────────
+const _CONTACT_FIELD_LABELS = {
+  firstname: 'first name',
+  lastname:  'last name',
+  email:     'email',
+  phone:     'phone',
+  address:   'address',
+  city:      'city',
+  zip:       'postcode',
+};
+
+function _fillContactEditForm(props) {
+  const f = props || {};
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('ec-firstname', f.firstname);
+  set('ec-lastname',  f.lastname);
+  set('ec-email',     f.email);
+  set('ec-phone',     f.phone);
+  set('ec-address',   f.address);
+  set('ec-city',      f.city);
+  set('ec-zip',       f.zip);
+}
+
+async function openContactEdit() {
+  if (isViewerOnly()) return;
+  const contactId = state.selectedContactId;
+  if (!contactId) return;
+
+  const overlay   = document.getElementById('edit-contact-overlay');
+  const modal     = document.getElementById('edit-contact-modal');
+  if (!overlay || !modal) return;
+
+  const errEl     = document.getElementById('ec-error');
+  const submitBtn = document.getElementById('ec-submit');
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+
+  // Pre-fill with known values immediately, then open modal
+  const contact = state.contacts.find(c => c.id === contactId);
+  _fillContactEditForm(contact?.properties || {});
+  overlay.classList.remove('hidden');
+  modal.style.display = 'flex';
+  modal.classList.remove('hidden');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Loading…'; }
+
+  // Refresh from HubSpot and detect drift in editable fields
+  try {
+    const fresh    = await GET(`/api/contacts/${contactId}`);
+    const oldProps = contact?.properties || {};
+    const newProps = fresh?.properties   || {};
+
+    const driftedLabels = Object.keys(_CONTACT_FIELD_LABELS).filter(f =>
+      (newProps[f] || '') !== (oldProps[f] || '')
+    ).map(f => _CONTACT_FIELD_LABELS[f]);
+
+    _fillContactEditForm(newProps);
+
+    if (typeof _mergeContactIntoState === 'function') _mergeContactIntoState(fresh);
+
+    if (driftedLabels.length > 0) {
+      const summary = driftedLabels.length === 1
+        ? driftedLabels[0]
+        : `${driftedLabels.slice(0, -1).join(', ')} and ${driftedLabels.slice(-1)}`;
+      showToast(`HubSpot has a newer value for ${summary} — form updated.`);
+    }
+  } catch {
+    showToast('Could not refresh contact from HubSpot — showing last known values.', true);
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; }
+  }
+}
+
+function closeContactEdit() {
+  const overlay = document.getElementById('edit-contact-overlay');
+  const modal   = document.getElementById('edit-contact-modal');
+  if (overlay) overlay.classList.add('hidden');
+  if (modal)   { modal.style.display = 'none'; modal.classList.add('hidden'); }
+}
+
+async function submitContactEdit(ev) {
+  ev.preventDefault();
+  const contactId = state.selectedContactId;
+  if (!contactId) return;
+
+  const trim = id => document.getElementById(id)?.value.trim() || '';
+  const fields = {
+    firstname: trim('ec-firstname'),
+    lastname:  trim('ec-lastname'),
+    email:     trim('ec-email'),
+    phone:     trim('ec-phone'),
+    address:   trim('ec-address'),
+    city:      trim('ec-city'),
+    zip:       trim('ec-zip'),
+  };
+
+  const errEl     = document.getElementById('ec-error');
+  const submitBtn = document.getElementById('ec-submit');
+  const showError = msg => { if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; } };
+
+  if (!fields.firstname) { showError('First name is required.'); return; }
+
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving…'; }
+
+  const contact   = state.contacts.find(c => c.id === contactId);
+  const prevProps = { ...(contact?.properties || {}) };
+
+  function _applyContactFields(props) {
+    if (contact) {
+      contact.properties = { ...(contact.properties || {}), ...props };
+      if (state.selectedContactId === contactId) state.selectedContact = contact;
+    }
+    renderCustomerList();
+    if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+  }
+
+  _applyContactFields(fields);
+  closeContactEdit();
+
+  try {
+    await PATCH_REQ(`/api/contacts/${contactId}`, fields);
+    showToast('Contact updated');
+  } catch (e) {
+    _applyContactFields(prevProps);
+    if (e.code === 'HUBSPOT_VERIFY_FAILED') {
+      showToast("Contact details didn't save in HubSpot — please try again.", true);
+    } else if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not update contact — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not update contact — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else {
+      showToast('Failed to update contact', true);
+    }
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; }
+  }
+}
+
 function _syncLeadStatusCache(contactId, status) {
   try {
     const cached = sessionStorage.getItem('contacts_all_cache');

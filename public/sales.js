@@ -857,6 +857,11 @@ function _renderWorkflowHeaderImpl() {
         <div class="flex items-center gap-2.5 min-w-0">
           <h1 class="text-xl font-bold text-slate-900 truncate">${escHtml(name)}</h1>
           ${customerNum ? `<span class="customer-num-badge">${escHtml(customerNum)}</span>` : ''}
+          <button class="contact-edit-btn" onclick="openContactEdit()" title="Edit contact details" data-viewer-hide>
+            <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+            </svg>
+          </button>
         </div>
         <div class="flex flex-wrap items-center gap-2 mt-1.5">
           <span class="text-xs font-semibold px-2.5 py-1 rounded-full"
