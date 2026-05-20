@@ -189,19 +189,6 @@
       if (openModal) {
         openNewCustomerModal();
       }
-
-      // Open a contact requested from another page — navigate to their profile.
-      try {
-        const pending = sessionStorage.getItem('pendingOpenContact');
-        if (pending) {
-          sessionStorage.removeItem('pendingOpenContact');
-          const { contactId, roomIdx } = JSON.parse(pending);
-          if (contactId) {
-            const url = roomIdx ? `/customers/${contactId}?room=${roomIdx}` : `/customers/${contactId}`;
-            location.href = url;
-          }
-        }
-      } catch {}
     });
   </script>
 </body>

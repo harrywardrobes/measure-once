@@ -39,9 +39,13 @@ function _initSalesListeners() {
       return;
     }
 
-    // Room row — open workflow detail
+    // Room row — open standalone customer detail page
     const row = e.target.closest('[data-contact-id]');
-    if (row) selectContact(row.dataset.contactId, parseInt(row.dataset.roomIdx, 10));
+    if (row) {
+      const contactId = row.dataset.contactId;
+      const roomIdx = parseInt(row.dataset.roomIdx, 10) || 0;
+      location.href = roomIdx ? `/customers/${contactId}?room=${roomIdx}` : `/customers/${contactId}`;
+    }
   });
 }
 

@@ -403,11 +403,9 @@ function clearHeaderSearch() {
 }
 
 function openProject(contactId, roomIdx) {
-  // Cross-page navigation: stash request, navigate to /sales, sales page will open it.
-  try {
-    sessionStorage.setItem('pendingOpenContact', JSON.stringify({ contactId, roomIdx }));
-  } catch {}
-  location.href = '/sales';
+  // Navigate directly to the standalone customer detail page.
+  const idx = parseInt(roomIdx, 10) || 0;
+  location.href = idx ? `/customers/${contactId}?room=${idx}` : `/customers/${contactId}`;
 }
 
 // ── Auth Status ───────────────────────────────────────────────────────────────
