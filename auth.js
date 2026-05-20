@@ -472,11 +472,14 @@ function isAdminEmail(email) {
   return !!email && getAdminEmails().has(email.toLowerCase());
 }
 
+// Authorization is based on the user's stored `privilege_level`, not on
+// `ADMIN_EMAILS`. The env var is only a bootstrap mechanism that sets a new
+// user's level to `admin` on first creation (see auth init paths); after that
+// an admin can downgrade an account and the downgrade must take effect even
+// if the email is still listed in ADMIN_EMAILS.
 const requireAdmin = async (req, res, next) => {
-  const email  = req.user?.claims?.email;
   const userId = req.user?.claims?.sub;
-  if (!email) return res.status(403).json({ message: 'Admin access required' });
-  if (isAdminEmail(email)) return next();
+  if (!userId) return res.status(403).json({ message: 'Admin access required' });
   try {
     const r = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
     if (r.rows[0]?.privilege_level === 'admin') return next();
@@ -490,10 +493,8 @@ const PRIVILEGE_HIERARCHY = { viewer: 0, member: 1, manager: 2, admin: 3 };
 
 function requirePrivilege(minLevel) {
   return async (req, res, next) => {
-    const email  = req.user?.claims?.email;
     const userId = req.user?.claims?.sub;
-    if (!email || !userId) return res.status(403).json({ message: 'Forbidden' });
-    if (isAdminEmail(email)) return next();
+    if (!userId) return res.status(403).json({ message: 'Forbidden' });
     try {
       const r = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
       const level    = r.rows[0]?.privilege_level || 'member';
@@ -508,10 +509,8 @@ function requirePrivilege(minLevel) {
 }
 
 const requireManagerOrAdmin = async (req, res, next) => {
-  const email  = req.user?.claims?.email;
   const userId = req.user?.claims?.sub;
-  if (!email || !userId) return res.status(403).json({ message: 'Forbidden' });
-  if (isAdminEmail(email)) return next();
+  if (!userId) return res.status(403).json({ message: 'Forbidden' });
   try {
     const r = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
     const level = r.rows[0]?.privilege_level || 'member';
@@ -945,7 +944,11 @@ async function setupAuth(app) {
   app.get('/api/auth/user', isAuthenticated, async (req, res) => {
     try {
       const user = await getUser(req.user.claims.sub);
-      const isAdmin = isAdminEmail(req.user.claims.email);
+      // `isAdmin` is derived from the user's stored privilege_level so the
+      // frontend's admin-only affordances stay in sync with what the server
+      // will actually allow. ADMIN_EMAILS is only a bootstrap mechanism and
+      // must not grant admin powers to a downgraded account.
+      const isAdmin = user?.privilege_level === 'admin';
       const photo_v = req.session?.photoVersion || null;
       res.json(user ? { ...user, isAdmin, photo_v } : null);
     } catch (e) {
@@ -1272,8 +1275,14 @@ async function setupAuth(app) {
     const requestingId    = req.user?.claims?.sub;
     const requestingEmail = req.user?.claims?.email;
     const targetId        = req.params.id;
-    if (targetId !== requestingId && !isAdminEmail(requestingEmail)) {
-      return res.status(403).json({ error: 'Access denied' });
+    if (targetId !== requestingId) {
+      // Only actual admins (by privilege_level) may view other users' profiles.
+      let isAdmin = false;
+      try {
+        const a = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [requestingId]);
+        isAdmin = a.rows[0]?.privilege_level === 'admin';
+      } catch { /* fall through to 403 */ }
+      if (!isAdmin) return res.status(403).json({ error: 'Access denied' });
     }
     try {
       const r = await pool.query(

@@ -59,7 +59,10 @@ async function renderSalesView() {
 
   const filter    = state.salesStageFilter || '';
   const privLevel = state.user?.privilege_level || 'member';
-  const canAssign = !!state.user?.isAdmin || privLevel === 'manager' || privLevel === 'admin';
+  // Fitter assignment is manager/admin only — gate on privilege_level only,
+  // so an account whose email is in ADMIN_EMAILS but is downgraded to
+  // viewer/member doesn't see the picker.
+  const canAssign = privLevel === 'manager' || privLevel === 'admin';
 
   // Build stage tabs: All + 3 target stages
   const stageTabs = [

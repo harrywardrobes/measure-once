@@ -21,7 +21,10 @@ async function renderProfileTab() {
   const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.email || 'User';
   const initials = [profile.first_name, profile.last_name]
     .filter(Boolean).map(s => s[0]).join('').toUpperCase() || '?';
-  const isAdmin = user.isAdmin;
+  // Gate the Admin panel link on the actual privilege_level, not on
+  // `user.isAdmin` alone — bootstrap ADMIN_EMAILS membership must not show
+  // admin affordances to a downgraded account.
+  const isAdmin = (user.privilege_level === 'admin');
 
   let photoSrc = profile.has_custom_photo
     ? `/api/users/${encodeURIComponent(profile.id)}/photo`

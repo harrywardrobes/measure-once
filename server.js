@@ -1631,12 +1631,9 @@ app.get('/admin', async (req, res) => {
   if (!isAuthed || !req.user?.claims) {
     return res.redirect('/login');
   }
-  const email = req.user.claims.email;
   const userId = req.user.claims.sub;
   let admin = false;
-  if (email && isAdminEmail(email)) {
-    admin = true;
-  } else if (userId) {
+  if (userId) {
     try {
       const r = await pool.query('SELECT privilege_level FROM users WHERE id = $1', [userId]);
       admin = r.rows[0]?.privilege_level === 'admin';
