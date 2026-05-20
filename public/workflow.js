@@ -629,11 +629,15 @@ async function submitContactEdit(ev) {
   _applyContactFields(fields);
   closeContactEdit();
 
+  const prevTitle = document.title;
+  if (contact) document.title = contactName(contact);
+
   try {
     await PATCH_REQ(`/api/contacts/${contactId}`, fields);
     showToast('Contact updated');
   } catch (e) {
     _applyContactFields(prevProps);
+    document.title = prevTitle;
     if (e.code === 'HUBSPOT_VERIFY_FAILED') {
       showToast("Contact details didn't save in HubSpot — please try again.", true);
     } else if (e.code === 'HUBSPOT_AUTH') {
