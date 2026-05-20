@@ -42,7 +42,8 @@ function renderHomeTab() {
 
   const calEvents = (state.calendarEvents || []).slice(0, 3);
 
-  const qbLoading  = !state.qb.statusKnown || (state.qb.connected && (state.qb.loading || !state.qb.loaded));
+  const qbLoading  = !state.qb.loadError && (!state.qb.statusKnown || (state.qb.connected && (state.qb.loading || !state.qb.loaded)));
+  const qbError    = state.qb.loadError;
   const overdueInvs = state.qb.connected && state.qb.loaded
     ? state.qb.invoices.filter(inv => inv.dueDate && new Date(inv.dueDate).getTime() < todayMs).slice(0, 4)
     : [];
@@ -141,7 +142,37 @@ function renderHomeTab() {
           </div>
           <div class="skeleton-line" style="height:10px;width:88px;margin-top:5px"></div>
         </div>`).join('')}
-    </div>` : overdueInvs.length > 0 ? `
+    </div>` : qbError ? (() => {
+      const isDbError = state.qb.errorCode === 'DB_ERROR';
+      const msg = isDbError
+        ? 'The database could not be reached. Check your connection and try again.'
+        : (state.qb.error || 'QuickBooks returned an unexpected error.');
+      return `
+    <div class="home-section">
+      <div class="home-section-header">
+        <span class="home-section-title">Overdue Invoices</span>
+      </div>
+      <div class="home-card" style="pointer-events:none;cursor:default;border-color:#fecaca;background:#fef2f2">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:#ef4444;flex-shrink:0;margin-top:1px">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+              d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          </svg>
+          <div style="min-width:0;flex:1">
+            <div class="home-card-title" style="color:#ef4444">Invoices couldn't be loaded</div>
+            <div class="home-card-sub" style="white-space:normal">${escHtml(msg)}</div>
+            <button onclick="loadQBInvoices()" class="qb-refresh-btn" style="margin-top:8px;padding:6px 12px;font-size:12px;pointer-events:auto">
+              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+    })() : overdueInvs.length > 0 ? `
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-title">Overdue Invoices</span>

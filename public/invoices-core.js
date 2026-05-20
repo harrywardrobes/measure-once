@@ -55,12 +55,7 @@ async function loadQBInvoices() {
     state.qb.loadError = true;
     state.qb.error     = e.message || 'Failed to load invoices';
     state.qb.errorCode = e.code   || null;
-    const invEl  = document.getElementById('invoices-view');
-    if (invEl) renderInvoicesTab();
-    const wfInvEl = document.getElementById('invoices-section');
-    if (wfInvEl) renderWorkflowInvoices();
-    const projEl = document.getElementById('projects-view');
-    if (projEl) renderProjectsView();
+    _refreshInvoiceViews();
   }
 }
 
