@@ -601,6 +601,100 @@ function showUnsavedChangesBar(onSave, onDiscard) {
   });
 }
 
+// ── Lead-status drift detection on tab focus ───────────────────────────────────
+// When the browser tab becomes visible again, re-fetch hs_lead_status for the
+// currently selected contact and a bounded slice of the visible contact list.
+// If HubSpot changed a lead status while the user was away, update the UI and
+// show a drift toast for the selected contact. No polling while tab is hidden.
+
+const _DRIFT_LIST_LIMIT = 9;  // extra contacts to check beyond the selected one
+let _driftCheckInFlight  = false;
+
+async function _checkLeadStatusDrift() {
+  if (_driftCheckInFlight) return;
+  if (document.visibilityState !== 'visible') return;
+  // Only run on pages that have contacts loaded
+  if (!state.contacts || !state.contacts.length) return;
+
+  _driftCheckInFlight = true;
+  try {
+    // Build the list of IDs to check: selected contact first, then up to
+    // _DRIFT_LIST_LIMIT more from the current filtered/visible list.
+    const toCheck = [];
+    if (state.selectedContactId) toCheck.push(state.selectedContactId);
+    for (const c of (state.filteredContacts || state.contacts)) {
+      if (toCheck.length >= _DRIFT_LIST_LIMIT + 1) break;
+      if (c.id !== state.selectedContactId) toCheck.push(c.id);
+    }
+    if (!toCheck.length) return;
+
+    // Fetch all contacts in parallel; ignore individual failures.
+    const results = await Promise.all(
+      toCheck.map(id => GET(`/api/contacts/${id}`).catch(() => null))
+    );
+
+    let anyChanged = false;
+    let selectedOldStatus = '';
+    let selectedNewStatus = '';
+    let selectedContactDrifted = false;
+
+    for (const fresh of results) {
+      if (!fresh || !fresh.id) continue;
+      // Don't clobber an in-flight optimistic lead-status change.
+      if (state.pendingLeadStatus &&
+          Object.prototype.hasOwnProperty.call(state.pendingLeadStatus, fresh.id)) continue;
+
+      const existing       = state.contacts.find(c => c.id === fresh.id);
+      const existingStatus = existing?.properties?.hs_lead_status || '';
+      const freshStatus    = fresh.properties?.hs_lead_status    || '';
+
+      if (existingStatus !== freshStatus) {
+        if (fresh.id === state.selectedContactId) {
+          selectedContactDrifted = true;
+          selectedOldStatus      = existingStatus;
+          selectedNewStatus      = freshStatus;
+        }
+        // Update state.contacts (and state.selectedContact if selected).
+        _mergeContactIntoState(fresh);
+        // Also sync the same entry in state.filteredContacts so renderCustomerList
+        // sees the updated status — _mergeContactIntoState only touches state.contacts.
+        if (state.filteredContacts) {
+          const fi = state.filteredContacts.findIndex(c => c.id === fresh.id);
+          if (fi !== -1) state.filteredContacts[fi] = state.contacts.find(c => c.id === fresh.id) || state.filteredContacts[fi];
+        }
+        anyChanged = true;
+      }
+    }
+
+    if (anyChanged) {
+      renderCustomerList();
+    }
+
+    if (selectedContactDrifted) {
+      // Re-render the selected-contact header so the lead-status badge updates
+      // immediately on whichever page this runs (sales, projects, detail view).
+      renderWorkflowHeader();
+      const oldLabel = LEAD_STATUS_OPTIONS.find(o => o.value === selectedOldStatus)?.label
+                    || selectedOldStatus || 'None';
+      const newLabel = LEAD_STATUS_OPTIONS.find(o => o.value === selectedNewStatus)?.label
+                    || selectedNewStatus || 'None';
+      showToast(`Lead status updated in HubSpot: ${oldLabel} → ${newLabel}`, false);
+    }
+  } finally {
+    _driftCheckInFlight = false;
+  }
+}
+
+// Wire up once: fire on tab-visibility restore and on window focus.
+// Guard against double-registration if this script is somehow re-evaluated.
+if (!window._leadDriftListenersAttached) {
+  window._leadDriftListenersAttached = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') _checkLeadStatusDrift();
+  });
+  window.addEventListener('focus', _checkLeadStatusDrift);
+}
+
 // ── Register implementations with core.js dispatchers ─────────────────────────
 registerWorkflowLoader(_loadWorkflowImpl);
 registerOpenLeadsLoader(_loadOpenLeadsImpl);
