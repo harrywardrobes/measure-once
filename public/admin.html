@@ -522,6 +522,25 @@
 
 <div id="toast" class="toast"></div>
 
+<div id="approve-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closeApproveModal()">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-title" id="approve-modal-title">Approve request</div>
+    <div class="modal-sub"   id="approve-modal-sub"></div>
+    <div class="form-section-label" style="margin-top:16px;">Job role <span class="opt">(optional)</span></div>
+    <div class="form-field-wrap">
+      <label style="font-size:.72rem;font-weight:600;color:var(--ink-3);">Assign a role now — you can change it later via the Team tab.</label>
+      <select class="field field-full" id="approve-modal-jobrole" style="margin-top:6px;">
+        <option value="">— No role (member access) —</option>
+      </select>
+    </div>
+    <div class="modal-err" id="approve-modal-err"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeApproveModal()">Cancel</button>
+      <button class="btn btn-approve" id="approve-modal-btn" onclick="confirmApprove()">Approve</button>
+    </div>
+  </div>
+</div>
+
 <div id="modal-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closeModal()">
   <div class="modal">
     <div class="modal-title" id="modal-title">Edit team member</div>
@@ -984,6 +1003,15 @@
       const u   = _users.find(u => u.id === uid);
       if (u) sel.innerHTML = jobRoleOptions(u.job_role || '');
     });
+
+    // Repopulate the Add Member and Approve modal role selectors.
+    const inviteSel = document.getElementById('invite-jobrole');
+    if (inviteSel) {
+      const cur = inviteSel.value;
+      inviteSel.innerHTML = '<option value="">— No role (member access) —</option>' +
+        _jobRoles.map(r => `<option value="${esc(r.name)}">${esc(r.name)}</option>`).join('');
+      if (cur) inviteSel.value = cur;
+    }
   }
 
   async function updateRolePrivilege(name, privilege_level) {
@@ -1140,12 +1168,50 @@
     }
   }
 
-  async function approve(id) {
+  let _approvingRequestId = null;
+
+  function openApproveModal(id, name, email) {
+    _approvingRequestId = id;
+    $('#approve-modal-title').textContent = 'Approve request';
+    $('#approve-modal-sub').textContent   = `${name} · ${email}`;
+    const sel = $('#approve-modal-jobrole');
+    sel.innerHTML = '<option value="">— No role (member access) —</option>' +
+      _jobRoles.map(r => `<option value="${esc(r.name)}">${esc(r.name)}</option>`).join('');
+    const errEl = $('#approve-modal-err');
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    $('#approve-overlay').classList.remove('hidden');
+    setTimeout(() => sel?.focus(), 50);
+  }
+
+  function closeApproveModal() {
+    $('#approve-overlay').classList.add('hidden');
+    _approvingRequestId = null;
+  }
+
+  async function confirmApprove() {
+    const id = _approvingRequestId;
+    if (!id) return;
+    const btn   = $('#approve-modal-btn');
+    const errEl = $('#approve-modal-err');
+    const job_role = $('#approve-modal-jobrole')?.value || '';
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
     try {
-      await api('POST', '/api/admin/requests/' + id + '/approve');
+      await api('POST', '/api/admin/requests/' + id + '/approve', { job_role: job_role || null });
+      closeApproveModal();
       toast('Approved — user can now sign in');
       await reload();
-    } catch (e) { toast(e.message, true); }
+    } catch (e) {
+      if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
+      else toast(e.message, true);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Approve'; }
+    }
+  }
+
+  async function approve(id) {
+    const req = _requests.find(r => r.id === id);
+    openApproveModal(id, req?.name || '', req?.email || '');
   }
   async function reject(id) {
     if (!confirm('Reject this request?')) return;
@@ -1191,13 +1257,14 @@
       ec_first_name: g('invite-ec-fname'),
       ec_last_name:  g('invite-ec-lname'),
       ec_phone:      g('invite-ec-phone'),
+      job_role:      g('invite-jobrole') || null,
     };
 
     if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
     try {
       await api('POST', '/api/admin/allowed', payload);
       ['invite-email','invite-fname','invite-lname','invite-dob','invite-ni','invite-mobile',
-       'invite-note','invite-ec-fname','invite-ec-lname','invite-ec-phone']
+       'invite-note','invite-ec-fname','invite-ec-lname','invite-ec-phone','invite-jobrole']
         .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
       const name = [payload.first_name, payload.last_name].filter(Boolean).join(' ');
       toast(name ? `${name} added — they can now sign in` : 'Email added — they can now sign in');
@@ -1621,7 +1688,15 @@
             </div>
           </div>
 
-          <div class="form-section-label">Note <span class="opt">(optional)</span></div>
+          <div class="form-section-label">Role <span class="opt">(optional)</span></div>
+          <div class="form-field-wrap">
+            <label style="font-size:.72rem;font-weight:600;color:var(--ink-3);">Job role — sets the privilege level for this team member.</label>
+            <select class="field field-full" id="invite-jobrole" style="margin-top:6px;">
+              <option value="">— No role (member access) —</option>
+            </select>
+          </div>
+
+          <div class="form-section-label" style="margin-top:18px;">Note <span class="opt">(optional)</span></div>
           <input class="field field-full" id="invite-note" type="text" placeholder="e.g. New hire · Site manager" maxlength="200">
 
           <div class="form-actions">

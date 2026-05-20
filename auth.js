@@ -619,23 +619,27 @@ async function lookupPasswordSetToken(rawToken) {
   return { ...row, invalid: null };
 }
 
-async function ensureUserForApprovedEmail(client, email, meta) {
+async function ensureUserForApprovedEmail(client, email, meta, { job_role = null, privilege_level = null } = {}) {
   const lower = email.toLowerCase();
   const m = meta || {};
   const first = m.first_name || null;
   const last  = m.last_name  || null;
   const isAdmin = isAdminEmail(lower);
-  const privilege = isAdmin ? 'admin' : 'member';
+  const privilege = isAdmin ? 'admin' : (privilege_level || 'member');
   // INSERT or update names if user already exists from prior approval/edit.
+  // job_role and privilege_level are set on insert and only updated when
+  // explicitly provided (admin chose them at approval time).
   const r = await client.query(
-    `INSERT INTO users (email, first_name, last_name, privilege_level, onboarding_status)
-     VALUES ($1, $2, $3, $4, 'more_info_required')
+    `INSERT INTO users (email, first_name, last_name, privilege_level, job_role, onboarding_status)
+     VALUES ($1, $2, $3, $4, $5, 'more_info_required')
      ON CONFLICT (email) DO UPDATE
-       SET first_name = COALESCE(EXCLUDED.first_name, users.first_name),
-           last_name  = COALESCE(EXCLUDED.last_name,  users.last_name),
-           updated_at = NOW()
+       SET first_name      = COALESCE(EXCLUDED.first_name, users.first_name),
+           last_name       = COALESCE(EXCLUDED.last_name,  users.last_name),
+           privilege_level = EXCLUDED.privilege_level,
+           job_role        = CASE WHEN EXCLUDED.job_role IS NOT NULL THEN EXCLUDED.job_role ELSE users.job_role END,
+           updated_at      = NOW()
      RETURNING id, email, password_hash, onboarding_status`,
-    [lower, first, last, privilege]
+    [lower, first, last, privilege, job_role || null]
   );
   return r.rows[0];
 }
@@ -1057,7 +1061,8 @@ async function setupAuth(app) {
 
     const first_name = str(body.first_name, 100);
     const last_name  = str(body.last_name, 100);
-    const job_role   = str(body.job_role, 64);
+    // job_role is intentionally ignored — it is set by the admin at approval
+    // time and must not be overwritten by user submission.
     const date_of_birth = str(body.date_of_birth, 20);
     const ni_number     = str(body.ni_number, 20);
     const mobile_number = str(body.mobile_number, 30);
@@ -1068,7 +1073,6 @@ async function setupAuth(app) {
     const missing = [];
     if (!first_name)    missing.push('first name');
     if (!last_name)     missing.push('last name');
-    if (!job_role)      missing.push('job role');
     if (!date_of_birth) missing.push('date of birth');
     if (!ni_number)     missing.push('National Insurance number');
     if (!mobile_number) missing.push('mobile number');
@@ -1091,10 +1095,10 @@ async function setupAuth(app) {
 
       await client.query(
         `UPDATE users
-            SET first_name = $1, last_name = $2, job_role = $3,
+            SET first_name = $1, last_name = $2,
                 onboarding_status = 'active', updated_at = NOW()
-          WHERE id = $4`,
-        [first_name, last_name, job_role, userId]
+          WHERE id = $3`,
+        [first_name, last_name, userId]
       );
 
       const existingR = await client.query(
@@ -1166,6 +1170,20 @@ async function setupAuth(app) {
       if (firstGuess) meta.first_name = firstGuess;
       if (lastGuess)  meta.last_name  = lastGuess;
 
+      // Admin-chosen role at approval time (optional — defaults to member).
+      const requestedRole = (req.body?.job_role || '').trim() || null;
+      let chosenRole = null;
+      let chosenPrivilege = 'member';
+      if (requestedRole) {
+        const roleRow = await client.query(
+          `SELECT name, privilege_level FROM job_roles WHERE name = $1`, [requestedRole]
+        );
+        if (roleRow.rowCount > 0) {
+          chosenRole      = roleRow.rows[0].name;
+          chosenPrivilege = roleRow.rows[0].privilege_level || 'member';
+        }
+      }
+
       await client.query(
         `INSERT INTO allowed_emails (email, note, metadata)
          VALUES ($1, 'approved via admin', $2::jsonb)
@@ -1178,7 +1196,7 @@ async function setupAuth(app) {
         `UPDATE account_requests SET status = 'approved' WHERE id = $1`,
         [req.params.id]
       );
-      await ensureUserForApprovedEmail(client, email, meta);
+      await ensureUserForApprovedEmail(client, email, meta, { job_role: chosenRole, privilege_level: chosenPrivilege });
       await client.query('COMMIT');
 
       // Issue token + email outside the transaction so a mailer hiccup doesn't
@@ -1244,7 +1262,23 @@ async function setupAuth(app) {
       if (str(body.ec_phone,        30)) meta.ec_phone        = str(body.ec_phone, 30);
       const metaJson = Object.keys(meta).length ? JSON.stringify(meta) : null;
 
+      // Admin-chosen role at invite time (optional — defaults to member).
+      const requestedRole = str(body.job_role, 64);
+      let chosenRole = null;
+      let chosenPrivilege = 'member';
+
       await client.query('BEGIN');
+
+      if (requestedRole) {
+        const roleRow = await client.query(
+          `SELECT name, privilege_level FROM job_roles WHERE name = $1`, [requestedRole]
+        );
+        if (roleRow.rowCount > 0) {
+          chosenRole      = roleRow.rows[0].name;
+          chosenPrivilege = roleRow.rows[0].privilege_level || 'member';
+        }
+      }
+
       const r = await client.query(
         `INSERT INTO allowed_emails (email, note, metadata)
          VALUES ($1, $2, $3::jsonb)
@@ -1256,7 +1290,7 @@ async function setupAuth(app) {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: 'This email is already on the approved list.' });
       }
-      await ensureUserForApprovedEmail(client, email, meta);
+      await ensureUserForApprovedEmail(client, email, meta, { job_role: chosenRole, privilege_level: chosenPrivilege });
       await client.query('COMMIT');
 
       try {

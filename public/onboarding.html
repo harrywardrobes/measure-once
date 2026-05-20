@@ -55,10 +55,6 @@
         <div><label for="date_of_birth">Date of birth</label><input id="date_of_birth" type="date" required></div>
         <div><label for="ni_number">National Insurance number</label><input id="ni_number" class="ni" type="text" maxlength="20" required oninput="this.value=this.value.toUpperCase()"></div>
         <div><label for="mobile_number">Mobile number</label><input id="mobile_number" type="tel" maxlength="30" required></div>
-        <div>
-          <label for="job_role">Job role</label>
-          <select id="job_role" required><option value="">— Select —</option></select>
-        </div>
       </div>
 
       <div class="section-label">Emergency contact</div>
@@ -86,20 +82,6 @@
     const e = document.getElementById('err'); e.style.display = 'none'; e.textContent = '';
   }
 
-  async function loadRoles() {
-    try {
-      const r = await fetch('/api/job-roles');
-      if (!r.ok) return;
-      const roles = await r.json();
-      const sel = document.getElementById('job_role');
-      for (const name of roles) {
-        const opt = document.createElement('option');
-        opt.value = name; opt.textContent = name;
-        sel.appendChild(opt);
-      }
-    } catch {}
-  }
-
   async function loadMe() {
     try {
       const r = await fetch('/api/onboarding/me');
@@ -107,22 +89,11 @@
       if (!r.ok) return;
       const me = await r.json();
       if (me.onboarding_status === 'active') {
-        // Already done — leave the page.
         location.href = '/';
         return;
       }
       document.getElementById('first_name').value = me.first_name || '';
       document.getElementById('last_name').value  = me.last_name  || '';
-      if (me.job_role) {
-        const sel = document.getElementById('job_role');
-        // Add option if it isn't in the list yet so the value survives.
-        if (![...sel.options].some(o => o.value === me.job_role)) {
-          const opt = document.createElement('option');
-          opt.value = me.job_role; opt.textContent = me.job_role;
-          sel.appendChild(opt);
-        }
-        sel.value = me.job_role;
-      }
       const m = me.metadata || {};
       document.getElementById('date_of_birth').value = m.date_of_birth || '';
       document.getElementById('ni_number').value     = m.ni_number     || '';
@@ -144,7 +115,6 @@
     const body = {
       first_name:    document.getElementById('first_name').value.trim(),
       last_name:     document.getElementById('last_name').value.trim(),
-      job_role:      document.getElementById('job_role').value,
       date_of_birth: document.getElementById('date_of_birth').value,
       ni_number:     document.getElementById('ni_number').value.trim(),
       mobile_number: document.getElementById('mobile_number').value.trim(),
@@ -173,7 +143,7 @@
     }
   });
 
-  loadRoles().then(loadMe);
+  loadMe();
 </script>
 </body>
 </html>
