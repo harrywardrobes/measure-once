@@ -58,15 +58,12 @@ app.use(express.json());
 // extensionless paths win over any default static-index handling.
 const PAGE_ROUTES = {
   '/':          'index.html',
-  '/sales':     'sales.html',
   '/customers': 'customers.html',
-  '/projects':  'projects.html',
   '/calendar':  'calendar.html',
-  '/invoices':  'invoices.html',
   '/profile':   'profile.html',
 };
 
-// /trades and /admin are protected — handled below after auth middleware is set up
+// /trades, /admin, /sales, /projects, /invoices are protected — handled below after auth middleware is set up
 for (const [route, file] of Object.entries(PAGE_ROUTES)) {
   app.get(route, (_req, res) => res.sendFile(path.join(__dirname, 'public', file)));
 }
@@ -79,6 +76,12 @@ app.get('/customers/:id', (req, res) => {
 // Canonicalise the admin URL: /admin.html → /admin so the protected route
 // below is the single entry point (and static can't serve the page directly).
 app.get('/admin.html', (req, res) => res.redirect(301, '/admin'));
+
+// Redirect .html variants of privilege-restricted pages to their clean URL
+// so the single protected route below is the only entry point.
+app.get('/sales.html',    (req, res) => res.redirect(301, '/sales'));
+app.get('/projects.html', (req, res) => res.redirect(301, '/projects'));
+app.get('/invoices.html', (req, res) => res.redirect(301, '/invoices'));
 
 // Public auth pages (no Replit/OIDC anymore — email + password handled in-app).
 app.get('/login', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
@@ -1675,6 +1678,43 @@ app.get('/admin', async (req, res) => {
 
 app.get('/trades', isAuthenticated, requireManagerOrAdmin, (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'trades.html'));
+});
+
+// Sales, Projects, Invoices — manager/admin only
+const MANAGER_ONLY_PAGE_HTML = `<!DOCTYPE html><html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Access restricted</title>
+<style>
+  body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fafaf9;}
+  .card{background:#fff;border-radius:12px;padding:32px 28px;max-width:380px;width:90%;
+        box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  h1{font-size:1.15rem;margin:0 0 8px;}
+  p{color:#57534e;font-size:.9rem;margin:0 0 20px;line-height:1.5;}
+  a{display:inline-block;background:#3d0f7a;color:#fff;text-decoration:none;
+    padding:9px 18px;border-radius:6px;font-weight:600;font-size:.88rem;}
+  a:hover{background:#2e0f5a;}
+</style></head>
+<body><div class="card">
+  <h1>Access restricted</h1>
+  <p>Your account doesn't have permission to view this page.</p>
+  <a href="/">Back to home</a>
+</div></body></html>`;
+
+function requireManagerOrAdminPage(req, res, next) {
+  if (!req.isAuthenticated || !req.isAuthenticated()) return res.redirect('/login');
+  const priv = req.user?.privilege_level || 'member';
+  if (priv === 'manager' || priv === 'admin') return next();
+  return res.status(403).send(MANAGER_ONLY_PAGE_HTML);
+}
+
+app.get('/sales',    isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'sales.html'));
+});
+app.get('/projects', isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'projects.html'));
+});
+app.get('/invoices', isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'invoices.html'));
 });
 
 app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) => {

@@ -292,6 +292,18 @@ async function bootstrap() {
 
   const priv = user.privilege_level || 'member';
 
+  // Viewers and members may not access these pages directly.
+  const RESTRICTED_PATHS = new Set([
+    '/sales', '/sales.html',
+    '/projects', '/projects.html',
+    '/invoices', '/invoices.html',
+  ]);
+  if (RESTRICTED_PATHS.has(location.pathname) &&
+      priv !== 'manager' && priv !== 'admin') {
+    window.location.href = '/';
+    return false;
+  }
+
   if (priv === 'viewer') {
     document.body.classList.add('viewer-mode');
     showViewerBanner();
