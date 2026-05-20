@@ -104,6 +104,7 @@ const state = {
   personalTasks: [],
   calendarEvents: [],
   calendarConnected: false,
+  calendarError: false,
   showAddPersonalTask: false,
   qb: {
     statusKnown: false, // true once the first /api/quickbooks/status fetch resolves
