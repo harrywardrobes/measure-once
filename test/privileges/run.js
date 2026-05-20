@@ -1,7 +1,7 @@
 const { Pool } = require('pg');
 const {
   cleanupTestData, resetRateLimitStore, seedUsers, spawnServer, waitForServer,
-  makeClient, login, ROLES,
+  makeClient, login, setPool, ROLES,
 } = require('./harness');
 const { ROUTES, classifyOutcome } = require('./matrix');
 const { runProbes } = require('./probes');
@@ -29,6 +29,7 @@ async function main() {
   const runId = Math.random().toString(36).slice(2, 8);
   const startedAt = new Date().toISOString();
   const pool = new Pool({ connectionString: connStr });
+  setPool(pool);
   if (hasTestDb) {
     console.log(`  Using DATABASE_URL_TEST (isolated test DB).`);
   } else {

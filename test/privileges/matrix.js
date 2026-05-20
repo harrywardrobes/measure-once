@@ -72,7 +72,10 @@ const ROUTES = [
 
   // ── self-or-admin (foreign id picked at runtime) ──────────────────────────
   { method: 'GET',    path: '/api/users/__FOREIGN__/profile', level: 'self-or-admin' },
-  { method: 'GET',    path: '/api/users/__FOREIGN__/photo',   level: 'self-or-admin' },
+  // Photos are team-roster profile pictures intentionally visible to all
+  // authenticated users (admin.html loads them for every team member).
+  // The route only enforces isAuthenticated; `auth` is the correct gate level.
+  { method: 'GET',    path: '/api/users/__FOREIGN__/photo',   level: 'auth' },
   { method: 'PATCH',  path: '/api/users/__FOREIGN__/profile', level: 'self-or-admin', body: {} },
 
   // ── member-level mutation surface ─────────────────────────────────────────

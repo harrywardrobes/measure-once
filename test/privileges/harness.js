@@ -9,6 +9,11 @@ const BASE = `http://127.0.0.1:${TEST_PORT}`;
 const PREFIX = 'privtest-';
 const PASSWORD = 'Tr0ub4dor&3-VeryUnique-Pw!';
 
+// Module-level pool reference, set by run.js once the pool is created.
+// Needed by loginViaDb when captcha enforcement is active.
+let _pool = null;
+function setPool(pool) { _pool = pool; }
+
 const ROLES = ['viewer', 'member', 'manager', 'admin'];
 
 function makeEmail(role, runId) {
@@ -157,7 +162,89 @@ function makeClient(cookie) {
   };
 }
 
+// Sign a session id the same way express-session / cookie-signature does:
+//   s:<sid>.<hmac-sha256(sid, secret) as plain base64 with trailing = stripped>
+function signSid(sid, secret) {
+  const sig = crypto.createHmac('sha256', secret)
+    .update(sid)
+    .digest('base64')
+    .replace(/=+$/, '');
+  return 's:' + sid + '.' + sig;
+}
+
+// Inject a session row directly into the `sessions` table and return an
+// authenticated client.  Used when the spawned server has TURNSTILE_SECRET_KEY
+// set (i.e. captcha is enforced), which means the HTTP /api/login endpoint
+// would reject harness requests that carry no captcha token.
+async function loginViaDb(email) {
+  const pool = _pool;
+  if (!pool) throw new Error('loginViaDb: call setPool(pool) before login when captcha is active');
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error('SESSION_SECRET is required for loginViaDb');
+  const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+  const r = await pool.query(
+    `SELECT id, email, first_name, last_name, profile_image_url,
+            privilege_level, onboarding_status
+     FROM users WHERE LOWER(email) = LOWER($1)`,
+    [email]
+  );
+  if (!r.rows[0]) {
+    // Diagnostic: show how many privtest users currently exist
+    const diag = await pool.query(
+      `SELECT email, privilege_level FROM users WHERE email LIKE 'privtest-%' ORDER BY email`
+    );
+    console.error(`loginViaDb: user not found — ${email}`);
+    console.error(`loginViaDb: privtest users in DB (${diag.rows.length}):`, diag.rows.map(u => u.email).join(', ') || '(none)');
+    throw new Error(`loginViaDb: user not found — ${email}`);
+  }
+  const dbUser = r.rows[0];
+  const sessionUser = {
+    claims: {
+      sub: dbUser.id,
+      email: dbUser.email,
+      first_name: dbUser.first_name || null,
+      last_name: dbUser.last_name || null,
+      profile_image_url: dbUser.profile_image_url || null,
+    },
+    privilege_level: dbUser.privilege_level || 'member',
+    onboarding_status: dbUser.onboarding_status || 'active',
+    expires_at: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
+  };
+  const sid = crypto.randomUUID();
+  const expire = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
+  const sess = JSON.stringify({
+    cookie: {
+      originalMaxAge: SESSION_TTL_SECONDS * 1000,
+      expires: expire.toISOString(),
+      secure: false,
+      httpOnly: true,
+      path: '/',
+      sameSite: 'lax',
+    },
+    passport: { user: sessionUser },
+  });
+  await pool.query(
+    `INSERT INTO sessions (sid, sess, expire) VALUES ($1, $2::jsonb, $3)
+     ON CONFLICT (sid) DO UPDATE SET sess = EXCLUDED.sess, expire = EXCLUDED.expire`,
+    [sid, sess, expire]
+  );
+  const cookieValue = `connect.sid=${encodeURIComponent(signSid(sid, secret))}`;
+  return makeClient(cookieValue);
+}
+
+// Log in as `email` using the best available method:
+//   • If TURNSTILE_SECRET_KEY is passed through to the test server
+//     (PRIVTEST_USE_TURNSTILE_SECRET_KEY=1), the HTTP login endpoint enforces
+//     captcha and the harness cannot send a valid token — use DB session
+//     injection instead.
+//   • Otherwise use the normal HTTP /api/login path (captcha is a no-op when
+//     the key is absent).
 async function login(email, password) {
+  const captchaActive = process.env.PRIVTEST_USE_TURNSTILE_SECRET_KEY === '1'
+    && !!process.env.TURNSTILE_SECRET_KEY;
+  if (captchaActive) {
+    return loginViaDb(email);
+  }
   const client = makeClient(null);
   const r = await client.post('/api/login', { email, password });
   if (r.status !== 200) {
@@ -180,4 +267,5 @@ module.exports = {
   waitForServer,
   makeClient,
   login,
+  setPool,
 };

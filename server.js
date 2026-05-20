@@ -130,14 +130,19 @@ app.use('/api', (req, res, next) => {
 });
 
 app.use('/api/pipeline', requireHubspotToken);
-app.use('/api/deals', requireHubspotToken);
-app.use('/api/contacts', requireHubspotToken);
 app.use('/api/account', requireHubspotToken);
 app.use('/api/open-leads', requireHubspotToken);
 app.use('/api/contacts-all', requireHubspotToken);
-app.use('/api/tasks', requireHubspotToken);
 app.use('/api/workflow-stages', requireHubspotToken);
 app.use('/api/localdata', requireHubspotToken);
+// NOTE: /api/contacts, /api/deals, and /api/tasks are intentionally NOT
+// covered by a blanket requireHubspotToken mount.  Those prefixes contain
+// routes gated by requirePrivilege / requireManagerOrAdmin, and Express runs
+// app.use() middleware before the route-specific guards.  A blanket mount
+// would therefore return 503 (no token) before the privilege check fires,
+// making it impossible to verify that low-privilege actors are correctly
+// denied.  requireHubspotToken is instead placed inline in every individual
+// route handler for those prefixes, always *after* the privilege middleware.
 
 // ── HubSpot Custom Properties (workflow data stored on contacts) ──────────────
 // Creates measure_once_rooms and measure_once_notes properties if they don't exist
@@ -166,7 +171,7 @@ async function ensureHubSpotProperties() {
 }
 
 // Read one contact's workflow data from HubSpot custom properties
-app.get('/api/contacts/:id/localdata', async (req, res) => {
+app.get('/api/contacts/:id/localdata', requireHubspotToken, async (req, res) => {
   const contactId = req.params.id;
   if (typeof contactId !== 'string' || !/^[A-Za-z0-9_-]+$/.test(contactId)) {
     return res.status(400).json({ error: 'Invalid contact id.' });
@@ -186,7 +191,7 @@ app.get('/api/contacts/:id/localdata', async (req, res) => {
 });
 
 // Save one contact's workflow data to HubSpot custom properties
-app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
+app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   try {
     const { rooms, notes, stage, substage } = req.body;
     const contactId = req.params.id;
@@ -484,7 +489,7 @@ function normalizeHubspotObjectId(id) {
   return encodeURIComponent(trimmed);
 }
 
-app.get('/api/deals', async (req, res) => {
+app.get('/api/deals', requireHubspotToken, async (req, res) => {
   try {
     const r = await axios.get(`${HS}/crm/v3/objects/deals`, {
       headers: hsHeaders(),
@@ -507,7 +512,7 @@ app.get('/api/deals', async (req, res) => {
   }
 });
 
-app.get('/api/deals/:id', async (req, res) => {
+app.get('/api/deals/:id', requireHubspotToken, async (req, res) => {
   try {
     const safeDealId = normalizeHubspotObjectId(req.params.id);
     if (!safeDealId) {
@@ -533,7 +538,7 @@ app.get('/api/deals/:id', async (req, res) => {
   }
 });
 
-app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
+app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   try {
     const safeDealId = normalizeHubspotObjectId(req.params.id);
     if (!safeDealId) {
@@ -629,7 +634,7 @@ app.get('/api/open-leads', async (req, res) => {
 // ── HubSpot: Contacts ─────────────────────────────────────────────────────────
 
 // Create a new contact in HubSpot and generate a customer number
-app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
+app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   const { firstname, lastname, email, phone, postcode } = req.body || {};
 
   if (!firstname || !email || !postcode) {
@@ -688,7 +693,7 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), hubspotMu
   }
 });
 
-app.get('/api/contacts/:id', async (req, res) => {
+app.get('/api/contacts/:id', requireHubspotToken, async (req, res) => {
   try {
     const contactId = String(req.params.id || '');
     if (!/^\d+$/.test(contactId)) {
@@ -815,7 +820,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
 });
 
 // ── HubSpot: Notes (for checklist storage) ────────────────────────────────────
-app.get('/api/deals/:id/notes', async (req, res) => {
+app.get('/api/deals/:id/notes', requireHubspotToken, async (req, res) => {
   try {
     const dealId = req.params.id;
     if (!/^\d+$/.test(dealId)) {
@@ -843,7 +848,7 @@ app.get('/api/deals/:id/notes', async (req, res) => {
   }
 });
 
-app.post('/api/deals/:id/checklist', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
+app.post('/api/deals/:id/checklist', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   try {
     const { checklistData, existingNoteId } = req.body;
     const noteBody = `WORKFLOW_CHECKLIST:${JSON.stringify(checklistData)}`;
@@ -1011,7 +1016,7 @@ app.post('/api/events', isAuthenticated, requirePrivilege('member'), calendarEve
 });
 
 // ── HubSpot: Contact Notes + Workflow Data ────────────────────────────────────
-app.get('/api/contacts/:id/notes', async (req, res) => {
+app.get('/api/contacts/:id/notes', requireHubspotToken, async (req, res) => {
   const contactId = String(req.params.id || '');
   if (!/^\d+$/.test(contactId)) {
     return res.status(400).json({ error: 'Invalid contact id' });
@@ -1038,7 +1043,7 @@ app.get('/api/contacts/:id/notes', async (req, res) => {
   }
 });
 
-app.post('/api/contacts/:id/workflow', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
+app.post('/api/contacts/:id/workflow', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   try {
     const { data, existingNoteId } = req.body;
     const contactId = String(req.params.id || '');
@@ -1082,7 +1087,7 @@ app.post('/api/contacts/:id/workflow', isAuthenticated, requirePrivilege('member
 });
 
 // ── Workflow Data (per-deal status + comments) ────────────────────────────────
-app.post('/api/deals/:id/workflow', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
+app.post('/api/deals/:id/workflow', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   try {
     const { data, existingNoteId } = req.body;
     const safeDealId = validateHsObjectId(req.params.id, 'id');
@@ -1122,7 +1127,7 @@ app.post('/api/deals/:id/workflow', isAuthenticated, requirePrivilege('member'),
 });
 
 // ── HubSpot: Tasks ────────────────────────────────────────────────────────────
-app.get('/api/contacts/:id/tasks', async (req, res) => {
+app.get('/api/contacts/:id/tasks', requireHubspotToken, async (req, res) => {
   try {
     const contactId = req.params.id;
     if (!/^\d+$/.test(contactId)) {
@@ -1150,7 +1155,7 @@ app.get('/api/contacts/:id/tasks', async (req, res) => {
   }
 });
 
-app.post('/api/contacts/:id/tasks', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
+app.post('/api/contacts/:id/tasks', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   try {
     const { subject, dueDate, stageKey } = req.body;
     const contactId = req.params.id;
@@ -1189,7 +1194,7 @@ app.post('/api/contacts/:id/tasks', isAuthenticated, requirePrivilege('member'),
   }
 });
 
-app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
+app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   try {
     const taskId = req.params.id;
     if (!/^\d+$/.test(taskId)) {
@@ -1214,7 +1219,7 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), hubspot
   }
 });
 
-app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), hubspotMutationLimiter, async (req, res) => {
+app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   try {
     const taskId = req.params.id;
     if (!/^\d+$/.test(taskId)) {
