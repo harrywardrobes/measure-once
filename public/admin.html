@@ -1064,98 +1064,6 @@
       </div>
 
       <div class="card">
-        <div class="card-title">Add team member</div>
-        <p class="card-desc" style="margin-bottom:4px;">
-          Approve an email address so this person can sign in straight away, and capture their key details at the same time.
-        </p>
-
-        <div class="form-section-label">Personal details</div>
-        <div class="form-grid">
-          <div class="form-field-wrap form-field-full">
-            <label>Work email address</label>
-            <input class="field" id="invite-email" type="email" placeholder="colleague@example.com" maxlength="254" autocomplete="off">
-          </div>
-          <div class="form-field-wrap">
-            <label>First name</label>
-            <input class="field" id="invite-fname" type="text" placeholder="Jane" maxlength="100" autocomplete="off">
-          </div>
-          <div class="form-field-wrap">
-            <label>Last name</label>
-            <input class="field" id="invite-lname" type="text" placeholder="Smith" maxlength="100" autocomplete="off">
-          </div>
-          <div class="form-field-wrap">
-            <label>Date of birth</label>
-            <input class="field" id="invite-dob" type="date" maxlength="20">
-          </div>
-          <div class="form-field-wrap">
-            <label>National Insurance number</label>
-            <input class="field" id="invite-ni" type="text" placeholder="AB 12 34 56 C" maxlength="20" autocomplete="off"
-              style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
-          </div>
-          <div class="form-field-wrap">
-            <label>Mobile number</label>
-            <input class="field" id="invite-mobile" type="tel" placeholder="+44 7700 900000" maxlength="30" autocomplete="off">
-          </div>
-        </div>
-
-        <div class="form-section-label">Emergency contact</div>
-        <div class="form-grid">
-          <div class="form-field-wrap">
-            <label>First name</label>
-            <input class="field" id="invite-ec-fname" type="text" placeholder="John" maxlength="100" autocomplete="off">
-          </div>
-          <div class="form-field-wrap">
-            <label>Last name</label>
-            <input class="field" id="invite-ec-lname" type="text" placeholder="Smith" maxlength="100" autocomplete="off">
-          </div>
-          <div class="form-field-wrap">
-            <label>Mobile number</label>
-            <input class="field" id="invite-ec-phone" type="tel" placeholder="+44 7700 900000" maxlength="30" autocomplete="off">
-          </div>
-        </div>
-
-        <div class="form-section-label">Note <span class="opt">(optional)</span></div>
-        <input class="field field-full" id="invite-note" type="text" placeholder="e.g. New hire · Site manager" maxlength="200">
-
-        <div class="form-actions">
-          <button class="btn btn-primary" id="invite-btn" onclick="addAllowed()">Add team member</button>
-          <div id="invite-err" class="invite-err" style="display:none;"></div>
-        </div>
-
-        <div class="checklist-box">
-          <div class="checklist-box-title">
-            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="flex-shrink-0">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-            </svg>
-            Still to collect offline before their first day
-          </div>
-          <div class="checklist-cols">
-            <div>
-              <div class="checklist-group-title">Payroll &amp; Tax</div>
-              <ul class="checklist-items">
-                <li>P45 or HMRC Starter Checklist<span>Mandatory — needed to set the correct tax code</span></li>
-                <li>Bank details<span>Account number and sort code for salary payments</span></li>
-              </ul>
-            </div>
-            <div>
-              <div class="checklist-group-title">Legal &amp; Compliance</div>
-              <ul class="checklist-items">
-                <li>Right to work proof<span>Passport or digital share code check</span></li>
-                <li>Home address<span>Required for contracts, pension enrolment, and P60s</span></li>
-              </ul>
-            </div>
-            <div>
-              <div class="checklist-group-title">Professional</div>
-              <ul class="checklist-items">
-                <li>Signed contract<span>Formal acceptance of your terms</span></li>
-                <li>Reference contacts<span>If your policy requires background checks</span></li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
         <div class="card-title">Approved team members <span class="card-count">(${_allowed.length})</span></div>
         ${_allowed.length === 0
           ? '<div class="table-empty">No approved emails yet.</div>'
@@ -1322,7 +1230,7 @@
      PHOTOS TAB
   ──────────────────────────────────────────────── */
   function renderPhotoRequests() {
-    const container = $('#photos-content');
+    const container = $('#requests-content');
     if (!container) return;
     const reqBadge = document.getElementById('req-tab-badge');
     if (reqBadge) {
@@ -1331,16 +1239,12 @@
       reqBadge.innerHTML = total > 0 ? `<span class="tab-badge">${total}</span>` : '';
     }
 
-    if (_photoRequests.length === 0) {
-      container.innerHTML = `
-        <div class="card">
+    const photoHtml = _photoRequests.length === 0
+      ? `<div class="card" id="photo-requests-card">
           <div class="card-title">Photo approvals</div>
           <div class="table-empty" style="padding:28px 0;">No pending photo submissions.</div>
-        </div>`;
-      return;
-    }
-    container.innerHTML = `
-      <div class="card">
+        </div>`
+      : `<div class="card" id="photo-requests-card">
         <div class="card-title">Pending photo approvals <span class="card-count">(${_photoRequests.length})</span></div>
         <p class="card-desc">Review profile photo submissions. Approved photos appear in the header and across the app.</p>
         <div class="photo-approval-grid">
@@ -1361,6 +1265,12 @@
           }).join('')}
         </div>
       </div>`;
+    const existing = document.getElementById('photo-requests-card');
+    if (existing) {
+      existing.outerHTML = photoHtml;
+    } else {
+      container.insertAdjacentHTML('afterbegin', photoHtml);
+    }
   }
 
   async function approvePhoto(id) {
@@ -1496,6 +1406,98 @@
             <tbody id="team-body"></tbody>
           </table>
         </div>
+
+        <div class="card">
+          <div class="card-title">Add team member</div>
+          <p class="card-desc" style="margin-bottom:4px;">
+            Approve an email address so this person can sign in straight away, and capture their key details at the same time.
+          </p>
+
+          <div class="form-section-label">Personal details</div>
+          <div class="form-grid">
+            <div class="form-field-wrap form-field-full">
+              <label>Work email address</label>
+              <input class="field" id="invite-email" type="email" placeholder="colleague@example.com" maxlength="254" autocomplete="off">
+            </div>
+            <div class="form-field-wrap">
+              <label>First name</label>
+              <input class="field" id="invite-fname" type="text" placeholder="Jane" maxlength="100" autocomplete="off">
+            </div>
+            <div class="form-field-wrap">
+              <label>Last name</label>
+              <input class="field" id="invite-lname" type="text" placeholder="Smith" maxlength="100" autocomplete="off">
+            </div>
+            <div class="form-field-wrap">
+              <label>Date of birth</label>
+              <input class="field" id="invite-dob" type="date" maxlength="20">
+            </div>
+            <div class="form-field-wrap">
+              <label>National Insurance number</label>
+              <input class="field" id="invite-ni" type="text" placeholder="AB 12 34 56 C" maxlength="20" autocomplete="off"
+                style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+            </div>
+            <div class="form-field-wrap">
+              <label>Mobile number</label>
+              <input class="field" id="invite-mobile" type="tel" placeholder="+44 7700 900000" maxlength="30" autocomplete="off">
+            </div>
+          </div>
+
+          <div class="form-section-label">Emergency contact</div>
+          <div class="form-grid">
+            <div class="form-field-wrap">
+              <label>First name</label>
+              <input class="field" id="invite-ec-fname" type="text" placeholder="John" maxlength="100" autocomplete="off">
+            </div>
+            <div class="form-field-wrap">
+              <label>Last name</label>
+              <input class="field" id="invite-ec-lname" type="text" placeholder="Smith" maxlength="100" autocomplete="off">
+            </div>
+            <div class="form-field-wrap">
+              <label>Mobile number</label>
+              <input class="field" id="invite-ec-phone" type="tel" placeholder="+44 7700 900000" maxlength="30" autocomplete="off">
+            </div>
+          </div>
+
+          <div class="form-section-label">Note <span class="opt">(optional)</span></div>
+          <input class="field field-full" id="invite-note" type="text" placeholder="e.g. New hire · Site manager" maxlength="200">
+
+          <div class="form-actions">
+            <button class="btn btn-primary" id="invite-btn" onclick="addAllowed()">Add team member</button>
+            <div id="invite-err" class="invite-err" style="display:none;"></div>
+          </div>
+
+          <div class="checklist-box">
+            <div class="checklist-box-title">
+              <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="flex-shrink-0">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              </svg>
+              Still to collect offline before their first day
+            </div>
+            <div class="checklist-cols">
+              <div>
+                <div class="checklist-group-title">Payroll &amp; Tax</div>
+                <ul class="checklist-items">
+                  <li>P45 or HMRC Starter Checklist<span>Mandatory — needed to set the correct tax code</span></li>
+                  <li>Bank details<span>Account number and sort code for salary payments</span></li>
+                </ul>
+              </div>
+              <div>
+                <div class="checklist-group-title">Legal &amp; Compliance</div>
+                <ul class="checklist-items">
+                  <li>Right to work proof<span>Passport or digital share code check</span></li>
+                  <li>Home address<span>Required for contracts, pension enrolment, and P60s</span></li>
+                </ul>
+              </div>
+              <div>
+                <div class="checklist-group-title">Professional</div>
+                <ul class="checklist-items">
+                  <li>Signed contract<span>Formal acceptance of your terms</span></li>
+                  <li>Reference contacts<span>If your policy requires background checks</span></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- PERMISSIONS & ROLES -->
@@ -1527,7 +1529,6 @@
 
       <!-- REQUESTS (access requests + photo approvals) -->
       <div class="tab-panel" id="tab-requests">
-        <div id="photos-content"></div>
         <div id="requests-content"></div>
       </div>
 
