@@ -5,23 +5,34 @@ const {
 } = require('./harness');
 const { ROUTES, classifyOutcome } = require('./matrix');
 const { runProbes } = require('./probes');
+const { runUiSmoke } = require('./uiSmoke');
 const { buildReport, writeReport } = require('./report');
 
 require('dotenv').config();
 
 async function main() {
+  const hasTestDb = !!process.env.DATABASE_URL_TEST;
+  const allowShared = process.env.PRIVTEST_ALLOW_SHARED_DB === '1';
   const connStr = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL;
   if (!connStr) {
-    console.error('DATABASE_URL (or DATABASE_URL_TEST) is required to run the privilege test suite.');
+    console.error('DATABASE_URL_TEST (preferred) or DATABASE_URL is required to run the privilege test suite.');
+    process.exit(2);
+  }
+  if (!hasTestDb && !allowShared) {
+    console.error(`\n  ✘ Privilege suite refuses to run against the shared DATABASE_URL by default.\n`
+      + `    Set DATABASE_URL_TEST=<disposable connection string> to point at an isolated DB,\n`
+      + `    or set PRIVTEST_ALLOW_SHARED_DB=1 to opt in to shared-DB mode (synthetic rows are\n`
+      + `    prefixed with 'privtest-' and cleaned up on exit, but a crash mid-run can leave\n`
+      + `    stale fixtures in the shared DB).`);
     process.exit(2);
   }
   const runId = Math.random().toString(36).slice(2, 8);
   const startedAt = new Date().toISOString();
   const pool = new Pool({ connectionString: connStr });
-  if (process.env.DATABASE_URL_TEST) {
+  if (hasTestDb) {
     console.log(`  Using DATABASE_URL_TEST (isolated test DB).`);
   } else {
-    console.log(`  Using shared DATABASE_URL with prefix cleanup (privtest-*).`);
+    console.log(`  Using shared DATABASE_URL (PRIVTEST_ALLOW_SHARED_DB=1 opt-in) with prefix cleanup (privtest-*).`);
   }
 
   console.log(`\n  Privilege test run ${runId}`);
@@ -122,6 +133,24 @@ async function main() {
     // ── Adversarial probes ───────────────────────────────────────────────
     console.log(`  Running adversarial probes…`);
     probeResults = await runProbes({ clients, users, pool, runId });
+
+    // ── UI smoke (Puppeteer) ─────────────────────────────────────────────
+    // Loads /login → / → /admin per role in headless chromium, asserts the
+    // access-denied page for non-admins, no console errors for admin, and
+    // captures screenshots into test-results/screenshots/.
+    console.log(`  Running headless UI smoke (puppeteer)…`);
+    let uiResults = [];
+    try {
+      uiResults = await runUiSmoke({ users, runId, clients });
+    } catch (e) {
+      uiResults = [{
+        category: 'ui-smoke', name: 'puppeteer smoke',
+        expected: 'runs to completion',
+        observed: `error: ${e.message}`,
+        severity: 'high', ok: false, detail: '',
+      }];
+    }
+    probeResults.push(...uiResults);
     const probeFails = probeResults.filter(p => !p.ok);
     console.log(`    probes: ${probeResults.length - probeFails.length}/${probeResults.length} ok`);
 

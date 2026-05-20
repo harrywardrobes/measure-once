@@ -37,18 +37,38 @@ Replit OIDC). Public auth pages: `/login`, `/set-password`, `/onboarding`. API:
    the dashboard.
 
 ## Privilege adversarial test suite
-Run `npm run test:privileges` to boot a dedicated test server (port 5050 by
-default, override with `PRIV_TEST_PORT`) against the live `DATABASE_URL`, seed
-four disposable users (`privtest-<role>-<runId>@privtest.local`) at each
-privilege level, exercise sign-in, the admin page, the per-route capability
-matrix (every gate type × five actors), and ~25 adversarial probes (token
-single-use, session invalidation on revoke / force-reset / change-password,
-mass-assignment via PATCH `/api/users/:id/profile`, IDOR, admin-only mutations
-as non-admins, OAuth callback gating, XSS data round-trip). A markdown report
-is written to `test-results/privileges.md`; the command exits non-zero when
-any probe or matrix cell fails. Findings only — fixes are tracked as separate
-tasks. The harness unsets `TURNSTILE_SECRET_KEY` / `HUBSPOT_TOKEN` / `SMTP_*` /
-`GOOGLE_*` / `QB_*` so it runs without third-party credentials.
+Run `DATABASE_URL_TEST=<disposable connection string> npm run test:privileges`
+to boot a dedicated test server (port 5050 by default, override with
+`PRIV_TEST_PORT`) against that isolated DB, seed four disposable users
+(`privtest-<role>-<runId>@privtest.local`) at each privilege level, exercise
+sign-in, the admin page, a 100-route capability matrix (every gate type ×
+five actors), the full adversarial probe checklist, and a headless Puppeteer
+UI smoke (`/login` → `/` → `/admin` per role with screenshot capture into
+`test-results/screenshots/`). The harness refuses to run against the shared
+`DATABASE_URL` unless you also export `PRIVTEST_ALLOW_SHARED_DB=1` — synthetic
+rows are still namespaced behind the `privtest-` prefix and cleaned up on
+exit, but a crash mid-run can leave stale fixtures. A markdown report is
+written to `test-results/privileges.md`; the command exits non-zero when any
+probe or matrix cell fails. Findings only — fixes are tracked as separate
+tasks.
+
+Probes covered: token single-use, session invalidation on revoke /
+force-reset / change-password, mass-assignment + cross-cookie / swapped-key
+abuse on `/api/change-password`, IDOR, admin-only mutations as non-admins
+(including approve/reject lifecycle on account requests), OAuth callback
+gating (Google + QuickBooks: stale / cross-user / missing state), CSRF
+method-confusion, XSS round-trip through `/api/admin/requests` and the
+allow-list note field, mid-session privilege downgrade, rate-limit hammering
+of `/api/login`, `/api/request-access`, **and** `/api/forgot-password`, plus
+an opt-in Turnstile tampering matrix (no-token / empty / replayed / 10KB /
+literal dummy) across `/api/login`, `/api/request-access`,
+`/api/forgot-password`.
+
+The harness strips `TURNSTILE_SECRET_KEY` / `HUBSPOT_TOKEN` / `SMTP_*` /
+`GOOGLE_*` / `QB_*` so it runs without third-party credentials. Opt any one
+back in with `PRIVTEST_USE_<NAME>=1 <NAME>=… npm run test:privileges` —
+required for the captcha tampering probes (`PRIVTEST_USE_TURNSTILE_SECRET_KEY=1`)
+and to resolve HubSpot/Google/QuickBooks-gated matrix cells.
 
 ### Migration note
 Users that existed before this change are backfilled to `active` (no onboarding

