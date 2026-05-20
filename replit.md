@@ -36,6 +36,20 @@ Replit OIDC). Public auth pages: `/login`, `/set-password`, `/onboarding`. API:
 5. Completing onboarding flips status to `active`; subsequent logins land on
    the dashboard.
 
+## Privilege adversarial test suite
+Run `npm run test:privileges` to boot a dedicated test server (port 5050 by
+default, override with `PRIV_TEST_PORT`) against the live `DATABASE_URL`, seed
+four disposable users (`privtest-<role>-<runId>@privtest.local`) at each
+privilege level, exercise sign-in, the admin page, the per-route capability
+matrix (every gate type × five actors), and ~25 adversarial probes (token
+single-use, session invalidation on revoke / force-reset / change-password,
+mass-assignment via PATCH `/api/users/:id/profile`, IDOR, admin-only mutations
+as non-admins, OAuth callback gating, XSS data round-trip). A markdown report
+is written to `test-results/privileges.md`; the command exits non-zero when
+any probe or matrix cell fails. Findings only — fixes are tracked as separate
+tasks. The harness unsets `TURNSTILE_SECRET_KEY` / `HUBSPOT_TOKEN` / `SMTP_*` /
+`GOOGLE_*` / `QB_*` so it runs without third-party credentials.
+
 ### Migration note
 Users that existed before this change are backfilled to `active` (no onboarding
 prompt) but have **no password set**. An admin must click **Resend
