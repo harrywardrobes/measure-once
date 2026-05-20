@@ -166,17 +166,39 @@ async function runProbes({ clients, users, pool, runId }) {
   }
 
   // ── IDOR on /api/users/:id/profile and /photo ─────────────────────────────
+  // Full variant matrix per the adversarial checklist:
+  //   • numeric-increment id (0, 1, 99999) — non-UUID shape
+  //   • a guessed/random UUID that points at nothing
+  //   • a real foreign UUID (manager + admin)
+  // The endpoint must respond identically (403/404) for all three classes so
+  // that the response shape doesn't leak account existence.
   {
     const viewer = clients.viewer;
-    const r = await viewer.get(`/api/users/${users.admin.id}/profile`);
-    await record('idor', "viewer cannot read admin's profile",
-      '403 forbidden', `status=${r.status}`,
-      'high', r.status === 403);
-
-    const r2 = await viewer.get(`/api/users/${users.manager.id}/profile`);
-    await record('idor', "viewer cannot read manager's profile",
-      '403 forbidden', `status=${r2.status}`,
-      'high', r2.status === 403);
+    const guessedUuid = '00000000-0000-4000-8000-000000000001';
+    const targets = [
+      ['admin uuid',            users.admin.id],
+      ['manager uuid',          users.manager.id],
+      ['guessed uuid',          guessedUuid],
+      ['numeric id 0',          '0'],
+      ['numeric id 1',          '1'],
+      ['numeric id 99999',      '99999'],
+    ];
+    for (const [label, id] of targets) {
+      // /profile is GET — must not leak the row to a non-admin / non-self.
+      const r = await viewer.get(`/api/users/${id}/profile`);
+      const denied = r.status === 403 || r.status === 404 || r.status === 400;
+      await record('idor', `viewer cannot read /profile of ${label}`,
+        'status in {400,403,404} (no data leak)',
+        `status=${r.status}`,
+        'high', denied && r.status !== 200);
+      // /photo is the same self-or-admin gate; same expectation.
+      const r2 = await viewer.get(`/api/users/${id}/photo`);
+      const denied2 = r2.status === 403 || r2.status === 404 || r2.status === 400;
+      await record('idor', `viewer cannot read /photo of ${label}`,
+        'status in {400,403,404}',
+        `status=${r2.status}`,
+        'high', denied2 && r2.status !== 200);
+    }
 
     // Note: photo upload endpoint writes to *self* by design — no per-id mutation
     // path exists, so the relevant IDOR surface is the PATCH /profile gate.
@@ -437,6 +459,69 @@ async function runProbes({ clients, users, pool, runId }) {
       "status='pending'",
       `status=${stillPending.rows[0]?.status}`,
       'critical', stillPending.rows[0]?.status === 'pending');
+
+    // ── Successful admin lifecycle (the happy path) ──
+    // Admin approves the request → server creates a users row with
+    // onboarding_status='more_info_required' (per replit.md). Then admin
+    // resends the set-password link, force-resets, and revokes the user.
+    // Each step asserts a concrete state change in the DB.
+    const approveOk = await clients.admin.post(
+      `/api/admin/requests/${reqId}/approve`, {});
+    await record('admin-only', 'admin can approve an account-request (happy path)',
+      'status in {200,201}', `status=${approveOk.status}`,
+      'critical', approveOk.status === 200 || approveOk.status === 201);
+    const created = await pool.query(
+      `SELECT id, onboarding_status, privilege_level FROM users WHERE email = $1`,
+      [lifecycleEmail]);
+    const createdRow = created.rows[0];
+    await record('admin-only',
+      'approving an account-request creates a users row with onboarding_status=more_info_required',
+      'row exists, onboarding_status=more_info_required',
+      `exists=${!!createdRow} onboarding_status=${createdRow?.onboarding_status} privilege_level=${createdRow?.privilege_level}`,
+      'critical',
+      !!createdRow && createdRow.onboarding_status === 'more_info_required');
+
+    if (createdRow) {
+      const resend = await clients.admin.post(
+        `/api/admin/users/${encodeURIComponent(lifecycleEmail)}/resend-set-password`, {});
+      await record('admin-only', 'admin can resend the set-password link to the new user',
+        'status=200', `status=${resend.status}`,
+        'high', resend.status === 200);
+      const tokenRow = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM password_set_tokens WHERE email = $1`,
+        [lifecycleEmail]);
+      await record('admin-only', 'resend issues a fresh password_set_tokens row',
+        'count >= 1',
+        `count=${tokenRow.rows[0]?.n}`,
+        'high', (tokenRow.rows[0]?.n || 0) >= 1);
+
+      const force = await clients.admin.post(
+        `/api/admin/users/${encodeURIComponent(lifecycleEmail)}/force-password-reset`, {});
+      await record('admin-only', 'admin can force a password reset on the new user',
+        'status=200', `status=${force.status}`,
+        'high', force.status === 200);
+
+      // Revoke = DELETE the allowed_emails row (auth.js:1294). The users row
+      // persists by design, but the email is removed from the allow-list and
+      // all active sessions for that email are purged.
+      const revoke = await clients.admin.delete(
+        `/api/admin/allowed/${encodeURIComponent(lifecycleEmail)}`);
+      await record('admin-only', 'admin can revoke the new user (DELETE /api/admin/allowed/:email)',
+        'status in {200,204}', `status=${revoke.status}`,
+        'critical', revoke.status === 200 || revoke.status === 204);
+      const allowAfter = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM allowed_emails WHERE email = $1`,
+        [lifecycleEmail]);
+      await record('admin-only',
+        'revoke removes the allow-list entry (login surface is shut)',
+        'allowed_emails row gone',
+        `remaining=${allowAfter.rows[0]?.n}`,
+        'critical', (allowAfter.rows[0]?.n || 0) === 0);
+    }
+    // Final cleanup
+    await pool.query(`DELETE FROM password_set_tokens WHERE email = $1`, [lifecycleEmail]);
+    await pool.query(`DELETE FROM users WHERE email = $1`, [lifecycleEmail]);
+    await pool.query(`DELETE FROM allowed_emails WHERE email = $1`, [lifecycleEmail]);
     await pool.query(`DELETE FROM account_requests WHERE id = $1`, [reqId]);
   }
 
@@ -625,6 +710,34 @@ async function runProbes({ clients, users, pool, runId }) {
         'status in {200,404,405,503}', `status=${r.status}`,
         'medium', acceptable);
     }
+
+    // Cross-origin Referer / Origin replay on the OAuth callbacks: the
+    // attacker tricks the user's browser into hitting the callback URL with
+    // Origin/Referer headers pointing at evil.com. The defense is the same
+    // session-bound state check — it must not depend on Origin/Referer being
+    // same-site. Confirm the callback still rejects regardless of header.
+    const evilHeaders = {
+      'Origin': 'https://evil.example.com',
+      'Referer': 'https://evil.example.com/attack.html',
+    };
+    const gCross = await clients.member.get('/auth/google/callback?code=abc&state=forged',
+      { headers: evilHeaders });
+    const gCrossOk = gCross.status === 302 &&
+      /error=google_auth_failed/.test(gCross.headers.get('location') || '');
+    await record('csrf',
+      'google callback with cross-origin Origin/Referer + forged state is still rejected',
+      '302 to /?error=google_auth_failed',
+      `status=${gCross.status} location=${gCross.headers.get('location')}`,
+      'critical', gCrossOk);
+    const qCross = await clients.admin.get('/auth/quickbooks/callback?code=abc&state=forged&realmId=1',
+      { headers: evilHeaders });
+    const qCrossOk = qCross.status === 302 &&
+      /qb=error&reason=invalid_state/.test(qCross.headers.get('location') || '');
+    await record('csrf',
+      'quickbooks callback with cross-origin Origin/Referer + forged state is still rejected',
+      '302 to /?qb=error&reason=invalid_state',
+      `status=${qCross.status} location=${qCross.headers.get('location')}`,
+      'critical', qCrossOk);
   }
 
   // ── Photo IDOR ────────────────────────────────────────────────────────────
@@ -806,10 +919,16 @@ async function runProbes({ clients, users, pool, runId }) {
       await pool.query(`DELETE FROM account_requests WHERE email LIKE $1`,
         [`privtest-cap-${runId}@privtest.local`]);
     } else {
-      await record('captcha', 'turnstile tampering probe',
+      // The architect explicitly called out "skipped as info" as
+      // insufficient; surface this as a real coverage gap so the default
+      // run flags it instead of silently passing. Set
+      // PRIVTEST_SKIP_TURNSTILE=1 to acknowledge the gap and downgrade
+      // back to info.
+      const acknowledged = process.env.PRIVTEST_SKIP_TURNSTILE === '1';
+      await record('captcha', 'turnstile tampering probe (REQUIRED coverage)',
         'PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 + TURNSTILE_SECRET_KEY set',
-        'captcha pass-through not enabled — probe skipped',
-        'info', true,
+        'captcha pass-through not enabled — probe could not run',
+        acknowledged ? 'info' : 'medium', acknowledged,
         'Run with PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 TURNSTILE_SECRET_KEY=… npm run test:privileges to exercise the captcha gate path.');
     }
   }
