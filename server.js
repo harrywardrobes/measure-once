@@ -706,12 +706,77 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
       return res.status(400).json({ error: 'No valid properties to update.' });
     }
     const safeContactId = encodeURIComponent(contactId);
-    const r = await axios.patch(
-      `${HS}/crm/v3/objects/contacts/${safeContactId}`,
-      { properties },
-      { headers: hsHeaders() }
-    );
-    res.json(r.data);
+
+    // Retry transient HubSpot failures (network errors, 429, 5xx) with small bounded backoff.
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const isTransient = err => {
+      const s = err.response?.status;
+      if (s === 429) return true;
+      if (s && s >= 500 && s < 600) return true;
+      if (!err.response) return true; // network / timeout
+      return false;
+    };
+
+    let lastErr;
+    let patchResp;
+    const delays = [250, 750, 1500];
+    for (let attempt = 0; attempt <= delays.length; attempt++) {
+      try {
+        patchResp = await axios.patch(
+          `${HS}/crm/v3/objects/contacts/${safeContactId}`,
+          { properties },
+          { headers: hsHeaders() }
+        );
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < delays.length && isTransient(err)) {
+          await sleep(delays[attempt]);
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    // If lead status was set, verify by reading back from HubSpot.
+    if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status')) {
+      const expected = properties.hs_lead_status || '';
+      let verifyResp;
+      let verifyErr;
+      for (let attempt = 0; attempt <= delays.length; attempt++) {
+        try {
+          verifyResp = await axios.get(
+            `${HS}/crm/v3/objects/contacts/${safeContactId}`,
+            { headers: hsHeaders(), params: { properties: 'hs_lead_status' } }
+          );
+          verifyErr = null;
+          break;
+        } catch (err) {
+          verifyErr = err;
+          if (attempt < delays.length && isTransient(err)) {
+            await sleep(delays[attempt]);
+            continue;
+          }
+          break;
+        }
+      }
+      if (verifyErr) {
+        return res.status(502).json({
+          error: 'HubSpot accepted the update but could not be re-read to confirm. Please try again.',
+          code: 'HUBSPOT_VERIFY_FAILED'
+        });
+      }
+      const actual = verifyResp.data?.properties?.hs_lead_status || '';
+      if (actual !== expected) {
+        return res.status(502).json({
+          error: 'HubSpot did not save the new lead status. Please try again.',
+          code: 'HUBSPOT_VERIFY_FAILED'
+        });
+      }
+    }
+
+    res.json(patchResp.data);
   } catch (e) {
     const status = e.response?.status;
     if (status === 401 || status === 403) {

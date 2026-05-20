@@ -430,7 +430,7 @@ async function quickSetRoomStatus(contactId, roomIdx, newStatus) {
 
 // ── Lead Status Picker ────────────────────────────────────────────────────────
 
-function openLeadStatusPicker(event, contactId) {
+async function openLeadStatusPicker(event, contactId) {
   event.stopPropagation();
   if (isViewerOnly()) return;
   closeCardPicker();
@@ -440,7 +440,50 @@ function openLeadStatusPicker(event, contactId) {
   popup.className = 'card-picker-popup';
   const top = Math.min(rect.bottom + 4, window.innerHeight - 300);
   popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
-  const currentLeadStatus = state.contacts.find(c => c.id === contactId)?.properties?.hs_lead_status || '';
+
+  const stalePrevStatus = state.contacts.find(c => c.id === contactId)?.properties?.hs_lead_status || '';
+
+  // Loading state while we refresh from HubSpot so the user can't pick a stale option.
+  const loadingEl = document.createElement('div');
+  loadingEl.style.cssText = 'padding:12px 16px;color:#64748b;font-size:13px;';
+  loadingEl.textContent = 'Loading current status…';
+  popup.appendChild(loadingEl);
+  document.body.appendChild(popup);
+  // Defer dismiss handler until after the picker is fully built, so loading-state
+  // clicks don't consume the once-listener before the real picker appears.
+
+  let currentLeadStatus = stalePrevStatus;
+  let driftedTo = null;
+  try {
+    const fresh = await GET(`/api/contacts/${contactId}`);
+    const freshStatus = fresh?.properties?.hs_lead_status || '';
+    // Don't override the UI value if an optimistic change is mid-flight for this contact.
+    const pending = state.pendingLeadStatus && Object.prototype.hasOwnProperty.call(state.pendingLeadStatus, contactId);
+    if (!pending) {
+      if (freshStatus !== stalePrevStatus) driftedTo = freshStatus;
+      currentLeadStatus = freshStatus;
+      if (typeof _mergeContactIntoState === 'function') {
+        _mergeContactIntoState(fresh);
+      }
+      _syncLeadStatusCache(contactId, freshStatus);
+      populateLeadStatusFilter();
+      renderCustomerList();
+      if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+    }
+  } catch (e) {
+    showToast('Could not refresh lead status from HubSpot — showing last known value.', true);
+  }
+
+  // User may have closed the popup (clicked elsewhere) while loading.
+  if (!document.body.contains(popup)) {
+    if (driftedTo !== null) {
+      const newLabel = driftedTo ? (LEAD_STATUS_OPTIONS.find(o => o.value === driftedTo)?.label || driftedTo) : 'cleared';
+      showToast(`Lead status was updated in HubSpot to ${newLabel}`);
+    }
+    return;
+  }
+
+  popup.innerHTML = '';
   const clearBtn = document.createElement('button');
   clearBtn.className = 'card-picker-opt card-picker-opt--clear' + (currentLeadStatus ? '' : ' card-picker-opt--disabled');
   clearBtn.textContent = '✕ Clear status';
@@ -453,14 +496,19 @@ function openLeadStatusPicker(event, contactId) {
 
   LEAD_STATUS_OPTIONS.forEach(({ value, label }) => {
     const btn = document.createElement('button');
-    btn.className = 'card-picker-opt';
+    const isActive = value === currentLeadStatus;
+    btn.className = 'card-picker-opt' + (isActive ? ' card-picker-opt--active' : '');
     btn.dataset.leadStatus = value;
     btn.textContent = label;
     btn.addEventListener('click', () => quickSetLeadStatus(contactId, value));
     popup.appendChild(btn);
   });
-  document.body.appendChild(popup);
   setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
+
+  if (driftedTo !== null) {
+    const newLabel = driftedTo ? (LEAD_STATUS_OPTIONS.find(o => o.value === driftedTo)?.label || driftedTo) : 'cleared';
+    showToast(`Lead status was updated in HubSpot to ${newLabel}`);
+  }
 }
 
 function _syncLeadStatusCache(contactId, status) {
@@ -529,6 +577,8 @@ async function quickSetLeadStatus(contactId, newStatus) {
       showToast('Could not update lead status — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
     } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
       showToast('Could not update lead status — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else if (e.code === 'HUBSPOT_VERIFY_FAILED') {
+      showToast("Lead status didn't save in HubSpot — please try again.", true);
     } else {
       showToast('Failed to update lead status', true);
     }
