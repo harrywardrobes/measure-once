@@ -19,12 +19,24 @@ const ROUTES = [
   { method: 'GET',    path: '/api/check-email?email=foo%40bar.com', level: 'public' },
   { method: 'GET',    path: '/api/set-password/validate?token=zzz', level: 'public' },
   { method: 'GET',    path: '/auth/status',                   level: 'public' },
+  // Authentication entry points: anyone may POST; the handler decides on
+  // payload validity. The matrix only asserts the *gate* doesn't 401/403
+  // them (junk body ⇒ 400/422 from validator, which is fine for `public`).
+  { method: 'POST',   path: '/api/login',                     level: 'public', body: { email: 'matrix-noop@privtest.local', password: 'x' } },
+  { method: 'POST',   path: '/api/request-access',            level: 'public', body: { name: 'matrix', email: 'matrix-noop@privtest.local' } },
+  { method: 'POST',   path: '/api/forgot-password',           level: 'public', body: { email: 'matrix-noop@privtest.local' } },
+  { method: 'POST',   path: '/api/set-password',              level: 'public', body: { token: 'invalid', password: 'WhateverStrong!9z' } },
 
   // ── auth-level (`isAuthenticated` only) ───────────────────────────────────
   { method: 'GET',    path: '/api/auth/user',                 level: 'auth' },
-  // POST /api/logout intentionally excluded — it destroys the session and
-  // would 401 every subsequent matrix row. It is covered by the sign-in
-  // probe (logout invalidates session) instead.
+  // /api/change-password also lives behind isAuthenticated + loginLimiter.
+  // Junk body → 400; the gate is what we're asserting here. (Per-role
+  // re-login happens at the bottom of the loop, so the rate-limit cap of
+  // 20/15min is well clear.)
+  // `acceptsHandler401: true` lets the classifier accept 401 from the
+  // handler (wrong currentPassword) for authenticated actors instead of
+  // treating it as an unexpected denial from the gate.
+  { method: 'POST',   path: '/api/change-password',           level: 'auth',    body: { currentPassword: 'x', newPassword: 'WhateverStrong!9z' }, acceptsHandler401: true },
   { method: 'GET',    path: '/api/onboarding/me',             level: 'auth' },
   { method: 'POST',   path: '/api/onboarding/complete',       level: 'auth',    body: {} },
   { method: 'GET',    path: '/api/job-roles',                 level: 'auth' },
@@ -128,13 +140,23 @@ const ROUTES = [
   { method: 'POST',   path: '/auth/quickbooks/disconnect',                     level: 'admin', body: {} },
   { method: 'POST',   path: '/api/quickbooks/invoice/0',                       level: 'admin', body: {}, needsQB: true },
   { method: 'POST',   path: '/api/quickbooks/invoice/0/send',                  level: 'admin', body: {}, needsQB: true },
+
+  // ── Logout MUST be last per actor (it destroys the session). The run.js
+  // matrix loop is route-outer/actor-inner, so this row fires once per actor
+  // after every other route has already been measured. Subsequent matrix
+  // rows would 401, but there are no subsequent rows. Re-login for the
+  // adversarial probe block happens explicitly in probes.js.
+  { method: 'POST',   path: '/api/logout',                                     level: 'auth',  body: {}, isTerminal: true },
 ];
 
 function classifyOutcome({ requiredLevel, actorLevel, status, route, actorIsTargetUser }) {
-  // Public routes: anyone may hit them; only an explicit 401/403 from a gate
-  // would be a finding here. Everything else is a pass.
+  // Public routes: anyone may hit them; a gate-style 403 would be a finding.
+  // 401 is allowed here because auth-handler routes (/api/login,
+  // /api/change-password as it lives behind isAuthenticated wasn't going to
+  // hit this branch, but for /api/login the handler returns 401 on bad
+  // creds). Rate-limit 429 is also acceptable (loginLimiter / accessLimiter).
   if (requiredLevel === 'public') {
-    if (status === 401 || status === 403) return { ok: false, kind: 'public-route-blocked' };
+    if (status === 403) return { ok: false, kind: 'public-route-blocked' };
     return { ok: true, kind: 'public-as-expected' };
   }
 
@@ -171,7 +193,7 @@ function classifyOutcome({ requiredLevel, actorLevel, status, route, actorIsTarg
   if (shouldPass) {
     if (status === 403) return { ok: false, kind: 'unexpected-denial' };
     if (status === 401) {
-      return route?.needsGoogle || route?.needsHubspot || route?.needsQB
+      return route?.needsGoogle || route?.needsHubspot || route?.needsQB || route?.acceptsHandler401
         ? { ok: true, kind: 'handler-401-unverified' }
         : { ok: false, kind: 'unexpected-denial' };
     }

@@ -41,8 +41,10 @@ Run `DATABASE_URL_TEST=<disposable connection string> npm run test:privileges`
 to boot a dedicated test server (port 5050 by default, override with
 `PRIV_TEST_PORT`) against that isolated DB, seed four disposable users
 (`privtest-<role>-<runId>@privtest.local`) at each privilege level, exercise
-sign-in, the admin page, a 100-route capability matrix (every gate type ×
-five actors), the full adversarial probe checklist, and a headless Puppeteer
+sign-in, the admin page, a 106-route capability matrix (every registered
+`/api/*` route — including `/api/login`, `/api/logout`, `/api/request-access`,
+`/api/forgot-password`, `/api/set-password`, `/api/change-password` —
+× five actors), the full adversarial probe checklist, and a headless Puppeteer
 UI smoke (`/login` → `/` → `/admin` per role with screenshot capture into
 `test-results/screenshots/`). The harness refuses to run against the shared
 `DATABASE_URL` unless you also export `PRIVTEST_ALLOW_SHARED_DB=1` — synthetic
@@ -60,9 +62,12 @@ gating (Google + QuickBooks: stale / cross-user / missing state), CSRF
 method-confusion, XSS round-trip through `/api/admin/requests` and the
 allow-list note field, mid-session privilege downgrade, rate-limit hammering
 of `/api/login`, `/api/request-access`, **and** `/api/forgot-password`, plus
-an opt-in Turnstile tampering matrix (no-token / empty / replayed / 10KB /
+a REQUIRED Turnstile tampering matrix (no-token / empty / replayed / 10KB /
 literal dummy) across `/api/login`, `/api/request-access`,
-`/api/forgot-password`.
+`/api/forgot-password` — when prerequisites are missing the run records a
+hard failing finding (no acknowledgement escape; run with
+`PRIVTEST_USE_TURNSTILE_SECRET_KEY=1` + a real `TURNSTILE_SECRET_KEY` to
+clear it).
 
 The harness strips `TURNSTILE_SECRET_KEY` / `HUBSPOT_TOKEN` / `SMTP_*` /
 `GOOGLE_*` / `QB_*` so it runs without third-party credentials. Opt any one

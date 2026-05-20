@@ -130,6 +130,12 @@ async function main() {
     const matrixInconclusive = matrixResults.filter(m => m.inconclusive).length;
     console.log(`    matrix: ${matrixResults.length - matrixFails.length}/${matrixResults.length} ok (${matrixInconclusive} inconclusive — see report)`);
 
+    // The matrix included POST /api/logout as the final row per actor, which
+    // destroyed every authenticated session. Re-login each role before the
+    // adversarial probe block so probes start from a fresh authenticated
+    // baseline.
+    for (const r of ROLES) clients[r] = await login(users[r].email, users[r].password);
+
     // ── Adversarial probes ───────────────────────────────────────────────
     console.log(`  Running adversarial probes…`);
     probeResults = await runProbes({ clients, users, pool, runId });

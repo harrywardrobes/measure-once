@@ -664,6 +664,35 @@ async function runProbes({ clients, users, pool, runId }) {
         'info', true,
         'Re-run with QB_CLIENT_ID to exercise the cross-user state path.');
     }
+
+    // Google cross-user state replay — mirror of the QB probe. Member
+    // initiates /auth/google → captures their state from the redirect →
+    // viewer replays the callback with that state. The viewer's session
+    // has no saved googleOAuthState, so the callback must redirect to
+    // /?error=google_auth_failed without performing the token exchange.
+    const gInit = await clients.member.get('/auth/google');
+    let gLeakedState = null;
+    try {
+      const loc = gInit.headers.get('location') || '';
+      const u   = new URL(loc, 'http://x');
+      gLeakedState = u.searchParams.get('state');
+    } catch {}
+    if (gLeakedState) {
+      const crossUser = await clients.viewer.get(
+        `/auth/google/callback?code=abc&state=${encodeURIComponent(gLeakedState)}`);
+      const blocked = crossUser.status === 302 &&
+        /error=google_auth_failed/.test(crossUser.headers.get('location') || '');
+      await record('oauth', "google state from another user's session cannot be replayed",
+        '302 to /?error=google_auth_failed',
+        `status=${crossUser.status} location=${crossUser.headers.get('location')}`,
+        'critical', blocked);
+    } else {
+      await record('oauth', "google state from another user's session cannot be replayed",
+        'state captured from member /auth/google redirect',
+        `init-status=${gInit.status} (GOOGLE_CLIENT_ID not set, no state to leak)`,
+        'info', true,
+        'Re-run with GOOGLE_CLIENT_ID to exercise the cross-user google state path.');
+    }
   }
 
   // ── CSRF on mutating GETs ──────────────────────────────────────────────────
@@ -919,16 +948,14 @@ async function runProbes({ clients, users, pool, runId }) {
       await pool.query(`DELETE FROM account_requests WHERE email LIKE $1`,
         [`privtest-cap-${runId}@privtest.local`]);
     } else {
-      // The architect explicitly called out "skipped as info" as
-      // insufficient; surface this as a real coverage gap so the default
-      // run flags it instead of silently passing. Set
-      // PRIVTEST_SKIP_TURNSTILE=1 to acknowledge the gap and downgrade
-      // back to info.
-      const acknowledged = process.env.PRIVTEST_SKIP_TURNSTILE === '1';
+      // REQUIRED probe — when the captcha gate cannot be exercised, this
+      // is recorded as a hard failing finding (no acknowledgement escape).
+      // The default `npm run test:privileges` will exit non-zero until
+      // the captcha pass-through path runs end-to-end.
       await record('captcha', 'turnstile tampering probe (REQUIRED coverage)',
-        'PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 + TURNSTILE_SECRET_KEY set',
-        'captcha pass-through not enabled — probe could not run',
-        acknowledged ? 'info' : 'medium', acknowledged,
+        'captcha tampering matrix executed against 3 endpoints × 5 payloads',
+        'captcha pass-through not enabled — probe could NOT be executed',
+        'medium', false,
         'Run with PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 TURNSTILE_SECRET_KEY=… npm run test:privileges to exercise the captcha gate path.');
     }
   }
