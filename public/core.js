@@ -417,9 +417,12 @@ function renderAuthStatus() {
   if (!user) { el.innerHTML = ''; return; }
   const initials = [user.first_name, user.last_name]
     .filter(Boolean).map(s => s[0]).join('').toUpperCase() || '?';
-  const photoSrc = user.has_custom_photo
+  let photoSrc = user.has_custom_photo
     ? `/api/users/${encodeURIComponent(user.id)}/photo`
     : (user.profile_image_url || null);
+  if (photoSrc && user.photo_v) {
+    photoSrc += (photoSrc.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(user.photo_v);
+  }
   el.innerHTML = photoSrc
     ? `<a href="/profile" class="header-avatar-btn" title="Profile" aria-label="Open profile">
          <img src="${escHtml(photoSrc)}" alt="" class="header-avatar-img">

@@ -25,9 +25,12 @@ async function renderProfileTab() {
   const levelLabel  = levelLabels[profile.privilege_level] || 'Member';
   const isAdmin = user.isAdmin;
 
-  const photoSrc = profile.has_custom_photo
+  let photoSrc = profile.has_custom_photo
     ? `/api/users/${encodeURIComponent(profile.id)}/photo`
     : (profile.profile_image_url || null);
+  if (photoSrc && user.photo_v && profile.id === user.id) {
+    photoSrc += (photoSrc.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(user.photo_v);
+  }
 
   el.innerHTML = `
     <!-- Back button -->

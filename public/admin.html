@@ -656,14 +656,19 @@
   }
 
   /* ── Avatar ── */
+  function withPhotoVersion(url, u) {
+    if (!url || !_me || u.id !== _me.id || !_me.photo_v) return url;
+    return url + (url.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(_me.photo_v);
+  }
+
   function avatarEl(u) {
     const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '?';
     const initials = name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
     if (u.has_custom_photo) {
-      return `<img class="avatar" src="/api/users/${esc(u.id)}/photo" alt="" loading="lazy">`;
+      return `<img class="avatar" src="${esc(withPhotoVersion(`/api/users/${u.id}/photo`, u))}" alt="" loading="lazy">`;
     }
     if (u.profile_image_url) {
-      return `<img class="avatar" src="${esc(u.profile_image_url)}" alt="" loading="lazy">`;
+      return `<img class="avatar" src="${esc(withPhotoVersion(u.profile_image_url, u))}" alt="" loading="lazy">`;
     }
     return `<span class="avatar-placeholder">${esc(initials)}</span>`;
   }
@@ -671,6 +676,7 @@
   /* ────────────────────────────────────────────────
      State
   ──────────────────────────────────────────────── */
+  let _me = null;
   let _users = [];
   let _jobRoles = [];
   let _requests = [];
@@ -1440,6 +1446,7 @@
       window.location.href = '/';
       return;
     }
+    _me = me;
 
     try {
       [_requests, _allowed, _users, _jobRoles, _capabilities, _auditLog, _photoRequests, _tradesAudit] = await Promise.all([

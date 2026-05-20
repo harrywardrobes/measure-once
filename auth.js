@@ -637,6 +637,9 @@ async function setupAuth(app) {
       }
       req.logIn(user, (loginErr) => {
         if (loginErr) return next(loginErr);
+        if (req.session) {
+          req.session.photoVersion = Date.now().toString(36);
+        }
         const returnTo = req.session?.returnTo || '/';
         delete req.session?.returnTo;
         res.redirect(returnTo);
@@ -710,7 +713,8 @@ async function setupAuth(app) {
     try {
       const user = await getUser(req.user.claims.sub);
       const isAdmin = isAdminEmail(req.user.claims.email);
-      res.json(user ? { ...user, isAdmin } : null);
+      const photo_v = req.session?.photoVersion || null;
+      res.json(user ? { ...user, isAdmin, photo_v } : null);
     } catch (e) {
       res.status(500).json({ message: 'Failed to fetch user' });
     }
