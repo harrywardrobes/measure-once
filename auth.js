@@ -12,6 +12,9 @@ const { Pool } = require('pg');
 const nodemailer = require('nodemailer');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const zxcvbn = require('zxcvbn');
+
+const MIN_PASSWORD_STRENGTH_SCORE = 2;
 
 const PASSWORD_SET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -581,12 +584,23 @@ async function ensureUserForApprovedEmail(client, email, meta) {
   return r.rows[0];
 }
 
-function validatePasswordPolicy(pw) {
+function validatePasswordPolicy(pw, userInputs = []) {
   if (typeof pw !== 'string') return 'Password is required.';
   if (pw.length < 8)  return 'Password must be at least 8 characters.';
   if (pw.length > 200) return 'Password is too long.';
   if (!/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) {
     return 'Password must contain both letters and numbers.';
+  }
+  const sanitizedInputs = (userInputs || [])
+    .filter(v => typeof v === 'string' && v.trim().length > 0);
+  // zxcvbn is capped at 100 chars for performance; the policy already rejects
+  // anything longer above.
+  const result = zxcvbn(pw, sanitizedInputs);
+  if (result.score < MIN_PASSWORD_STRENGTH_SCORE) {
+    const warning = result.feedback && result.feedback.warning;
+    return warning
+      ? `Password is too easy to guess: ${warning}`
+      : 'Password is too easy to guess — please choose something less common.';
   }
   return null;
 }
@@ -788,13 +802,14 @@ async function setupAuth(app) {
   app.post('/api/set-password', async (req, res) => {
     const token = (req.body?.token || '').toString();
     const password = req.body?.password;
-    const policyErr = validatePasswordPolicy(password);
-    if (policyErr) return res.status(400).json({ error: policyErr });
     const row = await lookupPasswordSetToken(token);
     if (!row || row.invalid) {
       return res.status(410).json({ error: 'This password link is no longer valid. Ask an admin to send a new one.' });
     }
     const lower = row.email.toLowerCase();
+    const localPart = lower.split('@')[0] || '';
+    const policyErr = validatePasswordPolicy(password, [lower, localPart, 'measure once', 'measureonce']);
+    if (policyErr) return res.status(400).json({ error: policyErr });
     if (!(await isEmailApproved(lower))) {
       return res.status(403).json({ error: 'This account is no longer approved. Contact an admin.' });
     }
