@@ -2500,6 +2500,8 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   width: 100%;
 }
 .inv-edit-input:focus { outline: none; border-color: var(--plum); }
+.inv-edit-input--dirty { border-color: var(--plum); background: #fdf7ff; box-shadow: inset 2px 0 0 var(--plum); }
+.inv-edit-input--dirty:focus { border-color: var(--plum); }
 .inv-edit-textarea { resize: vertical; min-height: 60px; }
 
 .inv-actions-btns { display: flex; gap: 8px; flex-wrap: wrap; }
