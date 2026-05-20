@@ -56,8 +56,28 @@
         <button id="login-submit" type="submit">Sign in</button>
       </form>
       <div class="footer">
+        <button class="toggle" type="button" onclick="showView('forgot')">Forgot password?</button>
+      </div>
+      <div class="footer">
         Don't have an account?
         <button class="toggle" type="button" onclick="showView('request')">Request access</button>
+      </div>
+    </div>
+
+    <div id="view-forgot" class="hidden">
+      <h1>Reset your password</h1>
+      <p class="sub">Enter your email and we'll send you a link to set a new password.</p>
+      <div id="forgot-ok"  class="ok"></div>
+      <div id="forgot-err" class="err"></div>
+      <form id="forgot-form">
+        <div class="field">
+          <label for="forgot-email">Email</label>
+          <input id="forgot-email" type="email" autocomplete="username" maxlength="254" required>
+        </div>
+        <button id="forgot-submit" type="submit">Send reset link</button>
+      </form>
+      <div class="footer">
+        <button class="toggle" type="button" onclick="showView('login')">Back to sign in</button>
       </div>
     </div>
 
@@ -88,6 +108,7 @@
   function showView(name) {
     document.getElementById('view-login').classList.toggle('hidden', name !== 'login');
     document.getElementById('view-request').classList.toggle('hidden', name !== 'request');
+    document.getElementById('view-forgot').classList.toggle('hidden', name !== 'forgot');
   }
   function show(el, msg) { el.textContent = msg; el.style.display = 'block'; }
   function hide(el) { el.style.display = 'none'; el.textContent = ''; }
@@ -129,6 +150,35 @@
     } catch (err) {
       show(errEl, 'Network error — please try again.');
       btn.disabled = false; btn.textContent = 'Sign in';
+    }
+  });
+
+  document.getElementById('forgot-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('forgot-err'); hide(errEl);
+    const okEl  = document.getElementById('forgot-ok');  hide(okEl);
+    const btn = document.getElementById('forgot-submit');
+    const email = document.getElementById('forgot-email').value.trim();
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      const r = await fetch('/api/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        show(okEl, "If that email is on the approved list, we've sent a password reset link. Check your inbox.");
+        document.getElementById('forgot-form').reset();
+      } else if (r.status === 429) {
+        show(errEl, 'Too many requests — please try again later.');
+      } else {
+        show(errEl, data.error || 'Could not send reset link.');
+      }
+    } catch {
+      show(errEl, 'Network error — please try again.');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Send reset link';
     }
   });
 

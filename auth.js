@@ -76,7 +76,7 @@ async function notifyAdminsOfAccessRequest(name, email, timestamp) {
   }
 }
 
-async function sendSetPasswordEmail(email, token, { resend = false } = {}) {
+async function sendSetPasswordEmail(email, token, { resend = false, reset = false } = {}) {
   const transport = createMailTransport();
   if (!transport) {
     console.warn(`  SMTP not configured — skipping set-password email for ${email}.`);
@@ -85,29 +85,40 @@ async function sendSetPasswordEmail(email, token, { resend = false } = {}) {
   }
   const link = `${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`;
   const from = process.env.SMTP_FROM || process.env.SMTP_USER;
-  const subject = resend
-    ? 'Set your Measure Once password (new link)'
-    : 'Welcome to Measure Once — set your password';
+  const subject = reset
+    ? 'Reset your Measure Once password'
+    : resend
+      ? 'Set your Measure Once password (new link)'
+      : 'Welcome to Measure Once — set your password';
+  const intro = reset
+    ? 'A password reset was requested for your Measure Once account.'
+    : resend
+      ? 'A new password setup link has been issued for your Measure Once account.'
+      : "You've been granted access to Measure Once.";
+  const introHtml = reset
+    ? 'A password reset was requested for your <strong>Measure Once</strong> account.'
+    : resend
+      ? 'A new password setup link has been issued for your Measure Once account.'
+      : "You've been granted access to <strong>Measure Once</strong>.";
+  const action = reset
+    ? 'Reset your password by clicking the link below (valid for 24 hours):'
+    : 'Set your password by clicking the link below (valid for 24 hours):';
   try {
     await transport.sendMail({
       from, to: email, subject,
       text: [
-        resend
-          ? 'A new password setup link has been issued for your Measure Once account.'
-          : "You've been granted access to Measure Once.",
+        intro,
         '',
-        'Set your password by clicking the link below (valid for 24 hours):',
+        action,
         `  ${link}`,
         '',
-        "If you didn't expect this email, you can safely ignore it.",
+        "If you didn't request this, you can safely ignore this email.",
       ].join('\n'),
       html: `
-        <p>${resend
-          ? 'A new password setup link has been issued for your Measure Once account.'
-          : "You've been granted access to <strong>Measure Once</strong>."}</p>
-        <p>Set your password by clicking the link below (valid for 24 hours):</p>
+        <p>${introHtml}</p>
+        <p>${action}</p>
         <p><a href="${link}">${link}</a></p>
-        <p>If you didn't expect this email, you can safely ignore it.</p>
+        <p>If you didn't request this, you can safely ignore this email.</p>
       `,
     });
     console.log(`  Set-password email sent to ${email}`);
@@ -733,6 +744,35 @@ async function setupAuth(app) {
     } catch (e) {
       console.error('request-access failed:', e.message);
       res.status(500).json({ error: 'Could not submit request. Please try again later.' });
+    }
+  });
+
+  // ── Public: forgot-password ────────────────────────────────────────────────
+  // Always returns 200 with the same response shape regardless of whether the
+  // email is on the approved list, so attackers can't use it to enumerate
+  // accounts. Rate-limited via accessRequestLimiter (same 5/hr/IP cap as the
+  // request-access endpoint).
+  app.post('/api/forgot-password', accessRequestLimiter, async (req, res) => {
+    const email = (req.body?.email || '').trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Please provide a valid email address.' });
+    }
+    try {
+      if (await isEmailApproved(email)) {
+        try {
+          const token = await issuePasswordSetToken(email);
+          await sendSetPasswordEmail(email, token, { reset: true });
+          console.log(`  Password reset link issued for ${email}`);
+        } catch (mailErr) {
+          console.error('  Failed to issue/send password reset email:', mailErr.message);
+        }
+      } else {
+        console.log(`  Password reset requested for unknown email: ${email}`);
+      }
+      res.json({ ok: true });
+    } catch (e) {
+      console.error('forgot-password failed:', e.message);
+      res.json({ ok: true });
     }
   });
 
