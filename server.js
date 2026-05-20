@@ -4,7 +4,7 @@ const axios = require('axios').create({ timeout: 10000 });
 const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
-const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, userIdExists } = require('./auth');
+const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, userIdExists, isAdminEmail, pool } = require('./auth');
 const {
   hubspotMutationLimiter,
   gmailSendLimiter,
@@ -75,6 +75,10 @@ for (const [route, file] of Object.entries(PAGE_ROUTES)) {
 app.get('/customers/:id', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'customer-detail.html'));
 });
+
+// Canonicalise the admin URL: /admin.html → /admin so the protected route
+// below is the single entry point (and static can't serve the page directly).
+app.get('/admin.html', (req, res) => res.redirect(301, '/admin'));
 
 app.use(express.static(path.join(__dirname, 'public')));
 installSession(app);
@@ -1600,7 +1604,51 @@ async function ensureTradesTable() {
   }
 }
 
-app.get('/admin', isAuthenticated, requireAdmin, (_req, res) => {
+// Admin page: handle auth/authorization with page-friendly responses so users
+// see a redirect to login or a friendly "no access" page instead of raw JSON
+// or a confusing 404.
+app.get('/admin', async (req, res) => {
+  const isAuthed = req.isAuthenticated && req.isAuthenticated();
+  if (!isAuthed || !req.user?.claims) {
+    return res.redirect('/api/login');
+  }
+  const email = req.user.claims.email;
+  const userId = req.user.claims.sub;
+  let admin = false;
+  if (email && isAdminEmail(email)) {
+    admin = true;
+  } else if (userId) {
+    try {
+      const r = await pool.query('SELECT privilege_level FROM users WHERE id = $1', [userId]);
+      admin = r.rows[0]?.privilege_level === 'admin';
+    } catch (e) {
+      console.error('GET /admin admin check failed:', e);
+    }
+  }
+  if (!admin) {
+    return res.status(403).send(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Access denied · Measure Once</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         background: #f8f7f4; color: #141413; margin: 0;
+         min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .card { background: #fff; border: 1px solid #e7e5e0; border-radius: 12px;
+          max-width: 420px; width: 100%; padding: 32px; text-align: center;
+          box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+  h1 { font-size: 1.15rem; margin: 0 0 8px; }
+  p { color: #57534e; font-size: .9rem; margin: 0 0 20px; line-height: 1.5; }
+  a { display: inline-block; background: #3d0f7a; color: #fff; text-decoration: none;
+      padding: 9px 18px; border-radius: 6px; font-weight: 600; font-size: .88rem; }
+  a:hover { background: #2e0f5a; }
+</style></head>
+<body><div class="card">
+  <h1>Admin access required</h1>
+  <p>You're signed in, but your account doesn't have admin permissions. If you think this is a mistake, contact an admin.</p>
+  <a href="/profile">Back to your profile</a>
+</div></body></html>`);
+  }
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 

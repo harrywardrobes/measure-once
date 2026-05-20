@@ -1357,4 +1357,4 @@ const isAuthenticated = async (req, res, next) => {
   }
 };
 
-module.exports = { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail, userIdExists };
+module.exports = { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail, userIdExists, pool };
