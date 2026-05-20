@@ -6,25 +6,32 @@
   document.head.appendChild(s);
 }());
 
-// ── Cross-module stubs ────────────────────────────────────────────────────────
-// No-ops so shared modules can call these safely on pages that don't load the
-// module containing the real implementation. The later function declaration
-// wins in global scope, so page modules simply redeclare to override.
+// ── Cross-module dispatchers ──────────────────────────────────────────────────
+// Each shared function is a stable dispatcher that forwards to a registered
+// implementation (or a no-op when the owning module isn't loaded). Page modules
+// call the matching register*() function instead of re-declaring the global,
+// so script load order no longer matters.
 
-// workflow-core.js calls these unconditionally (lines ~427-431, ~358, ~386,
-// ~433); pages that load workflow-core.js but NOT sales.js (calendar, customers,
-// index, invoices, projects) need these no-ops to avoid ReferenceErrors.
-// Real implementations live in sales.js.
-function renderWorkflowHeader() {}
-function renderWorkflowStages() {}
-function renderRoomTabs() {}
-async function saveWorkflowData() {}
+// Sales-owned renderers (real impls in sales.js). Pages that load
+// workflow-core.js but NOT sales.js (calendar, customers, index, invoices,
+// projects) fall back to the no-op.
+let _workflowHeaderRenderer = function() {};
+function renderWorkflowHeader() { _workflowHeaderRenderer(); }
+function registerWorkflowHeaderRenderer(fn) { _workflowHeaderRenderer = fn; }
 
-// Renderer registry — page modules call registerCustomerListRenderer /
-// registerProjectsViewRenderer with their implementation instead of silently
-// re-declaring the global function.  The dispatcher below is stable from the
-// moment core.js loads, so call order across modules no longer matters.
-// Pages that load neither workflow.js nor sales.js keep the default no-op.
+let _workflowStagesRenderer = function() {};
+function renderWorkflowStages() { _workflowStagesRenderer(); }
+function registerWorkflowStagesRenderer(fn) { _workflowStagesRenderer = fn; }
+
+let _roomTabsRenderer = function() {};
+function renderRoomTabs() { _roomTabsRenderer(); }
+function registerRoomTabsRenderer(fn) { _roomTabsRenderer = fn; }
+
+let _workflowDataSaver = async function() {};
+async function saveWorkflowData() { return _workflowDataSaver(); }
+function registerWorkflowDataSaver(fn) { _workflowDataSaver = fn; }
+
+// Renderer registry for customer/projects views.
 let _customerListRenderer = function() {};
 function renderCustomerList() { _customerListRenderer(); }
 function registerCustomerListRenderer(fn) { _customerListRenderer = fn; }
@@ -33,23 +40,36 @@ let _projectsViewRenderer = function() {};
 function renderProjectsView() { _projectsViewRenderer(); }
 function registerProjectsViewRenderer(fn) { _projectsViewRenderer = fn; }
 
-// Workflow-core stubs — kept because bootstrap() and clearHeaderSearch() in
-// this file call them unconditionally; pages that don't load workflow-core.js
-// (e.g. /profile, /trades) need these no-ops to avoid ReferenceErrors.
-// Real implementations in workflow-core.js override these when that file loads.
-async function loadWorkflow() {}
-async function loadOpenLeads() {}
-async function loadWorkflowStages() {}
-function populateStageFilter() {}
-function filterDeals() {}
+// Workflow-core-owned loaders/filters (real impls in workflow-core.js). Pages
+// that don't load workflow-core.js (e.g. /profile, /trades) keep the no-ops.
+let _workflowLoader = async function() {};
+async function loadWorkflow() { return _workflowLoader(); }
+function registerWorkflowLoader(fn) { _workflowLoader = fn; }
+
+let _openLeadsLoader = async function() {};
+async function loadOpenLeads() { return _openLeadsLoader(); }
+function registerOpenLeadsLoader(fn) { _openLeadsLoader = fn; }
+
+let _workflowStagesLoader = async function() {};
+async function loadWorkflowStages() { return _workflowStagesLoader(); }
+function registerWorkflowStagesLoader(fn) { _workflowStagesLoader = fn; }
+
+let _stageFilterPopulator = function() {};
+function populateStageFilter() { _stageFilterPopulator(); }
+function registerStageFilterPopulator(fn) { _stageFilterPopulator = fn; }
+
+let _dealsFilter = function() {};
+function filterDeals(query) { _dealsFilter(query); }
+function registerDealsFilter(fn) { _dealsFilter = fn; }
 
 // Sales stubs — safe no-ops on pages that don't load sales.js
 function renderGoogleEmailSection() {}
 
-// loadQBInvoices() is called unconditionally in bootstrap() below; pages that
-// don't load invoices-core.js (calendar, profile, trades) need this no-op.
-// Real implementation in invoices-core.js overrides when that file loads.
-async function loadQBInvoices() {}
+// invoices-core-owned loader. Pages that don't load invoices-core.js
+// (calendar, profile, trades) keep the no-op.
+let _qbInvoicesLoader = async function() {};
+async function loadQBInvoices() { return _qbInvoicesLoader(); }
+function registerQBInvoicesLoader(fn) { _qbInvoicesLoader = fn; }
 function closeInvoicePanel() {
   document.getElementById('inv-panel')?.classList.remove('inv-panel-open');
   document.getElementById('inv-overlay')?.classList.add('hidden');

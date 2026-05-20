@@ -769,7 +769,8 @@ async function submitEmail() {
 }
 
 // ── Room Tabs ─────────────────────────────────────────────────────────────────
-function renderRoomTabs() {
+// Implementation registered with core.js via registerRoomTabsRenderer below.
+function _renderRoomTabsImpl() {
   const el = document.getElementById('room-tabs-section');
   if (!el) return;
 
@@ -831,7 +832,8 @@ function saveInstallDate(field, value) {
 }
 
 // ── Workflow Header ───────────────────────────────────────────────────────────
-function renderWorkflowHeader() {
+// Implementation registered with core.js via registerWorkflowHeaderRenderer below.
+function _renderWorkflowHeaderImpl() {
   const el = document.getElementById('workflow-header');
   if (!el) return;
 
@@ -902,7 +904,8 @@ function renderWorkflowHeader() {
 }
 
 // ── Workflow Stages ───────────────────────────────────────────────────────────
-function renderWorkflowStages() {
+// Implementation registered with core.js via registerWorkflowStagesRenderer below.
+function _renderWorkflowStagesImpl() {
   const el = document.getElementById('workflow-stages');
   if (!el || !state.workflow) return;
 
@@ -1071,7 +1074,8 @@ function moveBackToStage(stageKey) {
 }
 
 // ── Save Workflow Data ────────────────────────────────────────────────────────
-async function saveWorkflowData() {
+// Implementation registered with core.js via registerWorkflowDataSaver below.
+async function _saveWorkflowDataImpl() {
   if (isViewerOnly()) return;
   // Compute primary room's current stage + most recently completed substage
   const primary = state.allRooms[0];
@@ -1560,4 +1564,10 @@ function renderWorkflowInvoices() {
     </div>
   `;
 }
+
+// ── Register implementations with core.js dispatchers ─────────────────────────
+registerRoomTabsRenderer(_renderRoomTabsImpl);
+registerWorkflowHeaderRenderer(_renderWorkflowHeaderImpl);
+registerWorkflowStagesRenderer(_renderWorkflowStagesImpl);
+registerWorkflowDataSaver(_saveWorkflowDataImpl);
 

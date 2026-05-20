@@ -150,7 +150,7 @@ function updateRoomCache() {
 }
 
 // ── Data loaders ──────────────────────────────────────────────────────────────
-async function loadWorkflow() {
+async function _loadWorkflowImpl() {
   const saved = await GET('/api/workflow');
   state.workflow = saved || DEFAULT_WORKFLOW;
   if (state.workflow?.stages) {
@@ -214,7 +214,7 @@ function _mergeContactIntoState(freshContact) {
   }
 }
 
-async function loadOpenLeads() {
+async function _loadOpenLeadsImpl() {
   const data = await GET('/api/open-leads');
   state.contacts = data.results || [];
   _reapplyPendingLeadStatuses();
@@ -251,14 +251,14 @@ function setContactsViewMode(mode) {
   }).catch(() => {});
 }
 
-async function loadWorkflowStages() {
+async function _loadWorkflowStagesImpl() {
   const data = await GET('/api/localdata/all').catch(() => ({}));
   for (const [contactId, rooms] of Object.entries(data || {})) {
     state.contactStageCache[contactId] = rooms;
   }
 }
 
-function populateStageFilter() {
+function _populateStageFilterImpl() {
   const sel = document.getElementById('stage-filter');
   if (!sel || !state.workflow?.stages) return;
   sel.innerHTML = `<option value="">All stages</option>` +
@@ -300,7 +300,7 @@ function populateLeadStatusFilter() {
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
-function filterDeals(query) {
+function _filterDealsImpl(query) {
   const q = (query || '').toLowerCase();
   state.filteredContacts = q
     ? state.contacts.filter(c =>
@@ -600,3 +600,10 @@ function showUnsavedChangesBar(onSave, onDiscard) {
     await onDiscard();
   });
 }
+
+// ── Register implementations with core.js dispatchers ─────────────────────────
+registerWorkflowLoader(_loadWorkflowImpl);
+registerOpenLeadsLoader(_loadOpenLeadsImpl);
+registerWorkflowStagesLoader(_loadWorkflowStagesImpl);
+registerStageFilterPopulator(_populateStageFilterImpl);
+registerDealsFilter(_filterDealsImpl);
