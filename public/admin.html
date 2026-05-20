@@ -328,47 +328,6 @@
     .chip-delete_job_role   { background: #fff7ed; color: #9a3412; }
     .chip-edit_permissions  { background: #ede0ff; color: #3d0f7a; }
 
-    /* ── Migration card ── */
-    .mig-card { margin-bottom: 20px; }
-    .mig-desc { font-size: .83rem; color: var(--ink-3); margin: 0 0 14px; line-height: 1.5; }
-    .mig-btns { display: flex; gap: 8px; flex-wrap: wrap; }
-    .mig-results { margin-top: 16px; display: none; }
-    .mig-results.show { display: block; }
-    .mig-section { margin-bottom: 14px; }
-    .mig-section-title {
-      font-size: .72rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: .06em; color: var(--ink-3); margin: 0 0 8px;
-    }
-    .mig-section-empty { font-size: .83rem; color: var(--ink-4); font-style: italic; }
-    .mig-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 4px 12px;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--stone-soft);
-      font-size: .83rem;
-      align-items: center;
-    }
-    .mig-row:last-child { border-bottom: none; }
-    .mig-company { font-weight: 600; color: var(--ink-1); }
-    .mig-change {
-      color: var(--ink-3); font-size: .78rem; grid-column: 1 / -1;
-      display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
-    }
-    .mig-old { text-decoration: line-through; color: var(--ink-4); }
-    .mig-arrow { color: var(--ink-4); flex-shrink: 0; }
-    .mig-new { color: #059669; font-weight: 600; }
-    .mig-warn { font-size: .8rem; color: #92400e; background: #fffbeb; border: 1px solid #fde68a;
-                border-radius: var(--radius-sm); padding: 10px 14px; margin-top: 10px; }
-    .mig-fix { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; grid-column: 1 / -1; margin-top: 4px; }
-    .mig-fix select { font-size: .78rem; padding: 3px 6px; border: 1px solid var(--stone-soft); border-radius: var(--radius-sm); background: #fff; color: var(--ink-1); flex: 1; min-width: 0; }
-    .mig-fix-btn { font-size: .75rem; padding: 3px 10px; border-radius: var(--radius-sm); border: 1px solid #d97706; background: #fffbeb; color: #92400e; cursor: pointer; white-space: nowrap; font-weight: 600; transition: background .15s; }
-    .mig-fix-btn:hover:not(:disabled) { background: #fef3c7; }
-    .mig-fix-btn:disabled { opacity: .5; cursor: default; }
-    .mig-fixed { font-size: .78rem; color: #059669; font-weight: 600; grid-column: 1 / -1; margin-top: 4px; }
-    .mig-success { font-size: .8rem; color: #166534; background: #dcfce7; border: 1px solid #86efac;
-                   border-radius: var(--radius-sm); padding: 10px 14px; margin-top: 10px; }
-
     /* ── Trades audit badge ── */
     .trades-audit-badge {
       display: inline-block;
@@ -708,10 +667,11 @@
   let _jobRoles = [];
   let _requests = [];
   let _allowed = [];
-  let _auditLog = [];
+  let _auditEntries = [];
+  let _auditOffset  = 0;
+  let _auditHasMore = false;
   let _photoRequests = [];
   let _capabilities = { levels: ['viewer','member','manager','admin'], features: [] };
-  let _tradesAudit = [];
   let _tradeSubmissions = [];
 
   /* ────────────────────────────────────────────────
@@ -1383,29 +1343,92 @@
     reject_profile_photo: 'Rejected profile photo',
   };
 
-  function renderAuditLog() {
-    const container = $('#audit-content');
-    if (!container) return;
-    if (_auditLog.length === 0) {
-      container.innerHTML = '<div class="table-empty" style="padding:28px 0;">No admin actions recorded yet.</div>';
-      return;
-    }
-    container.innerHTML = `<div class="audit-feed">${_auditLog.map(e => {
-      const label = ACTION_LABELS[e.action_type] || e.action_type;
-      const chip  = `<span class="audit-chip chip-${esc(e.action_type)}">${esc(e.action_type.replace(/_/g,' '))}</span>`;
-      const meta  = [
-        e.target_email ? `Target: ${esc(e.target_email)}` : '',
-        e.details      ? esc(e.details) : '',
-      ].filter(Boolean).join(' · ');
+  function auditEntryHtml(e) {
+    if (e.source === 'trade') {
+      const tradeChip = `<span class="audit-chip chip-trade-company">trade company</span>`;
+      const typeBadge = e.trade_type ? `<span class="trades-audit-badge">${esc(e.trade_type)}</span>` : '';
+      const by = e.actor_name ? ` · By <strong>${esc(e.actor_name)}</strong>` : '';
       return `
         <div class="audit-entry">
-          <div class="audit-time">${fmtDate(e.acted_at)}</div>
+          <div class="audit-time">${fmtDate(e.ts)}</div>
           <div class="audit-body">
-            <div class="audit-action">${chip}${esc(label)}</div>
-            <div class="audit-meta">By <strong>${esc(e.admin_email)}</strong>${meta ? ' · ' + meta : ''}</div>
+            <div class="audit-action">${tradeChip}${esc(e.company_name || '')} ${typeBadge}</div>
+            <div class="audit-meta">${esc(e.action || '')}${by}</div>
           </div>
         </div>`;
-    }).join('')}</div>`;
+    }
+    const label = ACTION_LABELS[e.action_type] || e.action_type;
+    const chip  = `<span class="audit-chip chip-${esc(e.action_type)}">${esc((e.action_type || '').replace(/_/g,' '))}</span>`;
+    const meta  = [
+      e.target_email ? `Target: ${esc(e.target_email)}` : '',
+      e.details      ? esc(e.details) : '',
+    ].filter(Boolean).join(' · ');
+    return `
+      <div class="audit-entry">
+        <div class="audit-time">${fmtDate(e.ts)}</div>
+        <div class="audit-body">
+          <div class="audit-action">${chip}${esc(label)}</div>
+          <div class="audit-meta">By <strong>${esc(e.admin_email || '')}</strong>${meta ? ' · ' + meta : ''}</div>
+        </div>
+      </div>`;
+  }
+
+  function renderUnifiedAuditLog(append) {
+    const feed = $('#audit-feed');
+    const btn  = $('#audit-load-more');
+    if (!feed) return;
+    if (!append && _auditEntries.length === 0) {
+      feed.innerHTML = '<div class="table-empty" style="padding:28px 0;">No audit entries recorded yet.</div>';
+      if (btn) btn.style.display = 'none';
+      return;
+    }
+    if (append) {
+      const frag = document.createDocumentFragment();
+      const tmp  = document.createElement('div');
+      const startIdx = _auditOffset - _auditEntries.slice(-(_auditEntries.length - (_auditOffset - 25 < 0 ? 0 : _auditOffset - 25))).length;
+      const newEntries = _auditEntries.slice(_auditOffset - 25 < 0 ? 0 : _auditOffset - 25);
+      newEntries.forEach(e => { tmp.innerHTML = auditEntryHtml(e); frag.appendChild(tmp.firstElementChild); });
+      feed.appendChild(frag);
+    } else {
+      feed.innerHTML = _auditEntries.map(auditEntryHtml).join('');
+    }
+    if (btn) btn.style.display = _auditHasMore ? '' : 'none';
+  }
+
+  async function loadMoreAudit() {
+    const btn = $('#audit-load-more');
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+    try {
+      const data = await api('GET', `/api/admin/audit-log-unified?limit=25&offset=${_auditOffset}`);
+      const newItems = data.items || [];
+      _auditEntries = _auditEntries.concat(newItems);
+      _auditHasMore = data.hasMore;
+      _auditOffset += newItems.length;
+      const feed = $('#audit-feed');
+      if (feed) {
+        const frag = document.createDocumentFragment();
+        const tmp  = document.createElement('div');
+        newItems.forEach(e => { tmp.innerHTML = auditEntryHtml(e); if (tmp.firstElementChild) frag.appendChild(tmp.firstElementChild); });
+        feed.appendChild(frag);
+      }
+      if (btn) { btn.disabled = false; btn.textContent = 'Load more'; btn.style.display = _auditHasMore ? '' : 'none'; }
+    } catch (e) {
+      toast(e.message, true);
+      if (btn) { btn.disabled = false; btn.textContent = 'Load more'; }
+    }
+  }
+
+  async function initAuditLog() {
+    _auditEntries = [];
+    _auditOffset  = 0;
+    _auditHasMore = false;
+    try {
+      const data = await api('GET', '/api/admin/audit-log-unified?limit=25&offset=0');
+      _auditEntries = data.items || [];
+      _auditHasMore = data.hasMore;
+      _auditOffset  = _auditEntries.length;
+    } catch {}
+    renderUnifiedAuditLog(false);
   }
 
   /* ────────────────────────────────────────────────
@@ -1421,8 +1444,7 @@
       toast('Approved — company is now live in the Trades directory');
       _tradeSubmissions = _tradeSubmissions.filter(s => s.id !== id);
       renderTradeSubmissions();
-      _tradesAudit = await api('GET', '/api/admin/trades-audit');
-      renderTradesAudit();
+      await initAuditLog();
     } catch (e) {
       toast(e.message, true);
       btns.forEach(b => { b.disabled = false; });
@@ -1446,37 +1468,6 @@
     }
   }
 
-  /* ────────────────────────────────────────────────
-     TRADES AUDIT TAB
-  ──────────────────────────────────────────────── */
-  function renderTradesAudit() {
-    const container = $('#trades-audit-content');
-    if (!container) return;
-    if (!_tradesAudit.length) {
-      container.innerHTML = '<div class="table-empty" style="padding:28px 0;">No change history recorded yet.</div>';
-      return;
-    }
-    const rows = _tradesAudit.map(r => {
-      return `<tr>
-        <td><strong>${esc(r.company_name)}</strong></td>
-        <td><span class="trades-audit-badge">${esc(r.trade_type)}</span></td>
-        <td>${esc(r.action)}</td>
-        <td>${r.actor_name ? esc(r.actor_name) : '<span style="color:var(--ink-4)">—</span>'}</td>
-        <td style="color:var(--ink-4);font-size:.8rem;white-space:nowrap;">${fmtDate(r.changed_at)}</td>
-      </tr>`;
-    }).join('');
-    container.innerHTML = `
-      <table>
-        <thead><tr>
-          <th>Company</th>
-          <th>Trade</th>
-          <th>Action</th>
-          <th>By</th>
-          <th>When</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
-  }
 
   /* ────────────────────────────────────────────────
      PHOTOS TAB
@@ -1508,21 +1499,18 @@
      Load & render
   ──────────────────────────────────────────────── */
   async function reload() {
-    [_requests, _allowed, _users, _auditLog, _photoRequests, _tradesAudit, _tradeSubmissions] = await Promise.all([
+    [_requests, _allowed, _users, _photoRequests, _tradeSubmissions] = await Promise.all([
       api('GET', '/api/admin/requests'),
       api('GET', '/api/admin/allowed'),
       api('GET', '/api/admin/users'),
-      api('GET', '/api/admin/audit-log'),
       api('GET', '/api/admin/photo-requests'),
-      api('GET', '/api/admin/trades-audit'),
       api('GET', '/api/admin/trades/submissions'),
     ]);
     renderTeam();
     renderRequests();
-    renderAuditLog();
     renderPhotoRequests();
-    renderTradesAudit();
     renderTradeSubmissions();
+    await initAuditLog();
   }
 
   let _hubspotStatusLoaded = false;
@@ -1570,15 +1558,13 @@
     _me = me;
 
     try {
-      [_requests, _allowed, _users, _jobRoles, _capabilities, _auditLog, _photoRequests, _tradesAudit, _tradeSubmissions] = await Promise.all([
+      [_requests, _allowed, _users, _jobRoles, _capabilities, _photoRequests, _tradeSubmissions] = await Promise.all([
         api('GET', '/api/admin/requests'),
         api('GET', '/api/admin/allowed'),
         api('GET', '/api/admin/users'),
         api('GET', '/api/admin/job-roles'),
         api('GET', '/api/admin/capabilities'),
-        api('GET', '/api/admin/audit-log'),
         api('GET', '/api/admin/photo-requests'),
-        api('GET', '/api/admin/trades-audit'),
         api('GET', '/api/admin/trades/submissions'),
       ]);
     } catch (e) {
@@ -1754,40 +1740,17 @@
         <div id="requests-content"></div>
       </div>
 
-      <!-- AUDIT LOG (admin actions + trades audit) -->
-      <div class="tab-panel" id="tab-auditlog">
-        <div class="card mig-card">
-          <div class="card-title" style="margin:0 0 6px;">Migrate legacy trade data</div>
-          <p class="mig-desc">
-            Companies added before the fixed category list was introduced may have freeform trade types
-            (e.g. "Electrician", "Painter &amp; Decorator") and comma-separated areas. This tool maps them
-            to the nearest fixed values so they appear correctly in filtered views.
-            Use <strong>Preview</strong> first to review what will change before committing.
-          </p>
-          <div class="mig-btns">
-            <button class="btn btn-ghost" id="mig-preview-btn" onclick="previewMigration()">Preview changes</button>
-            <button class="btn btn-primary" id="mig-run-btn" onclick="runMigration()" style="display:none;">Apply migration</button>
-          </div>
-          <div class="mig-results" id="mig-results"></div>
-        </div>
-
-        <div class="card" style="padding:0;overflow:hidden;">
-          <div style="padding:16px 20px 14px;border-bottom:1px solid var(--stone);">
-            <div class="card-title" style="margin:0 0 4px;">Trade companies change history <span class="card-count count-muted">(read-only)</span></div>
-            <p class="card-desc" style="margin:0;">Every recorded change to a trade company — action, actor, and timestamp.</p>
-          </div>
-          <div style="padding:0 4px;" id="trades-audit-content"></div>
-        </div>
-      </div>
-
-      <!-- AUDIT LOG -->
+      <!-- AUDIT LOG (unified: admin actions + trade company changes) -->
       <div class="tab-panel" id="tab-auditlog">
         <div class="card">
-          <div class="card-title">Admin audit log <span class="card-count count-muted">(read-only)</span></div>
+          <div class="card-title">Audit log <span class="card-count count-muted">(read-only)</span></div>
           <p class="card-desc" style="margin-bottom:16px;">
-            A time-ordered record of every admin action — who changed what, and when.
+            A unified, time-ordered record of admin actions and trade company changes.
           </p>
-          <div id="audit-content"></div>
+          <div class="audit-feed" id="audit-feed"></div>
+          <div style="text-align:center;margin-top:16px;">
+            <button class="btn btn-ghost" id="audit-load-more" onclick="loadMoreAudit()" style="display:none;">Load more</button>
+          </div>
         </div>
       </div>
 
@@ -1814,164 +1777,8 @@
     renderJobRoles();
     renderRequests();
     renderPhotoRequests();
-    renderTradesAudit();
-    renderAuditLog();
     renderTradeSubmissions();
-  }
-
-  /* ────────────────────────────────────────────────
-     TRADES MIGRATION
-  ──────────────────────────────────────────────── */
-  const MIG_CATEGORIES = [
-    'Carpentry / Roofing',
-    'Carpet Fitting',
-    'Electrical',
-    'Handyman Services',
-    'Internal Joinery',
-    'Landscaping / Outdoors',
-    'Painting + Decorating',
-    'Plasterer',
-    'Plumbing',
-  ];
-
-  let _migPreviewData = null;
-
-  function migRowHtml(r) {
-    const changes = [];
-    if (r.old_trade_type !== r.new_trade_type) {
-      changes.push(`<span class="mig-old">${esc(r.old_trade_type)}</span><span class="mig-arrow">→</span><span class="mig-new">${esc(r.new_trade_type)}</span>`);
-    }
-    const oldAreas = (r.old_areas || []).join(', ');
-    const newAreas = (r.new_areas || []).join(', ');
-    if (oldAreas !== newAreas) {
-      const oldDisplay = oldAreas || '(none)';
-      const newDisplay = newAreas || '(none)';
-      changes.push(`<span class="mig-old">${esc(oldDisplay)}</span><span class="mig-arrow">→</span><span class="mig-new">${esc(newDisplay)}</span>`);
-    }
-    return `<div class="mig-row">
-      <span class="mig-company">${esc(r.company_name)}</span>
-      ${changes.map(c => `<div class="mig-change">${c}</div>`).join('')}
-    </div>`;
-  }
-
-  function renderMigrationResults(data, applied) {
-    const el = $('#mig-results');
-    if (!el) return;
-    const { migrated = [], unmatched = [], skipped = [] } = data;
-
-    let html = '';
-
-    if (applied) {
-      if (migrated.length === 0) {
-        html += `<div class="mig-success">Nothing to migrate — all ${skipped.length} companies already use the fixed values.</div>`;
-      } else {
-        html += `<div class="mig-success">${migrated.length} ${migrated.length === 1 ? 'company' : 'companies'} updated successfully.${unmatched.length ? ` ${unmatched.length} could not be matched automatically — see below.` : ''}</div>`;
-      }
-    } else {
-      if (migrated.length === 0 && unmatched.length === 0) {
-        html += `<div class="mig-success">All ${skipped.length} companies already use the fixed values — no migration needed.</div>`;
-      }
-    }
-
-    if (migrated.length > 0) {
-      html += `<div class="mig-section">
-        <div class="mig-section-title">${applied ? 'Updated' : 'Will update'} (${migrated.length})</div>
-        ${migrated.map(migRowHtml).join('')}
-      </div>`;
-    }
-
-    if (unmatched.length > 0) {
-      const catOptions = MIG_CATEGORIES.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-      html += `<div class="mig-section">
-        <div class="mig-section-title">Could not match automatically (${unmatched.length})</div>
-        ${unmatched.map(r => `<div class="mig-row" id="mig-row-${r.id}">
-          <span class="mig-company">${esc(r.company_name)}</span>
-          <div class="mig-change"><span class="mig-old">${esc(r.trade_type)}</span></div>
-          <div class="mig-fix">
-            <select id="mig-cat-${r.id}" aria-label="Select category for ${esc(r.company_name)}">
-              <option value="">— pick a category —</option>
-              ${catOptions}
-            </select>
-            <button class="mig-fix-btn" onclick="quickFixTradeCategory(${r.id})">Fix</button>
-          </div>
-        </div>`).join('')}
-      </div>
-      <div class="mig-warn">These companies have trade types that couldn't be mapped automatically. Use the dropdowns above to assign the correct category inline, or open each company in the Trades directory.</div>`;
-    }
-
-    el.innerHTML = html;
-    el.classList.add('show');
-  }
-
-  async function quickFixTradeCategory(id) {
-    const select = $(`#mig-cat-${id}`);
-    const btn    = select && select.closest('.mig-fix') && select.closest('.mig-fix').querySelector('.mig-fix-btn');
-    if (!select || !select.value) { toast('Please select a category first.', true); return; }
-    const trade_type = select.value;
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-    if (select) select.disabled = true;
-    try {
-      await api('PATCH', `/api/trades/${id}/category`, { trade_type });
-      const row = $(`#mig-row-${id}`);
-      if (row) {
-        const fixDiv = row.querySelector('.mig-fix');
-        if (fixDiv) fixDiv.remove();
-        const oldSpan = row.querySelector('.mig-old');
-        if (oldSpan) {
-          const changeDiv = oldSpan.closest('.mig-change');
-          if (changeDiv) changeDiv.innerHTML = `<span class="mig-old">${esc(oldSpan.textContent)}</span><span class="mig-arrow">→</span><span class="mig-new">${esc(trade_type)}</span>`;
-        }
-        const fixed = document.createElement('div');
-        fixed.className = 'mig-fixed';
-        fixed.textContent = '✓ Category updated';
-        row.appendChild(fixed);
-      }
-      toast('Category updated');
-    } catch (e) {
-      toast(e.message, true);
-      if (btn) { btn.disabled = false; btn.textContent = 'Fix'; }
-      if (select) select.disabled = false;
-    }
-  }
-
-  async function previewMigration() {
-    const previewBtn = $('#mig-preview-btn');
-    const runBtn     = $('#mig-run-btn');
-    if (previewBtn) { previewBtn.disabled = true; previewBtn.textContent = 'Previewing…'; }
-    if (runBtn) runBtn.style.display = 'none';
-    _migPreviewData = null;
-    try {
-      const data = await api('POST', '/api/admin/trades/migrate', { dry_run: true });
-      _migPreviewData = data;
-      renderMigrationResults(data, false);
-      if ((data.migrated || []).length > 0 && runBtn) {
-        runBtn.style.display = '';
-      }
-    } catch (e) {
-      toast(e.message, true);
-    } finally {
-      if (previewBtn) { previewBtn.disabled = false; previewBtn.textContent = 'Preview changes'; }
-    }
-  }
-
-  async function runMigration() {
-    if (!confirm('Apply the migration? This will update the trade type and areas for each company shown in the preview.')) return;
-    const runBtn     = $('#mig-run-btn');
-    const previewBtn = $('#mig-preview-btn');
-    if (runBtn)     { runBtn.disabled = true; runBtn.textContent = 'Applying…'; }
-    if (previewBtn)  previewBtn.disabled = true;
-    try {
-      const data = await api('POST', '/api/admin/trades/migrate', { dry_run: false });
-      renderMigrationResults(data, true);
-      if (runBtn) runBtn.style.display = 'none';
-      _tradesAudit = await api('GET', '/api/admin/trades-audit');
-      renderTradesAudit();
-    } catch (e) {
-      toast(e.message, true);
-    } finally {
-      if (runBtn)     { runBtn.disabled = false; runBtn.textContent = 'Apply migration'; }
-      if (previewBtn) previewBtn.disabled = false;
-    }
+    await initAuditLog();
   }
 
   document.addEventListener('click', async function(e) {

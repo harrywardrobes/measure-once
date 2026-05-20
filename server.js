@@ -2029,6 +2029,63 @@ app.get('/api/admin/trades-audit', isAuthenticated, requireAdmin, async (req, re
   }
 });
 
+// ── Unified Audit Log (admin actions + trade company changes) ─────────────────
+app.get('/api/admin/audit-log-unified', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const limit  = Math.min(Math.max(parseInt(req.query.limit,  10) || 25, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const { rows } = await pool.query(`
+      SELECT
+        source,
+        ts,
+        admin_email,
+        action_type,
+        target_email,
+        details,
+        company_name,
+        trade_type,
+        action,
+        actor_name
+      FROM (
+        SELECT
+          'admin'      AS source,
+          acted_at     AS ts,
+          admin_email,
+          action_type,
+          target_email,
+          details,
+          NULL::text   AS company_name,
+          NULL::text   AS trade_type,
+          NULL::text   AS action,
+          NULL::text   AS actor_name
+        FROM admin_audit_log
+        UNION ALL
+        SELECT
+          'trade'      AS source,
+          tal.changed_at AS ts,
+          NULL::text   AS admin_email,
+          NULL::text   AS action_type,
+          NULL::text   AS target_email,
+          NULL::text   AS details,
+          tc.company_name,
+          tc.trade_type,
+          tal.action,
+          tal.actor_name
+        FROM trade_audit_log tal
+        JOIN trade_companies tc ON tc.id = tal.company_id
+      ) combined
+      ORDER BY ts DESC
+      LIMIT $1 OFFSET $2
+    `, [limit + 1, offset]);
+
+    const hasMore = rows.length > limit;
+    const items   = hasMore ? rows.slice(0, limit) : rows;
+    res.json({ items, hasMore });
+  } catch (e) {
+    res.status(500).json({ error: e.message, code: 'DB_ERROR' });
+  }
+});
+
 // ── Trade Companies Migration ─────────────────────────────────────────────────
 // Keyword → fixed category mappings (order matters: more specific first)
 const TRADE_TYPE_MAP = [

@@ -134,6 +134,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/admin/trades/submissions/0/approve',         level: 'admin', body: {} },
   { method: 'POST',   path: '/api/admin/trades/submissions/0/reject',          level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/trades-audit',                         level: 'admin' },
+  { method: 'GET',    path: '/api/admin/audit-log-unified',                    level: 'admin' },
   { method: 'POST',   path: '/api/admin/trades/migrate',                       level: 'admin', body: {} },
   { method: 'PATCH',  path: '/api/trades/0/category',                          level: 'admin', body: {} },
   { method: 'POST',   path: '/api/admin/users/foo@bar.com/resend-set-password',   level: 'admin', body: {} },
