@@ -674,6 +674,14 @@
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + id));
   }
 
+  /* ── Pending Requests badge (access requests + photo approvals + trade submissions) ── */
+  function updateRequestsBadge() {
+    const pendingCount = _requests.filter(r => r.status === 'pending').length;
+    const total = pendingCount + _photoRequests.length + _tradeSubmissions.length;
+    const badge = document.getElementById('req-tab-badge');
+    if (badge) badge.innerHTML = total > 0 ? `<span class="tab-badge">${total}</span>` : '';
+  }
+
   /* ── Avatar ── */
   function withPhotoVersion(url, u) {
     if (!url || !_me || u.id !== _me.id || !_me.photo_v) return url;
@@ -1125,10 +1133,7 @@
       </tr>`;
     };
 
-    const totalBadgeCount = pending.length + _photoRequests.length;
-    const pendingBadge = totalBadgeCount > 0 ? `<span class="tab-badge">${totalBadgeCount}</span>` : '';
-    const pendingTab = $('#req-tab-badge');
-    if (pendingTab) pendingTab.innerHTML = pendingBadge;
+    updateRequestsBadge();
 
     const container = $('#requests-content');
     if (container) {
@@ -1325,9 +1330,7 @@
     const container = $('#trade-submissions-content');
     if (!container) return;
 
-    const badge = $('#trade-sub-tab-badge');
-    if (badge) badge.innerHTML = _tradeSubmissions.length > 0
-      ? `<span class="tab-badge">${_tradeSubmissions.length}</span>` : '';
+    updateRequestsBadge();
 
     if (_tradeSubmissions.length === 0) {
       container.innerHTML = `
@@ -1458,12 +1461,7 @@
   function renderPhotoRequests() {
     const container = $('#requests-content');
     if (!container) return;
-    const reqBadge = document.getElementById('req-tab-badge');
-    if (reqBadge) {
-      const pendingCount = _requests.filter(r => r.status === 'pending').length;
-      const total = pendingCount + _photoRequests.length;
-      reqBadge.innerHTML = total > 0 ? `<span class="tab-badge">${total}</span>` : '';
-    }
+    updateRequestsBadge();
 
     const photoHtml = _photoRequests.length === 0
       ? `<div class="card" id="photo-requests-card">
@@ -1612,7 +1610,7 @@
     }
 
     const pending = _requests.filter(r => r.status === 'pending');
-    const totalReqBadge = pending.length + _photoRequests.length;
+    const totalReqBadge = pending.length + _photoRequests.length + _tradeSubmissions.length;
     const reqBadge = totalReqBadge > 0 ? `<span class="tab-badge">${totalReqBadge}</span>` : '';
 
     $('#page').innerHTML = `
@@ -1620,12 +1618,11 @@
       <p class="page-sub">Manage the team, permissions, and access requests.</p>
 
       <div class="tabs">
-        <button class="tab-btn active" data-tab="team"              onclick="switchTab('team')">Team <span id="team-count" class="count-muted">${_users.length}</span></button>
-        <button class="tab-btn"        data-tab="permissions"       onclick="switchTab('permissions')">Permissions &amp; roles</button>
-        <button class="tab-btn"        data-tab="requests"          onclick="switchTab('requests')">Requests <span id="req-tab-badge">${reqBadge}</span></button>
-        <button class="tab-btn"        data-tab="trade-submissions" onclick="switchTab('trade-submissions')">Trade Submissions <span id="trade-sub-tab-badge">${_tradeSubmissions.length > 0 ? `<span class="tab-badge">${_tradeSubmissions.length}</span>` : ''}</span></button>
-        <button class="tab-btn"        data-tab="auditlog"          onclick="switchTab('auditlog')">Audit log</button>
-        <button class="tab-btn"        data-tab="settings"          onclick="switchTab('settings');loadHubspotStatus()">Settings</button>
+        <button class="tab-btn active" data-tab="team"        onclick="switchTab('team')">Team <span id="team-count" class="count-muted">${_users.length}</span></button>
+        <button class="tab-btn"        data-tab="permissions" onclick="switchTab('permissions')">Permissions &amp; roles</button>
+        <button class="tab-btn"        data-tab="requests"    onclick="switchTab('requests')">Pending Requests <span id="req-tab-badge">${reqBadge}</span></button>
+        <button class="tab-btn"        data-tab="auditlog"    onclick="switchTab('auditlog')">Audit log</button>
+        <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings');loadHubspotStatus()">Settings</button>
       </div>
 
       <!-- TEAM -->
@@ -1767,13 +1764,9 @@
         </div>
       </div>
 
-      <!-- REQUESTS (access requests + photo approvals) -->
+      <!-- REQUESTS (access requests + photo approvals + trade submissions) -->
       <div class="tab-panel" id="tab-requests">
         <div id="requests-content"></div>
-      </div>
-
-      <!-- TRADE SUBMISSIONS -->
-      <div class="tab-panel" id="tab-trade-submissions">
         <div id="trade-submissions-content"></div>
       </div>
 
