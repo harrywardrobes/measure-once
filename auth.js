@@ -940,6 +940,71 @@ async function setupAuth(app) {
     }
   });
 
+  // ── Authenticated: change own password ────────────────────────────────────
+  app.post('/api/change-password', isAuthenticated, loginLimiter, async (req, res) => {
+    const currentPassword = req.body?.currentPassword;
+    const newPassword = req.body?.newPassword;
+    if (typeof currentPassword !== 'string' || !currentPassword ||
+        typeof newPassword !== 'string' || !newPassword) {
+      return res.status(400).json({ error: 'Current and new password are required.' });
+    }
+    const email = (req.user?.claims?.email || '').toLowerCase();
+    const userId = req.user?.claims?.sub;
+    if (!email || !userId) {
+      return res.status(401).json({ error: 'Not signed in.' });
+    }
+    const dbUser = await getUserByEmail(email);
+    if (!dbUser || !dbUser.password_hash) {
+      return res.status(400).json({
+        error: "This account doesn't have a password set. Ask an admin to send a set-password link.",
+        code: 'NO_PASSWORD',
+      });
+    }
+    const ok = await bcrypt.compare(currentPassword, dbUser.password_hash);
+    if (!ok) {
+      return res.status(401).json({ error: 'Current password is incorrect.' });
+    }
+    const localPart = email.split('@')[0] || '';
+    const policyErr = validatePasswordPolicy(newPassword, [
+      email, localPart, 'measure once', 'measureonce',
+      dbUser.first_name || '', dbUser.last_name || '',
+    ]);
+    if (policyErr) return res.status(400).json({ error: policyErr });
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ error: 'New password must be different from your current password.' });
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const hash = await bcrypt.hash(newPassword, 10);
+      await client.query(
+        `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+        [hash, dbUser.id]
+      );
+      const currentSid = req.sessionID || null;
+      const del = await client.query(
+        `DELETE FROM sessions
+           WHERE sid <> COALESCE($2, '')
+             AND (
+               (sess #>> '{passport,user,claims,sub}') = $1::text
+               OR LOWER(sess #>> '{passport,user,claims,email}') = LOWER($3)
+             )`,
+        [String(dbUser.id), currentSid, email]
+      );
+      if (del.rowCount) {
+        console.log(`[change-password] Cleared ${del.rowCount} other session(s) for ${email}.`);
+      }
+      await client.query('COMMIT');
+      res.json({ ok: true, otherSessionsCleared: del.rowCount || 0 });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error('change-password failed:', e.message);
+      res.status(500).json({ error: 'Could not change password. Please try again.' });
+    } finally {
+      client.release();
+    }
+  });
+
   // ── Current user / onboarding status ───────────────────────────────────────
   app.get('/api/auth/user', isAuthenticated, async (req, res) => {
     try {
