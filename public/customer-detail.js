@@ -467,6 +467,7 @@ function renderFullWorkflowView() {
       Customers
     </button>
     <div id="workflow-header" class="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 sticky top-0 z-10 shadow-sm"></div>
+    <div id="contact-edit-inline" class="contact-edit-inline hidden"></div>
     <div class="workflow-inner">
       <div id="comments-section" class="mb-5"></div>
       <div id="room-tabs-section" class="mb-5"></div>

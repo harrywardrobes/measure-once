@@ -1,22 +1,88 @@
-// ── New Customer Modal ────────────────────────────────────────────────────────
+// ── New Customer slide-over panel ────────────────────────────────────────────
+function _ensureNewCustomerPanel() {
+  let panel = document.getElementById('new-customer-panel');
+  if (panel) return panel;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'new-customer-overlay';
+  overlay.className = 'nc-panel-overlay';
+  overlay.style.display = 'none';
+  overlay.addEventListener('click', closeNewCustomerModal);
+
+  panel = document.createElement('aside');
+  panel.id = 'new-customer-panel';
+  panel.className = 'nc-panel';
+  panel.innerHTML = `
+    <div class="nc-panel-header">
+      <h2 class="nc-panel-title">New Customer</h2>
+      <button type="button" class="nc-panel-close" id="nc-panel-close-btn" title="Close" aria-label="Close">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="nc-panel-body">
+      <form id="new-customer-form" novalidate>
+        <div class="nc-form-grid">
+          <label class="nc-form-row">
+            <span class="nc-label-text">First name <span class="nc-required">*</span></span>
+            <input id="nc-firstname" type="text" required autocomplete="given-name" class="nc-input">
+          </label>
+          <label class="nc-form-row">
+            <span class="nc-label-text">Last name</span>
+            <input id="nc-lastname" type="text" autocomplete="family-name" class="nc-input">
+          </label>
+        </div>
+        <label class="nc-form-row">
+          <span class="nc-label-text">Email <span class="nc-required">*</span></span>
+          <input id="nc-email" type="email" required autocomplete="email" class="nc-input">
+        </label>
+        <label class="nc-form-row">
+          <span class="nc-label-text">Phone</span>
+          <input id="nc-phone" type="tel" autocomplete="tel" class="nc-input">
+        </label>
+        <label class="nc-form-row nc-form-row-last">
+          <span class="nc-label-text">Postcode <span class="nc-required">*</span></span>
+          <input id="nc-postcode" type="text" required autocomplete="postal-code" class="nc-input nc-postcode">
+        </label>
+        <div id="nc-error" class="nc-error"></div>
+        <div class="nc-actions">
+          <button type="button" id="nc-cancel-btn" class="nc-btn-cancel">Cancel</button>
+          <button type="submit" id="nc-submit" class="nc-btn-submit">Create Customer</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  document.body.appendChild(panel);
+
+  panel.querySelector('#nc-panel-close-btn').addEventListener('click', closeNewCustomerModal);
+  panel.querySelector('#nc-cancel-btn').addEventListener('click', closeNewCustomerModal);
+  panel.querySelector('#new-customer-form').addEventListener('submit', submitNewCustomer);
+  return panel;
+}
+
 function openNewCustomerModal() {
   if (isViewerOnly()) return;
+  const panel   = _ensureNewCustomerPanel();
   const overlay = document.getElementById('new-customer-overlay');
-  const modal   = document.getElementById('new-customer-modal');
   const form    = document.getElementById('new-customer-form');
   const err     = document.getElementById('nc-error');
-  if (form)    form.reset();
-  if (err)     { err.style.display = 'none'; err.textContent = ''; }
-  if (overlay) { overlay.classList.remove('hidden'); }
-  if (modal)   { modal.style.display = 'flex'; modal.classList.remove('hidden'); }
-  setTimeout(() => document.getElementById('nc-firstname')?.focus(), 50);
+  if (form) form.reset();
+  if (err)  { err.style.display = 'none'; err.textContent = ''; }
+  if (overlay) overlay.style.display = 'block';
+  // Force reflow so the transform transition runs
+  void panel.offsetWidth;
+  panel.classList.add('nc-panel-open');
+  setTimeout(() => document.getElementById('nc-firstname')?.focus(), 60);
 }
 
 function closeNewCustomerModal() {
   const overlay = document.getElementById('new-customer-overlay');
-  const modal   = document.getElementById('new-customer-modal');
-  if (overlay) overlay.classList.add('hidden');
-  if (modal)   { modal.style.display = 'none'; modal.classList.add('hidden'); }
+  const panel   = document.getElementById('new-customer-panel');
+  if (panel) panel.classList.remove('nc-panel-open');
+  if (overlay) overlay.style.display = 'none';
 }
 
 async function submitNewCustomer(ev) {
@@ -554,8 +620,7 @@ function _captureContactEditOriginal() {
 }
 
 function isContactEditOpen() {
-  const modal = document.getElementById('edit-contact-modal');
-  return !!(modal && !modal.classList.contains('hidden'));
+  return !!document.getElementById('edit-contact-form');
 }
 
 function isContactEditDirty() {
@@ -568,31 +633,91 @@ function isContactEditDirty() {
   return false;
 }
 
+function _contactEditInlineHtml() {
+  return `
+    <form id="edit-contact-form" novalidate>
+      <div class="contact-edit-inline-header">
+        <span class="contact-edit-inline-title">Edit Contact</span>
+        <span class="contact-edit-inline-status" id="ec-status"></span>
+      </div>
+      <div class="nc-form-grid">
+        <label class="nc-form-row">
+          <span class="nc-label-text">First name <span class="nc-required">*</span></span>
+          <input id="ec-firstname" type="text" required autocomplete="given-name" class="nc-input">
+        </label>
+        <label class="nc-form-row">
+          <span class="nc-label-text">Last name</span>
+          <input id="ec-lastname" type="text" autocomplete="family-name" class="nc-input">
+        </label>
+      </div>
+      <label class="nc-form-row">
+        <span class="nc-label-text">Email</span>
+        <input id="ec-email" type="email" autocomplete="email" class="nc-input">
+      </label>
+      <label class="nc-form-row">
+        <span class="nc-label-text">Phone</span>
+        <input id="ec-phone" type="tel" autocomplete="tel" class="nc-input">
+      </label>
+      <label class="nc-form-row">
+        <span class="nc-label-text">Address</span>
+        <input id="ec-address" type="text" autocomplete="street-address" class="nc-input">
+      </label>
+      <div class="nc-form-grid">
+        <label class="nc-form-row">
+          <span class="nc-label-text">City</span>
+          <input id="ec-city" type="text" autocomplete="address-level2" class="nc-input">
+        </label>
+        <label class="nc-form-row">
+          <span class="nc-label-text">Postcode</span>
+          <input id="ec-zip" type="text" autocomplete="postal-code" class="nc-input nc-postcode">
+        </label>
+      </div>
+      <div id="ec-error" class="nc-error"></div>
+      <div class="nc-actions">
+        <button type="button" id="ec-cancel-btn" class="nc-btn-cancel">Cancel</button>
+        <button type="submit" id="ec-submit" class="nc-btn-submit">Save</button>
+      </div>
+    </form>
+  `;
+}
+
 async function openContactEdit() {
   if (isViewerOnly()) return;
   const contactId = state.selectedContactId;
   if (!contactId) return;
 
-  const overlay   = document.getElementById('edit-contact-overlay');
-  const modal     = document.getElementById('edit-contact-modal');
-  if (!overlay || !modal) return;
+  const host = document.getElementById('contact-edit-inline');
+  if (!host) return;
 
-  const errEl     = document.getElementById('ec-error');
-  const submitBtn = document.getElementById('ec-submit');
-  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  host.innerHTML = _contactEditInlineHtml();
+  host.classList.remove('hidden');
 
-  // Pre-fill with known values immediately, then open modal
+  document.getElementById('ec-cancel-btn')?.addEventListener('click', requestCloseContactEdit);
+  document.getElementById('edit-contact-form')?.addEventListener('submit', submitContactEdit);
+
+  // Pre-fill with known values immediately
   const contact = state.contacts.find(c => c.id === contactId);
   _fillContactEditForm(contact?.properties || {});
   _captureContactEditOriginal();
-  overlay.classList.remove('hidden');
-  modal.style.display = 'flex';
-  modal.classList.remove('hidden');
+
+  const submitBtn = document.getElementById('ec-submit');
+  const statusEl  = document.getElementById('ec-status');
   if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Loading…'; }
+  if (statusEl)  { statusEl.textContent = 'Refreshing from HubSpot…'; }
+
+  setTimeout(() => {
+    const el = document.getElementById('ec-firstname');
+    if (el && document.activeElement?.tagName !== 'INPUT') el.focus();
+  }, 40);
+
+  // Scroll the form into view so the user sees it appear in place.
+  try { host.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch {}
 
   // Refresh from HubSpot and detect drift in editable fields
   try {
     const fresh    = await GET(`/api/contacts/${contactId}`);
+    // Bail out if the form was closed while loading.
+    if (!isContactEditOpen()) return;
     const oldProps = contact?.properties || {};
     const newProps = fresh?.properties   || {};
 
@@ -617,15 +742,16 @@ async function openContactEdit() {
   } catch {
     showToast('Could not refresh contact from HubSpot — showing last known values.', true);
   } finally {
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; }
+    const sBtn = document.getElementById('ec-submit');
+    const sEl  = document.getElementById('ec-status');
+    if (sBtn) { sBtn.disabled = false; sBtn.textContent = 'Save'; }
+    if (sEl)  { sEl.textContent = ''; }
   }
 }
 
 function closeContactEdit() {
-  const overlay = document.getElementById('edit-contact-overlay');
-  const modal   = document.getElementById('edit-contact-modal');
-  if (overlay) overlay.classList.add('hidden');
-  if (modal)   { modal.style.display = 'none'; modal.classList.add('hidden'); }
+  const host = document.getElementById('contact-edit-inline');
+  if (host) { host.innerHTML = ''; host.classList.add('hidden'); }
   _editContactOriginal = null;
   if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
 }
@@ -681,33 +807,35 @@ async function submitContactEdit(ev) {
     if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
   }
 
-  _applyContactFields(fields);
-  closeContactEdit();
-
   const prevTitle = document.title;
-  if (contact) document.title = contactName(contact);
 
   try {
     await PATCH_REQ(`/api/contacts/${contactId}`, fields);
+    // Success — apply locally, update title, then close the inline form.
+    _applyContactFields(fields);
+    if (contact) document.title = contactName(contact);
+    closeContactEdit();
     showToast('Contact updated');
     return true;
   } catch (e) {
-    _applyContactFields(prevProps);
+    // Failure — keep the inline form open and show the error inline so the
+    // user can fix and retry without losing their edits.
     document.title = prevTitle;
+    let msg;
     if (e.code === 'HUBSPOT_VERIFY_FAILED') {
-      showToast("Contact details didn't save in HubSpot — please try again.", true);
+      msg = "Contact details didn't save in HubSpot — please try again.";
     } else if (e.code === 'HUBSPOT_AUTH') {
-      showToast('Could not update contact — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+      msg = 'Could not update contact — HubSpot token is invalid or expired. Ask an admin to update the token.';
     } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
-      showToast('Could not update contact — HubSpot rate limit reached. Please try again in a moment.', true);
+      msg = 'Could not update contact — HubSpot rate limit reached. Please try again in a moment.';
     } else {
-      showToast('Failed to update contact', true);
+      msg = 'Failed to update contact. Please try again.';
     }
-    // PATCH failed but the modal is already closed and local state reverted —
-    // the user has been notified via toast, so navigation may still proceed.
-    return true;
+    showError(msg);
+    return false;
   } finally {
-    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; }
+    const sBtn = document.getElementById('ec-submit');
+    if (sBtn) { sBtn.disabled = false; sBtn.textContent = 'Save'; }
   }
 }
 

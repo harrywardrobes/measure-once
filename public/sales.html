@@ -105,60 +105,6 @@
     </aside>
   </div>
 
-  <!-- Edit Contact Modal -->
-  <div id="edit-contact-overlay" class="inv-overlay hidden" onclick="requestCloseContactEdit()"></div>
-  <div id="edit-contact-modal" class="nc-modal-wrap hidden" style="display:none;">
-    <div class="nc-modal-box" onclick="event.stopPropagation()">
-      <div class="nc-modal-header">
-        <h2 class="nc-modal-title">Edit Contact</h2>
-        <button onclick="requestCloseContactEdit()" class="nc-modal-close" title="Close">
-          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </button>
-      </div>
-      <form id="edit-contact-form" onsubmit="submitContactEdit(event)" novalidate>
-        <div class="nc-form-grid">
-          <label class="nc-form-row">
-            <span class="nc-label-text">First name <span class="nc-required">*</span></span>
-            <input id="ec-firstname" type="text" required autocomplete="given-name" class="nc-input">
-          </label>
-          <label class="nc-form-row">
-            <span class="nc-label-text">Last name</span>
-            <input id="ec-lastname" type="text" autocomplete="family-name" class="nc-input">
-          </label>
-        </div>
-        <label class="nc-form-row">
-          <span class="nc-label-text">Email</span>
-          <input id="ec-email" type="email" autocomplete="email" class="nc-input">
-        </label>
-        <label class="nc-form-row">
-          <span class="nc-label-text">Phone</span>
-          <input id="ec-phone" type="tel" autocomplete="tel" class="nc-input">
-        </label>
-        <label class="nc-form-row">
-          <span class="nc-label-text">Address</span>
-          <input id="ec-address" type="text" autocomplete="street-address" class="nc-input">
-        </label>
-        <div class="nc-form-grid">
-          <label class="nc-form-row">
-            <span class="nc-label-text">City</span>
-            <input id="ec-city" type="text" autocomplete="address-level2" class="nc-input">
-          </label>
-          <label class="nc-form-row">
-            <span class="nc-label-text">Postcode</span>
-            <input id="ec-zip" type="text" autocomplete="postal-code" class="nc-input nc-postcode">
-          </label>
-        </div>
-        <div id="ec-error" class="nc-error"></div>
-        <div class="nc-actions">
-          <button type="button" onclick="requestCloseContactEdit()" class="nc-btn-cancel">Cancel</button>
-          <button type="submit" id="ec-submit" class="nc-btn-submit">Save</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
   <script src="/chrome.js"></script>
   <script src="/core.js"></script>
   <script src="/workflow-core.js"></script>
