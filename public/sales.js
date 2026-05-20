@@ -1158,7 +1158,8 @@ function renderComments() {
     </div>
     <div id="comment-input-area" class="comment-input-area hidden">
       <div id="draft-resume-banner" class="draft-resume-banner hidden">
-        Draft restored — review and save or cancel to discard.
+        <span class="draft-resume-banner-text">Draft restored — review and save or cancel to discard.</span>
+        <button type="button" class="draft-resume-banner-close" aria-label="Dismiss banner" onclick="dismissDraftResumeBanner()">×</button>
       </div>
       <textarea id="comment-input" rows="3" class="notes-textarea"
         placeholder="Add a note..."
@@ -1229,6 +1230,10 @@ async function persistCommentDraft() {
   const author = [u?.first_name, u?.last_name].filter(Boolean).join(' ') || u?.email || '';
   state.workflowData.comments.push({ text, date: new Date().toISOString(), author, isDraft: true });
   _clearCommentDraft();
+}
+
+function dismissDraftResumeBanner() {
+  document.getElementById('draft-resume-banner')?.classList.add('hidden');
 }
 
 function showAddComment() {

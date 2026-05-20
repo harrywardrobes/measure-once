@@ -898,6 +898,20 @@ body.showing-workflow .workflow-panel { display: flex; }
   font-size: 1rem;
   flex-shrink: 0;
 }
+.draft-resume-banner-text { flex: 1; }
+.draft-resume-banner-close {
+  flex-shrink: 0;
+  background: transparent;
+  border: 0;
+  color: #92400e;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 2px 6px;
+  margin: -2px -4px -2px 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm, 4px);
+}
+.draft-resume-banner-close:hover { background: rgba(146, 64, 14, 0.12); }
 .comment-input-actions {
   display: flex;
   gap: 8px;
