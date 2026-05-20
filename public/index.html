@@ -28,6 +28,7 @@
   <script>
     async function loadCalendarForHome() {
       state.calendarError = false;
+      state.calendarLoading = true;
       renderHomeTab();
       try {
         const cal = await GET('/api/calendar/upcoming');
@@ -45,6 +46,7 @@
         state.calendarConnected = false;
         state.calendarEvents    = [];
       }
+      state.calendarLoading = false;
       renderHomeTab();
     }
 

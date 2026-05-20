@@ -42,6 +42,7 @@ function renderHomeTab() {
 
   const calEvents    = (state.calendarEvents || []).slice(0, 3);
   const calError     = !!state.calendarError;
+  const calLoading   = !!state.calendarLoading;
 
   const qbLoading  = !state.qb.loadError && (!state.qb.statusKnown || (state.qb.connected && (state.qb.loading || !state.qb.loaded)));
   const qbError    = state.qb.loadError;
@@ -121,7 +122,17 @@ function renderHomeTab() {
       }
     </div>
 
-    ${calError ? `
+    ${calLoading ? `
+    <div class="home-section">
+      <div class="home-section-header">
+        <span class="home-section-title">Upcoming</span>
+      </div>
+      ${[['60%', '40%'], ['50%', '36%']].map(([w1, w2]) => `
+        <div class="home-card" style="pointer-events:none;cursor:default">
+          <div class="skeleton-line" style="height:10px;width:${w2}"></div>
+          <div class="skeleton-line" style="height:13px;width:${w1};margin-top:6px"></div>
+        </div>`).join('')}
+    </div>` : calError ? `
     <div class="home-section">
       <div class="home-section-header">
         <span class="home-section-title">Upcoming</span>
