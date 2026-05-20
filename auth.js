@@ -73,6 +73,19 @@ function appBaseUrl() {
   return 'https://measureonce.replit.app';
 }
 
+// Build a friendly "Measure Once <address>" From header so recipients see a
+// recognisable sender even when the underlying SMTP_FROM is a plain mailbox.
+// If SMTP_FROM is already in `Name <addr>` form we leave it as-is.
+function buildFromHeader() {
+  const raw = (process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!raw) return raw;
+  if (/</.test(raw)) return raw;
+  return `Measure Once <${raw}>`;
+}
+function buildReplyTo() {
+  return (process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+}
+
 async function notifyAdminsOfAccessRequest(name, email, timestamp) {
   const adminEmails = (process.env.ADMIN_EMAILS || '')
     .split(',').map(s => s.trim()).filter(Boolean);
@@ -84,12 +97,14 @@ async function notifyAdminsOfAccessRequest(name, email, timestamp) {
     return;
   }
 
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const from = buildFromHeader();
+  const replyTo = buildReplyTo();
   const ts = timestamp ? new Date(timestamp).toUTCString() : new Date().toUTCString();
 
   try {
     await transport.sendMail({
       from,
+      replyTo,
       to: adminEmails.join(', '),
       subject: 'New access request — Measure Once',
       text: [
@@ -125,7 +140,8 @@ async function sendSetPasswordEmail(email, token, { resend = false, reset = fals
     return;
   }
   const link = `${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`;
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const from = buildFromHeader();
+  const replyTo = buildReplyTo();
   const subject = reset
     ? 'Reset your Measure Once password'
     : resend
@@ -146,7 +162,7 @@ async function sendSetPasswordEmail(email, token, { resend = false, reset = fals
     : 'Set your password by clicking the link below (valid for 24 hours):';
   try {
     await transport.sendMail({
-      from, to: email, subject,
+      from, replyTo, to: email, subject,
       text: [
         intro,
         '',
