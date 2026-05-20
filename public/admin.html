@@ -1086,7 +1086,12 @@
   /* ────────────────────────────────────────────────
      REQUESTS TAB
   ──────────────────────────────────────────────── */
-  function renderRequests() {
+  function renderPendingRequests() {
+    const container = $('#requests-content');
+    if (!container) return;
+    updateRequestsBadge();
+
+    /* ── Access requests ── */
     const pending = _requests.filter(r => r.status === 'pending');
     const past    = _requests.filter(r => r.status !== 'pending').slice(0, 30);
 
@@ -1105,6 +1110,108 @@
         </td>
       </tr>`;
 
+    const accessHtml = `
+      <div class="card">
+        <div class="card-title">Access requests <span class="card-count">(${pending.length})</span></div>
+        ${pending.length === 0
+          ? '<div class="table-empty">No pending requests.</div>'
+          : `<table>
+               <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th></th></tr></thead>
+               <tbody>${pending.map(reqRow).join('')}</tbody>
+             </table>`}
+      </div>
+      ${past.length > 0 ? `
+        <div class="card">
+          <div class="card-title">Recent decisions</div>
+          <table>
+            <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th>Status</th></tr></thead>
+            <tbody>${past.map(reqRow).join('')}</tbody>
+          </table>
+        </div>` : ''}`;
+
+    /* ── Photo approvals ── */
+    const photoHtml = _photoRequests.length === 0
+      ? `<div class="card">
+          <div class="card-title">Photo approvals</div>
+          <div class="table-empty" style="padding:28px 0;">No pending photo submissions.</div>
+        </div>`
+      : `<div class="card">
+          <div class="card-title">Photo approvals <span class="card-count">(${_photoRequests.length})</span></div>
+          <p class="card-desc">Review profile photo submissions. Approved photos appear in the header and across the app.</p>
+          <div class="photo-approval-grid">
+            ${_photoRequests.map(u => {
+              const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—';
+              return `
+                <div class="photo-approval-card" id="pcard-${esc(u.id)}">
+                  <img class="photo-approval-img" src="${esc(u.pending_photo)}" alt="">
+                  <div class="photo-approval-info">
+                    <div class="photo-approval-name">${esc(name)}</div>
+                    <div class="photo-approval-email">${esc(u.email || '')}</div>
+                  </div>
+                  <div class="photo-approval-btns">
+                    <button class="btn btn-primary btn-sm" onclick="approvePhoto('${esc(u.id)}')">Approve</button>
+                    <button class="btn btn-outline btn-sm" onclick="rejectPhoto('${esc(u.id)}')">Reject</button>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+
+    /* ── Trade submissions ── */
+    const tradeCards = _tradeSubmissions.map(s => {
+      const areas    = Array.isArray(s.areas_served) ? s.areas_served.join(', ') : (s.areas_served || '');
+      const contacts = Array.isArray(s.contacts) ? s.contacts : [];
+      const contactsHtml = contacts.map(c => {
+        const parts = [esc(c.name || '')];
+        if (c.role)  parts.push(esc(c.role));
+        if (c.phone) parts.push(esc(c.phone));
+        if (c.email) parts.push(esc(c.email));
+        return `<div style="font-size:.82rem;color:var(--ink-2);padding:2px 0;">${parts.join(' · ')}</div>`;
+      }).join('');
+      const details = [
+        s.timescale      ? `Lead time: ${esc(s.timescale)}`    : '',
+        s.invoice_method ? `Invoice: ${esc(s.invoice_method)}` : '',
+        s.payment_terms  ? `Payment: ${esc(s.payment_terms)}`  : '',
+      ].filter(Boolean);
+      return `
+        <div class="card" id="tsub-${s.id}" style="margin-bottom:16px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:1rem;font-weight:700;color:var(--ink-1);margin-bottom:4px;">${esc(s.company_name)}</div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+                <span class="trades-audit-badge">${esc(s.trade_type)}</span>
+                ${areas ? `<span style="font-size:.8rem;color:var(--ink-3);">${esc(areas)}</span>` : ''}
+              </div>
+              ${details.length ? `<div style="font-size:.8rem;color:var(--ink-3);margin-bottom:6px;">${details.join(' · ')}</div>` : ''}
+              ${s.notes ? `<div style="font-size:.82rem;color:var(--ink-3);margin-bottom:8px;font-style:italic;">${esc(s.notes)}</div>` : ''}
+              ${contacts.length ? `<div style="margin-bottom:8px;"><div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-4);margin-bottom:4px;">Contacts</div>${contactsHtml}</div>` : ''}
+              <div style="font-size:.75rem;color:var(--ink-4);margin-top:4px;">
+                Submitted by <strong>${esc(s.submitter_name || s.submitter_email || 'Unknown')}</strong>
+                · ${fmtDate(s.created_at)}
+              </div>
+            </div>
+            <div class="actions" style="flex-shrink:0;">
+              <button class="btn btn-approve" onclick="approveTradeSubmission(${s.id})">Approve</button>
+              <button class="btn btn-reject"  onclick="rejectTradeSubmission(${s.id})">Reject</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    const tradeHtml = _tradeSubmissions.length === 0
+      ? `<div class="card">
+          <div class="card-title">Trade submissions</div>
+          <div class="table-empty" style="padding:28px 0;">No pending submissions.</div>
+        </div>`
+      : `<div class="card" style="margin-bottom:4px;">
+          <div class="card-title">Trade submissions <span class="card-count">(${_tradeSubmissions.length})</span></div>
+          <p class="card-desc" style="margin:0;">Review and approve or reject trade company submissions from managers.</p>
+        </div>
+        ${tradeCards}`;
+
+    container.innerHTML = accessHtml + photoHtml + tradeHtml;
+
+    /* ── Team allowed list (written by this render pass too) ── */
     const allowRow = a => {
       const m    = a.metadata || {};
       const name = [m.first_name, m.last_name].filter(Boolean).join(' ');
@@ -1132,32 +1239,6 @@
         </td>
       </tr>`;
     };
-
-    updateRequestsBadge();
-
-    const container = $('#requests-content');
-    if (container) {
-      container.innerHTML = `
-        <div class="card">
-          <div class="card-title">Pending requests <span class="card-count">(${pending.length})</span></div>
-          ${pending.length === 0
-            ? '<div class="table-empty">No pending requests.</div>'
-            : `<table>
-                 <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th></th></tr></thead>
-                 <tbody>${pending.map(reqRow).join('')}</tbody>
-               </table>`}
-        </div>
-
-        ${past.length > 0 ? `
-          <div class="card">
-            <div class="card-title">Recent decisions</div>
-            <table>
-              <thead><tr><th>Name</th><th>Email</th><th>Submitted</th><th>Status</th></tr></thead>
-              <tbody>${past.map(reqRow).join('')}</tbody>
-            </table>
-          </div>` : ''}`;
-    }
-
     const allowedContainer = $('#team-allowed-content');
     if (allowedContainer) {
       allowedContainer.innerHTML = `
@@ -1172,6 +1253,10 @@
         </div>`;
     }
   }
+
+  function renderRequests()        { renderPendingRequests(); }
+  function renderPhotoRequests()   { renderPendingRequests(); }
+  function renderTradeSubmissions(){ renderPendingRequests(); }
 
   let _approvingRequestId = null;
 
@@ -1326,68 +1411,6 @@
   /* ────────────────────────────────────────────────
      TRADE SUBMISSIONS TAB
   ──────────────────────────────────────────────── */
-  function renderTradeSubmissions() {
-    const container = $('#trade-submissions-content');
-    if (!container) return;
-
-    updateRequestsBadge();
-
-    if (_tradeSubmissions.length === 0) {
-      container.innerHTML = `
-        <div class="card">
-          <div class="card-title">Pending trade submissions</div>
-          <div class="table-empty" style="padding:28px 0;">No pending submissions.</div>
-        </div>`;
-      return;
-    }
-
-    const cards = _tradeSubmissions.map(s => {
-      const areas = Array.isArray(s.areas_served) ? s.areas_served.join(', ') : (s.areas_served || '');
-      const contacts = Array.isArray(s.contacts) ? s.contacts : [];
-      const contactsHtml = contacts.map(c => {
-        const parts = [esc(c.name || '')];
-        if (c.role)  parts.push(esc(c.role));
-        if (c.phone) parts.push(esc(c.phone));
-        if (c.email) parts.push(esc(c.email));
-        return `<div style="font-size:.82rem;color:var(--ink-2);padding:2px 0;">${parts.join(' · ')}</div>`;
-      }).join('');
-      const details = [
-        s.timescale      ? `Lead time: ${esc(s.timescale)}`      : '',
-        s.invoice_method ? `Invoice: ${esc(s.invoice_method)}`   : '',
-        s.payment_terms  ? `Payment: ${esc(s.payment_terms)}`    : '',
-      ].filter(Boolean);
-      return `
-        <div class="card" id="tsub-${s.id}" style="margin-bottom:16px;">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:1rem;font-weight:700;color:var(--ink-1);margin-bottom:4px;">${esc(s.company_name)}</div>
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-                <span class="trades-audit-badge">${esc(s.trade_type)}</span>
-                ${areas ? `<span style="font-size:.8rem;color:var(--ink-3);">${esc(areas)}</span>` : ''}
-              </div>
-              ${details.length ? `<div style="font-size:.8rem;color:var(--ink-3);margin-bottom:6px;">${details.join(' · ')}</div>` : ''}
-              ${s.notes ? `<div style="font-size:.82rem;color:var(--ink-3);margin-bottom:8px;font-style:italic;">${esc(s.notes)}</div>` : ''}
-              ${contacts.length ? `<div style="margin-bottom:8px;"><div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-4);margin-bottom:4px;">Contacts</div>${contactsHtml}</div>` : ''}
-              <div style="font-size:.75rem;color:var(--ink-4);margin-top:4px;">
-                Submitted by <strong>${esc(s.submitter_name || s.submitter_email || 'Unknown')}</strong>
-                · ${fmtDate(s.created_at)}
-              </div>
-            </div>
-            <div class="actions" style="flex-shrink:0;">
-              <button class="btn btn-approve" onclick="approveTradeSubmission(${s.id})">Approve</button>
-              <button class="btn btn-reject"  onclick="rejectTradeSubmission(${s.id})">Reject</button>
-            </div>
-          </div>
-        </div>`;
-    }).join('');
-
-    container.innerHTML = `
-      <div class="card" style="margin-bottom:4px;">
-        <div class="card-title">Pending trade submissions <span class="card-count">(${_tradeSubmissions.length})</span></div>
-        <p class="card-desc" style="margin:0;">Review and approve or reject trade company submissions from managers.</p>
-      </div>
-      ${cards}`;
-  }
 
   async function approveTradeSubmission(id) {
     const card = $(`#tsub-${id}`);
@@ -1458,44 +1481,6 @@
   /* ────────────────────────────────────────────────
      PHOTOS TAB
   ──────────────────────────────────────────────── */
-  function renderPhotoRequests() {
-    const container = $('#requests-content');
-    if (!container) return;
-    updateRequestsBadge();
-
-    const photoHtml = _photoRequests.length === 0
-      ? `<div class="card" id="photo-requests-card">
-          <div class="card-title">Photo approvals</div>
-          <div class="table-empty" style="padding:28px 0;">No pending photo submissions.</div>
-        </div>`
-      : `<div class="card" id="photo-requests-card">
-        <div class="card-title">Pending photo approvals <span class="card-count">(${_photoRequests.length})</span></div>
-        <p class="card-desc">Review profile photo submissions. Approved photos appear in the header and across the app.</p>
-        <div class="photo-approval-grid">
-          ${_photoRequests.map(u => {
-            const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '—';
-            return `
-              <div class="photo-approval-card" id="pcard-${esc(u.id)}">
-                <img class="photo-approval-img" src="${esc(u.pending_photo)}" alt="">
-                <div class="photo-approval-info">
-                  <div class="photo-approval-name">${esc(name)}</div>
-                  <div class="photo-approval-email">${esc(u.email || '')}</div>
-                </div>
-                <div class="photo-approval-btns">
-                  <button class="btn btn-primary btn-sm" onclick="approvePhoto('${esc(u.id)}')">Approve</button>
-                  <button class="btn btn-outline btn-sm" onclick="rejectPhoto('${esc(u.id)}')">Reject</button>
-                </div>
-              </div>`;
-          }).join('')}
-        </div>
-      </div>`;
-    const existing = document.getElementById('photo-requests-card');
-    if (existing) {
-      existing.outerHTML = photoHtml;
-    } else {
-      container.insertAdjacentHTML('afterbegin', photoHtml);
-    }
-  }
 
   async function approvePhoto(id) {
     try {
@@ -1767,7 +1752,6 @@
       <!-- REQUESTS (access requests + photo approvals + trade submissions) -->
       <div class="tab-panel" id="tab-requests">
         <div id="requests-content"></div>
-        <div id="trade-submissions-content"></div>
       </div>
 
       <!-- AUDIT LOG (admin actions + trades audit) -->
