@@ -784,7 +784,7 @@ async function setupAuth(app) {
     try {
       const name  = (req.body?.name  || '').trim();
       const email = (req.body?.email || '').trim().toLowerCase();
-      if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!name || !email || !/^[a-zA-Z0-9.!#$%&*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/.test(email)) {
         return res.status(400).json({ error: 'Please provide a valid name and email.' });
       }
       const captcha = await verifyTurnstile(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);

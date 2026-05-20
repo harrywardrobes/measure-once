@@ -606,7 +606,7 @@
 
 <script>
   const $ = s => document.querySelector(s);
-  const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
   /* ── Toast ── */
   function toast(msg, isErr) {
@@ -712,7 +712,7 @@
         ? `<span class="lvl" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">More info required</span>`
         : `<span class="lvl" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">Active</span>`;
       const resendBtn = u.email
-        ? `<button class="btn btn-ghost" onclick="resendSetPassword('${esc(u.email)}', this)" title="Email this user a new set-password link">Resend set-password</button>`
+        ? `<button class="btn btn-ghost" data-resend-email="${esc(u.email)}" title="Email this user a new set-password link">Resend set-password</button>`
         : '';
       return `
         <tr>
@@ -1065,7 +1065,7 @@
         <td class="actions">
           ${a.protected
             ? '<span class="text-faint-xs">Protected</span>'
-            : `<button class="btn btn-danger" onclick="revoke('${esc(a.email)}')">Revoke</button>`}
+            : `<button class="btn btn-danger" data-revoke-email="${esc(a.email)}">Revoke</button>`}
         </td>
       </tr>`;
     };
@@ -1887,6 +1887,20 @@
       if (previewBtn) previewBtn.disabled = false;
     }
   }
+
+  document.addEventListener('click', async function(e) {
+    const resendBtn = e.target.closest('[data-resend-email]');
+    if (resendBtn) {
+      e.preventDefault();
+      await resendSetPassword(resendBtn.dataset.resendEmail, resendBtn);
+      return;
+    }
+    const revokeBtn = e.target.closest('[data-revoke-email]');
+    if (revokeBtn) {
+      e.preventDefault();
+      await revoke(revokeBtn.dataset.revokeEmail);
+    }
+  });
 
   init();
 </script>
