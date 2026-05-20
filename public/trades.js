@@ -367,8 +367,9 @@ function openTradesModal(id) {
       loadTradeAuditLog(id, historyList);
     }
   } else {
+    const isAdmin = (window.state?.user?.privilege_level === 'admin');
     title.textContent = 'Add Trade Company';
-    document.getElementById('trades-submit-btn').textContent = 'Submit for Approval';
+    document.getElementById('trades-submit-btn').textContent = isAdmin ? 'Add Company' : 'Submit for Approval';
     rebuildContactSlots([{}]);
   }
 
@@ -391,7 +392,11 @@ function resetTradesForm() {
   document.getElementById('trades-form').reset();
   document.getElementById('trades-edit-id').value = '';
   const submitBtn = document.getElementById('trades-submit-btn');
-  if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit for Approval'; }
+  if (submitBtn) {
+    const isAdmin = (window.state?.user?.privilege_level === 'admin');
+    submitBtn.disabled = false;
+    submitBtn.textContent = isAdmin ? 'Add Company' : 'Submit for Approval';
+  }
   const list = document.getElementById('trades-contacts-list');
   if (list) list.innerHTML = '';
   const btn = document.getElementById('trades-add-contact-btn');
@@ -464,8 +469,9 @@ async function saveTradeContact(e) {
     contacts,
   };
 
+  const isAdmin = (window.state?.user?.privilege_level === 'admin');
   submitBtn.disabled = true;
-  submitBtn.textContent = editId ? 'Saving…' : 'Submitting…';
+  submitBtn.textContent = editId ? 'Saving…' : (isAdmin ? 'Adding…' : 'Submitting…');
 
   try {
     if (editId) {
@@ -476,6 +482,13 @@ async function saveTradeContact(e) {
       populateTradeFilters();
       applyTradeFilters();
       showToast('Company updated');
+    } else if (isAdmin) {
+      const created = await POST('/api/trades', body);
+      _tradeContacts.push(created);
+      closeTradesModal();
+      populateTradeFilters();
+      applyTradeFilters();
+      showToast('Company added');
     } else {
       await POST('/api/trades/submissions', body);
       closeTradesModal();
@@ -487,7 +500,7 @@ async function saveTradeContact(e) {
       : (err.message || 'Failed to save company');
     showToast(msg, true);
     submitBtn.disabled = false;
-    submitBtn.textContent = editId ? 'Save Changes' : 'Submit for Approval';
+    submitBtn.textContent = editId ? 'Save Changes' : (isAdmin ? 'Add Company' : 'Submit for Approval');
   }
 }
 
