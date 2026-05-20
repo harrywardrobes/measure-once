@@ -80,6 +80,13 @@
         <div id="turnstile-forgot" class="cf-turnstile"></div>
         <button id="forgot-submit" type="submit">Send reset link</button>
       </form>
+      <div id="forgot-confirm" class="hidden">
+        <div class="ok" style="display:block">
+          An email has been sent to <strong id="forgot-confirm-email"></strong>.
+          Please check your inbox and follow the link to reset your password.
+        </div>
+        <button id="forgot-retry" type="button">Try a different email</button>
+      </div>
       <div class="footer">
         <button class="toggle" type="button" onclick="showView('login')">Back to sign in</button>
       </div>
@@ -114,6 +121,22 @@
     document.getElementById('view-login').classList.toggle('hidden', name !== 'login');
     document.getElementById('view-request').classList.toggle('hidden', name !== 'request');
     document.getElementById('view-forgot').classList.toggle('hidden', name !== 'forgot');
+    if (name !== 'forgot') resetForgotView();
+  }
+  function resetForgotView() {
+    const confirmEl = document.getElementById('forgot-confirm');
+    const formEl = document.getElementById('forgot-form');
+    if (confirmEl) confirmEl.classList.add('hidden');
+    if (formEl) formEl.classList.remove('hidden');
+    const okEl = document.getElementById('forgot-ok');
+    const errEl = document.getElementById('forgot-err');
+    if (okEl) hide(okEl);
+    if (errEl) hide(errEl);
+    const emailInput = document.getElementById('forgot-email');
+    if (emailInput) emailInput.value = '';
+    const confirmEmail = document.getElementById('forgot-confirm-email');
+    if (confirmEmail) confirmEmail.textContent = '';
+    resetTurnstile('forgot');
   }
   if (location.hash === '#forgot') showView('forgot');
   else if (location.hash === '#request') showView('request');
@@ -230,8 +253,10 @@
       });
       const data = await r.json().catch(() => ({}));
       if (r.ok) {
-        show(okEl, "If that email is on the approved list, we've sent a password reset link. Check your inbox.");
-        document.getElementById('forgot-form').reset();
+        document.getElementById('forgot-confirm-email').textContent = email;
+        document.getElementById('forgot-form').classList.add('hidden');
+        document.getElementById('forgot-confirm').classList.remove('hidden');
+        hide(okEl);
       } else if (r.status === 429) {
         show(errEl, 'Too many requests — please try again later.');
       } else {
@@ -243,6 +268,12 @@
       btn.disabled = false; btn.textContent = 'Send reset link';
       resetTurnstile('forgot');
     }
+  });
+
+  document.getElementById('forgot-retry').addEventListener('click', () => {
+    resetForgotView();
+    const emailInput = document.getElementById('forgot-email');
+    if (emailInput) emailInput.focus();
   });
 
   document.getElementById('req-form').addEventListener('submit', async (e) => {
