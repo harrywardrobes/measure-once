@@ -1209,7 +1209,10 @@ async function setupAuth(app) {
       }
 
       const adminEmail = req.user?.claims?.email;
-      await logAdminAction(adminEmail, 'approve_request', email, `Approved access request id=${req.params.id}`);
+      const approveRoleDetail = chosenRole
+        ? `Role: ${chosenRole} · Privilege: ${chosenPrivilege}`
+        : `Privilege: ${chosenPrivilege}`;
+      await logAdminAction(adminEmail, 'approve_request', email, `Approved access request id=${req.params.id}; ${approveRoleDetail}`);
       res.json({ ok: true, email });
     } catch (e) {
       await client.query('ROLLBACK');
@@ -1302,8 +1305,11 @@ async function setupAuth(app) {
 
       const adminEmail = req.user?.claims?.email;
       const nameStr = [meta.first_name, meta.last_name].filter(Boolean).join(' ');
+      const inviteRoleDetail = chosenRole
+        ? `Role: ${chosenRole} · Privilege: ${chosenPrivilege}`
+        : `Privilege: ${chosenPrivilege}`;
       await logAdminAction(adminEmail, 'add_allowed_email', email,
-        [nameStr ? `Name: ${nameStr}` : null, note ? `Note: ${note}` : null].filter(Boolean).join('; ') || null);
+        [nameStr ? `Name: ${nameStr}` : null, note ? `Note: ${note}` : null, inviteRoleDetail].filter(Boolean).join('; ') || null);
       res.json({ ok: true, row: r.rows[0] });
     } catch (e) {
       try { await client.query('ROLLBACK'); } catch {}
