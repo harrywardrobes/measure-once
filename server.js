@@ -113,6 +113,7 @@ app.use(visitsRouter);
 const AUTH_WHITELIST = new Set([
   '/login', '/auth/user', '/request-access', '/check-email',
   '/set-password', '/set-password/validate',
+  '/forgot-password', '/turnstile-config',
 ]);
 // Endpoints a logged-in user can still reach while in `more_info_required`
 // (so they can read their session, complete onboarding, or sign back out).

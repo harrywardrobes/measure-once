@@ -14,6 +14,44 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const zxcvbn = require('zxcvbn');
 
+// ── Cloudflare Turnstile (captcha) ───────────────────────────────────────────
+// Verifies the user-supplied token against Cloudflare's siteverify endpoint.
+// If TURNSTILE_SECRET_KEY is not set the check is a no-op so local dev and
+// fresh deploys continue to work; in production the key should always be set.
+const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+async function verifyTurnstile(token, ip) {
+  if (!process.env.TURNSTILE_SECRET_KEY) return { ok: true, skipped: true };
+  if (!token || typeof token !== 'string') return { ok: false, reason: 'missing-token' };
+  try {
+    const body = new URLSearchParams();
+    body.set('secret', process.env.TURNSTILE_SECRET_KEY);
+    body.set('response', token);
+    if (ip) body.set('remoteip', ip);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    let data;
+    try {
+      const r = await fetch(TURNSTILE_VERIFY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+        signal: controller.signal,
+      });
+      data = await r.json();
+    } finally {
+      clearTimeout(timer);
+    }
+    if (data && data.success) return { ok: true };
+    return { ok: false, reason: (data && data['error-codes'] && data['error-codes'][0]) || 'verify-failed' };
+  } catch (e) {
+    console.error('  Turnstile verify error:', e.message);
+    return { ok: false, reason: 'verify-error' };
+  }
+}
+function turnstileError(res) {
+  return res.status(400).json({ error: 'Captcha check failed — please try again.', code: 'CAPTCHA_FAILED' });
+}
+
 const MIN_PASSWORD_STRENGTH_SCORE = 2;
 
 const PASSWORD_SET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -670,6 +708,8 @@ async function setupAuth(app) {
     if (!email || !password || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Please enter your email and password.' });
     }
+    const captcha = await verifyTurnstile(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
+    if (!captcha.ok) return turnstileError(res);
     try {
       if (!(await isEmailApproved(email))) {
         return res.status(401).json({ error: 'Invalid email or password.' });
@@ -696,6 +736,16 @@ async function setupAuth(app) {
       console.error('Login failed:', e.message);
       res.status(500).json({ error: 'Could not sign in. Please try again later.' });
     }
+  });
+
+  // Public: surface the Turnstile site key (and whether captcha is enabled)
+  // so the signed-out login page can render the widget without hard-coding
+  // the key in HTML.
+  app.get('/api/turnstile-config', (_req, res) => {
+    res.json({
+      enabled: !!process.env.TURNSTILE_SECRET_KEY && !!process.env.TURNSTILE_SITE_KEY,
+      siteKey: process.env.TURNSTILE_SITE_KEY || null,
+    });
   });
 
   app.post('/api/logout', (req, res) => {
@@ -737,6 +787,8 @@ async function setupAuth(app) {
       if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return res.status(400).json({ error: 'Please provide a valid name and email.' });
       }
+      const captcha = await verifyTurnstile(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
+      if (!captcha.ok) return turnstileError(res);
       if (await isEmailApproved(email)) {
         return wantsJson
           ? res.status(409).json({ status: 'approved' })
@@ -771,6 +823,8 @@ async function setupAuth(app) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Please provide a valid email address.' });
     }
+    const captcha = await verifyTurnstile(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
+    if (!captcha.ok) return turnstileError(res);
     try {
       if (await isEmailApproved(email)) {
         try {
