@@ -16,47 +16,66 @@
 </head>
 <body>
 
-  <div id="tab-customers" class="app-body">
+  <a href="#customer-list" class="skip-link">Skip to customer list</a>
+
+  <div id="tab-customers" class="app-body cl-v2">
     <div id="list-panel" class="list-panel list-panel-fw">
-      <div class="p-3 border-b border-slate-100 flex-shrink-0">
-        <div class="flex gap-1.5 mb-1.5">
-          <button id="view-active-btn" onclick="setContactsViewMode('active')"
-            class="filter-btn flex-1 justify-center">Active</button>
-          <button id="view-all-btn" onclick="setContactsViewMode('all')"
-            class="filter-btn flex-1 justify-center filter-btn-active">All</button>
-        </div>
-        <div class="flex gap-1.5">
-          <select id="stage-filter" onchange="setStageFilter(this.value)"
-            class="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-blue-400 transition">
-            <option value="">All stages</option>
-          </select>
-          <button id="archived-toggle" onclick="toggleArchived()" class="filter-btn">Archived</button>
+      <div class="cl-controls">
+        <div class="cl-row cl-view-row">
+          <div class="cl-view-toggle" role="group" aria-label="Customer view">
+            <button id="view-active-btn" onclick="setContactsViewMode('active')"
+              class="filter-btn cl-toggle-btn">Active</button>
+            <button id="view-all-btn" onclick="setContactsViewMode('all')"
+              class="filter-btn cl-toggle-btn filter-btn-active">All</button>
+          </div>
           <button onclick="openNewCustomerModal()" title="New Customer" data-viewer-hide
-            class="flex-shrink-0 flex items-center gap-1 filter-btn bg-[#200842] hover:bg-[#3d0f7a] text-white border-transparent">
-            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            class="cl-new-btn">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
             </svg>
-            New
+            <span>New customer</span>
           </button>
         </div>
-        <div id="lead-status-filter-row" class="flex gap-1.5 mt-1.5">
-          <select id="lead-status-filter" onchange="setLeadStatusFilter(this.value)"
-            class="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-blue-400 transition">
-            <option value="">All statuses</option>
-          </select>
+
+        <div class="cl-row cl-filter-row">
+          <div class="cl-field">
+            <label for="stage-filter" class="cl-label">Stage</label>
+            <select id="stage-filter" onchange="setStageFilter(this.value)" class="cl-select">
+              <option value="">All stages</option>
+            </select>
+          </div>
+          <div class="cl-field">
+            <label for="sort-select" class="cl-label">Sort by</label>
+            <select id="sort-select" onchange="setSortBy(this.value)" class="cl-select">
+              <option value="newest">Newest first</option>
+              <option value="name-asc">Name A–Z</option>
+              <option value="name-desc">Name Z–A</option>
+              <option value="stage">Stage order</option>
+            </select>
+          </div>
         </div>
-        <div class="flex gap-1.5 mt-1.5">
-          <select id="sort-select" onchange="setSortBy(this.value)"
-            class="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-blue-400 transition">
-            <option value="newest">Newest first</option>
-            <option value="name-asc">Name A–Z</option>
-            <option value="name-desc">Name Z–A</option>
-            <option value="stage">Stage order</option>
-          </select>
+
+        <div id="lead-status-filter-row" class="cl-row cl-filter-row">
+          <div class="cl-field cl-field-grow">
+            <label for="lead-status-filter" class="cl-label">Lead status</label>
+            <select id="lead-status-filter" onchange="setLeadStatusFilter(this.value)" class="cl-select">
+              <option value="">All statuses</option>
+            </select>
+          </div>
+          <div class="cl-field cl-field-archived">
+            <span class="cl-label" aria-hidden="true">Archived</span>
+            <button id="archived-toggle" onclick="toggleArchived()" class="filter-btn cl-archived-btn" aria-pressed="false" aria-label="Show archived customers">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 11-2-2 2 2 0 012 2zm0 0v10a2 2 0 002 2h10a2 2 0 002-2V8M10 12h4"/>
+              </svg>
+              <span>Show</span>
+            </button>
+          </div>
         </div>
-        <div id="deal-count" class="text-xs text-slate-400 mt-1.5 px-0.5"></div>
+
+        <div id="deal-count" class="cl-count" aria-live="polite"></div>
       </div>
-      <div id="customer-list" class="flex-1 overflow-y-auto">
+      <div id="customer-list" class="cl-list" tabindex="-1">
         <div class="skeleton-card"><div class="skeleton-line skeleton-name"></div><div class="skeleton-meta"><div class="skeleton-line skeleton-pill"></div><div class="skeleton-line skeleton-email"></div></div></div>
         <div class="skeleton-card"><div class="skeleton-line skeleton-name" style="width:42%"></div><div class="skeleton-meta"><div class="skeleton-line skeleton-pill"></div><div class="skeleton-line skeleton-email" style="width:30%"></div></div></div>
         <div class="skeleton-card"><div class="skeleton-line skeleton-name" style="width:63%"></div><div class="skeleton-meta"><div class="skeleton-line skeleton-pill"></div><div class="skeleton-line skeleton-email" style="width:45%"></div></div></div>
@@ -65,6 +84,12 @@
         <div class="skeleton-card"><div class="skeleton-line skeleton-name" style="width:38%"></div><div class="skeleton-meta"><div class="skeleton-line skeleton-pill"></div><div class="skeleton-line skeleton-email" style="width:28%"></div></div></div>
         <div class="skeleton-card"><div class="skeleton-line skeleton-name" style="width:57%"></div><div class="skeleton-meta"><div class="skeleton-line skeleton-pill"></div><div class="skeleton-line skeleton-email" style="width:40%"></div></div></div>
         <div class="skeleton-card"><div class="skeleton-line skeleton-name" style="width:44%"></div><div class="skeleton-meta"><div class="skeleton-line skeleton-pill"></div><div class="skeleton-line skeleton-email" style="width:32%"></div></div></div>
+      </div>
+      <div class="cl-keyboard-hint" role="note">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21l4-7 4 7M3 4h18M4 4h16v12H4z"/>
+        </svg>
+        <span>Use <kbd>↑</kbd> <kbd>↓</kbd> to move, <kbd>Enter</kbd> to open.</span>
       </div>
     </div>
   </div>

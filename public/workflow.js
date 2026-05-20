@@ -267,8 +267,9 @@ function _renderCustomerListImpl() {
     const name         = contactName(contact);
     const email        = contact.properties?.email || '';
     const customerNum  = contact.properties?.customer_number || '';
-    const colour     = stageKey ? stageColour(stageKey) : null;
-    const stageLabel = stageKey ? (state.workflow?.stages?.[stageKey]?.label || stageKey) : null;
+    const colour     = stageKey ? stageColour(stageKey) : stageColour('sales');
+    const stageLabel = stageKey ? (state.workflow?.stages?.[stageKey]?.label || stageKey) : 'Sales';
+    const stageCode  = stageCodeFor(stageKey || 'sales');
     const isSelected = contact.id === state.selectedContactId && roomIdx === state.selectedRoomIdx;
     const urgency    = state.contactUrgencyCache[contact.id];
     const isArchived = roomStatus !== 'active';
@@ -277,24 +278,25 @@ function _renderCustomerListImpl() {
       ? `${name} — ${roomName}` : name;
 
     const urgencyDot = urgency === 'red'
-      ? `<span class="urgency-dot urgency-red" title="Urgent: task due within 1 working day"></span>`
+      ? `<span class="urgency-dot urgency-red" title="Urgent: task due within 1 working day" aria-label="Urgent: task due within 1 working day"></span>`
       : urgency === 'orange'
-        ? `<span class="urgency-dot urgency-orange" title="Task due within 2 working days"></span>`
+        ? `<span class="urgency-dot urgency-orange" title="Task due within 2 working days" aria-label="Task due within 2 working days"></span>`
         : '';
 
     const qbInvs    = matchInvoicesForContact(contact);
     const qbTotal   = qbInvs.reduce((s, inv) => s + inv.balance, 0);
     const qbInvIdsAttr = escHtml(JSON.stringify(qbInvs.map(inv => inv.id)));
     const qbBadge   = qbInvs.length > 0
-      ? `<button class="qb-badge" title="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}" data-inv-ids="${qbInvIdsAttr}" onclick="event.stopPropagation();openInvoicePanelFromBadge(this)">£${qbTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</button>`
+      ? `<button class="qb-badge" title="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}" aria-label="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}, total £${qbTotal.toFixed(2)}" data-inv-ids="${qbInvIdsAttr}" onclick="event.stopPropagation();openInvoicePanelFromBadge(this)">£${qbTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</button>`
       : '';
 
-    const stagePillHtml = stageLabel && colour
-      ? `<span class="stage-pill" style="background:${colour.light};color:${colour.text}">${escHtml(stageLabel)}</span>`
-      : `<span class="stage-pill" style="background:${stageColour('sales').light};color:${stageColour('sales').text}">Sales</span>`;
+    const stagePillHtml = `<span class="stage-pill stage-pill-coded" style="background:${colour.light};color:${colour.text};border-color:${colour.text}33">
+        <span class="stage-pill-code" aria-hidden="true">${escHtml(stageCode)}</span>
+        <span class="stage-pill-label">${escHtml(stageLabel)}</span>
+      </span>`;
 
     const statusLabel = roomStatus === 'declined' ? 'Declined' : roomStatus === 'complete' ? 'Complete' : roomStatus === 'remedial' ? 'Remedial' : 'Active';
-    const statusMini = `<span class="status-mini status-mini-${roomStatus}" onclick="openStatusPicker(event,'${contact.id}',${roomIdx})" title="Change status">${statusLabel}</span>`;
+    const statusMini = `<span class="status-mini status-mini-${roomStatus}" onclick="openStatusPicker(event,'${contact.id}',${roomIdx})" title="Change status" role="button" tabindex="-1">${statusLabel}</span>`;
 
     const customerNumBadge = customerNum
       ? `<span class="customer-num-badge" title="Customer number">${escHtml(customerNum)}</span>`
@@ -314,30 +316,51 @@ function _renderCustomerListImpl() {
         'BAD_TIMING':           { label: 'Bad Timing',   cls: 'lsb-bad-timing' },
       };
       if (!raw) {
-        return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${contact.id}')">+ Lead Status</span>`;
+        return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">+ Lead Status</span>`;
       }
       const entry = map[raw] || { label: raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()), cls: '' };
-      return `<span class="lead-status-badge ${entry.cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${contact.id}')">${escHtml(entry.label)}</span>`;
+      return `<span class="lead-status-badge ${entry.cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(entry.label)}</span>`;
     })();
 
+    const secondaryBadges = [leadStatusBadge, qbBadge, customerNumBadge].filter(Boolean).join('');
+
     return `
-      <div class="customer-card ${isArchived ? 'card-archived' : ''}"
+      <div class="customer-card ${isSelected ? 'selected' : ''} ${isArchived ? 'card-archived' : ''}"
            data-contact-id="${contact.id}" data-room-idx="${roomIdx}"
-           onclick="goToCustomer(this.dataset.contactId)">
-        <div class="customer-card-name">
-          ${urgencyDot}<span class="name-text">${escHtml(displayName)}</span>
+           role="button" tabindex="0"
+           aria-current="${isSelected ? 'true' : 'false'}"
+           aria-label="Open customer ${escHtml(displayName)}"
+           onclick="goToCustomer(this.dataset.contactId)"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goToCustomer(this.dataset.contactId);}">
+        <div class="customer-card-row">
+          <div class="customer-card-name">
+            ${urgencyDot}<span class="name-text">${escHtml(displayName)}</span>
+          </div>
           ${statusMini}
         </div>
         <div class="customer-card-meta">
           ${stagePillHtml}
-          ${leadStatusBadge}
-          ${qbBadge}
-          ${customerNumBadge}
           ${email ? `<span class="customer-card-value">${escHtml(email)}</span>` : ''}
         </div>
+        ${secondaryBadges ? `<div class="customer-card-secondary">${secondaryBadges}</div>` : ''}
       </div>
     `;
   }).join('');
+}
+
+// Short stage code shown as a leading letter group on the stage pill — gives
+// colorblind users a redundant cue for the stage in addition to colour.
+const STAGE_CODE_MAP = {
+  sales: 'S', designvisit: 'DV', survey: 'SV', quote: 'Q',
+  deposit: 'D', manufacture: 'M', install: 'I', won: 'W', lost: 'L',
+  complete: 'C', remedial: 'R',
+};
+function stageCodeFor(key) {
+  if (STAGE_CODE_MAP[key]) return STAGE_CODE_MAP[key];
+  // Fallback: first letter (or 2 letters of camelCase segments) uppercased
+  const parts = String(key).split(/[-_\s]|(?=[A-Z])/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return String(key).slice(0, 2).toUpperCase();
 }
 registerCustomerListRenderer(_renderCustomerListImpl);
 
