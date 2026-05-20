@@ -299,8 +299,10 @@ async function bootstrap() {
 
   if (priv === 'manager' || priv === 'admin') {
     document.body.classList.add('manager-mode');
-    const tradesBtn = document.getElementById('bnav-trades');
-    if (tradesBtn) tradesBtn.style.display = '';
+    ['bnav-trades', 'bnav-sales', 'bnav-projects', 'bnav-invoices'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.style.display = '';
+    });
   }
 
   if (priv === 'admin') {
