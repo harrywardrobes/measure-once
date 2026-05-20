@@ -2125,7 +2125,12 @@ app.get('/api/calendar/upcoming', async (req, res) => {
     });
     res.json({ events: response.data.items || [], connected: true });
   } catch (e) {
-    res.json({ events: [], connected: false, error: e.message });
+    const code = classifyGoogleError(e);
+    if (code === 'GOOGLE_AUTH') {
+      delete req.session.googleTokens;
+      return res.json({ events: [], connected: false, error: e.message, code });
+    }
+    res.json({ events: [], connected: true, error: e.message, code });
   }
 });
 

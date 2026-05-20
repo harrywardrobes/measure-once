@@ -29,20 +29,24 @@
     async function loadCalendarForHome() {
       state.calendarError = false;
       state.calendarLoading = true;
+      state.calendarErrorCode = null;
       renderHomeTab();
       try {
         const cal = await GET('/api/calendar/upcoming');
         if (cal && cal.error) {
           state.calendarError     = true;
-          state.calendarConnected = false;
+          state.calendarErrorCode = cal.code || 'GOOGLE_ERROR';
+          state.calendarConnected = !!(cal && cal.connected);
           state.calendarEvents    = [];
         } else {
           state.calendarError     = false;
+          state.calendarErrorCode = null;
           state.calendarEvents    = (cal && cal.events) || [];
           state.calendarConnected = !!(cal && cal.connected);
         }
       } catch {
         state.calendarError     = true;
+        state.calendarErrorCode = 'GOOGLE_ERROR';
         state.calendarConnected = false;
         state.calendarEvents    = [];
       }
@@ -64,10 +68,12 @@
       state.personalTasks = tasks || [];
       if (cal && (cal._error || cal.error)) {
         state.calendarError     = true;
-        state.calendarConnected = false;
+        state.calendarErrorCode = cal._error ? 'GOOGLE_ERROR' : (cal.code || 'GOOGLE_ERROR');
+        state.calendarConnected = !!(cal && cal.connected);
         state.calendarEvents    = [];
       } else {
         state.calendarError     = false;
+        state.calendarErrorCode = null;
         state.calendarEvents    = (cal && cal.events) || [];
         state.calendarConnected = !!(cal && cal.connected);
       }

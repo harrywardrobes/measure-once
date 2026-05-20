@@ -43,6 +43,7 @@ function renderHomeTab() {
   const calEvents    = (state.calendarEvents || []).slice(0, 3);
   const calError     = !!state.calendarError;
   const calLoading   = !!state.calendarLoading;
+  const calAuthError = calError && state.calendarErrorCode === 'GOOGLE_AUTH';
 
   const qbLoading  = !state.qb.loadError && (!state.qb.statusKnown || (state.qb.connected && (state.qb.loading || !state.qb.loaded)));
   const qbError    = state.qb.loadError;
@@ -144,15 +145,19 @@ function renderHomeTab() {
               d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
           </svg>
           <div style="min-width:0;flex:1">
-            <div class="home-card-title" style="color:#ef4444">Calendar couldn't be loaded</div>
-            <div class="home-card-sub" style="white-space:normal">Google Calendar returned an unexpected error. Check your connection and try again.</div>
-            <button onclick="loadCalendarForHome()" class="qb-refresh-btn" style="margin-top:8px;padding:6px 12px;font-size:12px;pointer-events:auto">
+            <div class="home-card-title" style="color:#ef4444">${calAuthError ? 'Your Google account was disconnected' : `Calendar couldn't be loaded`}</div>
+            <div class="home-card-sub" style="white-space:normal">${calAuthError
+              ? `Reconnect Google to see your upcoming events.`
+              : `Google Calendar returned an unexpected error. Check your connection and try again.`}</div>
+            ${calAuthError
+              ? `<a href="/profile" class="qb-refresh-btn" style="margin-top:8px;padding:6px 12px;font-size:12px;pointer-events:auto;display:inline-flex;align-items:center;text-decoration:none">Reconnect in Settings</a>`
+              : `<button onclick="loadCalendarForHome()" class="qb-refresh-btn" style="margin-top:8px;padding:6px 12px;font-size:12px;pointer-events:auto">
               <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
               </svg>
               Retry
-            </button>
+            </button>`}
           </div>
         </div>
       </div>
