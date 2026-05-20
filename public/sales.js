@@ -188,6 +188,12 @@ async function _commitActiveInlineEdit() {
   if (document.getElementById('task-subject')?.value.trim()) {
     await saveNewTask();
   }
+  if (typeof isContactEditDirty === 'function' && isContactEditDirty()) {
+    const ok = await submitContactEdit({ preventDefault(){} });
+    // If the edit-contact form couldn't be saved (e.g. required field missing)
+    // throw so the caller aborts navigation and the user can fix the form.
+    if (!ok) throw new Error('Contact edit not saved');
+  }
 }
 
 function _discardActiveInlineEdit() {
@@ -199,10 +205,14 @@ function _discardActiveInlineEdit() {
     state.showAddTask = false;
     renderTasks();
   }
+  if (typeof isContactEditOpen === 'function' && isContactEditOpen()) {
+    closeContactEdit();
+  }
 }
 
 async function goBack() {
   captureNotes();
+  if (typeof closeContactEditIfPristine === 'function') closeContactEditIfPristine();
 
   if (hasUnsavedChanges()) {
     showUnsavedChangesBar(
@@ -292,6 +302,11 @@ function syncRoomFromHubSpot(room, leadStatus) {
 
 // ── Contact Selection ─────────────────────────────────────────────────────────
 async function selectContact(contactId, roomIdx = 0) {
+  // Close a pristine open edit-contact modal so it doesn't get stranded.
+  if (state.selectedContactId && state.selectedContactId !== contactId
+      && typeof closeContactEditIfPristine === 'function') {
+    closeContactEditIfPristine();
+  }
   // Guard for unsaved changes when switching to a different contact
   if (state.selectedContactId && state.selectedContactId !== contactId && hasUnsavedChanges()) {
     showUnsavedChangesBar(
@@ -483,6 +498,7 @@ async function _doSelectContact(contactId, roomIdx) {
 async function switchRoom(idx) {
   if (idx === state.selectedRoomIdx) return;
   captureNotes();
+  if (typeof closeContactEditIfPristine === 'function') closeContactEditIfPristine();
 
   if (hasUnsavedChanges()) {
     showUnsavedChangesBar(

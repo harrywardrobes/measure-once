@@ -534,6 +534,40 @@ function _fillContactEditForm(props) {
   set('ec-zip',       f.zip);
 }
 
+// Snapshot of the form values at the moment the modal was last (re)populated,
+// used to detect unsaved edits when the user tries to navigate away.
+let _editContactOriginal = null;
+
+const _EC_FIELD_IDS = ['ec-firstname','ec-lastname','ec-email','ec-phone','ec-address','ec-city','ec-zip'];
+
+function _readContactEditForm() {
+  const out = {};
+  for (const id of _EC_FIELD_IDS) {
+    const el = document.getElementById(id);
+    out[id] = el ? el.value.trim() : '';
+  }
+  return out;
+}
+
+function _captureContactEditOriginal() {
+  _editContactOriginal = _readContactEditForm();
+}
+
+function isContactEditOpen() {
+  const modal = document.getElementById('edit-contact-modal');
+  return !!(modal && !modal.classList.contains('hidden'));
+}
+
+function isContactEditDirty() {
+  if (!_editContactOriginal) return false;
+  if (!isContactEditOpen()) return false;
+  const current = _readContactEditForm();
+  for (const id of _EC_FIELD_IDS) {
+    if ((current[id] || '') !== (_editContactOriginal[id] || '')) return true;
+  }
+  return false;
+}
+
 async function openContactEdit() {
   if (isViewerOnly()) return;
   const contactId = state.selectedContactId;
@@ -550,6 +584,7 @@ async function openContactEdit() {
   // Pre-fill with known values immediately, then open modal
   const contact = state.contacts.find(c => c.id === contactId);
   _fillContactEditForm(contact?.properties || {});
+  _captureContactEditOriginal();
   overlay.classList.remove('hidden');
   modal.style.display = 'flex';
   modal.classList.remove('hidden');
@@ -565,7 +600,11 @@ async function openContactEdit() {
       (newProps[f] || '') !== (oldProps[f] || '')
     ).map(f => _CONTACT_FIELD_LABELS[f]);
 
+    // Only re-baseline the dirty snapshot if the user hasn't started editing
+    // yet — otherwise their in-progress edits would suddenly look "clean".
+    const wasDirty = isContactEditDirty();
     _fillContactEditForm(newProps);
+    if (!wasDirty) _captureContactEditOriginal();
 
     if (typeof _mergeContactIntoState === 'function') _mergeContactIntoState(fresh);
 
@@ -587,12 +626,28 @@ function closeContactEdit() {
   const modal   = document.getElementById('edit-contact-modal');
   if (overlay) overlay.classList.add('hidden');
   if (modal)   { modal.style.display = 'none'; modal.classList.add('hidden'); }
+  _editContactOriginal = null;
+  if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+}
+
+// Guarded close used by the overlay click and the X / Cancel buttons. If the
+// user has unsaved edits, show the same bottom-bar prompt used elsewhere
+// instead of silently discarding their changes.
+function requestCloseContactEdit() {
+  if (isContactEditDirty()) {
+    showUnsavedChangesBar(
+      async () => { await submitContactEdit({ preventDefault(){} }); },
+      ()       => { closeContactEdit(); }
+    );
+    return;
+  }
+  closeContactEdit();
 }
 
 async function submitContactEdit(ev) {
   ev.preventDefault();
   const contactId = state.selectedContactId;
-  if (!contactId) return;
+  if (!contactId) return false;
 
   const trim = id => document.getElementById(id)?.value.trim() || '';
   const fields = {
@@ -609,7 +664,7 @@ async function submitContactEdit(ev) {
   const submitBtn = document.getElementById('ec-submit');
   const showError = msg => { if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; } };
 
-  if (!fields.firstname) { showError('First name is required.'); return; }
+  if (!fields.firstname) { showError('First name is required.'); return false; }
 
   if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
   if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving…'; }
@@ -635,6 +690,7 @@ async function submitContactEdit(ev) {
   try {
     await PATCH_REQ(`/api/contacts/${contactId}`, fields);
     showToast('Contact updated');
+    return true;
   } catch (e) {
     _applyContactFields(prevProps);
     document.title = prevTitle;
@@ -647,8 +703,19 @@ async function submitContactEdit(ev) {
     } else {
       showToast('Failed to update contact', true);
     }
+    // PATCH failed but the modal is already closed and local state reverted —
+    // the user has been notified via toast, so navigation may still proceed.
+    return true;
   } finally {
     if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save'; }
+  }
+}
+
+// Closes the modal silently if it is open without any unsaved edits, so a
+// pristine open modal doesn't get stranded across room/contact navigation.
+function closeContactEditIfPristine() {
+  if (isContactEditOpen() && !isContactEditDirty()) {
+    closeContactEdit();
   }
 }
 

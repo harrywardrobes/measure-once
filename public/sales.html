@@ -106,12 +106,12 @@
   </div>
 
   <!-- Edit Contact Modal -->
-  <div id="edit-contact-overlay" class="inv-overlay hidden" onclick="closeContactEdit()"></div>
+  <div id="edit-contact-overlay" class="inv-overlay hidden" onclick="requestCloseContactEdit()"></div>
   <div id="edit-contact-modal" class="nc-modal-wrap hidden" style="display:none;">
     <div class="nc-modal-box" onclick="event.stopPropagation()">
       <div class="nc-modal-header">
         <h2 class="nc-modal-title">Edit Contact</h2>
-        <button onclick="closeContactEdit()" class="nc-modal-close" title="Close">
+        <button onclick="requestCloseContactEdit()" class="nc-modal-close" title="Close">
           <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
           </svg>
@@ -152,7 +152,7 @@
         </div>
         <div id="ec-error" class="nc-error"></div>
         <div class="nc-actions">
-          <button type="button" onclick="closeContactEdit()" class="nc-btn-cancel">Cancel</button>
+          <button type="button" onclick="requestCloseContactEdit()" class="nc-btn-cancel">Cancel</button>
           <button type="submit" id="ec-submit" class="nc-btn-submit">Save</button>
         </div>
       </form>
