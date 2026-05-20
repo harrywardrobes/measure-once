@@ -270,7 +270,7 @@ async function bootstrap() {
   try {
     await checkAuthStatus();
     await loadWorkflow();
-    await Promise.all([loadOpenLeads(), loadWorkflowStages()]);
+    await Promise.all([loadOpenLeads(), loadWorkflowStages(), ensurePrefs()]);
     populateStageFilter();
     if (document.getElementById('customer-list') || document.getElementById('sales-view')) renderCustomerList();
     loadQBInvoices();
