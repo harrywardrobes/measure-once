@@ -104,15 +104,10 @@ function populateTradeFilters() {
 function applyTradeFilters() {
   const typeSelect = document.getElementById('trades-filter-type');
   const areaSelect = document.getElementById('trades-filter-area');
-  const searchInput = document.getElementById('trades-search');
   _tradeTypeFilter = typeSelect ? typeSelect.value : '';
   _tradeAreaFilter = areaSelect ? areaSelect.value : '';
-  const searchQuery = searchInput ? searchInput.value.trim().toLowerCase() : '';
 
   let filtered = _tradeContacts;
-  if (searchQuery) {
-    filtered = filtered.filter(co => (co.company_name || '').toLowerCase().includes(searchQuery));
-  }
   if (_tradeTypeFilter) {
     filtered = filtered.filter(co => (co.trade_type || '').trim() === _tradeTypeFilter);
   }
@@ -372,8 +367,8 @@ function openTradesModal(id) {
       loadTradeAuditLog(id, historyList);
     }
   } else {
-    title.textContent = 'Add Company';
-    document.getElementById('trades-submit-btn').textContent = 'Save Company';
+    title.textContent = 'Add Trade Company';
+    document.getElementById('trades-submit-btn').textContent = 'Submit for Approval';
     rebuildContactSlots([{}]);
   }
 
@@ -396,7 +391,7 @@ function resetTradesForm() {
   document.getElementById('trades-form').reset();
   document.getElementById('trades-edit-id').value = '';
   const submitBtn = document.getElementById('trades-submit-btn');
-  if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Save Company'; }
+  if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit for Approval'; }
   const list = document.getElementById('trades-contacts-list');
   if (list) list.innerHTML = '';
   const btn = document.getElementById('trades-add-contact-btn');
@@ -470,29 +465,29 @@ async function saveTradeContact(e) {
   };
 
   submitBtn.disabled = true;
-  submitBtn.textContent = 'Saving…';
+  submitBtn.textContent = editId ? 'Saving…' : 'Submitting…';
 
   try {
     if (editId) {
       const updated = await api('PUT', `/api/trades/${editId}`, body);
       const idx = _tradeContacts.findIndex(c => c.id === updated.id);
       if (idx !== -1) _tradeContacts[idx] = updated;
+      closeTradesModal();
+      populateTradeFilters();
+      applyTradeFilters();
       showToast('Company updated');
     } else {
-      const created = await POST('/api/trades', body);
-      _tradeContacts.unshift(created);
-      showToast('Company added');
+      await POST('/api/trades/submissions', body);
+      closeTradesModal();
+      showToast('Submitted — an admin will review it before it appears in the list');
     }
-    closeTradesModal();
-    populateTradeFilters();
-    applyTradeFilters();
   } catch (err) {
     const msg = err.code === 'DB_ERROR'
       ? 'Couldn\'t save — a database error occurred. Please try again.'
       : (err.message || 'Failed to save company');
     showToast(msg, true);
     submitBtn.disabled = false;
-    submitBtn.textContent = editId ? 'Save Changes' : 'Save Company';
+    submitBtn.textContent = editId ? 'Save Changes' : 'Submit for Approval';
   }
 }
 

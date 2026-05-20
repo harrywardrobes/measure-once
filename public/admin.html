@@ -685,6 +685,7 @@
   let _photoRequests = [];
   let _capabilities = { levels: ['viewer','member','manager','admin'], features: [] };
   let _tradesAudit = [];
+  let _tradeSubmissions = [];
 
   /* ────────────────────────────────────────────────
      TEAM TAB
@@ -1195,6 +1196,108 @@
   }
 
   /* ────────────────────────────────────────────────
+     TRADE SUBMISSIONS TAB
+  ──────────────────────────────────────────────── */
+  function renderTradeSubmissions() {
+    const container = $('#trade-submissions-content');
+    if (!container) return;
+
+    const badge = $('#trade-sub-tab-badge');
+    if (badge) badge.innerHTML = _tradeSubmissions.length > 0
+      ? `<span class="tab-badge">${_tradeSubmissions.length}</span>` : '';
+
+    if (_tradeSubmissions.length === 0) {
+      container.innerHTML = `
+        <div class="card">
+          <div class="card-title">Pending trade submissions</div>
+          <div class="table-empty" style="padding:28px 0;">No pending submissions.</div>
+        </div>`;
+      return;
+    }
+
+    const cards = _tradeSubmissions.map(s => {
+      const areas = Array.isArray(s.areas_served) ? s.areas_served.join(', ') : (s.areas_served || '');
+      const contacts = Array.isArray(s.contacts) ? s.contacts : [];
+      const contactsHtml = contacts.map(c => {
+        const parts = [esc(c.name || '')];
+        if (c.role)  parts.push(esc(c.role));
+        if (c.phone) parts.push(esc(c.phone));
+        if (c.email) parts.push(esc(c.email));
+        return `<div style="font-size:.82rem;color:var(--ink-2);padding:2px 0;">${parts.join(' · ')}</div>`;
+      }).join('');
+      const details = [
+        s.timescale      ? `Lead time: ${esc(s.timescale)}`      : '',
+        s.invoice_method ? `Invoice: ${esc(s.invoice_method)}`   : '',
+        s.payment_terms  ? `Payment: ${esc(s.payment_terms)}`    : '',
+      ].filter(Boolean);
+      return `
+        <div class="card" id="tsub-${s.id}" style="margin-bottom:16px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:1rem;font-weight:700;color:var(--ink-1);margin-bottom:4px;">${esc(s.company_name)}</div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+                <span class="trades-audit-badge">${esc(s.trade_type)}</span>
+                ${areas ? `<span style="font-size:.8rem;color:var(--ink-3);">${esc(areas)}</span>` : ''}
+              </div>
+              ${details.length ? `<div style="font-size:.8rem;color:var(--ink-3);margin-bottom:6px;">${details.join(' · ')}</div>` : ''}
+              ${s.notes ? `<div style="font-size:.82rem;color:var(--ink-3);margin-bottom:8px;font-style:italic;">${esc(s.notes)}</div>` : ''}
+              ${contacts.length ? `<div style="margin-bottom:8px;"><div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-4);margin-bottom:4px;">Contacts</div>${contactsHtml}</div>` : ''}
+              <div style="font-size:.75rem;color:var(--ink-4);margin-top:4px;">
+                Submitted by <strong>${esc(s.submitter_name || s.submitter_email || 'Unknown')}</strong>
+                · ${fmtDate(s.created_at)}
+              </div>
+            </div>
+            <div class="actions" style="flex-shrink:0;">
+              <button class="btn btn-approve" onclick="approveTradeSubmission(${s.id})">Approve</button>
+              <button class="btn btn-reject"  onclick="rejectTradeSubmission(${s.id})">Reject</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    container.innerHTML = `
+      <div class="card" style="margin-bottom:4px;">
+        <div class="card-title">Pending trade submissions <span class="card-count">(${_tradeSubmissions.length})</span></div>
+        <p class="card-desc" style="margin:0;">Review and approve or reject trade company submissions from managers.</p>
+      </div>
+      ${cards}`;
+  }
+
+  async function approveTradeSubmission(id) {
+    const card = $(`#tsub-${id}`);
+    const btns = card ? card.querySelectorAll('button') : [];
+    btns.forEach(b => { b.disabled = true; });
+    try {
+      await api('POST', `/api/admin/trades/submissions/${id}/approve`);
+      toast('Approved — company is now live in the Trades directory');
+      _tradeSubmissions = _tradeSubmissions.filter(s => s.id !== id);
+      renderTradeSubmissions();
+      _tradesAudit = await api('GET', '/api/admin/trades-audit');
+      renderTradesAudit();
+    } catch (e) {
+      toast(e.message, true);
+      btns.forEach(b => { b.disabled = false; });
+    }
+  }
+
+  async function rejectTradeSubmission(id) {
+    const reason = prompt('Optional: enter a reason for rejection (leave blank to skip)');
+    if (reason === null) return;
+    const card = $(`#tsub-${id}`);
+    const btns = card ? card.querySelectorAll('button') : [];
+    btns.forEach(b => { b.disabled = true; });
+    try {
+      await api('POST', `/api/admin/trades/submissions/${id}/reject`, { reason: reason || '' });
+      toast('Submission rejected');
+      _tradeSubmissions = _tradeSubmissions.filter(s => s.id !== id);
+      renderTradeSubmissions();
+    } catch (e) {
+      toast(e.message, true);
+      btns.forEach(b => { b.disabled = false; });
+    }
+  }
+
+  /* ────────────────────────────────────────────────
      TRADES AUDIT TAB
   ──────────────────────────────────────────────── */
   function renderTradesAudit() {
@@ -1299,19 +1402,21 @@
      Load & render
   ──────────────────────────────────────────────── */
   async function reload() {
-    [_requests, _allowed, _users, _auditLog, _photoRequests, _tradesAudit] = await Promise.all([
+    [_requests, _allowed, _users, _auditLog, _photoRequests, _tradesAudit, _tradeSubmissions] = await Promise.all([
       api('GET', '/api/admin/requests'),
       api('GET', '/api/admin/allowed'),
       api('GET', '/api/admin/users'),
       api('GET', '/api/admin/audit-log'),
       api('GET', '/api/admin/photo-requests'),
       api('GET', '/api/admin/trades-audit'),
+      api('GET', '/api/admin/trades/submissions'),
     ]);
     renderTeam();
     renderRequests();
     renderAuditLog();
     renderPhotoRequests();
     renderTradesAudit();
+    renderTradeSubmissions();
   }
 
   let _hubspotStatusLoaded = false;
@@ -1359,7 +1464,7 @@
     _me = me;
 
     try {
-      [_requests, _allowed, _users, _jobRoles, _capabilities, _auditLog, _photoRequests, _tradesAudit] = await Promise.all([
+      [_requests, _allowed, _users, _jobRoles, _capabilities, _auditLog, _photoRequests, _tradesAudit, _tradeSubmissions] = await Promise.all([
         api('GET', '/api/admin/requests'),
         api('GET', '/api/admin/allowed'),
         api('GET', '/api/admin/users'),
@@ -1368,6 +1473,7 @@
         api('GET', '/api/admin/audit-log'),
         api('GET', '/api/admin/photo-requests'),
         api('GET', '/api/admin/trades-audit'),
+        api('GET', '/api/admin/trades/submissions'),
       ]);
     } catch (e) {
       if (e.forbidden) {
@@ -1391,11 +1497,12 @@
       <p class="page-sub">Manage the team, permissions, and access requests.</p>
 
       <div class="tabs">
-        <button class="tab-btn active" data-tab="team"        onclick="switchTab('team')">Team <span id="team-count" class="count-muted">${_users.length}</span></button>
-        <button class="tab-btn"        data-tab="permissions" onclick="switchTab('permissions')">Permissions &amp; roles</button>
-        <button class="tab-btn"        data-tab="requests"    onclick="switchTab('requests')">Requests <span id="req-tab-badge">${reqBadge}</span></button>
-        <button class="tab-btn"        data-tab="auditlog"    onclick="switchTab('auditlog')">Audit log</button>
-        <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings');loadHubspotStatus()">Settings</button>
+        <button class="tab-btn active" data-tab="team"              onclick="switchTab('team')">Team <span id="team-count" class="count-muted">${_users.length}</span></button>
+        <button class="tab-btn"        data-tab="permissions"       onclick="switchTab('permissions')">Permissions &amp; roles</button>
+        <button class="tab-btn"        data-tab="requests"          onclick="switchTab('requests')">Requests <span id="req-tab-badge">${reqBadge}</span></button>
+        <button class="tab-btn"        data-tab="trade-submissions" onclick="switchTab('trade-submissions')">Trade Submissions <span id="trade-sub-tab-badge">${_tradeSubmissions.length > 0 ? `<span class="tab-badge">${_tradeSubmissions.length}</span>` : ''}</span></button>
+        <button class="tab-btn"        data-tab="auditlog"          onclick="switchTab('auditlog')">Audit log</button>
+        <button class="tab-btn"        data-tab="settings"          onclick="switchTab('settings');loadHubspotStatus()">Settings</button>
       </div>
 
       <!-- TEAM -->
@@ -1532,6 +1639,11 @@
         <div id="requests-content"></div>
       </div>
 
+      <!-- TRADE SUBMISSIONS -->
+      <div class="tab-panel" id="tab-trade-submissions">
+        <div id="trade-submissions-content"></div>
+      </div>
+
       <!-- AUDIT LOG (admin actions + trades audit) -->
       <div class="tab-panel" id="tab-auditlog">
         <div class="card mig-card">
@@ -1594,6 +1706,7 @@
     renderPhotoRequests();
     renderTradesAudit();
     renderAuditLog();
+    renderTradeSubmissions();
   }
 
   /* ────────────────────────────────────────────────

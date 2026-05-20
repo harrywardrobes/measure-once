@@ -1526,6 +1526,29 @@ async function ensureTradesTable() {
       email      VARCHAR
     );
   `);
+  await _tradesPool.query(`
+    CREATE TABLE IF NOT EXISTS trade_company_submissions (
+      id               SERIAL PRIMARY KEY,
+      company_name     VARCHAR NOT NULL,
+      trade_type       VARCHAR NOT NULL,
+      areas_served     TEXT,
+      timescale        VARCHAR,
+      invoice_method   VARCHAR,
+      payment_terms    VARCHAR,
+      notes            TEXT,
+      contacts         JSONB NOT NULL DEFAULT '[]',
+      submitter_id     VARCHAR,
+      submitter_email  VARCHAR,
+      submitter_name   VARCHAR,
+      status           VARCHAR NOT NULL DEFAULT 'pending',
+      reviewer_id      VARCHAR,
+      reviewer_email   VARCHAR,
+      reviewer_name    VARCHAR,
+      rejection_reason TEXT,
+      created_at       TIMESTAMP DEFAULT NOW(),
+      reviewed_at      TIMESTAMP
+    );
+  `);
   const { rows: unmigratedRows } = await _tradesPool.query(`
     SELECT * FROM trade_contacts
     WHERE id NOT IN (
@@ -1754,6 +1777,153 @@ app.delete('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req
   try {
     const r = await _tradesPool.query(`DELETE FROM trade_companies WHERE id=$1`, [id]);
     if (!r.rowCount) return res.status(404).json({ error: 'Company not found.' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message, code: 'DB_ERROR' });
+  }
+});
+
+// ── Trade Company Submissions ─────────────────────────────────────────────────
+
+app.post('/api/trades/submissions', isAuthenticated, requireManagerOrAdmin, tradesCreateLimiter, async (req, res) => {
+  const { company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, contacts } = req.body || {};
+  if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'Company name is required.' });
+  if (!trade_type || !trade_type.trim()) return res.status(400).json({ error: 'Trade type is required.' });
+  if (!TRADE_CATEGORIES.includes(trade_type.trim())) return res.status(400).json({ error: 'Invalid trade category.' });
+  const areasArr = Array.isArray(areas_served) ? areas_served : [];
+  if (!areasArr.length) return res.status(400).json({ error: 'At least one area served is required.' });
+  const invalidArea = areasArr.find(a => !TRADE_AREAS.includes(a));
+  if (invalidArea) return res.status(400).json({ error: `Invalid area: ${invalidArea}` });
+  const validContacts = (contacts || []).filter(c => c && (c.name || '').trim());
+  if (!validContacts.length) return res.status(400).json({ error: 'At least one contact person with a name is required.' });
+  if (validContacts.length > 3) return res.status(400).json({ error: 'A maximum of 3 contacts per company is allowed.' });
+
+  const claims = req.user?.claims || {};
+  const submitterId    = claims.sub || null;
+  const submitterEmail = claims.email || null;
+  const submitterName  = actorDisplayName(claims);
+
+  try {
+    const { rows: [sub] } = await _tradesPool.query(
+      `INSERT INTO trade_company_submissions
+        (company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes,
+         contacts, submitter_id, submitter_email, submitter_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING id, created_at`,
+      [company_name.trim(), trade_type.trim(), serializeAreasServed(areas_served),
+       (timescale || '').trim(), (invoice_method || '').trim(),
+       (payment_terms || '').trim(), (notes || '').trim(),
+       JSON.stringify(validContacts.map(c => ({
+         name:  c.name.trim(),
+         role:  (c.role  || '').trim(),
+         phone: (c.phone || '').trim(),
+         email: (c.email || '').trim(),
+       }))),
+       submitterId, submitterEmail, submitterName]
+    );
+    res.status(201).json({ id: sub.id, status: 'pending', created_at: sub.created_at });
+  } catch (e) {
+    res.status(500).json({ error: e.message, code: 'DB_ERROR' });
+  }
+});
+
+app.get('/api/admin/trades/submissions', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await _tradesPool.query(
+      `SELECT * FROM trade_company_submissions WHERE status='pending' ORDER BY created_at ASC`
+    );
+    res.json(rows.map(r => ({
+      ...r,
+      areas_served: parseAreasServed(r.areas_served),
+      contacts: Array.isArray(r.contacts) ? r.contacts : (r.contacts ? JSON.parse(r.contacts) : []),
+    })));
+  } catch (e) {
+    res.status(500).json({ error: e.message, code: 'DB_ERROR' });
+  }
+});
+
+app.post('/api/admin/trades/submissions/:id/approve', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id.' });
+
+  const claims = req.user?.claims || {};
+  const reviewerId    = claims.sub || null;
+  const reviewerEmail = claims.email || null;
+  const reviewerName  = actorDisplayName(claims);
+
+  const client = await _tradesPool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [sub] } = await client.query(
+      `SELECT * FROM trade_company_submissions WHERE id=$1 AND status='pending'`, [id]
+    );
+    if (!sub) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Pending submission not found.' }); }
+
+    const { rows: [co] } = await client.query(
+      `INSERT INTO trade_companies
+        (company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes,
+         created_by, created_by_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING *`,
+      [sub.company_name, sub.trade_type, sub.areas_served,
+       sub.timescale, sub.invoice_method, sub.payment_terms, sub.notes,
+       sub.submitter_id, sub.submitter_name]
+    );
+
+    const contacts = Array.isArray(sub.contacts) ? sub.contacts : (sub.contacts ? JSON.parse(sub.contacts) : []);
+    const insertedContacts = [];
+    for (let i = 0; i < contacts.length; i++) {
+      const ct = contacts[i];
+      const { rows: [cc] } = await client.query(
+        `INSERT INTO trade_company_contacts (company_id, sort_order, name, role, phone, email)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [co.id, i, ct.name || '', ct.role || '', ct.phone || '', ct.email || '']
+      );
+      insertedContacts.push(cc);
+    }
+
+    await client.query(
+      `INSERT INTO trade_audit_log (company_id, actor_id, actor_name, action) VALUES ($1,$2,$3,$4)`,
+      [co.id, reviewerId, reviewerName,
+       `Company created via submission (approved by ${reviewerName || reviewerEmail || 'admin'})`]
+    );
+
+    await client.query(
+      `UPDATE trade_company_submissions
+       SET status='approved', reviewer_id=$1, reviewer_email=$2, reviewer_name=$3, reviewed_at=NOW()
+       WHERE id=$4`,
+      [reviewerId, reviewerEmail, reviewerName, id]
+    );
+
+    await client.query('COMMIT');
+    res.json({ success: true, company_id: co.id });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message, code: 'DB_ERROR' });
+  } finally {
+    client.release();
+  }
+});
+
+app.post('/api/admin/trades/submissions/:id/reject', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id.' });
+
+  const claims = req.user?.claims || {};
+  const reviewerId    = claims.sub || null;
+  const reviewerEmail = claims.email || null;
+  const reviewerName  = actorDisplayName(claims);
+  const reason = (req.body?.reason || '').trim();
+
+  try {
+    const { rowCount } = await _tradesPool.query(
+      `UPDATE trade_company_submissions
+       SET status='rejected', reviewer_id=$1, reviewer_email=$2, reviewer_name=$3,
+           rejection_reason=$4, reviewed_at=NOW()
+       WHERE id=$5 AND status='pending'`,
+      [reviewerId, reviewerEmail, reviewerName, reason || null, id]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Pending submission not found.' });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message, code: 'DB_ERROR' });
