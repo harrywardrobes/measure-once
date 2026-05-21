@@ -237,6 +237,54 @@ async function renderEnquiryList() {
   `;
 }
 
+// ── Stage accent hex colours (B1 card design) ────────────────────────────────
+const STAGE_ACCENT = {
+  sales:       '#8B2BFF',
+  designvisit: '#2563EB',
+  survey:      '#059669',
+};
+function _eqRgb(hex) {
+  return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
+}
+
+// ── Next action label ─────────────────────────────────────────────────────────
+function nextActionLabel(stageKey, substageId) {
+  if (stageKey === 'sales') {
+    if (substageId === 'form_submission')   return 'Attempt contact';
+    if (substageId === 'attempted_contact') return 'Follow up call';
+    if (substageId === 'open_deal')         return 'Schedule design visit';
+  }
+  if (stageKey === 'designvisit') return 'Confirm design visit date';
+  if (stageKey === 'survey')      return 'Await survey confirmation';
+  return '';
+}
+
+// ── Stage trail HTML ──────────────────────────────────────────────────────────
+function stageTrailHtml(activeKey, isTerminal) {
+  const idx = SALES_TAB_STAGES.indexOf(activeKey);
+  const segs = SALES_TAB_STAGES.map((sk, i) => {
+    const done   = i < idx;
+    const active = i === idx;
+    const label  = escHtml(
+      state.workflow?.stages?.[sk]?.label ||
+      (sk === 'designvisit' ? 'Design Visit' : sk === 'survey' ? 'Survey' : 'Sales')
+    );
+    const hex       = isTerminal ? '#B8AE99' : (STAGE_ACCENT[sk] || '#8B2BFF');
+    const dotColor  = (done || active) ? hex : '#D9D2C2';
+    const lineColor = done ? hex : '#D9D2C2';
+    const labelColor = (done || active) ? hex : '#97927F';
+    const dotStyle  = `background:${dotColor}${active ? `;outline:3px solid rgba(${_eqRgb(hex)},0.16);outline-offset:1px` : ''}`;
+    const dotCls    = `eq-trail-dot${active ? ' eq-trail-dot-active' : ''}`;
+    const labelStyle = `color:${labelColor};font-weight:${active ? 700 : 400};opacity:${done ? 0.65 : 1}`;
+    const isLast    = i === SALES_TAB_STAGES.length - 1;
+    return (
+      `<div class="eq-trail-seg"><div class="${dotCls}" style="${dotStyle}"></div><span class="eq-trail-label" style="${labelStyle}">${label}</span></div>` +
+      (!isLast ? `<div class="eq-trail-rail" style="background:${lineColor};opacity:${done ? 0.7 : 0.4}"></div>` : '')
+    );
+  });
+  return `<div class="eq-trail">${segs.join('')}</div>`;
+}
+
 // ── Row HTML ──────────────────────────────────────────────────────────────────
 function enquiryRowHtml(entry) {
   const { contact, stageKey, substageId, sourceId, stageTime, priority } = entry;
@@ -244,42 +292,54 @@ function enquiryRowHtml(entry) {
 
   const name        = escHtml(contactName(contact));
   const customerNum = contact.properties?.customer_number || '';
-  const stageLabel  = escHtml(state.workflow?.stages?.[stageKey]?.label || stageKey);
   const subLabel    = escHtml(substageLabel(stageKey, substageId));
   const timeStr     = escHtml(relativeTime(stageTime));
-  const pillColour  = substagePillColour(stageKey, substageId);
 
-  const customerNumHtml = customerNum
-    ? `<span class="enquiry-row-custnum">${escHtml(customerNum)}</span>`
-    : '';
+  const numHtml = customerNum
+    ? `<span class="eq-card-num">${escHtml(customerNum)}</span>` : '';
 
-  const pillHtml = substageId
-    ? `<span class="enquiry-row-pill${isTerminal ? ' enquiry-row-pill-terminal' : ''}"
-         style="background:${pillColour.bg};color:${pillColour.text}">${subLabel}</span>`
-    : `<span class="enquiry-row-pill enquiry-row-pill-terminal"
-         style="background:var(--stone-soft);color:var(--ink-4)">${stageLabel}</span>`;
+  let pillHtml = '';
+  if (substageId) {
+    if (isTerminal) {
+      pillHtml = `<span class="eq-card-substage eq-card-substage-terminal">${subLabel}</span>`;
+    } else {
+      const hex = STAGE_ACCENT[stageKey] || '#8B2BFF';
+      const rgb = _eqRgb(hex);
+      pillHtml = `<span class="eq-card-substage" style="background:rgba(${rgb},0.09);color:${hex};border:1px solid rgba(${rgb},0.22)">${subLabel}</span>`;
+    }
+  }
 
   const sourceHtml = sourceId && SOURCE_LABELS[sourceId]
-    ? `<span class="enquiry-row-source">${escHtml(SOURCE_LABELS[sourceId])}</span>`
+    ? `<span class="eq-card-source"><span class="eq-card-source-dot"></span>${escHtml(SOURCE_LABELS[sourceId])}</span>`
     : '';
 
-  const stageTagHtml = `<span class="enquiry-row-stagelabel">${stageLabel}</span>`;
+  const accentColor = isTerminal ? '#B8AE99' : (STAGE_ACCENT[stageKey] || 'var(--orchid)');
+  const next        = isTerminal ? '' : nextActionLabel(stageKey, substageId);
+  const actionHtml  = next ? `
+    <div class="eq-card-action">
+      <span class="eq-card-action-label">${escHtml(next)}</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>` : '';
 
   return `
-    <div class="enquiry-row${isTerminal ? ' enquiry-row-terminal' : ''}"
+    <div class="eq-card${isTerminal ? ' eq-card-terminal' : ''}"
          data-contact-id="${escHtml(contact.id)}"
          role="button" tabindex="0">
-      <div class="enquiry-row-main">
-        <div class="enquiry-row-name-wrap">
-          <span class="enquiry-row-name">${name}</span>
-          ${customerNumHtml}
+      <div class="eq-card-stripe" style="background:${accentColor}"></div>
+      <div class="eq-card-body">
+        <div class="eq-card-name-row">
+          <div class="eq-card-name-wrap">
+            <span class="eq-card-name">${name}</span>
+            ${numHtml}
+          </div>
+          <span class="eq-card-time">${timeStr}</span>
         </div>
-        <div class="enquiry-row-meta">
-          ${stageTagHtml}
+        <div class="eq-card-meta">
           ${pillHtml}
           ${sourceHtml}
         </div>
+        ${stageTrailHtml(stageKey, isTerminal)}
       </div>
-      <div class="enquiry-row-time">${timeStr}</div>
+      ${actionHtml}
     </div>`;
 }
