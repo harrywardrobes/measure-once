@@ -1,21 +1,90 @@
-// ── Sales Stage Keys (the three early-pipeline stages shown on this tab) ────────
+// ── Sales Stage Keys ──────────────────────────────────────────────────────────
 const SALES_TAB_STAGES = ['sales', 'designvisit', 'survey'];
 
-// ── Sales Card List View ──────────────────────────────────────────────────────
-// On the sales page both renderCustomerList() and renderProjectsView() should
-// update the sales grid.  Register explicitly so the wiring is clear and safe
-// regardless of script load order (workflow.js and projects.js register their
-// own impls first; these calls replace those registrations for this page).
-registerCustomerListRenderer(() => renderSalesView());
-registerProjectsViewRenderer(() => renderSalesView());
+// Terminal/cold substage ids — de-emphasised in the list
+const TERMINAL_SUBSTAGES = new Set(['unqualified', 'not_suitable', 'bad_timing', 'no_response_x3']);
 
+// Source sub-sub-stage short labels
+const SOURCE_LABELS = {
+  website:   'Web',
+  whatsapp:  'WhatsApp',
+  call:      'Call',
+  instagram: 'IG',
+  facebook:  'FB',
+  email:     'Email',
+};
+
+// ── Data loading ──────────────────────────────────────────────────────────────
+// Sales page needs ALL contacts (sales + design visit + survey), not just
+// "open leads". Override the open-leads loader so bootstrap uses loadAllContacts.
+registerOpenLeadsLoader(loadAllContacts);
+
+// ── Renderer registration ─────────────────────────────────────────────────────
+registerCustomerListRenderer(() => renderEnquiryList());
+registerProjectsViewRenderer(() => renderEnquiryList());
+
+// ── Stage filter ──────────────────────────────────────────────────────────────
 function setSalesStageFilter(key) {
   state.salesStageFilter = key;
-  renderSalesView();
+  renderEnquiryList();
 }
 
-// One-time event delegation on the stable #list-panel — avoids listener
-// accumulation across repeated renderSalesView() calls.
+// ── Priority sort ─────────────────────────────────────────────────────────────
+// Returns a numeric band: 0 = most urgent, 3 = cold/archived.
+// Within bands, callers sort by createdate descending (newest first).
+function priorityScore(stageKey, substageId) {
+  if (stageKey === 'designvisit' && substageId === 'open_deal') return 0;
+  if (stageKey === 'survey'      && substageId === 'design_accepted') return 1;
+  if (TERMINAL_SUBSTAGES.has(substageId)) return 3;
+  return 2;
+}
+
+// ── Relative time ─────────────────────────────────────────────────────────────
+function relativeTime(input) {
+  if (!input) return '';
+  const ts = typeof input === 'number' ? input : Number(input);
+  if (!ts || isNaN(ts)) return '';
+  const diff = Date.now() - ts;
+  if (diff < 0) return 'just now';
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return mins <= 1 ? 'just now' : `${mins}m ago`;
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(diff / 86400000);
+  if (days < 14) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 8) return `${weeks}w ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
+// ── Sub-stage label lookup ────────────────────────────────────────────────────
+function substageLabel(stageKey, substageId) {
+  if (!substageId) return '';
+  const stage = state.workflow?.stages?.[stageKey];
+  if (!stage) return substageId;
+  const status = (stage.statuses || []).find(s => s.id === substageId);
+  return status ? status.label : substageId;
+}
+
+// ── Sub-stage pill colour ─────────────────────────────────────────────────────
+function substagePillColour(stageKey, substageId) {
+  if (TERMINAL_SUBSTAGES.has(substageId)) {
+    return { bg: 'var(--stone-soft)', text: 'var(--ink-4)' };
+  }
+  if (stageKey === 'designvisit' && substageId === 'open_deal') {
+    return { bg: '#dbeafe', text: '#1d4ed8' };
+  }
+  if (stageKey === 'survey' && substageId === 'design_accepted') {
+    return { bg: '#d1fae5', text: '#047857' };
+  }
+  if (substageId === 'form_submission' || substageId === 'attempted_contact') {
+    return { bg: '#fef3c7', text: '#b45309' };
+  }
+  return { bg: '#ccfbf1', text: '#0f766e' };
+}
+
+// ── One-time event delegation ─────────────────────────────────────────────────
 let _salesListenersInited = false;
 function _initSalesListeners() {
   if (_salesListenersInited) return;
@@ -24,131 +93,189 @@ function _initSalesListeners() {
   _salesListenersInited = true;
 
   panel.addEventListener('click', function(e) {
-    // Stage tab button
     const stageBtn = e.target.closest('[data-sales-stage]');
     if (stageBtn) { setSalesStageFilter(stageBtn.dataset.salesStage); return; }
 
-    // New customer button
     if (e.target.closest('#sales-new-btn')) { openNewCustomerModal(); return; }
 
-    // Fitter chip — open assignment picker (admin/manager only)
-    const chip = e.target.closest('[data-fitter-contact-id]');
-    if (chip) {
-      e.stopPropagation();
-      openFitterPicker(chip.dataset.fitterContactId, parseInt(chip.dataset.fitterRoomIdx, 10));
-      return;
-    }
-
-    // Room row — open standalone customer detail page
     const row = e.target.closest('[data-contact-id]');
     if (row) {
-      const contactId = row.dataset.contactId;
-      const roomIdx = parseInt(row.dataset.roomIdx, 10) || 0;
-      location.href = roomIdx ? `/customers/${contactId}?room=${roomIdx}` : `/customers/${contactId}`;
+      location.href = `/customers/${encodeURIComponent(row.dataset.contactId)}`;
     }
+  });
+
+  // Re-fetch both contacts and localdata then re-render when a detail save fires.
+  document.addEventListener('localdata-updated', async () => {
+    await Promise.all([loadAllContacts(), loadWorkflowStages()]);
+    state.filteredContacts = [...state.contacts];
+    renderEnquiryList();
   });
 }
 
-async function renderSalesView() {
+// ── Best room selector (one row per contact) ──────────────────────────────────
+// From all active rooms for a contact in the target stages (filtered if needed),
+// return the single room that represents the highest-priority action.
+// Priority: lowest band first; within band, keep whichever appears first in the
+// cache (data insertion order reflects original creation).
+function _bestRoom(cached, filter) {
+  if (!cached || cached.length === 0) return null;
+
+  let best = null;
+  let bestScore = Infinity;
+
+  for (let idx = 0; idx < cached.length; idx++) {
+    const r = cached[idx];
+    if ((r.roomStatus || 'active') !== 'active') continue;
+    if (!SALES_TAB_STAGES.includes(r.stageKey)) continue;
+    if (filter && r.stageKey !== filter) continue;
+
+    const score = priorityScore(r.stageKey, r.statusId || '');
+    if (score < bestScore) {
+      bestScore = score;
+      best = { ...r, roomIdx: idx };
+    }
+  }
+  return best;
+}
+
+// ── Main render ───────────────────────────────────────────────────────────────
+async function renderEnquiryList() {
   const view = document.getElementById('sales-view');
   if (!view) return;
 
   _initSalesListeners();
 
-  await ensureProjectPlatformUsers();
+  const filter = state.salesStageFilter || '';
 
-  const filter    = state.salesStageFilter || '';
-  const privLevel = state.user?.privilege_level || 'member';
-  // Fitter assignment is manager/admin only — gate on privilege_level only,
-  // so an account whose email is in ADMIN_EMAILS but is downgraded to
-  // viewer/member doesn't see the picker.
-  const canAssign = privLevel === 'manager' || privLevel === 'admin';
-
-  // Build stage tabs: All + 3 target stages
-  const stageTabs = [
-    { key: '', label: 'All' },
-    ...SALES_TAB_STAGES.map(k => ({ key: k, label: state.workflow?.stages?.[k]?.label || k }))
-  ].map(({ key, label }) => {
-    const colour = key ? stageColour(key) : null;
-    const active  = filter === key;
-    const style   = active && colour
-      ? `background:${colour.bg};color:#fff;border-color:${colour.bg}`
-      : active
-        ? 'background:var(--plum);color:#fff;border-color:var(--plum)'
-        : '';
-    return `<button class="project-stage-tab ${active ? 'project-stage-tab-active' : ''}"
-      style="${style}" data-sales-stage="${escHtml(key)}">${escHtml(label)}</button>`;
-  }).join('');
-
-  // Collect contacts with rooms in the target stages
-  const rows = [];
+  // ── Collect one entry per contact ─────────────────────────────────────────
+  const entries = [];
   for (const contact of state.filteredContacts) {
     const cached = state.contactStageCache[contact.id];
+    const createdate = parseInt(contact.properties?.createdate || '0', 10);
+
     if (!cached || cached.length === 0) {
-      // No local data yet — contact is implicitly at Sales stage
+      // No local data yet — treat as Sales stage, no substage known
       if (!filter || filter === 'sales') {
-        rows.push({ contact, rooms: [{ room: 'Main', stageKey: 'sales', roomStatus: 'active', roomIdx: 0, assignedFitterId: null }] });
+        entries.push({
+          contact,
+          stageKey: 'sales',
+          substageId: '',
+          sourceId: '',
+          createdate,
+          priority: 2,
+        });
       }
       continue;
     }
-    const qualifying = cached
-      .map((r, idx) => ({ ...r, roomIdx: idx }))
-      .filter(r => (r.roomStatus || 'active') === 'active')
-      .filter(r => SALES_TAB_STAGES.includes(r.stageKey))
-      .filter(r => !filter || r.stageKey === filter);
-    if (!qualifying.length) continue;
-    rows.push({ contact, rooms: qualifying });
+
+    const best = _bestRoom(cached, filter);
+    if (!best) continue;
+
+    // Prefer the recorded date the contact entered their current stage;
+    // fall back to contact createdate.
+    const stageEntryDate = best.stageDates?.[best.stageKey]
+      ? new Date(best.stageDates[best.stageKey] + 'T00:00:00').getTime()
+      : null;
+
+    entries.push({
+      contact,
+      stageKey: best.stageKey,
+      substageId: best.statusId || '',
+      sourceId: best.sourceId || '',
+      createdate,
+      stageTime: stageEntryDate || createdate,
+      priority: priorityScore(best.stageKey, best.statusId || ''),
+      roomIdx: best.roomIdx,
+    });
   }
 
-  // Sort alphabetically by customer name
-  rows.sort((a, b) => contactName(a.contact).localeCompare(contactName(b.contact)));
+  // ── Sort: priority band asc, then createdate desc (newest first) ──────────
+  entries.sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return b.createdate - a.createdate;
+  });
 
-  const bodyHtml = !rows.length
-    ? `<p class="projects-empty-msg">No customers at this stage.</p>`
-    : rows.map(({ contact, rooms }) => salesCustomerCardHtml(contact, rooms, canAssign)).join('');
+  // ── Stage tab bar ─────────────────────────────────────────────────────────
+  const tabs = [
+    { key: '', label: 'All' },
+    ...SALES_TAB_STAGES.map(k => ({
+      key: k,
+      label: state.workflow?.stages?.[k]?.label || k,
+    })),
+  ].map(({ key, label }) => {
+    const active = filter === key;
+    const colour = key ? stageColour(key) : null;
+    const style = active && colour
+      ? `background:${colour.bg};color:#fff;border-color:${colour.bg}`
+      : active ? 'background:var(--plum);color:#fff;border-color:var(--plum)' : '';
+    return `<button class="project-stage-tab${active ? ' project-stage-tab-active' : ''}"
+      style="${style}" data-sales-stage="${escHtml(key)}">${escHtml(label)}</button>`;
+  }).join('');
+
+  // ── Rows ──────────────────────────────────────────────────────────────────
+  const bodyHtml = entries.length
+    ? entries.map(e => enquiryRowHtml(e)).join('')
+    : `<p class="projects-empty-msg">No enquiries at this stage.</p>`;
 
   view.innerHTML = `
     <div class="project-stage-tabs-bar">
-      ${stageTabs}
-      <button class="sales-new-btn" id="sales-new-btn" title="New Customer">
+      ${tabs}
+      <button class="sales-new-btn" id="sales-new-btn" title="New Enquiry">
         <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
         </svg>
         New
       </button>
     </div>
-    <div class="projects-inner">
+    <div class="enquiry-list">
       ${bodyHtml}
     </div>
   `;
 }
 
-function salesCustomerCardHtml(contact, rooms, canAssign) {
+// ── Row HTML ──────────────────────────────────────────────────────────────────
+function enquiryRowHtml(entry) {
+  const { contact, stageKey, substageId, sourceId, stageTime, priority } = entry;
+  const isTerminal = priority === 3;
+
   const name        = escHtml(contactName(contact));
   const customerNum = contact.properties?.customer_number || '';
+  const stageLabel  = escHtml(state.workflow?.stages?.[stageKey]?.label || stageKey);
+  const subLabel    = escHtml(substageLabel(stageKey, substageId));
+  const timeStr     = escHtml(relativeTime(stageTime));
+  const pillColour  = substagePillColour(stageKey, substageId);
 
-  const roomRows = rooms.map(r => {
-    const colour     = stageColour(r.stageKey);
-    const stageLabel = escHtml(state.workflow?.stages?.[r.stageKey]?.label || r.stageKey);
-    const roomLabel  = escHtml(r.room || 'Main');
-    const chip       = fitterChipHtml(r, contact.id, canAssign);
-    return `
-      <div class="project-room-row" data-contact-id="${escHtml(contact.id)}" data-room-idx="${r.roomIdx}">
-        <span class="project-room-row-name">${roomLabel}</span>
-        ${chip}
-        <span class="stage-pill" style="background:${colour.light};color:${colour.text}">${stageLabel}</span>
-      </div>`;
-  }).join('');
+  const customerNumHtml = customerNum
+    ? `<span class="enquiry-row-custnum">${escHtml(customerNum)}</span>`
+    : '';
+
+  const pillHtml = substageId
+    ? `<span class="enquiry-row-pill${isTerminal ? ' enquiry-row-pill-terminal' : ''}"
+         style="background:${pillColour.bg};color:${pillColour.text}">${subLabel}</span>`
+    : `<span class="enquiry-row-pill enquiry-row-pill-terminal"
+         style="background:var(--stone-soft);color:var(--ink-4)">${stageLabel}</span>`;
+
+  const sourceHtml = sourceId && SOURCE_LABELS[sourceId]
+    ? `<span class="enquiry-row-source">${escHtml(SOURCE_LABELS[sourceId])}</span>`
+    : '';
+
+  const stageTagHtml = `<span class="enquiry-row-stagelabel">${stageLabel}</span>`;
 
   return `
-    <div class="customer-project-card">
-      <div class="customer-project-header">
-        <div class="customer-project-name">${name}</div>
-        ${customerNum ? `<div class="customer-project-id">${escHtml(customerNum)}</div>` : ''}
+    <div class="enquiry-row${isTerminal ? ' enquiry-row-terminal' : ''}"
+         data-contact-id="${escHtml(contact.id)}"
+         role="button" tabindex="0">
+      <div class="enquiry-row-main">
+        <div class="enquiry-row-name-wrap">
+          <span class="enquiry-row-name">${name}</span>
+          ${customerNumHtml}
+        </div>
+        <div class="enquiry-row-meta">
+          ${stageTagHtml}
+          ${pillHtml}
+          ${sourceHtml}
+        </div>
       </div>
-      <div class="project-room-list">
-        ${roomRows}
-      </div>
+      <div class="enquiry-row-time">${timeStr}</div>
     </div>`;
 }
-

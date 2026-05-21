@@ -8,14 +8,35 @@ const DEFAULT_WORKFLOW = {
     sales: {
       label: 'Sales',
       statuses: [
-        { id: 'form_submission',   label: 'Form submission',        hint: 'Email + WhatsApp customer asking for more information' },
-        { id: 'attempted_contact', label: 'Attempted to contact',   hint: 'If no response in 2 working days, call to discuss' },
-        { id: 'in_progress',       label: 'In progress',            hint: '' },
-        { id: 'awaiting_photos',   label: 'Awaiting photos',        hint: '' },
-        { id: 'rough_estimate',    label: 'Rough estimate',         hint: '' },
-        { id: 'unqualified',       label: 'Unqualified',            hint: '' },
-        { id: 'not_suitable',      label: 'Not suitable',           hint: '' },
-        { id: 'bad_timing',        label: 'Bad timing',             hint: 'Get back in touch in 1 month, or date suggested' }
+        {
+          id: 'form_submission', label: 'Form submission',
+          hint: 'Email + WhatsApp customer asking for more information',
+          subStatuses: [
+            { id: 'website',   label: 'Website contact received' },
+            { id: 'whatsapp',  label: 'WhatsApp message received' },
+            { id: 'call',      label: 'Call received' },
+            { id: 'instagram', label: 'Instagram message received' },
+            { id: 'facebook',  label: 'Facebook message received' },
+            { id: 'email',     label: 'Email received' },
+          ]
+        },
+        {
+          id: 'attempted_contact', label: 'Attempted to contact',
+          hint: 'If no response in 2 working days, call to discuss',
+          subStatuses: [
+            { id: 'email_sent',       label: 'Email sent' },
+            { id: 'whatsapp_sent',    label: 'WhatsApp sent' },
+            { id: 'called_customer',  label: 'Called customer' },
+            { id: 'no_response',      label: 'No response' },
+          ]
+        },
+        { id: 'in_progress',    label: 'In progress',    hint: '' },
+        { id: 'awaiting_photos', label: 'Awaiting photos', hint: '' },
+        { id: 'rough_estimate', label: 'Rough estimate',  hint: 'Data collected: rough dimensions, photos, ideas, price range' },
+        { id: 'unqualified',    label: 'Unqualified',     hint: '',                                               terminal: true },
+        { id: 'not_suitable',   label: 'Not suitable',    hint: '',                                               terminal: true },
+        { id: 'bad_timing',     label: 'Bad timing',      hint: 'Get back in touch in 1 month, or suggested date', terminal: true },
+        { id: 'no_response_x3', label: 'No response ×3',  hint: 'Mark as cold lead, archive after 4 weeks',       terminal: true },
       ]
     },
     designvisit: {
@@ -144,8 +165,11 @@ function updateRoomCache() {
   if (!state.selectedContactId) return;
   state.contactStageCache[state.selectedContactId] = state.allRooms.map(r => ({
     room: r.room, stageKey: r.stageKey, roomStatus: r.roomStatus || 'active',
+    statusId: r.statusId || null,
+    sourceId: r.sourceId || null,
     assignedFitterId: r.assignedFitterId || null,
-    installStart: r.installStart || null
+    installStart: r.installStart || null,
+    stageDates: r.stageDates || null,
   }));
 }
 
@@ -364,6 +388,7 @@ async function flushDeferredSave() {
     const cid = state.selectedContactId;
     try {
       await saveWorkflowData();
+      document.dispatchEvent(new CustomEvent('localdata-updated', { detail: { contactId: cid } }));
       // Re-fetch the contact so the list badge reflects the latest server state
       // after the flush (mirrors the same pattern in scheduleSave / Task 215).
       if (cid) {
@@ -406,6 +431,7 @@ function scheduleSave(undoMessage, snapshotRooms) {
     _updateBeforeUnloadGuard();
     try {
       await saveWorkflowData();
+      document.dispatchEvent(new CustomEvent('localdata-updated', { detail: { contactId: state.selectedContactId } }));
       // Re-fetch the contact so the list reflects the latest server state
       // (e.g. HubSpot last-activity timestamp after the PATCH).  Route through
       // _mergeContactIntoState so any in-flight optimistic lead-status change

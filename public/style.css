@@ -3467,6 +3467,117 @@ body.showing-workflow .sales-layout #workflow-panel {
 .sales-new-btn:hover { opacity: 0.85; }
 .sales-new-btn svg { flex-shrink: 0; }
 
+/* ── Enquiry List ────────────────────────────────────────────────────────────── */
+.enquiry-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.enquiry-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--stone);
+  cursor: pointer;
+  transition: background 0.1s;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--chalk);
+}
+.enquiry-row:hover  { background: var(--paper); }
+.enquiry-row:active { background: var(--stone-soft); }
+.enquiry-row:focus-visible {
+  outline: 2px solid var(--orchid);
+  outline-offset: -2px;
+}
+
+.enquiry-row-terminal {
+  opacity: 0.55;
+}
+
+.enquiry-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.enquiry-row-name-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.enquiry-row-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.enquiry-row-terminal .enquiry-row-name {
+  color: var(--ink-3);
+}
+
+.enquiry-row-custnum {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ink-4);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.enquiry-row-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.enquiry-row-stagelabel {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+.enquiry-row-pill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.enquiry-row-pill-terminal {
+  background: var(--stone-soft) !important;
+  color: var(--ink-4) !important;
+}
+
+.enquiry-row-source {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--paper-deep);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.enquiry-row-time {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ink-4);
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: center;
+}
+
 /* ── Trades Directory ────────────────────────────────────────────────────────── */
 .trades-page-wrap {
   display: flex; flex-direction: column;
