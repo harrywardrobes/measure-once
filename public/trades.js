@@ -192,10 +192,10 @@ function tradeCardHtml(co) {
   if (timescale) detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Lead time:</span> ${timescale}</span>`);
   if (coWebsite) {
     const siteDisplay = escHtml(coWebsite.replace(/^https?:\/\//, ''));
-    detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Website:</span> <a href="${escHtml(coWebsite)}" target="_blank" rel="noopener noreferrer" class="trades-card-link">${siteDisplay}</a></span>`);
+    detailParts.push(`<span class="trades-card-detail trades-card-detail-copyable"><span class="trades-card-detail-label">Website:</span> <a href="${escHtml(coWebsite)}" target="_blank" rel="noopener noreferrer" class="trades-card-link">${siteDisplay}</a><button class="trades-copy-btn" data-copy="${escHtml(coWebsite)}" aria-label="Copy website URL" title="Copy URL" type="button"><svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></span>`);
   }
   if (coCompanyPhone) {
-    detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Tel:</span> <a href="tel:${escHtml(coCompanyPhone)}" class="trades-card-link">${escHtml(coCompanyPhone)}</a></span>`);
+    detailParts.push(`<span class="trades-card-detail trades-card-detail-copyable"><span class="trades-card-detail-label">Tel:</span> <a href="tel:${escHtml(coCompanyPhone)}" class="trades-card-link">${escHtml(coCompanyPhone)}</a><button class="trades-copy-btn" data-copy="${escHtml(coCompanyPhone)}" aria-label="Copy company phone" title="Copy number" type="button"><svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></span>`);
   }
 
   return `

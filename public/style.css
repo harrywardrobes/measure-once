@@ -3723,6 +3723,15 @@ body.showing-workflow .sales-layout #workflow-panel {
   border-radius: var(--radius-sm);
   padding: 2px 8px;
 }
+.trades-card-detail-copyable {
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.trades-card-detail-copyable .trades-copy-btn {
+  opacity: 0; flex-shrink: 0;
+}
+.trades-card-detail-copyable:hover .trades-copy-btn,
+.trades-card-detail-copyable .trades-copy-btn:focus-visible,
+.trades-card-detail-copyable .trades-copy-btn.copied { opacity: 1; }
 .trades-card-detail-label { font-weight: 600; color: var(--ink-2); }
 .trades-card-notes {
   margin-top: 8px; font-size: 0.8rem; color: var(--ink-3);
