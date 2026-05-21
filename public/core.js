@@ -500,11 +500,26 @@ function renderAuthStatus() {
   }
 
   if (user.privilege_level === 'admin') {
-    _updatePendingDot();
-    _pendingCountInterval = setInterval(_updatePendingDot, 60_000);
+    if (document.visibilityState !== 'hidden') {
+      _updatePendingDot();
+      _pendingCountInterval = setInterval(_updatePendingDot, 60_000);
+    }
+    document.removeEventListener('visibilitychange', _onPendingVisibility);
+    document.addEventListener('visibilitychange', _onPendingVisibility);
     window.addEventListener('beforeunload', () => {
       clearInterval(_pendingCountInterval);
       _pendingCountInterval = null;
+      document.removeEventListener('visibilitychange', _onPendingVisibility);
     }, { once: true });
+  }
+}
+
+function _onPendingVisibility() {
+  if (document.visibilityState === 'hidden') {
+    clearInterval(_pendingCountInterval);
+    _pendingCountInterval = null;
+  } else if (_pendingCountInterval === null) {
+    _updatePendingDot();
+    _pendingCountInterval = setInterval(_updatePendingDot, 60_000);
   }
 }
