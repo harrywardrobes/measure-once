@@ -19,7 +19,7 @@
   <div id="trades-view" class="trades-page-wrap">
     <div class="trades-header-bar">
       <h1 class="trades-page-title">Trades</h1>
-      <button class="trades-add-btn" id="trades-add-btn" onclick="openTradesModal()" data-manager-only>
+      <button class="trades-add-btn" id="trades-add-btn" onclick="openTradesModal()" style="display:none">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
         </svg>
@@ -168,6 +168,11 @@
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       if (!await bootstrap()) return;
+      const priv = state.user?.privilege_level;
+      if (priv === 'manager' || priv === 'admin') {
+        const btn = document.getElementById('trades-add-btn');
+        if (btn) btn.style.removeProperty('display');
+      }
       loadTradeContacts();
     });
   </script>
