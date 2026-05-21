@@ -149,7 +149,6 @@ function tradeCardHtml(co) {
   const areasDisplay = escHtml(areasArr.join(', '));
   const timescale  = escHtml(co.timescale || '');
   const notes      = escHtml(co.notes    || '');
-  const timescaleUpdatedAt = co.timescale_updated_at ? new Date(co.timescale_updated_at) : null;
   const id = co.id;
 
   const contactsHtml = (co.contacts || []).map(c => {
@@ -182,20 +181,7 @@ function tradeCardHtml(co) {
   }).join('');
 
   const detailParts = [];
-  if (timescale) {
-    let freshBadge = '';
-    if (timescaleUpdatedAt) {
-      const monthsAgo = (Date.now() - timescaleUpdatedAt.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
-      const label = monthsAgo < 1 ? 'Updated this month'
-                  : monthsAgo < 2 ? 'Updated 1 month ago'
-                  : `Updated ${Math.floor(monthsAgo)} months ago`;
-      const cls = monthsAgo < 6 ? 'fresh-green' : monthsAgo < 12 ? 'fresh-amber' : 'fresh-red';
-      freshBadge = `<span class="trades-fresh-badge trades-fresh-${cls}" title="${label}">${label}</span>`;
-    } else {
-      freshBadge = `<span class="trades-fresh-badge trades-fresh-red" title="Lead time not recently verified">Not verified</span>`;
-    }
-    detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Lead time:</span> ${timescale} ${freshBadge}</span>`);
-  }
+  if (timescale) detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Lead time:</span> ${timescale}</span>`);
 
   return `
     <div class="trades-card" data-id="${id}">

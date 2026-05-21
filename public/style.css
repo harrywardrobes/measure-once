@@ -3708,18 +3708,6 @@ body.showing-workflow .sales-layout #workflow-panel {
   padding: 2px 8px;
 }
 .trades-card-detail-label { font-weight: 600; color: var(--ink-2); }
-.trades-fresh-badge {
-  display: inline-block;
-  font-size: 0.68rem; font-weight: 600;
-  padding: 1px 6px;
-  border-radius: var(--radius-pill);
-  vertical-align: middle;
-  margin-left: 4px;
-  letter-spacing: 0.01em;
-}
-.trades-fresh-green { background: #dcfce7; color: #15803d; }
-.trades-fresh-amber { background: #fef9c3; color: #92400e; }
-.trades-fresh-red   { background: #fee2e2; color: #b91c1c; }
 .trades-card-notes {
   margin-top: 8px; font-size: 0.8rem; color: var(--ink-3);
   border-top: 1px solid var(--stone-light); padding-top: 8px;
