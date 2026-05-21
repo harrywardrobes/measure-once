@@ -267,9 +267,11 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, captchaToken }),
       });
-      const data = await r.json().catch(() => ({}));
+      let data = {};
+      let bodyText = '';
+      try { bodyText = await r.text(); data = JSON.parse(bodyText); } catch (_) {}
       if (!r.ok) {
-        show(errEl, data.error || 'Could not sign in — please reload the page and try again.');
+        show(errEl, data.error || `Sign in failed (${r.status}) — please reload and try again.`);
         btn.disabled = false; btn.textContent = 'Sign in';
         resetTurnstile('login');
         return;

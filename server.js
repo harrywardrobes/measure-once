@@ -2299,11 +2299,6 @@ app.get('/api/calendar/upcoming', async (req, res) => {
   }
 });
 
-// ── 404 catch-all ─────────────────────────────────────────────────────────────
-app.use((req, res) => {
-  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
-});
-
 // ── Start ─────────────────────────────────────────────────────────────────────
 (async () => {
   try {
@@ -2312,6 +2307,11 @@ app.use((req, res) => {
   } catch (e) {
     console.error('  Auth setup failed:', e.message);
   }
+
+  // 404 catch-all must be registered AFTER setupAuth so auth routes are matched first.
+  app.use((req, res) => {
+    res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  });
 
   app.listen(PORT, HOST, async () => {
     console.log(`\n  Measure Once`);
