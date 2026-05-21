@@ -151,11 +151,18 @@ function tradeCardHtml(co) {
   const notes      = escHtml(co.notes    || '');
   const id = co.id;
 
+  const coWebsite      = co.website      || '';
+  const coCompanyPhone = co.company_phone || '';
+
   const contactsHtml = (co.contacts || []).map(c => {
     const cName  = escHtml(c.name  || '');
     const cRole  = escHtml(c.role  || '');
     const cPhone = escHtml(c.phone || '');
     const cEmail = escHtml(c.email || '');
+    const prefLabels = (c.preferred_contact || '').split(',').map(s => s.trim()).filter(Boolean);
+    const prefHtml = prefLabels.length
+      ? `<div class="trades-card-person-pref">${prefLabels.map(l => `<span class="trades-pref-chip">${escHtml(l)}</span>`).join('')}</div>`
+      : '';
     const callBtn  = cPhone ? `<div class="trades-contact-action-group">
       <a href="tel:${cPhone}" class="trades-contact-action-btn trades-contact-call-btn" aria-label="Call ${cName} at ${cPhone}">
         <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
@@ -176,12 +183,20 @@ function tradeCardHtml(co) {
       <div class="trades-card-person-top">
         <span class="trades-card-person-name">${cName}</span>${cRole ? `<span class="trades-card-person-role">${cRole}</span>` : ''}
       </div>
+      ${prefHtml}
       ${(callBtn || emailBtn) ? `<div class="trades-card-contact-row">${callBtn}${emailBtn}</div>` : ''}
     </div>`;
   }).join('');
 
   const detailParts = [];
   if (timescale) detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Lead time:</span> ${timescale}</span>`);
+  if (coWebsite) {
+    const siteDisplay = escHtml(coWebsite.replace(/^https?:\/\//, ''));
+    detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Website:</span> <a href="${escHtml(coWebsite)}" target="_blank" rel="noopener noreferrer" class="trades-card-link">${siteDisplay}</a></span>`);
+  }
+  if (coCompanyPhone) {
+    detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Tel:</span> <a href="tel:${escHtml(coCompanyPhone)}" class="trades-card-link">${escHtml(coCompanyPhone)}</a></span>`);
+  }
 
   return `
     <div class="trades-card" data-id="${id}">
@@ -228,6 +243,10 @@ function contactSlotHtml(index, data) {
   const role  = escHtml(data?.role  || '');
   const phone = escHtml(data?.phone || '');
   const email = escHtml(data?.email || '');
+  const prefArr = (data?.preferred_contact || '').split(',').map(s => s.trim()).filter(Boolean);
+  const prefCall     = prefArr.includes('Phone call') ? ' checked' : '';
+  const prefWhatsapp = prefArr.includes('WhatsApp')   ? ' checked' : '';
+  const prefEmail    = prefArr.includes('Email')       ? ' checked' : '';
   return `
     <div class="trades-contact-slot" data-slot="${index}">
       <div class="trades-contact-slot-header">
@@ -256,6 +275,16 @@ function contactSlotHtml(index, data) {
         <div class="trades-field">
           <label class="trades-label" for="tf-cemail-${index}">Email address</label>
           <input class="trades-input" id="tf-cemail-${index}" type="email" placeholder="e.g. john@example.com" value="${email}">
+        </div>
+      </div>
+      <div class="trades-form-row">
+        <div class="trades-field">
+          <label class="trades-label">Preferred contact method</label>
+          <div class="trades-areas-group">
+            <label class="trades-area-chip"><input type="checkbox" id="tf-cpref-call-${index}" value="Phone call"${prefCall}> Phone call</label>
+            <label class="trades-area-chip"><input type="checkbox" id="tf-cpref-whatsapp-${index}" value="WhatsApp"${prefWhatsapp}> WhatsApp</label>
+            <label class="trades-area-chip"><input type="checkbox" id="tf-cpref-email-${index}" value="Email"${prefEmail}> Email</label>
+          </div>
         </div>
       </div>
     </div>`;
@@ -294,12 +323,18 @@ function rebuildContactSlots(dataArr) {
 
 function collectContactSlots() {
   const slots = document.querySelectorAll('#trades-contacts-list .trades-contact-slot');
-  return Array.from(slots).map((_, i) => ({
-    name:  (document.getElementById(`tf-cname-${i}`)  || {}).value || '',
-    role:  (document.getElementById(`tf-crole-${i}`)  || {}).value || '',
-    phone: (document.getElementById(`tf-cphone-${i}`) || {}).value || '',
-    email: (document.getElementById(`tf-cemail-${i}`) || {}).value || '',
-  }));
+  return Array.from(slots).map((_, i) => {
+    const prefChecked = Array.from(
+      document.querySelectorAll(`#trades-contacts-list .trades-contact-slot[data-slot="${i}"] input[type="checkbox"]:checked`)
+    ).map(cb => cb.value);
+    return {
+      name:             (document.getElementById(`tf-cname-${i}`)  || {}).value || '',
+      role:             (document.getElementById(`tf-crole-${i}`)  || {}).value || '',
+      phone:            (document.getElementById(`tf-cphone-${i}`) || {}).value || '',
+      email:            (document.getElementById(`tf-cemail-${i}`) || {}).value || '',
+      preferred_contact: prefChecked.join(','),
+    };
+  });
 }
 
 function collectAreasServed() {
@@ -331,6 +366,8 @@ function openTradesModal(id) {
     });
     document.getElementById('tf-timescale').value      = co.timescale       || '';
     document.getElementById('tf-notes').value          = co.notes           || '';
+    document.getElementById('tf-website').value        = co.website         || '';
+    document.getElementById('tf-company-phone').value  = co.company_phone   || '';
     const existingContacts = (co.contacts || []).length ? co.contacts : [{}];
     rebuildContactSlots(existingContacts);
     document.getElementById('trades-submit-btn').textContent = 'Save Changes';
@@ -458,6 +495,8 @@ async function saveTradeContact(e) {
     areas_served:   collectAreasServed(),
     timescale:      document.getElementById('tf-timescale').value.trim(),
     notes:          document.getElementById('tf-notes').value.trim(),
+    website:        (document.getElementById('tf-website')       || {}).value || '',
+    company_phone:  (document.getElementById('tf-company-phone') || {}).value || '',
     contacts,
   };
 

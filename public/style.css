@@ -3612,6 +3612,22 @@ body.showing-workflow .sales-layout #workflow-panel {
 .trades-card-person-role {
   font-size: 0.75rem; color: var(--ink-4);
 }
+.trades-card-person-pref {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-bottom: 4px;
+}
+.trades-pref-chip {
+  font-size: 0.7rem; font-weight: 500;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--stone-soft);
+  border: 1px solid var(--stone);
+  color: var(--ink-3);
+}
+.trades-card-link {
+  color: var(--orchid); text-decoration: none;
+}
+.trades-card-link:hover { text-decoration: underline; }
 .trades-card-actions {
   display: flex; gap: 4px; flex-shrink: 0;
 }

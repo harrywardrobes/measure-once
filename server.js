@@ -1537,6 +1537,11 @@ async function ensureTradesTable() {
   await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS created_by_name VARCHAR`);
   await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS updated_by_name VARCHAR`);
   await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS timescale_updated_at TIMESTAMP`);
+  await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS website VARCHAR`);
+  await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS company_phone VARCHAR`);
+  await _tradesPool.query(`ALTER TABLE trade_company_contacts ADD COLUMN IF NOT EXISTS preferred_contact VARCHAR`);
+  await _tradesPool.query(`ALTER TABLE trade_company_submissions ADD COLUMN IF NOT EXISTS website VARCHAR`);
+  await _tradesPool.query(`ALTER TABLE trade_company_submissions ADD COLUMN IF NOT EXISTS company_phone VARCHAR`);
   await _tradesPool.query(`
     CREATE TABLE IF NOT EXISTS trade_audit_log (
       id         SERIAL PRIMARY KEY,
@@ -1754,7 +1759,7 @@ app.get('/api/trades', isAuthenticated, async (req, res) => {
 });
 
 app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, tradesCreateLimiter, async (req, res) => {
-  const { company_name, trade_type, areas_served, timescale, notes, contacts } = req.body || {};
+  const { company_name, trade_type, areas_served, timescale, notes, website, company_phone, contacts } = req.body || {};
   if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'Company name is required.' });
   if (!trade_type || !trade_type.trim()) return res.status(400).json({ error: 'Trade type is required.' });
   const validContacts = (contacts || []).filter(c => c && (c.name || '').trim());
@@ -1766,11 +1771,12 @@ app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, tradesCreateLimi
     const timescaleVal = (timescale || '').trim();
     const { rows: [co] } = await client.query(
       `INSERT INTO trade_companies
-        (company_name, trade_type, areas_served, timescale, notes, created_by, created_by_name, timescale_updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        (company_name, trade_type, areas_served, timescale, notes, website, company_phone, created_by, created_by_name, timescale_updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        RETURNING *`,
       [company_name.trim(), trade_type.trim(), serializeAreasServed(areas_served),
        timescaleVal, (notes || '').trim(),
+       (website || '').trim() || null, (company_phone || '').trim() || null,
        req.user?.claims?.sub || null,
        actorDisplayName(req.user?.claims),
        timescaleVal ? new Date() : null]
@@ -1779,9 +1785,9 @@ app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, tradesCreateLimi
     for (let i = 0; i < validContacts.length; i++) {
       const ct = validContacts[i];
       const { rows: [cc] } = await client.query(
-        `INSERT INTO trade_company_contacts (company_id, sort_order, name, role, phone, email)
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-        [co.id, i, ct.name.trim(), (ct.role || '').trim(), (ct.phone || '').trim(), (ct.email || '').trim()]
+        `INSERT INTO trade_company_contacts (company_id, sort_order, name, role, phone, email, preferred_contact)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [co.id, i, ct.name.trim(), (ct.role || '').trim(), (ct.phone || '').trim(), (ct.email || '').trim(), (ct.preferred_contact || '').trim() || null]
       );
       insertedContacts.push(cc);
     }
@@ -1802,7 +1808,7 @@ app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, tradesCreateLimi
 app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid id.' });
-  const { company_name, trade_type, areas_served, timescale, notes, contacts } = req.body || {};
+  const { company_name, trade_type, areas_served, timescale, notes, website, company_phone, contacts } = req.body || {};
   if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'Company name is required.' });
   if (!trade_type || !trade_type.trim()) return res.status(400).json({ error: 'Trade type is required.' });
   const validContacts = (contacts || []).filter(c => c && (c.name || '').trim());
@@ -1814,7 +1820,7 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
     const { rows: [prev] } = await client.query(`SELECT * FROM trade_companies WHERE id=$1`, [id]);
     if (!prev) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Company not found.' }); }
     const { rows: prevContacts } = await client.query(
-      `SELECT name, role, phone, email FROM trade_company_contacts WHERE company_id=$1 ORDER BY sort_order, id`, [id]
+      `SELECT name, role, phone, email, preferred_contact FROM trade_company_contacts WHERE company_id=$1 ORDER BY sort_order, id`, [id]
     );
     const timescaleVal = (timescale || '').trim();
     const timescaleChanged = prev.timescale !== timescaleVal;
@@ -1822,12 +1828,14 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
       `UPDATE trade_companies
        SET company_name=$1, trade_type=$2, areas_served=$3, timescale=$4,
            notes=$5, updated_by=$6, updated_at=NOW(), updated_by_name=$8,
-           timescale_updated_at = CASE WHEN $9 THEN NOW() ELSE timescale_updated_at END
+           timescale_updated_at = CASE WHEN $9 THEN NOW() ELSE timescale_updated_at END,
+           website=$10, company_phone=$11
        WHERE id=$7 RETURNING *`,
       [company_name.trim(), trade_type.trim(), serializeAreasServed(areas_served),
        timescaleVal, (notes || '').trim(),
        req.user?.claims?.sub || null, id,
-       actorDisplayName(req.user?.claims), timescaleChanged]
+       actorDisplayName(req.user?.claims), timescaleChanged,
+       (website || '').trim() || null, (company_phone || '').trim() || null]
     );
     if (!rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Company not found.' }); }
     await client.query(`DELETE FROM trade_company_contacts WHERE company_id=$1`, [id]);
@@ -1835,9 +1843,9 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
     for (let i = 0; i < validContacts.length; i++) {
       const ct = validContacts[i];
       const { rows: [cc] } = await client.query(
-        `INSERT INTO trade_company_contacts (company_id, sort_order, name, role, phone, email)
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-        [id, i, ct.name.trim(), (ct.role || '').trim(), (ct.phone || '').trim(), (ct.email || '').trim()]
+        `INSERT INTO trade_company_contacts (company_id, sort_order, name, role, phone, email, preferred_contact)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [id, i, ct.name.trim(), (ct.role || '').trim(), (ct.phone || '').trim(), (ct.email || '').trim(), (ct.preferred_contact || '').trim() || null]
       );
       insertedContacts.push(cc);
     }
@@ -1846,11 +1854,13 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
     if (prev.trade_type !== trade_type.trim()) changedFields.push('category');
     if (timescaleChanged) changedFields.push('lead time');
     if (prev.notes !== (notes || '').trim()) changedFields.push('notes');
+    if ((prev.website || '') !== ((website || '').trim())) changedFields.push('website');
+    if ((prev.company_phone || '') !== ((company_phone || '').trim())) changedFields.push('company phone');
     const prevAreasStr = serializeAreasServed(parseAreasServed(prev.areas_served));
     const newAreasStr  = serializeAreasServed(areas_served);
     if (prevAreasStr !== newAreasStr) changedFields.push('areas served');
-    const prevContactsSig = prevContacts.map(c => `${c.name}|${c.role}|${c.phone}|${c.email}`).join(';');
-    const newContactsSig  = validContacts.map(c => `${c.name.trim()}|${(c.role||'').trim()}|${(c.phone||'').trim()}|${(c.email||'').trim()}`).join(';');
+    const prevContactsSig = prevContacts.map(c => `${c.name}|${c.role}|${c.phone}|${c.email}|${c.preferred_contact||''}`).join(';');
+    const newContactsSig  = validContacts.map(c => `${c.name.trim()}|${(c.role||'').trim()}|${(c.phone||'').trim()}|${(c.email||'').trim()}|${(c.preferred_contact||'').trim()}`).join(';');
     if (prevContactsSig !== newContactsSig) changedFields.push('contacts');
     const action = changedFields.length ? `Updated ${changedFields.join(', ')}` : 'Saved (no changes)';
     await client.query(
@@ -1896,7 +1906,7 @@ app.delete('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req
 // ── Trade Company Submissions ─────────────────────────────────────────────────
 
 app.post('/api/trades/submissions', isAuthenticated, requireManagerOrAdmin, tradesCreateLimiter, async (req, res) => {
-  const { company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, contacts } = req.body || {};
+  const { company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, website, company_phone, contacts } = req.body || {};
   if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'Company name is required.' });
   if (!trade_type || !trade_type.trim()) return res.status(400).json({ error: 'Trade type is required.' });
   if (!TRADE_CATEGORIES.includes(trade_type.trim())) return res.status(400).json({ error: 'Invalid trade category.' });
@@ -1917,17 +1927,19 @@ app.post('/api/trades/submissions', isAuthenticated, requireManagerOrAdmin, trad
     const { rows: [sub] } = await _tradesPool.query(
       `INSERT INTO trade_company_submissions
         (company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes,
-         contacts, submitter_id, submitter_email, submitter_name)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         website, company_phone, contacts, submitter_id, submitter_email, submitter_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING id, created_at`,
       [company_name.trim(), trade_type.trim(), serializeAreasServed(areas_served),
        (timescale || '').trim(), (invoice_method || '').trim(),
        (payment_terms || '').trim(), (notes || '').trim(),
+       (website || '').trim() || null, (company_phone || '').trim() || null,
        JSON.stringify(validContacts.map(c => ({
-         name:  c.name.trim(),
-         role:  (c.role  || '').trim(),
-         phone: (c.phone || '').trim(),
-         email: (c.email || '').trim(),
+         name:             c.name.trim(),
+         role:             (c.role             || '').trim(),
+         phone:            (c.phone            || '').trim(),
+         email:            (c.email            || '').trim(),
+         preferred_contact:(c.preferred_contact|| '').trim(),
        }))),
        submitterId, submitterEmail, submitterName]
     );
@@ -1972,11 +1984,12 @@ app.post('/api/admin/trades/submissions/:id/approve', isAuthenticated, requireAd
     const { rows: [co] } = await client.query(
       `INSERT INTO trade_companies
         (company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes,
-         created_by, created_by_name)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         website, company_phone, created_by, created_by_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING *`,
       [sub.company_name, sub.trade_type, sub.areas_served,
        sub.timescale, sub.invoice_method, sub.payment_terms, sub.notes,
+       sub.website || null, sub.company_phone || null,
        sub.submitter_id, sub.submitter_name]
     );
 
@@ -1985,9 +1998,9 @@ app.post('/api/admin/trades/submissions/:id/approve', isAuthenticated, requireAd
     for (let i = 0; i < contacts.length; i++) {
       const ct = contacts[i];
       const { rows: [cc] } = await client.query(
-        `INSERT INTO trade_company_contacts (company_id, sort_order, name, role, phone, email)
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-        [co.id, i, ct.name || '', ct.role || '', ct.phone || '', ct.email || '']
+        `INSERT INTO trade_company_contacts (company_id, sort_order, name, role, phone, email, preferred_contact)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [co.id, i, ct.name || '', ct.role || '', ct.phone || '', ct.email || '', ct.preferred_contact || null]
       );
       insertedContacts.push(cc);
     }
