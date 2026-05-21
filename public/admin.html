@@ -1129,8 +1129,9 @@
       const contactsHtml = contacts.map(c => {
         const parts = [esc(c.name || '')];
         if (c.role)  parts.push(esc(c.role));
-        if (c.phone) parts.push(esc(c.phone));
+        if (c.phone) parts.push(`<a href="tel:${esc(c.phone)}" style="color:inherit;">${esc(c.phone)}</a>`);
         if (c.email) parts.push(esc(c.email));
+        if (c.preferred_contact) parts.push(`<span style="background:var(--surface-2,#f1f5f9);border-radius:3px;padding:0 5px;font-size:.75rem;">${esc(c.preferred_contact)}</span>`);
         return `<div style="font-size:.82rem;color:var(--ink-2);padding:2px 0;">${parts.join(' · ')}</div>`;
       }).join('');
       const details = [
@@ -1148,6 +1149,10 @@
                 ${areas ? `<span style="font-size:.8rem;color:var(--ink-3);">${esc(areas)}</span>` : ''}
               </div>
               ${details.length ? `<div style="font-size:.8rem;color:var(--ink-3);margin-bottom:6px;">${details.join(' · ')}</div>` : ''}
+              ${(s.website || s.company_phone) ? `<div style="font-size:.82rem;color:var(--ink-2);margin-bottom:6px;display:flex;gap:16px;flex-wrap:wrap;">
+                ${s.website ? `<a href="${esc(s.website)}" target="_blank" rel="noopener" style="color:var(--accent,#3b82f6);text-decoration:none;">🌐 ${esc(s.website)}</a>` : ''}
+                ${s.company_phone ? `<a href="tel:${esc(s.company_phone)}" style="color:inherit;text-decoration:none;">📞 ${esc(s.company_phone)}</a>` : ''}
+              </div>` : ''}
               ${s.notes ? `<div style="font-size:.82rem;color:var(--ink-3);margin-bottom:8px;font-style:italic;">${esc(s.notes)}</div>` : ''}
               ${contacts.length ? `<div style="margin-bottom:8px;"><div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-4);margin-bottom:4px;">Contacts</div>${contactsHtml}</div>` : ''}
               <div style="font-size:.75rem;color:var(--ink-4);margin-top:4px;">
