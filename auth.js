@@ -858,7 +858,7 @@ async function setupAuth(app) {
     const captcha = await verifyTurnstile(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
     if (!captcha.ok) return turnstileError(res);
     try {
-      if (await isEmailApproved(email)) {
+      if (await isEmailApproved(email) || isAdminEmail(email)) {
         try {
           const token = await issuePasswordSetToken(email, { purpose: 'reset' });
           await sendSetPasswordEmail(email, token, { reset: true });
