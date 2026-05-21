@@ -1146,6 +1146,17 @@ async function setupAuth(app) {
   });
 
   // ── Admin: review access requests & manage allow-list ──────────────────────
+  app.get('/api/admin/pending-count', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT COUNT(*) AS count FROM account_requests WHERE status = 'pending'`
+      );
+      res.json({ count: parseInt(r.rows[0].count, 10) });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get('/api/admin/requests', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(

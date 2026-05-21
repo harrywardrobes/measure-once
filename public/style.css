@@ -2596,6 +2596,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 
 /* ── Header Avatar ───────────────────────────────────────────────────────────── */
 .header-avatar-btn {
+  position: relative;
   background: rgba(255,255,255,0.15);
   border: none;
   border-radius: 50%;
@@ -2614,6 +2615,17 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   letter-spacing: 0.03em;
 }
 .header-avatar-btn:hover { background: rgba(255,255,255,0.25); }
+.header-avatar-dot {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 1.5px solid #200842;
+  pointer-events: none;
+}
 .header-avatar-img {
   width: 30px;
   height: 30px;

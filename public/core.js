@@ -468,4 +468,18 @@ function renderAuthStatus() {
     : `<a href="/profile" class="header-avatar-btn header-avatar-initials" title="Profile" aria-label="Open profile">
          ${escHtml(initials)}
        </a>`;
+  if (user.privilege_level === 'admin') {
+    fetch('/api/admin/pending-count')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data || data.count < 1) return;
+        const btn = el.querySelector('.header-avatar-btn');
+        if (!btn) return;
+        const dot = document.createElement('span');
+        dot.className = 'header-avatar-dot';
+        dot.setAttribute('aria-label', 'Pending access requests');
+        btn.appendChild(dot);
+      })
+      .catch(() => {});
+  }
 }
