@@ -147,10 +147,9 @@ function tradeCardHtml(co) {
   const trade   = escHtml(co.trade_type   || '');
   const areasArr = Array.isArray(co.areas_served) ? co.areas_served : [];
   const areasDisplay = escHtml(areasArr.join(', '));
-  const timescale  = escHtml(co.timescale      || '');
-  const payTerms   = escHtml(co.payment_terms  || '');
-  const invMethod  = escHtml(co.invoice_method || '');
-  const notes      = escHtml(co.notes          || '');
+  const timescale  = escHtml(co.timescale || '');
+  const notes      = escHtml(co.notes    || '');
+  const timescaleUpdatedAt = co.timescale_updated_at ? new Date(co.timescale_updated_at) : null;
   const id = co.id;
 
   const contactsHtml = (co.contacts || []).map(c => {
@@ -183,9 +182,20 @@ function tradeCardHtml(co) {
   }).join('');
 
   const detailParts = [];
-  if (timescale)  detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Lead time:</span> ${timescale}</span>`);
-  if (payTerms)   detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Payment:</span> ${payTerms}</span>`);
-  if (invMethod)  detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Invoice via:</span> ${invMethod}</span>`);
+  if (timescale) {
+    let freshBadge = '';
+    if (timescaleUpdatedAt) {
+      const monthsAgo = (Date.now() - timescaleUpdatedAt.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+      const label = monthsAgo < 1 ? 'Updated this month'
+                  : monthsAgo < 2 ? 'Updated 1 month ago'
+                  : `Updated ${Math.floor(monthsAgo)} months ago`;
+      const cls = monthsAgo < 6 ? 'fresh-green' : monthsAgo < 12 ? 'fresh-amber' : 'fresh-red';
+      freshBadge = `<span class="trades-fresh-badge trades-fresh-${cls}" title="${label}">${label}</span>`;
+    } else {
+      freshBadge = `<span class="trades-fresh-badge trades-fresh-red" title="Lead time not recently verified">Not verified</span>`;
+    }
+    detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Lead time:</span> ${timescale} ${freshBadge}</span>`);
+  }
 
   return `
     <div class="trades-card" data-id="${id}">
@@ -334,8 +344,6 @@ function openTradesModal(id) {
       cb.checked = currentAreas.includes(cb.value);
     });
     document.getElementById('tf-timescale').value      = co.timescale       || '';
-    document.getElementById('tf-invoice-method').value = co.invoice_method  || '';
-    document.getElementById('tf-payment-terms').value  = co.payment_terms   || '';
     document.getElementById('tf-notes').value          = co.notes           || '';
     const existingContacts = (co.contacts || []).length ? co.contacts : [{}];
     rebuildContactSlots(existingContacts);
@@ -463,8 +471,6 @@ async function saveTradeContact(e) {
     trade_type,
     areas_served:   collectAreasServed(),
     timescale:      document.getElementById('tf-timescale').value.trim(),
-    invoice_method: document.getElementById('tf-invoice-method').value.trim(),
-    payment_terms:  document.getElementById('tf-payment-terms').value.trim(),
     notes:          document.getElementById('tf-notes').value.trim(),
     contacts,
   };

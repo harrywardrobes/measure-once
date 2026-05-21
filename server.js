@@ -1536,6 +1536,7 @@ async function ensureTradesTable() {
   await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP`);
   await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS created_by_name VARCHAR`);
   await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS updated_by_name VARCHAR`);
+  await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS timescale_updated_at TIMESTAMP`);
   await _tradesPool.query(`
     CREATE TABLE IF NOT EXISTS trade_audit_log (
       id         SERIAL PRIMARY KEY,
@@ -1753,7 +1754,7 @@ app.get('/api/trades', isAuthenticated, async (req, res) => {
 });
 
 app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, tradesCreateLimiter, async (req, res) => {
-  const { company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, contacts } = req.body || {};
+  const { company_name, trade_type, areas_served, timescale, notes, contacts } = req.body || {};
   if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'Company name is required.' });
   if (!trade_type || !trade_type.trim()) return res.status(400).json({ error: 'Trade type is required.' });
   const validContacts = (contacts || []).filter(c => c && (c.name || '').trim());
@@ -1762,16 +1763,17 @@ app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, tradesCreateLimi
   const client = await _tradesPool.connect();
   try {
     await client.query('BEGIN');
+    const timescaleVal = (timescale || '').trim();
     const { rows: [co] } = await client.query(
       `INSERT INTO trade_companies
-        (company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, created_by, created_by_name)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        (company_name, trade_type, areas_served, timescale, notes, created_by, created_by_name, timescale_updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING *`,
       [company_name.trim(), trade_type.trim(), serializeAreasServed(areas_served),
-       (timescale || '').trim(), (invoice_method || '').trim(),
-       (payment_terms || '').trim(), (notes || '').trim(),
+       timescaleVal, (notes || '').trim(),
        req.user?.claims?.sub || null,
-       actorDisplayName(req.user?.claims)]
+       actorDisplayName(req.user?.claims),
+       timescaleVal ? new Date() : null]
     );
     const insertedContacts = [];
     for (let i = 0; i < validContacts.length; i++) {
@@ -1800,7 +1802,7 @@ app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, tradesCreateLimi
 app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid id.' });
-  const { company_name, trade_type, areas_served, timescale, invoice_method, payment_terms, notes, contacts } = req.body || {};
+  const { company_name, trade_type, areas_served, timescale, notes, contacts } = req.body || {};
   if (!company_name || !company_name.trim()) return res.status(400).json({ error: 'Company name is required.' });
   if (!trade_type || !trade_type.trim()) return res.status(400).json({ error: 'Trade type is required.' });
   const validContacts = (contacts || []).filter(c => c && (c.name || '').trim());
@@ -1814,17 +1816,18 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
     const { rows: prevContacts } = await client.query(
       `SELECT name, role, phone, email FROM trade_company_contacts WHERE company_id=$1 ORDER BY sort_order, id`, [id]
     );
+    const timescaleVal = (timescale || '').trim();
+    const timescaleChanged = prev.timescale !== timescaleVal;
     const { rows: [co], rowCount } = await client.query(
       `UPDATE trade_companies
        SET company_name=$1, trade_type=$2, areas_served=$3, timescale=$4,
-           invoice_method=$5, payment_terms=$6, notes=$7,
-           updated_by=$8, updated_at=NOW(), updated_by_name=$10
-       WHERE id=$9 RETURNING *`,
+           notes=$5, updated_by=$6, updated_at=NOW(), updated_by_name=$8,
+           timescale_updated_at = CASE WHEN $9 THEN NOW() ELSE timescale_updated_at END
+       WHERE id=$7 RETURNING *`,
       [company_name.trim(), trade_type.trim(), serializeAreasServed(areas_served),
-       (timescale || '').trim(), (invoice_method || '').trim(),
-       (payment_terms || '').trim(), (notes || '').trim(),
+       timescaleVal, (notes || '').trim(),
        req.user?.claims?.sub || null, id,
-       actorDisplayName(req.user?.claims)]
+       actorDisplayName(req.user?.claims), timescaleChanged]
     );
     if (!rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Company not found.' }); }
     await client.query(`DELETE FROM trade_company_contacts WHERE company_id=$1`, [id]);
@@ -1841,9 +1844,7 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
     const changedFields = [];
     if (prev.company_name !== company_name.trim()) changedFields.push('company name');
     if (prev.trade_type !== trade_type.trim()) changedFields.push('category');
-    if (prev.timescale !== (timescale || '').trim()) changedFields.push('lead time');
-    if (prev.invoice_method !== (invoice_method || '').trim()) changedFields.push('invoice method');
-    if (prev.payment_terms !== (payment_terms || '').trim()) changedFields.push('payment terms');
+    if (timescaleChanged) changedFields.push('lead time');
     if (prev.notes !== (notes || '').trim()) changedFields.push('notes');
     const prevAreasStr = serializeAreasServed(parseAreasServed(prev.areas_served));
     const newAreasStr  = serializeAreasServed(areas_served);
