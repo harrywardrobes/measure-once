@@ -792,6 +792,7 @@
     try {
       await api('POST', `/api/admin/users/${encodeURIComponent(email)}/resend-set-password`);
       toast(`Set-password email sent to ${email}`);
+      _auditLogInitialized = false;
     } catch (e) {
       toast(e.message || 'Could not send email', true);
     } finally {
@@ -811,6 +812,7 @@
     try {
       await api('POST', `/api/admin/users/${encodeURIComponent(email)}/force-password-reset`);
       toast(`Password reset — email sent to ${email}`);
+      _auditLogInitialized = false;
       try {
         _users = await api('GET', '/api/admin/users') || _users;
         renderTeam();
@@ -854,6 +856,7 @@
       renderRequests();
       closeModal();
       toast('Changes saved');
+      _auditLogInitialized = false;
     } catch (e) {
       if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
       else toast(e.message, true);
@@ -940,6 +943,7 @@
       const note = $('#perm-unsaved-note');
       if (note) note.style.display = 'none';
       toast('Permissions saved');
+      _auditLogInitialized = false;
     } catch (e) {
       toast(e.message, true);
     } finally {
@@ -993,6 +997,7 @@
       const idx = _jobRoles.findIndex(r => r.name === name);
       if (idx >= 0) _jobRoles[idx] = { ..._jobRoles[idx], privilege_level };
       toast('Role updated');
+      _auditLogInitialized = false;
     } catch (e) {
       toast(e.message, true);
       renderJobRoles();
@@ -1031,6 +1036,7 @@
       if (btn) btn.textContent = 'Add role';
       renderJobRoles();
       toast(existing >= 0 ? 'Role updated' : 'Role added');
+      _auditLogInitialized = false;
     } catch (e) {
       toast(e.message, true);
     }
@@ -1043,6 +1049,7 @@
       _jobRoles = _jobRoles.filter(r => r.name !== name);
       renderJobRoles();
       toast('Role removed');
+      _auditLogInitialized = false;
     } catch (e) {
       toast(e.message, true);
     }
@@ -1261,6 +1268,7 @@
       closeApproveModal();
       toast('Approved — user can now sign in');
       await reload();
+      _auditLogInitialized = false;
     } catch (e) {
       if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
       else toast(e.message, true);
@@ -1279,6 +1287,7 @@
       await api('POST', '/api/admin/requests/' + id + '/reject');
       toast('Rejected');
       await reload();
+      _auditLogInitialized = false;
     } catch (e) { toast(e.message, true); }
   }
   async function revoke(email) {
@@ -1287,6 +1296,7 @@
       await api('DELETE', '/api/admin/allowed/' + encodeURIComponent(email));
       toast('Access revoked');
       await reload();
+      _auditLogInitialized = false;
     } catch (e) { toast(e.message, true); }
   }
 
@@ -1329,6 +1339,7 @@
       const name = [payload.first_name, payload.last_name].filter(Boolean).join(' ');
       toast(name ? `${name} added — they can now sign in` : 'Email added — they can now sign in');
       await reload();
+      _auditLogInitialized = false;
     } catch (e) {
       if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
       else toast(e.message, true);
@@ -1449,7 +1460,7 @@
       toast('Approved — company is now live in the Trades directory');
       _tradeSubmissions = _tradeSubmissions.filter(s => s.id !== id);
       renderTradeSubmissions();
-      await initAuditLog();
+      _auditLogInitialized = false;
     } catch (e) {
       toast(e.message, true);
       btns.forEach(b => { b.disabled = false; });
@@ -1467,6 +1478,7 @@
       toast('Submission rejected');
       _tradeSubmissions = _tradeSubmissions.filter(s => s.id !== id);
       renderTradeSubmissions();
+      _auditLogInitialized = false;
     } catch (e) {
       toast(e.message, true);
       btns.forEach(b => { b.disabled = false; });
@@ -1487,6 +1499,7 @@
       const users = await api('GET', '/api/admin/users');
       _users = users;
       renderTeam();
+      _auditLogInitialized = false;
     } catch (e) { toast(e.message, true); }
   }
 
@@ -1497,6 +1510,7 @@
       toast('Photo rejected');
       _photoRequests = _photoRequests.filter(r => r.id !== id);
       renderPhotoRequests();
+      _auditLogInitialized = false;
     } catch (e) { toast(e.message, true); }
   }
 
