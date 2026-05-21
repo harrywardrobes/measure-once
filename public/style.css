@@ -17,6 +17,8 @@
 /* ── Brand Tokens ────────────────────────────────────────────────────────────── */
 :root {
   color-scheme: light;
+  --header-h: 52px;
+  --banner-h: 37px;
   --paper:        #F6F1E7;
   --paper-deep:   #EDE5D4;
   --chalk:        #FBFAF5;
@@ -55,13 +57,15 @@ body {
   background: var(--paper);
   color: var(--ink-1);
   overscroll-behavior: none;
+  padding-top: var(--header-h);
 }
+body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
 
 /* ── App Shell ───────────────────────────────────────────────────────────────── */
 .app-header {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: 52px;
+  height: var(--header-h);
   background: var(--plum);
   border-bottom: 1px solid rgba(255,255,255,0.08);
   display: flex;
@@ -226,7 +230,7 @@ body {
 /* ── Viewer read-only banner ─────────────────────────────────────────────────── */
 .viewer-banner {
   position: fixed;
-  top: 52px;
+  top: var(--header-h);
   left: 0; right: 0;
   z-index: 90;
   background: #fefce8;
@@ -261,11 +265,11 @@ body {
 .app-body {
   display: flex;
   position: fixed;
-  top: 52px;
+  top: var(--header-h);
   bottom: calc(60px + env(safe-area-inset-bottom));
   left: 0; right: 0;
 }
-body.has-viewer-banner .app-body { top: calc(52px + 37px); }
+body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h)); }
 .app-body.hidden { display: none; }
 
 /* ── Nav Button ──────────────────────────────────────────────────────────────── */
@@ -1315,7 +1319,7 @@ body.showing-workflow .workflow-panel { display: flex; }
 /* ── Home Tab ────────────────────────────────────────────────────────────────── */
 .home-tab {
   position: fixed;
-  top: 52px;
+  top: var(--header-h);
   bottom: calc(60px + env(safe-area-inset-bottom));
   left: 0; right: 0;
   overflow-y: auto;
@@ -1497,7 +1501,7 @@ body.showing-workflow .workflow-panel { display: flex; }
 /* ── Projects tab panel ──────────────────────────────────────────────────────── */
 .projects-tab {
   position: fixed;
-  top: 52px;
+  top: var(--header-h);
   bottom: calc(60px + env(safe-area-inset-bottom));
   left: 0; right: 0;
   display: flex;
@@ -1917,7 +1921,7 @@ body.showing-workflow .workflow-panel { display: flex; }
 /* ── Tasks tab panel ─────────────────────────────────────────────────────────── */
 .tasks-tab {
   position: fixed;
-  top: 52px;
+  top: var(--header-h);
   bottom: calc(60px + env(safe-area-inset-bottom));
   left: 0; right: 0;
   overflow-y: auto;
@@ -2333,7 +2337,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 /* Invoices tab */
 .invoices-tab-wrap {
   position: fixed;
-  top: 52px;
+  top: var(--header-h);
   bottom: calc(60px + env(safe-area-inset-bottom));
   left: 0; right: 0;
   overflow-y: auto;
@@ -2594,7 +2598,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 /* ── Profile Tab ─────────────────────────────────────────────────────────────── */
 .profile-tab {
   position: fixed;
-  top: 52px;
+  top: var(--header-h);
   bottom: calc(60px + env(safe-area-inset-bottom));
   left: 0; right: 0;
   overflow-y: auto;
@@ -3466,10 +3470,9 @@ body.showing-workflow .sales-layout #workflow-panel {
 /* ── Trades Directory ────────────────────────────────────────────────────────── */
 .trades-page-wrap {
   display: flex; flex-direction: column;
-  padding: 52px 0 calc(env(safe-area-inset-bottom) + 80px);
+  padding: 0 0 calc(env(safe-area-inset-bottom) + 80px);
   min-height: 100vh;
 }
-body.has-viewer-banner .trades-page-wrap { padding-top: calc(52px + 37px); }
 .trades-header-bar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 16px 10px;
