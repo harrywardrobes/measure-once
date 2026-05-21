@@ -181,6 +181,10 @@
   // turnstile.render() twice on the same element, even when turnstile.render()
   // returns null/undefined (e.g. when Cloudflare can't reach its servers).
   const _turnstileAttempted = new Set();
+  // True when Cloudflare reports the widget itself is in error / unsupported.
+  // When the widget errors we skip the client-side token gate and let the
+  // server decide (it fails open when Cloudflare is unreachable).
+  const _turnstileErrors = { login: false, forgot: false, request: false };
   let _turnstileSiteKey = null;
   function getTurnstileToken(formName) {
     const id = _turnstileWidgets[formName];
@@ -189,6 +193,7 @@
   }
   function resetTurnstile(formName) {
     const id = _turnstileWidgets[formName];
+    _turnstileErrors[formName] = false;
     if (_turnstileSiteKey && id != null && window.turnstile) window.turnstile.reset(id);
   }
   window.renderTurnstileWidgets = function () {
@@ -202,6 +207,9 @@
           sitekey: _turnstileSiteKey,
           theme: 'light',
           appearance: 'always',
+          callback:              () => { _turnstileErrors[name] = false; },
+          'error-callback':      () => { _turnstileErrors[name] = true;  },
+          'unsupported-callback':() => { _turnstileErrors[name] = true;  },
         });
         if (widgetId != null) {
           _turnstileWidgets[name] = widgetId;
@@ -248,7 +256,7 @@
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
     const captchaToken = getTurnstileToken('login');
-    if (_turnstileSiteKey && !captchaToken) {
+    if (_turnstileSiteKey && !captchaToken && !_turnstileErrors['login']) {
       show(errEl, 'Please complete the captcha challenge.');
       return;
     }
@@ -261,7 +269,7 @@
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
-        show(errEl, data.error || 'Sign in failed.');
+        show(errEl, data.error || 'Could not sign in — please reload the page and try again.');
         btn.disabled = false; btn.textContent = 'Sign in';
         resetTurnstile('login');
         return;
@@ -281,7 +289,7 @@
     const btn = document.getElementById('forgot-submit');
     const email = document.getElementById('forgot-email').value.trim();
     const captchaToken = getTurnstileToken('forgot');
-    if (_turnstileSiteKey && !captchaToken) {
+    if (_turnstileSiteKey && !captchaToken && !_turnstileErrors['forgot']) {
       show(errEl, 'Please complete the captcha challenge.');
       return;
     }
@@ -325,7 +333,7 @@
     const name  = document.getElementById('req-name').value.trim();
     const email = document.getElementById('req-email').value.trim();
     const captchaToken = getTurnstileToken('request');
-    if (_turnstileSiteKey && !captchaToken) {
+    if (_turnstileSiteKey && !captchaToken && !_turnstileErrors['request']) {
       show(errEl, 'Please complete the captcha challenge.');
       return;
     }

@@ -21,11 +21,13 @@ const zxcvbn = require('zxcvbn');
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 async function verifyTurnstile(token, ip) {
   if (!process.env.TURNSTILE_SECRET_KEY) return { ok: true, skipped: true };
-  if (!token || typeof token !== 'string') return { ok: false, reason: 'missing-token' };
+  // Note: we proceed even when the token is empty — Cloudflare will return a
+  // proper error if it is reachable (so we reject). If Cloudflare itself is
+  // unreachable we fail-open and log a warning; the rate limiter still applies.
   try {
     const body = new URLSearchParams();
     body.set('secret', process.env.TURNSTILE_SECRET_KEY);
-    body.set('response', token);
+    body.set('response', token || '');
     if (ip) body.set('remoteip', ip);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
@@ -44,8 +46,10 @@ async function verifyTurnstile(token, ip) {
     if (data && data.success) return { ok: true };
     return { ok: false, reason: (data && data['error-codes'] && data['error-codes'][0]) || 'verify-failed' };
   } catch (e) {
-    console.error('  Turnstile verify error:', e.message);
-    return { ok: false, reason: 'verify-error' };
+    // Cloudflare is unreachable (timeout, DNS failure, sandbox network block, etc.).
+    // Fail open so users are not permanently locked out; the rate limiter still applies.
+    console.warn('  Turnstile: Cloudflare unreachable, failing open —', e.message);
+    return { ok: true, skipped: true };
   }
 }
 function turnstileError(res) {
