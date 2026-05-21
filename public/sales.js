@@ -7,10 +7,11 @@ const PIPELINE_ALL_STAGES = ['sales', 'designvisit', 'survey'];
 // Terminal/cold substage ids — de-emphasised in the list
 const TERMINAL_SUBSTAGES = new Set(['unqualified', 'not_suitable', 'bad_timing', 'no_response_x3']);
 
-// Filterable substage options (all terminal substages with human labels)
+// Substages excluded from the sales page entirely (not filterable — never shown).
+const SALES_EXCLUDED_SUBSTAGES = new Set(['unqualified', 'not_suitable']);
+
+// Filterable substage options (terminal substages the user can toggle on/off)
 const SUBSTAGE_FILTER_OPTIONS = [
-  { id: 'unqualified',    label: 'Unqualified' },
-  { id: 'not_suitable',   label: 'Not Suitable' },
   { id: 'bad_timing',     label: 'Bad Timing' },
   { id: 'no_response_x3', label: 'No Response \u00d73' },
 ];
@@ -24,7 +25,7 @@ function _initHiddenSubstages() {
     const saved = localStorage.getItem(HIDDEN_SUBSTAGES_KEY);
     state.salesHiddenSubstages = saved !== null
       ? new Set(JSON.parse(saved))
-      : new Set(['unqualified', 'not_suitable']);
+      : new Set();
   } catch (_) {
     state.salesHiddenSubstages = new Set(['unqualified', 'not_suitable']);
   }
@@ -240,6 +241,7 @@ async function renderEnquiryList() {
     if (!best) continue;
 
     const statusId      = best.statusId || '';
+    if (SALES_EXCLUDED_SUBSTAGES.has(statusId)) continue;
     const substageDate  = statusId && best.substateDates?.[statusId]
       ? new Date(best.substateDates[statusId] + 'T00:00:00').getTime() : null;
     const stageEntryDate = best.stageDates?.[best.stageKey]
