@@ -1687,31 +1687,16 @@ app.get('/trades', isAuthenticated, (_req, res) => {
 });
 
 // Sales, Projects, Invoices — manager/admin only
-const MANAGER_ONLY_PAGE_HTML = `<!DOCTYPE html><html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Access restricted</title>
-<style>
-  body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fafaf9;}
-  .card{background:#fff;border-radius:12px;padding:32px 28px;max-width:380px;width:90%;
-        box-shadow:0 1px 3px rgba(0,0,0,.04);}
-  h1{font-size:1.15rem;margin:0 0 8px;}
-  p{color:#57534e;font-size:.9rem;margin:0 0 20px;line-height:1.5;}
-  a{display:inline-block;background:#3d0f7a;color:#fff;text-decoration:none;
-    padding:9px 18px;border-radius:6px;font-weight:600;font-size:.88rem;}
-  a:hover{background:#2e0f5a;}
-</style></head>
-<body><div class="card">
-  <h1>Access restricted</h1>
-  <p>Your account doesn't have permission to view this page.</p>
-  <a href="/">Back to home</a>
-</div></body></html>`;
-
 function requireManagerOrAdminPage(req, res, next) {
   if (!req.isAuthenticated || !req.isAuthenticated()) return res.redirect('/login');
   const priv = req.user?.privilege_level || 'member';
   if (priv === 'manager' || priv === 'admin') return next();
-  return res.status(403).send(MANAGER_ONLY_PAGE_HTML);
+  return res.redirect('/access-restricted');
 }
+
+app.get('/access-restricted', isAuthenticated, (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'access-restricted.html'));
+});
 
 app.get('/sales',    isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'sales.html'));

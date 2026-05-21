@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#200842">
+  <meta name="color-scheme" content="light">
+  <title>Access Restricted · Measure Once</title>
+  <link rel="stylesheet" href="/tailwind.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .restricted-wrap {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+    .restricted-card {
+      background: var(--chalk);
+      border: 1px solid var(--stone);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-md);
+      padding: 40px 36px;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+    }
+    .restricted-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: var(--orchid-tint);
+      color: var(--orchid-deep);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+    }
+    .restricted-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--ink-1);
+      margin: 0 0 10px;
+    }
+    .restricted-body {
+      font-size: 0.9rem;
+      color: var(--ink-3);
+      line-height: 1.6;
+      margin: 0 0 28px;
+    }
+    .restricted-home-btn {
+      display: inline-block;
+      background: var(--orchid);
+      color: #fff;
+      text-decoration: none;
+      padding: 10px 22px;
+      border-radius: var(--radius-md);
+      font-weight: 600;
+      font-size: 0.875rem;
+      transition: background 0.15s;
+    }
+    .restricted-home-btn:hover {
+      background: var(--orchid-deep);
+    }
+  </style>
+</head>
+<body>
+
+  <div id="tab-restricted" class="app-body">
+    <div class="restricted-wrap" id="main-content">
+      <div class="restricted-card">
+        <div class="restricted-icon">
+          <svg width="26" height="26" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 15v2m0 0v2m0-2h2m-2 0H10m2-9a4 4 0 00-4 4v1H6a2 2 0 00-2 2v5a2 2 0 002 2h12a2 2 0 002-2v-5a2 2 0 00-2-2h-2v-1a4 4 0 00-4-4z"/>
+          </svg>
+        </div>
+        <h1 class="restricted-title">Access restricted</h1>
+        <p class="restricted-body">
+          This page is only available to managers and admins.<br>
+          Contact your admin if you think you should have access.
+        </p>
+        <a href="/" class="restricted-home-btn">Back to home</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/chrome.js"></script>
+  <script src="/core.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (!await bootstrap()) return;
+    });
+  </script>
+</body>
+</html>
