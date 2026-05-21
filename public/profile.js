@@ -16,8 +16,6 @@ async function renderProfileTab() {
     return;
   }
 
-  const hubspotLabel = 'Checking…';
-  const hubspotBadgeStyle = 'background:#f3f4f6;color:#6b7280;';
   const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.email || 'User';
   const initials = [profile.first_name, profile.last_name]
     .filter(Boolean).map(s => s[0]).join('').toUpperCase() || '?';
@@ -92,27 +90,6 @@ async function renderProfileTab() {
       </div>
     </div>
 
-    <!-- Integrations card -->
-    <div class="profile-card">
-      <div class="profile-card-header">
-        <span class="profile-section-title">Integrations</span>
-      </div>
-      <div class="profile-integration-row">
-        <span class="profile-int-label">
-          <span id="hubspot-status-dot" class="auth-dot auth-dot-pending"></span>
-          HubSpot
-        </span>
-        <span id="hubspot-status-badge" style="font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:999px;${hubspotBadgeStyle}">${hubspotLabel}</span>
-      </div>
-      <div class="profile-integration-row">
-        <span class="profile-int-label">
-          <span id="google-status-dot" class="auth-dot auth-dot-pending"></span>
-          Google
-        </span>
-        <span id="google-status-badge" style="font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:999px;background:#f3f4f6;color:#6b7280;">Checking…</span>
-      </div>
-    </div>
-
     <!-- Change password card -->
     <div class="profile-card">
       <div class="profile-card-header">
@@ -162,37 +139,6 @@ async function renderProfileTab() {
   `;
 
   mountChangePasswordForm(profile);
-
-  GET('/api/hubspot/status').catch(() => ({ connected: false, code: 'HUBSPOT_ERROR' })).then(hubspotStatus => {
-    const dot = document.getElementById('hubspot-status-dot');
-    const badge = document.getElementById('hubspot-status-badge');
-    if (!dot || !badge) return;
-    const connected = hubspotStatus?.connected ?? false;
-    const label = connected ? 'Connected' : (hubspotStatus?.code === 'NO_TOKEN' ? 'No token set' : 'Not connected');
-    const style = connected ? 'background:#dcfce7;color:#166534;' : 'background:#fee2e2;color:#991b1b;';
-    dot.className = `auth-dot ${connected ? 'auth-dot-ok' : 'auth-dot-off'}`;
-    badge.style.cssText = `font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:999px;${style}`;
-    badge.textContent = label;
-  });
-
-  GET('/api/google/status').then(data => {
-    const dot = document.getElementById('google-status-dot');
-    const badge = document.getElementById('google-status-badge');
-    if (!dot || !badge) return;
-    const googleConnected = data?.connected === true;
-    dot.className = `auth-dot ${googleConnected ? 'auth-dot-ok' : 'auth-dot-off'}`;
-    if (googleConnected) {
-      badge.outerHTML = `<button class="profile-int-action" onclick="profileLogoutGoogle()">Disconnect</button>`;
-    } else {
-      badge.outerHTML = `<a href="/auth/google" class="profile-int-action profile-int-connect">Connect</a>`;
-    }
-  }).catch(() => {
-    const dot = document.getElementById('google-status-dot');
-    const badge = document.getElementById('google-status-badge');
-    if (!dot || !badge) return;
-    dot.className = 'auth-dot auth-dot-off';
-    badge.outerHTML = `<a href="/auth/google" class="profile-int-action profile-int-connect">Connect</a>`;
-  });
 }
 
 
