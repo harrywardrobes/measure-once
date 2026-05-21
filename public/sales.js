@@ -1,5 +1,8 @@
 // ── Sales Stage Keys ──────────────────────────────────────────────────────────
-const SALES_TAB_STAGES = ['sales', 'designvisit', 'survey'];
+const SALES_TAB_STAGES = ['sales', 'designvisit'];
+
+// Full 3-stage pipeline used for the stage trail on cards (survey is a separate page).
+const PIPELINE_ALL_STAGES = ['sales', 'designvisit', 'survey'];
 
 // Terminal/cold substage ids — de-emphasised in the list
 const TERMINAL_SUBSTAGES = new Set(['unqualified', 'not_suitable', 'bad_timing', 'no_response_x3']);
@@ -377,8 +380,8 @@ function nextActionLabel(stageKey, substageId) {
 
 // ── Stage trail HTML ──────────────────────────────────────────────────────────
 function stageTrailHtml(activeKey, isTerminal) {
-  const idx = SALES_TAB_STAGES.indexOf(activeKey);
-  const segs = SALES_TAB_STAGES.map((sk, i) => {
+  const idx = PIPELINE_ALL_STAGES.indexOf(activeKey);
+  const segs = PIPELINE_ALL_STAGES.map((sk, i) => {
     const done   = i < idx;
     const active = i === idx;
     const label  = escHtml(
@@ -392,7 +395,7 @@ function stageTrailHtml(activeKey, isTerminal) {
     const dotStyle  = `background:${dotColor}${active ? `;outline:3px solid rgba(${_eqRgb(hex)},0.16);outline-offset:1px` : ''}`;
     const dotCls    = `eq-trail-dot${active ? ' eq-trail-dot-active' : ''}`;
     const labelStyle = `color:${labelColor};font-weight:${active ? 700 : 400};opacity:${done ? 0.65 : 1}`;
-    const isLast    = i === SALES_TAB_STAGES.length - 1;
+    const isLast    = i === PIPELINE_ALL_STAGES.length - 1;
     return (
       `<div class="eq-trail-seg"><div class="${dotCls}" style="${dotStyle}"></div><span class="eq-trail-label" style="${labelStyle}">${label}</span></div>` +
       (!isLast ? `<div class="eq-trail-rail" style="background:${lineColor};opacity:${done ? 0.7 : 0.4}"></div>` : '')

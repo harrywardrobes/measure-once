@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#200842">
+  <meta name="color-scheme" content="light">
+  <title>Survey · Measure Once</title>
+  <link rel="stylesheet" href="/tailwind.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <div id="tab-survey" class="app-body">
+    <aside id="list-panel" class="list-panel sales-list-panel">
+      <div id="survey-view">
+        <div class="project-stage-tabs-bar">
+          <div class="skeleton-line" style="height:30px;width:62px;border-radius:20px"></div>
+          <div class="skeleton-line" style="height:30px;width:42px;border-radius:20px"></div>
+        </div>
+        <div class="projects-inner">
+          <div class="customer-project-card skeleton-pipeline-card">
+            <div class="customer-project-header">
+              <div class="skeleton-line" style="height:14px;width:62%"></div>
+            </div>
+            <div class="project-room-list">
+              <div class="skeleton-room-row">
+                <div class="skeleton-line" style="height:12px;width:28%"></div>
+                <div class="skeleton-line skeleton-pill" style="width:70px"></div>
+              </div>
+            </div>
+          </div>
+          <div class="customer-project-card skeleton-pipeline-card">
+            <div class="customer-project-header">
+              <div class="skeleton-line" style="height:14px;width:50%"></div>
+            </div>
+            <div class="project-room-list">
+              <div class="skeleton-room-row">
+                <div class="skeleton-line" style="height:12px;width:32%"></div>
+                <div class="skeleton-line skeleton-pill" style="width:78px"></div>
+              </div>
+            </div>
+          </div>
+          <div class="customer-project-card skeleton-pipeline-card">
+            <div class="customer-project-header">
+              <div class="skeleton-line" style="height:14px;width:70%"></div>
+            </div>
+            <div class="project-room-list">
+              <div class="skeleton-room-row">
+                <div class="skeleton-line" style="height:12px;width:36%"></div>
+                <div class="skeleton-line skeleton-pill" style="width:64px"></div>
+              </div>
+            </div>
+          </div>
+          <div class="customer-project-card skeleton-pipeline-card">
+            <div class="customer-project-header">
+              <div class="skeleton-line" style="height:14px;width:55%"></div>
+            </div>
+            <div class="project-room-list">
+              <div class="skeleton-room-row">
+                <div class="skeleton-line" style="height:12px;width:30%"></div>
+                <div class="skeleton-line skeleton-pill" style="width:72px"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script src="/chrome.js"></script>
+  <script src="/core.js"></script>
+  <script src="/workflow-core.js"></script>
+  <script src="/invoices-core.js"></script>
+  <script src="/workflow.js"></script>
+  <script src="/projects.js"></script>
+  <script src="/survey.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const ok = await bootstrap();
+      if (ok) renderSurveyList();
+    });
+  </script>
+</body>
+</html>

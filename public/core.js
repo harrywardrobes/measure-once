@@ -252,6 +252,7 @@ function showToast(msg, isError) {
 const NAV_PATH_MAP = {
   '/': 'home',
   '/sales': 'sales',
+  '/survey': 'survey',
   '/projects': 'projects',
   '/calendar': 'calendar',
   '/invoices': 'invoices',
@@ -295,6 +296,7 @@ async function bootstrap() {
   // Viewers and members may not access these pages directly.
   const RESTRICTED_PATHS = new Set([
     '/sales', '/sales.html',
+    '/survey', '/survey.html',
     '/projects', '/projects.html',
     '/invoices', '/invoices.html',
   ]);
@@ -315,7 +317,7 @@ async function bootstrap() {
 
   if (priv === 'manager' || priv === 'admin') {
     document.body.classList.add('manager-mode');
-    ['bnav-sales', 'bnav-projects', 'bnav-invoices'].forEach(id => {
+    ['bnav-sales', 'bnav-survey', 'bnav-projects', 'bnav-invoices'].forEach(id => {
       const btn = document.getElementById(id);
       if (btn) btn.style.display = '';
     });
