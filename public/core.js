@@ -448,6 +448,31 @@ function openProject(contactId, roomIdx) {
 }
 
 // ── Auth Status ───────────────────────────────────────────────────────────────
+let _pendingCountInterval = null;
+
+function _updatePendingDot() {
+  const el = document.getElementById('auth-status');
+  if (!el) return;
+  fetch('/api/admin/pending-count')
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      const btn = el.querySelector('.header-avatar-btn');
+      if (!btn) return;
+      let dot = btn.querySelector('.header-avatar-dot');
+      if (data && data.count > 0) {
+        if (!dot) {
+          dot = document.createElement('span');
+          dot.className = 'header-avatar-dot';
+          dot.setAttribute('aria-label', 'Pending access requests');
+          btn.appendChild(dot);
+        }
+      } else {
+        if (dot) dot.remove();
+      }
+    })
+    .catch(() => {});
+}
+
 function renderAuthStatus() {
   const el = document.getElementById('auth-status');
   if (!el) return;
@@ -468,18 +493,18 @@ function renderAuthStatus() {
     : `<a href="/profile" class="header-avatar-btn header-avatar-initials" title="Profile" aria-label="Open profile">
          ${escHtml(initials)}
        </a>`;
+
+  if (_pendingCountInterval !== null) {
+    clearInterval(_pendingCountInterval);
+    _pendingCountInterval = null;
+  }
+
   if (user.privilege_level === 'admin') {
-    fetch('/api/admin/pending-count')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data || data.count < 1) return;
-        const btn = el.querySelector('.header-avatar-btn');
-        if (!btn) return;
-        const dot = document.createElement('span');
-        dot.className = 'header-avatar-dot';
-        dot.setAttribute('aria-label', 'Pending access requests');
-        btn.appendChild(dot);
-      })
-      .catch(() => {});
+    _updatePendingDot();
+    _pendingCountInterval = setInterval(_updatePendingDot, 60_000);
+    window.addEventListener('beforeunload', () => {
+      clearInterval(_pendingCountInterval);
+      _pendingCountInterval = null;
+    }, { once: true });
   }
 }
