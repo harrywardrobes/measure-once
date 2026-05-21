@@ -3472,6 +3472,7 @@ body.showing-workflow .sales-layout #workflow-panel {
   display: flex; flex-direction: column;
   padding: 0 0 calc(env(safe-area-inset-bottom) + 80px);
   min-height: 100vh;
+  max-width: 1100px; width: 100%; margin: 0 auto;
 }
 .trades-header-bar {
   display: flex; align-items: center; justify-content: space-between;
