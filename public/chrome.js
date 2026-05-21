@@ -98,21 +98,29 @@
           <img src="/assets/logo-mark-paper.png" alt="Harry Wardrobes" width="26" height="26" style="height:26px;width:auto;">
         </a>
         <div class="header-search-wrap">
-          <svg class="header-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
-          </svg>
-          <input id="search" type="text" placeholder="Search customers…"
-            oninput="onHeaderSearch(this.value)"
-            onkeydown="if(event.key==='Enter')onHeaderSearchSubmit(this.value)"
-            class="header-search-input" autocomplete="off" autocorrect="off" spellcheck="false">
-          <a href="/customers" class="header-search-customers" title="Customers" aria-label="Customers">
-            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+          <div class="header-search-pill">
+            <svg class="header-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
             </svg>
-          </a>
-          <button id="search-clear" class="header-search-clear hidden" onclick="clearHeaderSearch()">
-            <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-          </button>
+            <input id="search" type="text" placeholder="Search customers"
+              oninput="onHeaderSearch(this.value)"
+              onkeydown="if(event.key==='Enter')onHeaderSearchSubmit(this.value)"
+              class="header-search-input" autocomplete="off" autocorrect="off" spellcheck="false">
+            <a href="/customers" class="header-search-customers" title="Customers" aria-label="Customers">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+            </a>
+            <button id="search-clear" class="header-search-clear hidden" onclick="clearHeaderSearch()">
+              <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+            </button>
+          </div>
+          ${path === '/customers' ? `<button onclick="openNewCustomerModal()" title="New Customer" data-viewer-hide class="header-new-customer-btn">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+            </svg>
+            <span>New customer</span>
+          </button>` : ''}
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
           <div id="auth-status" class="flex items-center gap-1.5"></div>
