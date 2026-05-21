@@ -7,37 +7,6 @@ const PIPELINE_ALL_STAGES = ['sales', 'designvisit', 'survey'];
 // Terminal/cold substage ids — de-emphasised in the list
 const TERMINAL_SUBSTAGES = new Set(['unqualified', 'not_suitable', 'bad_timing', 'no_response_x3']);
 
-// Substages excluded from the sales page entirely (not filterable — never shown).
-const SALES_EXCLUDED_SUBSTAGES = new Set(['unqualified', 'not_suitable']);
-
-// Filterable substage options (terminal substages the user can toggle on/off)
-const SUBSTAGE_FILTER_OPTIONS = [
-  { id: 'bad_timing',     label: 'Bad Timing' },
-  { id: 'no_response_x3', label: 'No Response \u00d73' },
-];
-
-// localStorage key for persisting hidden substage preferences
-const HIDDEN_SUBSTAGES_KEY = 'salesHiddenSubstages';
-
-function _initHiddenSubstages() {
-  if (state.salesHiddenSubstages) return;
-  try {
-    const saved = localStorage.getItem(HIDDEN_SUBSTAGES_KEY);
-    state.salesHiddenSubstages = saved !== null
-      ? new Set(JSON.parse(saved))
-      : new Set();
-  } catch (_) {
-    state.salesHiddenSubstages = new Set(['unqualified', 'not_suitable']);
-  }
-  if (state.salesSubstageFilterOpen === undefined) state.salesSubstageFilterOpen = false;
-}
-
-function _saveHiddenSubstages() {
-  try {
-    localStorage.setItem(HIDDEN_SUBSTAGES_KEY, JSON.stringify([...state.salesHiddenSubstages]));
-  } catch (_) {}
-}
-
 // Source sub-sub-stage short labels
 const SOURCE_LABELS = {
   website:   'Web',
@@ -132,48 +101,9 @@ function _initSalesListeners() {
 
     if (e.target.closest('#sales-new-btn')) { openNewCustomerModal(); return; }
 
-    // Substage filter button — open/close popover
-    if (e.target.closest('#substage-filter-btn')) {
-      e.stopPropagation();
-      state.salesSubstageFilterOpen = !state.salesSubstageFilterOpen;
-      renderEnquiryList();
-      return;
-    }
-
-    // Clicks inside the open popover (not on checkboxes) — keep popover open
-    if (e.target.closest('#substage-filter-popover')) {
-      e.stopPropagation();
-      return;
-    }
-
     const row = e.target.closest('[data-contact-id]');
     if (row) {
       location.href = `/customers/${encodeURIComponent(row.dataset.contactId)}`;
-    }
-  });
-
-  // Substage checkbox toggles
-  panel.addEventListener('change', function(e) {
-    const cb = e.target.closest('[data-substage-toggle]');
-    if (!cb) return;
-    const id = cb.dataset.substageToggle;
-    if (state.salesHiddenSubstages.has(id)) {
-      state.salesHiddenSubstages.delete(id);
-    } else {
-      state.salesHiddenSubstages.add(id);
-    }
-    _saveHiddenSubstages();
-    state.salesSubstageFilterOpen = true;
-    renderEnquiryList();
-  });
-
-  // Close popover when clicking outside
-  document.addEventListener('click', function(e) {
-    if (!state.salesSubstageFilterOpen) return;
-    if (!e.target.closest('#substage-filter-wrap')) {
-      state.salesSubstageFilterOpen = false;
-      const popover = document.getElementById('substage-filter-popover');
-      if (popover) popover.classList.remove('substage-filter-popover-open');
     }
   });
 
@@ -217,7 +147,6 @@ async function renderEnquiryList() {
   if (!view) return;
 
   _initSalesListeners();
-  _initHiddenSubstages();
 
   // No "All" tab — default to the first stage
   if (!state.salesStageFilter || !SALES_TAB_STAGES.includes(state.salesStageFilter)) {
@@ -241,7 +170,6 @@ async function renderEnquiryList() {
     if (!best) continue;
 
     const statusId      = best.statusId || '';
-    if (SALES_EXCLUDED_SUBSTAGES.has(statusId)) continue;
     const substageDate  = statusId && best.substateDates?.[statusId]
       ? new Date(best.substateDates[statusId] + 'T00:00:00').getTime() : null;
     const stageEntryDate = best.stageDates?.[best.stageKey]
@@ -259,20 +187,15 @@ async function renderEnquiryList() {
     });
   }
 
-  // ── Apply substage visibility filter ─────────────────────────────────────
-  const visibleEntries = state.salesHiddenSubstages.size > 0
-    ? allEntries.filter(e => !state.salesHiddenSubstages.has(e.substageId))
-    : allEntries;
-
   // ── Sort: priority band asc, then newest first ────────────────────────────
-  visibleEntries.sort((a, b) => {
+  allEntries.sort((a, b) => {
     if (a.priority !== b.priority) return a.priority - b.priority;
     return b.createdate - a.createdate;
   });
 
   // ── Group by stage ────────────────────────────────────────────────────────
   const byStage = Object.fromEntries(SALES_TAB_STAGES.map(k => [k, []]));
-  for (const e of visibleEntries) {
+  for (const e of allEntries) {
     if (byStage[e.stageKey]) byStage[e.stageKey].push(e);
   }
 
@@ -311,40 +234,9 @@ async function renderEnquiryList() {
       </div>`;
   }).join('');
 
-  // ── Substage filter UI ────────────────────────────────────────────────────
-  const hiddenCount = state.salesHiddenSubstages.size;
-  const isOpen = state.salesSubstageFilterOpen;
-  const filterItemsHtml = SUBSTAGE_FILTER_OPTIONS.map(opt => {
-    const visible = !state.salesHiddenSubstages.has(opt.id);
-    return `
-      <label class="substage-filter-item">
-        <input type="checkbox" data-substage-toggle="${escHtml(opt.id)}"${visible ? ' checked' : ''}>
-        <span>${escHtml(opt.label)}</span>
-      </label>`;
-  }).join('');
-
-  const badgeHtml = hiddenCount > 0
-    ? `<span class="substage-filter-badge">${hiddenCount} hidden</span>` : '';
-
-  const filterHtml = `
-    <div class="substage-filter-wrap" id="substage-filter-wrap">
-      <button class="substage-filter-btn${isOpen ? ' substage-filter-btn-active' : ''}" id="substage-filter-btn" title="Filter by substage">
-        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h18M7 12h10M11 20h2"/>
-        </svg>
-        <span>Filter</span>
-        ${badgeHtml}
-      </button>
-      <div class="substage-filter-popover${isOpen ? ' substage-filter-popover-open' : ''}" id="substage-filter-popover">
-        <p class="substage-filter-heading">Show substages</p>
-        ${filterItemsHtml}
-      </div>
-    </div>`;
-
   view.innerHTML = `
     <div class="sales-stage-bar">
       ${tabs}
-      ${filterHtml}
       <button class="sales-new-btn" id="sales-new-btn" title="New Enquiry">
         <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
