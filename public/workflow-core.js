@@ -134,6 +134,14 @@ function recordStageDate(room, stageKey) {
   if (!room.stageDates[stageKey]) room.stageDates[stageKey] = todayISO();
 }
 
+// Record the date a room entered a substage — always overwrites so the date
+// reflects the most recent time that substage became active.
+function recordSubstageDate(room, substageId) {
+  if (!substageId) return;
+  if (!room.substateDates) room.substateDates = {};
+  room.substateDates[substageId] = todayISO();
+}
+
 // ── Working days / urgency ────────────────────────────────────────────────────
 function workingDayDeadline(n) {
   const d = new Date();
@@ -163,14 +171,25 @@ function getTaskUrgency(tasks) {
 // ── Room cache helper ─────────────────────────────────────────────────────────
 function updateRoomCache() {
   if (!state.selectedContactId) return;
-  state.contactStageCache[state.selectedContactId] = state.allRooms.map(r => ({
-    room: r.room, stageKey: r.stageKey, roomStatus: r.roomStatus || 'active',
-    statusId: r.statusId || null,
-    sourceId: r.sourceId || null,
-    assignedFitterId: r.assignedFitterId || null,
-    installStart: r.installStart || null,
-    stageDates: r.stageDates || null,
-  }));
+  state.contactStageCache[state.selectedContactId] = state.allRooms.map(r => {
+    const stageKey = r.stageKey || 'sales';
+    // Derive the current substage from completedStatuses (last completed in stage order).
+    // Fall back to the legacy r.statusId field for rooms that haven't been normalised yet.
+    const doneIds = (r.completedStatuses || {})[stageKey] || [];
+    const stageStatuses = state.workflow?.stages?.[stageKey]?.statuses || [];
+    const lastCompleted = [...stageStatuses].reverse().find(s => doneIds.includes(s.id));
+    const currentSubstageId = lastCompleted?.id || r.statusId || null;
+
+    return {
+      room: r.room, stageKey, roomStatus: r.roomStatus || 'active',
+      statusId: currentSubstageId,
+      sourceId: r.sourceId || null,
+      assignedFitterId: r.assignedFitterId || null,
+      installStart: r.installStart || null,
+      stageDates: r.stageDates || null,
+      substateDates: r.substateDates || null,
+    };
+  });
 }
 
 // ── Data loaders ──────────────────────────────────────────────────────────────

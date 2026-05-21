@@ -297,6 +297,7 @@ async function _doSelectContact(contactId, roomIdx) {
         comments:          r.comments   || [],
         roomStatus:        r.roomStatus || 'active',
         stageDates,
+        substateDates:     r.substateDates ? { ...r.substateDates } : {},
         installStart:      r.installStart  || null,
         installFinish:     r.installFinish || null,
         assignedFitterId:  r.assignedFitterId || null,
@@ -903,6 +904,16 @@ function setStatusChecked(stageKey, statusId, checked) {
       renderCustomerList();
       renderProjectsView();
       message = `Moved back to ${state.workflow?.stages?.[stageKey]?.label || stageKey}`;
+    }
+  }
+
+  // Stamp substage date when a status is checked and becomes the new "current"
+  // substage (i.e. the last completed status in the current stage by order).
+  if (checked && state.workflowData.stageKey === stageKey) {
+    const stageStatuses = state.workflow?.stages?.[stageKey]?.statuses || [];
+    const lastCompleted = [...stageStatuses].reverse().find(s => done.includes(s.id));
+    if (lastCompleted && lastCompleted.id === statusId) {
+      recordSubstageDate(state.workflowData, statusId);
     }
   }
 

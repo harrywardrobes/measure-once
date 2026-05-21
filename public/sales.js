@@ -171,8 +171,12 @@ async function renderEnquiryList() {
     const best = _bestRoom(cached, filter);
     if (!best) continue;
 
-    // Prefer the recorded date the contact entered their current stage;
-    // fall back to contact createdate.
+    // Prefer the recorded date the contact entered their current substage;
+    // fall back to the stage entry date, then to contact createdate.
+    const statusId = best.statusId || '';
+    const substageDate = statusId && best.substateDates?.[statusId]
+      ? new Date(best.substateDates[statusId] + 'T00:00:00').getTime()
+      : null;
     const stageEntryDate = best.stageDates?.[best.stageKey]
       ? new Date(best.stageDates[best.stageKey] + 'T00:00:00').getTime()
       : null;
@@ -180,11 +184,11 @@ async function renderEnquiryList() {
     entries.push({
       contact,
       stageKey: best.stageKey,
-      substageId: best.statusId || '',
+      substageId: statusId,
       sourceId: best.sourceId || '',
       createdate,
-      stageTime: stageEntryDate || createdate,
-      priority: priorityScore(best.stageKey, best.statusId || ''),
+      stageTime: substageDate || stageEntryDate || createdate,
+      priority: priorityScore(best.stageKey, statusId),
       roomIdx: best.roomIdx,
     });
   }
