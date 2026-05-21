@@ -35,7 +35,7 @@
               font:inherit; font-weight:500; }
     .toggle:hover { text-decoration:underline; }
     .hidden { display:none !important; }
-    .cf-turnstile { margin: 4px 0 14px; min-height: 65px; }
+    .turnstile-widget { margin: 4px 0 14px; min-height: 65px; }
   </style>
   <script>
     // Suppress non-Error unhandled rejections from third-party scripts
@@ -85,7 +85,7 @@
           <label for="login-password">Password</label>
           <input id="login-password" type="password" autocomplete="current-password" required>
         </div>
-        <div id="turnstile-login" class="cf-turnstile"></div>
+        <div id="turnstile-login" class="turnstile-widget"></div>
         <button id="login-submit" type="submit">Sign in</button>
       </form>
       <div class="footer">
@@ -107,7 +107,7 @@
           <label for="forgot-email">Email</label>
           <input id="forgot-email" type="email" autocomplete="username" maxlength="254" required>
         </div>
-        <div id="turnstile-forgot" class="cf-turnstile"></div>
+        <div id="turnstile-forgot" class="turnstile-widget"></div>
         <button id="forgot-submit" type="submit">Send reset link</button>
       </form>
       <div id="forgot-confirm" class="hidden">
@@ -136,7 +136,7 @@
           <label for="req-email">Work email</label>
           <input id="req-email" type="email" maxlength="254" required>
         </div>
-        <div id="turnstile-request" class="cf-turnstile"></div>
+        <div id="turnstile-request" class="turnstile-widget"></div>
         <button id="req-submit" type="submit">Submit request</button>
       </form>
       <div class="footer">
@@ -198,11 +198,16 @@
         const el = document.getElementById(elId);
         if (!el || _turnstileAttempted.has(name)) return;
         _turnstileAttempted.add(name);
-        _turnstileWidgets[name] = window.turnstile.render(el, {
+        const widgetId = window.turnstile.render(el, {
           sitekey: _turnstileSiteKey,
           theme: 'light',
           appearance: 'always',
         });
+        if (widgetId != null) {
+          _turnstileWidgets[name] = widgetId;
+        } else {
+          _turnstileAttempted.delete(name);
+        }
       });
   };
   fetch('/api/turnstile-config')
