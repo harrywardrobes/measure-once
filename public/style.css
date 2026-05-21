@@ -3466,9 +3466,10 @@ body.showing-workflow .sales-layout #workflow-panel {
 /* ── Trades Directory ────────────────────────────────────────────────────────── */
 .trades-page-wrap {
   display: flex; flex-direction: column;
-  padding: 0 0 calc(env(safe-area-inset-bottom) + 80px);
+  padding: 52px 0 calc(env(safe-area-inset-bottom) + 80px);
   min-height: 100vh;
 }
+body.has-viewer-banner .trades-page-wrap { padding-top: calc(52px + 37px); }
 .trades-header-bar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 16px 10px;
