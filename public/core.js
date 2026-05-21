@@ -206,6 +206,18 @@ function escHtml(str) {
   return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function safeUrl(url) {
+  const s = (url || '').trim();
+  if (!s) return '';
+  try {
+    const parsed = new URL(s);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+  } catch {
+    return '';
+  }
+  return s;
+}
+
 function formatDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);

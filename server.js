@@ -1452,6 +1452,18 @@ app.delete('/api/personal-tasks/:id', isAuthenticated, requirePrivilege('member'
 // ── Trades Directory ──────────────────────────────────────────────────────────
 const _tradesPool = new (require('pg').Pool)({ connectionString: process.env.DATABASE_URL });
 
+function sanitizeWebsite(raw) {
+  const url = (raw || '').trim();
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  } catch {
+    return null;
+  }
+  return url;
+}
+
 const TRADE_CATEGORIES = [
   'Carpentry / Roofing',
   'Carpet Fitting',
@@ -1754,6 +1766,8 @@ app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, tradesCreateLimi
   const validContacts = (contacts || []).filter(c => c && (c.name || '').trim());
   if (!validContacts.length) return res.status(400).json({ error: 'At least one contact person with a name is required.' });
   if (validContacts.length > 3) return res.status(400).json({ error: 'A maximum of 3 contacts per company is allowed.' });
+  const websiteVal = sanitizeWebsite(website);
+  if ((website || '').trim() && !websiteVal) return res.status(400).json({ error: 'Website must be a valid http or https URL.' });
   const client = await _tradesPool.connect();
   try {
     await client.query('BEGIN');
@@ -1765,7 +1779,7 @@ app.post('/api/trades', isAuthenticated, requireManagerOrAdmin, tradesCreateLimi
        RETURNING *`,
       [company_name.trim(), trade_type.trim(), serializeAreasServed(areas_served),
        timescaleVal, (notes || '').trim(),
-       (website || '').trim() || null, (company_phone || '').trim() || null,
+       websiteVal, (company_phone || '').trim() || null,
        req.user?.claims?.sub || null,
        actorDisplayName(req.user?.claims),
        timescaleVal ? new Date() : null]
@@ -1803,6 +1817,8 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
   const validContacts = (contacts || []).filter(c => c && (c.name || '').trim());
   if (!validContacts.length) return res.status(400).json({ error: 'At least one contact person with a name is required.' });
   if (validContacts.length > 3) return res.status(400).json({ error: 'A maximum of 3 contacts per company is allowed.' });
+  const websiteVal = sanitizeWebsite(website);
+  if ((website || '').trim() && !websiteVal) return res.status(400).json({ error: 'Website must be a valid http or https URL.' });
   const client = await _tradesPool.connect();
   try {
     await client.query('BEGIN');
@@ -1824,7 +1840,7 @@ app.put('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req, r
        timescaleVal, (notes || '').trim(),
        req.user?.claims?.sub || null, id,
        actorDisplayName(req.user?.claims), timescaleChanged,
-       (website || '').trim() || null, (company_phone || '').trim() || null]
+       websiteVal, (company_phone || '').trim() || null]
     );
     if (!rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Company not found.' }); }
     await client.query(`DELETE FROM trade_company_contacts WHERE company_id=$1`, [id]);
@@ -1906,6 +1922,8 @@ app.post('/api/trades/submissions', isAuthenticated, requireManagerOrAdmin, trad
   const validContacts = (contacts || []).filter(c => c && (c.name || '').trim());
   if (!validContacts.length) return res.status(400).json({ error: 'At least one contact person with a name is required.' });
   if (validContacts.length > 3) return res.status(400).json({ error: 'A maximum of 3 contacts per company is allowed.' });
+  const websiteVal = sanitizeWebsite(website);
+  if ((website || '').trim() && !websiteVal) return res.status(400).json({ error: 'Website must be a valid http or https URL.' });
 
   const claims = req.user?.claims || {};
   const submitterId    = claims.sub || null;
@@ -1922,7 +1940,7 @@ app.post('/api/trades/submissions', isAuthenticated, requireManagerOrAdmin, trad
       [company_name.trim(), trade_type.trim(), serializeAreasServed(areas_served),
        (timescale || '').trim(), (invoice_method || '').trim(),
        (payment_terms || '').trim(), (notes || '').trim(),
-       (website || '').trim() || null, (company_phone || '').trim() || null,
+       websiteVal, (company_phone || '').trim() || null,
        JSON.stringify(validContacts.map(c => ({
          name:             c.name.trim(),
          role:             (c.role             || '').trim(),

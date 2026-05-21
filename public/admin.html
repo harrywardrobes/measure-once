@@ -585,6 +585,15 @@
 <script>
   const $ = s => document.querySelector(s);
   const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  function safeUrl(url) {
+    const s = (url || '').trim();
+    if (!s) return '';
+    try {
+      const parsed = new URL(s);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+    } catch { return ''; }
+    return s;
+  }
 
   /* ── Toast ── */
   function toast(msg, isErr) {
@@ -1157,7 +1166,7 @@
               </div>
               ${details.length ? `<div style="font-size:.8rem;color:var(--ink-3);margin-bottom:6px;">${details.join(' · ')}</div>` : ''}
               ${(s.website || s.company_phone) ? `<div style="font-size:.82rem;color:var(--ink-2);margin-bottom:6px;display:flex;gap:16px;flex-wrap:wrap;">
-                ${s.website ? `<a href="${esc(s.website)}" target="_blank" rel="noopener" style="color:var(--accent,#3b82f6);text-decoration:none;">🌐 ${esc(s.website)}</a>` : ''}
+                ${s.website && safeUrl(s.website) ? `<a href="${esc(safeUrl(s.website))}" target="_blank" rel="noopener" style="color:var(--accent,#3b82f6);text-decoration:none;">🌐 ${esc(s.website)}</a>` : ''}
                 ${s.company_phone ? `<a href="tel:${esc(s.company_phone)}" style="color:inherit;text-decoration:none;">📞 ${esc(s.company_phone)}</a>` : ''}
               </div>` : ''}
               ${s.notes ? `<div style="font-size:.82rem;color:var(--ink-3);margin-bottom:8px;font-style:italic;">${esc(s.notes)}</div>` : ''}
