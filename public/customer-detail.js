@@ -131,7 +131,9 @@ function syncRoomFromHubSpot(room, leadStatus) {
   if (HS_ADVANCE_STATUSES.includes(ls) && room.stageKey === 'sales') {
     // All sales tasks done, advance to Design Visit
     cs.sales = allSalesTasks;
-    return { ...room, stageKey: 'designvisit', completedStatuses: cs };
+    const stageDates = { ...(room.stageDates || {}) };
+    if (!stageDates.designvisit) stageDates.designvisit = todayISO();
+    return { ...room, stageKey: 'designvisit', completedStatuses: cs, stageDates };
   }
 
   if (HS_SALES_PROGRESSION[ls] && room.stageKey === 'sales') {

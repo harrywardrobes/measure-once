@@ -421,7 +421,10 @@ async function quickLoadAndUpdate(contactId, roomIdx, updater) {
     return;
   }
   state.contactStageCache[contactId] = rooms.map(r => ({
-    room: r.room, stageKey: r.stageKey, roomStatus: r.roomStatus || 'active'
+    room: r.room, stageKey: r.stageKey, roomStatus: r.roomStatus || 'active',
+    statusId: r.statusId || null,
+    sourceId: r.sourceId || null,
+    stageDates: r.stageDates || null,
   }));
   renderCustomerList();
 }
@@ -460,7 +463,11 @@ async function quickSetStage(contactId, roomIdx, stageKey, showUndo = true) {
   closeCardPicker();
   const prevStageKey = state.contactStageCache[contactId]?.[roomIdx]?.stageKey || null;
   await quickLoadAndUpdate(contactId, roomIdx, (rooms, idx) => {
-    if (rooms[idx]) { rooms[idx].stageKey = stageKey; rooms[idx].statusId = null; }
+    if (rooms[idx]) {
+      rooms[idx].stageKey = stageKey;
+      rooms[idx].statusId = null;
+      recordStageDate(rooms[idx], stageKey);
+    }
   });
   if (showUndo && prevStageKey && prevStageKey !== stageKey) {
     const newLabel = state.workflow?.stages?.[stageKey]?.label || stageKey;
