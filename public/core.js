@@ -268,6 +268,7 @@ const NAV_PATH_MAP = {
   '/projects': 'projects',
   '/calendar': 'calendar',
   '/invoices': 'invoices',
+  '/ideas': 'ideas',
 };
 
 function highlightActiveNav() {
@@ -323,9 +324,11 @@ async function bootstrap() {
     showViewerBanner();
   }
 
-  // Show the Trades nav link for all authenticated users
+  // Show the Trades and Ideas nav links for all authenticated users
   const bnavTrades = document.getElementById('bnav-trades');
   if (bnavTrades) bnavTrades.style.display = '';
+  const bnavIdeas = document.getElementById('bnav-ideas');
+  if (bnavIdeas) bnavIdeas.style.display = '';
 
   if (priv === 'manager' || priv === 'admin') {
     document.body.classList.add('manager-mode');

@@ -2321,6 +2321,127 @@ app.get('/api/calendar/upcoming', async (req, res) => {
   }
 });
 
+// ── Ideas & Feedback ──────────────────────────────────────────────────────────
+app.get('/ideas', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'ideas.html')));
+
+async function ensureIdeasTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ideas (
+      id             SERIAL PRIMARY KEY,
+      author_user_id VARCHAR NOT NULL,
+      body           TEXT NOT NULL,
+      created_at     TIMESTAMP DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS idea_comments (
+      id             SERIAL PRIMARY KEY,
+      idea_id        INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+      author_user_id VARCHAR NOT NULL,
+      body           TEXT NOT NULL,
+      created_at     TIMESTAMP DEFAULT NOW()
+    );
+  `);
+}
+
+app.get('/api/ideas', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT i.id, i.body, i.created_at,
+             u.first_name, u.last_name, u.email AS author_email,
+             COUNT(c.id)::int AS comment_count
+      FROM ideas i
+      LEFT JOIN users u ON u.id = i.author_user_id
+      LEFT JOIN idea_comments c ON c.idea_id = i.id
+      GROUP BY i.id, u.first_name, u.last_name, u.email
+      ORDER BY i.created_at DESC
+    `);
+    res.json(rows.map(r => ({
+      id:            r.id,
+      body:          r.body,
+      created_at:    r.created_at,
+      author_name:   [r.first_name, r.last_name].filter(Boolean).join(' ') || r.author_email || 'Unknown',
+      comment_count: r.comment_count,
+    })));
+  } catch (e) {
+    console.error('GET /api/ideas error:', e.message);
+    res.status(500).json({ error: 'Could not load ideas.' });
+  }
+});
+
+app.post('/api/ideas', async (req, res) => {
+  const body = (req.body?.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'Idea body is required.' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO ideas (author_user_id, body) VALUES ($1, $2) RETURNING id, body, created_at`,
+      [req.user.id, body]
+    );
+    const idea = rows[0];
+    const u = req.user;
+    res.status(201).json({
+      id:            idea.id,
+      body:          idea.body,
+      created_at:    idea.created_at,
+      author_name:   [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || 'Unknown',
+      comment_count: 0,
+    });
+  } catch (e) {
+    console.error('POST /api/ideas error:', e.message);
+    res.status(500).json({ error: 'Could not save idea.' });
+  }
+});
+
+app.get('/api/ideas/:id/comments', async (req, res) => {
+  const ideaId = parseInt(req.params.id, 10);
+  if (isNaN(ideaId)) return res.status(400).json({ error: 'Invalid idea id.' });
+  try {
+    const { rows } = await pool.query(`
+      SELECT c.id, c.body, c.created_at,
+             u.first_name, u.last_name, u.email AS author_email
+      FROM idea_comments c
+      LEFT JOIN users u ON u.id = c.author_user_id
+      WHERE c.idea_id = $1
+      ORDER BY c.created_at ASC
+    `, [ideaId]);
+    res.json(rows.map(r => ({
+      id:          r.id,
+      body:        r.body,
+      created_at:  r.created_at,
+      author_name: [r.first_name, r.last_name].filter(Boolean).join(' ') || r.author_email || 'Unknown',
+    })));
+  } catch (e) {
+    console.error('GET /api/ideas/:id/comments error:', e.message);
+    res.status(500).json({ error: 'Could not load comments.' });
+  }
+});
+
+app.post('/api/ideas/:id/comments', async (req, res) => {
+  const ideaId = parseInt(req.params.id, 10);
+  if (isNaN(ideaId)) return res.status(400).json({ error: 'Invalid idea id.' });
+  const body = (req.body?.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'Comment body is required.' });
+  try {
+    const ideaCheck = await pool.query('SELECT id FROM ideas WHERE id = $1', [ideaId]);
+    if (!ideaCheck.rows.length) return res.status(404).json({ error: 'Idea not found.' });
+    const { rows } = await pool.query(
+      `INSERT INTO idea_comments (idea_id, author_user_id, body) VALUES ($1, $2, $3) RETURNING id, body, created_at`,
+      [ideaId, req.user.id, body]
+    );
+    const comment = rows[0];
+    const u = req.user;
+    res.status(201).json({
+      id:          comment.id,
+      body:        comment.body,
+      created_at:  comment.created_at,
+      author_name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || 'Unknown',
+    });
+  } catch (e) {
+    console.error('POST /api/ideas/:id/comments error:', e.message);
+    res.status(500).json({ error: 'Could not save comment.' });
+  }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 (async () => {
   try {
@@ -2343,5 +2464,7 @@ app.get('/api/calendar/upcoming', async (req, res) => {
     catch (e) { console.error('  Visits table setup failed:', e.message); }
     try { await ensureTradesTable(); console.log('  Trades table ready'); }
     catch (e) { console.error('  Trades table setup failed:', e.message); }
+    try { await ensureIdeasTables(); console.log('  Ideas tables ready'); }
+    catch (e) { console.error('  Ideas tables setup failed:', e.message); }
   });
 })();

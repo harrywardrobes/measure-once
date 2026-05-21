@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#200842">
+  <meta name="color-scheme" content="light">
+  <title>Ideas · Measure Once</title>
+  <link rel="stylesheet" href="/tailwind.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <div id="ideas-view" class="ideas-page-wrap">
+
+    <div class="ideas-header-bar">
+      <div>
+        <h1 class="ideas-page-title">Ideas &amp; Feedback</h1>
+        <p class="ideas-page-subtitle">Share suggestions and discuss ideas with your team.</p>
+      </div>
+    </div>
+
+    <div class="ideas-submit-card" id="ideas-submit-card">
+      <form id="ideas-form" onsubmit="submitIdea(event)">
+        <textarea
+          id="ideas-input"
+          class="ideas-textarea"
+          placeholder="Share an idea or piece of feedback…"
+          rows="3"
+          required
+        ></textarea>
+        <div class="ideas-form-footer">
+          <button type="submit" class="ideas-submit-btn" id="ideas-submit-btn">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+            </svg>
+            Post idea
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div id="ideas-list" class="ideas-list">
+      <div class="ideas-loading">
+        <div class="spinner"></div>
+        Loading…
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/chrome.js"></script>
+  <script src="/core.js"></script>
+  <script src="/ideas.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (!await bootstrap()) return;
+      loadIdeas();
+    });
+  </script>
+</body>
+</html>
