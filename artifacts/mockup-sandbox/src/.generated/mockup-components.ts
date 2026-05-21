@@ -13,5 +13,8 @@ export const modules: ModuleMap = {
   "./components/mockups/signin-approaches/Conversational.tsx": () => import("../components/mockups/signin-approaches/Conversational.tsx"),
   "./components/mockups/signin-approaches/DualAction.tsx": () => import("../components/mockups/signin-approaches/DualAction.tsx"),
   "./components/mockups/signin-approaches/EditorialCraft.tsx": () => import("../components/mockups/signin-approaches/EditorialCraft.tsx"),
-  "./components/mockups/signin-approaches/SplitPreview.tsx": () => import("../components/mockups/signin-approaches/SplitPreview.tsx")
+  "./components/mockups/signin-approaches/SplitPreview.tsx": () => import("../components/mockups/signin-approaches/SplitPreview.tsx"),
+  "./components/mockups/trades-card/AccessibilityReadability.tsx": () => import("../components/mockups/trades-card/AccessibilityReadability.tsx"),
+  "./components/mockups/trades-card/InformationHierarchy.tsx": () => import("../components/mockups/trades-card/InformationHierarchy.tsx"),
+  "./components/mockups/trades-card/InteractionAffordance.tsx": () => import("../components/mockups/trades-card/InteractionAffordance.tsx")
 };
