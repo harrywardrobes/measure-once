@@ -814,7 +814,12 @@ async function setupAuth(app) {
   app.post('/api/request-access', accessRequestLimiter, async (req, res) => {
     const wantsJson = req.is('application/json') || req.headers.accept?.includes('application/json');
     try {
-      const name  = (req.body?.name  || '').trim();
+      const rawName = (req.body?.name || '').trim();
+      const nameTokens = rawName.split(/\s+/).filter(Boolean)
+        .map(t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
+      const name = nameTokens.length <= 1
+        ? (nameTokens[0] || '')
+        : nameTokens[0] + ' ' + nameTokens[nameTokens.length - 1];
       const email = (req.body?.email || '').trim().toLowerCase();
       if (!name || !email || !/^[a-zA-Z0-9.!#$%&*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/.test(email)) {
         return res.status(400).json({ error: 'Please provide a valid name and email.' });
