@@ -243,10 +243,7 @@ function contactSlotHtml(index, data) {
   const role  = escHtml(data?.role  || '');
   const phone = escHtml(data?.phone || '');
   const email = escHtml(data?.email || '');
-  const prefArr = (data?.preferred_contact || '').split(',').map(s => s.trim()).filter(Boolean);
-  const prefCall     = prefArr.includes('Phone call') ? ' checked' : '';
-  const prefWhatsapp = prefArr.includes('WhatsApp')   ? ' checked' : '';
-  const prefEmail    = prefArr.includes('Email')       ? ' checked' : '';
+  const prefVal = (data?.preferred_contact || '').trim();
   return `
     <div class="trades-contact-slot" data-slot="${index}">
       <div class="trades-contact-slot-header">
@@ -281,9 +278,9 @@ function contactSlotHtml(index, data) {
         <div class="trades-field">
           <label class="trades-label">Preferred contact method</label>
           <div class="trades-areas-group">
-            <label class="trades-area-chip"><input type="checkbox" id="tf-cpref-call-${index}" value="Phone call"${prefCall}> Phone call</label>
-            <label class="trades-area-chip"><input type="checkbox" id="tf-cpref-whatsapp-${index}" value="WhatsApp"${prefWhatsapp}> WhatsApp</label>
-            <label class="trades-area-chip"><input type="checkbox" id="tf-cpref-email-${index}" value="Email"${prefEmail}> Email</label>
+            <label class="trades-area-chip"><input type="radio" name="tf-cpref-${index}" value="Phone call"${prefVal === 'Phone call' ? ' checked' : ''}> Phone call</label>
+            <label class="trades-area-chip"><input type="radio" name="tf-cpref-${index}" value="WhatsApp"${prefVal === 'WhatsApp' ? ' checked' : ''}> WhatsApp</label>
+            <label class="trades-area-chip"><input type="radio" name="tf-cpref-${index}" value="Email"${prefVal === 'Email' ? ' checked' : ''}> Email</label>
           </div>
         </div>
       </div>
@@ -324,15 +321,13 @@ function rebuildContactSlots(dataArr) {
 function collectContactSlots() {
   const slots = document.querySelectorAll('#trades-contacts-list .trades-contact-slot');
   return Array.from(slots).map((_, i) => {
-    const prefChecked = Array.from(
-      document.querySelectorAll(`#trades-contacts-list .trades-contact-slot[data-slot="${i}"] input[type="checkbox"]:checked`)
-    ).map(cb => cb.value);
+    const prefEl = document.querySelector(`#trades-contacts-list .trades-contact-slot[data-slot="${i}"] input[type="radio"]:checked`);
     return {
       name:             (document.getElementById(`tf-cname-${i}`)  || {}).value || '',
       role:             (document.getElementById(`tf-crole-${i}`)  || {}).value || '',
       phone:            (document.getElementById(`tf-cphone-${i}`) || {}).value || '',
       email:            (document.getElementById(`tf-cemail-${i}`) || {}).value || '',
-      preferred_contact: prefChecked.join(','),
+      preferred_contact: prefEl ? prefEl.value : '',
     };
   });
 }
