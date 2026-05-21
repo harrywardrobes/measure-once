@@ -18,7 +18,10 @@
 
   <div id="trades-view" class="trades-page-wrap">
     <div class="trades-header-bar">
-      <h1 class="trades-page-title">Trades</h1>
+      <div>
+        <h1 class="trades-page-title">Vendors &amp; Trades</h1>
+        <p class="trades-page-subtitle">Manage your trusted subcontractors and vendor relationships.</p>
+      </div>
       <button class="trades-add-btn" id="trades-add-btn" onclick="openTradesModal()" style="display:none">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
@@ -27,19 +30,14 @@
       </button>
     </div>
 
-    <div id="trades-filters-wrap" class="trades-filters-wrap">
-      <label class="trades-filter-group">
-        <span class="trades-filter-label">Service Provided</span>
-        <select id="trades-filter-type" class="trades-filter-select" onchange="applyTradeFilters()">
-          <option value="">All services</option>
-        </select>
-      </label>
-      <label class="trades-filter-group">
-        <span class="trades-filter-label">Area Served</span>
-        <select id="trades-filter-area" class="trades-filter-select" onchange="applyTradeFilters()">
-          <option value="">All areas</option>
-        </select>
-      </label>
+    <div class="trades-filter-bar">
+      <div class="trades-type-tabs" id="trades-type-tabs" role="tablist" aria-label="Filter by trade type"></div>
+      <div class="trades-filter-search-wrap">
+        <svg class="trades-filter-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input type="search" id="trades-search" class="trades-filter-search-input" placeholder="Search companies, contacts…" aria-label="Search trades">
+      </div>
     </div>
 
     <div id="trades-list" class="trades-list">
@@ -173,6 +171,11 @@
         const btn = document.getElementById('trades-add-btn');
         if (btn) btn.style.removeProperty('display');
       }
+      const searchInput = document.getElementById('trades-search');
+      if (searchInput) searchInput.addEventListener('input', applyTradeFilters);
+      document.addEventListener('click', () => {
+        document.querySelectorAll('.trades-chip-popover.open').forEach(p => p.classList.remove('open'));
+      });
       loadTradeContacts();
     });
   </script>

@@ -26,33 +26,47 @@ let _tradeContacts = [];
 let _tradeDeleteId = null;
 let _tradeTypeFilter = '';
 let _tradeAreaFilter = '';
+let _tradeSearch = '';
 const MAX_CONTACTS = 3;
+
+const TRADE_TYPE_COLORS = {
+  'Electrical':              '#f59e0b',
+  'Plumbing':                '#3b82f6',
+  'Carpentry / Roofing':     '#f97316',
+  'Carpet Fitting':          '#ec4899',
+  'Handyman Services':       '#14b8a6',
+  'Internal Joinery':        '#92400e',
+  'Landscaping / Outdoors':  '#22c55e',
+  'Painting + Decorating':   '#8b5cf6',
+  'Plasterer':               '#94a3b8',
+  'Structural Steel':        '#64748b',
+  'Concrete':                '#a8a29e',
+};
+function tradeTypeColor(type) {
+  return TRADE_TYPE_COLORS[type] || '#9ca3af';
+}
 
 function fmtTradeDate(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function tradeSkeletonHtml(namePct, badgeW, areasW, contactRow) {
+function tradeSkeletonHtml(namePct, badgeW, chipCount) {
+  const chips = Array.from({length: chipCount}, () =>
+    `<div class="skeleton-line skeleton-pill" style="width:${80 + Math.random()*40|0}px;height:32px;border-radius:16px"></div>`
+  ).join('');
   return `
-    <div class="trades-card skeleton-trade-card">
-      <div class="trades-card-top">
-        <div class="trades-card-info">
-          <div class="skeleton-line" style="height:14px;width:${namePct}%;margin-bottom:8px"></div>
-          <div class="trades-card-trade-row">
-            <div class="skeleton-line skeleton-pill" style="width:${badgeW}px;height:20px"></div>
-            <div class="skeleton-line" style="height:11px;width:${areasW}px"></div>
-          </div>
-        </div>
-        <div style="display:flex;gap:4px">
-          <div class="skeleton-action-btn"></div>
-          <div class="skeleton-action-btn"></div>
-        </div>
+    <div class="trades-row-skeleton">
+      <div class="skel-bar skeleton-line" style="width:5px;height:56px;border-radius:3px;flex-shrink:0"></div>
+      <div class="skel-left" style="flex:0 0 28%;display:flex;flex-direction:column;gap:6px">
+        <div class="skeleton-line" style="height:14px;width:${namePct}%"></div>
+        <div class="skeleton-line skeleton-pill" style="width:${badgeW}px;height:18px"></div>
+        <div class="skeleton-line" style="height:11px;width:70%"></div>
       </div>
-      ${contactRow ? `<div class="skeleton-contact-row">
-        <div class="skeleton-line" style="height:11px;width:100px"></div>
-        <div class="skeleton-line" style="height:11px;width:130px"></div>
-      </div>` : ''}
+      <div class="skel-mid" style="flex:1;display:flex;gap:8px;flex-wrap:wrap">${chips}</div>
+      <div class="skel-right" style="flex:0 0 18%;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+        <div class="skeleton-line skeleton-pill" style="width:80px;height:22px"></div>
+      </div>
     </div>`;
 }
 
@@ -60,11 +74,11 @@ async function loadTradeContacts() {
   const list = document.getElementById('trades-list');
   if (!list) return;
   list.innerHTML = [
-    tradeSkeletonHtml(58, 76, 100, true),
-    tradeSkeletonHtml(45, 88, 80,  true),
-    tradeSkeletonHtml(65, 68, 110, false),
-    tradeSkeletonHtml(52, 80, 90,  true),
-    tradeSkeletonHtml(70, 72, 95,  false),
+    tradeSkeletonHtml(58, 76, 1),
+    tradeSkeletonHtml(45, 88, 2),
+    tradeSkeletonHtml(65, 68, 1),
+    tradeSkeletonHtml(52, 80, 2),
+    tradeSkeletonHtml(70, 72, 1),
   ].join('');
   try {
     _tradeContacts = await GET('/api/trades');
@@ -85,36 +99,40 @@ async function loadTradeContacts() {
 }
 
 function populateTradeFilters() {
-  const typeSelect = document.getElementById('trades-filter-type');
-  const areaSelect = document.getElementById('trades-filter-area');
-
-  if (typeSelect) {
-    const cur = typeSelect.value;
-    typeSelect.innerHTML = `<option value="">All categories</option>` +
-      TRADE_CATEGORIES.map(t => `<option value="${escHtml(t)}"${t === cur ? ' selected' : ''}>${escHtml(t)}</option>`).join('');
-  }
-
-  if (areaSelect) {
-    const cur = areaSelect.value;
-    areaSelect.innerHTML = `<option value="">All areas</option>` +
-      TRADE_AREAS.map(a => `<option value="${escHtml(a)}"${a === cur ? ' selected' : ''}>${escHtml(a)}</option>`).join('');
-  }
+  const tabsEl = document.getElementById('trades-type-tabs');
+  if (!tabsEl) return;
+  const types = [...new Set(_tradeContacts.map(c => c.trade_type).filter(Boolean))].sort();
+  const all = ['All', ...types];
+  tabsEl.innerHTML = all.map(t => {
+    const val = t === 'All' ? '' : t;
+    const active = _tradeTypeFilter === val;
+    return `<button type="button" class="trades-type-tab${active ? ' active' : ''}" data-type="${escHtml(val)}" role="tab" aria-selected="${active}">${escHtml(t)}</button>`;
+  }).join('');
+  tabsEl.querySelectorAll('.trades-type-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _tradeTypeFilter = btn.dataset.type;
+      tabsEl.querySelectorAll('.trades-type-tab').forEach(b => {
+        b.classList.toggle('active', b === btn);
+        b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+      });
+      applyTradeFilters();
+    });
+  });
 }
 
 function applyTradeFilters() {
-  const typeSelect = document.getElementById('trades-filter-type');
-  const areaSelect = document.getElementById('trades-filter-area');
-  _tradeTypeFilter = typeSelect ? typeSelect.value : '';
-  _tradeAreaFilter = areaSelect ? areaSelect.value : '';
+  const searchEl = document.getElementById('trades-search');
+  _tradeSearch = searchEl ? searchEl.value.toLowerCase().trim() : '';
 
   let filtered = _tradeContacts;
   if (_tradeTypeFilter) {
     filtered = filtered.filter(co => (co.trade_type || '').trim() === _tradeTypeFilter);
   }
-  if (_tradeAreaFilter) {
+  if (_tradeSearch) {
     filtered = filtered.filter(co => {
-      const areas = Array.isArray(co.areas_served) ? co.areas_served : [];
-      return areas.includes(_tradeAreaFilter);
+      const name = (co.company_name || '').toLowerCase();
+      const contactNames = (co.contacts || []).map(c => (c.name || '').toLowerCase()).join(' ');
+      return name.includes(_tradeSearch) || contactNames.includes(_tradeSearch);
     });
   }
   renderTradeContacts(filtered);
@@ -128,109 +146,134 @@ function renderTradeContacts(contacts) {
     return;
   }
   list.innerHTML = contacts.map(tradeCardHtml).join('');
-  list.querySelectorAll('.trades-copy-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.preventDefault();
+
+  list.querySelectorAll('.trades-chip').forEach(chip => {
+    chip.addEventListener('click', e => {
       e.stopPropagation();
-      const value = btn.dataset.copy;
-      if (!value) return;
-      navigator.clipboard.writeText(value).then(() => {
-        btn.classList.add('copied');
-        setTimeout(() => btn.classList.remove('copied'), 1500);
-      }).catch(() => {});
+      const wrap = chip.closest('.trades-chip-wrap');
+      const popover = wrap?.querySelector('.trades-chip-popover');
+      if (!popover) return;
+      const isOpen = popover.classList.contains('open');
+      document.querySelectorAll('.trades-chip-popover.open').forEach(p => p.classList.remove('open'));
+      if (!isOpen) popover.classList.add('open');
     });
+  });
+
+  list.querySelectorAll('.trades-chip-popover').forEach(pop => {
+    pop.addEventListener('click', e => e.stopPropagation());
   });
 }
 
 function tradeCardHtml(co) {
-  const company = escHtml(co.company_name || '');
-  const trade   = escHtml(co.trade_type   || '');
-  const areasArr = Array.isArray(co.areas_served) ? co.areas_served : [];
+  const company    = escHtml(co.company_name || '');
+  const tradeType  = escHtml(co.trade_type   || '');
+  const areasArr   = Array.isArray(co.areas_served) ? co.areas_served : [];
   const areasDisplay = escHtml(areasArr.join(', '));
-  const timescale  = escHtml(co.timescale || '');
-  const notes      = escHtml(co.notes    || '');
-  const id = co.id;
+  const timescale  = escHtml(co.timescale    || '');
+  const notes      = escHtml(co.notes        || '');
+  const id         = co.id;
+  const barColor   = tradeTypeColor(co.trade_type || '');
+  const badgeBg    = barColor + '18';
+  const isPriv     = ['manager','admin'].includes(state?.user?.privilege_level);
 
   const coWebsite      = co.website      || '';
   const coCompanyPhone = co.company_phone || '';
 
-  const contactsHtml = (co.contacts || []).map(c => {
-    const cName  = escHtml(c.name  || '');
-    const cRole  = escHtml(c.role  || '');
-    const cPhone = escHtml(c.phone || '');
-    const cEmail = escHtml(c.email || '');
-    const prefLabels = (c.preferred_contact || '').split(',').map(s => s.trim()).filter(Boolean);
-    const prefHtml = prefLabels.length
-      ? `<div class="trades-card-person-pref">${prefLabels.map(l => `<span class="trades-pref-chip">${escHtml(l)}</span>`).join('')}</div>`
-      : '';
-    const callBtn  = cPhone ? `<div class="trades-contact-action-group">
-      <a href="tel:${cPhone}" class="trades-contact-action-btn trades-contact-call-btn" aria-label="Call ${cName} at ${cPhone}">
+  // ── Contact chips (middle column) ─────────────────────────────────────────
+  const chipsHtml = (co.contacts || []).map((c, idx) => {
+    const cName   = escHtml(c.name  || '');
+    const cRole   = escHtml(c.role  || '');
+    const cPhone  = c.phone || '';
+    const cEmail  = c.email || '';
+    const pref    = (c.preferred_contact || '').toLowerCase();
+    const prefPhone = pref.includes('phone') || pref.includes('call') || pref.includes('whatsapp');
+    const prefEmail = pref.includes('email');
+    const initials  = (c.name || '').trim().split(/\s+/).map(n => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+
+    const popActions = [
+      cPhone ? `<a href="tel:${escHtml(cPhone)}" class="trades-popover-action trades-popover-call${prefPhone ? ' preferred' : ''}" aria-label="Call ${cName}">
         <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
-        <span class="trades-contact-btn-inner"><span class="trades-contact-btn-label">Call</span><span class="trades-contact-btn-sub">${cPhone}</span></span></a>
-      <button class="trades-copy-btn trades-copy-btn-call" data-copy="${cPhone}" aria-label="Copy phone number" title="Copy number" type="button">
-        <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-      </button>
-    </div>` : '';
-    const emailBtn = cEmail ? `<div class="trades-contact-action-group">
-      <a href="mailto:${cEmail}" class="trades-contact-action-btn trades-contact-email-btn" aria-label="Email ${cName} at ${cEmail}">
+        <span class="trades-popover-action-text">${escHtml(cPhone)}${prefPhone ? '<span class="trades-popover-pref">Preferred</span>' : ''}</span>
+      </a>` : '',
+      cEmail ? `<a href="mailto:${escHtml(cEmail)}" class="trades-popover-action trades-popover-email${prefEmail ? ' preferred' : ''}" aria-label="Email ${cName}">
         <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-        <span class="trades-contact-btn-inner"><span class="trades-contact-btn-label">Email</span><span class="trades-contact-btn-sub">${cEmail}</span></span></a>
-      <button class="trades-copy-btn trades-copy-btn-email" data-copy="${cEmail}" aria-label="Copy email address" title="Copy email" type="button">
-        <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        <span class="trades-popover-action-text">${escHtml(cEmail)}${prefEmail ? '<span class="trades-popover-pref">Preferred</span>' : ''}</span>
+      </a>` : '',
+    ].filter(Boolean).join('');
+
+    return `<div class="trades-chip-wrap">
+      <button type="button" class="trades-chip" aria-haspopup="true" aria-label="Contact ${cName}">
+        <span class="trades-chip-avatar">${initials}</span>
+        <span class="trades-chip-info">
+          <span class="trades-chip-name">${cName}</span>
+          ${cRole ? `<span class="trades-chip-role">${cRole}</span>` : ''}
+        </span>
       </button>
-    </div>` : '';
-    return `<div class="trades-card-person">
-      <div class="trades-card-person-top">
-        <span class="trades-card-person-name">${cName}</span>${cRole ? `<span class="trades-card-person-role">${cRole}</span>` : ''}
+      <div class="trades-chip-popover" role="dialog" aria-label="${cName} contact options">
+        <div class="trades-popover-header">
+          <span class="trades-popover-avatar">${initials}</span>
+          <div>
+            <div class="trades-popover-name">${cName}</div>
+            ${cRole ? `<div class="trades-popover-role">${cRole}</div>` : ''}
+          </div>
+        </div>
+        <div class="trades-popover-actions">${popActions || '<p class="trades-popover-empty">No contact details</p>'}</div>
       </div>
-      ${prefHtml}
-      ${(callBtn || emailBtn) ? `<div class="trades-card-contact-row">${callBtn}${emailBtn}</div>` : ''}
     </div>`;
   }).join('');
 
-  const detailParts = [];
-  if (timescale) detailParts.push(`<span class="trades-card-detail"><span class="trades-card-detail-label">Lead time:</span> ${timescale}</span>`);
-  if (coWebsite) {
-    const siteDisplay = escHtml(coWebsite.replace(/^https?:\/\//, ''));
-    detailParts.push(`<span class="trades-card-detail trades-card-detail-copyable"><span class="trades-card-detail-label">Website:</span> <a href="${escHtml(coWebsite)}" target="_blank" rel="noopener noreferrer" class="trades-card-link">${siteDisplay}</a><button class="trades-copy-btn" data-copy="${escHtml(coWebsite)}" aria-label="Copy website URL" title="Copy URL" type="button"><svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></span>`);
-  }
-  if (coCompanyPhone) {
-    detailParts.push(`<span class="trades-card-detail trades-card-detail-copyable"><span class="trades-card-detail-label">Tel:</span> <a href="tel:${escHtml(coCompanyPhone)}" class="trades-card-link">${escHtml(coCompanyPhone)}</a><button class="trades-copy-btn" data-copy="${escHtml(coCompanyPhone)}" aria-label="Copy company phone" title="Copy number" type="button"><svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button></span>`);
-  }
+  // ── Middle meta: notes + website + company phone ──────────────────────────
+  const websiteDisplay = coWebsite ? escHtml(coWebsite.replace(/^https?:\/\//, '')) : '';
+  const midMetaHtml = [
+    notes       ? `<div class="trades-row-notes">"${notes}"</div>` : '',
+    coWebsite   ? `<div class="trades-row-meta-link"><svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg><a href="${escHtml(coWebsite)}" target="_blank" rel="noopener noreferrer" class="trades-card-link">${websiteDisplay}</a></div>` : '',
+    coCompanyPhone ? `<div class="trades-row-meta-link"><svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg><a href="tel:${escHtml(coCompanyPhone)}" class="trades-card-link">${escHtml(coCompanyPhone)}</a></div>` : '',
+  ].filter(Boolean).join('');
+
+  // ── Right column: lead time + admin actions ────────────────────────────────
+  const leadHtml = timescale ? `<span class="trades-row-lead">
+    <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6v6l4 2"/></svg>
+    Lead: ${timescale}
+  </span>` : '';
+
+  const actionsHtml = isPriv ? `<div class="trades-row-actions">
+    <button class="trades-card-btn" onclick="openTradesModal(${id})" title="Edit" aria-label="Edit company">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+    </button>
+    <button class="trades-card-btn trades-card-btn-danger" onclick="openDeleteConfirm(${id})" title="Delete" aria-label="Delete company">
+      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+    </button>
+  </div>` : '';
+
+  // ── Audit line ─────────────────────────────────────────────────────────────
+  const auditParts = [];
+  if (co.created_by_name) auditParts.push(`Added by <strong>${escHtml(co.created_by_name)}</strong>${co.created_at ? ` · ${fmtTradeDate(co.created_at)}` : ''}`);
+  else if (co.created_at)  auditParts.push(`Added ${fmtTradeDate(co.created_at)}`);
+  if (co.updated_by_name)  auditParts.push(`Edited by <strong>${escHtml(co.updated_by_name)}</strong>${co.updated_at ? ` · ${fmtTradeDate(co.updated_at)}` : ''}`);
 
   return `
-    <div class="trades-card" data-id="${id}">
-      <div class="trades-card-top">
-        <div class="trades-card-info">
-          <div class="trades-card-name">${company}</div>
-          <div class="trades-card-trade-row">
-            <span class="trades-card-trade-badge">${trade}</span>
-            ${areasDisplay ? `<span class="trades-card-areas">${areasDisplay}</span>` : ''}
+    <div class="trades-row" data-id="${id}">
+      <div class="trades-row-bar" style="background:${barColor}" aria-hidden="true"></div>
+      <div class="trades-row-body">
+        <div class="trades-row-cols">
+          <div class="trades-row-left">
+            <h3 class="trades-row-company">${company}</h3>
+            <span class="trades-row-badge" style="background:${badgeBg};color:${barColor};border-color:${barColor}33">${tradeType}</span>
+            ${areasDisplay ? `<div class="trades-row-areas">
+              <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              ${areasDisplay}
+            </div>` : ''}
+          </div>
+          <div class="trades-row-mid">
+            ${chipsHtml ? `<div class="trades-row-chips">${chipsHtml}</div>` : ''}
+            ${midMetaHtml}
+          </div>
+          <div class="trades-row-right">
+            ${leadHtml}
+            ${actionsHtml}
           </div>
         </div>
-        ${['manager','admin'].includes(state?.user?.privilege_level) ? `<div class="trades-card-actions">
-          <button class="trades-card-btn" onclick="openTradesModal(${id})" title="Edit" aria-label="Edit company">
-            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-            </svg>
-          </button>
-          <button class="trades-card-btn trades-card-btn-danger" onclick="openDeleteConfirm(${id})" title="Delete" aria-label="Delete company">
-            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-            </svg>
-          </button>
-        </div>` : ''}
-      </div>
-      ${contactsHtml ? `<div class="trades-card-persons">${contactsHtml}</div>` : ''}
-      ${detailParts.length ? `<div class="trades-card-details">${detailParts.join('')}</div>` : ''}
-      ${notes ? `<div class="trades-card-notes">${notes}</div>` : ''}
-      <div class="trades-card-audit">
-        ${co.created_by_name
-          ? `<span>Added by <strong>${escHtml(co.created_by_name)}</strong>${co.created_at ? ` · ${fmtTradeDate(co.created_at)}` : ''}</span>`
-          : co.created_at ? `<span>Added ${fmtTradeDate(co.created_at)}</span>` : ''}
-        ${co.updated_by_name
-          ? `<span class="trades-card-audit-sep">·</span><span>Edited by <strong>${escHtml(co.updated_by_name)}</strong>${co.updated_at ? ` · ${fmtTradeDate(co.updated_at)}` : ''}</span>`
-          : ''}
+        ${auditParts.length ? `<div class="trades-row-audit">${auditParts.join('<span class="trades-card-audit-sep"> · </span>')}</div>` : ''}
       </div>
     </div>`;
 }
