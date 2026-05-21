@@ -93,5 +93,11 @@ Sessions and users are stored in PostgreSQL (`sessions`, `users`,
 - `APP_URL` (or `REPLIT_DOMAINS`) — used to build the absolute link in emails
 - `HUBSPOT_TOKEN` — HubSpot private app token (otherwise `/api/*` HubSpot endpoints return 503)
 - `GOOGLE_*` — Google OAuth credentials for calendar integration
+- `BOOTSTRAP_ADMIN_PASSWORD` — **emergency-only** fallback password for all
+  accounts listed in `ADMIN_EMAILS`. When set, those accounts can log in with
+  this password even if their normal password is unset or forgotten, bypassing
+  the usual bcrypt check. Use a strong random value (e.g. a UUID or 32-char
+  random string). Every use is logged as `[SECURITY] Bootstrap admin login used`.
+  This secret is not required for normal operation — omit it until needed.
 
 `REPL_ID` and Replit OIDC are no longer used.

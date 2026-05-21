@@ -65,8 +65,19 @@ function turnstileError(res) {
 const MIN_PASSWORD_STRENGTH_SCORE = 2;
 
 const PASSWORD_SET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h (admin-issued)
-const PASSWORD_RESET_TOKEN_TTL_MS = 15 * 60 * 1000;    // 15m (self-service reset)
+const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;    // 1h  (self-service reset)
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+// Bootstrap admin password — hashed lazily from BOOTSTRAP_ADMIN_PASSWORD env var
+// so the hash is computed at most once per server process.
+let _bootstrapAdminHash = undefined; // undefined = not yet computed
+async function getBootstrapAdminHash() {
+  if (_bootstrapAdminHash !== undefined) return _bootstrapAdminHash;
+  const pw = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+  if (!pw) { _bootstrapAdminHash = null; return null; }
+  _bootstrapAdminHash = await bcrypt.hash(pw, 12);
+  return _bootstrapAdminHash;
+}
 
 function createMailTransport() {
   if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
@@ -169,7 +180,7 @@ async function sendSetPasswordEmail(email, token, { resend = false, reset = fals
       ? 'A new password setup link has been issued for your Measure Once account.'
       : "You've been granted access to <strong>Measure Once</strong>.";
   const action = reset
-    ? 'Reset your password by clicking the link below (valid for 15 minutes):'
+    ? 'Reset your password by clicking the link below (valid for 1 hour):'
     : 'Set your password by clicking the link below (valid for 24 hours):';
   try {
     await transport.sendMail({
@@ -743,18 +754,29 @@ async function setupAuth(app) {
     const captcha = await verifyTurnstile(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
     if (!captcha.ok) return turnstileError(res);
     try {
-      if (!(await isEmailApproved(email))) {
+      if (!(await isEmailApproved(email)) && !isAdminEmail(email)) {
         return res.status(401).json({ error: 'Invalid email or password.' });
       }
       const dbUser = await getUserByEmail(email);
-      if (!dbUser || !dbUser.password_hash) {
-        return res.status(401).json({
-          error: "This account hasn't set a password yet. Ask an admin to send you the set-password link.",
-          code: 'NO_PASSWORD',
-        });
+      if (!dbUser) {
+        return res.status(401).json({ error: 'Invalid email or password.' });
       }
-      const ok = await bcrypt.compare(password, dbUser.password_hash);
-      if (!ok) return res.status(401).json({ error: 'Invalid email or password.' });
+      const normalOk = dbUser.password_hash && await bcrypt.compare(password, dbUser.password_hash);
+      if (!normalOk) {
+        const bootstrapHash = await getBootstrapAdminHash();
+        const bootstrapOk = bootstrapHash && isAdminEmail(email) &&
+          await bcrypt.compare(password, bootstrapHash);
+        if (bootstrapOk) {
+          console.warn(`  [SECURITY] Bootstrap admin login used for ${email}`);
+        } else if (!dbUser.password_hash) {
+          return res.status(401).json({
+            error: "This account hasn't set a password yet. Ask an admin to send you the set-password link.",
+            code: 'NO_PASSWORD',
+          });
+        } else {
+          return res.status(401).json({ error: 'Invalid email or password.' });
+        }
+      }
 
       const sessionUser = buildSessionUser(dbUser);
       await loginSessionUser(req, sessionUser);
