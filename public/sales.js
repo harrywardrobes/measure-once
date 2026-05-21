@@ -145,84 +145,94 @@ async function renderEnquiryList() {
 
   _initSalesListeners();
 
-  const filter = state.salesStageFilter || '';
+  // No "All" tab — default to the first stage
+  if (!state.salesStageFilter || !SALES_TAB_STAGES.includes(state.salesStageFilter)) {
+    state.salesStageFilter = SALES_TAB_STAGES[0];
+  }
+  const filter = state.salesStageFilter;
 
-  // ── Collect one entry per contact ─────────────────────────────────────────
-  const entries = [];
+  // ── Collect ALL entries across every stage ────────────────────────────────
+  const allEntries = [];
   for (const contact of state.filteredContacts) {
-    const cached = state.contactStageCache[contact.id];
+    const cached    = state.contactStageCache[contact.id];
     const createdate = parseInt(contact.properties?.createdate || '0', 10);
 
     if (!cached || cached.length === 0) {
-      // No local data yet — treat as Sales stage, no substage known
-      if (!filter || filter === 'sales') {
-        entries.push({
-          contact,
-          stageKey: 'sales',
-          substageId: '',
-          sourceId: '',
-          createdate,
-          priority: 2,
-        });
-      }
+      allEntries.push({ contact, stageKey: 'sales', substageId: '', sourceId: '',
+        createdate, stageTime: createdate, priority: 2 });
       continue;
     }
 
-    const best = _bestRoom(cached, filter);
+    const best = _bestRoom(cached, ''); // '' = no stage filter
     if (!best) continue;
 
-    // Prefer the recorded date the contact entered their current substage;
-    // fall back to the stage entry date, then to contact createdate.
-    const statusId = best.statusId || '';
-    const substageDate = statusId && best.substateDates?.[statusId]
-      ? new Date(best.substateDates[statusId] + 'T00:00:00').getTime()
-      : null;
+    const statusId      = best.statusId || '';
+    const substageDate  = statusId && best.substateDates?.[statusId]
+      ? new Date(best.substateDates[statusId] + 'T00:00:00').getTime() : null;
     const stageEntryDate = best.stageDates?.[best.stageKey]
-      ? new Date(best.stageDates[best.stageKey] + 'T00:00:00').getTime()
-      : null;
+      ? new Date(best.stageDates[best.stageKey] + 'T00:00:00').getTime() : null;
 
-    entries.push({
+    allEntries.push({
       contact,
-      stageKey: best.stageKey,
+      stageKey:  best.stageKey,
       substageId: statusId,
-      sourceId: best.sourceId || '',
+      sourceId:  best.sourceId || '',
       createdate,
       stageTime: substageDate || stageEntryDate || createdate,
-      priority: priorityScore(best.stageKey, statusId),
-      roomIdx: best.roomIdx,
+      priority:  priorityScore(best.stageKey, statusId),
+      roomIdx:   best.roomIdx,
     });
   }
 
-  // ── Sort: priority band asc, then createdate desc (newest first) ──────────
-  entries.sort((a, b) => {
+  // ── Sort: priority band asc, then newest first ────────────────────────────
+  allEntries.sort((a, b) => {
     if (a.priority !== b.priority) return a.priority - b.priority;
     return b.createdate - a.createdate;
   });
 
-  // ── Stage tab bar ─────────────────────────────────────────────────────────
-  const tabs = [
-    { key: '', label: 'All' },
-    ...SALES_TAB_STAGES.map(k => ({
-      key: k,
-      label: state.workflow?.stages?.[k]?.label || k,
-    })),
-  ].map(({ key, label }) => {
-    const active = filter === key;
-    const colour = key ? stageColour(key) : null;
-    const style = active && colour
-      ? `background:${colour.bg};color:#fff;border-color:${colour.bg}`
-      : active ? 'background:var(--plum);color:#fff;border-color:var(--plum)' : '';
+  // ── Group by stage ────────────────────────────────────────────────────────
+  const byStage = Object.fromEntries(SALES_TAB_STAGES.map(k => [k, []]));
+  for (const e of allEntries) {
+    if (byStage[e.stageKey]) byStage[e.stageKey].push(e);
+  }
+
+  // ── Mobile tab pills ──────────────────────────────────────────────────────
+  const tabs = SALES_TAB_STAGES.map(k => {
+    const label  = escHtml(state.workflow?.stages?.[k]?.label ||
+      (k === 'designvisit' ? 'Design Visit' : k === 'survey' ? 'Survey' : 'Sales'));
+    const active = filter === k;
+    const hex    = STAGE_ACCENT[k] || '#8B2BFF';
+    const style  = active ? `background:${hex};color:#fff;border-color:${hex}` : '';
     return `<button class="project-stage-tab${active ? ' project-stage-tab-active' : ''}"
-      style="${style}" data-sales-stage="${escHtml(key)}">${escHtml(label)}</button>`;
+      style="${style}" data-sales-stage="${k}">${label}</button>`;
   }).join('');
 
-  // ── Rows ──────────────────────────────────────────────────────────────────
-  const bodyHtml = entries.length
-    ? entries.map(e => enquiryRowHtml(e)).join('')
-    : `<p class="projects-empty-msg">No enquiries at this stage.</p>`;
+  // ── Build 3 columns ───────────────────────────────────────────────────────
+  const colsHtml = SALES_TAB_STAGES.map(sk => {
+    const label    = escHtml(state.workflow?.stages?.[sk]?.label ||
+      (sk === 'designvisit' ? 'Design Visit' : sk === 'survey' ? 'Survey' : 'Sales'));
+    const entries  = byStage[sk];
+    const count    = entries.length;
+    const hex      = STAGE_ACCENT[sk] || '#8B2BFF';
+    const rgb      = _eqRgb(hex);
+    const isActive = filter === sk;
+    const cardsHtml = entries.length
+      ? entries.map(e => enquiryRowHtml(e)).join('')
+      : `<p class="projects-empty-msg">Nothing here yet.</p>`;
+    const badge = count
+      ? `<span class="eq-col-header-count" style="background:rgba(${rgb},0.1);color:${hex}">${count}</span>` : '';
+    return `
+      <div class="eq-col${isActive ? ' eq-col-active' : ''}" data-col="${sk}">
+        <div class="eq-col-header" style="border-top:3px solid ${hex}">
+          <span class="eq-col-header-label">${label}</span>
+          ${badge}
+        </div>
+        <div class="enquiry-list">${cardsHtml}</div>
+      </div>`;
+  }).join('');
 
   view.innerHTML = `
-    <div class="project-stage-tabs-bar">
+    <div class="sales-stage-bar">
       ${tabs}
       <button class="sales-new-btn" id="sales-new-btn" title="New Enquiry">
         <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -231,8 +241,8 @@ async function renderEnquiryList() {
         New
       </button>
     </div>
-    <div class="enquiry-list">
-      ${bodyHtml}
+    <div class="sales-board">
+      ${colsHtml}
     </div>
   `;
 }
