@@ -38,6 +38,13 @@
     .cf-turnstile { margin: 4px 0 14px; min-height: 65px; }
   </style>
   <script>
+    // Suppress non-Error unhandled rejections from third-party scripts
+    // (Cloudflare Turnstile throws non-Error values internally when it
+    // cannot reach its servers in sandboxed / network-restricted environments).
+    window.addEventListener('unhandledrejection', function (event) {
+      if (!(event.reason instanceof Error)) event.preventDefault();
+    });
+
     // Must be defined BEFORE the Turnstile loader so the async script can find
     // it when it fires onload. The real renderTurnstileWidgets() lives further
     // down once the rest of the page script has set _turnstileSiteKey.
@@ -48,8 +55,19 @@
         window.renderTurnstileWidgets();
       }
     };
+    // The Cloudflare script is injected dynamically only when the server
+    // confirms a site key is configured (see the /api/turnstile-config fetch
+    // below). This avoids loading it — and the non-Error throws it produces
+    // when it cannot reach Cloudflare — in environments where CAPTCHA is not
+    // enabled.
+    window._loadTurnstileScript = function () {
+      const s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady';
+      s.async = true;
+      s.defer = true;
+      document.head.appendChild(s);
+    };
   </script>
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady" async defer></script>
 </head>
 <body>
   <div class="card">
@@ -158,7 +176,11 @@
   // ── Cloudflare Turnstile ──────────────────────────────────────────────────
   // Fetches the site key from the server; if captcha is disabled (no secret
   // configured), the widget containers stay empty and forms submit as before.
-  const _turnstileWidgets = { login: null, forgot: null, request: null };
+  const _turnstileWidgets  = { login: null, forgot: null, request: null };
+  // Track containers where render has been attempted so we never call
+  // turnstile.render() twice on the same element, even when turnstile.render()
+  // returns null/undefined (e.g. when Cloudflare can't reach its servers).
+  const _turnstileAttempted = new Set();
   let _turnstileSiteKey = null;
   function getTurnstileToken(formName) {
     const id = _turnstileWidgets[formName];
@@ -174,7 +196,8 @@
     [['login', 'turnstile-login'], ['forgot', 'turnstile-forgot'], ['request', 'turnstile-request']]
       .forEach(([name, elId]) => {
         const el = document.getElementById(elId);
-        if (!el || _turnstileWidgets[name] != null) return;
+        if (!el || _turnstileAttempted.has(name)) return;
+        _turnstileAttempted.add(name);
         _turnstileWidgets[name] = window.turnstile.render(el, {
           sitekey: _turnstileSiteKey,
           theme: 'light',
@@ -187,7 +210,14 @@
     .then(cfg => {
       if (cfg && cfg.enabled && cfg.siteKey) {
         _turnstileSiteKey = cfg.siteKey;
-        if (window._turnstileApiReady) window.renderTurnstileWidgets();
+        // Script is loaded on-demand — if the API beat the script, the
+        // onTurnstileReady callback will call renderTurnstileWidgets once
+        // it fires. If the script is already ready (e.g. cached), render now.
+        if (window._turnstileApiReady) {
+          window.renderTurnstileWidgets();
+        } else {
+          window._loadTurnstileScript();
+        }
       }
     })
     .catch(() => {});
