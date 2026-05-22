@@ -640,6 +640,8 @@ async function runUiSmoke({ users, runId, clients }) {
         'medium',
         /Showing 26/.test(leadFilterOnPage2Text) && /Showing 1[–\-]/.test(afterLeadFilterText));
 
+      await safeShot(page, path.join(SCREENSHOT_DIR, `${runId}-lead-status-filter-reset.png`));
+
       await page.close();
     } catch (e) {
       record('filter-reset pagination regression probe ran', 'no error',
