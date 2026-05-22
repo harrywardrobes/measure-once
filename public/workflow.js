@@ -423,20 +423,6 @@ function _renderCustomerListImpl() {
   });
 }
 
-// Short stage code shown as a leading letter group on the stage pill — gives
-// colorblind users a redundant cue for the stage in addition to colour.
-const STAGE_CODE_MAP = {
-  sales: 'S', designvisit: 'DV', survey: 'SV', quote: 'Q',
-  deposit: 'D', manufacture: 'M', install: 'I', won: 'W', lost: 'L',
-  complete: 'C', remedial: 'R',
-};
-function stageCodeFor(key) {
-  if (STAGE_CODE_MAP[key]) return STAGE_CODE_MAP[key];
-  // Fallback: first letter (or 2 letters of camelCase segments) uppercased
-  const parts = String(key).split(/[-_\s]|(?=[A-Z])/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return String(key).slice(0, 2).toUpperCase();
-}
 registerCustomerListRenderer(_renderCustomerListImpl);
 
 // ── Quick Card Actions ────────────────────────────────────────────────────────
