@@ -111,6 +111,21 @@ const HS_SALES_PROGRESSION = {
 const HS_DECLINE_STATUSES = ['unqualified', 'not_suitable', 'bad_timing'];
 const HS_ADVANCE_STATUSES  = ['open_deal', 'visit_scheduled'];
 
+// ── Stage → HubSpot lead status mapping ──────────────────────────────────────
+// When a user explicitly advances or moves back to a stage, this map decides
+// which hs_lead_status value is written back to HubSpot. null = no update sent.
+const STAGE_LEAD_STATUS_MAP = {
+  sales:        'IN_PROGRESS',
+  designvisit:  'VISIT_SCHEDULED',
+  survey:       'OPEN_DEAL',
+  order:        'OPEN_DEAL',
+  workshop:     'OPEN_DEAL',
+  packing:      'OPEN_DEAL',
+  delivery:     'OPEN_DEAL',
+  installation: 'OPEN_DEAL',
+  aftercare:    null,
+};
+
 function syncRoomFromHubSpot(room, leadStatus) {
   if (!leadStatus) return room;
   const ls = leadStatus.toLowerCase().replace(/-/g, '_');
@@ -1193,7 +1208,45 @@ function setStatusChecked(stageKey, statusId, checked) {
   scheduleSave(message, snapshot);
 }
 
-// ── Move back to a past stage ─────────────────────────────────────────────────
+// ── Non-blocking HubSpot lead status write on stage change ───────────────────
+// Looks up the new stage in STAGE_LEAD_STATUS_MAP and fires a PATCH to HubSpot.
+// The stage change is already committed locally before this runs; failure only
+// shows a toast — it does not revert the local change.
+function _syncStageLeadStatus(stageKey) {
+  if (isViewerOnly()) return;
+  const contactId = state.selectedContactId;
+  if (!contactId) return;
+  const newStatus = STAGE_LEAD_STATUS_MAP[stageKey];
+  if (!newStatus) return;
+  PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: newStatus })
+    .then(() => {
+      const contact = state.contacts?.find(c => String(c.id) === String(contactId));
+      if (contact) {
+        contact.properties = { ...(contact.properties || {}), hs_lead_status: newStatus };
+      }
+      if (state.selectedContact) {
+        state.selectedContact.properties = {
+          ...(state.selectedContact.properties || {}),
+          hs_lead_status: newStatus,
+        };
+      }
+      if (typeof loadLeadStatusCounts === 'function') {
+        loadLeadStatusCounts()
+          .then(() => { if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter(); })
+          .catch(() => {});
+      }
+    })
+    .catch(err => {
+      if (err.code === 'HUBSPOT_AUTH') {
+        showToast('Could not update lead status — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+      } else if (err.code === 'HUBSPOT_RATE_LIMIT') {
+        showToast('Could not update lead status — HubSpot rate limit reached. Please try again in a moment.', true);
+      } else {
+        showToast('Could not update lead status in HubSpot', true);
+      }
+    });
+}
+
 function moveBackToStage(stageKey) {
   if (!state.workflowData) return;
   const snapshot = JSON.parse(JSON.stringify(state.allRooms));
@@ -1207,6 +1260,7 @@ function moveBackToStage(stageKey) {
   renderWorkflowHeader();
   const label = state.workflow?.stages?.[stageKey]?.label || stageKey;
   scheduleSave(`Moved back to ${label}`, snapshot);
+  _syncStageLeadStatus(stageKey);
 }
 
 // ── Advance to a specific stage (explicit button action) ──────────────────────
@@ -1224,6 +1278,7 @@ function advanceToStage(nextKey) {
   renderWorkflowHeader();
   const label = state.workflow?.stages?.[nextKey]?.label || nextKey;
   scheduleSave(`Advanced to ${label}`, snapshot);
+  _syncStageLeadStatus(nextKey);
 }
 
 // ── Save Workflow Data ────────────────────────────────────────────────────────
