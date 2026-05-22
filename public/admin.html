@@ -1621,8 +1621,11 @@
       return;
     }
 
+    // NOTE: The null-status sentinel row (is_null_row=TRUE) intentionally has no
+    // delete button. The server also rejects DELETE requests for this row with 400.
+    // Do NOT add a generic delete button here without re-checking is_null_row first.
     const nullRowHtml = nullRow ? `
-      <tr style="border-bottom:1px solid var(--border);background:var(--stone-soft);" data-ls-key="${esc(nullRow.key)}">
+      <tr style="border-bottom:1px solid var(--border);background:var(--stone-soft);" data-ls-key="${esc(nullRow.key)}" data-ls-no-delete="1">
         <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
           <button class="btn btn-ghost" disabled style="padding:2px 7px;font-size:1rem;line-height:1;opacity:.3;" title="Cannot reorder">↑</button>
           <button class="btn btn-ghost" disabled style="padding:2px 7px;font-size:1rem;line-height:1;opacity:.3;" title="Cannot reorder">↓</button>

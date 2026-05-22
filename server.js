@@ -2666,6 +2666,27 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
   }
 });
 
+// Admin: delete a status row (null sentinel is protected)
+app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async (req, res) => {
+  const key = req.params.key;
+  try {
+    const { rows: existing } = await pool.query(
+      'SELECT key, is_null_row FROM lead_status_config WHERE key = $1',
+      [key]
+    );
+    if (!existing.length) return res.status(404).json({ error: 'Status not found.' });
+    if (existing[0].is_null_row) {
+      return res.status(400).json({ error: 'The null-status sentinel row cannot be deleted.' });
+    }
+    await pool.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
+    res.json({ ok: true });
+    syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
+  } catch (e) {
+    console.error('DELETE /api/admin/lead-statuses/:key error:', e.message);
+    res.status(500).json({ error: 'Could not delete lead status.' });
+  }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 (async () => {
   try {
