@@ -164,10 +164,13 @@ async function runUiSmoke({ users, runId, clients }) {
           // Legacy bespoke buttons that must not exist now that chrome.js owns the header
           const legacySignOut = Array.from(document.querySelectorAll('.nav-btn'))
             .find(el => /sign\s*out/i.test(el.textContent));
+          // Auth avatar rendered by core.js into #auth-status
+          const avatarBtn = document.querySelector('#auth-status .header-avatar-btn');
           return {
             hasAppHeader: !!header,
             pageTitleText: titleEl ? titleEl.textContent.trim() : '',
             hasLegacySignOut: !!legacySignOut,
+            hasAuthAvatar: !!avatarBtn,
           };
         });
 
@@ -185,6 +188,11 @@ async function runUiSmoke({ users, runId, clients }) {
           'no .nav-btn element with "Sign out" text',
           `hasLegacySignOut=${chromeInfo.hasLegacySignOut}`,
           'medium', !chromeInfo.hasLegacySignOut);
+
+        record('admin /admin renders auth avatar (.header-avatar-btn) in #auth-status',
+          '#auth-status .header-avatar-btn element present in DOM',
+          `hasAuthAvatar=${chromeInfo.hasAuthAvatar}`,
+          'high', chromeInfo.hasAuthAvatar);
       } else {
         record(`${role} /admin returns 403 in the browser`,
           'status=403', `status=${adminStatus}`,
