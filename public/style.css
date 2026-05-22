@@ -3313,6 +3313,86 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 
 /* ── Calendar (Tasks tab) ──────────────────────────────────────────────────── */
 .cal-shell { padding: 8px 0 24px; }
+
+/* ── Calendar sync section (visual-only placeholder) ─────────────────────── */
+.cal-sync {
+  margin: 0 12px 16px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid var(--stone-light);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.cal-sync-head { margin-bottom: 12px; }
+.cal-sync-title {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink-1);
+}
+.cal-sync-sub {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+.cal-sync-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 720px) {
+  .cal-sync-grid { grid-template-columns: repeat(3, 1fr); }
+}
+.cal-sync-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--stone-soft);
+  border: 1px solid var(--stone-light);
+  border-radius: 10px;
+}
+.cal-sync-card-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cal-sync-card-body { flex: 1; min-width: 0; }
+.cal-sync-card-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink-1);
+  line-height: 1.2;
+}
+.cal-sync-card-desc {
+  font-size: 0.75rem;
+  color: var(--ink-3);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+.cal-sync-connect-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--orchid);
+  background: #fff;
+  color: var(--orchid-deep);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.cal-sync-connect-btn:hover {
+  background: var(--orchid);
+  color: #fff;
+}
+.cal-sync-connect-btn:active { background: var(--orchid-deep); color: #fff; }
 .cal-header {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
   gap: 12px; padding: 0 12px 12px;

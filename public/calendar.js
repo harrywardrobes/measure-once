@@ -73,6 +73,7 @@ function renderTasksView() {
   const body = renderAgendaView();
   view.innerHTML = `
     <div class="cal-shell">
+      ${renderCalSyncSection()}
       ${renderCalendarHeader()}
       ${renderCalTopPanel()}
       <div class="cal-body">${body}</div>
@@ -238,6 +239,74 @@ function renderAgendaRow(v) {
       </div>
     </div>
   </div>`;
+}
+
+// ── Calendar sync (visual-only placeholder) ─────────────────────────────────
+const CAL_SYNC_PROVIDERS = [
+  {
+    id: 'google',
+    name: 'Google Calendar',
+    desc: 'Sync events from your Google account.',
+    iconHtml: `
+      <svg viewBox="0 0 48 48" width="28" height="28" aria-hidden="true">
+        <path fill="#4285F4" d="M37.5 10.5h-27A2.5 2.5 0 0 0 8 13v24a2.5 2.5 0 0 0 2.5 2.5h27A2.5 2.5 0 0 0 40 37V13a2.5 2.5 0 0 0-2.5-2.5z"/>
+        <path fill="#fff" d="M21.7 30.6c-2.7 0-4.6-1.6-4.9-3.8h2.4c.2 1 1.1 1.7 2.5 1.7 1.5 0 2.5-.8 2.5-2 0-1.2-1-2-2.6-2H20v-1.9h1.5c1.4 0 2.3-.7 2.3-1.8 0-1-.8-1.8-2.2-1.8-1.3 0-2.2.7-2.3 1.7H17c.2-2.1 2-3.6 4.6-3.6 2.7 0 4.5 1.5 4.5 3.5 0 1.4-.9 2.4-2.2 2.7v.1c1.6.2 2.7 1.4 2.7 2.9.1 2.3-2 3.8-4.9 3.8zM31.5 30.4h-2.3v-9.6l-2.9 2v-2.4l3-2.1h2.2v12.1z"/>
+        <path fill="#34A853" d="M32 39.5h5.5A2.5 2.5 0 0 0 40 37v-5.5h-8V39.5z"/>
+        <path fill="#FBBC04" d="M40 16h-8v-5.5h5.5A2.5 2.5 0 0 1 40 13v3z"/>
+        <path fill="#EA4335" d="M32 10.5h-3l-1.5 3-1.5-3h-3v.4l3 4.6-3 4.6V20h3l1.5-3 1.5 3h3v-.4l-3-4.6 3-4.6z" opacity="0"/>
+      </svg>`
+  },
+  {
+    id: 'outlook',
+    name: 'Microsoft Outlook',
+    desc: 'Sync events from your Outlook account.',
+    iconHtml: `
+      <svg viewBox="0 0 48 48" width="28" height="28" aria-hidden="true">
+        <path fill="#0078D4" d="M28 10h14a2 2 0 0 1 2 2v24a2 2 0 0 1-2 2H28V10z"/>
+        <path fill="#106EBE" d="M28 24h16v6H28z" opacity=".25"/>
+        <path fill="#0364B8" d="M4 12.5 26 8v32L4 35.5v-23z"/>
+        <path fill="#fff" d="M15 17c-3.6 0-6 2.9-6 7s2.4 7 6 7 6-2.9 6-7-2.4-7-6-7zm0 11.4c-2 0-3.3-1.8-3.3-4.4S13 19.6 15 19.6s3.3 1.8 3.3 4.4-1.3 4.4-3.3 4.4z"/>
+        <path fill="#fff" d="M30 16h12v2H30zM30 20h12v2H30zM30 24h12v2H30zM30 28h8v2h-8z" opacity=".8"/>
+      </svg>`
+  },
+  {
+    id: 'apple',
+    name: 'Apple Calendar',
+    desc: 'Sync events from your iCloud account.',
+    iconHtml: `
+      <svg viewBox="0 0 48 48" width="28" height="28" aria-hidden="true">
+        <rect x="6" y="8" width="36" height="34" rx="6" fill="#fff" stroke="#E5E5EA" stroke-width="1.5"/>
+        <text x="24" y="22" text-anchor="middle" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="7" font-weight="700" fill="#FF3B30" letter-spacing="0.5">SAT</text>
+        <text x="24" y="38" text-anchor="middle" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="18" font-weight="300" fill="#1C1C1E">22</text>
+      </svg>`
+  }
+];
+
+function renderCalSyncSection() {
+  const cards = CAL_SYNC_PROVIDERS.map(p => `
+    <div class="cal-sync-card">
+      <div class="cal-sync-card-icon">${p.iconHtml}</div>
+      <div class="cal-sync-card-body">
+        <div class="cal-sync-card-name">${escHtml(p.name)}</div>
+        <div class="cal-sync-card-desc">${escHtml(p.desc)}</div>
+      </div>
+      <button type="button" class="cal-sync-connect-btn" onclick="calSyncConnect('${p.id}')">Connect</button>
+    </div>
+  `).join('');
+  return `
+    <section class="cal-sync" aria-labelledby="cal-sync-title">
+      <div class="cal-sync-head">
+        <h2 id="cal-sync-title" class="cal-sync-title">Sync your calendar</h2>
+        <p class="cal-sync-sub">Connect a calendar so your visits stay in sync with the rest of your day.</p>
+      </div>
+      <div class="cal-sync-grid">${cards}</div>
+    </section>`;
+}
+
+function calSyncConnect(providerId) {
+  const p = CAL_SYNC_PROVIDERS.find(x => x.id === providerId);
+  const name = p ? p.name : 'Calendar';
+  showToast(`${name} sync is coming soon`);
 }
 
 // ── Top panel: mini calendars + visit stats ──────────────────────────────────
