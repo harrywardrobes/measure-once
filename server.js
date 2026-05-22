@@ -2442,6 +2442,123 @@ app.post('/api/ideas/:id/comments', async (req, res) => {
   }
 });
 
+// ── Lead Status Config ─────────────────────────────────────────────────────────
+const DEFAULT_LEAD_STATUSES = [
+  { key: 'NEW',                  label: 'New',                  sort_order: 0,  excluded_from_sales: false },
+  { key: 'OPEN',                 label: 'Open',                 sort_order: 1,  excluded_from_sales: false },
+  { key: 'IN_PROGRESS',          label: 'In Progress',          sort_order: 2,  excluded_from_sales: false },
+  { key: 'OPEN_DEAL',            label: 'Open Deal',            sort_order: 3,  excluded_from_sales: false },
+  { key: 'VISIT_SCHEDULED',      label: 'Visit Scheduled',      sort_order: 4,  excluded_from_sales: false },
+  { key: 'CONNECTED',            label: 'Connected',            sort_order: 5,  excluded_from_sales: false },
+  { key: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact', sort_order: 6,  excluded_from_sales: false },
+  { key: 'UNQUALIFIED',          label: 'Unqualified',          sort_order: 7,  excluded_from_sales: true  },
+  { key: 'BAD_TIMING',           label: 'Bad Timing',           sort_order: 8,  excluded_from_sales: false },
+];
+
+async function ensureLeadStatusTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS lead_status_config (
+      key                 TEXT PRIMARY KEY,
+      label               TEXT NOT NULL,
+      sort_order          INT  NOT NULL DEFAULT 0,
+      excluded_from_sales BOOLEAN NOT NULL DEFAULT FALSE
+    )
+  `);
+  const { rows } = await pool.query('SELECT COUNT(*) AS cnt FROM lead_status_config');
+  if (parseInt(rows[0].cnt, 10) === 0) {
+    for (const s of DEFAULT_LEAD_STATUSES) {
+      await pool.query(
+        'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales) VALUES ($1, $2, $3, $4) ON CONFLICT (key) DO NOTHING',
+        [s.key, s.label, s.sort_order, s.excluded_from_sales]
+      );
+    }
+    console.log('  Lead status config seeded with defaults');
+  }
+}
+
+// Public authenticated: full ordered list for all frontend pages
+app.get('/api/lead-statuses', isAuthenticated, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT key, label, sort_order, excluded_from_sales FROM lead_status_config ORDER BY sort_order ASC, key ASC'
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error('GET /api/lead-statuses error:', e.message);
+    res.status(500).json({ error: 'Could not load lead statuses.' });
+  }
+});
+
+// Admin: full list (same as public for now but separate for future extension)
+app.get('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT key, label, sort_order, excluded_from_sales FROM lead_status_config ORDER BY sort_order ASC, key ASC'
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error('GET /api/admin/lead-statuses error:', e.message);
+    res.status(500).json({ error: 'Could not load lead statuses.' });
+  }
+});
+
+// Admin: add new status
+app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, res) => {
+  const key   = (req.body?.key   || '').trim().toUpperCase().replace(/\s+/g, '_');
+  const label = (req.body?.label || '').trim();
+  if (!key || !label) return res.status(400).json({ error: 'key and label are required.' });
+  if (!/^[A-Z0-9_]+$/.test(key)) return res.status(400).json({ error: 'key may only contain uppercase letters, digits, and underscores.' });
+  try {
+    const { rows: maxRows } = await pool.query('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM lead_status_config');
+    const next = maxRows[0].next;
+    const { rows } = await pool.query(
+      'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales) VALUES ($1, $2, $3, FALSE) RETURNING *',
+      [key, label, next]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'A status with that key already exists.' });
+    console.error('POST /api/admin/lead-statuses error:', e.message);
+    res.status(500).json({ error: 'Could not add lead status.' });
+  }
+});
+
+// Admin: update label / sort_order / excluded_from_sales
+app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async (req, res) => {
+  const key = req.params.key;
+  const { label, sort_order, excluded_from_sales } = req.body || {};
+  if (label !== undefined && !String(label).trim()) return res.status(400).json({ error: 'label cannot be empty.' });
+  try {
+    const { rows: existing } = await pool.query('SELECT * FROM lead_status_config WHERE key = $1', [key]);
+    if (!existing.length) return res.status(404).json({ error: 'Status not found.' });
+    const cur = existing[0];
+    const newLabel    = label !== undefined ? String(label).trim() : cur.label;
+    const newOrder    = sort_order !== undefined ? parseInt(sort_order, 10) : cur.sort_order;
+    const newExcluded = excluded_from_sales !== undefined ? !!excluded_from_sales : cur.excluded_from_sales;
+    const { rows } = await pool.query(
+      'UPDATE lead_status_config SET label = $1, sort_order = $2, excluded_from_sales = $3 WHERE key = $4 RETURNING *',
+      [newLabel, newOrder, newExcluded, key]
+    );
+    res.json(rows[0]);
+  } catch (e) {
+    console.error('PATCH /api/admin/lead-statuses/:key error:', e.message);
+    res.status(500).json({ error: 'Could not update lead status.' });
+  }
+});
+
+// Admin: delete a status
+app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async (req, res) => {
+  const key = req.params.key;
+  try {
+    const { rowCount } = await pool.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
+    if (!rowCount) return res.status(404).json({ error: 'Status not found.' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('DELETE /api/admin/lead-statuses/:key error:', e.message);
+    res.status(500).json({ error: 'Could not delete lead status.' });
+  }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 (async () => {
   try {
@@ -2466,5 +2583,7 @@ app.post('/api/ideas/:id/comments', async (req, res) => {
     catch (e) { console.error('  Trades table setup failed:', e.message); }
     try { await ensureIdeasTables(); console.log('  Ideas tables ready'); }
     catch (e) { console.error('  Ideas tables setup failed:', e.message); }
+    try { await ensureLeadStatusTable(); console.log('  Lead status config table ready'); }
+    catch (e) { console.error('  Lead status table setup failed:', e.message); }
   });
 })();

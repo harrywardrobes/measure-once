@@ -158,7 +158,7 @@ async function renderEnquiryList() {
   const filter = state.salesStageFilter;
 
   // ── Collect ALL entries across every stage ────────────────────────────────
-  const EXCLUDED_LEAD_STATUSES = new Set(['NOT_SUITABLE', 'UNQUALIFIED']);
+  const EXCLUDED_LEAD_STATUSES = new Set(LEAD_STATUS_OPTIONS.filter(o => o.excluded_from_sales).map(o => o.value));
   const allEntries = [];
   for (const contact of state.filteredContacts) {
     const ls = (contact.properties?.hs_lead_status || '').toUpperCase();

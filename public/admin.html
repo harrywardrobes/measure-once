@@ -1570,6 +1570,167 @@
     }
   }
 
+  let _leadStatusesData = [];
+  let _leadStatusesLoaded = false;
+
+  async function loadLeadStatusesAdmin() {
+    if (_leadStatusesLoaded) return;
+    const wrap = document.getElementById('lead-statuses-table-wrap');
+    if (!wrap) return;
+    try {
+      _leadStatusesData = await api('GET', '/api/admin/lead-statuses');
+      _leadStatusesLoaded = true;
+      renderLeadStatusesTable();
+    } catch (e) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load lead statuses: ${esc(e.message)}</p>`;
+    }
+  }
+
+  function renderLeadStatusesTable() {
+    const wrap = document.getElementById('lead-statuses-table-wrap');
+    if (!wrap) return;
+    const data = _leadStatusesData;
+    if (!data.length) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">No statuses configured yet.</p>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Key</th>
+            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Display Label</th>
+            <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">Excl. from Sales</th>
+            <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Order</th>
+            <th style="padding:6px 8px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.map((s, i) => `
+            <tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? '' : 'background:var(--stone-soft);'}" data-ls-key="${esc(s.key)}">
+              <td style="padding:7px 8px;font-family:monospace;color:var(--ink-3);font-size:.78rem;">${esc(s.key)}</td>
+              <td style="padding:7px 8px;">
+                <input type="text" class="field ls-label-input" value="${esc(s.label)}" data-key="${esc(s.key)}"
+                  style="padding:4px 7px;font-size:.82rem;width:100%;min-width:120px;"
+                  onblur="saveLeadStatusLabel(this)"
+                  onkeydown="if(event.key==='Enter')this.blur()">
+              </td>
+              <td style="padding:7px 8px;text-align:center;">
+                <input type="checkbox" ${s.excluded_from_sales ? 'checked' : ''} data-key="${esc(s.key)}"
+                  title="Exclude from Sales board" onchange="toggleLeadStatusExclusion(this)"
+                  style="width:16px;height:16px;cursor:pointer;">
+              </td>
+              <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
+                <button class="btn btn-ghost" title="Move up"
+                  style="padding:2px 7px;font-size:1rem;line-height:1;" ${i === 0 ? 'disabled' : ''}
+                  onclick="moveLeadStatus('${esc(s.key)}', 'up')">↑</button>
+                <button class="btn btn-ghost" title="Move down"
+                  style="padding:2px 7px;font-size:1rem;line-height:1;" ${i === data.length - 1 ? 'disabled' : ''}
+                  onclick="moveLeadStatus('${esc(s.key)}', 'down')">↓</button>
+              </td>
+              <td style="padding:7px 8px;text-align:right;">
+                <button class="btn btn-ghost" title="Delete status"
+                  style="padding:2px 8px;font-size:.78rem;color:#991b1b;border-color:#fca5a5;"
+                  onclick="deleteLeadStatus('${esc(s.key)}')">Delete</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  async function saveLeadStatusLabel(input) {
+    const key = input.dataset.key;
+    const label = input.value.trim();
+    if (!label) { input.value = (_leadStatusesData.find(s => s.key === key)?.label || ''); return; }
+    const existing = _leadStatusesData.find(s => s.key === key);
+    if (existing && existing.label === label) return;
+    try {
+      const updated = await api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(key)}`, { label });
+      const idx = _leadStatusesData.findIndex(s => s.key === key);
+      if (idx !== -1) _leadStatusesData[idx] = updated;
+    } catch (e) {
+      toast(`Failed to save label: ${e.message}`, true);
+      input.value = existing?.label || '';
+    }
+  }
+
+  async function toggleLeadStatusExclusion(checkbox) {
+    const key = checkbox.dataset.key;
+    const excluded = checkbox.checked;
+    try {
+      const updated = await api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(key)}`, { excluded_from_sales: excluded });
+      const idx = _leadStatusesData.findIndex(s => s.key === key);
+      if (idx !== -1) _leadStatusesData[idx] = updated;
+    } catch (e) {
+      toast(`Failed to update: ${e.message}`, true);
+      checkbox.checked = !excluded;
+    }
+  }
+
+  async function deleteLeadStatus(key) {
+    if (!confirm(`Delete lead status "${key}"? This cannot be undone.`)) return;
+    try {
+      await api('DELETE', `/api/admin/lead-statuses/${encodeURIComponent(key)}`);
+      _leadStatusesData = _leadStatusesData.filter(s => s.key !== key);
+      renderLeadStatusesTable();
+    } catch (e) {
+      toast(`Failed to delete: ${e.message}`, true);
+    }
+  }
+
+  async function moveLeadStatus(key, direction) {
+    const idx = _leadStatusesData.findIndex(s => s.key === key);
+    if (idx === -1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= _leadStatusesData.length) return;
+
+    const a = _leadStatusesData[idx];
+    const b = _leadStatusesData[swapIdx];
+    const aOrder = a.sort_order;
+    const bOrder = b.sort_order;
+
+    try {
+      await Promise.all([
+        api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(a.key)}`, { sort_order: bOrder }),
+        api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(b.key)}`, { sort_order: aOrder }),
+      ]);
+      a.sort_order = bOrder;
+      b.sort_order = aOrder;
+      _leadStatusesData[idx]     = b;
+      _leadStatusesData[swapIdx] = a;
+      renderLeadStatusesTable();
+    } catch (e) {
+      toast(`Failed to reorder: ${e.message}`, true);
+    }
+  }
+
+  async function addLeadStatus() {
+    const keyInput   = document.getElementById('ls-new-key');
+    const labelInput = document.getElementById('ls-new-label');
+    const errEl      = document.getElementById('ls-add-error');
+    const key        = (keyInput?.value || '').trim().toUpperCase();
+    const label      = (labelInput?.value || '').trim();
+
+    const showErr = msg => { if (errEl) { errEl.textContent = msg; errEl.style.display = ''; } };
+    const clearErr = () => { if (errEl) errEl.style.display = 'none'; };
+
+    if (!key)   { showErr('Key is required.'); return; }
+    if (!label) { showErr('Display label is required.'); return; }
+    clearErr();
+
+    try {
+      const created = await api('POST', '/api/admin/lead-statuses', { key, label });
+      _leadStatusesData.push(created);
+      if (keyInput)   keyInput.value   = '';
+      if (labelInput) labelInput.value = '';
+      renderLeadStatusesTable();
+    } catch (e) {
+      showErr(e.message || 'Failed to add status.');
+    }
+  }
+
   async function init() {
     let me;
     try {
@@ -1620,7 +1781,7 @@
         <button class="tab-btn"        data-tab="permissions" onclick="switchTab('permissions')">Permissions &amp; roles</button>
         <button class="tab-btn"        data-tab="requests"    onclick="switchTab('requests')">Pending Requests <span id="req-tab-badge">${reqBadge}</span></button>
         <button class="tab-btn"        data-tab="auditlog"    onclick="switchTab('auditlog')">Audit log</button>
-        <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings');loadHubspotStatus()">Settings</button>
+        <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings');loadHubspotStatus();loadLeadStatusesAdmin()">Settings</button>
       </div>
 
       <!-- TEAM -->
@@ -1795,6 +1956,37 @@
               <span style="font-weight:600;font-size:.875rem;color:var(--ink-1);">HubSpot CRM</span>
             </div>
             <span id="hubspot-status-badge" style="font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:var(--radius-pill);background:var(--stone);color:var(--ink-4);">Checking…</span>
+          </div>
+
+          <div style="border-top:1px solid var(--border);margin:20px 0 16px;"></div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+            <div>
+              <div style="font-weight:600;font-size:.875rem;color:var(--ink-1);">Lead Statuses</div>
+              <p class="card-desc" style="margin:2px 0 0;">Define the HubSpot lead status values and their display labels. Statuses marked "Excl. from Sales" are hidden from the Sales board.</p>
+            </div>
+          </div>
+
+          <div id="lead-statuses-table-wrap">
+            <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
+          </div>
+
+          <div style="margin-top:12px;padding:10px 12px;background:var(--stone-soft);border-radius:var(--radius);border:1px solid var(--border);">
+            <div style="font-size:.75rem;font-weight:600;color:var(--ink-3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Add new status</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+              <div style="flex:1;min-width:120px;">
+                <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Key (e.g. AWAITING_PHOTOS)</label>
+                <input id="ls-new-key" type="text" class="field" placeholder="KEY" maxlength="64"
+                  style="font-family:monospace;font-size:.8rem;text-transform:uppercase;"
+                  oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')">
+              </div>
+              <div style="flex:2;min-width:150px;">
+                <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Display label</label>
+                <input id="ls-new-label" type="text" class="field" placeholder="Human-readable label" maxlength="128">
+              </div>
+              <button class="btn btn-primary" onclick="addLeadStatus()" style="white-space:nowrap;align-self:flex-end;">Add status</button>
+            </div>
+            <div id="ls-add-error" style="display:none;font-size:.78rem;color:#991b1b;margin-top:6px;"></div>
           </div>
         </div>
       </div>

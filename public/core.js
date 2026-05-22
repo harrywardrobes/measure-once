@@ -345,7 +345,8 @@ async function bootstrap() {
   try {
     await checkAuthStatus();
     await loadWorkflow();
-    await Promise.all([loadOpenLeads(), loadWorkflowStages(), ensurePrefs()]);
+    await Promise.all([loadOpenLeads(), loadWorkflowStages(), ensurePrefs(),
+      typeof loadLeadStatuses === 'function' ? loadLeadStatuses() : Promise.resolve()]);
     populateStageFilter();
     if (document.getElementById('customer-list') || document.getElementById('sales-view')) renderCustomerList();
     if (priv === 'manager' || priv === 'admin') loadQBInvoices();

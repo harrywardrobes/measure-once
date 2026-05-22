@@ -735,22 +735,24 @@ function _renderWorkflowHeaderImpl() {
                 style="background:${colour.light};color:${colour.text}">${escHtml(stageLabel)}</span>
           ${(() => {
             const raw = contact?.properties?.hs_lead_status || '';
-            const lsMap = {
-              'OPEN_DEAL':            { label: 'Open Deal',   cls: 'lsb-open-deal' },
-              'NEW':                  { label: 'New',          cls: 'lsb-new' },
-              'IN_PROGRESS':          { label: 'In Progress',  cls: 'lsb-in-progress' },
-              'OPEN':                 { label: 'Open',         cls: 'lsb-new' },
-              'CONNECTED':            { label: 'Connected',    cls: 'lsb-connected' },
-              'ATTEMPTED_TO_CONTACT': { label: 'Attempted',    cls: '' },
-              'UNQUALIFIED':          { label: 'Unqualified',  cls: 'lsb-unqualified' },
-              'BAD_TIMING':           { label: 'Bad Timing',   cls: 'lsb-bad-timing' },
+            const CSS_CLASS_MAP = {
+              'OPEN_DEAL':            'lsb-open-deal',
+              'NEW':                  'lsb-new',
+              'IN_PROGRESS':          'lsb-in-progress',
+              'OPEN':                 'lsb-new',
+              'CONNECTED':            'lsb-connected',
+              'ATTEMPTED_TO_CONTACT': '',
+              'UNQUALIFIED':          'lsb-unqualified',
+              'BAD_TIMING':           'lsb-bad-timing',
             };
             const cid = contact?.id || '';
             if (!raw) {
               return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${cid}')">+ Lead Status</span>`;
             }
-            const entry = lsMap[raw] || { label: raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()), cls: '' };
-            return `<span class="lead-status-badge ${entry.cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(entry.label)}</span>`;
+            const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
+            const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+            const cls = CSS_CLASS_MAP[raw] || '';
+            return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(label)}</span>`;
           })()}
           ${email ? `<a href="mailto:${escHtml(email)}" class="text-sm text-blue-600 hover:underline">${escHtml(email)}</a>` : ''}
           ${phone ? `<span class="text-sm text-slate-500">${escHtml(phone)}</span>` : ''}

@@ -310,17 +310,32 @@ function _populateStageFilterImpl() {
     ).join('');
 }
 
-const LEAD_STATUS_OPTIONS = [
-  { value: 'NEW',                  label: 'New' },
-  { value: 'OPEN',                 label: 'Open' },
-  { value: 'IN_PROGRESS',          label: 'In Progress' },
-  { value: 'OPEN_DEAL',            label: 'Open Deal' },
-  { value: 'VISIT_SCHEDULED',      label: 'Visit Scheduled' },
-  { value: 'CONNECTED',            label: 'Connected' },
-  { value: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact' },
-  { value: 'UNQUALIFIED',          label: 'Unqualified' },
-  { value: 'BAD_TIMING',           label: 'Bad Timing' },
+let LEAD_STATUS_OPTIONS = [
+  { value: 'NEW',                  label: 'New',                  excluded_from_sales: false },
+  { value: 'OPEN',                 label: 'Open',                 excluded_from_sales: false },
+  { value: 'IN_PROGRESS',          label: 'In Progress',          excluded_from_sales: false },
+  { value: 'OPEN_DEAL',            label: 'Open Deal',            excluded_from_sales: false },
+  { value: 'VISIT_SCHEDULED',      label: 'Visit Scheduled',      excluded_from_sales: false },
+  { value: 'CONNECTED',            label: 'Connected',            excluded_from_sales: false },
+  { value: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact', excluded_from_sales: false },
+  { value: 'UNQUALIFIED',          label: 'Unqualified',          excluded_from_sales: true  },
+  { value: 'BAD_TIMING',           label: 'Bad Timing',           excluded_from_sales: false },
 ];
+
+async function loadLeadStatuses() {
+  try {
+    const rows = await GET('/api/lead-statuses');
+    if (Array.isArray(rows) && rows.length > 0) {
+      LEAD_STATUS_OPTIONS = rows.map(r => ({
+        value:               r.key,
+        label:               r.label,
+        excluded_from_sales: !!r.excluded_from_sales,
+      }));
+    }
+  } catch (e) {
+    console.warn('Could not load lead statuses from server, using defaults:', e.message);
+  }
+}
 
 function populateLeadStatusFilter() {
   const sel = document.getElementById('lead-status-filter');

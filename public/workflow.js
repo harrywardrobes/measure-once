@@ -305,21 +305,23 @@ function _renderCustomerListImpl() {
     const leadStatusBadge = (() => {
       if (state.contactsViewMode !== 'all') return '';
       const raw = contact.properties?.hs_lead_status || '';
-      const map = {
-        'OPEN_DEAL':            { label: 'Open Deal',   cls: 'lsb-open-deal' },
-        'NEW':                  { label: 'New',          cls: 'lsb-new' },
-        'IN_PROGRESS':          { label: 'In Progress',  cls: 'lsb-in-progress' },
-        'OPEN':                 { label: 'Open',         cls: 'lsb-new' },
-        'CONNECTED':            { label: 'Connected',    cls: 'lsb-connected' },
-        'ATTEMPTED_TO_CONTACT': { label: 'Attempted',    cls: '' },
-        'UNQUALIFIED':          { label: 'Unqualified',  cls: 'lsb-unqualified' },
-        'BAD_TIMING':           { label: 'Bad Timing',   cls: 'lsb-bad-timing' },
+      const CSS_CLASS_MAP = {
+        'OPEN_DEAL':            'lsb-open-deal',
+        'NEW':                  'lsb-new',
+        'IN_PROGRESS':          'lsb-in-progress',
+        'OPEN':                 'lsb-new',
+        'CONNECTED':            'lsb-connected',
+        'ATTEMPTED_TO_CONTACT': '',
+        'UNQUALIFIED':          'lsb-unqualified',
+        'BAD_TIMING':           'lsb-bad-timing',
       };
       if (!raw) {
         return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">+ Lead Status</span>`;
       }
-      const entry = map[raw] || { label: raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()), cls: '' };
-      return `<span class="lead-status-badge ${entry.cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(entry.label)}</span>`;
+      const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
+      const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+      const cls = CSS_CLASS_MAP[raw] || '';
+      return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(label)}</span>`;
     })();
 
     const secondaryBadges = [leadStatusBadge, qbBadge, customerNumBadge].filter(Boolean).join('');
