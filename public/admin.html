@@ -1759,18 +1759,6 @@
     }
   }
 
-  async function deleteLeadStatus(key) {
-    if (!confirm(`Delete lead status "${key}"? This cannot be undone.`)) return;
-    try {
-      await api('DELETE', `/api/admin/lead-statuses/${encodeURIComponent(key)}`);
-      _leadStatusesData = _leadStatusesData.filter(s => s.key !== key);
-      renderLeadStatusesTable();
-      _notifyLeadStatusChanged();
-    } catch (e) {
-      toast(`Failed to delete: ${e.message}`, true);
-    }
-  }
-
   async function moveLeadStatus(key, direction) {
     const idx = _leadStatusesData.findIndex(s => s.key === key);
     if (idx === -1) return;

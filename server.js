@@ -2647,20 +2647,6 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
   }
 });
 
-// Admin: delete a status
-app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async (req, res) => {
-  const key = req.params.key;
-  try {
-    const { rowCount } = await pool.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
-    if (!rowCount) return res.status(404).json({ error: 'Status not found.' });
-    res.json({ success: true });
-    syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
-  } catch (e) {
-    console.error('DELETE /api/admin/lead-statuses/:key error:', e.message);
-    res.status(500).json({ error: 'Could not delete lead status.' });
-  }
-});
-
 // ── Start ─────────────────────────────────────────────────────────────────────
 (async () => {
   try {
