@@ -1614,10 +1614,30 @@
     const wrap = document.getElementById('lead-statuses-table-wrap');
     if (!wrap) return;
     const data = _leadStatusesData;
-    if (!data.length) {
+    const realStatuses = data.filter(s => !s.is_null_row);
+    const nullRow      = data.find(s => s.is_null_row);
+    if (!nullRow && !realStatuses.length) {
       wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">No statuses configured yet.</p>`;
       return;
     }
+
+    const nullRowHtml = nullRow ? `
+      <tr style="border-bottom:1px solid var(--border);background:var(--stone-soft);" data-ls-key="${esc(nullRow.key)}">
+        <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
+          <button class="btn btn-ghost" disabled style="padding:2px 7px;font-size:1rem;line-height:1;opacity:.3;" title="Cannot reorder">↑</button>
+          <button class="btn btn-ghost" disabled style="padding:2px 7px;font-size:1rem;line-height:1;opacity:.3;" title="Cannot reorder">↓</button>
+        </td>
+        <td style="padding:7px 8px;color:var(--ink-4);font-size:.78rem;font-style:italic;">—</td>
+        <td style="padding:7px 8px;font-family:monospace;color:var(--ink-4);font-size:.78rem;font-style:italic;">— none —</td>
+        <td style="padding:7px 8px;">
+          <input type="text" class="field ls-label-input" value="${esc(nullRow.label)}" data-key="${esc(nullRow.key)}"
+            style="padding:4px 7px;font-size:.82rem;width:100%;min-width:120px;"
+            onkeydown="if(event.key==='Enter')this.blur()">
+        </td>
+        <td style="padding:7px 8px;text-align:center;color:var(--ink-4);font-size:.72rem;font-style:italic;">—</td>
+      </tr>
+    ` : '';
+
     wrap.innerHTML = `
       <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
         <thead>
@@ -1630,14 +1650,15 @@
           </tr>
         </thead>
         <tbody>
-          ${data.map((s, i) => `
+          ${nullRowHtml}
+          ${realStatuses.map((s, i) => `
             <tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? '' : 'background:var(--stone-soft);'}" data-ls-key="${esc(s.key)}">
               <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
                 <button class="btn btn-ghost" title="Move up"
                   style="padding:2px 7px;font-size:1rem;line-height:1;" ${i === 0 ? 'disabled' : ''}
                   onclick="moveLeadStatus('${esc(s.key)}', 'up')">↑</button>
                 <button class="btn btn-ghost" title="Move down"
-                  style="padding:2px 7px;font-size:1rem;line-height:1;" ${i === data.length - 1 ? 'disabled' : ''}
+                  style="padding:2px 7px;font-size:1rem;line-height:1;" ${i === realStatuses.length - 1 ? 'disabled' : ''}
                   onclick="moveLeadStatus('${esc(s.key)}', 'down')">↓</button>
               </td>
               <td style="padding:7px 8px;">

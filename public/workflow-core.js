@@ -322,16 +322,22 @@ let LEAD_STATUS_OPTIONS = [
   { value: 'BAD_TIMING',           label: 'Bad Timing',           excluded_from_sales: false },
 ];
 
+let NULL_LEAD_STATUS_LABEL = 'No status';
+
 async function loadLeadStatuses() {
   try {
     const rows = await GET('/api/lead-statuses');
     if (Array.isArray(rows) && rows.length > 0) {
-      LEAD_STATUS_OPTIONS = rows.map(r => ({
-        value:               r.key,
-        label:               r.label,
-        excluded_from_sales: !!r.excluded_from_sales,
-        stage:               r.stage || null,
-      }));
+      const nullRow = rows.find(r => r.is_null_row);
+      if (nullRow) NULL_LEAD_STATUS_LABEL = nullRow.label || 'No status';
+      LEAD_STATUS_OPTIONS = rows
+        .filter(r => !r.is_null_row)
+        .map(r => ({
+          value:               r.key,
+          label:               r.label,
+          excluded_from_sales: !!r.excluded_from_sales,
+          stage:               r.stage || null,
+        }));
     }
   } catch (e) {
     console.warn('Could not load lead statuses from server, using defaults:', e.message);

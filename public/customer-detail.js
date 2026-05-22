@@ -733,7 +733,8 @@ function _renderWorkflowHeaderImpl() {
             };
             const cid = contact?.id || '';
             if (!raw) {
-              return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${cid}')">+ Lead Status</span>`;
+              const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+              return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(nullLabel)}</span>`;
             }
             const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
             const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());

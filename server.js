@@ -2449,7 +2449,7 @@ app.post('/api/ideas/:id/comments', async (req, res) => {
 async function syncLeadStatusesToHubSpot() {
   if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
   const { rows } = await pool.query(
-    'SELECT key, label, sort_order FROM lead_status_config ORDER BY sort_order ASC, key ASC'
+    'SELECT key, label, sort_order FROM lead_status_config WHERE is_null_row IS NOT TRUE ORDER BY sort_order ASC, key ASC'
   );
   const options = rows.map((r, i) => ({
     value:        r.key,
@@ -2486,6 +2486,14 @@ async function ensureLeadStatusTable() {
     )
   `);
   await pool.query(`ALTER TABLE lead_status_config ADD COLUMN IF NOT EXISTS stage VARCHAR(32)`);
+  await pool.query(`ALTER TABLE lead_status_config ADD COLUMN IF NOT EXISTS is_null_row BOOLEAN NOT NULL DEFAULT FALSE`);
+
+  // Ensure the sentinel null-status row exists (never overwrite an admin-changed label).
+  await pool.query(
+    `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, is_null_row)
+     VALUES ('__NULL__', 'No status', -1, FALSE, TRUE)
+     ON CONFLICT (key) DO NOTHING`
+  );
 
   // Backfill stage for known seed keys (only where stage is still NULL — never overwrite admin choices).
   for (const [stage, keys] of Object.entries(LEAD_STATUS_STAGE_SEEDS)) {
@@ -2496,7 +2504,7 @@ async function ensureLeadStatusTable() {
     );
   }
 
-  const { rows: countRows } = await pool.query('SELECT COUNT(*) AS cnt FROM lead_status_config');
+  const { rows: countRows } = await pool.query('SELECT COUNT(*) AS cnt FROM lead_status_config WHERE is_null_row IS NOT TRUE');
   if (parseInt(countRows[0].cnt, 10) > 0) return;
 
   // ── Seed from HubSpot if a token is available ──────────────────────────────
@@ -2550,7 +2558,7 @@ async function ensureLeadStatusTable() {
 app.get('/api/lead-statuses', isAuthenticated, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT key, label, sort_order, excluded_from_sales, stage FROM lead_status_config ORDER BY sort_order ASC, key ASC'
+      'SELECT key, label, sort_order, excluded_from_sales, stage, is_null_row FROM lead_status_config ORDER BY sort_order ASC, key ASC'
     );
     res.set('Cache-Control', 'no-store');
     res.json(rows);
@@ -2564,7 +2572,7 @@ app.get('/api/lead-statuses', isAuthenticated, async (req, res) => {
 app.get('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT key, label, sort_order, excluded_from_sales, stage FROM lead_status_config ORDER BY sort_order ASC, key ASC'
+      'SELECT key, label, sort_order, excluded_from_sales, stage, is_null_row FROM lead_status_config ORDER BY sort_order ASC, key ASC'
     );
     res.json(rows);
   } catch (e) {
@@ -2628,6 +2636,18 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
     const { rows: existing } = await pool.query('SELECT * FROM lead_status_config WHERE key = $1', [key]);
     if (!existing.length) return res.status(404).json({ error: 'Status not found.' });
     const cur = existing[0];
+
+    // For the null sentinel row, only the label may be changed.
+    if (cur.is_null_row) {
+      const newLabel = label !== undefined ? String(label).trim() : cur.label;
+      if (!newLabel) return res.status(400).json({ error: 'label cannot be empty.' });
+      const { rows } = await pool.query(
+        'UPDATE lead_status_config SET label = $1 WHERE key = $2 RETURNING *',
+        [newLabel, key]
+      );
+      return res.json(rows[0]);
+    }
+
     const newLabel    = label     !== undefined ? String(label).trim()      : cur.label;
     const newOrder    = sort_order !== undefined ? parseInt(sort_order, 10) : cur.sort_order;
     const newExcluded = excluded_from_sales !== undefined ? !!excluded_from_sales : cur.excluded_from_sales;

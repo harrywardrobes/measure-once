@@ -316,7 +316,8 @@ function _renderCustomerListImpl() {
         'BAD_TIMING':           'lsb-bad-timing',
       };
       if (!raw) {
-        return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">+ Lead Status</span>`;
+        const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+        return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(nullLabel)}</span>`;
       }
       const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
       const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
@@ -575,7 +576,8 @@ async function openLeadStatusPicker(event, contactId) {
   // User may have closed the popup (clicked elsewhere) while loading.
   if (!document.body.contains(popup)) {
     if (driftedTo !== null) {
-      const newLabel = driftedTo ? (LEAD_STATUS_OPTIONS.find(o => o.value === driftedTo)?.label || driftedTo) : 'cleared';
+      const _nullLbl = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+      const newLabel = driftedTo ? (LEAD_STATUS_OPTIONS.find(o => o.value === driftedTo)?.label || driftedTo) : _nullLbl;
       showToast(`Lead status was updated in HubSpot to ${newLabel}`);
     }
     return;
@@ -604,7 +606,8 @@ async function openLeadStatusPicker(event, contactId) {
   setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
 
   if (driftedTo !== null) {
-    const newLabel = driftedTo ? (LEAD_STATUS_OPTIONS.find(o => o.value === driftedTo)?.label || driftedTo) : 'cleared';
+    const _nullLbl2 = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+    const newLabel = driftedTo ? (LEAD_STATUS_OPTIONS.find(o => o.value === driftedTo)?.label || driftedTo) : _nullLbl2;
     showToast(`Lead status was updated in HubSpot to ${newLabel}`);
   }
 }
@@ -928,8 +931,9 @@ async function quickSetLeadStatus(contactId, newStatus) {
     await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: newStatus });
     // PATCH succeeded — server now has the new value, so no longer pending.
     if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
+    const _nullLbl3 = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
     const newLabel = newStatus ? (LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)?.label || newStatus) : null;
-    showBottomUndo(newLabel ? `Lead status set to ${newLabel}` : 'Lead status cleared', async () => {
+    showBottomUndo(newLabel ? `Lead status set to ${newLabel}` : `Lead status set to ${_nullLbl3}`, async () => {
       _applyLeadStatus(prevStatus || '');
       await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: prevStatus || '' })
         .catch(() => {})
