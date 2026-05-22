@@ -1068,6 +1068,7 @@ async function quickSetLeadStatus(contactId, newStatus) {
     populateLeadStatusFilter();
     renderCustomerList();
     if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+    if (typeof renderWorkflowStages === 'function') renderWorkflowStages();
   }
 
   // Optimistic update
