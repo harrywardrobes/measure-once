@@ -17,7 +17,7 @@
 /* ── Brand Tokens ────────────────────────────────────────────────────────────── */
 :root {
   color-scheme: light;
-  --header-h: 96px;
+  --header-h: calc(52px + env(safe-area-inset-top));
   --banner-h: 37px;
   --paper:        #F6F1E7;
   --paper-deep:   #EDE5D4;
