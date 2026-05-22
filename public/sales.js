@@ -155,8 +155,11 @@ async function renderEnquiryList() {
   const filter = state.salesStageFilter;
 
   // ── Collect ALL entries across every stage ────────────────────────────────
+  const EXCLUDED_LEAD_STATUSES = new Set(['NOT_SUITABLE', 'UNQUALIFIED']);
   const allEntries = [];
   for (const contact of state.filteredContacts) {
+    const ls = (contact.properties?.hs_lead_status || '').toUpperCase();
+    if (EXCLUDED_LEAD_STATUSES.has(ls)) continue;
     const cached    = state.contactStageCache[contact.id];
     const createdate = parseInt(contact.properties?.createdate || '0', 10);
 
