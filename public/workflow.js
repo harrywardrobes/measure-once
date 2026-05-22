@@ -324,6 +324,12 @@ function _renderCustomerListImpl() {
       </select>
       <button id="archived-toggle" class="project-stage-tab${showAllActive}" style="${showAllStyle};margin-left:auto"
         aria-pressed="${state.showArchived}" aria-label="Show all HubSpot contacts">Show all</button>
+      <button class="sales-new-btn" id="customers-new-btn" onclick="openNewCustomerModal()" title="Add new customer">
+        <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+        </svg>
+        Customer
+      </button>
     </div>`;
 
   // ── Cards ───────────────────────────────────────────────────────────────────
