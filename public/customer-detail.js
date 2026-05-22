@@ -955,12 +955,21 @@ function _renderWorkflowStagesImpl() {
     </div>
   `;
 
-  if (totalTasks > 0) {
-    const bar = el.querySelector('.stage-panel-progress-bar');
-    if (bar) {
-      requestAnimationFrame(() => { bar.style.width = progressPct + '%'; });
+  requestAnimationFrame(() => {
+    if (totalTasks > 0) {
+      const bar = el.querySelector('.stage-panel-progress-bar');
+      if (bar) bar.style.width = progressPct + '%';
     }
-  }
+    _scrollStepperToFocused(el);
+  });
+}
+
+function _scrollStepperToFocused(stagesEl) {
+  const row     = (stagesEl || document.getElementById('workflow-stages'))?.querySelector('.stage-stepper-row');
+  const focused = row?.querySelector('.stage-step-focused');
+  if (!row || !focused) return;
+  const targetLeft = focused.offsetLeft - row.clientWidth / 2 + focused.offsetWidth / 2;
+  row.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
 }
 
 // toggleStage is no longer used by the stepper UI but kept as a safe no-op
