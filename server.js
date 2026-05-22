@@ -235,6 +235,10 @@ const LOCALDATA_CACHE_TTL_MS = 300_000; // 5 minutes
 let _localdataCache = null;       // { data, expiresAt }
 let _localdataInflight = null;    // Promise while a scan is running
 
+const CONTACTS_ALL_CACHE_TTL_MS = 300_000; // 5 minutes
+let _contactsAllCache = null;     // { data, expiresAt }
+let _contactsAllInflight = null;  // Promise while a scan is running
+
 async function fetchLocaldataFromHubspot() {
   const allResults = [];
   let after;
@@ -567,6 +571,27 @@ app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), require
 });
 
 // ── HubSpot: All Contacts (no lead status filter) ─────────────────────────────
+async function fetchContactsAllFromHubspot() {
+  const allResults = [];
+  let after;
+  do {
+    const body = {
+      properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
+      sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
+      limit: 100
+    };
+    if (after) body.after = after;
+    const r = await axios.post(
+      `${HS}/crm/v3/objects/contacts/search`,
+      body,
+      { headers: hsHeaders() }
+    );
+    allResults.push(...(r.data.results || []));
+    after = r.data.paging?.next?.after;
+  } while (after);
+  return { results: allResults, total: allResults.length };
+}
+
 app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
   try {
     const page       = Math.max(1, parseInt(req.query.page  || '1',   10));
@@ -702,6 +727,7 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHu
     );
 
     contact.properties.customer_number = customerNumber;
+    _contactsAllCache = null;
     return res.status(201).json(contact);
   } catch (e) {
     const status = e.response?.status;
@@ -831,6 +857,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
       }
     }
 
+    _contactsAllCache = null;
     res.json(patchResp.data);
   } catch (e) {
     const status = e.response?.status;
