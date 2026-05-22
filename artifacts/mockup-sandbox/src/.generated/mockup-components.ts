@@ -29,9 +29,5 @@ export const modules: ModuleMap = {
   "./components/mockups/trades-card/InteractionAffordance.tsx": () => import("../components/mockups/trades-card/InteractionAffordance.tsx"),
   "./components/mockups/trades-card/KanbanByTrade.tsx": () => import("../components/mockups/trades-card/KanbanByTrade.tsx"),
   "./components/mockups/trades-card/QuickDial.tsx": () => import("../components/mockups/trades-card/QuickDial.tsx"),
-  "./components/mockups/trades-card/ScannableList.tsx": () => import("../components/mockups/trades-card/ScannableList.tsx"),
-  "./components/mockups/signin-approaches/Conversational.tsx": () => import("../components/mockups/signin-approaches/Conversational.tsx"),
-  "./components/mockups/signin-approaches/DualAction.tsx": () => import("../components/mockups/signin-approaches/DualAction.tsx"),
-  "./components/mockups/signin-approaches/EditorialCraft.tsx": () => import("../components/mockups/signin-approaches/EditorialCraft.tsx"),
-  "./components/mockups/signin-approaches/SplitPreview.tsx": () => import("../components/mockups/signin-approaches/SplitPreview.tsx")
+  "./components/mockups/trades-card/ScannableList.tsx": () => import("../components/mockups/trades-card/ScannableList.tsx")
 };
