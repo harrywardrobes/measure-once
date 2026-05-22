@@ -10,7 +10,8 @@
     "watch:css": "tailwindcss -i ./src/tailwind.css -o ./public/tailwind.css --watch",
     "test:privileges": "node test/privileges/run.js",
     "test:lead-status-sync": "node test/lead-status-sync/run.js",
-    "test:ci": "npm run test:privileges && npm run test:lead-status-sync"
+    "test:ci": "npm run test:privileges && npm run test:lead-status-sync",
+    "backfill:ec-name-casing": "node scripts/backfill-ec-name-casing.js"
   },
   "dependencies": {
     "@acpr/rate-limit-postgresql": "^1.4.1",
