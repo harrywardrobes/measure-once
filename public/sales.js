@@ -78,6 +78,9 @@ function substagePillColour(stageKey, substageId) {
   if (stageKey === 'designvisit' && substageId === 'open_deal') {
     return { bg: '#dbeafe', text: '#1d4ed8' };
   }
+  if (substageId === 'OPEN_DEAL' || substageId === 'VISIT_SCHEDULED') {
+    return { bg: '#dbeafe', text: '#1d4ed8' };
+  }
   if (stageKey === 'survey' && substageId === 'design_accepted') {
     return { bg: '#d1fae5', text: '#047857' };
   }
@@ -164,8 +167,16 @@ async function renderEnquiryList() {
     const createdate = parseInt(contact.properties?.createdate || '0', 10);
 
     if (!cached || cached.length === 0) {
-      allEntries.push({ contact, stageKey: 'sales', substageId: '', sourceId: '',
-        createdate, stageTime: createdate, priority: 2 });
+      const lsColumn = HS_STATUS_COLUMN[ls] || 'sales';
+      const lsOpt    = ls ? LEAD_STATUS_OPTIONS.find(o => o.value === ls) : null;
+      allEntries.push({
+        contact,
+        stageKey:   lsColumn,
+        substageId: ls || '',
+        badgeLabel: lsOpt ? lsOpt.label : '',
+        sourceId:   '',
+        createdate, stageTime: createdate, priority: 2,
+      });
       continue;
     }
 
@@ -178,15 +189,26 @@ async function renderEnquiryList() {
     const stageEntryDate = best.stageDates?.[best.stageKey]
       ? new Date(best.stageDates[best.stageKey] + 'T00:00:00').getTime() : null;
 
+    // Override the room's column with the HubSpot lead status if it maps to
+    // a different column — local room substage/badge is still preserved.
+    const lsColumn   = HS_STATUS_COLUMN[ls];
+    const finalStage = lsColumn || best.stageKey;
+
+    // When the room has no substage but the column is driven by lead status,
+    // surface the lead status as the badge label.
+    const lsOpt2    = (!statusId && lsColumn) ? LEAD_STATUS_OPTIONS.find(o => o.value === ls) : null;
+    const roomBadge = lsOpt2 ? lsOpt2.label : '';
+
     allEntries.push({
       contact,
-      stageKey:  best.stageKey,
+      stageKey:   finalStage,
       substageId: statusId,
-      sourceId:  best.sourceId || '',
+      badgeLabel: roomBadge,
+      sourceId:   best.sourceId || '',
       createdate,
-      stageTime: substageDate || stageEntryDate || createdate,
-      priority:  priorityScore(best.stageKey, statusId),
-      roomIdx:   best.roomIdx,
+      stageTime:  substageDate || stageEntryDate || createdate,
+      priority:   priorityScore(finalStage, statusId),
+      roomIdx:    best.roomIdx,
     });
   }
 
@@ -253,6 +275,19 @@ async function renderEnquiryList() {
   `;
 }
 
+// ── Lead-status → column map ──────────────────────────────────────────────────
+// Statuses not listed here (NOT_SUITABLE, UNQUALIFIED) are excluded upstream.
+const HS_STATUS_COLUMN = {
+  OPEN_DEAL:            'designvisit',
+  VISIT_SCHEDULED:      'designvisit',
+  NEW:                  'sales',
+  OPEN:                 'sales',
+  IN_PROGRESS:          'sales',
+  CONNECTED:            'sales',
+  ATTEMPTED_TO_CONTACT: 'sales',
+  BAD_TIMING:           'sales',
+};
+
 // ── Stage accent hex colours (B1 card design) ────────────────────────────────
 const STAGE_ACCENT = {
   sales:       '#8B2BFF',
@@ -303,25 +338,24 @@ function stageTrailHtml(activeKey, isTerminal) {
 
 // ── Row HTML ──────────────────────────────────────────────────────────────────
 function enquiryRowHtml(entry) {
-  const { contact, stageKey, substageId, sourceId, stageTime, priority } = entry;
+  const { contact, stageKey, substageId, sourceId, stageTime, priority, badgeLabel } = entry;
   const isTerminal = priority === 3;
 
   const name        = escHtml(contactName(contact));
   const customerNum = contact.properties?.customer_number || '';
-  const subLabel    = escHtml(substageLabel(stageKey, substageId));
+  const subLabel    = escHtml(badgeLabel || substageLabel(stageKey, substageId));
   const timeStr     = escHtml(relativeTime(stageTime));
 
   const numHtml = customerNum
     ? `<span class="eq-card-num">${escHtml(customerNum)}</span>` : '';
 
   let pillHtml = '';
-  if (substageId) {
+  if (substageId || badgeLabel) {
     if (isTerminal) {
       pillHtml = `<span class="eq-card-substage eq-card-substage-terminal">${subLabel}</span>`;
     } else {
-      const hex = STAGE_ACCENT[stageKey] || '#8B2BFF';
-      const rgb = _eqRgb(hex);
-      pillHtml = `<span class="eq-card-substage" style="background:rgba(${rgb},0.09);color:${hex};border:1px solid rgba(${rgb},0.22)">${subLabel}</span>`;
+      const pc = substagePillColour(stageKey, substageId);
+      pillHtml = `<span class="eq-card-substage" style="background:${pc.bg};color:${pc.text};border:1px solid ${pc.bg}">${subLabel}</span>`;
     }
   }
 

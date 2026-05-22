@@ -315,6 +315,7 @@ const LEAD_STATUS_OPTIONS = [
   { value: 'OPEN',                 label: 'Open' },
   { value: 'IN_PROGRESS',          label: 'In Progress' },
   { value: 'OPEN_DEAL',            label: 'Open Deal' },
+  { value: 'VISIT_SCHEDULED',      label: 'Visit Scheduled' },
   { value: 'CONNECTED',            label: 'Connected' },
   { value: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact' },
   { value: 'UNQUALIFIED',          label: 'Unqualified' },
