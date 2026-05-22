@@ -27,6 +27,8 @@ const SURVEY_ACCENT = {
   designvisit: '#2563EB',
   survey:      '#059669',
 };
+const SURVEY_ACTION_TINT = '#D1FAE5';
+const SURVEY_ACTION_TEXT = '#047857';
 
 function _svRgb(hex) {
   return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
@@ -141,48 +143,58 @@ function _svCardHtml(entry) {
 
   const name        = escHtml(contactName(contact));
   const customerNum = contact.properties?.customer_number || '';
+  const postcode    = escHtml((contact.properties?.zip || '').toUpperCase());
   const subLabel    = escHtml(_svSubstageLabel(substageId));
   const timeStr     = escHtml(_svRelativeTime(stageTime));
 
   const numHtml = customerNum
     ? `<span class="eq-card-num">${escHtml(customerNum)}</span>` : '';
 
-  let pillHtml = '';
+  const postcodeHtml = postcode
+    ? `<span class="eq-card-postcode">${postcode}</span>` : '';
+
+  // Filled stage pill
+  const stagePillHtml = isTerminal ? '' :
+    `<span class="eq-card-stage-pill" style="background:${hex};color:#fff">Survey</span>`;
+
+  // Substage pill
+  let subPillHtml = '';
   if (substageId) {
-    pillHtml = isTerminal
+    subPillHtml = isTerminal
       ? `<span class="eq-card-substage eq-card-substage-terminal">${subLabel}</span>`
       : `<span class="eq-card-substage" style="background:rgba(${rgb},0.09);color:${hex};border:1px solid rgba(${rgb},0.22)">${subLabel}</span>`;
   }
 
+  // Source pill (outlined, no dot)
   const sourceHtml = sourceId && SURVEY_SOURCE_LABELS[sourceId]
-    ? `<span class="eq-card-source"><span class="eq-card-source-dot"></span>${escHtml(SURVEY_SOURCE_LABELS[sourceId])}</span>`
-    : '';
+    ? `<span class="eq-card-source-pill">${escHtml(SURVEY_SOURCE_LABELS[sourceId])}</span>` : '';
 
-  const accentColor = isTerminal ? '#B8AE99' : hex;
-  const actionHtml  = isTerminal ? '' : `
-    <div class="eq-card-action">
-      <span class="eq-card-action-label">Await survey confirmation</span>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+  const actionHtml = isTerminal ? '' : `
+    <div class="eq-card-action" style="background:${SURVEY_ACTION_TINT}">
+      <span class="eq-card-action-label" style="color:${SURVEY_ACTION_TEXT}">Await survey confirmation</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${SURVEY_ACTION_TEXT}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
     </div>`;
 
   return `
     <div class="eq-card${isTerminal ? ' eq-card-terminal' : ''}"
          data-contact-id="${escHtml(contact.id)}"
          role="button" tabindex="0">
-      <div class="eq-card-stripe" style="background:${accentColor}"></div>
       <div class="eq-card-body">
         <div class="eq-card-name-row">
           <div class="eq-card-name-wrap">
             <span class="eq-card-name">${name}</span>
             ${numHtml}
           </div>
-          <span class="eq-card-time">${timeStr}</span>
+          ${postcodeHtml}
         </div>
         <div class="eq-card-meta">
-          ${pillHtml}
+          ${stagePillHtml}
+          ${subPillHtml}
           ${sourceHtml}
         </div>
-        ${_svTrailHtml(isTerminal)}
+        <div class="eq-card-footer">
+          <span class="eq-card-time">${timeStr}</span>
+        </div>
       </div>
       ${actionHtml}
     </div>`;

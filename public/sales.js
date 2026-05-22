@@ -395,12 +395,30 @@ function _columnForLeadStatus(ls) {
   return { column: HS_STATUS_COLUMN[ls] || null, terminal: false };
 }
 
-// ── Stage accent hex colours (B1 card design) ────────────────────────────────
+// ── Stage accent hex colours ──────────────────────────────────────────────────
 const STAGE_ACCENT = {
   sales:       '#8B2BFF',
   designvisit: '#0d9488',
   survey:      '#d97706',
 };
+// Tint background and text colour for action strip (matches accent per stage)
+const STAGE_TINT = {
+  sales:       '#F3EAFF',
+  designvisit: '#CCFBF1',
+  survey:      '#FEF3C7',
+};
+const STAGE_ACTION_TEXT = {
+  sales:       '#6A12D9',
+  designvisit: '#0f766e',
+  survey:      '#b45309',
+};
+const STAGE_LABEL_FALLBACK = {
+  sales: 'Sales', designvisit: 'Design Visit', survey: 'Survey',
+};
+function _stageLabel(stageKey) {
+  return state.workflow?.stages?.[stageKey]?.label ||
+    STAGE_LABEL_FALLBACK[stageKey] || stageKey;
+}
 function _eqRgb(hex) {
   return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
 }
@@ -449,52 +467,66 @@ function enquiryRowHtml(entry) {
 
   const name        = escHtml(contactName(contact));
   const customerNum = contact.properties?.customer_number || '';
+  const postcode    = escHtml((contact.properties?.zip || '').toUpperCase());
   const subLabel    = escHtml(badgeLabel || substageLabel(stageKey, substageId));
   const timeStr     = escHtml(relativeTime(stageTime));
 
   const numHtml = customerNum
     ? `<span class="eq-card-num">${escHtml(customerNum)}</span>` : '';
 
-  let pillHtml = '';
+  const postcodeHtml = postcode
+    ? `<span class="eq-card-postcode">${postcode}</span>` : '';
+
+  const accent = isTerminal ? '#B8AE99' : (STAGE_ACCENT[stageKey] || 'var(--orchid)');
+
+  // Filled stage-name pill
+  const stagePillHtml = isTerminal ? '' :
+    `<span class="eq-card-stage-pill" style="background:${accent};color:#fff">${escHtml(_stageLabel(stageKey))}</span>`;
+
+  // Substage pill
+  let subPillHtml = '';
   if (substageId || badgeLabel) {
     if (isTerminal) {
-      pillHtml = `<span class="eq-card-substage eq-card-substage-terminal">${subLabel}</span>`;
+      subPillHtml = `<span class="eq-card-substage eq-card-substage-terminal">${subLabel}</span>`;
     } else {
       const pc = substagePillColour(stageKey, substageId);
-      pillHtml = `<span class="eq-card-substage" style="background:${pc.bg};color:${pc.text};border:1px solid ${pc.bg}">${subLabel}</span>`;
+      subPillHtml = `<span class="eq-card-substage" style="background:${pc.bg};color:${pc.text};border:1px solid ${pc.bg}">${subLabel}</span>`;
     }
   }
 
+  // Source pill (outlined, no dot)
   const sourceHtml = sourceId && SOURCE_LABELS[sourceId]
-    ? `<span class="eq-card-source"><span class="eq-card-source-dot"></span>${escHtml(SOURCE_LABELS[sourceId])}</span>`
-    : '';
+    ? `<span class="eq-card-source-pill">${escHtml(SOURCE_LABELS[sourceId])}</span>` : '';
 
-  const accentColor = isTerminal ? '#B8AE99' : (STAGE_ACCENT[stageKey] || 'var(--orchid)');
-  const next        = isTerminal ? '' : nextActionLabel(stageKey, substageId);
-  const actionHtml  = next ? `
-    <div class="eq-card-action">
-      <span class="eq-card-action-label">${escHtml(next)}</span>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+  const next = isTerminal ? '' : nextActionLabel(stageKey, substageId);
+  const actionTint = STAGE_TINT[stageKey] || '#f3f4f6';
+  const actionText = STAGE_ACTION_TEXT[stageKey] || '#374151';
+  const actionHtml = next ? `
+    <div class="eq-card-action" style="background:${actionTint}">
+      <span class="eq-card-action-label" style="color:${actionText}">${escHtml(next)}</span>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${actionText}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
     </div>` : '';
 
   return `
     <div class="eq-card${isTerminal ? ' eq-card-terminal' : ''}"
          data-contact-id="${escHtml(contact.id)}"
          role="button" tabindex="0">
-      <div class="eq-card-stripe" style="background:${accentColor}"></div>
       <div class="eq-card-body">
         <div class="eq-card-name-row">
           <div class="eq-card-name-wrap">
             <span class="eq-card-name">${name}</span>
             ${numHtml}
           </div>
-          <span class="eq-card-time">${timeStr}</span>
+          ${postcodeHtml}
         </div>
         <div class="eq-card-meta">
-          ${pillHtml}
+          ${stagePillHtml}
+          ${subPillHtml}
           ${sourceHtml}
         </div>
-        ${stageTrailHtml(stageKey, isTerminal)}
+        <div class="eq-card-footer">
+          <span class="eq-card-time">${timeStr}</span>
+        </div>
       </div>
       ${actionHtml}
     </div>`;

@@ -6,25 +6,25 @@ const CARDS = [
     name: 'Tom Fletcher', num: '#038', initials: 'TF',
     stage: 'Design Visit', stageKey: 'visit',
     substage: 'Open deal', source: 'Call',
-    timeAgo: '5d ago', value: '£4,200',
+    timeAgo: '5d ago', postcode: 'SW1A 2AA',
     nextAction: 'Confirm design visit date',
-    surveyScore: null, terminal: false,
+    terminal: false,
   },
   {
     name: 'Sarah Powell', num: '#035', initials: 'SP',
     stage: 'Survey', stageKey: 'survey',
     substage: 'Design accepted', source: 'WhatsApp',
-    timeAgo: '9d ago', value: '£6,800',
+    timeAgo: '9d ago', postcode: 'M1 1AE',
     nextAction: 'Await survey confirmation',
-    surveyScore: 4, terminal: false,
+    terminal: false,
   },
   {
     name: 'James Morrison', num: '#042', initials: 'JM',
     stage: 'Sales', stageKey: 'sales',
     substage: 'Form submission', source: 'Web',
-    timeAgo: 'just now', value: '—',
+    timeAgo: 'just now', postcode: 'E1 6RF',
     nextAction: 'Attempt contact',
-    surveyScore: null, terminal: false,
+    terminal: false,
   },
 ];
 
@@ -40,18 +40,6 @@ const STAGE_TEXT: Record<string, string> = {
 const PIPELINE = ['Sales', 'Design Visit', 'Survey'];
 const PIPELINE_KEY = ['sales', 'visit', 'survey'];
 
-const Stars = ({ n }: { n: number }) => (
-  <span style={{ display: 'inline-flex', gap: 2 }}>
-    {[1,2,3,4,5].map(i => (
-      <svg key={i} width="11" height="11" viewBox="0 0 24 24"
-        fill={i <= n ? '#F59E0B' : 'none'}
-        stroke={i <= n ? '#F59E0B' : '#D1C9B8'}
-        strokeWidth="2">
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-      </svg>
-    ))}
-  </span>
-);
 
 /* ─── V1: Minimal ──────────────────────────────────────────────────── */
 function V1() {
@@ -109,13 +97,13 @@ function V2() {
         {CARDS.map(c => (
           <div key={c.num} className="wf-card" style={{ border: '1px solid #DDD8CC' }}>
             <div style={{ padding: '10px 12px 8px' }}>
-              {/* Row 1 */}
+              {/* Row 1 — name + postcode */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
                   <span style={{ fontWeight: 700, fontSize: 14, color: '#141413' }}>{c.name}</span>
                   <span style={{ fontSize: 11, color: '#97927F', fontWeight: 500 }}>{c.num}</span>
                 </div>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#3C3A34' }}>{c.value}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#6B6860', letterSpacing: '0.03em' }}>{c.postcode}</span>
               </div>
               {/* Row 2 — pills */}
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
@@ -128,15 +116,12 @@ function V2() {
                   background: '#F5F2EB', color: '#6B6860', border: '1px solid #D9D2C2',
                 }}>{c.substage}</span>
                 <span style={{
-                  fontSize: 10, fontWeight: 500, padding: '2px 6px', borderRadius: 999,
+                  fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 999,
                   background: 'transparent', color: '#97927F', border: '1px solid #D9D2C2',
                 }}>{c.source}</span>
               </div>
-              {/* Row 3 — meta */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: '#97927F' }}>Updated {c.timeAgo}</span>
-                {c.surveyScore && <Stars n={c.surveyScore} />}
-              </div>
+              {/* Row 3 — timestamp */}
+              <div style={{ fontSize: 11, color: '#97927F' }}>{c.timeAgo}</div>
             </div>
             <div style={{
               padding: '6px 12px', background: STAGE_TINT[c.stageKey],
@@ -192,10 +177,7 @@ function V3() {
                 }}>{c.substage}</span>
                 <span style={{ fontSize: 11, color: '#97927F' }}>· {c.source}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 11, color: '#97927F' }}>{c.num} · {c.timeAgo}</span>
-                {c.surveyScore && <Stars n={c.surveyScore} />}
-              </div>
+              <div style={{ fontSize: 11, color: '#97927F' }}>{c.num} · {c.timeAgo} · {c.postcode}</div>
             </div>
             {/* Next action */}
             <div style={{
@@ -314,7 +296,6 @@ function V5() {
                   border: `1px solid ${STAGE_COLOR[c.stageKey]}44`,
                 }}>{c.stage}</span>
                 <span style={{ fontSize: 10, color: '#97927F' }}>{c.substage}</span>
-                {c.surveyScore && <Stars n={c.surveyScore} />}
               </div>
               <div style={{
                 fontSize: 11, fontWeight: 700, color: STAGE_TEXT[c.stageKey],

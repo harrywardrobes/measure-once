@@ -4134,6 +4134,7 @@ body.showing-workflow .sales-layout #workflow-panel {
 .eq-card {
   background: var(--chalk);
   border-radius: 8px;
+  border: 1px solid var(--stone);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
   cursor: pointer;
@@ -4149,9 +4150,9 @@ body.showing-workflow .sales-layout #workflow-panel {
 
 .eq-card-terminal { opacity: 0.55; }
 
-.eq-card-stripe { height: 3px; }
+.eq-card-stripe { display: none; }
 
-.eq-card-body { padding: 14px 14px 16px; }
+.eq-card-body { padding: 10px 12px 8px; }
 
 .eq-card-name-row {
   display: flex;
@@ -4202,18 +4203,38 @@ body.showing-workflow .sales-layout #workflow-panel {
   padding-top: 1px;
 }
 
+.eq-card-postcode {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--ink-3);
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+  padding-top: 1px;
+}
+
 .eq-card-meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 7px;
-  margin-bottom: 16px;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.eq-card-stage-pill {
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
 }
 
 .eq-card-substage {
   font-size: 0.6875rem;
   font-weight: 600;
-  padding: 3px 9px;
+  padding: 2px 7px;
   border-radius: var(--radius-pill);
   white-space: nowrap;
   letter-spacing: 0.01em;
@@ -4224,6 +4245,18 @@ body.showing-workflow .sales-layout #workflow-panel {
   border: 1px solid var(--stone) !important;
 }
 
+.eq-card-source-pill {
+  display: inline-block;
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  color: var(--ink-4);
+  border: 1px solid var(--stone);
+  white-space: nowrap;
+}
+
+/* kept for any legacy references */
 .eq-card-source {
   display: inline-flex;
   align-items: center;
@@ -4238,6 +4271,12 @@ body.showing-workflow .sales-layout #workflow-panel {
   border-radius: 50%;
   background: var(--ink-4);
   flex-shrink: 0;
+}
+
+.eq-card-footer {
+  display: flex;
+  align-items: center;
+  padding-bottom: 2px;
 }
 
 /* Stage trail */
@@ -4276,20 +4315,19 @@ body.showing-workflow .sales-layout #workflow-panel {
   min-width: 8px;
 }
 
-/* Action row */
+/* Action row — background and text colour driven by inline styles per stage */
 .eq-card-action {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
-  background: var(--plum);
+  padding: 9px 12px;
   cursor: pointer;
+  border-top: 1px solid rgba(0,0,0,0.06);
 }
 .eq-card-action-label {
   font-size: 0.6875rem;
   font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
