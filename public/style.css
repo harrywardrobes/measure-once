@@ -3611,6 +3611,30 @@ body.showing-workflow .sales-layout #workflow-panel {
   .sales-stage-bar { justify-content: flex-end; padding: 6px 10px; }
 }
 
+.eq-ls-filter-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--chalk);
+  border-bottom: 1px solid var(--stone);
+  flex-shrink: 0;
+}
+.eq-ls-filter-select {
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+  background: var(--chalk);
+  border: 1px solid var(--stone);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  outline: none;
+  max-width: 100%;
+}
+.eq-ls-filter-select:focus-visible {
+  border-color: var(--orchid);
+  box-shadow: 0 0 0 2px rgba(139,43,255,0.15);
+}
+
 .sales-board {
   display: flex;
   flex-direction: column;

@@ -91,6 +91,12 @@ function substagePillColour(stageKey, substageId) {
   return { bg: '#ccfbf1', text: '#0f766e' };
 }
 
+// ── Lead-status filter (Enquiries) ────────────────────────────────────────────
+function setEnquiryLeadStatusFilter(value) {
+  state.enquiryLeadStatusFilter = value;
+  renderEnquiryList();
+}
+
 // ── One-time event delegation ─────────────────────────────────────────────────
 let _salesListenersInited = false;
 function _initSalesListeners() {
@@ -108,6 +114,12 @@ function _initSalesListeners() {
     const row = e.target.closest('[data-contact-id]');
     if (row) {
       location.href = `/customers/${encodeURIComponent(row.dataset.contactId)}`;
+    }
+  });
+
+  panel.addEventListener('change', function(e) {
+    if (e.target && e.target.id === 'enquiry-lead-status-filter') {
+      setEnquiryLeadStatusFilter(e.target.value);
     }
   });
 
@@ -162,10 +174,29 @@ async function renderEnquiryList() {
 
   // ── Collect ALL entries across every stage ────────────────────────────────
   const EXCLUDED_LEAD_STATUSES = new Set(LEAD_STATUS_OPTIONS.filter(o => o.excluded_from_sales).map(o => o.value));
+  const lsFilter = state.enquiryLeadStatusFilter || '';
+
+  // Compute lead-status counts for the filter dropdown (over all non-excluded contacts)
+  const _lsCounts = {};
+  let _nullCount = 0;
+  for (const c of state.contacts) {
+    const s = (c.properties?.hs_lead_status || '').toUpperCase();
+    if (EXCLUDED_LEAD_STATUSES.has(s)) continue;
+    if (s) _lsCounts[s] = (_lsCounts[s] || 0) + 1;
+    else _nullCount++;
+  }
+
   const allEntries = [];
   for (const contact of state.filteredContacts) {
     const ls = (contact.properties?.hs_lead_status || '').toUpperCase();
     if (EXCLUDED_LEAD_STATUSES.has(ls)) continue;
+
+    // Apply lead-status filter
+    if (lsFilter === '__no_status__') {
+      if (ls) continue;
+    } else if (lsFilter) {
+      if (ls !== lsFilter) continue;
+    }
     const cached    = state.contactStageCache[contact.id];
     const createdate = parseInt(contact.properties?.createdate || '0', 10);
 
@@ -277,6 +308,25 @@ async function renderEnquiryList() {
       </div>`;
   }).join('');
 
+  // ── Lead-status filter dropdown ───────────────────────────────────────────
+  const _nullLbl = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+  const _nullDisabled = _nullCount === 0 ? ' disabled style="color:#cbd5e1"' : '';
+  const _lsOptions = LEAD_STATUS_OPTIONS
+    .filter(o => !o.excluded_from_sales)
+    .map(({ value, label }) => {
+      const n = _lsCounts[value] || 0;
+      const attrs = n === 0 ? ' disabled style="color:#cbd5e1"' : '';
+      return `<option value="${escHtml(value)}"${attrs}${lsFilter === value ? ' selected' : ''}>${escHtml(label)} (${n})</option>`;
+    }).join('');
+  const lsFilterHtml = `
+    <div class="eq-ls-filter-row">
+      <select id="enquiry-lead-status-filter" class="eq-ls-filter-select">
+        <option value=""${!lsFilter ? ' selected' : ''}>All statuses</option>
+        <option value="__no_status__"${_nullDisabled}${lsFilter === '__no_status__' ? ' selected' : ''}>${escHtml(_nullLbl)} (${_nullCount})</option>
+        ${_lsOptions}
+      </select>
+    </div>`;
+
   view.innerHTML = `
     <div class="sales-stage-bar">
       ${tabs}
@@ -287,6 +337,7 @@ async function renderEnquiryList() {
         New
       </button>
     </div>
+    ${lsFilterHtml}
     <div class="sales-board">
       ${colsHtml}
     </div>
