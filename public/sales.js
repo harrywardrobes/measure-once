@@ -217,8 +217,10 @@ async function renderEnquiryList() {
   const staleCutoff   = Date.now() - FOUR_WEEKS_MS;
   const visibleEntries = allEntries.filter(e => {
     if (e.stageKey !== 'sales') return true;
-    const lmd = parseInt(e.contact.properties?.lastmodifieddate || '0', 10);
-    return lmd >= staleCutoff;
+    const raw = e.contact.properties?.lastmodifieddate;
+    if (!raw) return true;
+    const lmd = new Date(raw).getTime();
+    return !isNaN(lmd) && lmd >= staleCutoff;
   });
 
   // ── Sort: priority band asc, then newest first ────────────────────────────
