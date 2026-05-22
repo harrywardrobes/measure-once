@@ -110,15 +110,12 @@ function _initSalesListeners() {
 
     if (e.target.closest('#sales-new-btn')) { openNewCustomerModal(); return; }
 
+    const lsPill = e.target.closest('.eq-ls-pill');
+    if (lsPill && !lsPill.disabled) { setEnquiryLeadStatusFilter(lsPill.dataset.lsValue); return; }
+
     const row = e.target.closest('[data-contact-id]');
     if (row) {
       location.href = `/customers/${encodeURIComponent(row.dataset.contactId)}`;
-    }
-  });
-
-  panel.addEventListener('change', function(e) {
-    if (e.target && e.target.id === 'enquiry-lead-status-filter') {
-      setEnquiryLeadStatusFilter(e.target.value);
     }
   });
 
@@ -319,23 +316,31 @@ async function renderEnquiryList() {
       </div>`;
   }).join('');
 
-  // ── Lead-status filter dropdown ───────────────────────────────────────────
+  // ── Lead-status filter pills ───────────────────────────────────────────────
   const _nullLbl = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
-  const _nullDisabled = _nullCount === 0 ? ' disabled style="color:#cbd5e1"' : '';
-  const _lsOptions = LEAD_STATUS_OPTIONS
+  const _allPill = `<button class="eq-ls-pill${!lsFilter ? ' active' : ''}" data-ls-value="">All statuses</button>`;
+  const _nullPill = (() => {
+    const active = lsFilter === '__no_status__' ? ' active' : '';
+    const dim = _nullCount === 0 ? ' dimmed' : '';
+    const dis = _nullCount === 0 ? ' disabled' : '';
+    return `<button class="eq-ls-pill${active}${dim}" data-ls-value="__no_status__"${dis}>${escHtml(_nullLbl)} (${_nullCount})</button>`;
+  })();
+  const _lsPills = LEAD_STATUS_OPTIONS
     .filter(o => !o.excluded_from_sales)
     .map(({ value, label }) => {
       const n = _lsCounts[value] || 0;
-      const attrs = n === 0 ? ' disabled style="color:#cbd5e1"' : '';
-      return `<option value="${escHtml(value)}"${attrs}${lsFilter === value ? ' selected' : ''}>${escHtml(label)} (${n})</option>`;
+      const active = lsFilter === value ? ' active' : '';
+      const dim = n === 0 ? ' dimmed' : '';
+      const dis = n === 0 ? ' disabled' : '';
+      return `<button class="eq-ls-pill${active}${dim}" data-ls-value="${escHtml(value)}"${dis}>${escHtml(label)} (${n})</button>`;
     }).join('');
   const lsFilterHtml = `
     <div class="eq-ls-filter-row">
-      <select id="enquiry-lead-status-filter" class="eq-ls-filter-select">
-        <option value=""${!lsFilter ? ' selected' : ''}>All statuses</option>
-        <option value="__no_status__"${_nullDisabled}${lsFilter === '__no_status__' ? ' selected' : ''}>${escHtml(_nullLbl)} (${_nullCount})</option>
-        ${_lsOptions}
-      </select>
+      <div class="eq-ls-pills">
+        ${_allPill}
+        ${_nullPill}
+        ${_lsPills}
+      </div>
     </div>`;
 
   view.innerHTML = `

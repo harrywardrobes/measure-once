@@ -3873,21 +3873,44 @@ body.showing-workflow .sales-layout #workflow-panel {
   background: var(--chalk);
   border-bottom: 1px solid var(--stone);
   flex-shrink: 0;
+  overflow-x: auto;
 }
-.eq-ls-filter-select {
-  font-size: 0.8125rem;
+.eq-ls-pills {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+.eq-ls-pill {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
   color: var(--ink-2);
   background: var(--chalk);
   border: 1px solid var(--stone);
-  border-radius: 6px;
-  padding: 4px 8px;
+  border-radius: 999px;
+  padding: 3px 10px;
   cursor: pointer;
-  outline: none;
-  max-width: 100%;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  line-height: 1.5;
 }
-.eq-ls-filter-select:focus-visible {
+.eq-ls-pill:hover:not(:disabled):not(.active) {
+  background: var(--lavender, #f3eeff);
   border-color: var(--orchid);
-  box-shadow: 0 0 0 2px rgba(139,43,255,0.15);
+  color: var(--orchid);
+}
+.eq-ls-pill.active {
+  background: var(--orchid);
+  border-color: var(--orchid);
+  color: #fff;
+}
+.eq-ls-pill.dimmed,
+.eq-ls-pill:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .sales-board {
