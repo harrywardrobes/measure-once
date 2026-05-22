@@ -6,51 +6,84 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="/style.css">
   <style>
-    body { background:#f8f7f4; color:#141413; margin:0;
-           font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-           min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
-    .card { background:#fff; border:1px solid #e7e5e0; border-radius:12px;
-            max-width:420px; width:100%; padding:32px;
-            box-shadow:0 1px 3px rgba(0,0,0,.04); }
-    .logo-wrap { text-align:center; margin-bottom:24px; }
-    .logo-wrap img { max-width:180px; width:100%; height:auto; display:inline-block; }
-    h1 { font-size:1.25rem; margin:0 0 4px; }
-    .sub { color:#57534e; font-size:.9rem; margin:0 0 20px; }
-    label { display:block; font-size:.82rem; color:#374151; margin-bottom:6px; font-weight:500; }
-    input { width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid #d6d3d1;
-            border-radius:8px; font-size:.95rem; background:#fff; }
-    input:focus { outline:none; border-color:#3d0f7a; box-shadow:0 0 0 3px rgba(61,15,122,.12); }
-    .field { margin-bottom:16px; }
-    button { width:100%; background:#3d0f7a; color:#fff; border:none; padding:11px 18px;
-             border-radius:8px; font-weight:600; font-size:.95rem; cursor:pointer;
-             transition:background .15s ease; }
-    button:hover { background:#5a1fad; }
-    button:disabled { opacity:.5; cursor:not-allowed; background:#3d0f7a; }
-    .err { background:#fef2f2; border:1px solid #fecaca; color:#991b1b;
-           padding:10px 12px; border-radius:8px; font-size:.85rem; margin-bottom:16px; display:none; }
-    .ok  { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534;
-           padding:10px 12px; border-radius:8px; font-size:.85rem; margin-bottom:16px; display:none; }
-    .footer { margin-top:20px; padding-top:16px; border-top:1px solid #f3f1ec;
-              font-size:.85rem; color:#57534e; text-align:center; }
-    .footer a { color:#3d0f7a; text-decoration:none; font-weight:500; }
-    .footer a:hover { text-decoration:underline; }
-    .toggle { background:none; border:none; color:#3d0f7a; padding:0; cursor:pointer;
-              font:inherit; font-weight:500; }
-    .toggle:hover { text-decoration:underline; }
-    .hidden { display:none !important; }
+    body {
+      background: #f5f4f1; color: #1c1917; margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .card {
+      background: #fff; border: 2px solid #d6d3d1; border-radius: 12px;
+      max-width: 440px; width: 100%; padding: 36px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.06);
+    }
+    .logo-wrap { text-align: center; margin-bottom: 28px; }
+    .logo-wrap img { max-width: 180px; width: 100%; height: auto; display: inline-block; }
+    h1 { font-size: 1.4rem; font-weight: 700; margin: 0 0 6px; color: #0f0f0e; letter-spacing: -.01em; }
+    .sub { color: #44403c; font-size: .95rem; margin: 0 0 28px; line-height: 1.5; }
+
+    /* Labels — flex row with right-side Required badge */
+    .field-label {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-size: .9rem; font-weight: 600; color: #1c1917; margin-bottom: 6px;
+    }
+    .field-required { font-size: .75rem; color: #78716c; font-weight: 400; }
+
+    label { display: block; font-size: .9rem; font-weight: 600; color: #1c1917; margin-bottom: 6px; }
+    input {
+      width: 100%; box-sizing: border-box; padding: 12px 14px;
+      border: 2px solid #a8a29e; border-radius: 8px;
+      font-size: 1rem; background: #fff; color: #1c1917;
+    }
+    input:focus { outline: none; border-color: #3d0f7a; box-shadow: 0 0 0 3px rgba(61,15,122,.12); }
+    .field { margin-bottom: 18px; }
+
+    button {
+      width: 100%; background: #3d0f7a; color: #fff; border: none;
+      padding: 14px 18px; border-radius: 8px; font-weight: 700;
+      font-size: 1rem; cursor: pointer; min-height: 48px;
+      letter-spacing: .02em; transition: background .15s ease;
+    }
+    button:hover { background: #5a1fad; }
+    button:disabled { opacity: .5; cursor: not-allowed; background: #3d0f7a; }
+
+    /* Alert banners — icon + text */
+    .err, .ok {
+      display: none; padding: 10px 12px; border-radius: 8px;
+      font-size: .9rem; margin-bottom: 18px;
+      align-items: flex-start; gap: 10px; line-height: 1.4;
+    }
+    .err { background: #fef2f2; border: 1.5px solid #fca5a5; color: #7f1d1d; }
+    .ok  { background: #f0fdf4; border: 1.5px solid #86efac; color: #14532d; }
+    .err svg, .ok svg { flex-shrink: 0; margin-top: 1px; }
+
+    .forgot-link {
+      display: inline-block; margin-top: 6px; margin-bottom: 22px;
+      font-size: .875rem; color: #3d0f7a; font-weight: 600;
+      text-decoration: underline; background: none; border: none;
+      cursor: pointer; padding: 0; font-family: inherit;
+    }
+    .forgot-link:hover { color: #5a1fad; }
+
+    .footer {
+      margin-top: 22px; padding-top: 18px; border-top: 2px solid #f3f1ec;
+      font-size: .9rem; color: #44403c; text-align: center; line-height: 1.6;
+    }
+    .footer a, .footer button.toggle {
+      color: #3d0f7a; text-decoration: underline; font-weight: 700;
+    }
+    .footer a:hover, .footer button.toggle:hover { color: #5a1fad; }
+
+    .toggle {
+      background: none; border: none; cursor: pointer;
+      font: inherit; font-weight: 700; padding: 0;
+    }
+    .hidden { display: none !important; }
     .turnstile-widget { margin: 4px 0 14px; min-height: 65px; }
   </style>
   <script>
-    // Suppress non-Error unhandled rejections from third-party scripts
-    // (Cloudflare Turnstile throws non-Error values internally when it
-    // cannot reach its servers in sandboxed / network-restricted environments).
     window.addEventListener('unhandledrejection', function (event) {
       if (!(event.reason instanceof Error)) event.preventDefault();
     });
-
-    // Must be defined BEFORE the Turnstile loader so the async script can find
-    // it when it fires onload. The real renderTurnstileWidgets() lives further
-    // down once the rest of the page script has set _turnstileSiteKey.
     window._turnstileApiReady = false;
     window.onTurnstileReady = function () {
       window._turnstileApiReady = true;
@@ -58,16 +91,10 @@
         window.renderTurnstileWidgets();
       }
     };
-    // The Cloudflare script is injected dynamically only when the server
-    // confirms a site key is configured (see the /api/turnstile-config fetch
-    // below). This avoids loading it — and the non-Error throws it produces
-    // when it cannot reach Cloudflare — in environments where CAPTCHA is not
-    // enabled.
     window._loadTurnstileScript = function () {
       const s = document.createElement('script');
       s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady';
-      s.async = true;
-      s.defer = true;
+      s.async = true; s.defer = true;
       document.head.appendChild(s);
     };
   </script>
@@ -77,70 +104,91 @@
     <div class="logo-wrap">
       <img src="/harry-wardrobes-logo.png" alt="Harry Wardrobes">
     </div>
+
+    <!-- Sign in view -->
     <div id="view-login">
       <h1>Sign in</h1>
-      <p class="sub">Use the email + password for your Measure Once account.</p>
-      <div id="login-ok"  class="ok"></div>
-      <div id="login-err" class="err"></div>
+      <p class="sub">Use your email and password to sign in to your Measure Once account.</p>
+      <div id="login-ok"  class="ok"  role="status"></div>
+      <div id="login-err" class="err" role="alert"></div>
       <form id="login-form" autocomplete="on">
         <div class="field">
-          <label for="login-email">Email</label>
-          <input id="login-email" type="email" autocomplete="username" required>
+          <div class="field-label">
+            <label for="login-email">Email address</label>
+            <span class="field-required">Required</span>
+          </div>
+          <input id="login-email" type="email" autocomplete="username" aria-required="true"
+            placeholder="your@email.com" required>
         </div>
         <div class="field">
-          <label for="login-password">Password</label>
-          <input id="login-password" type="password" autocomplete="current-password" required>
+          <div class="field-label">
+            <label for="login-password">Password</label>
+            <span class="field-required">Required</span>
+          </div>
+          <input id="login-password" type="password" autocomplete="current-password" aria-required="true" required>
         </div>
+        <button type="button" class="forgot-link" onclick="showView('forgot')">Forgot your password?</button>
         <div id="turnstile-login" class="turnstile-widget"></div>
-        <button id="login-submit" type="submit">Sign in</button>
+        <button id="login-submit" type="submit">Sign in to Measure Once</button>
       </form>
-      <div class="footer">
-        <button class="toggle" type="button" onclick="showView('forgot')">Forgot password?</button>
-      </div>
       <div class="footer">
         Don't have an account?
         <button class="toggle" type="button" onclick="showView('request')">Request access</button>
       </div>
     </div>
 
+    <!-- Forgot password view -->
     <div id="view-forgot" class="hidden">
       <h1>Reset your password</h1>
       <p class="sub">Enter your email and we'll send you a link to set a new password.</p>
-      <div id="forgot-ok"  class="ok"></div>
-      <div id="forgot-err" class="err"></div>
+      <div id="forgot-ok"  class="ok"  role="status"></div>
+      <div id="forgot-err" class="err" role="alert"></div>
       <form id="forgot-form">
         <div class="field">
-          <label for="forgot-email">Email</label>
-          <input id="forgot-email" type="email" autocomplete="username" maxlength="254" required>
+          <div class="field-label">
+            <label for="forgot-email">Email address</label>
+            <span class="field-required">Required</span>
+          </div>
+          <input id="forgot-email" type="email" autocomplete="username" maxlength="254" aria-required="true"
+            placeholder="your@email.com" required>
         </div>
         <div id="turnstile-forgot" class="turnstile-widget"></div>
         <button id="forgot-submit" type="submit">Send reset link</button>
       </form>
       <div id="forgot-confirm" class="hidden">
-        <div class="ok" style="display:block">
-          An email has been sent to <strong id="forgot-confirm-email"></strong>.
-          Please check your inbox and follow the link to reset your password.
+        <div class="ok" style="display:flex">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span>An email has been sent to <strong id="forgot-confirm-email"></strong>. Please check your inbox and follow the link to reset your password.</span>
         </div>
-        <button id="forgot-retry" type="button">Try a different email</button>
+        <button id="forgot-retry" type="button" style="margin-top:14px;">Try a different email</button>
       </div>
       <div class="footer">
         <button class="toggle" type="button" onclick="showView('login')">Back to sign in</button>
       </div>
     </div>
 
+    <!-- Request access view -->
     <div id="view-request" class="hidden">
       <h1>Request access</h1>
       <p class="sub">An admin will review your request and email you a link to set your password.</p>
-      <div id="req-ok"  class="ok"></div>
-      <div id="req-err" class="err"></div>
+      <div id="req-ok"  class="ok"  role="status"></div>
+      <div id="req-err" class="err" role="alert"></div>
       <form id="req-form">
         <div class="field">
-          <label for="req-name">Full name</label>
-          <input id="req-name" type="text" maxlength="100" required>
+          <div class="field-label">
+            <label for="req-name">Full name</label>
+            <span class="field-required">Required</span>
+          </div>
+          <input id="req-name" type="text" maxlength="100" aria-required="true" required>
         </div>
         <div class="field">
-          <label for="req-email">Work email</label>
-          <input id="req-email" type="email" maxlength="254" required>
+          <div class="field-label">
+            <label for="req-email">Work email</label>
+            <span class="field-required">Required</span>
+          </div>
+          <input id="req-email" type="email" maxlength="254" aria-required="true" required>
         </div>
         <div id="turnstile-request" class="turnstile-widget"></div>
         <button id="req-submit" type="submit">Submit request</button>
@@ -153,6 +201,9 @@
   </div>
 
 <script>
+  const _okIcon  = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" style="flex-shrink:0;margin-top:1px"><polyline points="20 6 9 17 4 12"/></svg>`;
+  const _errIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+
   function showView(name) {
     document.getElementById('view-login').classList.toggle('hidden', name !== 'login');
     document.getElementById('view-request').classList.toggle('hidden', name !== 'request');
@@ -160,48 +211,42 @@
     if (name !== 'forgot') {
       if (name === 'login') {
         const forgotEmail = document.getElementById('forgot-email');
-        const loginEmail = document.getElementById('login-email');
+        const loginEmail  = document.getElementById('login-email');
         if (forgotEmail && loginEmail && forgotEmail.value) loginEmail.value = forgotEmail.value;
       }
       resetForgotView();
     } else {
-      const loginEmail = document.getElementById('login-email');
+      const loginEmail  = document.getElementById('login-email');
       const forgotEmail = document.getElementById('forgot-email');
       if (loginEmail && forgotEmail) forgotEmail.value = loginEmail.value;
     }
   }
   function resetForgotView() {
     const confirmEl = document.getElementById('forgot-confirm');
-    const formEl = document.getElementById('forgot-form');
+    const formEl    = document.getElementById('forgot-form');
     if (confirmEl) confirmEl.classList.add('hidden');
-    if (formEl) formEl.classList.remove('hidden');
-    const okEl = document.getElementById('forgot-ok');
-    const errEl = document.getElementById('forgot-err');
-    if (okEl) hide(okEl);
-    if (errEl) hide(errEl);
-    const emailInput = document.getElementById('forgot-email');
-    if (emailInput) emailInput.value = '';
-    const confirmEmail = document.getElementById('forgot-confirm-email');
+    if (formEl)    formEl.classList.remove('hidden');
+    hide(document.getElementById('forgot-ok'));
+    hide(document.getElementById('forgot-err'));
+    const emailInput    = document.getElementById('forgot-email');
+    const confirmEmail  = document.getElementById('forgot-confirm-email');
+    if (emailInput)   emailInput.value = '';
     if (confirmEmail) confirmEmail.textContent = '';
     resetTurnstile('forgot');
   }
-  if (location.hash === '#forgot') showView('forgot');
+  if (location.hash === '#forgot')   showView('forgot');
   else if (location.hash === '#request') showView('request');
-  function show(el, msg) { el.textContent = msg; el.style.display = 'block'; }
-  function hide(el) { el.style.display = 'none'; el.textContent = ''; }
+
+  function show(el, msg, isOk) {
+    el.innerHTML = (isOk ? _okIcon : _errIcon) + `<span>${msg}</span>`;
+    el.style.display = 'flex';
+  }
+  function hide(el) { if (el) { el.style.display = 'none'; el.innerHTML = ''; } }
 
   // ── Cloudflare Turnstile ──────────────────────────────────────────────────
-  // Fetches the site key from the server; if captcha is disabled (no secret
-  // configured), the widget containers stay empty and forms submit as before.
-  const _turnstileWidgets  = { login: null, forgot: null, request: null };
-  // Track containers where render has been attempted so we never call
-  // turnstile.render() twice on the same element, even when turnstile.render()
-  // returns null/undefined (e.g. when Cloudflare can't reach its servers).
+  const _turnstileWidgets   = { login: null, forgot: null, request: null };
   const _turnstileAttempted = new Set();
-  // True when Cloudflare reports the widget itself is in error / unsupported.
-  // When the widget errors we skip the client-side token gate and let the
-  // server decide (it fails open when Cloudflare is unreachable).
-  const _turnstileErrors = { login: false, forgot: false, request: false };
+  const _turnstileErrors    = { login: false, forgot: false, request: false };
   let _turnstileSiteKey = null;
   function getTurnstileToken(formName) {
     const id = _turnstileWidgets[formName];
@@ -221,12 +266,12 @@
         if (!el || _turnstileAttempted.has(name)) return;
         _turnstileAttempted.add(name);
         const widgetId = window.turnstile.render(el, {
-          sitekey: _turnstileSiteKey,
-          theme: 'light',
-          appearance: 'always',
+          sitekey:               _turnstileSiteKey,
+          theme:                 'light',
+          appearance:            'always',
           callback:              () => { _turnstileErrors[name] = false; },
-          'error-callback':      () => { _turnstileErrors[name] = true;  },
-          'unsupported-callback':() => { _turnstileErrors[name] = true;  },
+          'error-callback':      () => { _turnstileErrors[name] = true; },
+          'unsupported-callback':() => { _turnstileErrors[name] = true; },
         });
         if (widgetId != null) {
           _turnstileWidgets[name] = widgetId;
@@ -240,9 +285,6 @@
     .then(cfg => {
       if (cfg && cfg.enabled && cfg.siteKey) {
         _turnstileSiteKey = cfg.siteKey;
-        // Script is loaded on-demand — if the API beat the script, the
-        // onTurnstileReady callback will call renderTurnstileWidgets once
-        // it fires. If the script is already ready (e.g. cached), render now.
         if (window._turnstileApiReady) {
           window.renderTurnstileWidgets();
         } else {
@@ -254,22 +296,19 @@
 
   const params = new URLSearchParams(location.search);
   if (params.get('password_set') === '1') {
-    show(document.getElementById('login-ok'),
-      'Password set successfully — you can now sign in.');
+    show(document.getElementById('login-ok'), 'Password set successfully — you can now sign in.', true);
   } else if (params.get('signed_out') === '1') {
-    show(document.getElementById('login-ok'), "You've been signed out.");
+    show(document.getElementById('login-ok'), "You've been signed out.", true);
   } else if (params.get('access_approved') === '1') {
-    show(document.getElementById('login-ok'),
-      'Your account is already approved — check your email for a set-password link, or ask an admin to resend it.');
+    show(document.getElementById('login-ok'), 'Your account is already approved — check your email for a set-password link, or ask an admin to resend it.', true);
   } else if (params.get('access_pending') === '1') {
-    show(document.getElementById('login-ok'),
-      "You've already requested access — an admin will review it shortly.");
+    show(document.getElementById('login-ok'), "You've already requested access — an admin will review it shortly.", true);
   }
 
   document.getElementById('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errEl = document.getElementById('login-err'); hide(errEl);
-    const btn = document.getElementById('login-submit');
+    const btn   = document.getElementById('login-submit');
     const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
     const captchaToken = getTurnstileToken('login');
@@ -285,18 +324,17 @@
         body: JSON.stringify({ email, password, captchaToken }),
       });
       let data = {};
-      let bodyText = '';
-      try { bodyText = await r.text(); data = JSON.parse(bodyText); } catch (_) {}
+      try { const t = await r.text(); data = JSON.parse(t); } catch (_) {}
       if (!r.ok) {
         show(errEl, data.error || `Sign in failed (${r.status}) — please reload and try again.`);
-        btn.disabled = false; btn.textContent = 'Sign in';
+        btn.disabled = false; btn.textContent = 'Sign in to Measure Once';
         resetTurnstile('login');
         return;
       }
       window.location.href = data.next || '/';
     } catch (err) {
       show(errEl, 'Network error — please try again.');
-      btn.disabled = false; btn.textContent = 'Sign in';
+      btn.disabled = false; btn.textContent = 'Sign in to Measure Once';
       resetTurnstile('login');
     }
   });
@@ -305,7 +343,7 @@
     e.preventDefault();
     const errEl = document.getElementById('forgot-err'); hide(errEl);
     const okEl  = document.getElementById('forgot-ok');  hide(okEl);
-    const btn = document.getElementById('forgot-submit');
+    const btn   = document.getElementById('forgot-submit');
     const email = document.getElementById('forgot-email').value.trim();
     const captchaToken = getTurnstileToken('forgot');
     if (_turnstileSiteKey && !captchaToken && !_turnstileErrors['forgot']) {
@@ -348,7 +386,7 @@
     e.preventDefault();
     const errEl = document.getElementById('req-err'); hide(errEl);
     const okEl  = document.getElementById('req-ok');  hide(okEl);
-    const btn = document.getElementById('req-submit');
+    const btn   = document.getElementById('req-submit');
     const name  = document.getElementById('req-name').value.trim();
     const email = document.getElementById('req-email').value.trim();
     const captchaToken = getTurnstileToken('request');
@@ -365,12 +403,12 @@
       });
       const data = await r.json().catch(() => ({}));
       if (r.ok) {
-        show(okEl, "Request received. We'll email you once an admin approves it.");
+        show(okEl, "Request received. We'll email you once an admin approves it.", true);
         document.getElementById('req-form').reset();
       } else if (r.status === 409 && data.status === 'approved') {
-        show(okEl, 'This email is already approved — check your inbox for a set-password link.');
+        show(okEl, 'This email is already approved — check your inbox for a set-password link.', true);
       } else if (r.status === 409 && data.status === 'pending') {
-        show(okEl, 'This email already has a pending request.');
+        show(okEl, 'This email already has a pending request.', true);
       } else if (r.status === 429) {
         show(errEl, 'Too many requests — please try again later.');
       } else {
