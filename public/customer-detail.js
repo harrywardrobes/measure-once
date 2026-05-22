@@ -1229,6 +1229,7 @@ function _syncStageLeadStatus(stageKey) {
           ...(state.selectedContact.properties || {}),
           hs_lead_status: newStatus,
         };
+        if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
       }
       if (typeof loadLeadStatusCounts === 'function') {
         loadLeadStatusCounts()
