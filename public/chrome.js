@@ -1,5 +1,14 @@
 // Shared chrome: skip link, toast-live, access gate, header, bottom nav, invoice panel.
 // Runs synchronously so chrome is in the DOM before bootstrap() looks for it.
+
+/**
+ * Returns a platform-aware keyboard shortcut string.
+ * getShortcut('K') → '⌘K' on Mac / iOS, 'Ctrl K' everywhere else.
+ */
+window.getShortcut = function (key) {
+  return /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? '\u2318' + key : 'Ctrl ' + key;
+};
+
 (function () {
   const path = location.pathname;
 
@@ -102,8 +111,7 @@
       </div>
     </div>`;
 
-  const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
-  const kbdHint = isMac ? '⌘K' : 'Ctrl K';
+  const kbdHint = getShortcut('K');
 
   const backBtn = path !== '/' ? `
     <button onclick="history.length > 1 ? history.back() : location.href = '/'" class="header-back-btn" aria-label="Go back" title="Back">
