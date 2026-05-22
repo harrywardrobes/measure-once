@@ -341,6 +341,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   loadLeadStatuses().then(() => {
     if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
+    if (typeof renderCustomerList === 'function') renderCustomerList();
   });
 });
 
