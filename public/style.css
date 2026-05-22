@@ -156,6 +156,7 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 .header-right {
   display: flex;
