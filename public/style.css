@@ -135,6 +135,13 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
   padding: 0 12px;
   gap: 8px;
 }
+@media (min-width: 640px) {
+  .header-inner {
+    max-width: 640px;
+    width: 100%;
+    margin: 0 auto;
+  }
+}
 .header-left {
   display: flex;
   align-items: center;
