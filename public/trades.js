@@ -23,6 +23,7 @@ const TRADE_AREAS = [
 ];
 
 let _tradeContacts = [];
+window._cpGetTradeContacts = function () { return _tradeContacts; };
 let _tradeDeleteId = null;
 let _tradeTypeFilter = (() => { try { return localStorage.getItem('tradesTypeFilter') || ''; } catch (_) { return ''; } })();
 let _tradeAreaFilter = '';

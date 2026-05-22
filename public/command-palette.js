@@ -132,6 +132,16 @@
     return [];
   }
 
+  function getTradeContacts() {
+    if (typeof window._cpGetTradeContacts === 'function') return window._cpGetTradeContacts();
+    return [];
+  }
+
+  function getInvoices() {
+    if (window.state && window.state.qb && Array.isArray(window.state.qb.invoices)) return window.state.qb.invoices;
+    return [];
+  }
+
   function escHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
@@ -194,6 +204,64 @@
             <span class="cp-result-avatar">${escHtml(initials)}</span>
             <span class="cp-result-text">
               <span class="cp-result-label">${escHtml(name)}</span>
+              ${sub ? `<span class="cp-result-sub">${escHtml(sub)}</span>` : ''}
+            </span>
+          </button>`;
+        });
+      }
+    }
+
+    const trades = getTradeContacts();
+    if (q && trades.length) {
+      const tradeIcon = `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>`;
+      const matchedTrades = trades.filter(c => {
+        const name = (c.company_name || '').toLowerCase();
+        const type = (c.trade_type || '').toLowerCase();
+        return name.includes(q) || type.includes(q);
+      }).slice(0, 5);
+
+      if (matchedTrades.length) {
+        html += `<div class="cp-section-label">Trades</div>`;
+        matchedTrades.forEach(c => {
+          const name = c.company_name || 'Unknown';
+          const sub  = c.trade_type || '';
+          const id   = c.id;
+          const numId = Number(id);
+          const idLiteral = Number.isFinite(numId) ? numId : `'${escHtml(String(id))}'`;
+          const onclick = `closeCommandPalette();if(typeof openTradesModal==='function')openTradesModal(${idLiteral});else location.href='/trades';`;
+          html += `<button class="cp-result-item" onclick="${onclick}" tabindex="0">
+            <span class="cp-result-icon">${tradeIcon}</span>
+            <span class="cp-result-text">
+              <span class="cp-result-label">${escHtml(name)}</span>
+              ${sub ? `<span class="cp-result-sub">${escHtml(sub)}</span>` : ''}
+            </span>
+          </button>`;
+        });
+      }
+    }
+
+    const invoices = getInvoices();
+    if (q && invoices.length) {
+      const invoiceIcon = `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
+      const matchedInvoices = invoices.filter(inv => {
+        const custName  = (inv.customerName || '').toLowerCase();
+        const docNumber = (inv.docNumber    || '').toLowerCase();
+        return custName.includes(q) || docNumber.includes(q);
+      }).slice(0, 5);
+
+      if (matchedInvoices.length) {
+        html += `<div class="cp-section-label">Invoices</div>`;
+        matchedInvoices.forEach(inv => {
+          const label = inv.customerName || inv.docNumber || 'Invoice';
+          const doc   = inv.docNumber ? `#${inv.docNumber}` : '';
+          const bal   = inv.balance != null ? ' · £' + Number(inv.balance).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+          const sub   = [doc, bal].filter(Boolean).join('');
+          const id    = inv.id;
+          const onclick = `closeCommandPalette();if(typeof openInvoicePanel==='function')openInvoicePanel('${escHtml(String(id))}');else location.href='/invoices';`;
+          html += `<button class="cp-result-item" onclick="${onclick}" tabindex="0">
+            <span class="cp-result-icon">${invoiceIcon}</span>
+            <span class="cp-result-text">
+              <span class="cp-result-label">${escHtml(label)}</span>
               ${sub ? `<span class="cp-result-sub">${escHtml(sub)}</span>` : ''}
             </span>
           </button>`;
