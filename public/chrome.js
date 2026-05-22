@@ -113,6 +113,11 @@
           <span class="header-page-title">${pageTitle}</span>
         </div>
         <div class="header-right">
+          <button onclick="openCommandPalette()" class="header-icon-btn" aria-label="Search (⌘K)" title="Search (⌘K)">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+            </svg>
+          </button>
           <a href="/customers" class="header-icon-btn${path === '/customers' || path.startsWith('/customers/') ? ' header-icon-btn--active' : ''}" aria-label="Customers" title="Customers">
             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
