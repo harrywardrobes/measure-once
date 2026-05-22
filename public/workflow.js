@@ -139,7 +139,11 @@ function buildListItems() {
     // Apply lead-status filter (only relevant in "all" view)
     if (state.leadStatusFilter) {
       const ls = contact.properties?.hs_lead_status || '';
-      if (ls !== state.leadStatusFilter) continue;
+      if (state.leadStatusFilter === '__no_status__') {
+        if (ls) continue;
+      } else {
+        if (ls !== state.leadStatusFilter) continue;
+      }
     }
 
     const cached = state.contactStageCache[contact.id];

@@ -373,13 +373,19 @@ function populateLeadStatusFilter() {
   if (!sel) return;
 
   const counts = {};
+  let nullCount = 0;
   for (const c of state.contacts) {
     const s = c.properties?.hs_lead_status || '';
     if (s) counts[s] = (counts[s] || 0) + 1;
+    else nullCount++;
   }
+
+  const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+  const nullAttrs = nullCount === 0 ? ' disabled style="color:#cbd5e1"' : '';
 
   const prevValue = sel.value;
   sel.innerHTML = `<option value="">All statuses</option>` +
+    `<option value="__no_status__"${nullAttrs}>${escHtml(nullLabel)} (${nullCount})</option>` +
     LEAD_STATUS_OPTIONS.map(({ value, label }) => {
       const n = counts[value] || 0;
       const attrs = n === 0 ? ' disabled style="color:#cbd5e1"' : '';
