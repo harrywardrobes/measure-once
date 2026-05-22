@@ -4365,54 +4365,7 @@ body.showing-workflow .sales-layout #workflow-panel {
   padding: 14px;
   box-shadow: var(--shadow-sm);
 }
-.trades-card-top {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
-}
-.trades-card-info { flex: 1; min-width: 0; }
-.trades-card-name {
-  font-weight: 700; font-size: 0.98rem; color: var(--ink-1);
-  margin-bottom: 5px; line-height: 1.3;
-}
-.trades-card-trade-row {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 7px;
-  margin-bottom: 4px;
-}
-.trades-card-trade-badge {
-  background: var(--orchid-tint); color: var(--orchid-deep);
-  border-radius: var(--radius-pill);
-  font-size: 0.75rem; font-weight: 700;
-  padding: 2px 10px;
-  white-space: nowrap;
-}
-.trades-card-areas {
-  font-size: 0.78rem; color: var(--ink-3);
-}
-.trades-card-company {
-  display: block; font-size: 0.8rem; color: var(--ink-3);
-  margin-bottom: 2px;
-}
 
-.trades-card-persons {
-  display: flex; flex-direction: column; gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--stone-light);
-}
-.trades-card-person {}
-.trades-card-person-top {
-  display: flex; align-items: baseline; gap: 6px;
-  margin-bottom: 3px;
-}
-.trades-card-person-name {
-  font-size: 0.85rem; font-weight: 600; color: var(--ink-2);
-}
-.trades-card-person-role {
-  font-size: 0.75rem; color: var(--ink-4);
-}
-.trades-card-person-pref {
-  display: flex; flex-wrap: wrap; gap: 4px;
-  margin-bottom: 4px;
-}
 .trades-pref-chip {
   font-size: 0.7rem; font-weight: 500;
   padding: 1px 7px;
@@ -4425,9 +4378,6 @@ body.showing-workflow .sales-layout #workflow-panel {
   color: var(--orchid); text-decoration: none;
 }
 .trades-card-link:hover { text-decoration: underline; }
-.trades-card-actions {
-  display: flex; gap: 4px; flex-shrink: 0;
-}
 .trades-card-btn {
   display: flex; align-items: center; justify-content: center;
   width: 32px; height: 32px; border-radius: var(--radius-md);
@@ -4438,10 +4388,6 @@ body.showing-workflow .sales-layout #workflow-panel {
 .trades-card-btn:hover { background: var(--paper-deep); color: var(--ink-1); }
 .trades-card-btn-danger:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
 
-.trades-card-contact-row {
-  display: flex; flex-wrap: wrap; gap: 6px;
-  margin-top: 8px;
-}
 .trades-contact-action-btn {
   display: inline-flex; align-items: center; gap: 5px;
   padding: 4px 10px;
@@ -4510,31 +4456,6 @@ body.showing-workflow .sales-layout #workflow-panel {
   z-index: 20;
 }
 
-.trades-card-details {
-  display: flex; flex-wrap: wrap; gap: 8px;
-  margin-top: 8px;
-}
-.trades-card-detail {
-  font-size: 0.76rem; color: var(--ink-3);
-  background: var(--stone-soft);
-  border-radius: var(--radius-sm);
-  padding: 2px 8px;
-}
-.trades-card-detail-copyable {
-  display: inline-flex; align-items: center; gap: 4px;
-}
-.trades-card-detail-copyable .trades-copy-btn {
-  opacity: 0; flex-shrink: 0;
-}
-.trades-card-detail-copyable:hover .trades-copy-btn,
-.trades-card-detail-copyable .trades-copy-btn:focus-visible,
-.trades-card-detail-copyable .trades-copy-btn.copied { opacity: 1; }
-.trades-card-detail-label { font-weight: 600; color: var(--ink-2); }
-.trades-card-notes {
-  margin-top: 8px; font-size: 0.8rem; color: var(--ink-3);
-  border-top: 1px solid var(--stone-light); padding-top: 8px;
-  white-space: pre-wrap; line-height: 1.5;
-}
 .trades-card-audit {
   margin-top: 8px;
   padding-top: 8px;
