@@ -642,58 +642,17 @@ body.showing-workflow .workflow-panel { display: flex; }
   0%   { background-position: -400px 0; }
   100% { background-position: 400px 0; }
 }
-.skeleton-card {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--stone);
-  border-left: 3px solid transparent;
-  min-height: 60px;
-}
 .skeleton-line {
   border-radius: var(--radius-sm);
   background: linear-gradient(90deg, var(--stone-light) 25%, var(--stone-soft) 50%, var(--stone-light) 75%);
   background-size: 800px 100%;
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
 }
-.skeleton-name {
-  height: 14px;
-  width: 55%;
-  margin-bottom: 10px;
-}
-.skeleton-meta {
-  display: flex;
-  gap: 8px;
-}
 .skeleton-pill {
   height: 11px;
   width: 64px;
   border-radius: var(--radius-pill);
 }
-.skeleton-email {
-  height: 11px;
-  width: 38%;
-}
-
-
-/* ── Trade card skeleton ─────────────────────────────────────────────────────── */
-.skeleton-trade-card {
-  pointer-events: none;
-}
-.skeleton-trade-card .trades-card-top {
-  align-items: center;
-}
-.skeleton-action-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  background: var(--stone-light);
-  flex-shrink: 0;
-}
-.skeleton-contact-row {
-  display: flex;
-  gap: 12px;
-  margin-top: 10px;
-}
-
 /* ── Workflow detail panel skeleton ──────────────────────────────────────────── */
 .skeleton-wf-name {
   height: 22px;
