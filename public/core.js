@@ -191,6 +191,14 @@ function isViewerOnly() {
   return document.body.classList.contains('viewer-mode');
 }
 
+// True only for manager+ users — controls who may change pipeline state
+// (customer stage, substage / completed tasks, and HubSpot lead status).
+// Members and viewers are treated identically for pipeline editing.
+function canEditPipeline() {
+  return document.body.classList.contains('manager-mode')
+      || document.body.classList.contains('admin-mode');
+}
+
 function showViewerBanner() {
   if (sessionStorage.getItem('viewerBannerDismissed') === '1') return;
   const banner = document.getElementById('viewer-banner');

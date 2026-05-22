@@ -203,6 +203,72 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
     if (!/^[A-Za-z0-9_-]+$/.test(contactId)) {
       return res.status(400).json({ error: 'Invalid contact id' });
     }
+
+    // Pipeline-field gate: only managers/admins may change stageKey or
+    // completedStatuses on any room. Fetch current rooms to detect mutations
+    // and reject the whole save with a clear 403 if a member/viewer attempts
+    // to change pipeline state. Other fields (notes, comments, fitters, etc.)
+    // remain editable at the route's base member privilege.
+    if (Array.isArray(rooms)) {
+      try {
+        const userId = req.user?.claims?.sub;
+        const ur = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
+        const level = ur.rows[0]?.privilege_level || 'member';
+        const isManagerOrAdmin = (level === 'manager' || level === 'admin');
+        if (!isManagerOrAdmin) {
+          let existingRooms = [];
+          try {
+            const cur = await axios.get(
+              `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+              { headers: hsHeaders(), params: { properties: 'measure_once_rooms' } }
+            );
+            const json = cur.data?.properties?.measure_once_rooms;
+            if (json) existingRooms = JSON.parse(json) || [];
+          } catch { /* treat as no prior rooms */ }
+
+          const normCompleted = c => {
+            const out = {};
+            const src = c || {};
+            for (const k of Object.keys(src)) {
+              out[k] = [...(src[k] || [])].map(String).sort();
+            }
+            return out;
+          };
+          const sameCompleted = (a, b) => {
+            const na = normCompleted(a), nb = normCompleted(b);
+            const ka = Object.keys(na).sort(), kb = Object.keys(nb).sort();
+            if (ka.length !== kb.length || ka.some((k, i) => k !== kb[i])) return false;
+            return ka.every(k => {
+              const va = na[k], vb = nb[k] || [];
+              if (va.length !== vb.length) return false;
+              return va.every((v, i) => v === vb[i]);
+            });
+          };
+
+          // Only treat changes to pipeline fields on rooms that exist on BOTH
+          // sides as pipeline mutations. Room add/remove (and pure reorder of
+          // non-pipeline fields) remains a member-allowed CRUD operation.
+          let pipelineChanged = false;
+          const pairLen = Math.min(rooms.length, existingRooms.length);
+          for (let i = 0; i < pairLen; i++) {
+            const a = rooms[i] || {};
+            const b = existingRooms[i] || {};
+            if ((a.stageKey || '') !== (b.stageKey || '')) { pipelineChanged = true; break; }
+            if ((a.statusId || '') !== (b.statusId || '')) { pipelineChanged = true; break; }
+            if (!sameCompleted(a.completedStatuses, b.completedStatuses)) { pipelineChanged = true; break; }
+          }
+          if (pipelineChanged) {
+            return res.status(403).json({
+              message: 'Manager or admin privilege required to change stage, substage, or completed tasks.',
+              code: 'PIPELINE_EDIT_FORBIDDEN',
+            });
+          }
+        }
+      } catch (gateErr) {
+        return res.status(500).json({ error: 'Authorization check failed' });
+      }
+    }
+
     await axios.patch(
       `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
       {
@@ -835,6 +901,23 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     }
     if (Object.keys(properties).length === 0) {
       return res.status(400).json({ error: 'No valid properties to update.' });
+    }
+    // Pipeline-field gate: only managers/admins may change hs_lead_status.
+    // Other contact fields remain editable at the route's base member level.
+    if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status')) {
+      try {
+        const userId = req.user?.claims?.sub;
+        const ur = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
+        const level = ur.rows[0]?.privilege_level || 'member';
+        if (level !== 'manager' && level !== 'admin') {
+          return res.status(403).json({
+            message: 'Manager or admin privilege required to change lead status.',
+            code: 'PIPELINE_EDIT_FORBIDDEN',
+          });
+        }
+      } catch {
+        return res.status(500).json({ error: 'Authorization check failed' });
+      }
     }
     const safeContactId = encodeURIComponent(contactId);
 

@@ -111,6 +111,20 @@ function _initSalesListeners() {
     const lsPill = e.target.closest('.eq-ls-pill');
     if (lsPill && !lsPill.disabled) { setEnquiryLeadStatusFilter(lsPill.dataset.lsValue); return; }
 
+    // Inline manager+ card editing — must run before the row-navigation
+    // fallback so clicking a pill never navigates to the customer page.
+    const cardEdit = e.target.closest('[data-card-edit]');
+    if (cardEdit) {
+      e.stopPropagation();
+      const cid  = cardEdit.dataset.contactId;
+      const kind = cardEdit.dataset.cardEdit;
+      const idx  = parseInt(cardEdit.dataset.roomIdx, 10);
+      if (kind === 'stage')      openCardStagePicker({ stopPropagation(){}, currentTarget: cardEdit }, cid, idx);
+      else if (kind === 'substage') openCardSubstagePicker({ stopPropagation(){}, currentTarget: cardEdit }, cid, idx);
+      else if (kind === 'leadstatus') openLeadStatusPicker({ stopPropagation(){}, currentTarget: cardEdit }, cid);
+      return;
+    }
+
     const row = e.target.closest('[data-contact-id]');
     if (row) {
       location.href = `/customers/${encodeURIComponent(row.dataset.contactId)}`;
@@ -495,9 +509,15 @@ function enquiryRowHtml(entry) {
 
   const accent = isTerminal ? '#B8AE99' : (STAGE_ACCENT[stageKey] || 'var(--orchid)');
 
-  // Filled stage-name pill
+  // Filled stage-name pill (clickable for managers when the contact has a real
+  // room — roomIdx is undefined for lead-status-only fallback entries).
+  const _editable = canEditPipeline();
+  const hasRoom   = Number.isInteger(entry.roomIdx);
+  const editAttrs = (_editable && hasRoom && !isTerminal)
+    ? `data-card-edit="stage" data-contact-id="${escHtml(contact.id)}" data-room-idx="${entry.roomIdx}" role="button" tabindex="-1" title="Change stage" style="background:${accent};color:#fff;cursor:pointer"`
+    : `style="background:${accent};color:#fff"`;
   const stagePillHtml = isTerminal ? '' :
-    `<span class="eq-card-stage-pill" style="background:${accent};color:#fff">${escHtml(_stageLabel(stageKey))}</span>`;
+    `<span class="eq-card-stage-pill" ${editAttrs}>${escHtml(_stageLabel(stageKey))}</span>`;
 
   // Substage pill
   let subPillHtml = '';
@@ -506,7 +526,10 @@ function enquiryRowHtml(entry) {
       subPillHtml = `<span class="eq-card-substage eq-card-substage-terminal">${subLabel}</span>`;
     } else {
       const pc = substagePillColour(stageKey, substageId);
-      subPillHtml = `<span class="eq-card-substage" style="background:${pc.bg};color:${pc.text};border:1px solid ${pc.bg}">${subLabel}</span>`;
+      const subEditAttrs = (_editable && hasRoom)
+        ? `data-card-edit="substage" data-contact-id="${escHtml(contact.id)}" data-room-idx="${entry.roomIdx}" role="button" tabindex="-1" title="Change substage" style="background:${pc.bg};color:${pc.text};border:1px solid ${pc.bg};cursor:pointer"`
+        : `style="background:${pc.bg};color:${pc.text};border:1px solid ${pc.bg}"`;
+      subPillHtml = `<span class="eq-card-substage" ${subEditAttrs}>${subLabel}</span>`;
     }
   }
 
@@ -521,8 +544,11 @@ function enquiryRowHtml(entry) {
   );
   const actionTint = STAGE_TINT[stageKey] || '#f3f4f6';
   const actionText = STAGE_ACTION_TEXT[stageKey] || '#374151';
+  const actionEditAttrs = _editable
+    ? `data-card-edit="leadstatus" data-contact-id="${escHtml(contact.id)}" role="button" tabindex="-1" title="Change lead status" style="background:${actionTint};cursor:pointer"`
+    : `style="background:${actionTint}"`;
   const actionHtml = next ? `
-    <div class="eq-card-action" style="background:${actionTint}">
+    <div class="eq-card-action" ${actionEditAttrs}>
       <span class="eq-card-action-label" style="color:${actionText}">${escHtml(next)}</span>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${actionText}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
     </div>` : '';

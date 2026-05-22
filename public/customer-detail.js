@@ -836,13 +836,16 @@ function _renderWorkflowHeaderImpl() {
               'BAD_TIMING':           'lsb-bad-timing',
             };
             const cid = contact?.id || '';
+            const editable = canEditPipeline();
             if (!raw) {
               const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+              if (!editable) return `<span class="lead-status-badge lsb-empty">${escHtml(nullLabel)}</span>`;
               return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(nullLabel)}</span>`;
             }
             const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
             const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
             const cls = CSS_CLASS_MAP[raw] || '';
+            if (!editable) return `<span class="lead-status-badge ${cls}">${escHtml(label)}</span>`;
             return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(label)}</span>`;
           })()}
           ${email ? `<a href="mailto:${escHtml(email)}" class="text-sm text-blue-600 hover:underline">${escHtml(email)}</a>` : ''}
@@ -968,13 +971,21 @@ function _renderWorkflowStagesImpl() {
   const entryDate  = state.workflowData?.stageDates?.[focusedKey];
 
   // Task rows
+  const _canEdit = canEditPipeline();
   const tasksHtml = (focusedStage?.statuses || []).map(status => {
     const done = doneIds.includes(status.id);
-    if (isFocusedFuture) {
-      return `<div class="status-task-row" style="opacity:0.4;cursor:default;pointer-events:none">
-        <div class="status-task-check"></div>
+    if (isFocusedFuture || !_canEdit) {
+      // Members/viewers see read-only rows: keep the tick visible for completed
+      // tasks but disable interaction.
+      const checkBg = done ? `background:${focusedColour.bg};border-color:${focusedColour.bg}` : '';
+      const tick = done ? `<svg width="10" height="8" fill="none" stroke="#fff" viewBox="0 0 12 10">
+          <polyline points="1,5 4.5,8.5 11,1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>` : '';
+      const dimStyle = isFocusedFuture ? 'opacity:0.4;cursor:default;pointer-events:none' : 'cursor:default;pointer-events:none';
+      return `<div class="status-task-row ${done ? 'status-task-done' : ''}" style="${dimStyle}">
+        <div class="status-task-check ${done ? 'status-task-check-done' : ''}" style="${checkBg}">${tick}</div>
         <div class="status-text">
-          <span class="status-label">${escHtml(status.label)}</span>
+          <span class="status-label ${done ? 'status-label-done' : ''}">${escHtml(status.label)}</span>
           ${status.hint ? `<span class="status-hint">${escHtml(status.hint)}</span>` : ''}
         </div>
       </div>`;
@@ -1014,17 +1025,24 @@ function _renderWorkflowStagesImpl() {
       lsLabel = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
       lsCls = CSS_CLASS_MAP[raw] || '';
     }
-    leadStatusRowHtml = `<div class="stage-lead-status-row">
-      <span class="stage-lead-status-label">HubSpot status</span>
-      <span class="lead-status-badge ${lsCls} ${raw ? 'lsb-clickable' : 'lsb-empty'}"
-            title="${raw ? 'Change lead status' : 'Set lead status'}"
-            onclick="openLeadStatusPicker(event,'${escHtml(cid)}')">${escHtml(lsLabel)}</span>
-    </div>`;
+    if (_canEdit) {
+      leadStatusRowHtml = `<div class="stage-lead-status-row">
+        <span class="stage-lead-status-label">HubSpot status</span>
+        <span class="lead-status-badge ${lsCls} ${raw ? 'lsb-clickable' : 'lsb-empty'}"
+              title="${raw ? 'Change lead status' : 'Set lead status'}"
+              onclick="openLeadStatusPicker(event,'${escHtml(cid)}')">${escHtml(lsLabel)}</span>
+      </div>`;
+    } else {
+      leadStatusRowHtml = `<div class="stage-lead-status-row">
+        <span class="stage-lead-status-label">HubSpot status</span>
+        <span class="lead-status-badge ${lsCls}">${escHtml(lsLabel)}</span>
+      </div>`;
+    }
   }
 
   // Action buttons
   let actionHtml = '';
-  if (!isFocusedFuture && !isViewerOnly()) {
+  if (!isFocusedFuture && _canEdit) {
     if (isFocusedCurrent) {
       const nextKey = STAGE_KEYS[focusedIdx + 1];
       if (nextKey && allDone) {
@@ -1144,6 +1162,7 @@ function toggleStage(_key) {}
 // ── Tick off sub-tasks (auto-advances stage when all done) ────────────────────
 function setStatusChecked(stageKey, statusId, checked) {
   if (!state.workflowData) return;
+  if (!canEditPipeline()) return;
 
   // Snapshot before any change
   const snapshot = JSON.parse(JSON.stringify(state.allRooms));
@@ -1218,7 +1237,7 @@ function setStatusChecked(stageKey, statusId, checked) {
 // The stage change is already committed locally before this runs; failure only
 // shows a toast — it does not revert the local change.
 function _syncStageLeadStatus(stageKey) {
-  if (isViewerOnly()) return;
+  if (!canEditPipeline()) return;
   const contactId = state.selectedContactId;
   if (!contactId) return;
 
@@ -1268,6 +1287,7 @@ function _syncStageLeadStatus(stageKey) {
 
 function moveBackToStage(stageKey) {
   if (!state.workflowData) return;
+  if (!canEditPipeline()) return;
   const snapshot = JSON.parse(JSON.stringify(state.allRooms));
   state.workflowData.stageKey = stageKey;
   state.expandedStages = new Set([stageKey]);
@@ -1285,6 +1305,7 @@ function moveBackToStage(stageKey) {
 // ── Advance to a specific stage (explicit button action) ──────────────────────
 function advanceToStage(nextKey) {
   if (!state.workflowData) return;
+  if (!canEditPipeline()) return;
   const snapshot = JSON.parse(JSON.stringify(state.allRooms));
   state.workflowData.stageKey = nextKey;
   recordStageDate(state.workflowData, nextKey);

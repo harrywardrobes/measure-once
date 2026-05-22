@@ -156,16 +156,26 @@ function _svCardHtml(entry) {
   const postcodeHtml = postcode
     ? `<span class="eq-card-postcode">${postcode}</span>` : '';
 
-  // Filled stage pill
+  // Filled stage pill (clickable for managers when there's a real room)
+  const _editable = canEditPipeline();
+  const hasRoom   = Number.isInteger(entry.roomIdx);
+  const stageEditAttrs = (_editable && hasRoom && !isTerminal)
+    ? `data-card-edit="stage" data-contact-id="${escHtml(contact.id)}" data-room-idx="${entry.roomIdx}" role="button" tabindex="-1" title="Change stage" style="background:${hex};color:#fff;cursor:pointer"`
+    : `style="background:${hex};color:#fff"`;
   const stagePillHtml = isTerminal ? '' :
-    `<span class="eq-card-stage-pill" style="background:${hex};color:#fff">Survey</span>`;
+    `<span class="eq-card-stage-pill" ${stageEditAttrs}>Survey</span>`;
 
   // Substage pill
   let subPillHtml = '';
   if (substageId) {
-    subPillHtml = isTerminal
-      ? `<span class="eq-card-substage eq-card-substage-terminal">${subLabel}</span>`
-      : `<span class="eq-card-substage" style="background:rgba(${rgb},0.09);color:${hex};border:1px solid rgba(${rgb},0.22)">${subLabel}</span>`;
+    if (isTerminal) {
+      subPillHtml = `<span class="eq-card-substage eq-card-substage-terminal">${subLabel}</span>`;
+    } else {
+      const subEditAttrs = (_editable && hasRoom)
+        ? `data-card-edit="substage" data-contact-id="${escHtml(contact.id)}" data-room-idx="${entry.roomIdx}" role="button" tabindex="-1" title="Change substage" style="background:rgba(${rgb},0.09);color:${hex};border:1px solid rgba(${rgb},0.22);cursor:pointer"`
+        : `style="background:rgba(${rgb},0.09);color:${hex};border:1px solid rgba(${rgb},0.22)"`;
+      subPillHtml = `<span class="eq-card-substage" ${subEditAttrs}>${subLabel}</span>`;
+    }
   }
 
   // Source pill (outlined, no dot)
@@ -195,8 +205,11 @@ function _svCardHtml(entry) {
   } else if (!actionLabel && typeof stageActionLabelLookup === 'function') {
     actionLabel = stageActionLabelLookup(SURVEY_STAGE_KEY, substageId);
   }
+  const actionEditAttrs = _editable
+    ? `data-card-edit="leadstatus" data-contact-id="${escHtml(contact.id)}" role="button" tabindex="-1" title="Change lead status" style="background:${SURVEY_ACTION_TINT};cursor:pointer"`
+    : `style="background:${SURVEY_ACTION_TINT}"`;
   const actionHtml = (isTerminal || !actionLabel) ? '' : `
-    <div class="eq-card-action" style="background:${SURVEY_ACTION_TINT}">
+    <div class="eq-card-action" ${actionEditAttrs}>
       <span class="eq-card-action-label" style="color:${SURVEY_ACTION_TEXT}">${escHtml(actionLabel)}</span>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${SURVEY_ACTION_TEXT}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
     </div>`;
@@ -243,6 +256,21 @@ function _initSurveyListeners() {
       return;
     }
     if (e.target.closest('#sv-new-btn')) { openNewCustomerModal(); return; }
+
+    // Inline manager+ card editing — must run before the row-navigation
+    // fallback so clicking a pill never navigates to the customer page.
+    const cardEdit = e.target.closest('[data-card-edit]');
+    if (cardEdit) {
+      e.stopPropagation();
+      const cid  = cardEdit.dataset.contactId;
+      const kind = cardEdit.dataset.cardEdit;
+      const idx  = parseInt(cardEdit.dataset.roomIdx, 10);
+      if (kind === 'stage')      openCardStagePicker({ stopPropagation(){}, currentTarget: cardEdit }, cid, idx);
+      else if (kind === 'substage') openCardSubstagePicker({ stopPropagation(){}, currentTarget: cardEdit }, cid, idx);
+      else if (kind === 'leadstatus') openLeadStatusPicker({ stopPropagation(){}, currentTarget: cardEdit }, cid);
+      return;
+    }
+
     const row = e.target.closest('[data-contact-id]');
     if (row) location.href = `/customers/${encodeURIComponent(row.dataset.contactId)}`;
   });
@@ -306,6 +334,7 @@ async function renderSurveyList() {
       createdate,
       stageTime:  substageDate || stageEntryDate || createdate,
       priority:   _svPriorityScore(statusId),
+      roomIdx:    best.roomIdx,
     });
   }
 

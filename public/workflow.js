@@ -372,13 +372,20 @@ function _renderCustomerListImpl() {
           'OPEN': 'lsb-new', 'CONNECTED': 'lsb-connected',
           'ATTEMPTED_TO_CONTACT': '', 'UNQUALIFIED': 'lsb-unqualified', 'BAD_TIMING': 'lsb-bad-timing',
         };
+        const editable = canEditPipeline();
         if (!raw) {
           const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+          if (!editable) {
+            return `<span class="lead-status-badge lsb-empty">${escHtml(nullLabel)}</span>`;
+          }
           return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(nullLabel)}</span>`;
         }
         const opt   = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
         const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
         const cls   = CSS_CLASS_MAP[raw] || '';
+        if (!editable) {
+          return `<span class="lead-status-badge ${cls}">${escHtml(label)}</span>`;
+        }
         return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(label)}</span>`;
       })();
 
@@ -686,7 +693,7 @@ function closeCardPicker() {
 
 async function openLeadStatusPicker(event, contactId) {
   event.stopPropagation();
-  if (isViewerOnly()) return;
+  if (!canEditPipeline()) return;
   closeCardPicker();
   const rect = event.currentTarget.getBoundingClientRect();
   const popup = document.createElement('div');
@@ -764,6 +771,182 @@ async function openLeadStatusPicker(event, contactId) {
     const newLabel = driftedTo ? (LEAD_STATUS_OPTIONS.find(o => o.value === driftedTo)?.label || driftedTo) : _nullLbl2;
     showToast(`Lead status was updated in HubSpot to ${newLabel}`);
   }
+}
+
+// ── Card Stage / Substage Pickers (Sales + Survey inline editing) ────────────
+// Manager+ only. Opens a small popup over a card pill and writes the change
+// back via /api/contacts/:id/localdata using the full current rooms payload
+// so we don't clobber other room fields.
+
+async function _fetchLocaldataForCard(contactId) {
+  try {
+    const data = await GET(`/api/contacts/${encodeURIComponent(contactId)}/localdata`);
+    return data || { rooms: [], notes: '' };
+  } catch {
+    return null;
+  }
+}
+
+function _lastCompletedSubstageLabel(workflow, stageKey, doneIds) {
+  const stage = workflow?.stages?.[stageKey];
+  const statuses = stage?.statuses || [];
+  const last = [...statuses].reverse().find(s => doneIds.includes(s.id));
+  return last?.label || '';
+}
+
+async function _saveCardRoomMutation(contactId, mutateRoom) {
+  const data = await _fetchLocaldataForCard(contactId);
+  if (!data) { showToast('Could not load customer data', true); return false; }
+  const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+  const notes = data.notes || '';
+  if (!rooms.length) { showToast('No room found to edit', true); return false; }
+
+  const ok = mutateRoom(rooms);
+  if (!ok) return false;
+
+  // Compute stage/substage label for the primary room (mirrors customer-detail.js)
+  const primary = rooms[0] || {};
+  const stageKey = primary.stageKey || 'sales';
+  const stageLabel = state.workflow?.stages?.[stageKey]?.label || stageKey;
+  const doneIds = primary.completedStatuses?.[stageKey] || [];
+  const substageLabel = _lastCompletedSubstageLabel(state.workflow, stageKey, doneIds);
+
+  try {
+    await POST(`/api/contacts/${encodeURIComponent(contactId)}/localdata`, {
+      rooms, notes, stage: stageLabel, substage: substageLabel,
+    });
+  } catch (e) {
+    if (e.code === 'PIPELINE_EDIT_FORBIDDEN') {
+      showToast('Manager or admin privilege required to change pipeline state.', true);
+    } else if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not save — HubSpot token is invalid or expired.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not save — HubSpot rate limit reached. Try again in a moment.', true);
+    } else {
+      showToast('Failed to save change', true);
+    }
+    return false;
+  }
+  // Bust the shared workflow cache and trigger the page-level refresh listener.
+  document.dispatchEvent(new CustomEvent('localdata-updated'));
+  return true;
+}
+
+async function openCardStagePicker(event, contactId, roomIdx) {
+  event.stopPropagation();
+  if (!canEditPipeline()) return;
+  closeCardPicker();
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const popup = document.createElement('div');
+  popup.id = 'card-picker-popup';
+  popup.className = 'card-picker-popup';
+  const top = Math.min(rect.bottom + 4, window.innerHeight - 320);
+  popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
+
+  // Determine current stage of the target room (best-effort from cache).
+  const cached = state.contactStageCache?.[contactId] || [];
+  const currentStageKey = cached[roomIdx]?.stageKey || '';
+
+  const stages = Object.entries(state.workflow?.stages || {});
+  if (!stages.length) return;
+
+  stages.forEach(([key, stage]) => {
+    const btn = document.createElement('button');
+    btn.className = 'card-picker-opt' + (key === currentStageKey ? ' card-picker-opt--active' : '');
+    btn.textContent = stage.label || key;
+    btn.addEventListener('click', async () => {
+      closeCardPicker();
+      if (key === currentStageKey) return;
+      await _saveCardRoomMutation(contactId, rooms => {
+        const room = rooms[roomIdx];
+        if (!room) { showToast('Room no longer exists', true); return false; }
+        room.stageKey = key;
+        room.stageDates = room.stageDates || {};
+        room.stageDates[key] = room.stageDates[key] || todayISO();
+        // Clear the recorded substage when moving into a different stage.
+        if (room.statusId) room.statusId = '';
+        return true;
+      });
+    });
+    popup.appendChild(btn);
+  });
+
+  document.body.appendChild(popup);
+  setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
+}
+
+async function openCardSubstagePicker(event, contactId, roomIdx) {
+  event.stopPropagation();
+  if (!canEditPipeline()) return;
+  closeCardPicker();
+
+  const cached = state.contactStageCache?.[contactId] || [];
+  const room = cached[roomIdx] || {};
+  const stageKey = room.stageKey || '';
+  const stage = state.workflow?.stages?.[stageKey];
+  if (!stage?.statuses?.length) {
+    showToast('No substages available for this stage', true);
+    return;
+  }
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const popup = document.createElement('div');
+  popup.id = 'card-picker-popup';
+  popup.className = 'card-picker-popup';
+  const top = Math.min(rect.bottom + 4, window.innerHeight - 320);
+  popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
+
+  const currentSubId = room.statusId || '';
+
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'card-picker-opt card-picker-opt--clear' + (currentSubId ? '' : ' card-picker-opt--disabled');
+  clearBtn.textContent = '✕ Clear substage';
+  if (currentSubId) {
+    clearBtn.addEventListener('click', async () => {
+      closeCardPicker();
+      await _saveCardRoomMutation(contactId, rooms => {
+        const r = rooms[roomIdx];
+        if (!r) { showToast('Room no longer exists', true); return false; }
+        r.statusId = '';
+        if (r.completedStatuses) r.completedStatuses[stageKey] = [];
+        return true;
+      });
+    });
+  } else {
+    clearBtn.disabled = true;
+  }
+  popup.appendChild(clearBtn);
+
+  stage.statuses.forEach(s => {
+    const btn = document.createElement('button');
+    const isActive = s.id === currentSubId;
+    btn.className = 'card-picker-opt' + (isActive ? ' card-picker-opt--active' : '');
+    btn.textContent = s.label || s.id;
+    btn.addEventListener('click', async () => {
+      closeCardPicker();
+      if (s.id === currentSubId) return;
+      await _saveCardRoomMutation(contactId, rooms => {
+        const r = rooms[roomIdx];
+        if (!r) { showToast('Room no longer exists', true); return false; }
+        // Mark all statuses up to and including the selected one as complete
+        // so the card stays consistent with the customer-detail tick semantics.
+        const ids = (state.workflow?.stages?.[stageKey]?.statuses || []).map(x => x.id);
+        const cutoff = ids.indexOf(s.id);
+        const done = cutoff >= 0 ? ids.slice(0, cutoff + 1) : [s.id];
+        r.completedStatuses = r.completedStatuses || {};
+        r.completedStatuses[stageKey] = done;
+        r.statusId = s.id;
+        r.substateDates = r.substateDates || {};
+        r.substateDates[s.id] = r.substateDates[s.id] || todayISO();
+        return true;
+      });
+    });
+    popup.appendChild(btn);
+  });
+
+  document.body.appendChild(popup);
+  setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
 }
 
 // ── Contact Detail Edit ───────────────────────────────────────────────────────
