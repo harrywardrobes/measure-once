@@ -3907,6 +3907,14 @@ body.showing-workflow .sales-layout #workflow-panel {
   pointer-events: none;
 }
 
+@media (pointer: coarse) {
+  .eq-ls-pill {
+    min-height: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
+
 .sales-board {
   display: flex;
   flex-direction: column;
