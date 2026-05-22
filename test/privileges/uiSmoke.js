@@ -571,76 +571,84 @@ async function runUiSmoke({ users, runId, clients }) {
       let leadFilterOnPage2Text = '';
       let afterLeadFilterText = '';
       let leadFilterApplied = false;
+      let leadStatusProbeErr = null;
 
-      if (paginationEl2) {
-        // Return to page 1 first (in case we're not there after the stage-tab reset)
-        // then advance to page 2 so we have a clean starting point.
-        await page.evaluate(() => {
-          const prev = document.querySelector('#cl-prev-btn');
-          if (prev) prev.click();
-        }).catch(() => {});
+      try {
+        if (paginationEl2) {
+          // Return to page 1 first (in case we're not there after the stage-tab reset)
+          // then advance to page 2 so we have a clean starting point.
+          await page.evaluate(() => {
+            const prev = document.querySelector('#cl-prev-btn');
+            if (prev) prev.click();
+          }).catch(() => {});
 
-        // Advance to page 2
-        await page.click('#cl-next-btn').catch(() => {});
-        await page.waitForFunction(() => {
-          const info = document.querySelector('.cl-pagination-info');
-          return info && info.textContent.includes('26');
-        }, { timeout: 5000 }).catch(() => {});
-        leadFilterOnPage2Text = await page.$eval('.cl-pagination-info', el => el.textContent).catch(() => '');
-
-        // Change the lead-status select to a value different from the current one.
-        // Critical: choose an enabled (count > 0) option so the filtered list
-        // stays non-empty and pagination remains visible for the assertion.
-        //
-        // With the 26-contact mock (all hs_lead_status='OPEN_DEAL'):
-        //   - '' (All statuses)  → 26 contacts, enabled  ← starting value
-        //   - 'OPEN_DEAL'        → 26 contacts, enabled  ← target
-        //   - '__no_status__'    →  0 contacts, disabled ← must be skipped
-        //
-        // We pick the first enabled option with a non-empty value (i.e. not
-        // "All statuses"), falling back to injecting a synthetic 'OPEN_DEAL'
-        // option if the select has no enabled specific-status options.
-        const changed = await page.evaluate(() => {
-          const sel = document.querySelector('#lead-status-filter');
-          if (!sel) return false;
-
-          // Find first enabled option that isn't "All statuses" (value '').
-          const opts = Array.from(sel.options);
-          const target = opts.find(o => o.value !== '' && !o.disabled);
-          if (target) {
-            sel.value = target.value;
-          } else {
-            // Fallback: inject a synthetic OPEN_DEAL option that matches all
-            // mock contacts so the list stays non-empty after the filter change.
-            const opt = document.createElement('option');
-            opt.value = 'OPEN_DEAL';
-            opt.textContent = 'Open Deal (synthetic)';
-            sel.appendChild(opt);
-            sel.value = 'OPEN_DEAL';
-          }
-          // Fire the change event — triggers setLeadStatusFilter() which resets
-          // state.currentPage to 1 and calls renderCustomerList().
-          sel.dispatchEvent(new Event('change', { bubbles: true }));
-          return true;
-        }).catch(() => false);
-
-        if (changed) {
-          leadFilterApplied = true;
+          // Advance to page 2
+          await page.click('#cl-next-btn').catch(() => {});
           await page.waitForFunction(() => {
             const info = document.querySelector('.cl-pagination-info');
-            return info && /Showing 1[–\-]/.test(info.textContent);
-          }, { timeout: 8000 }).catch(() => {});
-          afterLeadFilterText = await page.$eval('.cl-pagination-info', el => el.textContent).catch(() => '');
+            return info && info.textContent.includes('26');
+          }, { timeout: 5000 }).catch(() => {});
+          leadFilterOnPage2Text = await page.$eval('.cl-pagination-info', el => el.textContent).catch(() => '');
+
+          // Change the lead-status select to a value different from the current one.
+          // Critical: choose an enabled (count > 0) option so the filtered list
+          // stays non-empty and pagination remains visible for the assertion.
+          //
+          // With the 26-contact mock (all hs_lead_status='OPEN_DEAL'):
+          //   - '' (All statuses)  → 26 contacts, enabled  ← starting value
+          //   - 'OPEN_DEAL'        → 26 contacts, enabled  ← target
+          //   - '__no_status__'    →  0 contacts, disabled ← must be skipped
+          //
+          // We pick the first enabled option with a non-empty value (i.e. not
+          // "All statuses"), falling back to injecting a synthetic 'OPEN_DEAL'
+          // option if the select has no enabled specific-status options.
+          const changed = await page.evaluate(() => {
+            const sel = document.querySelector('#lead-status-filter');
+            if (!sel) return false;
+
+            // Find first enabled option that isn't "All statuses" (value '').
+            const opts = Array.from(sel.options);
+            const target = opts.find(o => o.value !== '' && !o.disabled);
+            if (target) {
+              sel.value = target.value;
+            } else {
+              // Fallback: inject a synthetic OPEN_DEAL option that matches all
+              // mock contacts so the list stays non-empty after the filter change.
+              const opt = document.createElement('option');
+              opt.value = 'OPEN_DEAL';
+              opt.textContent = 'Open Deal (synthetic)';
+              sel.appendChild(opt);
+              sel.value = 'OPEN_DEAL';
+            }
+            // Fire the change event — triggers setLeadStatusFilter() which resets
+            // state.currentPage to 1 and calls renderCustomerList().
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+          }).catch(() => false);
+
+          if (changed) {
+            leadFilterApplied = true;
+            await page.waitForFunction(() => {
+              const info = document.querySelector('.cl-pagination-info');
+              return info && /Showing 1[–\-]/.test(info.textContent);
+            }, { timeout: 8000 }).catch(() => {});
+            afterLeadFilterText = await page.$eval('.cl-pagination-info', el => el.textContent).catch(() => '');
+          }
         }
+      } catch (e) {
+        leadStatusProbeErr = e;
+      } finally {
+        await safeShot(page, path.join(SCREENSHOT_DIR,
+          leadStatusProbeErr
+            ? `${runId}-lead-status-filter-reset-error.png`
+            : `${runId}-lead-status-filter-reset.png`));
       }
 
       record('lead-status filter change on page 2 resets customer list to page 1',
         'pagination info shows "Showing 1–" after lead-status dropdown change from page 2',
         `onPage2="${leadFilterOnPage2Text}" afterFilter="${afterLeadFilterText}" filterApplied=${leadFilterApplied}`,
         'medium',
-        /Showing 26/.test(leadFilterOnPage2Text) && /Showing 1[–\-]/.test(afterLeadFilterText));
-
-      await safeShot(page, path.join(SCREENSHOT_DIR, `${runId}-lead-status-filter-reset.png`));
+        !leadStatusProbeErr && /Showing 26/.test(leadFilterOnPage2Text) && /Showing 1[–\-]/.test(afterLeadFilterText));
 
       await page.close();
     } catch (e) {
