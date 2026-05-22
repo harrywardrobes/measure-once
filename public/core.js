@@ -92,6 +92,7 @@ const state = {
   allRooms: [],            // [{room, stageKey, statusId, comments, roomStatus}]
   workflowData: null,      // reference to allRooms[selectedRoomIdx]
   expandedStages: new Set(),
+  focusedStageKey: null,
   contactStageCache: {},   // contactId -> [{room, stageKey, roomStatus}]
   contactUrgencyCache: {}, // contactId -> 'red'|'orange'|null
   loadingContact: false,

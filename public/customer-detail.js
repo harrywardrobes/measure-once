@@ -202,6 +202,7 @@ async function _doSelectContact(contactId, roomIdx) {
   state.allRooms          = [];
   state.workflowData      = null;
   state.expandedStages    = new Set();
+  state.focusedStageKey   = null;
   state.tasks             = [];
   state.showAddTask       = false;
   state.addingRoom        = false;
@@ -322,6 +323,7 @@ async function _doSelectContact(contactId, roomIdx) {
     } catch (_) {}
     state.selectedRoomIdx = Math.min(resolvedRoomIdx, state.allRooms.length - 1);
     state.workflowData = state.allRooms[state.selectedRoomIdx];
+    state.focusedStageKey = state.workflowData?.stageKey || 'sales';
 
     updateRoomCache();
     renderCustomerList();
@@ -393,6 +395,7 @@ function _doSwitchRoom(idx) {
   state.selectedRoomIdx = idx;
   state.workflowData = state.allRooms[idx];
   state.expandedStages = new Set();
+  state.focusedStageKey = state.workflowData?.stageKey || 'sales';
   try { localStorage.setItem('customerRoomIdx_' + state.selectedContactId, String(idx)); } catch (_) {}
   renderFullWorkflowView();
   _restoreNoteDraftIfPresent();
@@ -480,12 +483,21 @@ function renderFullWorkflowView() {
     if (!target) return;
     const action = target.dataset.action;
     const key = target.dataset.key;
-    if (action === 'toggleStage' && key) {
-      toggleStage(key);
+    if (action === 'setFocusedStage' && key) {
+      state.focusedStageKey = key;
+      renderWorkflowStages();
+    } else if (action === 'focusPrevStage') {
+      const idx = STAGE_KEYS.indexOf(state.focusedStageKey || state.workflowData?.stageKey || 'sales');
+      if (idx > 0) { state.focusedStageKey = STAGE_KEYS[idx - 1]; renderWorkflowStages(); }
+    } else if (action === 'focusNextStage') {
+      const idx = STAGE_KEYS.indexOf(state.focusedStageKey || state.workflowData?.stageKey || 'sales');
+      if (idx < STAGE_KEYS.length - 1) { state.focusedStageKey = STAGE_KEYS[idx + 1]; renderWorkflowStages(); }
     } else if (action === 'setStatusChecked' && key) {
       setStatusChecked(key, target.dataset.statusId, target.dataset.checked === 'true');
     } else if (action === 'moveBackToStage' && key) {
       moveBackToStage(key);
+    } else if (action === 'advanceToStage' && key) {
+      advanceToStage(key);
     }
   });
   renderWorkflowHeader();
@@ -766,98 +778,182 @@ function _renderWorkflowStagesImpl() {
   if (!el || !state.workflow) return;
 
   const currentStageKey = state.workflowData?.stageKey || 'sales';
-  const currentStatusId = state.workflowData?.statusId;
   const currentStageIdx = STAGE_KEYS.indexOf(currentStageKey);
+
+  // Ensure focusedStageKey is initialised
+  if (!state.focusedStageKey) state.focusedStageKey = currentStageKey;
+  const focusedKey = state.focusedStageKey;
+  const focusedIdx = STAGE_KEYS.indexOf(focusedKey);
 
   const completedStatuses = state.workflowData?.completedStatuses || {};
 
-  const stagesHtml = Object.entries(state.workflow.stages).map(([key, stage], i) => {
-    const colour     = STAGE_COLOURS[i] || STAGE_COLOURS[0];
-    const isCurrent  = key === currentStageKey;
-    const isPast     = i < currentStageIdx;
-    const isFuture   = i > currentStageIdx;
-    const isExpanded = (isCurrent || state.expandedStages.has(key)) && !isFuture;
+  // ── Stepper row ─────────────────────────────────────────────────────────────
+  const stageEntries = Object.entries(state.workflow.stages);
+  const stepperItems = stageEntries.map(([key, stage], i) => {
+    const colour    = STAGE_COLOURS[i] || STAGE_COLOURS[0];
+    const isCurrent = key === currentStageKey;
+    const isPast    = i < currentStageIdx;
+    const isFuture  = i > currentStageIdx;
+    const isFocused = key === focusedKey;
 
-    const doneIds    = completedStatuses[key] || [];
-    const totalTasks = stage.statuses?.length || 0;
-    const doneTasks  = stage.statuses?.filter(s => doneIds.includes(s.id)).length || 0;
+    let iconHtml;
+    if (isPast) {
+      iconHtml = `<div class="stage-step-icon stage-step-done">
+        <svg width="9" height="7" fill="none" stroke="#fff" viewBox="0 0 12 10">
+          <polyline points="1,5 4.5,8.5 11,1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>`;
+    } else if (isCurrent) {
+      iconHtml = `<div class="stage-step-icon stage-step-current" style="background:${colour.bg};border-color:${colour.bg}">
+        <span style="display:block;width:6px;height:6px;border-radius:50%;background:#fff;flex-shrink:0"></span>
+      </div>`;
+    } else {
+      iconHtml = `<div class="stage-step-icon stage-step-future"></div>`;
+    }
 
-    const icon = isPast
-      ? `<svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:#059669">
-           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
-         </svg>`
-      : isCurrent
-        ? `<span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${colour.bg}"></span>`
-        : `<span class="w-3 h-3 rounded-full border-2 flex-shrink-0" style="border-color:var(--stone-deep)"></span>`;
+    return `<div class="stage-step ${isFocused ? 'stage-step-focused' : ''} ${!isFuture ? 'stage-step-clickable' : ''}"
+              ${!isFuture ? `data-action="setFocusedStage" data-key="${escHtml(key)}"` : ''}
+              title="${escHtml(stage.label)}">
+        ${iconHtml}
+        <div class="stage-step-label" style="${isCurrent ? `color:${colour.text};font-weight:700` : isFuture ? 'color:var(--stone-deep)' : 'color:var(--ink-3)'}">${escHtml(stage.label)}</div>
+        ${isFocused ? `<div class="stage-step-underline" style="background:${colour.bg}"></div>` : '<div class="stage-step-underline stage-step-underline-empty"></div>'}
+      </div>`;
+  });
 
-    const tasksHtml = isExpanded ? `
-      <div class="stage-statuses">
-        ${(stage.statuses || []).map(status => {
-          const done = doneIds.includes(status.id);
-          return `
-            <div class="status-task-row ${done ? 'status-task-done' : ''}"
-                 data-action="setStatusChecked" data-key="${escHtml(key)}" data-status-id="${escHtml(status.id)}" data-checked="${!done}">
-              <div class="status-task-check ${done ? 'status-task-check-done' : ''}"
-                   style="${done ? `background:${colour.bg};border-color:${colour.bg}` : ''}">
-                ${done ? `<svg width="10" height="8" fill="none" stroke="#fff" viewBox="0 0 12 10">
-                  <polyline points="1,5 4.5,8.5 11,1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>` : ''}
-              </div>
-              <div class="status-text">
-                <span class="status-label ${done ? 'status-label-done' : ''}">${escHtml(status.label)}</span>
-                ${status.hint ? `<span class="status-hint">${escHtml(status.hint)}</span>` : ''}
-              </div>
-            </div>
-          `;
-        }).join('')}
-        ${isPast ? `
-          <div style="padding:4px 0 4px;">
-            <button class="btn-move-back" data-action="moveBackToStage" data-key="${escHtml(key)}">← Set as current stage</button>
-          </div>
-        ` : ''}
-      </div>
-    ` : '';
+  // Interleave connectors between steps
+  const stepperHtml = stageEntries.map((_, i) =>
+    i < stageEntries.length - 1
+      ? stepperItems[i] + '<div class="stage-step-connector"></div>'
+      : stepperItems[i]
+  ).join('');
 
-    let cardClass = 'stage-card';
-    if (isCurrent) cardClass += ' stage-current';
-    else if (isPast) cardClass += ' stage-past';
-    else cardClass += ' stage-future';
+  // ── Focused stage detail panel ───────────────────────────────────────────────
+  const focusedStage  = state.workflow.stages[focusedKey];
+  const focusedColour = STAGE_COLOURS[focusedIdx] || STAGE_COLOURS[0];
+  const isFocusedCurrent = focusedKey === currentStageKey;
+  const isFocusedPast    = focusedIdx < currentStageIdx;
+  const isFocusedFuture  = focusedIdx > currentStageIdx;
 
-    return `
-      <div class="${cardClass}">
-        <div class="stage-header-row" ${isFuture ? '' : `data-action="toggleStage" data-key="${escHtml(key)}"`}
-             style="${isCurrent ? `border-left:3px solid ${colour.bg}` : 'border-left:3px solid transparent'}${isFuture ? ';cursor:default' : ''}">
-          <div class="flex items-center gap-3 min-w-0 flex-1">
-            ${icon}
-            <div class="min-w-0">
-              <div class="stage-label ${isCurrent ? 'font-semibold' : ''}"
-                   style="${isCurrent ? `color:${colour.text}` : ''}">${escHtml(stage.label)}</div>
-              ${isCurrent && totalTasks > 0 ? `<div class="stage-sublabel">${doneTasks} of ${totalTasks} tasks done</div>` : ''}
-              ${(isCurrent || isPast) && state.workflowData?.stageDates?.[key] ? `<div class="stage-date-entered">Entered ${formatShortDate(state.workflowData.stageDates[key])}</div>` : ''}
-            </div>
-          </div>
-          <div class="flex items-center gap-2 flex-shrink-0">
-            ${isCurrent ? `<span class="badge-current" style="background:${colour.light};color:${colour.text}">Current</span>` : ''}
-            ${isPast    ? `<span class="badge-done">Done</span>` : ''}
-            ${!isFuture ? `<svg class="w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}"
-                 style="color:var(--stone-deep)" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>` : ''}
-          </div>
+  const doneIds    = completedStatuses[focusedKey] || [];
+  const totalTasks = focusedStage?.statuses?.length || 0;
+  const doneTasks  = focusedStage?.statuses?.filter(s => doneIds.includes(s.id)).length || 0;
+  const allDone    = totalTasks > 0 && doneTasks === totalTasks;
+  const entryDate  = state.workflowData?.stageDates?.[focusedKey];
+
+  // Task rows
+  const tasksHtml = (focusedStage?.statuses || []).map(status => {
+    const done = doneIds.includes(status.id);
+    if (isFocusedFuture) {
+      return `<div class="status-task-row" style="opacity:0.4;cursor:default;pointer-events:none">
+        <div class="status-task-check"></div>
+        <div class="status-text">
+          <span class="status-label">${escHtml(status.label)}</span>
+          ${status.hint ? `<span class="status-hint">${escHtml(status.hint)}</span>` : ''}
         </div>
-        ${tasksHtml}
+      </div>`;
+    }
+    return `<div class="status-task-row ${done ? 'status-task-done' : ''}"
+         data-action="setStatusChecked" data-key="${escHtml(focusedKey)}" data-status-id="${escHtml(status.id)}" data-checked="${!done}">
+      <div class="status-task-check ${done ? 'status-task-check-done' : ''}"
+           style="${done ? `background:${focusedColour.bg};border-color:${focusedColour.bg}` : ''}">
+        ${done ? `<svg width="10" height="8" fill="none" stroke="#fff" viewBox="0 0 12 10">
+          <polyline points="1,5 4.5,8.5 11,1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>` : ''}
       </div>
-    `;
+      <div class="status-text">
+        <span class="status-label ${done ? 'status-label-done' : ''}">${escHtml(status.label)}</span>
+        ${status.hint ? `<span class="status-hint">${escHtml(status.hint)}</span>` : ''}
+      </div>
+    </div>`;
   }).join('');
 
-  el.innerHTML = stagesHtml;
+  // Lead status row — only in the Sales panel
+  let leadStatusRowHtml = '';
+  if (focusedKey === 'sales') {
+    const contact  = state.selectedContact;
+    const cid      = contact?.id || '';
+    const raw      = contact?.properties?.hs_lead_status || '';
+    const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+    const CSS_CLASS_MAP = {
+      'OPEN_DEAL': 'lsb-open-deal', 'NEW': 'lsb-new', 'IN_PROGRESS': 'lsb-in-progress',
+      'OPEN': 'lsb-new', 'CONNECTED': 'lsb-connected', 'ATTEMPTED_TO_CONTACT': '',
+      'UNQUALIFIED': 'lsb-unqualified', 'BAD_TIMING': 'lsb-bad-timing',
+    };
+    let lsLabel, lsCls;
+    if (!raw) {
+      lsLabel = nullLabel; lsCls = 'lsb-empty';
+    } else {
+      const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
+      lsLabel = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+      lsCls = CSS_CLASS_MAP[raw] || '';
+    }
+    leadStatusRowHtml = `<div class="stage-lead-status-row">
+      <span class="stage-lead-status-label">HubSpot status</span>
+      <span class="lead-status-badge ${lsCls} ${raw ? 'lsb-clickable' : 'lsb-empty'}"
+            title="${raw ? 'Change lead status' : 'Set lead status'}"
+            onclick="openLeadStatusPicker(event,'${escHtml(cid)}')">${escHtml(lsLabel)}</span>
+    </div>`;
+  }
+
+  // Action buttons
+  let actionHtml = '';
+  if (!isFocusedFuture && !isViewerOnly()) {
+    if (isFocusedCurrent) {
+      const nextKey = STAGE_KEYS[focusedIdx + 1];
+      if (nextKey && allDone) {
+        const nextLabel = state.workflow.stages[nextKey]?.label || nextKey;
+        actionHtml = `<button class="stage-advance-btn" data-action="advanceToStage" data-key="${escHtml(nextKey)}"
+                style="background:${focusedColour.bg}">
+          Advance to ${escHtml(nextLabel)} →
+        </button>`;
+      }
+    } else if (isFocusedPast) {
+      actionHtml = `<button class="btn-move-back stage-move-back-btn" data-action="moveBackToStage" data-key="${escHtml(focusedKey)}">
+        ← Set as current stage
+      </button>`;
+    }
+  }
+
+  const hasPrev = focusedIdx > 0;
+  const hasNext = focusedIdx < STAGE_KEYS.length - 1;
+
+  el.innerHTML = `
+    <div class="stage-stepper-wrap">
+      <div class="stage-stepper-row">${stepperHtml}</div>
+    </div>
+    <div class="stage-panel" style="border-top:3px solid ${focusedColour.bg}">
+      <div class="stage-panel-header">
+        <div class="stage-panel-title-block">
+          <div class="stage-panel-name" style="color:${isFocusedFuture ? 'var(--ink-3)' : focusedColour.text}">${escHtml(focusedStage?.label || focusedKey)}</div>
+          <div class="stage-panel-meta">
+            ${totalTasks > 0 ? `<span class="stage-sublabel">${doneTasks} of ${totalTasks} tasks done</span>` : ''}
+            ${entryDate && !isFocusedFuture ? `<span class="stage-date-entered">${totalTasks > 0 ? ' · ' : ''}Entered ${formatShortDate(entryDate)}</span>` : ''}
+            ${isFocusedFuture ? `<span class="stage-date-entered">Not started yet</span>` : ''}
+          </div>
+        </div>
+        <div class="stage-panel-nav">
+          <button class="stage-nav-btn" ${!hasPrev ? 'disabled' : ''} data-action="focusPrevStage" title="Previous stage">
+            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <button class="stage-nav-btn" ${!hasNext ? 'disabled' : ''} data-action="focusNextStage" title="Next stage">
+            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      ${totalTasks > 0 ? `<div class="stage-statuses">${tasksHtml}</div>` : ''}
+      ${leadStatusRowHtml}
+      ${actionHtml ? `<div class="stage-panel-actions">${actionHtml}</div>` : ''}
+    </div>
+  `;
 }
 
-function toggleStage(key) {
-  if (state.expandedStages.has(key)) state.expandedStages.delete(key);
-  else state.expandedStages.add(key);
-  renderWorkflowStages();
-}
+// toggleStage is no longer used by the stepper UI but kept as a safe no-op
+// in case any external call path references it.
+function toggleStage(_key) {}
 
 // ── Tick off sub-tasks (auto-advances stage when all done) ────────────────────
 function setStatusChecked(stageKey, statusId, checked) {
@@ -884,6 +980,7 @@ function setStatusChecked(stageKey, statusId, checked) {
     if (stageIdx < currentIdx) {
       state.workflowData.stageKey = stageKey;
       state.expandedStages = new Set([stageKey]);
+      state.focusedStageKey = stageKey;
       updateRoomCache();
       renderCustomerList();
       renderProjectsView();
@@ -911,6 +1008,7 @@ function setStatusChecked(stageKey, statusId, checked) {
         state.workflowData.stageKey = nextKey;
         recordStageDate(state.workflowData, nextKey);
         state.expandedStages = new Set();
+        state.focusedStageKey = nextKey;
         updateRoomCache();
         renderCustomerList();
         renderProjectsView();
@@ -930,6 +1028,7 @@ function moveBackToStage(stageKey) {
   const snapshot = JSON.parse(JSON.stringify(state.allRooms));
   state.workflowData.stageKey = stageKey;
   state.expandedStages = new Set([stageKey]);
+  state.focusedStageKey = stageKey;
   updateRoomCache();
   renderCustomerList();
   renderProjectsView();
@@ -937,6 +1036,23 @@ function moveBackToStage(stageKey) {
   renderWorkflowHeader();
   const label = state.workflow?.stages?.[stageKey]?.label || stageKey;
   scheduleSave(`Moved back to ${label}`, snapshot);
+}
+
+// ── Advance to a specific stage (explicit button action) ──────────────────────
+function advanceToStage(nextKey) {
+  if (!state.workflowData) return;
+  const snapshot = JSON.parse(JSON.stringify(state.allRooms));
+  state.workflowData.stageKey = nextKey;
+  recordStageDate(state.workflowData, nextKey);
+  state.expandedStages = new Set();
+  state.focusedStageKey = nextKey;
+  updateRoomCache();
+  renderCustomerList();
+  renderProjectsView();
+  renderWorkflowStages();
+  renderWorkflowHeader();
+  const label = state.workflow?.stages?.[nextKey]?.label || nextKey;
+  scheduleSave(`Advanced to ${label}`, snapshot);
 }
 
 // ── Save Workflow Data ────────────────────────────────────────────────────────
