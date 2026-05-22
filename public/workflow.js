@@ -147,19 +147,35 @@ function buildListItems() {
     }
 
     const cached = state.contactStageCache[contact.id];
+    let rooms;
     if (cached && cached.length > 0) {
-      cached.forEach((r, idx) => {
+      const filtered = [];
+      for (let idx = 0; idx < cached.length; idx++) {
+        const r = cached[idx];
         const roomStatus = r.roomStatus || 'active';
-        if (roomStatus !== 'active' && !state.showArchived) return;
-        if (state.stageFilter && r.stageKey !== state.stageFilter) return;
-        items.push({ contact, roomIdx: idx, roomName: r.room, stageKey: r.stageKey, roomStatus });
-      });
+        if (roomStatus !== 'active' && !state.showArchived) continue;
+        if (state.stageFilter && r.stageKey !== state.stageFilter) continue;
+        filtered.push({ room: r.room || 'Main', stageKey: r.stageKey || 'sales', roomStatus, roomIdx: idx });
+      }
+      if (filtered.length === 0) continue;
+      rooms = filtered;
     } else {
       // No local data yet — default to Sales
       if (!state.stageFilter || state.stageFilter === 'sales') {
-        items.push({ contact, roomIdx: 0, roomName: null, stageKey: 'sales', roomStatus: 'active' });
+        rooms = [{ room: null, stageKey: 'sales', roomStatus: 'active', roomIdx: 0 }];
+      } else {
+        continue;
       }
     }
+
+    // Representative stage for sorting: most advanced (lowest STAGE_KEYS index)
+    const sortStageKey = rooms.reduce((best, r) => {
+      const bi = STAGE_KEYS.indexOf(best);
+      const ri = STAGE_KEYS.indexOf(r.stageKey);
+      return (bi === -1 || (ri !== -1 && ri < bi)) ? r.stageKey : best;
+    }, rooms[0].stageKey);
+
+    items.push({ contact, rooms, sortStageKey });
   }
 
   const sortBy = state.sortBy || 'newest';
@@ -171,8 +187,8 @@ function buildListItems() {
       return contactName(b.contact).localeCompare(contactName(a.contact));
     }
     if (sortBy === 'stage') {
-      const ai = STAGE_KEYS.indexOf(a.stageKey);
-      const bi = STAGE_KEYS.indexOf(b.stageKey);
+      const ai = STAGE_KEYS.indexOf(a.sortStageKey);
+      const bi = STAGE_KEYS.indexOf(b.sortStageKey);
       return ai - bi;
     }
     // 'newest' — sort by createdate descending (most recent first)
@@ -315,17 +331,16 @@ function _renderCustomerListImpl() {
   if (!items.length) {
     bodyHtml = `<p class="projects-empty-msg">No customers match</p>`;
   } else {
-    bodyHtml = items.map(({ contact, roomIdx, roomName, stageKey, roomStatus }) => {
+    bodyHtml = items.map(({ contact, rooms }) => {
       const name        = contactName(contact);
       const email       = contact.properties?.email || '';
+      const phone       = contact.properties?.phone || '';
+      const hsId        = contact.id || '';
       const customerNum = contact.properties?.customer_number || '';
-      const colour      = stageColour(stageKey || 'sales');
-      const stageLabel  = stageKey ? (state.workflow?.stages?.[stageKey]?.label || stageKey) : 'Sales';
-      const isSelected  = contact.id === state.selectedContactId && roomIdx === state.selectedRoomIdx;
+      const isSelected  = contact.id === state.selectedContactId;
       const urgency     = state.contactUrgencyCache[contact.id];
-      const isArchived  = roomStatus !== 'active';
-      const multiRoom   = (state.contactStageCache[contact.id]?.length || 0) > 1;
-      const displayName = (multiRoom && roomName && roomName !== 'Main') ? `${name} — ${roomName}` : name;
+      const allArchived = rooms.every(r => r.roomStatus !== 'active');
+      const multiRoom   = rooms.length > 1;
 
       const urgencyDot = urgency === 'red'
         ? `<span class="urgency-dot urgency-red" title="Urgent: task due within 1 working day" aria-label="Urgent"></span>`
@@ -333,16 +348,15 @@ function _renderCustomerListImpl() {
           ? `<span class="urgency-dot urgency-orange" title="Task due within 2 working days" aria-label="Task due soon"></span>`
           : '';
 
-      const qbInvs       = matchInvoicesForContact(contact);
-      const qbTotal      = qbInvs.reduce((s, inv) => s + inv.balance, 0);
-      const qbInvIdsAttr = escHtml(JSON.stringify(qbInvs.map(inv => inv.id)));
-      const qbBadge      = qbInvs.length > 0
-        ? `<button class="qb-badge" title="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}" data-inv-ids="${qbInvIdsAttr}" onclick="event.stopPropagation();openInvoicePanelFromBadge(this)">£${qbTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</button>`
-        : '';
-
-      const customerNumBadge = customerNum
-        ? `<span class="customer-num-badge" title="Customer number">${escHtml(customerNum)}</span>`
-        : '';
+      // One stage pill per room, all inline; include room name if multi-room
+      const stagePills = rooms.map(r => {
+        const colour     = stageColour(r.stageKey || 'sales');
+        const stageLabel = r.stageKey ? (state.workflow?.stages?.[r.stageKey]?.label || r.stageKey) : 'Sales';
+        const pillText   = multiRoom && r.room && r.room !== 'Main'
+          ? `${stageLabel} — ${r.room}` : stageLabel;
+        const archivedStyle = r.roomStatus !== 'active' ? 'opacity:0.55;' : '';
+        return `<span class="stage-pill" style="background:${colour.light};color:${colour.text};${archivedStyle}">${escHtml(pillText)}</span>`;
+      }).join('');
 
       const leadStatusBadge = (() => {
         const raw = contact.properties?.hs_lead_status || '';
@@ -361,31 +375,43 @@ function _renderCustomerListImpl() {
         return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(label)}</span>`;
       })();
 
-      const secondaryBadges = [
-        email ? `<span class="customer-list-email">${escHtml(email)}</span>` : '',
-        leadStatusBadge, qbBadge, customerNumBadge,
+      const qbInvs       = matchInvoicesForContact(contact);
+      const qbTotal      = qbInvs.reduce((s, inv) => s + inv.balance, 0);
+      const qbInvIdsAttr = escHtml(JSON.stringify(qbInvs.map(inv => inv.id)));
+      const qbBadge      = qbInvs.length > 0
+        ? `<button class="qb-badge" title="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}" data-inv-ids="${qbInvIdsAttr}" onclick="event.stopPropagation();openInvoicePanelFromBadge(this)">£${qbTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</button>`
+        : '';
+
+      const customerNumBadge = customerNum
+        ? `<span class="customer-num-badge" title="Customer number">${escHtml(customerNum)}</span>`
+        : '';
+
+      const footerBadges = [
+        email       ? `<span class="cl-badge cl-badge-email" title="Email">${escHtml(email)}</span>` : '',
+        phone       ? `<span class="cl-badge cl-badge-phone" title="Phone">${escHtml(phone)}</span>` : '',
+        hsId        ? `<span class="cl-badge cl-badge-hsid" title="HubSpot contact ID">${escHtml(hsId)}</span>` : '',
+        qbBadge,
+        customerNumBadge,
       ].filter(Boolean).join('');
 
       return `
-        <div class="customer-project-card${isSelected ? ' customer-project-card-selected' : ''}${isArchived ? ' card-archived' : ''}"
-             data-contact-id="${contact.id}" data-room-idx="${roomIdx}"
+        <div class="customer-project-card${isSelected ? ' customer-project-card-selected' : ''}${allArchived ? ' card-archived' : ''}"
+             data-contact-id="${contact.id}"
              role="button" tabindex="0"
              aria-current="${isSelected ? 'true' : 'false'}"
-             aria-label="Open customer ${escHtml(displayName)}"
+             aria-label="Open customer ${escHtml(name)}"
              onclick="goToCustomer(this.dataset.contactId)"
              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goToCustomer(this.dataset.contactId);}">
-          <div class="customer-project-header">
-            <div class="customer-project-name-row">
-              <div class="customer-project-name">${urgencyDot}${escHtml(displayName)}</div>
+          <div class="cl-card-main">
+            <div class="cl-card-name-row">
+              ${urgencyDot}<span class="cl-card-name">${escHtml(name)}</span>
+            </div>
+            <div class="cl-card-pills">
+              ${stagePills}
+              ${leadStatusBadge}
             </div>
           </div>
-          <div class="project-room-list">
-            <div class="project-room-row" data-contact-id="${contact.id}" data-room-idx="${roomIdx}">
-              <span class="project-room-row-name">${escHtml(roomName || 'Main')}</span>
-              <span class="stage-pill" style="background:${colour.light};color:${colour.text}">${escHtml(stageLabel)}</span>
-            </div>
-          </div>
-          ${secondaryBadges ? `<div class="project-card-invoices customer-list-secondary">${secondaryBadges}</div>` : ''}
+          ${footerBadges ? `<div class="cl-card-footer">${footerBadges}</div>` : ''}
         </div>`;
     }).join('');
   }
