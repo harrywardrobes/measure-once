@@ -285,6 +285,7 @@ async function loadContactsPage({ page = 1, leadStatus = '', sort = 'newest' } =
   const qs = new URLSearchParams({ page, limit: 25 });
   if (leadStatus) qs.set('leadStatus', leadStatus);
   if (sort && sort !== 'newest') qs.set('sort', sort);
+  if (state.searchQuery) qs.set('q', state.searchQuery);
   const data = await GET(`/api/contacts-all?${qs}`);
   state.contacts = data.results || [];
   state.currentPage = data.page || page;
@@ -446,11 +447,18 @@ function applySearchFilter(contacts) {
     : [...contacts];
 }
 
+let _customersReloader = null;
+function registerCustomersReloader(fn) { _customersReloader = fn; }
+
 function _filterDealsImpl(query) {
   state.searchQuery = query || '';
-  state.filteredContacts = applySearchFilter(state.contacts);
-  state.currentPage = 1;
-  renderCustomerList();
+  if (state.contactsViewMode === 'all' && _customersReloader) {
+    _customersReloader();
+  } else {
+    state.filteredContacts = applySearchFilter(state.contacts);
+    state.currentPage = 1;
+    renderCustomerList();
+  }
 }
 
 function setStageFilter(value) {

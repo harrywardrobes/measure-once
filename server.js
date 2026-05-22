@@ -589,6 +589,7 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     const limit      = Math.min(100, Math.max(1, parseInt(req.query.limit || '25', 10)));
     const leadStatus = req.query.leadStatus || '';
     const sort       = req.query.sort || 'newest';
+    const q          = (req.query.q || '').trim().toLowerCase();
 
     const sortComparators = {
       'newest':    (a, b) => (b.properties.createdate || '').localeCompare(a.properties.createdate || ''),
@@ -606,6 +607,16 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
       } else {
         contacts = contacts.filter(c => c.properties?.hs_lead_status === leadStatus);
       }
+    }
+
+    if (q) {
+      contacts = contacts.filter(c => {
+        const first = (c.properties?.firstname || '').toLowerCase();
+        const last  = (c.properties?.lastname  || '').toLowerCase();
+        const email = (c.properties?.email     || '').toLowerCase();
+        const phone = (c.properties?.phone     || '').toLowerCase();
+        return `${first} ${last}`.includes(q) || first.includes(q) || last.includes(q) || email.includes(q) || phone.includes(q);
+      });
     }
 
     contacts = [...contacts].sort(comparator);

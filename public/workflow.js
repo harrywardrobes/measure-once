@@ -616,6 +616,7 @@ function _customersLoadAndRender({ page, fetchCounts = false } = {}) {
     .then(() => renderCustomerList())
     .catch(() => {});
 }
+registerCustomersReloader(() => _customersLoadAndRender({ page: 1 }));
 
 // ── Quick Card Actions ────────────────────────────────────────────────────────
 
