@@ -3522,7 +3522,7 @@ async function getWabaId() {
   return _wabaId;
 }
 
-app.get('/api/whatsapp/templates', isAuthenticated, requirePrivilege('member'), requireWhatsAppConfig, async (req, res) => {
+app.get('/api/whatsapp/templates', isAuthenticated, requireAdmin, requireWhatsAppConfig, async (req, res) => {
   try {
     const wabaId = await getWabaId();
     if (!wabaId) return res.json([]);
@@ -3557,7 +3557,7 @@ app.get('/api/whatsapp/templates', isAuthenticated, requirePrivilege('member'), 
   }
 });
 
-app.post('/api/whatsapp/send', isAuthenticated, requirePrivilege('member'), requireWhatsAppConfig, whatsappSendLimiter, async (req, res) => {
+app.post('/api/whatsapp/send', isAuthenticated, requireAdmin, requireWhatsAppConfig, whatsappSendLimiter, async (req, res) => {
   const { contactPhone, contactId, mode, templateName, templateLanguage, templateParams, message } = req.body;
 
   if (!contactPhone || typeof contactPhone !== 'string') {
@@ -3567,6 +3567,36 @@ app.post('/api/whatsapp/send', isAuthenticated, requirePrivilege('member'), requ
   const digitsOnly = contactPhone.replace(/[^\d]/g, '');
   if (!digitsOnly || digitsOnly.length < 7) {
     return res.status(400).json({ error: 'Invalid phone number.' });
+  }
+
+  // contactId is required — we must be able to verify the phone belongs to this contact
+  if (!contactId || !/^\d+$/.test(String(contactId))) {
+    return res.status(400).json({ error: 'contactId is required and must be numeric.' });
+  }
+  const safeContactId = String(contactId);
+
+  // Verify the supplied phone number matches the contact's phone in HubSpot
+  // to prevent sending to arbitrary numbers or poisoning the audit log
+  if (!process.env.HUBSPOT_ACCESS_TOKEN) {
+    return res.status(503).json({ error: 'HubSpot is not configured — cannot verify contact phone number.' });
+  }
+  try {
+    const hsContact = await axios.get(`${HS}/crm/v3/objects/contacts/${encodeURIComponent(safeContactId)}`, {
+      headers: hsHeaders(),
+      params: { properties: 'phone,mobilephone' },
+    });
+    const hsPhone       = (hsContact.data?.properties?.phone       || '').replace(/[^\d]/g, '');
+    const hsMobilePhone = (hsContact.data?.properties?.mobilephone || '').replace(/[^\d]/g, '');
+    const phoneMatches  = (hsPhone && hsPhone === digitsOnly) || (hsMobilePhone && hsMobilePhone === digitsOnly);
+    if (!phoneMatches) {
+      return res.status(403).json({ error: 'The supplied phone number does not match this contact\'s phone on record.' });
+    }
+  } catch (e) {
+    const status = e.response?.status;
+    if (status === 404) return res.status(404).json({ error: 'Contact not found in HubSpot.' });
+    if (status === 401 || status === 403) return res.status(502).json({ error: 'HubSpot rejected the request — check the token.' });
+    console.error('WhatsApp send — HubSpot contact lookup error:', e.response?.data || e.message);
+    return res.status(502).json({ error: 'Could not verify contact phone number with HubSpot.' });
   }
 
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -3616,18 +3646,16 @@ app.post('/api/whatsapp/send', isAuthenticated, requirePrivilege('member'), requ
       }
     );
 
-    if (contactId && /^\d+$/.test(String(contactId))) {
-      const messageText = mode === 'freeform' ? (message || '').trim() : null;
-      const tplName = mode === 'template' ? (templateName || null) : null;
-      const tplParams = (mode === 'template' && Array.isArray(templateParams) && templateParams.length > 0)
-        ? JSON.stringify(templateParams.map(v => String(v)))
-        : null;
-      pool.query(
-        `INSERT INTO whatsapp_messages (contact_id, sender_user_id, mode, template_name, template_params, message_text)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [String(contactId), req.user.id, mode, tplName, tplParams, messageText]
-      ).catch(e => console.error('whatsapp_messages insert error:', e.message));
-    }
+    const messageText = mode === 'freeform' ? (message || '').trim() : null;
+    const tplName = mode === 'template' ? (templateName || null) : null;
+    const tplParams = (mode === 'template' && Array.isArray(templateParams) && templateParams.length > 0)
+      ? JSON.stringify(templateParams.map(v => String(v)))
+      : null;
+    pool.query(
+      `INSERT INTO whatsapp_messages (contact_id, sender_user_id, mode, template_name, template_params, message_text)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [safeContactId, req.user.id, mode, tplName, tplParams, messageText]
+    ).catch(e => console.error('whatsapp_messages insert error:', e.message));
 
     res.json({ ok: true });
   } catch (e) {
@@ -3668,7 +3696,7 @@ async function ensureWhatsAppMessagesTable() {
   await pool.query(`CREATE INDEX IF NOT EXISTS whatsapp_messages_contact_idx ON whatsapp_messages(contact_id, sent_at DESC)`);
 }
 
-app.get('/api/whatsapp/history/:contactId', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+app.get('/api/whatsapp/history/:contactId', isAuthenticated, requireAdmin, async (req, res) => {
   const { contactId } = req.params;
   if (!contactId || !/^\d+$/.test(contactId)) {
     return res.status(400).json({ error: 'Invalid contactId.' });
