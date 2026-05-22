@@ -370,6 +370,42 @@ function stageActionLabelLookup(stageKey, statusKey) {
   return STAGE_ACTION_LABEL_MAP[`${s}|${k}`] || '';
 }
 
+// ── Lead sub-statuses ────────────────────────────────────────────────────────
+// Per (lead_status, sub-status) action labels. Surfaced on contacts via the
+// HubSpot `hw_lead_substatus` enumeration property whose option values are
+// namespaced as `${STATUS_KEY}__${SUBSTATUS_KEY}`. Keys here are uppercase
+// to match HubSpot's lead-status convention.
+let LEAD_SUBSTATUSES = [];
+let LEAD_SUBSTATUS_ACTION_MAP = {}; // `${STATUS_KEY}|${SUBSTATUS_KEY}` → action_label
+
+function substatusActionLabelLookup(statusKey, hwSubstatusValue) {
+  if (!statusKey || !hwSubstatusValue) return '';
+  const sk = String(statusKey).toUpperCase();
+  const v  = String(hwSubstatusValue).toUpperCase();
+  const expectedPrefix = `${sk}__`;
+  if (!v.startsWith(expectedPrefix)) return ''; // belongs to a different lead status
+  const subKey = v.slice(expectedPrefix.length);
+  return LEAD_SUBSTATUS_ACTION_MAP[`${sk}|${subKey}`] || '';
+}
+
+async function loadLeadSubstatuses() {
+  try {
+    const rows = await GET('/api/lead-substatuses');
+    if (Array.isArray(rows)) {
+      LEAD_SUBSTATUSES = rows;
+      const m = {};
+      for (const r of rows) {
+        if (!r.action_label) continue;
+        const k = `${String(r.status_key).toUpperCase()}|${String(r.substatus_key).toUpperCase()}`;
+        m[k] = r.action_label;
+      }
+      LEAD_SUBSTATUS_ACTION_MAP = m;
+    }
+  } catch (e) {
+    console.warn('Could not load lead sub-statuses:', e.message);
+  }
+}
+
 async function loadStageActionLabels() {
   try {
     const rows = await GET('/api/stage-action-labels');
@@ -433,6 +469,15 @@ if (typeof BroadcastChannel !== 'undefined') {
   const _sacChannel = new BroadcastChannel('stage_action_labels_changed');
   _sacChannel.addEventListener('message', () => {
     loadStageActionLabels().then(() => {
+      if (typeof renderCustomerList === 'function') renderCustomerList();
+      if (typeof renderEnquiryList   === 'function') renderEnquiryList();
+      if (typeof renderSurveyList    === 'function') renderSurveyList();
+    });
+  });
+
+  const _subChannel = new BroadcastChannel('lead_substatuses_changed');
+  _subChannel.addEventListener('message', () => {
+    loadLeadSubstatuses().then(() => {
       if (typeof renderCustomerList === 'function') renderCustomerList();
       if (typeof renderEnquiryList   === 'function') renderEnquiryList();
       if (typeof renderSurveyList    === 'function') renderSurveyList();

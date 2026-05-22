@@ -172,11 +172,20 @@ function _svCardHtml(entry) {
   const sourceHtml = sourceId && SURVEY_SOURCE_LABELS[sourceId]
     ? `<span class="eq-card-source-pill">${escHtml(SURVEY_SOURCE_LABELS[sourceId])}</span>` : '';
 
-  // Fully admin-configurable via the admin Card actions tab. When no mapping
-  // exists for this (stage, status) the action strip is omitted entirely.
-  const actionLabel = (typeof stageActionLabelLookup === 'function')
-    ? stageActionLabelLookup(SURVEY_STAGE_KEY, substageId)
-    : '';
+  // Fully admin-configurable via the admin Card actions tab.
+  //   1. HubSpot hw_lead_substatus → matching sub-status action label.
+  //   2. Stage/substage default mapping.
+  //   3. '' → action strip omitted entirely.
+  let actionLabel = '';
+  if (typeof substatusActionLabelLookup === 'function') {
+    actionLabel = substatusActionLabelLookup(
+      contact.properties?.hs_lead_status,
+      contact.properties?.hw_lead_substatus,
+    );
+  }
+  if (!actionLabel && typeof stageActionLabelLookup === 'function') {
+    actionLabel = stageActionLabelLookup(SURVEY_STAGE_KEY, substageId);
+  }
   const actionHtml = (isTerminal || !actionLabel) ? '' : `
     <div class="eq-card-action" style="background:${SURVEY_ACTION_TINT}">
       <span class="eq-card-action-label" style="color:${SURVEY_ACTION_TEXT}">${escHtml(actionLabel)}</span>

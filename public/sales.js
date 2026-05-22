@@ -424,9 +424,17 @@ function _eqRgb(hex) {
 }
 
 // ── Next action label ─────────────────────────────────────────────────────────
-// Fully admin-configurable via the admin Card actions tab. Returns '' when no
-// mapping exists, in which case the action strip is omitted entirely.
-function nextActionLabel(stageKey, substageId) {
+// Fully admin-configurable via the admin Card actions tab.
+//   1. If the contact has a HubSpot `hw_lead_substatus` set that matches a
+//      sub-status configured under its current lead status → use that
+//      sub-status's action label.
+//   2. Otherwise fall back to the (stage, substage) default mapping.
+//   3. Otherwise '' → no strip is rendered.
+function nextActionLabel(stageKey, substageId, leadStatusKey, hwSubstatusValue) {
+  if (typeof substatusActionLabelLookup === 'function') {
+    const fromSub = substatusActionLabelLookup(leadStatusKey, hwSubstatusValue);
+    if (fromSub) return fromSub;
+  }
   if (typeof stageActionLabelLookup === 'function') {
     return stageActionLabelLookup(stageKey, substageId) || '';
   }
@@ -500,7 +508,11 @@ function enquiryRowHtml(entry) {
   const sourceHtml = sourceId && SOURCE_LABELS[sourceId]
     ? `<span class="eq-card-source-pill">${escHtml(SOURCE_LABELS[sourceId])}</span>` : '';
 
-  const next = isTerminal ? '' : nextActionLabel(stageKey, substageId);
+  const next = isTerminal ? '' : nextActionLabel(
+    stageKey, substageId,
+    contact.properties?.hs_lead_status,
+    contact.properties?.hw_lead_substatus,
+  );
   const actionTint = STAGE_TINT[stageKey] || '#f3f4f6';
   const actionText = STAGE_ACTION_TEXT[stageKey] || '#374151';
   const actionHtml = next ? `

@@ -239,7 +239,7 @@ let _allContactsCache = null;     // { contacts: [...], expiresAt }
 let _allContactsInflight = null;  // Promise while a scan is running
 
 const ALL_CONTACTS_PROPERTIES = [
-  'firstname', 'lastname', 'email', 'phone', 'hs_lead_status',
+  'firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'hw_lead_substatus',
   'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate',
   'measure_once_rooms'
 ];
@@ -3024,6 +3024,235 @@ app.delete('/api/admin/stage-action-labels/:stage_key/:status_key', isAuthentica
   }
 });
 
+// ── Lead sub-statuses (per lead_status, synced to HubSpot hw_lead_substatus) ──
+// Each lead status can have any number of sub-statuses, each with its own
+// action label. Sub-statuses are surfaced on the HubSpot contact via the
+// `hw_lead_substatus` enumeration property (single-select radio). Option
+// values are namespaced as `${STATUS_KEY}__${SUBSTATUS_KEY}` so the single
+// HubSpot dropdown can list options for every parent lead status without
+// collisions.
+async function ensureLeadSubstatusesTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS lead_substatuses (
+      id            SERIAL PRIMARY KEY,
+      status_key    TEXT NOT NULL,
+      substatus_key TEXT NOT NULL,
+      label         TEXT NOT NULL,
+      action_label  TEXT NOT NULL DEFAULT '',
+      sort_order    INT  NOT NULL DEFAULT 0,
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (status_key, substatus_key)
+    )
+  `);
+}
+
+// Create the `hw_lead_substatus` HubSpot property if it doesn't already exist.
+// HubSpot rejects enumeration property creation with an empty options array,
+// so seed with a hidden placeholder; real options arrive via
+// syncLeadSubstatusesToHubSpot() immediately after.
+async function ensureHwLeadSubstatusProperty() {
+  if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
+  try {
+    await axios.get(
+      `${HS}/crm/v3/properties/contacts/hw_lead_substatus`,
+      { headers: hsHeaders() }
+    );
+    return; // already exists
+  } catch (e) {
+    if (e.response?.status !== 404) {
+      console.warn('  hw_lead_substatus probe failed:', e.response?.data?.message || e.message);
+      return;
+    }
+  }
+  try {
+    await axios.post(
+      `${HS}/crm/v3/properties/contacts`,
+      {
+        name:        'hw_lead_substatus',
+        label:       'HW Lead Sub-Status',
+        groupName:   'contactinformation',
+        type:        'enumeration',
+        fieldType:   'radio',
+        description: 'Sub-status within the current Lead Status (Measure Once CRM). Options are namespaced as STATUS_KEY__SUBSTATUS_KEY.',
+        options: [{ value: '__placeholder__', label: '—', displayOrder: 0, hidden: true }],
+      },
+      { headers: hsHeaders() }
+    );
+    console.log('  Created HubSpot property: hw_lead_substatus');
+  } catch (e) {
+    console.warn('  Could not create hw_lead_substatus:', e.response?.data?.message || e.message);
+  }
+}
+
+// Push the full lead_substatuses table to HubSpot as hw_lead_substatus options.
+// Option label is `{Lead Status label} → {Sub-status label}` so the dropdown
+// reads naturally in HubSpot. Called after every create / update / delete.
+async function syncLeadSubstatusesToHubSpot() {
+  if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
+  const { rows } = await pool.query(`
+    SELECT s.status_key, s.substatus_key, s.label AS sub_label, s.sort_order AS sub_order,
+           c.label AS ls_label, c.sort_order AS ls_order
+    FROM lead_substatuses s
+    LEFT JOIN lead_status_config c ON c.key = s.status_key
+    ORDER BY COALESCE(c.sort_order, 9999) ASC, s.status_key ASC,
+             s.sort_order ASC, s.substatus_key ASC
+  `);
+  const options = rows.map((r, i) => ({
+    value:        `${r.status_key}__${r.substatus_key}`,
+    label:        `${r.ls_label || r.status_key} → ${r.sub_label}`,
+    displayOrder: i,
+    hidden:       false,
+  }));
+  // HubSpot requires at least one option on the property; keep a hidden
+  // placeholder when the table is empty so the property stays valid.
+  if (!options.length) {
+    options.push({ value: '__placeholder__', label: '—', displayOrder: 0, hidden: true });
+  }
+  await axios.patch(
+    `${HS}/crm/v3/properties/contacts/hw_lead_substatus`,
+    { options },
+    { headers: hsHeaders() }
+  );
+}
+
+const _SUBSTATUS_KEY_RE = /^[A-Z0-9_]{1,64}$/;
+
+function _validateSubstatusBody(body, { partial = false } = {}) {
+  const out = {};
+  if (body.status_key !== undefined || !partial) {
+    const k = String(body.status_key || '').trim().toUpperCase();
+    if (!_SUBSTATUS_KEY_RE.test(k)) return { error: 'status_key must be 1–64 uppercase letters, digits, or underscores.' };
+    out.status_key = k;
+  }
+  if (body.substatus_key !== undefined || !partial) {
+    const k = String(body.substatus_key || '').trim().toUpperCase();
+    if (!_SUBSTATUS_KEY_RE.test(k)) return { error: 'substatus_key must be 1–64 uppercase letters, digits, or underscores.' };
+    out.substatus_key = k;
+  }
+  if (body.label !== undefined || !partial) {
+    const v = String(body.label || '').trim();
+    if (!v) return { error: 'label cannot be empty.' };
+    if (v.length > 128) return { error: 'label must be 128 characters or fewer.' };
+    out.label = v;
+  }
+  if (body.action_label !== undefined) {
+    const v = String(body.action_label || '').trim();
+    if (v.length > 128) return { error: 'action_label must be 128 characters or fewer.' };
+    out.action_label = v;
+  }
+  if (body.sort_order !== undefined) {
+    const n = parseInt(body.sort_order, 10);
+    if (Number.isNaN(n)) return { error: 'sort_order must be an integer.' };
+    out.sort_order = n;
+  }
+  return { value: out };
+}
+
+// Authenticated read — used by the Sales/Survey card render to look up the
+// action label for a contact's hw_lead_substatus value.
+app.get('/api/lead-substatuses', isAuthenticated, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, status_key, substatus_key, label, action_label, sort_order
+       FROM lead_substatuses
+       ORDER BY status_key ASC, sort_order ASC, substatus_key ASC`
+    );
+    res.set('Cache-Control', 'no-store');
+    res.json(rows);
+  } catch (e) {
+    console.error('GET /api/lead-substatuses error:', e.message);
+    res.status(500).json({ error: 'Could not load lead sub-statuses.' });
+  }
+});
+
+app.get('/api/admin/lead-substatuses', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, status_key, substatus_key, label, action_label, sort_order, updated_at
+       FROM lead_substatuses
+       ORDER BY status_key ASC, sort_order ASC, substatus_key ASC`
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error('GET /api/admin/lead-substatuses error:', e.message);
+    res.status(500).json({ error: 'Could not load lead sub-statuses.' });
+  }
+});
+
+app.post('/api/admin/lead-substatuses', isAuthenticated, requireAdmin, async (req, res) => {
+  const { error, value } = _validateSubstatusBody(req.body || {});
+  if (error) return res.status(400).json({ error });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, status_key, substatus_key, label, action_label, sort_order, updated_at`,
+      [value.status_key, value.substatus_key, value.label, value.action_label || '', value.sort_order ?? 0]
+    );
+    syncLeadSubstatusesToHubSpot().catch(e =>
+      console.warn('  hw_lead_substatus sync failed after create:', e.response?.data?.message || e.message)
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    if (e.code === '23505') {
+      return res.status(409).json({ error: 'A sub-status with that key already exists for this lead status.' });
+    }
+    console.error('POST /api/admin/lead-substatuses error:', e.message);
+    res.status(500).json({ error: 'Could not create sub-status.' });
+  }
+});
+
+app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id.' });
+  const { error, value } = _validateSubstatusBody(req.body || {}, { partial: true });
+  if (error) return res.status(400).json({ error });
+  if (!Object.keys(value).length) return res.status(400).json({ error: 'No fields to update.' });
+
+  const sets = [];
+  const params = [];
+  for (const [col, v] of Object.entries(value)) {
+    params.push(v);
+    sets.push(`${col} = $${params.length}`);
+  }
+  sets.push(`updated_at = NOW()`);
+  params.push(id);
+  try {
+    const { rows } = await pool.query(
+      `UPDATE lead_substatuses SET ${sets.join(', ')} WHERE id = $${params.length}
+       RETURNING id, status_key, substatus_key, label, action_label, sort_order, updated_at`,
+      params
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Sub-status not found.' });
+    syncLeadSubstatusesToHubSpot().catch(e =>
+      console.warn('  hw_lead_substatus sync failed after update:', e.response?.data?.message || e.message)
+    );
+    res.json(rows[0]);
+  } catch (e) {
+    if (e.code === '23505') {
+      return res.status(409).json({ error: 'A sub-status with that key already exists for this lead status.' });
+    }
+    console.error('PATCH /api/admin/lead-substatuses error:', e.message);
+    res.status(500).json({ error: 'Could not update sub-status.' });
+  }
+});
+
+app.delete('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id.' });
+  try {
+    const r = await pool.query('DELETE FROM lead_substatuses WHERE id = $1', [id]);
+    if (!r.rowCount) return res.status(404).json({ error: 'Sub-status not found.' });
+    syncLeadSubstatusesToHubSpot().catch(e =>
+      console.warn('  hw_lead_substatus sync failed after delete:', e.response?.data?.message || e.message)
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /api/admin/lead-substatuses error:', e.message);
+    res.status(500).json({ error: 'Could not delete sub-status.' });
+  }
+});
+
 // ── WhatsApp config probe (no creds needed — just reports if configured) ──────
 app.get('/api/whatsapp/config', isAuthenticated, (req, res) => {
   res.json({
@@ -3319,6 +3548,12 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Stage action labels table setup failed:', e.message); }
     try { await seedStageActionLabelsDefaults(); console.log('  Stage action labels defaults seeded'); }
     catch (e) { console.error('  Stage action labels seed failed:', e.message); }
+    try { await ensureLeadSubstatusesTable(); console.log('  Lead sub-statuses table ready'); }
+    catch (e) { console.error('  Lead sub-statuses table setup failed:', e.message); }
+    try { await ensureHwLeadSubstatusProperty(); console.log('  hw_lead_substatus HubSpot property ready'); }
+    catch (e) { console.error('  hw_lead_substatus property setup failed:', e.message); }
+    try { await syncLeadSubstatusesToHubSpot(); console.log('  hw_lead_substatus options synced'); }
+    catch (e) { console.warn('  hw_lead_substatus sync skipped:', e.response?.data?.message || e.message); }
     try { await ensureSearchSettingsTable(); console.log('  Search settings table ready'); }
     catch (e) { console.error('  Search settings table setup failed:', e.message); }
     try { await ensureWhatsAppMessagesTable(); console.log('  WhatsApp messages table ready'); }

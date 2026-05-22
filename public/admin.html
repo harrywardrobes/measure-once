@@ -1670,152 +1670,368 @@
     if (!wrap) return;
     _cardActionsEverLoaded = true;
     try {
-      // Always fetch both fresh so a rename / reorder in the Lead Statuses tab
-      // is immediately reflected here, even within the same browser session.
-      const [labels, statuses] = await Promise.all([
+      // Always fetch all three fresh so a rename / reorder in the Lead
+      // Statuses tab is immediately reflected here, and any sub-status created
+      // in another tab shows up on re-open.
+      const [labels, statuses, substatuses] = await Promise.all([
         api('GET', '/api/admin/stage-action-labels'),
         api('GET', '/api/admin/lead-statuses'),
+        api('GET', '/api/admin/lead-substatuses'),
       ]);
-      _cardActionsData    = Array.isArray(labels)   ? labels   : [];
-      _leadStatusesData   = Array.isArray(statuses) ? statuses : _leadStatusesData;
-      _leadStatusesLoaded = true;
+      _cardActionsData     = Array.isArray(labels)      ? labels      : [];
+      _leadStatusesData    = Array.isArray(statuses)    ? statuses    : _leadStatusesData;
+      _cardSubstatusesData = Array.isArray(substatuses) ? substatuses : [];
+      _leadStatusesLoaded  = true;
+      _pendingSubstatusDeletes = new Set();
+      _newSubstatusCounter = 0;
       renderCardActionsTable();
     } catch (e) {
       wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load card actions: ${esc(e.message)}</p>`;
     }
   }
 
+  // Sub-status state. _cardSubstatusesData holds the server's view; the DOM
+  // is the source of truth for unsaved edits / additions. Deletions are
+  // tracked in _pendingSubstatusDeletes (set of numeric ids) so Save can DELETE
+  // them after the user confirms. New (unsaved) rows have no data-sub-id but
+  // do have data-sub-new="1".
+  let _cardSubstatusesData     = [];
+  let _pendingSubstatusDeletes = new Set();
+  let _newSubstatusCounter     = 0;
+
   function _stageLabelFor(key) {
     const s = CARD_ACTION_STAGES.find(x => x.key === key);
     return s ? s.label : key;
   }
 
-  // Build the ordered list of (stage, status) rows the table should render.
-  // Ordering rules:
-  //   1. Stages appear in the order they first appear in _leadStatusesData
-  //      (i.e. mirrors the Lead Statuses table's global sort order).
-  //   2. Within each stage, the "(no status)" row appears first, then the
-  //      lead statuses in their sort_order.
-  //   3. Stages with no lead statuses yet still appear (just the "(no status)"
-  //      row), in CARD_ACTION_STAGES declaration order.
-  function _buildCardActionRows() {
+  // Build a structured model: stages in lead-status order, each containing a
+  // "no lead status" default row and a list of lead statuses (each with its
+  // own default-label row + sub-status rows).
+  function _buildCardActionsModel() {
     const labelByKey = {};
     for (const r of _cardActionsData) {
       labelByKey[`${r.stage_key}|${r.status_key}`] = r.label;
     }
+    const subsByLs = {};
+    for (const s of _cardSubstatusesData) {
+      const k = String(s.status_key).toUpperCase();
+      (subsByLs[k] = subsByLs[k] || []).push(s);
+    }
 
-    const stagesSeen = new Set();
-    const ordered    = [];
-    const real       = (_leadStatusesData || []).filter(s => !s.is_null_row);
+    const stages = [];
+    const seen   = new Set();
+    const real   = (_leadStatusesData || []).filter(s => !s.is_null_row);
+
+    function ensureStage(stageKey) {
+      if (seen.has(stageKey)) return stages.find(s => s.key === stageKey);
+      seen.add(stageKey);
+      const stage = {
+        key:           stageKey,
+        label:         _stageLabelFor(stageKey),
+        noStatusLabel: labelByKey[`${stageKey}|`] || '',
+        statuses:      [],
+      };
+      stages.push(stage);
+      return stage;
+    }
 
     for (const s of real) {
       const stageKey = CARD_ACTION_LS_STAGE_TO_KEY[s.stage];
       if (!stageKey) continue;
-      if (!stagesSeen.has(stageKey)) {
-        stagesSeen.add(stageKey);
-        const k = `${stageKey}|`;
-        ordered.push({ stage_key: stageKey, status_key: '', label: labelByKey[k] || '' });
-      }
-      const statusKey = String(s.key || '').toLowerCase();
-      const k = `${stageKey}|${statusKey}`;
-      ordered.push({
-        stage_key:    stageKey,
-        status_key:   statusKey,
-        status_label: s.label,
-        label:        labelByKey[k] || '',
+      const stage     = ensureStage(stageKey);
+      const statusKey = String(s.key || '');
+      stage.statuses.push({
+        key:          statusKey,
+        label:        s.label,
+        defaultLabel: labelByKey[`${stageKey}|${statusKey.toLowerCase()}`] || '',
+        substatuses:  (subsByLs[statusKey.toUpperCase()] || []).slice()
+                        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
       });
     }
+    // Stages with no lead statuses yet still get their "no status" row.
+    for (const cs of CARD_ACTION_STAGES) ensureStage(cs.key);
 
-    // Stages with no lead statuses configured yet still get their "(no status)"
-    // row so admins can pre-populate a label.
-    for (const cs of CARD_ACTION_STAGES) {
-      if (stagesSeen.has(cs.key)) continue;
-      const k = `${cs.key}|`;
-      ordered.push({ stage_key: cs.key, status_key: '', label: labelByKey[k] || '' });
-    }
-
-    return ordered;
+    return stages;
   }
 
   function renderCardActionsTable() {
     const wrap = document.getElementById('card-actions-table-wrap');
     if (!wrap) return;
-    const rows = _buildCardActionRows();
-    if (!rows.length) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">No card-stage lead statuses configured yet.</p>`;
-      return;
-    }
-    wrap.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
-        <thead>
-          <tr style="border-bottom:1px solid var(--border);">
-            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Stage</th>
-            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Lead status</th>
-            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Action label</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.map((r, i) => {
-            const statusCell = r.status_key
-              ? `<span style="color:var(--ink-2);">${esc(r.status_label || r.status_key)}</span>
-                 <span style="font-family:monospace;color:var(--ink-4);font-size:.72rem;margin-left:6px;">(${esc(r.status_key)})</span>`
-              : '<em style="color:var(--ink-4);">— none —</em>';
-            return `
-            <tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? '' : 'background:var(--stone-soft);'}"
-                data-ca-stage="${esc(r.stage_key)}" data-ca-status="${esc(r.status_key)}"
-                data-ca-original="${esc(r.label)}">
-              <td style="padding:7px 8px;">${esc(_stageLabelFor(r.stage_key))}</td>
-              <td style="padding:7px 8px;font-size:.78rem;">${statusCell}</td>
-              <td style="padding:7px 8px;">
-                <input type="text" class="field ca-label-input" value="${esc(r.label)}" maxlength="128"
-                  placeholder="(no label — strip will be hidden)"
-                  style="padding:4px 7px;font-size:.82rem;width:100%;min-width:160px;"
-                  onkeydown="if(event.key==='Enter')this.blur()">
-              </td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    `;
+    const stages = _buildCardActionsModel();
+
+    wrap.innerHTML = stages.map(stage => `
+      <section style="margin-bottom:22px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+        <header style="padding:10px 14px;background:var(--stone-soft);border-bottom:1px solid var(--border);font-weight:600;font-size:.85rem;color:var(--ink-2);">
+          ${esc(stage.label)}
+        </header>
+
+        <!-- Stage default (no lead status) -->
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+          <div style="flex:0 0 220px;font-size:.78rem;color:var(--ink-3);">
+            <em>No lead status</em>
+            <div style="font-size:.7rem;color:var(--ink-4);margin-top:2px;">Default action label when contact has no <code>hs_lead_status</code>.</div>
+          </div>
+          <input type="text" class="field ca-default-input" maxlength="128"
+            data-kind="stage-default" data-stage="${esc(stage.key)}"
+            data-original="${esc(stage.noStatusLabel)}"
+            value="${esc(stage.noStatusLabel)}"
+            placeholder="(no label — strip hidden)"
+            style="flex:1;padding:5px 8px;font-size:.82rem;"
+            onkeydown="if(event.key==='Enter')this.blur()">
+        </div>
+
+        ${stage.statuses.length === 0 ? `
+          <div style="padding:14px;font-size:.78rem;color:var(--ink-4);"><em>No lead statuses configured for this stage yet.</em></div>
+        ` : stage.statuses.map(ls => `
+          <div data-ls-block="${esc(ls.key)}" style="padding:12px 14px;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">
+              <strong style="font-size:.85rem;color:var(--ink-1);">${esc(ls.label)}</strong>
+              <span style="font-family:monospace;font-size:.7rem;color:var(--ink-4);">${esc(ls.key)}</span>
+            </div>
+
+            <!-- Lead-status default row -->
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+              <div style="flex:0 0 220px;font-size:.78rem;color:var(--ink-3);">Default action label</div>
+              <input type="text" class="field ca-default-input" maxlength="128"
+                data-kind="ls-default" data-stage="${esc(stage.key)}" data-status="${esc(ls.key.toLowerCase())}"
+                data-original="${esc(ls.defaultLabel)}"
+                value="${esc(ls.defaultLabel)}"
+                placeholder="(used when no sub-status set)"
+                style="flex:1;padding:5px 8px;font-size:.82rem;"
+                onkeydown="if(event.key==='Enter')this.blur()">
+            </div>
+
+            <!-- Sub-statuses -->
+            <div data-sub-list="${esc(ls.key)}" style="margin-top:8px;">
+              ${ls.substatuses.map(sub => _renderSubstatusRow(ls.key, sub)).join('')}
+            </div>
+
+            <div style="margin-top:8px;">
+              <button class="btn btn-ghost" style="padding:4px 10px;font-size:.74rem;"
+                onclick="addCardActionSubstatus('${esc(ls.key)}')">+ Add sub-status</button>
+            </div>
+          </div>
+        `).join('')}
+      </section>
+    `).join('');
   }
 
-  // Sweep every input in the table and PUT each one whose value differs from
-  // the row's original value. Empty values are skipped (the server requires
-  // a non-empty label); if you need to clear a label, change it to something
-  // meaningful instead. Mirrors the "Save all" pattern used by Lead Statuses.
+  function _renderSubstatusRow(lsKey, sub) {
+    // Existing row: data-sub-id is the DB id and inputs carry originals so Save
+    // only PATCHes when something changed.
+    const id           = sub.id;
+    const subKey       = sub.substatus_key || '';
+    const subLabel     = sub.label || '';
+    const subAction    = sub.action_label || '';
+    return `
+      <div class="ca-sub-row" data-sub-id="${esc(id)}" data-sub-ls="${esc(lsKey)}"
+           data-orig-key="${esc(subKey)}" data-orig-label="${esc(subLabel)}" data-orig-action="${esc(subAction)}"
+           style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px dashed var(--border);">
+        <input type="text" class="field ca-sub-key" maxlength="64"
+          value="${esc(subKey)}"
+          placeholder="KEY"
+          style="flex:0 0 140px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;">
+        <input type="text" class="field ca-sub-label" maxlength="128"
+          value="${esc(subLabel)}"
+          placeholder="Display label"
+          style="flex:1;padding:4px 7px;font-size:.78rem;">
+        <input type="text" class="field ca-sub-action" maxlength="128"
+          value="${esc(subAction)}"
+          placeholder="Action label"
+          style="flex:1;padding:4px 7px;font-size:.78rem;">
+        <button class="btn btn-ghost" style="padding:3px 9px;font-size:.74rem;color:#991b1b;"
+          onclick="deleteCardActionSubstatus(this)">Delete</button>
+      </div>`;
+  }
+
+  // Append an empty sub-status row to the named lead status block. New rows
+  // have data-sub-new="1" and no data-sub-id so Save knows to POST them.
+  function addCardActionSubstatus(lsKey) {
+    const list = document.querySelector(`[data-sub-list="${CSS.escape(lsKey)}"]`);
+    if (!list) return;
+    _newSubstatusCounter++;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = `
+      <div class="ca-sub-row" data-sub-new="1" data-sub-ls="${esc(lsKey)}"
+           data-orig-key="" data-orig-label="" data-orig-action=""
+           style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px dashed var(--border);background:#fffbeb;">
+        <input type="text" class="field ca-sub-key" maxlength="64"
+          placeholder="KEY"
+          style="flex:0 0 140px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;">
+        <input type="text" class="field ca-sub-label" maxlength="128"
+          placeholder="Display label"
+          style="flex:1;padding:4px 7px;font-size:.78rem;">
+        <input type="text" class="field ca-sub-action" maxlength="128"
+          placeholder="Action label"
+          style="flex:1;padding:4px 7px;font-size:.78rem;">
+        <button class="btn btn-ghost" style="padding:3px 9px;font-size:.74rem;color:#991b1b;"
+          onclick="deleteCardActionSubstatus(this)">Delete</button>
+      </div>`;
+    list.appendChild(tmp.firstElementChild);
+  }
+
+  // Delete a sub-status row. New (unsaved) rows just vanish; existing rows are
+  // queued for deletion on next Save.
+  function deleteCardActionSubstatus(btn) {
+    const row = btn.closest('.ca-sub-row');
+    if (!row) return;
+    if (row.dataset.subNew) {
+      row.remove();
+      return;
+    }
+    const id = parseInt(row.dataset.subId, 10);
+    if (!Number.isInteger(id)) { row.remove(); return; }
+    if (!confirm('Delete this sub-status? It will also be removed from HubSpot on Save.')) return;
+    _pendingSubstatusDeletes.add(id);
+    row.style.opacity   = '0.4';
+    row.style.background = '#fee2e2';
+    row.querySelectorAll('input,button').forEach(el => { el.disabled = true; });
+    // Re-enable the delete button so users can undo their queued deletion.
+    const undoBtn = document.createElement('button');
+    undoBtn.className = 'btn btn-ghost';
+    undoBtn.style.cssText = 'padding:3px 9px;font-size:.74rem;';
+    undoBtn.textContent = 'Undo';
+    undoBtn.onclick = () => {
+      _pendingSubstatusDeletes.delete(id);
+      row.style.opacity = '';
+      row.style.background = '';
+      row.querySelectorAll('input').forEach(el => { el.disabled = false; });
+      undoBtn.replaceWith(btn);
+      btn.disabled = false;
+    };
+    btn.replaceWith(undoBtn);
+  }
+
+  // Save sweeps every dirty row, in order:
+  //   1. stage-default + ls-default inputs → PUT /api/admin/stage-action-labels
+  //   2. existing sub-status rows with changes → PATCH /api/admin/lead-substatuses/:id
+  //   3. new sub-status rows → POST /api/admin/lead-substatuses
+  //   4. queued deletes → DELETE /api/admin/lead-substatuses/:id
   async function saveAllCardActionLabels() {
-    const rows = document.querySelectorAll('#card-actions-table-wrap tr[data-ca-stage]');
-    const changed = [];
-    rows.forEach(row => {
-      const stage    = row.dataset.caStage;
-      const status   = row.dataset.caStatus;
-      const original = row.dataset.caOriginal || '';
-      const input    = row.querySelector('.ca-label-input');
-      if (!input) return;
-      const value = input.value.trim();
-      if (!value)             return; // skip empty (cannot persist empty label)
-      if (value === original) return; // unchanged
-      changed.push({ stage, status, value, original, input });
-    });
-    if (!changed.length) { toast('No changes to save.'); return; }
     let saved = 0, failed = 0;
-    for (const { stage, status, value, original, input } of changed) {
+    const failures = [];
+
+    // 1) Stage / lead-status default labels.
+    const defaultInputs = document.querySelectorAll('#card-actions-table-wrap .ca-default-input');
+    for (const input of defaultInputs) {
+      const value    = input.value.trim();
+      const original = input.dataset.original || '';
+      if (!value || value === original) continue;
+      const payload = input.dataset.kind === 'stage-default'
+        ? { stage_key: input.dataset.stage, status_key: '',                       label: value }
+        : { stage_key: input.dataset.stage, status_key: input.dataset.status,     label: value };
       try {
-        await api('PUT', '/api/admin/stage-action-labels', {
-          stage_key: stage, status_key: status, label: value,
-        });
-        input.closest('tr').dataset.caOriginal = value;
+        await api('PUT', '/api/admin/stage-action-labels', payload);
+        input.dataset.original = value;
         saved++;
       } catch (e) {
         input.value = original;
         failed++;
+        failures.push(`default (${input.dataset.stage}/${input.dataset.status || '—'}): ${e.message || 'error'}`);
       }
     }
-    if (failed) toast(`Saved ${saved}, failed ${failed}.`, true);
-    else        toast(`${saved} change${saved !== 1 ? 's' : ''} saved.`);
+
+    // 2) + 3) Sub-status rows.
+    const subRows = document.querySelectorAll('#card-actions-table-wrap .ca-sub-row');
+    for (const row of subRows) {
+      const isNew = !!row.dataset.subNew;
+      const idStr = row.dataset.subId;
+      // Skip rows queued for delete — handled below.
+      if (!isNew && _pendingSubstatusDeletes.has(parseInt(idStr, 10))) continue;
+
+      const lsKey      = row.dataset.subLs;
+      const keyInput   = row.querySelector('.ca-sub-key');
+      const labelInput = row.querySelector('.ca-sub-label');
+      const actInput   = row.querySelector('.ca-sub-action');
+      const subKey     = keyInput.value.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+      const label      = labelInput.value.trim();
+      const action     = actInput.value.trim();
+
+      if (isNew) {
+        if (!subKey || !label) {
+          if (subKey || label || action) {
+            failed++;
+            failures.push(`new sub-status (${lsKey}): key and display label are required.`);
+          }
+          continue;
+        }
+        try {
+          const created = await api('POST', '/api/admin/lead-substatuses', {
+            status_key:    lsKey,
+            substatus_key: subKey,
+            label, action_label: action, sort_order: 0,
+          });
+          // Convert the row into a saved row in place.
+          row.removeAttribute('data-sub-new');
+          row.style.background = '';
+          row.dataset.subId      = created.id;
+          row.dataset.origKey    = created.substatus_key;
+          row.dataset.origLabel  = created.label;
+          row.dataset.origAction = created.action_label || '';
+          keyInput.value = created.substatus_key;
+          saved++;
+        } catch (e) {
+          failed++;
+          failures.push(`new sub-status (${lsKey}/${subKey}): ${e.message || 'error'}`);
+        }
+      } else {
+        const origKey    = row.dataset.origKey    || '';
+        const origLabel  = row.dataset.origLabel  || '';
+        const origAction = row.dataset.origAction || '';
+        const patch = {};
+        if (subKey  !== origKey)    patch.substatus_key = subKey;
+        if (label   !== origLabel)  patch.label         = label;
+        if (action  !== origAction) patch.action_label  = action;
+        if (!Object.keys(patch).length) continue;
+        if (patch.label === '') { failed++; failures.push(`sub-status #${idStr}: label cannot be empty.`); continue; }
+        try {
+          const updated = await api('PATCH', `/api/admin/lead-substatuses/${idStr}`, patch);
+          row.dataset.origKey    = updated.substatus_key;
+          row.dataset.origLabel  = updated.label;
+          row.dataset.origAction = updated.action_label || '';
+          keyInput.value = updated.substatus_key;
+          saved++;
+        } catch (e) {
+          failed++;
+          failures.push(`sub-status #${idStr}: ${e.message || 'error'}`);
+        }
+      }
+    }
+
+    // 4) Deletes.
+    for (const id of Array.from(_pendingSubstatusDeletes)) {
+      try {
+        await api('DELETE', `/api/admin/lead-substatuses/${id}`);
+        _pendingSubstatusDeletes.delete(id);
+        const row = document.querySelector(`.ca-sub-row[data-sub-id="${id}"]`);
+        if (row) row.remove();
+        saved++;
+      } catch (e) {
+        failed++;
+        failures.push(`delete sub-status #${id}: ${e.message || 'error'}`);
+      }
+    }
+
+    if (saved === 0 && failed === 0) { toast('No changes to save.'); return; }
+    if (failed) {
+      console.warn('Card actions save: some changes failed', failures);
+      toast(`Saved ${saved}, failed ${failed}.`, true);
+    } else {
+      toast(`${saved} change${saved !== 1 ? 's' : ''} saved.`);
+    }
+
     _broadcastCardActionsChanged();
-    // Refresh the in-memory copy so a follow-up Save doesn't re-send.
-    try { _cardActionsData = await api('GET', '/api/admin/stage-action-labels'); } catch (_) {}
+    try { new BroadcastChannel('lead_substatuses_changed').postMessage({ ts: Date.now() }); } catch (_) {}
+
+    // Refresh in-memory copies so a follow-up Save doesn't re-send.
+    try {
+      const [labels, subs] = await Promise.all([
+        api('GET', '/api/admin/stage-action-labels'),
+        api('GET', '/api/admin/lead-substatuses'),
+      ]);
+      _cardActionsData     = Array.isArray(labels) ? labels : _cardActionsData;
+      _cardSubstatusesData = Array.isArray(subs)   ? subs   : _cardSubstatusesData;
+    } catch (_) {}
   }
 
   // Cross-tab sync: when the Lead Statuses panel is changed in another tab,
@@ -1830,8 +2046,10 @@
 
   // Expose handlers used from inline onclick handlers + the lead-status
   // notify hook.
-  window.loadCardActionsAdmin    = loadCardActionsAdmin;
-  window.saveAllCardActionLabels = saveAllCardActionLabels;
+  window.loadCardActionsAdmin       = loadCardActionsAdmin;
+  window.saveAllCardActionLabels    = saveAllCardActionLabels;
+  window.addCardActionSubstatus     = addCardActionSubstatus;
+  window.deleteCardActionSubstatus  = deleteCardActionSubstatus;
 
   async function loadLeadStatusesAdmin() {
     if (_leadStatusesLoaded) return;
