@@ -71,8 +71,8 @@ jobs:
       - name: Install npm dependencies
         run: npm ci --legacy-peer-deps
 
-      - name: Run privilege test suite
-        run: npm run test:privileges
+      - name: Run privilege and lead-status-sync test suites
+        run: npm run test:ci
         env:
           # Re-declare so they are visible at this step even if inherited env
           # is not forwarded (belt-and-suspenders for some GHA runners).
@@ -85,13 +85,14 @@ jobs:
           PRIVTEST_USE_HUBSPOT_TOKEN: "1"
           HUBSPOT_TOKEN: ${{ secrets.HUBSPOT_TOKEN }}
 
-      - name: Upload test report
+      - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: privilege-test-report
           path: |
             test-results/privileges.md
+            test-results/lead-status-sync.md
             test-results/screenshots/
           if-no-files-found: ignore
           retention-days: 30
