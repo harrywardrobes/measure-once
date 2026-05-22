@@ -4869,6 +4869,63 @@ details[open] .trades-history-summary::before { transform: rotate(90deg); }
   opacity: 0.35;
   cursor: default;
 }
+.cl-pagination-btn--active {
+  background: var(--orchid);
+  border-color: var(--orchid);
+  color: #fff;
+  cursor: default;
+}
+.cl-pagination-btn--active:hover {
+  background: var(--orchid);
+  border-color: var(--orchid);
+  color: #fff;
+}
+.cl-pagination-ellipsis {
+  font-size: 0.75rem;
+  color: var(--ink-3);
+  line-height: 1;
+  padding: 0 2px;
+  display: flex;
+  align-items: center;
+  user-select: none;
+}
+.cl-pagination-jump {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.cl-pagination-jump-label {
+  font-size: 0.72rem;
+  color: var(--ink-3);
+  white-space: nowrap;
+  font-weight: 500;
+}
+.cl-pagination-jump-input {
+  width: 44px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 4px 6px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-1);
+  text-align: center;
+  line-height: 1.4;
+  -moz-appearance: textfield;
+}
+.cl-pagination-jump-input::-webkit-inner-spin-button,
+.cl-pagination-jump-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.cl-pagination-jump-input:focus {
+  outline: none;
+  border-color: var(--orchid);
+}
+.cl-pagination-jump-btn {
+  padding: 4px 10px;
+}
 
 /* ── Ideas & Feedback ─────────────────────────────────────────────────────────── */
 .ideas-page-wrap {

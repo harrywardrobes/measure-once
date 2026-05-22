@@ -395,15 +395,39 @@ function _renderCustomerListImpl() {
   if (totalPages > 1) {
     const rangeStart = totalItems === 0 ? 0 : pageStart + 1;
     const rangeEnd   = Math.min(pageStart + PAGE_SIZE, totalItems);
-    const prevDisabled = state.currentPage <= 1            ? ' disabled' : '';
-    const nextDisabled = state.currentPage >= totalPages   ? ' disabled' : '';
+    const prevDisabled = state.currentPage <= 1          ? ' disabled' : '';
+    const nextDisabled = state.currentPage >= totalPages ? ' disabled' : '';
+
+    // Build the set of page numbers to show (windowed with ellipsis)
+    const pageNums = new Set([1, totalPages]);
+    for (let p = state.currentPage - 1; p <= state.currentPage + 1; p++) {
+      if (p >= 1 && p <= totalPages) pageNums.add(p);
+    }
+    const sortedPages = Array.from(pageNums).sort((a, b) => a - b);
+    let pageButtonsHtml = '';
+    let prev = 0;
+    for (const p of sortedPages) {
+      if (p - prev > 1) {
+        pageButtonsHtml += `<span class="cl-pagination-ellipsis">…</span>`;
+      }
+      const active = p === state.currentPage ? ' cl-pagination-btn--active' : '';
+      pageButtonsHtml += `<button class="cl-pagination-btn cl-pagination-page${active}" data-page="${p}" aria-label="Page ${p}" aria-current="${p === state.currentPage ? 'page' : 'false'}">${p}</button>`;
+      prev = p;
+    }
+
     paginationHtml = `
       <div class="cl-pagination">
         <span class="cl-pagination-info">Showing ${rangeStart}–${rangeEnd} of ${totalItems}</span>
         <div class="cl-pagination-btns">
           <button class="cl-pagination-btn" id="cl-prev-btn"${prevDisabled} aria-label="Previous page">← Prev</button>
+          ${pageButtonsHtml}
           <button class="cl-pagination-btn" id="cl-next-btn"${nextDisabled} aria-label="Next page">Next →</button>
         </div>
+        <form class="cl-pagination-jump" id="cl-jump-form" aria-label="Jump to page">
+          <label class="cl-pagination-jump-label" for="cl-jump-input">Go to</label>
+          <input id="cl-jump-input" class="cl-pagination-jump-input" type="number" min="1" max="${totalPages}" placeholder="${state.currentPage}" aria-label="Page number">
+          <button type="submit" class="cl-pagination-btn cl-pagination-jump-btn">Go</button>
+        </form>
       </div>`;
   }
 
@@ -466,6 +490,25 @@ function _renderCustomerListImpl() {
   const nextBtn = view.querySelector('#cl-next-btn');
   if (nextBtn) nextBtn.addEventListener('click', () => {
     if (state.currentPage < totalPages) { state.currentPage++; renderCustomerList(); }
+  });
+
+  view.querySelectorAll('.cl-pagination-page').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = parseInt(btn.dataset.page, 10);
+      if (p !== state.currentPage && p >= 1 && p <= totalPages) {
+        state.currentPage = p;
+        renderCustomerList();
+      }
+    });
+  });
+
+  const jumpForm = view.querySelector('#cl-jump-form');
+  if (jumpForm) jumpForm.addEventListener('submit', e => {
+    e.preventDefault();
+    const input = jumpForm.querySelector('#cl-jump-input');
+    const p = Math.round(Number(input.value));
+    if (!Number.isFinite(p) || p < 1 || p > totalPages) { input.select(); return; }
+    if (p !== state.currentPage) { state.currentPage = p; renderCustomerList(); }
   });
 
   const inner = view.querySelector('.projects-inner');
