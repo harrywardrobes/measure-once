@@ -29,6 +29,8 @@
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       if (!await bootstrap()) return;
+      const urlQ = new URLSearchParams(window.location.search).get('q');
+      if (urlQ) state.qb.searchQuery = urlQ;
       renderInvoicesTab();
     });
   </script>

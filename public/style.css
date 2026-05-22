@@ -2757,10 +2757,22 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .qb-tab-empty-sub { font-size: 0.85rem; color: var(--ink-3); margin-top: 6px; }
 .qb-tab-loading { display: flex; align-items: center; gap: 10px; padding: 40px 24px; color: var(--ink-3); font-size: 0.875rem; }
 .qb-filter-bar {
-  display: flex; gap: 6px; margin-bottom: 16px;
+  display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;
   padding: 4px; background: var(--paper-deep);
-  border-radius: var(--radius-md); width: fit-content;
+  border-radius: var(--radius-md); width: fit-content; max-width: 100%;
 }
+.qb-filter-search-wrap { position: relative; flex-shrink: 0; width: 200px; margin-left: 4px; }
+.qb-filter-search-icon {
+  position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-4); pointer-events: none;
+}
+.qb-filter-search-input {
+  width: 100%; padding: 7px 10px 7px 28px;
+  border: 1.5px solid var(--stone); border-radius: var(--radius-pill);
+  background: var(--chalk); font-size: 0.85rem; font-family: inherit;
+  color: var(--ink-1); outline: none; box-sizing: border-box;
+}
+.qb-filter-search-input:focus { border-color: var(--orchid); }
 .qb-filter-btn {
   font-size: .88rem; font-weight: 600; font-family: inherit;
   padding: 8px 16px; border-radius: calc(var(--radius-md) - 2px);

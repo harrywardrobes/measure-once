@@ -91,7 +91,14 @@ function renderInvoicesTab() {
   });
 
   const matchedOnly = state.qb.showMatchedOnly;
-  const visible     = matchedOnly ? tagged.filter(t => t.matched) : tagged;
+  const searchQuery = (state.qb.searchQuery || '').toLowerCase().trim();
+  let visible = matchedOnly ? tagged.filter(t => t.matched) : tagged;
+  if (searchQuery) {
+    visible = visible.filter(({ inv }) =>
+      (inv.customerName || '').toLowerCase().includes(searchQuery) ||
+      (inv.docNumber || '').toLowerCase().includes(searchQuery)
+    );
+  }
   const total       = visible.reduce((s, t) => s + t.inv.balance, 0);
   const matchCount  = tagged.filter(t => t.matched).length;
 
@@ -105,6 +112,15 @@ function renderInvoicesTab() {
         onclick="state.qb.showMatchedOnly=true;renderInvoicesTab()">
         Matched to customers (${matchCount})
       </button>
+      <div class="qb-filter-search-wrap">
+        <svg class="qb-filter-search-icon" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
+        </svg>
+        <input type="search" class="qb-filter-search-input" placeholder="Search invoices…"
+          value="${escHtml(state.qb.searchQuery || '')}"
+          oninput="state.qb.searchQuery=this.value;renderInvoicesTab()"
+          aria-label="Search invoices">
+      </div>
     </div>
   `;
 

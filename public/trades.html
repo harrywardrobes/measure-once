@@ -173,6 +173,8 @@
         if (btn) btn.style.removeProperty('display');
       }
       const searchInput = document.getElementById('trades-search');
+      const urlQ = new URLSearchParams(window.location.search).get('q');
+      if (urlQ && searchInput) searchInput.value = urlQ;
       if (searchInput) searchInput.addEventListener('input', applyTradeFilters);
       document.addEventListener('click', () => {
         document.querySelectorAll('.trades-chip-popover.open').forEach(p => p.classList.remove('open'));
