@@ -475,6 +475,7 @@ function renderFullWorkflowView() {
       <div id="invoices-section" class="mb-5"></div>
       <div id="tasks-section" class="mb-6"></div>
       <div id="google-emails-section" class="mb-5"></div>
+      <div id="whatsapp-history-section" class="mb-5"></div>
       <div id="workflow-stages" class="space-y-2"></div>
     </div>
   `;
@@ -506,12 +507,60 @@ function renderFullWorkflowView() {
   renderWorkflowInvoices();
   renderTasks();
   renderGoogleEmailSection();
+  renderWhatsAppHistory();
   renderWorkflowStages();
   renderComments();
 }
 
 // captureNotes retained as no-op — called before navigation to flush any pending state
 function captureNotes() {}
+
+// ── WhatsApp History (customer detail) ───────────────────────────────────────
+async function renderWhatsAppHistory() {
+  const el = document.getElementById('whatsapp-history-section');
+  if (!el) return;
+
+  if (!state.whatsappEnabled) { el.innerHTML = ''; return; }
+
+  const contactId = state.selectedContactId;
+  if (!contactId) { el.innerHTML = ''; return; }
+
+  try {
+    const { messages } = await GET(`/api/whatsapp/history/${encodeURIComponent(contactId)}`);
+    if (!messages || messages.length === 0) { el.innerHTML = ''; return; }
+
+    el.innerHTML = `
+      <div class="notes-header">
+        <span class="notes-header-label">WhatsApp sent</span>
+      </div>
+      <div id="whatsapp-history-list"></div>
+    `;
+
+    const list = document.getElementById('whatsapp-history-list');
+    list.innerHTML = messages.map(m => {
+      const dateStr = m.sent_at
+        ? new Date(m.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+        : '';
+      const senderName = [m.first_name, m.last_name].filter(Boolean).join(' ') || m.sender_email || 'Unknown';
+      const preview = m.mode === 'template'
+        ? (m.template_name ? `Template: ${m.template_name}` : 'Template message')
+        : (m.message_text ? m.message_text : 'Free-form message');
+      return `
+        <div class="comment-item" style="margin-bottom:6px">
+          <div class="comment-meta">
+            <span class="comment-author">${escHtml(senderName)}</span>
+            ${dateStr ? `<span class="comment-meta-sep">·</span><span class="comment-date">${escHtml(dateStr)}</span>` : ''}
+            <span class="comment-meta-sep">·</span>
+            <span style="font-size:0.75rem;background:#dcfce7;color:#15803d;border-radius:4px;padding:1px 6px;font-weight:500">WhatsApp</span>
+          </div>
+          <div class="comment-text" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(preview)}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (_) {
+    el.innerHTML = '';
+  }
+}
 
 // ── Google Emails (customer detail) ──────────────────────────────────────────
 function _googleAuthToast() {
@@ -1816,7 +1865,7 @@ async function waSubmit() {
   _waClearFeedback();
   if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
 
-  let payload = { contactPhone: phone, mode: _waMode };
+  let payload = { contactPhone: phone, contactId: state.selectedContactId || undefined, mode: _waMode };
 
   if (_waMode === 'template') {
     const selEl = document.getElementById('wa-template-select');
@@ -1852,7 +1901,7 @@ async function waSubmit() {
     await POST('/api/whatsapp/send', payload);
     if (okEl) okEl.classList.remove('hidden');
     if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
-    setTimeout(() => closeWhatsAppModal(), 2000);
+    setTimeout(() => { closeWhatsAppModal(); renderWhatsAppHistory(); }, 2000);
   } catch (e) {
     if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
     let msg = e.message || 'Failed to send. Please try again.';

@@ -2840,7 +2840,7 @@ app.get('/api/whatsapp/templates', isAuthenticated, requireWhatsAppConfig, async
 });
 
 app.post('/api/whatsapp/send', isAuthenticated, requireWhatsAppConfig, whatsappSendLimiter, async (req, res) => {
-  const { contactPhone, mode, templateName, templateLanguage, templateParams, message } = req.body;
+  const { contactPhone, contactId, mode, templateName, templateLanguage, templateParams, message } = req.body;
 
   if (!contactPhone || typeof contactPhone !== 'string') {
     return res.status(400).json({ error: 'contactPhone is required.' });
@@ -2897,6 +2897,17 @@ app.post('/api/whatsapp/send', isAuthenticated, requireWhatsAppConfig, whatsappS
         timeout: 10000,
       }
     );
+
+    if (contactId && /^\d+$/.test(String(contactId))) {
+      const messageText = mode === 'freeform' ? (message || '').trim() : null;
+      const tplName = mode === 'template' ? (templateName || null) : null;
+      pool.query(
+        `INSERT INTO whatsapp_messages (contact_id, sender_user_id, mode, template_name, message_text)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [String(contactId), req.user.id, mode, tplName, messageText]
+      ).catch(e => console.error('whatsapp_messages insert error:', e.message));
+    }
+
     res.json({ ok: true });
   } catch (e) {
     const status   = e.response?.status;
@@ -2917,6 +2928,43 @@ app.post('/api/whatsapp/send', isAuthenticated, requireWhatsAppConfig, whatsappS
     }
     console.error('POST /api/whatsapp/send error:', metaErr || e.message);
     res.status(502).json({ error: metaMsg || 'Failed to send WhatsApp message.' });
+  }
+});
+
+// ── WhatsApp Message Log ──────────────────────────────────────────────────────
+async function ensureWhatsAppMessagesTable() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS whatsapp_messages (
+    id              SERIAL PRIMARY KEY,
+    contact_id      TEXT        NOT NULL,
+    sender_user_id  VARCHAR     NOT NULL REFERENCES users(id),
+    mode            TEXT        NOT NULL CHECK (mode IN ('template','freeform')),
+    template_name   TEXT,
+    message_text    TEXT,
+    sent_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS whatsapp_messages_contact_idx ON whatsapp_messages(contact_id, sent_at DESC)`);
+}
+
+app.get('/api/whatsapp/history/:contactId', isAuthenticated, async (req, res) => {
+  const { contactId } = req.params;
+  if (!contactId || !/^\d+$/.test(contactId)) {
+    return res.status(400).json({ error: 'Invalid contactId.' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `SELECT w.id, w.contact_id, w.mode, w.template_name, w.message_text, w.sent_at,
+              u.first_name, u.last_name, u.email AS sender_email
+       FROM whatsapp_messages w
+       JOIN users u ON u.id = w.sender_user_id
+       WHERE w.contact_id = $1
+       ORDER BY w.sent_at DESC
+       LIMIT 50`,
+      [contactId]
+    );
+    res.json({ messages: rows });
+  } catch (e) {
+    console.error('GET /api/whatsapp/history error:', e.message);
+    res.status(500).json({ error: 'Could not load WhatsApp history.' });
   }
 });
 
@@ -3003,5 +3051,7 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Lead status table setup failed:', e.message); }
     try { await ensureSearchSettingsTable(); console.log('  Search settings table ready'); }
     catch (e) { console.error('  Search settings table setup failed:', e.message); }
+    try { await ensureWhatsAppMessagesTable(); console.log('  WhatsApp messages table ready'); }
+    catch (e) { console.error('  WhatsApp messages table setup failed:', e.message); }
   });
 })();
