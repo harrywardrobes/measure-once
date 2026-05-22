@@ -2081,7 +2081,12 @@
           row.dataset.origKey    = created.substatus_key;
           row.dataset.origLabel  = created.label;
           row.dataset.origAction = created.action_label || '';
-          keyInput.value = created.substatus_key;
+          // Input shows only the suffix when a prefix pill is present, so a
+          // second Save doesn't re-concatenate the prefix and produce
+          // ATCT_ATCT_FOO. The prefix pill + data-key-prefix stay intact.
+          keyInput.value = keyPrefix && created.substatus_key.startsWith(keyPrefix)
+            ? created.substatus_key.slice(keyPrefix.length)
+            : created.substatus_key;
           saved++;
         } catch (e) {
           failed++;
@@ -2102,7 +2107,11 @@
           row.dataset.origKey    = updated.substatus_key;
           row.dataset.origLabel  = updated.label;
           row.dataset.origAction = updated.action_label || '';
-          keyInput.value = updated.substatus_key;
+          // Mirror the POST branch: strip the prefix from the visible value
+          // so re-saving doesn't double-prefix.
+          keyInput.value = keyPrefix && updated.substatus_key.startsWith(keyPrefix)
+            ? updated.substatus_key.slice(keyPrefix.length)
+            : updated.substatus_key;
           saved++;
         } catch (e) {
           failed++;
