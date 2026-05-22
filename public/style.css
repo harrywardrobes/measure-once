@@ -834,6 +834,14 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 .filter-btn-active:hover { background: #2e0f5a; }
 
+@media (pointer: coarse) {
+  .filter-btn {
+    min-height: 44px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
+
 /* ── Room tabs ───────────────────────────────────────────────────────────────── */
 .room-tab {
   font-size: .88rem;
@@ -855,6 +863,15 @@ body.showing-workflow .workflow-panel { display: flex; }
   color: #fff;
   border-color: var(--plum);
 }
+
+@media (pointer: coarse) {
+  .room-tab {
+    min-height: 44px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
+
 .room-tab-add {
   font-size: .88rem;
   font-weight: 600;
@@ -1920,6 +1937,15 @@ body.showing-workflow .workflow-panel { display: flex; }
 .search-active-chip:hover {
   background: var(--plum-dark, #5a2d82);
 }
+
+@media (pointer: coarse) {
+  .search-active-chip {
+    min-height: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
+
 .search-active-chip-x {
   flex-shrink: 0;
   opacity: 0.8;
@@ -1955,6 +1981,14 @@ body.showing-workflow .workflow-panel { display: flex; }
 .project-group-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+@media (pointer: coarse) {
+  .project-group-btn {
+    min-height: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
 }
 
 /* ── Project stage group headings ────────────────────────────────────────────── */
@@ -2800,6 +2834,14 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .qb-filter-btn:hover { color: var(--ink-1); }
 .qb-filter-active { background: #fff !important; color: var(--ink-1) !important; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+@media (pointer: coarse) {
+  .qb-filter-btn {
+    min-height: 44px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+}
 .qb-row { cursor: pointer; }
 .qb-row:hover { background: var(--paper-deep); }
 
@@ -3969,6 +4011,87 @@ body.showing-workflow .sales-layout #workflow-panel {
   flex-shrink: 0;
 }
 
+/* ── Substage filter button (survey column header) ───────────────────────────── */
+.substage-filter-wrap { position: relative; }
+.substage-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--ink-3);
+  background: var(--chalk);
+  border: 1.5px solid var(--stone);
+  border-radius: var(--radius-pill);
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.substage-filter-btn:hover {
+  background: var(--paper-deep);
+  border-color: var(--orchid);
+  color: var(--orchid);
+}
+.substage-filter-btn-active {
+  background: var(--orchid);
+  border-color: var(--orchid);
+  color: #fff;
+}
+.substage-filter-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: rgba(255,255,255,0.25);
+  border-radius: 999px;
+  padding: 1px 5px;
+}
+.substage-filter-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  background: var(--paper);
+  border: 1.5px solid var(--stone);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  min-width: 160px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+  display: none;
+}
+.substage-filter-popover.substage-filter-popover-open { display: block; }
+.substage-filter-heading {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--ink-3);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 0 0 8px;
+}
+.substage-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+  padding: 3px 0;
+}
+.substage-filter-item input[type="checkbox"] { accent-color: var(--orchid); }
+
+@media (pointer: coarse) {
+  .substage-filter-btn {
+    min-height: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .substage-filter-item {
+    min-height: 44px;
+  }
+}
+
 /* ── Enquiry cards (B1 — Polished Priority Stack) ────────────────────────── */
 .enquiry-list {
   display: flex;
@@ -4632,7 +4755,16 @@ details[open] .trades-history-summary::before { transform: rotate(90deg); }
 .trades-area-chip:has(input:checked) {
   background: var(--orchid); border-color: var(--orchid); color: #fff;
 }
-.trades-area-chip input[type="checkbox"] { display: none; }
+.trades-area-chip input[type="checkbox"],
+.trades-area-chip input[type="radio"] { display: none; }
+
+@media (pointer: coarse) {
+  .trades-area-chip {
+    min-height: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
 
 .trades-contacts-section {
   border-top: 1.5px solid var(--stone-light);
