@@ -838,6 +838,107 @@ async function runUiSmoke({ users, runId, clients }) {
       record('mobile pagination overflow regression probe (many-pages variant) ran', 'no error',
         `error: ${e.message}`, 'medium', false);
     }
+
+    // ── Tablet pagination overflow — 540 px breakpoint (many pages) ──────────
+    // The responsive CSS hides .cl-pagination-page and .cl-pagination-ellipsis
+    // at max-width: 540 px.  This probe confirms that the intermediate breakpoint
+    // rules also prevent overflow when the page-number buttons are hidden.
+    // Uses 201 contacts (9 pages) and navigates to page 8.
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 540, height: 900 });
+      await page.setCacheEnabled(false);
+
+      const memberSess = await login(users.member.email, PASSWORD);
+      const kv = parseCookieKV(memberSess.cookie);
+      if (kv) {
+        const { hostname } = new URL(BASE);
+        await page.setCookie({
+          name: kv.name, value: kv.value,
+          domain: hostname, path: '/', httpOnly: true,
+        });
+      }
+
+      const tabletContacts = Array.from({ length: 201 }, (_, i) => ({
+        id: `tablet-pg-${i + 1}`,
+        properties: {
+          firstname: 'Tablet',
+          lastname: `Page${String(i + 1).padStart(3, '0')}`,
+          email: `tabletpg${i + 1}@privtest.local`,
+          phone: '',
+          hs_lead_status: 'OPEN_DEAL',
+          city: '',
+          customer_number: `TB-${String(i + 1).padStart(3, '0')}`,
+          createdate: new Date(Date.now() - i * 1000).toISOString(),
+          closedate: null,
+          lastmodifieddate: new Date().toISOString(),
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        archived: false,
+      }));
+      const tabletPayload = JSON.stringify({ results: tabletContacts, total: 201 });
+      const emptyPayload  = JSON.stringify({ results: [], total: 0 });
+
+      await page.setRequestInterception(true);
+      page.on('request', req => {
+        const u = req.url();
+        if (u.includes('/api/contacts-all')) {
+          req.respond({ status: 200, contentType: 'application/json', body: tabletPayload });
+        } else if (u.includes('/api/open-leads')) {
+          req.respond({ status: 200, contentType: 'application/json', body: emptyPayload });
+        } else {
+          req.continue();
+        }
+      });
+
+      await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded' });
+
+      const paginationElTablet = await page.waitForSelector('.cl-pagination', { timeout: 8000 }).catch(() => null);
+
+      let noOverflowTablet = false;
+      let overflowDetailTablet = 'pagination bar not found';
+
+      if (paginationElTablet) {
+        // Jump to page 8 so multi-digit page numbers (if visible) and ellipsis render.
+        await page.evaluate(() => {
+          const input = document.querySelector('#cl-jump-input');
+          const form  = document.querySelector('#cl-jump-form');
+          if (input && form) {
+            input.value = '8';
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+          }
+        }).catch(() => {});
+
+        // Wait for the pagination info to reflect page 8 content (items 176–200 of 201).
+        await page.waitForFunction(() => {
+          const info = document.querySelector('.cl-pagination-info');
+          return info && /176|177|178/.test(info.textContent);
+        }, { timeout: 5000 }).catch(() => {});
+
+        const dims = await page.$eval('.cl-pagination', el => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        })).catch(() => null);
+
+        if (dims) {
+          noOverflowTablet = dims.scrollWidth <= dims.clientWidth;
+          overflowDetailTablet = `scrollWidth=${dims.scrollWidth} clientWidth=${dims.clientWidth}`;
+        }
+      }
+
+      await safeShot(page, path.join(SCREENSHOT_DIR, `${runId}-tablet-pagination-overflow.png`));
+
+      record('pagination bar does not overflow at 540 px with 9 pages (tablet breakpoint variant)',
+        'scrollWidth <= clientWidth on .cl-pagination at 540 px with 201 contacts on page 8',
+        overflowDetailTablet,
+        'medium', noOverflowTablet);
+
+      await page.close();
+    } catch (e) {
+      record('tablet pagination overflow regression probe (540 px) ran', 'no error',
+        `error: ${e.message}`, 'medium', false);
+    }
   } finally {
     await browser.close().catch(() => {});
   }
