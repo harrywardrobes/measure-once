@@ -6,10 +6,9 @@
   <title>Admin · Measure Once</title>
   <link rel="stylesheet" href="style.css">
   <style>
+    .header-icon-btn, .cp-hint-bar { display: none !important; }
     /* ── Admin-specific layout ── */
     body { min-height: 100vh; }
-
-    .admin-brand-sep { color: rgba(255,255,255,.35); font-size: .8rem; margin-left: 2px; }
 
     .page { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
     .page-title { font-size: 1.25rem; font-weight: 700; margin: 0 0 2px; }
@@ -513,12 +512,6 @@
 </head>
 <body>
 
-<header class="app-header">
-  <a href="/" class="nav-btn">← Home</a>
-  <span class="flex-spacer"></span>
-  <button onclick="(function(){var f=document.createElement('form');f.method='POST';f.action='/api/logout';document.body.appendChild(f);f.submit();})()" class="nav-btn" style="background:none;border:none;cursor:pointer;font-family:inherit;font-size:inherit;">Sign out</button>
-</header>
-
 <div class="page" id="page">
   <h1 class="page-title">Admin Panel</h1>
   <div class="loading-state">Loading…</div>
@@ -627,6 +620,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
 
+<script src="/chrome.js"></script>
+<script src="/command-palette.js"></script>
+<script src="/core.js"></script>
 <script>
   const $ = s => document.querySelector(s);
   const esc = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1900,6 +1896,20 @@
       return;
     }
     _me = me;
+
+    // Populate shared chrome (auth avatar, bottom-nav visibility).
+    if (typeof state !== 'undefined') {
+      state.user = me;
+      if (typeof renderAuthStatus === 'function') renderAuthStatus();
+      if (typeof highlightActiveNav === 'function') highlightActiveNav();
+      // Unhide all nav items — admin users have full access.
+      ['bnav-trades', 'bnav-ideas', 'bnav-sales', 'bnav-survey',
+       'bnav-projects', 'bnav-invoices'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.style.display = '';
+      });
+      document.body.classList.add('manager-mode', 'admin-mode');
+    }
 
     try {
       [_requests, _allowed, _users, _jobRoles, _capabilities, _photoRequests, _tradeSubmissions] = await Promise.all([
