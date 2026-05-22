@@ -370,6 +370,26 @@ function stageActionLabelLookup(stageKey, statusKey) {
   return STAGE_ACTION_LABEL_MAP[`${s}|${k}`] || '';
 }
 
+// Resolve a card's action-strip label using the same priority as the admin
+// Card Actions tab: lead status first (it's the configurable key), local
+// workflow substageId only as a legacy fallback for contacts with no LS, then
+// finally the per-stage "no lead status" row. Returns '' when nothing matches
+// — the caller is expected to omit the action strip entirely in that case.
+function stageOrLeadStatusActionLabel(stageKey, leadStatusKey, substageId) {
+  const lsKey = String(leadStatusKey || '').toLowerCase();
+  if (lsKey) {
+    const fromLs = stageActionLabelLookup(stageKey, lsKey);
+    if (fromLs) return fromLs;
+  }
+  if (substageId) {
+    const fromSub = stageActionLabelLookup(stageKey, substageId);
+    if (fromSub) return fromSub;
+  }
+  // Last resort: the global "no lead status" row (stored per-stage as
+  // stage_action_labels[stage|'']).
+  return stageActionLabelLookup(stageKey, '') || '';
+}
+
 // ── Lead sub-statuses ────────────────────────────────────────────────────────
 // Per (lead_status, sub-status) action labels. Surfaced on contacts via the
 // HubSpot `hw_lead_substatus` enumeration property whose option values are

@@ -435,6 +435,12 @@ function nextActionLabel(stageKey, substageId, leadStatusKey, hwSubstatusValue) 
     const fromSub = substatusActionLabelLookup(leadStatusKey, hwSubstatusValue);
     if (fromSub) return fromSub;
   }
+  // Prefer lead-status over local workflow substageId — the admin Card Actions
+  // tab is keyed by lead status, so a card with LS "ATTEMPTED_TO_CONTACT" and
+  // local room substageId "attempted_contact" must resolve via the LS key.
+  if (typeof stageOrLeadStatusActionLabel === 'function') {
+    return stageOrLeadStatusActionLabel(stageKey, leadStatusKey, substageId);
+  }
   if (typeof stageActionLabelLookup === 'function') {
     return stageActionLabelLookup(stageKey, substageId) || '';
   }

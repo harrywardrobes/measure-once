@@ -183,7 +183,16 @@ function _svCardHtml(entry) {
       contact.properties?.hw_lead_substatus,
     );
   }
-  if (!actionLabel && typeof stageActionLabelLookup === 'function') {
+  if (!actionLabel && typeof stageOrLeadStatusActionLabel === 'function') {
+    // Prefer lead-status over local workflow substageId for the same reason as
+    // the Sales board — stage_action_labels is keyed by LS, not by local
+    // workflow IDs.
+    actionLabel = stageOrLeadStatusActionLabel(
+      SURVEY_STAGE_KEY,
+      contact.properties?.hs_lead_status,
+      substageId,
+    );
+  } else if (!actionLabel && typeof stageActionLabelLookup === 'function') {
     actionLabel = stageActionLabelLookup(SURVEY_STAGE_KEY, substageId);
   }
   const actionHtml = (isTerminal || !actionLabel) ? '' : `
