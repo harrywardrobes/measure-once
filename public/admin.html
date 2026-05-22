@@ -2175,7 +2175,10 @@
     _broadcastCardActionsChanged();
     try { new BroadcastChannel('lead_substatuses_changed').postMessage({ ts: Date.now() }); } catch (_) {}
 
-    // Refresh in-memory copies so a follow-up Save doesn't re-send.
+    // Refresh in-memory copies so a follow-up Save doesn't re-send, then
+    // re-render so newly-saved sub-status rows pick up the ↑/▼ arrow
+    // controls (those are only rendered for rows that exist in
+    // _cardSubstatusesData with a real id).
     try {
       const [labels, subs] = await Promise.all([
         api('GET', '/api/admin/stage-action-labels'),
@@ -2183,6 +2186,7 @@
       ]);
       _cardActionsData     = Array.isArray(labels) ? labels : _cardActionsData;
       _cardSubstatusesData = Array.isArray(subs)   ? subs   : _cardSubstatusesData;
+      renderCardActionsTable();
     } catch (_) {}
   }
 
