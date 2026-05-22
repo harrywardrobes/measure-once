@@ -101,6 +101,11 @@
 /* Mirrors Tailwind's .hidden so non-Tailwind pages (e.g. admin.html) honour it. */
 .hidden { display: none; }
 
+/* auth-status is injected by chrome.js into every page (including non-Tailwind
+   pages such as admin.html), so its layout must come from style.css rather than
+   Tailwind utility classes. */
+#auth-status { display: flex; align-items: center; gap: 0.375rem; }
+
 body {
   font-family: 'Open Sans', system-ui, sans-serif;
   background: var(--paper);

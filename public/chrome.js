@@ -155,7 +155,7 @@ window.getShortcut = function (key) {
             </svg>
           </a>`;
           }).join('')}
-          <div id="auth-status" class="flex items-center gap-1.5"></div>
+          <div id="auth-status"></div>
         </div>
       </div>
     </header>`;
