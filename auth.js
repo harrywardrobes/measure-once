@@ -374,8 +374,9 @@ async function ensureAuthTables() {
   `);
 
   await pool.query(`
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_photo TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_photo  TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_photo  TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_photo   TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_version  TIMESTAMPTZ;
   `);
 
   await pool.query(`
@@ -583,6 +584,7 @@ async function getUser(id) {
   const r = await pool.query(
     `SELECT id, email, first_name, last_name, profile_image_url,
             job_role, privilege_level, onboarding_status, created_at, updated_at,
+            photo_version,
             (custom_photo  IS NOT NULL) AS has_custom_photo,
             (pending_photo IS NOT NULL) AS has_pending_photo
      FROM users WHERE id = $1`,
@@ -782,7 +784,6 @@ async function setupAuth(app) {
 
       const sessionUser = buildSessionUser(dbUser);
       await loginSessionUser(req, sessionUser);
-      if (req.session) req.session.photoVersion = Date.now().toString(36);
       res.json({
         ok: true,
         onboarding_status: sessionUser.onboarding_status,
@@ -1061,7 +1062,9 @@ async function setupAuth(app) {
       // will actually allow. ADMIN_EMAILS is only a bootstrap mechanism and
       // must not grant admin powers to a downgraded account.
       const isAdmin = user?.privilege_level === 'admin';
-      const photo_v = req.session?.photoVersion || null;
+      const photo_v = user?.photo_version
+        ? new Date(user.photo_version).getTime().toString(36)
+        : null;
       res.json(user ? { ...user, isAdmin, photo_v } : null);
     } catch (e) {
       res.status(500).json({ message: 'Failed to fetch user' });
@@ -1857,7 +1860,7 @@ async function setupAuth(app) {
     }
     try {
       await pool.query(
-        `UPDATE users SET pending_photo = $1, updated_at = NOW() WHERE id = $2`,
+        `UPDATE users SET pending_photo = $1, photo_version = NOW(), updated_at = NOW() WHERE id = $2`,
         [data, userId]
       );
       res.json({ ok: true });
@@ -1904,7 +1907,8 @@ async function setupAuth(app) {
     try {
       const r = await pool.query(
         `UPDATE users
-           SET custom_photo = pending_photo, pending_photo = NULL, updated_at = NOW()
+           SET custom_photo = pending_photo, pending_photo = NULL,
+               photo_version = NOW(), updated_at = NOW()
          WHERE id = $1 AND pending_photo IS NOT NULL
          RETURNING email`,
         [req.params.id]
@@ -1920,7 +1924,7 @@ async function setupAuth(app) {
   app.post('/api/admin/photo-requests/:id/reject', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
-        `UPDATE users SET pending_photo = NULL, updated_at = NOW()
+        `UPDATE users SET pending_photo = NULL, photo_version = NOW(), updated_at = NOW()
          WHERE id = $1 RETURNING email`,
         [req.params.id]
       );
