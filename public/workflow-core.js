@@ -427,7 +427,7 @@ function populateLeadStatusFilter() {
   const prevValue = sel.value;
   sel.innerHTML = `<option value="">All statuses</option>` +
     `<option value="__no_status__"${nullAttrs}>${escHtml(nullLabel)} (${nullCount})</option>` +
-    LEAD_STATUS_OPTIONS.map(({ value, label }) => {
+    LEAD_STATUS_OPTIONS.filter(o => !o.excluded_from_sales).map(({ value, label }) => {
       const n = counts[value] || 0;
       const attrs = n === 0 ? ' disabled style="color:#cbd5e1"' : '';
       return `<option value="${escHtml(value)}"${attrs}>${escHtml(label)} (${n})</option>`;
