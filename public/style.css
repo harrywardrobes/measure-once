@@ -4736,6 +4736,12 @@ details[open] .trades-history-summary::before { transform: rotate(90deg); }
   background: var(--orchid-tint);
 }
 #customers-view .customer-project-card.card-archived { opacity: 0.6; }
+#customers-view .customer-project-card:focus-visible {
+  outline: 2px solid var(--orchid);
+  outline-offset: 2px;
+  border-color: var(--orchid);
+  box-shadow: var(--shadow-md);
+}
 
 .customer-list-secondary {
   flex-wrap: wrap;

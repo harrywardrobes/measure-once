@@ -421,6 +421,23 @@ function _renderCustomerListImpl() {
       loadOpenLeads().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
     }
   });
+
+  const inner = view.querySelector('.projects-inner');
+  if (inner) inner.addEventListener('keydown', function(e) {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const cards = Array.from(inner.querySelectorAll('.customer-project-card'));
+    if (!cards.length) return;
+    const idx = cards.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = idx === -1 ? cards[0] : cards[Math.min(idx + 1, cards.length - 1)];
+      next.focus();
+    } else {
+      e.preventDefault();
+      const prev = idx <= 0 ? cards[0] : cards[idx - 1];
+      prev.focus();
+    }
+  });
 }
 
 registerCustomerListRenderer(_renderCustomerListImpl);
