@@ -208,17 +208,19 @@
     document.getElementById('view-login').classList.toggle('hidden', name !== 'login');
     document.getElementById('view-request').classList.toggle('hidden', name !== 'request');
     document.getElementById('view-forgot').classList.toggle('hidden', name !== 'forgot');
+    const loginEmail   = document.getElementById('login-email');
+    const forgotEmail  = document.getElementById('forgot-email');
+    const requestEmail = document.getElementById('req-email');
+    if (name === 'login') {
+      if (forgotEmail && loginEmail && forgotEmail.value) loginEmail.value = forgotEmail.value;
+      if (requestEmail && loginEmail && requestEmail.value) loginEmail.value = requestEmail.value;
+    } else if (name === 'forgot') {
+      if (loginEmail && forgotEmail && loginEmail.value) forgotEmail.value = loginEmail.value;
+    } else if (name === 'request') {
+      if (loginEmail && requestEmail && loginEmail.value) requestEmail.value = loginEmail.value;
+    }
     if (name !== 'forgot') {
-      if (name === 'login') {
-        const forgotEmail = document.getElementById('forgot-email');
-        const loginEmail  = document.getElementById('login-email');
-        if (forgotEmail && loginEmail && forgotEmail.value) loginEmail.value = forgotEmail.value;
-      }
       resetForgotView();
-    } else {
-      const loginEmail  = document.getElementById('login-email');
-      const forgotEmail = document.getElementById('forgot-email');
-      if (loginEmail && forgotEmail) forgotEmail.value = loginEmail.value;
     }
   }
   function resetForgotView() {
