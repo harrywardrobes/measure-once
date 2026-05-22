@@ -338,8 +338,8 @@ function _columnForLeadStatus(ls) {
 // ── Stage accent hex colours (B1 card design) ────────────────────────────────
 const STAGE_ACCENT = {
   sales:       '#8B2BFF',
-  designvisit: '#2563EB',
-  survey:      '#059669',
+  designvisit: '#0d9488',
+  survey:      '#d97706',
 };
 function _eqRgb(hex) {
   return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;

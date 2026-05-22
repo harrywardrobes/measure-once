@@ -1663,6 +1663,8 @@
               </td>
               <td style="padding:7px 8px;">
                 <select class="field ls-stage-select" id="ls-stage-${esc(s.key)}" data-key="${esc(s.key)}"
+                  data-stage="${esc(s.stage || '')}"
+                  oninput="this.dataset.stage=this.value"
                   style="padding:4px 7px;font-size:.78rem;min-width:130px;">
                   ${_stageOptionsHtml(s.stage)}
                 </select>

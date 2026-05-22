@@ -110,15 +110,15 @@ const DEFAULT_WORKFLOW = {
 };
 
 const STAGE_COLOURS = [
-  { bg: '#8B2BFF', light: '#F3EAFF', text: '#6A12D9' },  // orchid       — Sales
-  { bg: '#0d9488', light: '#ccfbf1', text: '#0f766e' },  // teal         — Design Visit
-  { bg: '#d97706', light: '#fef3c7', text: '#b45309' },  // amber        — Survey
-  { bg: '#2563eb', light: '#dbeafe', text: '#1d4ed8' },  // blue         — Order
-  { bg: '#dc2626', light: '#fee2e2', text: '#b91c1c' },  // red          — Workshop
-  { bg: '#059669', light: '#d1fae5', text: '#047857' },  // emerald      — Packing
-  { bg: '#0891b2', light: '#cffafe', text: '#0e7490' },  // cyan         — Delivery
-  { bg: '#8A5A3B', light: '#fdf6ee', text: '#5c3820' },  // walnut       — Installation
-  { bg: '#200842', light: '#ede0ff', text: '#3d0f7a' },  // plum         — Aftercare
+  { key: 'sales',           bg: '#8B2BFF', light: '#F3EAFF', text: '#6A12D9' },  // orchid       — Sales
+  { key: 'designvisit',     bg: '#0d9488', light: '#ccfbf1', text: '#0f766e' },  // teal         — Design Visit
+  { key: 'survey',          bg: '#d97706', light: '#fef3c7', text: '#b45309' },  // amber        — Survey
+  { key: 'order',           bg: '#2563eb', light: '#dbeafe', text: '#1d4ed8' },  // blue         — Order
+  { key: 'workshop',        bg: '#dc2626', light: '#fee2e2', text: '#b91c1c' },  // red          — Workshop
+  { key: 'packing',         bg: '#059669', light: '#d1fae5', text: '#047857' },  // emerald      — Packing
+  { key: 'delivery',        bg: '#0891b2', light: '#cffafe', text: '#0e7490' },  // cyan         — Delivery
+  { key: 'installation',    bg: '#8A5A3B', light: '#fdf6ee', text: '#5c3820' },  // walnut       — Installation
+  { key: 'aftercare',       bg: '#200842', light: '#ede0ff', text: '#3d0f7a' },  // plum         — Aftercare
 ];
 
 const STAGE_KEYS = Object.keys(DEFAULT_WORKFLOW.stages);
