@@ -3,6 +3,14 @@
 (function () {
   const path = location.pathname;
 
+  const PAGE_TITLES = {
+    '/': 'Home', '/customers': 'Customers', '/sales': 'Sales',
+    '/survey': 'Survey', '/projects': 'Projects', '/calendar': 'Calendar',
+    '/invoices': 'Invoices', '/trades': 'Trades', '/ideas': 'Ideas',
+    '/admin': 'Admin', '/profile': 'Profile',
+  };
+  const pageTitle = PAGE_TITLES[path] || (path.startsWith('/customers/') ? 'Customer' : 'Measure Once');
+
   const NAV = [
     { key: 'home',     href: '/',         label: 'Home',
       svg: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -95,39 +103,31 @@
   const header = `
     <header class="app-header">
       <div class="header-inner">
-        ${backBtn}
-        <a href="/" class="flex-shrink-0" style="background:none;border:none;padding:0;cursor:pointer;display:flex;align-items:center;" title="Home" aria-label="Go to home">
-          <img src="/assets/logo-mark-paper.png" alt="Harry Wardrobes" width="26" height="26" style="height:26px;width:auto;">
-        </a>
-        <div class="header-search-wrap">
-          ${path !== '/customers' ? `<a href="/customers" class="header-search-customers" title="Customers" aria-label="Customers">
-            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
-            </svg>
-          </a>` : ''}
-          <div class="header-search-pill">
-            <svg class="header-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <div class="header-left">
+          ${backBtn}
+          <a href="/" class="header-logo-link" title="Home" aria-label="Go to home">
+            <img src="/assets/logo-mark-paper.png" alt="Harry Wardrobes" width="26" height="26" style="height:26px;width:auto;">
+          </a>
+        </div>
+        <div class="header-center">
+          <span class="header-page-title">${pageTitle}</span>
+        </div>
+        <div class="header-right">
+          <button class="header-icon-btn" onclick="openCommandPalette()" aria-label="Search (⌘K)" title="Search (⌘K)">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
             </svg>
-            <input id="search" type="text" placeholder="Search customers"
-              oninput="onHeaderSearch(this.value)"
-              onkeydown="if(event.key==='Enter')onHeaderSearchSubmit(this.value)"
-              class="header-search-input bg-[#fdfdfb]" autocomplete="off" autocorrect="off" spellcheck="false">
-            <button id="search-clear" class="header-search-clear hidden text-[#200842]" onclick="clearHeaderSearch()">
-              <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-            </button>
-          </div>
-          ${path === '/customers' ? `<button onclick="openNewCustomerModal()" title="New Customer" data-viewer-hide class="header-new-customer-btn">
-            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
-            </svg>
-            <span>New customer</span>
-          </button>` : ''}
-        </div>
-        <div class="flex items-center gap-2 flex-shrink-0">
+          </button>
           <div id="auth-status" class="flex items-center gap-1.5"></div>
         </div>
       </div>
+      <button class="cp-hint-bar" onclick="openCommandPalette()" aria-label="Search customers and actions">
+        <svg class="cp-hint-icon" width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/>
+        </svg>
+        <span class="cp-hint-text">Search customers, actions…</span>
+        <kbd class="cp-kbd-badge">⌘K</kbd>
+      </button>
     </header>`;
 
   const bottomNav = `
@@ -137,10 +137,10 @@
           const active = n.href === path ? ' bottom-nav-active' : '';
           const hidden = (n.managerOnly || n.adminOnly) ? ' style="display:none"' : '';
           return `<a class="bottom-nav-btn${active}" id="bnav-${n.key}" href="${n.href}" aria-label="${n.label}"${hidden}>
-            <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" class="bottom-nav-icon">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${n.svg}"/>
             </svg>
-            <span aria-hidden="true">${n.label}</span>
+            <span>${n.label}</span>
           </a>`;
         }).join('')}
       </div>
