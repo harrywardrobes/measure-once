@@ -734,6 +734,110 @@ async function runUiSmoke({ users, runId, clients }) {
       record('mobile pagination overflow regression probe ran', 'no error',
         `error: ${e.message}`, 'medium', false);
     }
+    // ── Mobile pagination overflow — many pages (high page-number variant) ──
+    // A customer list with hundreds of pages exercises wider page-number buttons
+    // and multi-digit numbers.  This variant uses 201 contacts (9 pages) and
+    // navigates to page 8 so the paginator renders numbers like "6 7 [8] 9"
+    // alongside "…" ellipsis elements.  The bar must still not overflow at
+    // 360 px viewport width.
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 360, height: 640 });
+      await page.setCacheEnabled(false);
+
+      const memberSess = await login(users.member.email, PASSWORD);
+      const kv = parseCookieKV(memberSess.cookie);
+      if (kv) {
+        const { hostname } = new URL(BASE);
+        await page.setCookie({
+          name: kv.name, value: kv.value,
+          domain: hostname, path: '/', httpOnly: true,
+        });
+      }
+
+      // 201 contacts → 9 pages of 25.  Navigate to page 8 to trigger the
+      // "many-page" number display (ellipsis on both sides).
+      const manyContacts = Array.from({ length: 201 }, (_, i) => ({
+        id: `many-pg-${i + 1}`,
+        properties: {
+          firstname: 'Many',
+          lastname: `Page${String(i + 1).padStart(3, '0')}`,
+          email: `manypg${i + 1}@privtest.local`,
+          phone: '',
+          hs_lead_status: 'OPEN_DEAL',
+          city: '',
+          customer_number: `MN-${String(i + 1).padStart(3, '0')}`,
+          createdate: new Date(Date.now() - i * 1000).toISOString(),
+          closedate: null,
+          lastmodifieddate: new Date().toISOString(),
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        archived: false,
+      }));
+      const manyPayload  = JSON.stringify({ results: manyContacts, total: 201 });
+      const emptyPayload = JSON.stringify({ results: [], total: 0 });
+
+      await page.setRequestInterception(true);
+      page.on('request', req => {
+        const u = req.url();
+        if (u.includes('/api/contacts-all')) {
+          req.respond({ status: 200, contentType: 'application/json', body: manyPayload });
+        } else if (u.includes('/api/open-leads')) {
+          req.respond({ status: 200, contentType: 'application/json', body: emptyPayload });
+        } else {
+          req.continue();
+        }
+      });
+
+      await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded' });
+
+      const paginationElMany = await page.waitForSelector('.cl-pagination', { timeout: 8000 }).catch(() => null);
+
+      let noOverflowMany = false;
+      let overflowDetailMany = 'pagination bar not found';
+
+      if (paginationElMany) {
+        // Jump to page 8 via the jump form so multi-digit page numbers render.
+        await page.evaluate(() => {
+          const input = document.querySelector('#cl-jump-input');
+          const form  = document.querySelector('#cl-jump-form');
+          if (input && form) {
+            input.value = '8';
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+          }
+        }).catch(() => {});
+
+        // Wait for the pagination info to reflect page 8 content
+        // (items 176–200 of 201).
+        await page.waitForFunction(() => {
+          const info = document.querySelector('.cl-pagination-info');
+          return info && /176|177|178/.test(info.textContent);
+        }, { timeout: 5000 }).catch(() => {});
+
+        const dims = await page.$eval('.cl-pagination', el => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        })).catch(() => null);
+
+        if (dims) {
+          noOverflowMany = dims.scrollWidth <= dims.clientWidth;
+          overflowDetailMany = `scrollWidth=${dims.scrollWidth} clientWidth=${dims.clientWidth}`;
+        }
+      }
+
+      await safeShot(page, path.join(SCREENSHOT_DIR, `${runId}-mobile-pagination-overflow-many.png`));
+
+      record('pagination bar does not overflow at 360 px with 9 pages (high page-number variant)',
+        'scrollWidth <= clientWidth on .cl-pagination at 360 px with 201 contacts on page 8',
+        overflowDetailMany,
+        'medium', noOverflowMany);
+
+      await page.close();
+    } catch (e) {
+      record('mobile pagination overflow regression probe (many-pages variant) ran', 'no error',
+        `error: ${e.message}`, 'medium', false);
+    }
   } finally {
     await browser.close().catch(() => {});
   }
