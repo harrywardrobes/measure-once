@@ -1651,12 +1651,11 @@
               <td style="padding:7px 8px;">
                 <input type="text" class="field ls-label-input" value="${esc(s.label)}" data-key="${esc(s.key)}"
                   style="padding:4px 7px;font-size:.82rem;width:100%;min-width:120px;"
-                  onblur="saveLeadStatusLabel(this)"
                   onkeydown="if(event.key==='Enter')this.blur()">
               </td>
               <td style="padding:7px 8px;text-align:center;">
                 <input type="checkbox" ${s.excluded_from_sales ? 'checked' : ''} data-key="${esc(s.key)}"
-                  title="Exclude from Sales board" onchange="toggleLeadStatusExclusion(this)"
+                  title="Exclude from Sales board"
                   style="width:16px;height:16px;cursor:pointer;">
               </td>
               <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
@@ -1679,31 +1678,43 @@
     `;
   }
 
-  async function saveAllLeadStatusStages() {
-    const selects = document.querySelectorAll('.ls-stage-select');
+  async function saveAllLeadStatuses() {
+    const rows = document.querySelectorAll('#lead-statuses-table-wrap tr[data-ls-key]');
     const changed = [];
-    selects.forEach(sel => {
-      const key = sel.dataset.key;
-      const stage = sel.value || null;
+    rows.forEach(row => {
+      const key      = row.dataset.lsKey;
       const existing = _leadStatusesData.find(s => s.key === key);
-      if ((existing?.stage || null) !== stage) changed.push({ key, stage, select: sel });
+      if (!existing) return;
+      const labelEl   = row.querySelector('.ls-label-input');
+      const stageEl   = row.querySelector('.ls-stage-select');
+      const exclEl    = row.querySelector('input[type="checkbox"]');
+      const newLabel   = labelEl  ? labelEl.value.trim()      : existing.label;
+      const newStage   = stageEl  ? (stageEl.value || null)   : existing.stage;
+      const newExcl    = exclEl   ? exclEl.checked             : existing.excluded_from_sales;
+      const diff = {};
+      if (newLabel !== existing.label)                 diff.label = newLabel;
+      if (newStage !== (existing.stage || null))       diff.stage = newStage;
+      if (newExcl  !== existing.excluded_from_sales)   diff.excluded_from_sales = newExcl;
+      if (!newLabel) return;
+      if (Object.keys(diff).length) changed.push({ key, diff, labelEl, stageEl, exclEl, existing });
     });
-    if (!changed.length) { toast('No stage changes to save.'); return; }
+    if (!changed.length) { toast('No changes to save.'); return; }
     let saved = 0, failed = 0;
-    for (const { key, stage, select } of changed) {
-      const existing = _leadStatusesData.find(s => s.key === key);
+    for (const { key, diff, labelEl, stageEl, exclEl, existing } of changed) {
       try {
-        const updated = await api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(key)}`, { stage });
+        const updated = await api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(key)}`, diff);
         const idx = _leadStatusesData.findIndex(s => s.key === key);
         if (idx !== -1) _leadStatusesData[idx] = updated;
         saved++;
       } catch (e) {
-        select.value = existing?.stage || '';
+        if (labelEl)  labelEl.value   = existing.label;
+        if (stageEl)  stageEl.value   = existing.stage || '';
+        if (exclEl)   exclEl.checked  = existing.excluded_from_sales;
         failed++;
       }
     }
     if (failed) toast(`Saved ${saved}, failed ${failed}.`, true);
-    else toast(`${saved} stage${saved !== 1 ? 's' : ''} saved.`);
+    else toast(`${saved} change${saved !== 1 ? 's' : ''} saved.`);
     _notifyLeadStatusChanged();
   }
 
@@ -2056,7 +2067,7 @@
               <div style="font-weight:600;font-size:.875rem;color:var(--ink-1);">Lead Statuses</div>
               <p class="card-desc" style="margin:2px 0 0;">Define the HubSpot lead status values and their display labels. Statuses marked "Excl. from Sales" are hidden from the Sales board.</p>
             </div>
-            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="saveAllLeadStatusStages()">Save stages</button>
+            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="saveAllLeadStatuses()">Save</button>
           </div>
 
           <div id="lead-statuses-table-wrap">
