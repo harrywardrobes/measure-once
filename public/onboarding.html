@@ -12,6 +12,8 @@
     .card { background:#fff; border:1px solid var(--line); border-radius:12px;
             max-width:680px; width:100%; padding:32px;
             box-shadow:0 1px 3px rgba(0,0,0,.04); }
+    .logo-wrap { text-align:center; margin-bottom:24px; }
+    .logo-wrap img { max-width:180px; width:100%; height:auto; display:inline-block; }
     .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
     h1 { font-size:1.35rem; margin:0 0 4px; }
     .sub { color:var(--ink-3); font-size:.92rem; margin:0 0 24px; }
@@ -29,8 +31,9 @@
     .actions { display:flex; justify-content:space-between; align-items:center; margin-top:24px;
                padding-top:18px; border-top:1px solid #f3f1ec; gap:12px; }
     button.primary { background:var(--brand); color:#fff; border:none; padding:10px 22px;
-                     border-radius:8px; font-weight:600; font-size:.92rem; cursor:pointer; }
-    button.primary:hover { background:#2e0f5a; }
+                     border-radius:8px; font-weight:600; font-size:.92rem; cursor:pointer;
+                     transition:background .15s ease; }
+    button.primary:hover { background:#5a1fad; }
     button.primary:disabled { opacity:.6; cursor:not-allowed; }
     button.ghost { background:none; border:none; color:var(--ink-3); cursor:pointer; font:inherit;
                    text-decoration:underline; padding:0; }
@@ -39,6 +42,9 @@
 </head>
 <body>
   <div class="card">
+    <div class="logo-wrap">
+      <img src="/harry-wardrobes-logo.png" alt="Harry Wardrobes">
+    </div>
     <div class="topbar">
       <div>
         <h1>Complete your profile</h1>
