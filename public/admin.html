@@ -1971,10 +1971,24 @@
 
     // 1) Default labels (global "no status" + per-LS defaults).
     const defaultInputs = document.querySelectorAll('#card-actions-table-wrap .ca-default-input');
+    console.log('[card-actions] save: found', defaultInputs.length, 'default inputs');
     for (const input of defaultInputs) {
       const value    = input.value.trim();
       const original = input.dataset.original || '';
-      if (!value || value === original) continue;
+      console.log('[card-actions] input', input.dataset.kind,
+        'stage=', input.dataset.stage, 'status=', input.dataset.status,
+        'value=', JSON.stringify(value), 'orig=', JSON.stringify(original),
+        'changed=', value && value !== original);
+      if (!value) {
+        // Empty: server requires non-empty label. Surface this so the admin
+        // knows their clear-attempt didn't save (rather than silently skipping).
+        if (original) {
+          failures.push(`${input.dataset.kind} (${input.dataset.stage || ''}/${input.dataset.status || ''}): label cannot be empty.`);
+          failed++;
+        }
+        continue;
+      }
+      if (value === original) continue;
 
       if (input.dataset.kind === 'no-status-global') {
         // The global "no lead status" row writes through to all three
