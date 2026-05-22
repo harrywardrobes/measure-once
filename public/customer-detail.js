@@ -796,19 +796,43 @@ function _renderWorkflowStagesImpl() {
     const isFuture  = i > currentStageIdx;
     const isFocused = key === focusedKey;
 
+    // Progress ring values for this stage
+    const stageDoneIds    = completedStatuses[key] || [];
+    const stageTotalTasks = stage?.statuses?.length || 0;
+    const stageDoneTasks  = stage?.statuses?.filter(s => stageDoneIds.includes(s.id)).length || 0;
+    const ringFraction    = stageTotalTasks > 0 ? stageDoneTasks / stageTotalTasks : 0;
+    // Show ring on any stage that has at least one task defined
+    const showRing = stageTotalTasks > 0;
+    const ringR = 12;
+    const ringCirc = +(2 * Math.PI * ringR).toFixed(2);
+    const ringOffset = ringFraction >= 1
+      ? 0
+      : +(ringCirc * (1 - ringFraction)).toFixed(2);
+    const ringColour = colour.bg;
+    const ringOpacity = ringFraction === 0 ? '0.25' : '1';
+    const ringSvg = showRing ? `<svg class="stage-step-ring" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="15" cy="15" r="${ringR}" fill="none" stroke="${ringColour}" stroke-opacity="${ringOpacity}"
+          stroke-width="2.5" stroke-linecap="round"
+          stroke-dasharray="${ringCirc}"
+          stroke-dashoffset="${ringOffset}"
+          transform="rotate(-90 15 15)"/>
+      </svg>` : '';
+
     let iconHtml;
     if (isPast) {
       iconHtml = `<div class="stage-step-icon stage-step-done">
         <svg width="9" height="7" fill="none" stroke="#fff" viewBox="0 0 12 10">
           <polyline points="1,5 4.5,8.5 11,1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
+        ${ringSvg}
       </div>`;
     } else if (isCurrent) {
       iconHtml = `<div class="stage-step-icon stage-step-current" style="background:${colour.bg};border-color:${colour.bg}">
         <span style="display:block;width:6px;height:6px;border-radius:50%;background:#fff;flex-shrink:0"></span>
+        ${ringSvg}
       </div>`;
     } else {
-      iconHtml = `<div class="stage-step-icon stage-step-future"></div>`;
+      iconHtml = `<div class="stage-step-icon stage-step-future">${ringSvg}</div>`;
     }
 
     return `<div class="stage-step ${isFocused ? 'stage-step-focused' : ''} ${!isFuture ? 'stage-step-clickable' : ''}"

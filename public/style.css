@@ -1080,6 +1080,18 @@ body.showing-workflow .workflow-panel { display: flex; }
   box-shadow: 0 0 0 3px var(--chalk), 0 0 0 5px currentColor;
 }
 
+.stage-step-icon {
+  position: relative;
+}
+.stage-step-ring {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 30px; height: 30px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  overflow: visible;
+}
+
 .stage-step-connector {
   flex: 1;
   height: 2px;
