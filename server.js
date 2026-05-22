@@ -2949,13 +2949,14 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
     if (!existing.length) return res.status(404).json({ error: 'Status not found.' });
     const cur = existing[0];
 
-    // For the null sentinel row, only the label may be changed.
+    // For the null sentinel row, only the label and shorthand may be changed.
     if (cur.is_null_row) {
-      const newLabel = label !== undefined ? String(label).trim() : cur.label;
+      const newLabel     = label !== undefined ? String(label).trim() : cur.label;
       if (!newLabel) return res.status(400).json({ error: 'label cannot be empty.' });
+      const newShorthand = shorthandProvided ? shorthandValue : cur.shorthand;
       const { rows } = await pool.query(
-        'UPDATE lead_status_config SET label = $1 WHERE key = $2 RETURNING *',
-        [newLabel, key]
+        'UPDATE lead_status_config SET label = $1, shorthand = $2 WHERE key = $3 RETURNING *',
+        [newLabel, newShorthand, key]
       );
       return res.json(rows[0]);
     }

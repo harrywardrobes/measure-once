@@ -1769,7 +1769,7 @@
       salesStage.statuses.unshift({
         key:              '__NULL__',
         label:            nullRow ? nullRow.label : 'No lead status',
-        shorthand:        '',
+        shorthand:        (nullRow && nullRow.shorthand) || '',
         defaultLabel:     labelByKey['sales|'] || '',
         defaultStatusKey: '',
         isNullRow:        true,
@@ -2199,7 +2199,14 @@
         </td>
         <td style="padding:7px 8px;color:var(--ink-4);font-size:.78rem;font-style:italic;">—</td>
         <td style="padding:7px 8px;font-family:monospace;color:var(--ink-4);font-size:.78rem;font-style:italic;">— none —</td>
-        <td style="padding:7px 8px;font-family:monospace;color:var(--ink-4);font-size:.78rem;font-style:italic;">—</td>
+        <td style="padding:7px 8px;">
+          <input type="text" class="field ls-shorthand-input" maxlength="4"
+            value="${esc(nullRow.shorthand || '')}" data-key="${esc(nullRow.key)}"
+            title="4-character shorthand (must be unique). Used to prefix new sub-status keys under No lead status."
+            style="padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;width:62px;letter-spacing:.05em;"
+            oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4)"
+            onkeydown="if(event.key==='Enter')this.blur()">
+        </td>
         <td style="padding:7px 8px;">
           <input type="text" class="field ls-label-input" value="${esc(nullRow.label)}" data-key="${esc(nullRow.key)}"
             style="padding:4px 7px;font-size:.82rem;width:100%;min-width:120px;"
