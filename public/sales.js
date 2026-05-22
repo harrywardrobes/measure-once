@@ -36,9 +36,11 @@ function setSalesStageFilter(key) {
 // ── Priority sort ─────────────────────────────────────────────────────────────
 // Returns a numeric band: 0 = most urgent, 3 = cold/archived.
 // Within bands, callers sort by createdate descending (newest first).
+// stageKey is always 'sales' or 'designvisit' at call sites — survey rooms are
+// excluded by _bestRoom's SALES_TAB_STAGES guard and survey lead-status
+// entries are terminal (parked in designvisit column), so that band is unused.
 function priorityScore(stageKey, substageId) {
   if (stageKey === 'designvisit' && substageId === 'open_deal') return 0;
-  if (stageKey === 'survey'      && substageId === 'design_accepted') return 1;
   if (TERMINAL_SUBSTAGES.has(substageId)) return 3;
   return 2;
 }
@@ -81,9 +83,6 @@ function substagePillColour(stageKey, substageId) {
   }
   if (substageId === 'OPEN_DEAL' || substageId === 'VISIT_SCHEDULED') {
     return { bg: '#dbeafe', text: '#1d4ed8' };
-  }
-  if (stageKey === 'survey' && substageId === 'design_accepted') {
-    return { bg: '#d1fae5', text: '#047857' };
   }
   if (substageId === 'form_submission' || substageId === 'attempted_contact') {
     return { bg: '#fef3c7', text: '#b45309' };
@@ -132,6 +131,10 @@ function _initSalesListeners() {
 }
 
 // ── Best room selector (one row per contact) ──────────────────────────────────
+// The sales board is a 2-column view: 'sales' and 'designvisit'.
+// 'survey' is intentionally excluded here — survey contacts are remapped to the
+// designvisit column (terminal) by the lead-status override in renderEnquiryList,
+// and 'survey' appears only in the stage trail rendered on each card.
 // From all active rooms for a contact in the target stages,
 // return the single room that represents the highest-priority action.
 // Priority: lowest band first; within band, keep whichever appears first in the
@@ -267,15 +270,18 @@ async function renderEnquiryList() {
   });
 
   // ── Group by stage ────────────────────────────────────────────────────────
+  // finalStage on every entry resolves to 'sales' or 'designvisit' (see
+  // STAGE_COLUMN_INFO and _columnForLeadStatus), so all entries land in a bucket.
   const byStage = Object.fromEntries(SALES_TAB_STAGES.map(k => [k, []]));
   for (const e of visibleEntries) {
     if (byStage[e.stageKey]) byStage[e.stageKey].push(e);
   }
 
   // ── Mobile tab pills ──────────────────────────────────────────────────────
+  // SALES_TAB_STAGES = ['sales', 'designvisit'] — 'survey' is never k here.
   const tabs = SALES_TAB_STAGES.map(k => {
     const label  = escHtml(state.workflow?.stages?.[k]?.label ||
-      (k === 'designvisit' ? 'Design Visit' : k === 'survey' ? 'Survey' : 'Sales'));
+      (k === 'designvisit' ? 'Design Visit' : 'Sales'));
     const active = filter === k;
     const hex    = STAGE_ACCENT[k] || '#8B2BFF';
     const style  = active ? `background:${hex};color:#fff;border-color:${hex}` : '';
@@ -283,10 +289,11 @@ async function renderEnquiryList() {
       style="${style}" data-sales-stage="${k}">${label}</button>`;
   }).join('');
 
-  // ── Build 3 columns ───────────────────────────────────────────────────────
+  // ── Build columns (sales + designvisit) ──────────────────────────────────
+  // 'survey' appears only in the stage trail on each card, not as a board column.
   const colsHtml = SALES_TAB_STAGES.map(sk => {
     const label    = escHtml(state.workflow?.stages?.[sk]?.label ||
-      (sk === 'designvisit' ? 'Design Visit' : sk === 'survey' ? 'Survey' : 'Sales'));
+      (sk === 'designvisit' ? 'Design Visit' : 'Sales'));
     const entries  = byStage[sk];
     const count    = entries.length;
     const hex      = STAGE_ACCENT[sk] || '#8B2BFF';
@@ -403,7 +410,6 @@ function nextActionLabel(stageKey, substageId) {
     if (substageId === 'open_deal')         return 'Schedule design visit';
   }
   if (stageKey === 'designvisit') return 'Confirm design visit date';
-  if (stageKey === 'survey')      return 'Await survey confirmation';
   return '';
 }
 
