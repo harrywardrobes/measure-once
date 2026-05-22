@@ -1759,26 +1759,35 @@
     if (!wrap) return;
     const stages = _buildCardActionsModel();
 
-    wrap.innerHTML = stages.map(stage => `
-      <section style="margin-bottom:22px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
-        <header style="padding:10px 14px;background:var(--stone-soft);border-bottom:1px solid var(--border);font-weight:600;font-size:.85rem;color:var(--ink-2);">
-          ${esc(stage.label)}
-        </header>
+    // Top-level "No lead status" row — covers contacts with no hs_lead_status
+    // regardless of stage. Backed by the three stage_action_labels[stage|''] rows
+    // (sales / designvisit / survey) kept in lock-step on Save.
+    const noStatusValue = stages.reduce(
+      (acc, s) => acc || s.noStatusLabel || '', ''
+    );
 
-        <!-- Stage default (no lead status) -->
-        <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+    const noStatusHtml = `
+      <section style="margin-bottom:22px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+        <div style="padding:10px 14px;display:flex;align-items:center;gap:12px;background:#fff;">
           <div style="flex:0 0 220px;font-size:.78rem;color:var(--ink-3);">
             <em>No lead status</em>
             <div style="font-size:.7rem;color:var(--ink-4);margin-top:2px;">Default action label when contact has no <code>hs_lead_status</code>.</div>
           </div>
           <input type="text" class="field ca-default-input" maxlength="128"
-            data-kind="stage-default" data-stage="${esc(stage.key)}"
-            data-original="${esc(stage.noStatusLabel)}"
-            value="${esc(stage.noStatusLabel)}"
+            data-kind="no-status-global"
+            data-original="${esc(noStatusValue)}"
+            value="${esc(noStatusValue)}"
             placeholder="(no label — strip hidden)"
             style="flex:1;padding:5px 8px;font-size:.82rem;"
             onkeydown="if(event.key==='Enter')this.blur()">
         </div>
+      </section>`;
+
+    wrap.innerHTML = noStatusHtml + stages.map(stage => `
+      <section style="margin-bottom:22px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+        <header style="padding:10px 14px;background:var(--stone-soft);border-bottom:1px solid var(--border);font-weight:600;font-size:.85rem;color:var(--ink-2);">
+          ${esc(stage.label)}
+        </header>
 
         ${stage.statuses.length === 0 ? `
           <div style="padding:14px;font-size:.78rem;color:var(--ink-4);"><em>No lead statuses configured for this stage yet.</em></div>
@@ -1911,17 +1920,40 @@
     let saved = 0, failed = 0;
     const failures = [];
 
-    // 1) Stage / lead-status default labels.
+    // 1) Default labels (global "no status" + per-LS defaults).
     const defaultInputs = document.querySelectorAll('#card-actions-table-wrap .ca-default-input');
     for (const input of defaultInputs) {
       const value    = input.value.trim();
       const original = input.dataset.original || '';
       if (!value || value === original) continue;
-      const payload = input.dataset.kind === 'stage-default'
-        ? { stage_key: input.dataset.stage, status_key: '',                       label: value }
-        : { stage_key: input.dataset.stage, status_key: input.dataset.status,     label: value };
+
+      if (input.dataset.kind === 'no-status-global') {
+        // The global "no lead status" row writes through to all three
+        // stage_action_labels[stage|''] rows so contacts with no hs_lead_status
+        // get the same label regardless of which column they land in.
+        let allOk = true;
+        for (const stageKey of ['sales', 'designvisit', 'survey']) {
+          try {
+            await api('PUT', '/api/admin/stage-action-labels', {
+              stage_key: stageKey, status_key: '', label: value,
+            });
+          } catch (e) {
+            allOk = false;
+            failures.push(`no-status (${stageKey}): ${e.message || 'error'}`);
+          }
+        }
+        if (allOk) { input.dataset.original = value; saved++; }
+        else       { input.value = original;          failed++; }
+        continue;
+      }
+
+      // Per-lead-status default.
       try {
-        await api('PUT', '/api/admin/stage-action-labels', payload);
+        await api('PUT', '/api/admin/stage-action-labels', {
+          stage_key: input.dataset.stage,
+          status_key: input.dataset.status,
+          label: value,
+        });
         input.dataset.original = value;
         saved++;
       } catch (e) {
