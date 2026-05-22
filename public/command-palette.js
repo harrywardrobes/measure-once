@@ -188,6 +188,25 @@
       }
     }
 
+    if (!q) {
+      try {
+        const recents = JSON.parse(localStorage.getItem('cp_recent_customers') || '[]');
+        if (recents.length) {
+          html += `<div class="cp-section-label">Recent</div>`;
+          recents.forEach(r => {
+            const initials = r.name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+            html += `<button class="cp-result-item" onclick="closeCommandPalette();location.href='/customers/${escHtml(r.id)}'" tabindex="0">
+              <span class="cp-result-avatar">${escHtml(initials)}</span>
+              <span class="cp-result-text">
+                <span class="cp-result-label">${escHtml(r.name)}</span>
+                ${r.company ? `<span class="cp-result-sub">${escHtml(r.company)}</span>` : ''}
+              </span>
+            </button>`;
+          });
+        }
+      } catch (_) {}
+    }
+
     const activeActions = _getActiveActions();
     const filtered = q
       ? activeActions.filter(a => a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q))

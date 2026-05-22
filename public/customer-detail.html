@@ -122,6 +122,21 @@
       if (contact && contact.properties) {
         const name = contactName(contact);
         document.title = `${name} · Measure Once`;
+
+        try {
+          const KEY = 'cp_recent_customers';
+          const MAX = 5;
+          const entry = {
+            id: contactId,
+            name,
+            company: contact.properties.company || '',
+            ts: Date.now(),
+          };
+          const existing = JSON.parse(localStorage.getItem(KEY) || '[]');
+          const filtered = existing.filter(r => r.id !== contactId);
+          filtered.unshift(entry);
+          localStorage.setItem(KEY, JSON.stringify(filtered.slice(0, MAX)));
+        } catch (_) {}
       }
 
       const roomParam = new URLSearchParams(location.search).get('room');
