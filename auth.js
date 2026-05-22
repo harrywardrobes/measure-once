@@ -1118,8 +1118,14 @@ async function setupAuth(app) {
     const date_of_birth = str(body.date_of_birth, 20);
     const ni_number     = str(body.ni_number, 20);
     const mobile_number = str(body.mobile_number, 30);
-    const ec_first_name = str(body.ec_first_name, 100);
-    const ec_last_name  = str(body.ec_last_name, 100);
+    const _ecFnRaw  = str(body.ec_first_name, 100);
+    const _ecFnTok  = _ecFnRaw ? (_ecFnRaw.split(/\s+/).filter(Boolean)[0] || '') : '';
+    const ec_first_name = _ecFnTok ? _ecFnTok.charAt(0).toUpperCase() + _ecFnTok.slice(1).toLowerCase() : null;
+
+    const _ecLnRaw    = str(body.ec_last_name, 100);
+    const _ecLnTokens = _ecLnRaw ? _ecLnRaw.split(/\s+/).filter(Boolean) : [];
+    const _ecLnTok    = _ecLnTokens[_ecLnTokens.length - 1] || '';
+    const ec_last_name  = _ecLnTok ? _ecLnTok.charAt(0).toUpperCase() + _ecLnTok.slice(1).toLowerCase() : null;
     const ec_phone      = str(body.ec_phone, 30);
 
     const missing = [];
