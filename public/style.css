@@ -139,20 +139,14 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
 }
 .header-logo-link {
   display: flex;
   align-items: center;
   text-decoration: none;
   flex-shrink: 0;
-}
-.header-center {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
 }
 .header-page-title {
   font-size: 0.95rem;

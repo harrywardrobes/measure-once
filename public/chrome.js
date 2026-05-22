@@ -135,8 +135,6 @@ window.getShortcut = function (key) {
           <a href="/" class="header-logo-link" title="Home" aria-label="Go to home">
             <img src="/assets/logo-mark-paper.png" alt="Harry Wardrobes" width="26" height="26" style="height:26px;width:auto;">
           </a>
-        </div>
-        <div class="header-center">
           <span class="header-page-title">${pageTitle}</span>
         </div>
         <div class="header-right">
