@@ -145,7 +145,10 @@ function _svCardHtml(entry) {
   const customerNum = contact.properties?.customer_number || '';
   const postcode    = escHtml((contact.properties?.zip || '').toUpperCase());
   const subLabel    = escHtml(_svSubstageLabel(substageId));
-  const timeStr     = escHtml(_svRelativeTime(stageTime));
+  const lmdRaw      = contact.properties?.lastmodifieddate;
+  const lmdMs       = lmdRaw ? new Date(lmdRaw).getTime() : NaN;
+  const displayTime = !isNaN(lmdMs) ? lmdMs : stageTime;
+  const timeStr     = escHtml(_svRelativeTime(displayTime));
 
   const numHtml = customerNum
     ? `<span class="eq-card-num">${escHtml(customerNum)}</span>` : '';
@@ -193,7 +196,7 @@ function _svCardHtml(entry) {
           ${sourceHtml}
         </div>
         <div class="eq-card-footer">
-          <span class="eq-card-time">${timeStr}</span>
+          <span class="eq-card-time">Updated ${timeStr}</span>
         </div>
       </div>
       ${actionHtml}
