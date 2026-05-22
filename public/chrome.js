@@ -197,8 +197,9 @@ window.getShortcut = function (key) {
       </button>
     </div>`;
 
+  const isAdminPage = path === '/admin' || path.startsWith('/admin/');
   document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner);
-  document.body.insertAdjacentHTML('beforeend', invoicePanel + bottomNav);
+  document.body.insertAdjacentHTML('beforeend', invoicePanel + (isAdminPage ? '' : bottomNav));
 
   function scrollActiveNavIntoView(behavior) {
     const btn = document.querySelector('.bottom-nav-active');
@@ -208,6 +209,7 @@ window.getShortcut = function (key) {
   function syncActiveNav(behavior) {
     const currentPath = location.pathname;
     const buttons = document.querySelectorAll('.bottom-nav-btn');
+    if (!buttons.length) return;
     let changed = false;
     buttons.forEach(btn => {
       const href = btn.getAttribute('href');
