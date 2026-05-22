@@ -1572,6 +1572,8 @@
 
   let _leadStatusesData = [];
   let _leadStatusesLoaded = false;
+  const _lsBroadcast = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('lead_statuses_changed') : null;
+  function _notifyLeadStatusChanged() { _lsBroadcast?.postMessage('changed'); }
 
   async function loadLeadStatusesAdmin() {
     if (_leadStatusesLoaded) return;
@@ -1650,6 +1652,7 @@
       const updated = await api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(key)}`, { label });
       const idx = _leadStatusesData.findIndex(s => s.key === key);
       if (idx !== -1) _leadStatusesData[idx] = updated;
+      _notifyLeadStatusChanged();
     } catch (e) {
       toast(`Failed to save label: ${e.message}`, true);
       input.value = existing?.label || '';
@@ -1663,6 +1666,7 @@
       const updated = await api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(key)}`, { excluded_from_sales: excluded });
       const idx = _leadStatusesData.findIndex(s => s.key === key);
       if (idx !== -1) _leadStatusesData[idx] = updated;
+      _notifyLeadStatusChanged();
     } catch (e) {
       toast(`Failed to update: ${e.message}`, true);
       checkbox.checked = !excluded;
@@ -1675,6 +1679,7 @@
       await api('DELETE', `/api/admin/lead-statuses/${encodeURIComponent(key)}`);
       _leadStatusesData = _leadStatusesData.filter(s => s.key !== key);
       renderLeadStatusesTable();
+      _notifyLeadStatusChanged();
     } catch (e) {
       toast(`Failed to delete: ${e.message}`, true);
     }
@@ -1701,6 +1706,7 @@
       _leadStatusesData[idx]     = b;
       _leadStatusesData[swapIdx] = a;
       renderLeadStatusesTable();
+      _notifyLeadStatusChanged();
     } catch (e) {
       toast(`Failed to reorder: ${e.message}`, true);
     }
@@ -1726,6 +1732,7 @@
       if (keyInput)   keyInput.value   = '';
       if (labelInput) labelInput.value = '';
       renderLeadStatusesTable();
+      _notifyLeadStatusChanged();
     } catch (e) {
       showErr(e.message || 'Failed to add status.');
     }

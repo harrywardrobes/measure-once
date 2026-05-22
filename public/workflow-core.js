@@ -345,6 +345,20 @@ document.addEventListener('visibilitychange', () => {
   });
 });
 
+// ── Cross-tab lead-status refresh ─────────────────────────────────────────────
+// When the admin settings panel saves a lead-status change in another tab,
+// it broadcasts on this channel so open contact lists can re-render immediately
+// without requiring the user to leave and return to the tab.
+if (typeof BroadcastChannel !== 'undefined') {
+  const _lsChannel = new BroadcastChannel('lead_statuses_changed');
+  _lsChannel.addEventListener('message', () => {
+    loadLeadStatuses().then(() => {
+      if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
+      if (typeof renderCustomerList === 'function') renderCustomerList();
+    });
+  });
+}
+
 function populateLeadStatusFilter() {
   const sel = document.getElementById('lead-status-filter');
   if (!sel) return;
