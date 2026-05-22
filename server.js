@@ -214,6 +214,7 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
       },
       { headers: hsHeaders() }
     );
+    bustSharedCache();
     res.json({ success: true });
   } catch (e) {
     const status = e.response?.status;
@@ -273,6 +274,12 @@ async function getSharedContactsCache() {
   return contacts;
 }
 
+// Invalidate the shared contacts cache so the next request triggers a fresh
+// HubSpot scan. Call this from every mutation route that changes contact data.
+function bustSharedCache() {
+  _allContactsCache = null;
+}
+
 // Assign (or unassign) a fitter to a specific room on a contact (manager or admin only)
 app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireManagerOrAdmin, requireHubspotToken, async (req, res) => {
   const contactId = req.params.id;
@@ -313,7 +320,7 @@ app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireMan
     );
 
     // Bust shared cache so next /api/localdata/all and /api/contacts-all reflect the new assignment
-    _allContactsCache = null;
+    bustSharedCache();
 
     res.json({ success: true, rooms });
   } catch (e) {
@@ -702,7 +709,7 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHu
     );
 
     contact.properties.customer_number = customerNumber;
-    _allContactsCache = null;
+    bustSharedCache();
     return res.status(201).json(contact);
   } catch (e) {
     const status = e.response?.status;
@@ -832,7 +839,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
       }
     }
 
-    _allContactsCache = null;
+    bustSharedCache();
     res.json(patchResp.data);
   } catch (e) {
     const status = e.response?.status;
