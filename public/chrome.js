@@ -6,7 +6,8 @@
  * getShortcut('K') → '⌘K' on Mac / iOS, 'Ctrl K' everywhere else.
  */
 window.getShortcut = function (key) {
-  return /Mac|iPhone|iPad|iPod/.test(navigator.platform) ? '\u2318' + key : 'Ctrl ' + key;
+  const platform = navigator.userAgentData?.platform ?? navigator.platform;
+  return /Mac|iPhone|iPad|iPod/i.test(platform) ? '\u2318' + key : 'Ctrl ' + key;
 };
 
 (function () {
