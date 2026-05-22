@@ -103,6 +103,10 @@ function populateTradeFilters() {
   const tabsEl = document.getElementById('trades-type-tabs');
   if (!tabsEl) return;
   const types = [...new Set(_tradeContacts.map(c => c.trade_type).filter(Boolean))].sort();
+  if (_tradeTypeFilter && !types.includes(_tradeTypeFilter)) {
+    _tradeTypeFilter = '';
+    try { localStorage.removeItem('tradesTypeFilter'); } catch (_) {}
+  }
   const all = ['All', ...types];
   tabsEl.innerHTML = all.map(t => {
     const val = t === 'All' ? '' : t;
