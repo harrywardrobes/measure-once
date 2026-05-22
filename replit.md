@@ -96,6 +96,8 @@ The run also includes API pre-checks (`GET /api/admin/lead-statuses` and
 written to `test-results/lead-status-sync.md`; the command exits non-zero when
 any probe fails.
 
+If a disposable database is unavailable, `PRIVTEST_ALLOW_SHARED_DB=1 npm run test:lead-status-sync` is accepted as a fallback — synthetic rows are namespaced behind the `privtest-` prefix and cleaned up on exit, but a crash mid-run can leave stale fixtures.
+
 **Known limitation:** the test server strips `HUBSPOT_TOKEN`, so
 `loadAllContacts()` returns 503 and contact counts in the filter options will
 always be 0. The `bootstrapFilter()` helper compensates by calling
