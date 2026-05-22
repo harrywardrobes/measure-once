@@ -763,7 +763,15 @@ function _renderWorkflowHeaderImpl() {
             return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(label)}</span>`;
           })()}
           ${email ? `<a href="mailto:${escHtml(email)}" class="text-sm text-blue-600 hover:underline">${escHtml(email)}</a>` : ''}
-          ${phone ? `<span class="text-sm text-slate-500">${escHtml(phone)}</span>` : ''}
+          ${phone ? `<span class="text-sm text-slate-500 flex items-center gap-1">
+            ${escHtml(phone)}
+            ${state.whatsappEnabled ? `<button onclick="openWhatsAppModal()" title="Send WhatsApp message"
+              style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#25D366;border:none;cursor:pointer;flex-shrink:0;padding:0;vertical-align:middle">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+              </svg>
+            </button>` : ''}
+          </span>` : ''}
           ${city  ? `<span class="text-sm text-slate-400">${escHtml(city)}</span>`  : ''}
         </div>
       </div>
@@ -1641,6 +1649,230 @@ function renderWorkflowInvoices() {
     </div>
   `;
 }
+
+// ── WhatsApp Modal ────────────────────────────────────────────────────────────
+let _waMode = 'template';
+let _waTemplates = null; // null = not yet fetched, [] = fetched (may be empty)
+let _waTemplatesFetching = false;
+
+function openWhatsAppModal() {
+  const phone = state.selectedContact?.properties?.phone || '';
+  if (!phone) return;
+
+  const modal = document.getElementById('whatsapp-modal');
+  if (!modal) return;
+
+  const toEl = document.getElementById('whatsapp-to');
+  if (toEl) toEl.textContent = `To: ${phone}`;
+
+  _waMode = 'template';
+  _waApplyTabStyles();
+  _waShowPanel('template');
+  _waClearFeedback();
+
+  modal.style.display = 'flex';
+  modal.classList.remove('hidden');
+
+  _waFetchTemplates();
+}
+
+function closeWhatsAppModal() {
+  const modal = document.getElementById('whatsapp-modal');
+  if (!modal) return;
+  modal.style.display = 'none';
+  modal.classList.add('hidden');
+}
+
+function waSetMode(mode) {
+  _waMode = mode;
+  _waApplyTabStyles();
+  _waShowPanel(mode);
+  _waClearFeedback();
+}
+
+function _waApplyTabStyles() {
+  const tabTemplate = document.getElementById('wa-tab-template');
+  const tabFreeform = document.getElementById('wa-tab-freeform');
+  if (!tabTemplate || !tabFreeform) return;
+  const activeStyle = 'background:#f0fdf4;color:#15803d;';
+  const inactiveStyle = 'background:#f8fafc;color:#374151;';
+  tabTemplate.style.cssText = `flex:1;padding:8px 0;font-size:0.82rem;font-weight:600;border:none;cursor:pointer;transition:background 0.15s;${_waMode === 'template' ? activeStyle : inactiveStyle}`;
+  tabFreeform.style.cssText = `flex:1;padding:8px 0;font-size:0.82rem;font-weight:600;border:none;cursor:pointer;transition:background 0.15s;border-left:1px solid #e2e8f0;${_waMode === 'freeform' ? activeStyle : inactiveStyle}`;
+}
+
+function _waShowPanel(mode) {
+  const pTemplate = document.getElementById('wa-panel-template');
+  const pFreeform = document.getElementById('wa-panel-freeform');
+  if (pTemplate) pTemplate.style.display = mode === 'template' ? '' : 'none';
+  if (pFreeform) pFreeform.classList.toggle('hidden', mode !== 'freeform');
+}
+
+function _waClearFeedback() {
+  const errEl = document.getElementById('wa-send-error');
+  const okEl  = document.getElementById('wa-send-success');
+  if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
+  if (okEl)  { okEl.classList.add('hidden'); }
+}
+
+async function _waFetchTemplates() {
+  if (_waTemplates !== null) {
+    _waRenderTemplates(_waTemplates);
+    return;
+  }
+  if (_waTemplatesFetching) return;
+  _waTemplatesFetching = true;
+
+  const loadEl  = document.getElementById('wa-templates-loading');
+  const errEl   = document.getElementById('wa-templates-error');
+  const selEl   = document.getElementById('wa-template-select');
+  if (loadEl) loadEl.style.display = '';
+  if (errEl)  errEl.classList.add('hidden');
+  if (selEl)  selEl.classList.add('hidden');
+
+  try {
+    const templates = await GET('/api/whatsapp/templates');
+    _waTemplates = templates;
+    _waRenderTemplates(templates);
+  } catch (e) {
+    if (errEl) {
+      errEl.textContent = e.message || 'Could not load templates.';
+      errEl.classList.remove('hidden');
+    }
+    if (loadEl) loadEl.style.display = 'none';
+  } finally {
+    _waTemplatesFetching = false;
+  }
+}
+
+function _waRenderTemplates(templates) {
+  const loadEl = document.getElementById('wa-templates-loading');
+  const selEl  = document.getElementById('wa-template-select');
+  if (loadEl) loadEl.style.display = 'none';
+  if (!selEl) return;
+
+  selEl.innerHTML = '<option value="">— Select a template —</option>' +
+    templates.map(t => `<option value="${escHtml(t.name)}" data-lang="${escHtml(t.language || 'en_US')}">${escHtml(t.name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()))}</option>`).join('');
+  selEl.classList.remove('hidden');
+
+  if (templates.length === 0) {
+    const errEl = document.getElementById('wa-templates-error');
+    if (errEl) {
+      errEl.textContent = 'No approved templates found. Templates are managed in Meta Business Manager.';
+      errEl.classList.remove('hidden');
+    }
+  }
+}
+
+function waOnTemplateChange() {
+  const selEl      = document.getElementById('wa-template-select');
+  const previewEl  = document.getElementById('wa-template-preview');
+  const paramsEl   = document.getElementById('wa-template-params');
+  if (!selEl || !previewEl || !paramsEl) return;
+
+  const name = selEl.value;
+  if (!name || !_waTemplates) {
+    previewEl.style.display = 'none';
+    paramsEl.style.display = 'none';
+    return;
+  }
+
+  const tpl = _waTemplates.find(t => t.name === name);
+  if (!tpl) { previewEl.style.display = 'none'; paramsEl.style.display = 'none'; return; }
+
+  const bodyComp = (tpl.components || []).find(c => c.type === 'BODY');
+  if (bodyComp?.text) {
+    previewEl.textContent = bodyComp.text;
+    previewEl.style.display = '';
+  } else {
+    previewEl.style.display = 'none';
+  }
+
+  const params = bodyComp?.parameters || [];
+  if (params.length > 0) {
+    paramsEl.style.display = '';
+    paramsEl.innerHTML = params.map(p => `
+      <div style="margin-bottom:8px">
+        <label style="font-size:0.78rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">
+          Parameter {{${p.index}}}${p.example ? ` <span style="font-weight:400;color:#9ca3af">e.g. ${escHtml(p.example)}</span>` : ''}
+        </label>
+        <input type="text" id="wa-param-${p.index}" placeholder="Value for {{${p.index}}}"
+          style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:0.875rem;box-sizing:border-box;font-size:16px">
+      </div>
+    `).join('');
+  } else {
+    paramsEl.style.display = 'none';
+    paramsEl.innerHTML = '';
+  }
+}
+
+async function waSubmit() {
+  const phone = state.selectedContact?.properties?.phone || '';
+  if (!phone) return;
+
+  const sendBtn = document.getElementById('wa-send-btn');
+  const errEl   = document.getElementById('wa-send-error');
+  const okEl    = document.getElementById('wa-send-success');
+
+  _waClearFeedback();
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
+
+  let payload = { contactPhone: phone, mode: _waMode };
+
+  if (_waMode === 'template') {
+    const selEl = document.getElementById('wa-template-select');
+    const templateName = selEl?.value;
+    if (!templateName) {
+      if (errEl) { errEl.textContent = 'Please select a template.'; errEl.classList.remove('hidden'); }
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
+      return;
+    }
+    const selectedOpt = selEl.selectedOptions[0];
+    const lang = selectedOpt?.dataset?.lang || 'en_US';
+    const tpl  = _waTemplates?.find(t => t.name === templateName);
+    const bodyComp = (tpl?.components || []).find(c => c.type === 'BODY');
+    const params = bodyComp?.parameters || [];
+    const vals = params.map(p => {
+      const inp = document.getElementById(`wa-param-${p.index}`);
+      return inp ? inp.value.trim() : '';
+    });
+    payload.templateName = templateName;
+    payload.templateLanguage = lang;
+    payload.templateParams = vals;
+  } else {
+    const text = document.getElementById('wa-freeform-text')?.value.trim();
+    if (!text) {
+      if (errEl) { errEl.textContent = 'Please enter a message.'; errEl.classList.remove('hidden'); }
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
+      return;
+    }
+    payload.message = text;
+  }
+
+  try {
+    await POST('/api/whatsapp/send', payload);
+    if (okEl) okEl.classList.remove('hidden');
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
+    setTimeout(() => closeWhatsAppModal(), 2000);
+  } catch (e) {
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
+    let msg = e.message || 'Failed to send. Please try again.';
+    if (e.code === 'OUTSIDE_WINDOW') {
+      msg = 'Outside the 24-hour window — please send a template message instead.';
+      waSetMode('template');
+    } else if (e.code === 'NOT_ON_WHATSAPP') {
+      msg = 'This phone number is not registered on WhatsApp.';
+    }
+    if (errEl) { errEl.textContent = msg; errEl.classList.remove('hidden'); }
+  }
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const modal = document.getElementById('whatsapp-modal');
+    if (modal && modal.style.display !== 'none') closeWhatsAppModal();
+  }
+});
 
 // ── Register implementations with core.js dispatchers ─────────────────────────
 registerRoomTabsRenderer(_renderRoomTabsImpl);

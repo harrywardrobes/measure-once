@@ -12,6 +12,7 @@ const {
   personalTaskCreateLimiter,
   tradesCreateLimiter,
   prefsWriteLimiter,
+  whatsappSendLimiter,
 } = require('./rate-limiters');
 const qbRoutes = require('./quickbooks');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
@@ -2765,6 +2766,157 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
   } catch (e) {
     console.error('DELETE /api/admin/lead-statuses/:key error:', e.message);
     res.status(500).json({ error: 'Could not delete lead status.' });
+  }
+});
+
+// ── WhatsApp config probe (no creds needed — just reports if configured) ──────
+app.get('/api/whatsapp/config', isAuthenticated, (req, res) => {
+  res.json({
+    enabled: !!(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID),
+  });
+});
+
+// ── WhatsApp (Meta Cloud API) ─────────────────────────────────────────────────
+const META_GRAPH = 'https://graph.facebook.com/v19.0';
+
+function requireWhatsAppConfig(req, res, next) {
+  if (!process.env.WHATSAPP_ACCESS_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
+    return res.status(503).json({
+      error: 'WhatsApp is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID in your environment secrets.'
+    });
+  }
+  next();
+}
+
+// Cache the WABA ID derived from the phone number ID (valid for server lifetime)
+let _wabaId = null;
+async function getWabaId() {
+  if (_wabaId) return _wabaId;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const r = await axios.get(
+    `${META_GRAPH}/${encodeURIComponent(phoneNumberId)}`,
+    {
+      params: { fields: 'whatsapp_business_account', access_token: process.env.WHATSAPP_ACCESS_TOKEN },
+      timeout: 8000,
+    }
+  );
+  _wabaId = r.data?.whatsapp_business_account?.id || null;
+  return _wabaId;
+}
+
+app.get('/api/whatsapp/templates', isAuthenticated, requireWhatsAppConfig, async (req, res) => {
+  try {
+    const wabaId = await getWabaId();
+    if (!wabaId) return res.json([]);
+    const r = await axios.get(
+      `${META_GRAPH}/${encodeURIComponent(wabaId)}/message_templates`,
+      {
+        params: { status: 'APPROVED', limit: 100, access_token: process.env.WHATSAPP_ACCESS_TOKEN },
+        timeout: 10000,
+      }
+    );
+    const templates = (r.data?.data || []).map(t => ({
+      name:     t.name,
+      language: t.language,
+      category: t.category,
+      components: (t.components || []).map(c => ({
+        type:       c.type,
+        text:       c.text || '',
+        parameters: (c.example?.body_text?.[0] || []).map((ex, i) => ({
+          index:   i + 1,
+          example: ex,
+        })),
+      })),
+    }));
+    res.json(templates);
+  } catch (e) {
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'Meta API rejected the request — check your WHATSAPP_ACCESS_TOKEN.' });
+    }
+    console.error('GET /api/whatsapp/templates error:', e.response?.data || e.message);
+    res.status(502).json({ error: e.response?.data?.error?.message || 'Could not fetch WhatsApp templates.' });
+  }
+});
+
+app.post('/api/whatsapp/send', isAuthenticated, requireWhatsAppConfig, whatsappSendLimiter, async (req, res) => {
+  const { contactPhone, mode, templateName, templateLanguage, templateParams, message } = req.body;
+
+  if (!contactPhone || typeof contactPhone !== 'string') {
+    return res.status(400).json({ error: 'contactPhone is required.' });
+  }
+  // Normalise phone: strip everything except digits and leading +
+  const digitsOnly = contactPhone.replace(/[^\d]/g, '');
+  if (!digitsOnly || digitsOnly.length < 7) {
+    return res.status(400).json({ error: 'Invalid phone number.' });
+  }
+
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  let body;
+
+  if (mode === 'template') {
+    if (!templateName) return res.status(400).json({ error: 'templateName is required for template mode.' });
+    const components = [];
+    if (Array.isArray(templateParams) && templateParams.length > 0) {
+      components.push({
+        type: 'body',
+        parameters: templateParams.map(v => ({ type: 'text', text: String(v) })),
+      });
+    }
+    body = {
+      messaging_product: 'whatsapp',
+      to: digitsOnly,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: templateLanguage || 'en_US' },
+        ...(components.length ? { components } : {}),
+      },
+    };
+  } else if (mode === 'freeform') {
+    if (!message || !message.trim()) return res.status(400).json({ error: 'message is required for freeform mode.' });
+    body = {
+      messaging_product: 'whatsapp',
+      to: digitsOnly,
+      type: 'text',
+      text: { body: message.trim() },
+    };
+  } else {
+    return res.status(400).json({ error: 'mode must be "template" or "freeform".' });
+  }
+
+  try {
+    await axios.post(
+      `${META_GRAPH}/${encodeURIComponent(phoneNumberId)}/messages`,
+      body,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      }
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    const status   = e.response?.status;
+    const metaErr  = e.response?.data?.error;
+    const metaCode = metaErr?.code;
+    const metaMsg  = metaErr?.message || e.message;
+
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'Meta API rejected the request — check your WHATSAPP_ACCESS_TOKEN.' });
+    }
+    // 131047 = message failed to send because more than 24 hours have passed
+    if (metaCode === 131047 || (metaMsg || '').includes('24 hour')) {
+      return res.status(422).json({ error: 'Outside the 24-hour messaging window. You can only send template messages to this customer right now.', code: 'OUTSIDE_WINDOW' });
+    }
+    // 131026 = recipient phone number not in allowed list / not a WhatsApp user
+    if (metaCode === 131026) {
+      return res.status(422).json({ error: 'That phone number is not registered on WhatsApp.', code: 'NOT_ON_WHATSAPP' });
+    }
+    console.error('POST /api/whatsapp/send error:', metaErr || e.message);
+    res.status(502).json({ error: metaMsg || 'Failed to send WhatsApp message.' });
   }
 });
 

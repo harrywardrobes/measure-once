@@ -125,6 +125,7 @@ const state = {
     panelSaving: false,
     panelSending: false,
   },
+  whatsappEnabled: false,
 };
 
 // ── User prefs helpers ────────────────────────────────────────────────────────
@@ -348,7 +349,9 @@ async function bootstrap() {
     await checkAuthStatus();
     await loadWorkflow();
     await Promise.all([loadOpenLeads(), loadWorkflowStages(), ensurePrefs(),
-      typeof loadLeadStatuses === 'function' ? loadLeadStatuses() : Promise.resolve()]);
+      typeof loadLeadStatuses === 'function' ? loadLeadStatuses() : Promise.resolve(),
+      GET('/api/whatsapp/config').then(cfg => { state.whatsappEnabled = !!cfg.enabled; }).catch(() => {}),
+    ]);
     populateStageFilter();
     if (document.getElementById('customers-view') || document.getElementById('sales-view')) renderCustomerList();
     if (priv === 'manager' || priv === 'admin') loadQBInvoices();

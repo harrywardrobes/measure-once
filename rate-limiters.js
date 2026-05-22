@@ -79,6 +79,13 @@ const prefsWriteLimiter = createUserRateLimiter({
   message: 'Too many preference updates. Please wait a moment and try again.',
 });
 
+const whatsappSendLimiter = createUserRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  prefix: 'whatsapp_send',
+  message: 'WhatsApp send limit reached. Please wait before sending more messages.',
+});
+
 const visitsReadLimiter = createUserRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -97,5 +104,6 @@ module.exports = {
   personalTaskCreateLimiter,
   tradesCreateLimiter,
   prefsWriteLimiter,
+  whatsappSendLimiter,
   visitsReadLimiter,
 };
