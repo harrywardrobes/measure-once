@@ -641,6 +641,7 @@
   function switchTab(id) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + id));
+    try { localStorage.setItem('adminActiveTab', id); } catch (_) {}
     if (id === 'auditlog' && !_auditLogInitialized) {
       _auditLogInitialized = true;
       initAuditLog();
@@ -2100,6 +2101,14 @@
     renderPhotoRequests();
     renderTradeSubmissions();
     await initAuditLog();
+
+    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings'];
+    let savedTab;
+    try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
+    if (savedTab && validTabs.includes(savedTab)) {
+      if (savedTab === 'settings') { switchTab('settings'); loadHubspotStatus(); loadLeadStatusesAdmin(); }
+      else { switchTab(savedTab); }
+    }
   }
 
   document.addEventListener('click', async function(e) {
