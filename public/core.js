@@ -503,8 +503,9 @@ function renderAuthStatus() {
   if (photoSrc && user.photo_v) {
     photoSrc += (photoSrc.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(user.photo_v);
   }
-  const adminPath = window.location.pathname;
-  const adminActive = (adminPath === '/admin' || adminPath.startsWith('/admin/')) ? ' header-icon-btn--active' : '';
+  const currentPath = window.location.pathname;
+  const adminActive = (currentPath === '/admin' || currentPath.startsWith('/admin/')) ? ' header-icon-btn--active' : '';
+  const profileActive = (currentPath === '/profile' || currentPath.startsWith('/profile/')) ? ' header-icon-btn--active' : '';
   const adminIconHtml = user.privilege_level === 'admin'
     ? `<a href="/admin" class="header-icon-btn${adminActive}" aria-label="Admin panel" title="Admin panel">
          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -513,10 +514,10 @@ function renderAuthStatus() {
        </a>`
     : '';
   el.innerHTML = adminIconHtml + (photoSrc
-    ? `<a href="/profile" class="header-avatar-btn" title="Profile" aria-label="Open profile">
+    ? `<a href="/profile" class="header-avatar-btn${profileActive}" title="Profile" aria-label="Open profile">
          <img src="${escHtml(photoSrc)}" alt="" class="header-avatar-img">
        </a>`
-    : `<a href="/profile" class="header-avatar-btn header-avatar-initials" title="Profile" aria-label="Open profile">
+    : `<a href="/profile" class="header-avatar-btn header-avatar-initials${profileActive}" title="Profile" aria-label="Open profile">
          ${escHtml(initials)}
        </a>`);
 
