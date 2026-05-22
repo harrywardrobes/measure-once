@@ -595,7 +595,8 @@ async function getUserByEmail(email) {
   if (!email) return null;
   const r = await pool.query(
     `SELECT id, email, first_name, last_name, profile_image_url,
-            job_role, privilege_level, onboarding_status, password_hash
+            job_role, privilege_level, onboarding_status, password_hash,
+            (custom_photo IS NOT NULL) AS has_custom_photo
      FROM users WHERE LOWER(email) = LOWER($1)`,
     [email]
   );
@@ -724,6 +725,7 @@ function buildSessionUser(dbUser) {
       last_name: dbUser.last_name || null,
       profile_image_url: dbUser.profile_image_url || null,
     },
+    has_custom_photo: dbUser.has_custom_photo || false,
     privilege_level: dbUser.privilege_level || 'member',
     onboarding_status: dbUser.onboarding_status || 'active',
     expires_at: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
@@ -942,6 +944,10 @@ async function setupAuth(app) {
           [lower, hash, isAdminEmail(lower) ? 'admin' : 'member']
         );
       } else {
+        // INTENTIONAL: only password_hash and updated_at are updated here.
+        // Do NOT widen this UPDATE — profile fields (custom_photo, profile_image_url,
+        // first_name, last_name, onboarding_status, etc.) must never be touched
+        // by a password-reset path.
         await client.query(
           `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
           [hash, u.rows[0].id]
@@ -1441,6 +1447,10 @@ async function setupAuth(app) {
       return res.status(400).json({ error: 'Use the change-password flow to reset your own password.' });
     }
     try {
+      // INTENTIONAL: only password_hash and updated_at are cleared here.
+      // Do NOT widen this UPDATE — profile fields (custom_photo, profile_image_url,
+      // first_name, last_name, onboarding_status, etc.) must never be touched
+      // by a force-password-reset path.
       await pool.query(
         `UPDATE users SET password_hash = NULL, updated_at = NOW() WHERE LOWER(email) = LOWER($1)`,
         [email]
@@ -1866,7 +1876,7 @@ async function setupAuth(app) {
       const [header, b64] = photo.split(',');
       const mime = (header.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
       res.set('Content-Type', mime);
-      res.set('Cache-Control', 'public, max-age=3600');
+      res.set('Cache-Control', 'private, max-age=3600');
       res.send(Buffer.from(b64, 'base64'));
     } catch (e) {
       res.status(500).end();
