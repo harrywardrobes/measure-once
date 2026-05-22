@@ -947,6 +947,130 @@ async function runUiSmoke({ users, runId, clients }) {
       record('tablet pagination overflow regression probe (540 px) ran', 'no error',
         `error: ${e.message}`, 'medium', false);
     }
+
+    // ── Narrowest breakpoint overflow — 420 px ────────────────────────────────
+    // At max-width: 420px the CSS additionally hides .cl-pagination-info and
+    // .cl-pagination-jump-label.  This probe isolates that threshold to confirm:
+    //   (a) no overflow occurs on .cl-pagination
+    //   (b) .cl-pagination-info is not visible (display:none / hidden)
+    // Uses 201 contacts (9 pages) and navigates to page 8 (same as 540 px variant).
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 420, height: 740 });
+      await page.setCacheEnabled(false);
+
+      const memberSess = await login(users.member.email, PASSWORD);
+      const kv = parseCookieKV(memberSess.cookie);
+      if (kv) {
+        const { hostname } = new URL(BASE);
+        await page.setCookie({
+          name: kv.name, value: kv.value,
+          domain: hostname, path: '/', httpOnly: true,
+        });
+      }
+
+      const narrowContacts = Array.from({ length: 201 }, (_, i) => ({
+        id: `narrow-pg-${i + 1}`,
+        properties: {
+          firstname: 'Narrow',
+          lastname: `Page${String(i + 1).padStart(3, '0')}`,
+          email: `narrowpg${i + 1}@privtest.local`,
+          phone: '',
+          hs_lead_status: 'OPEN_DEAL',
+          city: '',
+          customer_number: `NW-${String(i + 1).padStart(3, '0')}`,
+          createdate: new Date(Date.now() - i * 1000).toISOString(),
+          closedate: null,
+          lastmodifieddate: new Date().toISOString(),
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        archived: false,
+      }));
+      const narrowPayload = JSON.stringify({ results: narrowContacts, total: 201 });
+      const emptyPayload  = JSON.stringify({ results: [], total: 0 });
+
+      await page.setRequestInterception(true);
+      page.on('request', req => {
+        const u = req.url();
+        if (u.includes('/api/contacts-all')) {
+          req.respond({ status: 200, contentType: 'application/json', body: narrowPayload });
+        } else if (u.includes('/api/open-leads')) {
+          req.respond({ status: 200, contentType: 'application/json', body: emptyPayload });
+        } else {
+          req.continue();
+        }
+      });
+
+      await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded' });
+
+      const paginationElNarrow = await page.waitForSelector('.cl-pagination', { timeout: 8000 }).catch(() => null);
+
+      let noOverflowNarrow = false;
+      let overflowDetailNarrow = 'pagination bar not found';
+      let infoHidden = false;
+      let infoHiddenDetail = 'pagination bar not found';
+
+      if (paginationElNarrow) {
+        // Jump to page 8 so the pagination renders multi-digit numbers and ellipsis.
+        await page.evaluate(() => {
+          const input = document.querySelector('#cl-jump-input');
+          const form  = document.querySelector('#cl-jump-form');
+          if (input && form) {
+            input.value = '8';
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+          }
+        }).catch(() => {});
+
+        // Wait for the pagination to reflect page 8 content (items 176–200 of 201).
+        await page.waitForFunction(() => {
+          const info = document.querySelector('.cl-pagination-info');
+          return info && /176|177|178/.test(info.textContent);
+        }, { timeout: 5000 }).catch(() => {});
+
+        const dims = await page.$eval('.cl-pagination', el => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        })).catch(() => null);
+
+        if (dims) {
+          noOverflowNarrow = dims.scrollWidth <= dims.clientWidth;
+          overflowDetailNarrow = `scrollWidth=${dims.scrollWidth} clientWidth=${dims.clientWidth}`;
+        }
+
+        // Assert that .cl-pagination-info is hidden at 420 px (display:none per CSS).
+        const infoVisibility = await page.$eval('.cl-pagination-info', el => {
+          const style = window.getComputedStyle(el);
+          return {
+            display: style.display,
+            visibility: style.visibility,
+            offsetParent: el.offsetParent !== null,
+          };
+        }).catch(() => null);
+
+        if (infoVisibility) {
+          infoHidden = infoVisibility.display === 'none' || infoVisibility.visibility === 'hidden' || !infoVisibility.offsetParent;
+          infoHiddenDetail = `display=${infoVisibility.display} visibility=${infoVisibility.visibility} offsetParent=${infoVisibility.offsetParent}`;
+        }
+      }
+
+      await safeShot(page, path.join(SCREENSHOT_DIR, `${runId}-420px-pagination-overflow.png`));
+
+      record('pagination bar does not overflow at 420 px with 9 pages (narrowest breakpoint)',
+        'scrollWidth <= clientWidth on .cl-pagination at 420 px with 201 contacts on page 8',
+        overflowDetailNarrow,
+        'medium', noOverflowNarrow);
+
+      record('.cl-pagination-info is hidden at 420 px viewport width',
+        'display:none or not visible per computed style',
+        infoHiddenDetail,
+        'medium', infoHidden);
+
+      await page.close();
+    } catch (e) {
+      record('narrowest breakpoint pagination overflow probe (420 px) ran', 'no error',
+        `error: ${e.message}`, 'medium', false);
+    }
   } finally {
     await browser.close().catch(() => {});
   }
