@@ -1615,7 +1615,16 @@
   let _leadStatusesData = [];
   let _leadStatusesLoaded = false;
   const _lsBroadcast = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('lead_statuses_changed') : null;
-  function _notifyLeadStatusChanged() { _lsBroadcast?.postMessage('changed'); }
+  function _notifyLeadStatusChanged() {
+    _lsBroadcast?.postMessage('changed');
+    // Card action labels are ordered to mirror the Lead Statuses table, so any
+    // rename / reorder / add must refresh that panel too. Reload silently if
+    // the panel has been opened in this session; otherwise the next open will
+    // fetch fresh data automatically.
+    if (_cardActionsEverLoaded && typeof loadCardActionsAdmin === 'function') {
+      loadCardActionsAdmin();
+    }
+  }
 
   const LEAD_STATUS_STAGES = [
     { key: 'SALES',            label: 'Sales' },
@@ -1638,12 +1647,19 @@
   }
 
   // ── Card action labels admin ─────────────────────────────────────────────
+  // Card stages, in display order. Only lead statuses assigned to one of these
+  // stages render a card with an action strip, so this is the universe of rows
+  // the table needs to show.
   const CARD_ACTION_STAGES = [
-    { key: 'sales',       label: 'Sales' },
-    { key: 'designvisit', label: 'Design Visit' },
-    { key: 'survey',      label: 'Survey' },
+    { key: 'sales',       label: 'Sales',        lsStage: 'SALES'        },
+    { key: 'designvisit', label: 'Design Visit', lsStage: 'DESIGN_VISIT' },
+    { key: 'survey',      label: 'Survey',       lsStage: 'SURVEY'       },
   ];
-  let _cardActionsData = [];
+  const CARD_ACTION_LS_STAGE_TO_KEY = Object.fromEntries(
+    CARD_ACTION_STAGES.map(s => [s.lsStage, s.key])
+  );
+  let _cardActionsData      = [];   // raw rows from /api/admin/stage-action-labels
+  let _cardActionsEverLoaded = false; // becomes true the first time the tab is opened
 
   function _broadcastCardActionsChanged() {
     try { new BroadcastChannel('stage_action_labels_changed').postMessage({ ts: Date.now() }); } catch (_) {}
@@ -1652,20 +1668,17 @@
   async function loadCardActionsAdmin() {
     const wrap = document.getElementById('card-actions-table-wrap');
     if (!wrap) return;
+    _cardActionsEverLoaded = true;
     try {
+      // Always fetch both fresh so a rename / reorder in the Lead Statuses tab
+      // is immediately reflected here, even within the same browser session.
       const [labels, statuses] = await Promise.all([
         api('GET', '/api/admin/stage-action-labels'),
         api('GET', '/api/admin/lead-statuses'),
       ]);
-      _cardActionsData = Array.isArray(labels) ? labels : [];
-      // Populate the "Lead status" dropdown from lead_status_config (lowercased
-      // to match the substageId values used on cards).
-      const sel = document.getElementById('ca-new-status');
-      if (sel) {
-        const real = (statuses || []).filter(s => !s.is_null_row);
-        sel.innerHTML = '<option value="">— (no status)</option>' +
-          real.map(s => `<option value="${esc(String(s.key).toLowerCase())}">${esc(s.label)} <span style="color:#999">(${esc(s.key)})</span></option>`).join('');
-      }
+      _cardActionsData    = Array.isArray(labels)   ? labels   : [];
+      _leadStatusesData   = Array.isArray(statuses) ? statuses : _leadStatusesData;
+      _leadStatusesLoaded = true;
       renderCardActionsTable();
     } catch (e) {
       wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load card actions: ${esc(e.message)}</p>`;
@@ -1677,11 +1690,59 @@
     return s ? s.label : key;
   }
 
+  // Build the ordered list of (stage, status) rows the table should render.
+  // Ordering rules:
+  //   1. Stages appear in the order they first appear in _leadStatusesData
+  //      (i.e. mirrors the Lead Statuses table's global sort order).
+  //   2. Within each stage, the "(no status)" row appears first, then the
+  //      lead statuses in their sort_order.
+  //   3. Stages with no lead statuses yet still appear (just the "(no status)"
+  //      row), in CARD_ACTION_STAGES declaration order.
+  function _buildCardActionRows() {
+    const labelByKey = {};
+    for (const r of _cardActionsData) {
+      labelByKey[`${r.stage_key}|${r.status_key}`] = r.label;
+    }
+
+    const stagesSeen = new Set();
+    const ordered    = [];
+    const real       = (_leadStatusesData || []).filter(s => !s.is_null_row);
+
+    for (const s of real) {
+      const stageKey = CARD_ACTION_LS_STAGE_TO_KEY[s.stage];
+      if (!stageKey) continue;
+      if (!stagesSeen.has(stageKey)) {
+        stagesSeen.add(stageKey);
+        const k = `${stageKey}|`;
+        ordered.push({ stage_key: stageKey, status_key: '', label: labelByKey[k] || '' });
+      }
+      const statusKey = String(s.key || '').toLowerCase();
+      const k = `${stageKey}|${statusKey}`;
+      ordered.push({
+        stage_key:    stageKey,
+        status_key:   statusKey,
+        status_label: s.label,
+        label:        labelByKey[k] || '',
+      });
+    }
+
+    // Stages with no lead statuses configured yet still get their "(no status)"
+    // row so admins can pre-populate a label.
+    for (const cs of CARD_ACTION_STAGES) {
+      if (stagesSeen.has(cs.key)) continue;
+      const k = `${cs.key}|`;
+      ordered.push({ stage_key: cs.key, status_key: '', label: labelByKey[k] || '' });
+    }
+
+    return ordered;
+  }
+
   function renderCardActionsTable() {
     const wrap = document.getElementById('card-actions-table-wrap');
     if (!wrap) return;
-    if (!_cardActionsData.length) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">No mappings yet — cards will fall back to their built-in labels.</p>`;
+    const rows = _buildCardActionRows();
+    if (!rows.length) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">No card-stage lead statuses configured yet.</p>`;
       return;
     }
     wrap.innerHTML = `
@@ -1691,82 +1752,86 @@
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Stage</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Lead status</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Action label</th>
-            <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Actions</th>
           </tr>
         </thead>
         <tbody>
-          ${_cardActionsData.map((r, i) => `
+          ${rows.map((r, i) => {
+            const statusCell = r.status_key
+              ? `<span style="color:var(--ink-2);">${esc(r.status_label || r.status_key)}</span>
+                 <span style="font-family:monospace;color:var(--ink-4);font-size:.72rem;margin-left:6px;">(${esc(r.status_key)})</span>`
+              : '<em style="color:var(--ink-4);">— none —</em>';
+            return `
             <tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? '' : 'background:var(--stone-soft);'}"
-                data-ca-stage="${esc(r.stage_key)}" data-ca-status="${esc(r.status_key)}">
+                data-ca-stage="${esc(r.stage_key)}" data-ca-status="${esc(r.status_key)}"
+                data-ca-original="${esc(r.label)}">
               <td style="padding:7px 8px;">${esc(_stageLabelFor(r.stage_key))}</td>
-              <td style="padding:7px 8px;font-family:monospace;color:var(--ink-3);font-size:.78rem;">${r.status_key ? esc(r.status_key) : '<em style="color:var(--ink-4);">— none —</em>'}</td>
+              <td style="padding:7px 8px;font-size:.78rem;">${statusCell}</td>
               <td style="padding:7px 8px;">
                 <input type="text" class="field ca-label-input" value="${esc(r.label)}" maxlength="128"
+                  placeholder="(no label — strip will be hidden)"
                   style="padding:4px 7px;font-size:.82rem;width:100%;min-width:160px;"
-                  onkeydown="if(event.key==='Enter')updateCardActionLabel(this)">
+                  onkeydown="if(event.key==='Enter')this.blur()">
               </td>
-              <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
-                <button class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;"
-                  onclick="updateCardActionLabel(this.closest('tr').querySelector('.ca-label-input'))">Save</button>
-                <button class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;color:#991b1b;"
-                  onclick="deleteCardActionLabel('${esc(r.stage_key)}','${esc(r.status_key)}')">Delete</button>
-              </td>
-            </tr>
-          `).join('')}
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     `;
   }
 
-  async function saveCardActionLabel() {
-    const stage  = document.getElementById('ca-new-stage').value;
-    const status = document.getElementById('ca-new-status').value;
-    const label  = document.getElementById('ca-new-label').value.trim();
-    const err    = document.getElementById('ca-save-error');
-    err.style.display = 'none';
-    if (!label) { err.textContent = 'Label is required.'; err.style.display = 'block'; return; }
-    try {
-      await api('PUT', '/api/admin/stage-action-labels', { stage_key: stage, status_key: status, label });
-      document.getElementById('ca-new-label').value = '';
-      _broadcastCardActionsChanged();
-      await loadCardActionsAdmin();
-    } catch (e) {
-      err.textContent = e.message || 'Could not save mapping.';
-      err.style.display = 'block';
+  // Sweep every input in the table and PUT each one whose value differs from
+  // the row's original value. Empty values are skipped (the server requires
+  // a non-empty label); if you need to clear a label, change it to something
+  // meaningful instead. Mirrors the "Save all" pattern used by Lead Statuses.
+  async function saveAllCardActionLabels() {
+    const rows = document.querySelectorAll('#card-actions-table-wrap tr[data-ca-stage]');
+    const changed = [];
+    rows.forEach(row => {
+      const stage    = row.dataset.caStage;
+      const status   = row.dataset.caStatus;
+      const original = row.dataset.caOriginal || '';
+      const input    = row.querySelector('.ca-label-input');
+      if (!input) return;
+      const value = input.value.trim();
+      if (!value)             return; // skip empty (cannot persist empty label)
+      if (value === original) return; // unchanged
+      changed.push({ stage, status, value, original, input });
+    });
+    if (!changed.length) { toast('No changes to save.'); return; }
+    let saved = 0, failed = 0;
+    for (const { stage, status, value, original, input } of changed) {
+      try {
+        await api('PUT', '/api/admin/stage-action-labels', {
+          stage_key: stage, status_key: status, label: value,
+        });
+        input.closest('tr').dataset.caOriginal = value;
+        saved++;
+      } catch (e) {
+        input.value = original;
+        failed++;
+      }
     }
+    if (failed) toast(`Saved ${saved}, failed ${failed}.`, true);
+    else        toast(`${saved} change${saved !== 1 ? 's' : ''} saved.`);
+    _broadcastCardActionsChanged();
+    // Refresh the in-memory copy so a follow-up Save doesn't re-send.
+    try { _cardActionsData = await api('GET', '/api/admin/stage-action-labels'); } catch (_) {}
   }
 
-  async function updateCardActionLabel(inputEl) {
-    const tr     = inputEl.closest('tr');
-    const stage  = tr.dataset.caStage;
-    const status = tr.dataset.caStatus;
-    const label  = inputEl.value.trim();
-    if (!label) return;
+  // Cross-tab sync: when the Lead Statuses panel is changed in another tab,
+  // refresh the card action labels here so the order stays in lock-step.
+  if (typeof BroadcastChannel !== 'undefined') {
     try {
-      await api('PUT', '/api/admin/stage-action-labels', { stage_key: stage, status_key: status, label });
-      _broadcastCardActionsChanged();
-      await loadCardActionsAdmin();
-    } catch (e) {
-      alert('Could not save: ' + (e.message || 'unknown error'));
-    }
+      new BroadcastChannel('lead_statuses_changed').addEventListener('message', () => {
+        if (_cardActionsEverLoaded) loadCardActionsAdmin();
+      });
+    } catch (_) {}
   }
 
-  async function deleteCardActionLabel(stage, status) {
-    if (!confirm(`Remove the action label for ${_stageLabelFor(stage)} / ${status || '(no status)'}?`)) return;
-    try {
-      await api('DELETE', `/api/admin/stage-action-labels/${encodeURIComponent(stage)}/${encodeURIComponent(status)}`);
-      _broadcastCardActionsChanged();
-      await loadCardActionsAdmin();
-    } catch (e) {
-      alert('Could not delete: ' + (e.message || 'unknown error'));
-    }
-  }
-
-  // Expose handlers used from inline onclick handlers in renderCardActionsTable.
-  window.loadCardActionsAdmin   = loadCardActionsAdmin;
-  window.saveCardActionLabel    = saveCardActionLabel;
-  window.updateCardActionLabel  = updateCardActionLabel;
-  window.deleteCardActionLabel  = deleteCardActionLabel;
+  // Expose handlers used from inline onclick handlers + the lead-status
+  // notify hook.
+  window.loadCardActionsAdmin    = loadCardActionsAdmin;
+  window.saveAllCardActionLabels = saveAllCardActionLabels;
 
   async function loadLeadStatusesAdmin() {
     if (_leadStatusesLoaded) return;
@@ -2310,39 +2375,16 @@
       <!-- CARD ACTIONS -->
       <div class="tab-panel" id="tab-cardactions">
         <div class="card">
-          <div class="card-title">Card action labels</div>
-          <p class="card-desc" style="margin:0 0 18px;">
-            The bottom strip on Sales &amp; Survey cards (e.g. <em>Await survey confirmation</em>) is determined by the card's <strong>stage</strong> and <strong>lead status</strong>. Define a label for each combination below. If no label is defined, the card shows the built-in default (or nothing).
-          </p>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+            <div>
+              <div class="card-title" style="margin:0;">Card action labels</div>
+              <p class="card-desc" style="margin:2px 0 0;">The bottom strip on Sales &amp; Survey cards. One row per (stage × lead status); rows mirror the order of the Lead Statuses table in Settings and refresh automatically when that table is reordered or renamed.</p>
+            </div>
+            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="saveAllCardActionLabels()">Save</button>
+          </div>
 
           <div id="card-actions-table-wrap">
             <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
-          </div>
-
-          <div style="margin-top:14px;padding:10px 12px;background:var(--stone-soft);border-radius:var(--radius);border:1px solid var(--border);">
-            <div style="font-size:.75rem;font-weight:600;color:var(--ink-3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Add or update mapping</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
-              <div style="flex:1;min-width:130px;">
-                <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Stage</label>
-                <select id="ca-new-stage" class="field" style="font-size:.8rem;">
-                  <option value="sales">Sales</option>
-                  <option value="designvisit">Design Visit</option>
-                  <option value="survey">Survey</option>
-                </select>
-              </div>
-              <div style="flex:1;min-width:160px;">
-                <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Lead status</label>
-                <select id="ca-new-status" class="field" style="font-size:.8rem;">
-                  <option value="">— (no status)</option>
-                </select>
-              </div>
-              <div style="flex:2;min-width:180px;">
-                <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Action label</label>
-                <input id="ca-new-label" type="text" class="field" placeholder="e.g. Schedule design visit" maxlength="128">
-              </div>
-              <button class="btn btn-primary" onclick="saveCardActionLabel()" style="white-space:nowrap;align-self:flex-end;">Save</button>
-            </div>
-            <div id="ca-save-error" style="display:none;font-size:.78rem;color:#991b1b;margin-top:6px;"></div>
           </div>
         </div>
       </div>
