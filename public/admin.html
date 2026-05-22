@@ -1620,17 +1620,24 @@
       <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
         <thead>
           <tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Order</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Stage</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Key</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Display Label</th>
             <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">Excl. from Sales</th>
-            <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Order</th>
-            <th style="padding:6px 8px;"></th>
           </tr>
         </thead>
         <tbody>
           ${data.map((s, i) => `
             <tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? '' : 'background:var(--stone-soft);'}" data-ls-key="${esc(s.key)}">
+              <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
+                <button class="btn btn-ghost" title="Move up"
+                  style="padding:2px 7px;font-size:1rem;line-height:1;" ${i === 0 ? 'disabled' : ''}
+                  onclick="moveLeadStatus('${esc(s.key)}', 'up')">↑</button>
+                <button class="btn btn-ghost" title="Move down"
+                  style="padding:2px 7px;font-size:1rem;line-height:1;" ${i === data.length - 1 ? 'disabled' : ''}
+                  onclick="moveLeadStatus('${esc(s.key)}', 'down')">↓</button>
+              </td>
               <td style="padding:7px 8px;">
                 <select class="field ls-stage-select" id="ls-stage-${esc(s.key)}" data-key="${esc(s.key)}"
                   style="padding:4px 7px;font-size:.78rem;min-width:130px;">
@@ -1657,19 +1664,6 @@
                 <input type="checkbox" ${s.excluded_from_sales ? 'checked' : ''} data-key="${esc(s.key)}"
                   title="Exclude from Sales board"
                   style="width:16px;height:16px;cursor:pointer;">
-              </td>
-              <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
-                <button class="btn btn-ghost" title="Move up"
-                  style="padding:2px 7px;font-size:1rem;line-height:1;" ${i === 0 ? 'disabled' : ''}
-                  onclick="moveLeadStatus('${esc(s.key)}', 'up')">↑</button>
-                <button class="btn btn-ghost" title="Move down"
-                  style="padding:2px 7px;font-size:1rem;line-height:1;" ${i === data.length - 1 ? 'disabled' : ''}
-                  onclick="moveLeadStatus('${esc(s.key)}', 'down')">↓</button>
-              </td>
-              <td style="padding:7px 8px;text-align:right;">
-                <button class="btn btn-ghost" title="Delete status"
-                  style="padding:2px 8px;font-size:.78rem;color:#991b1b;border-color:#fca5a5;"
-                  onclick="deleteLeadStatus('${esc(s.key)}')">Delete</button>
               </td>
             </tr>
           `).join('')}
