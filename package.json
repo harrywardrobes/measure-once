@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "build:css": "tailwindcss -i ./src/tailwind.css -o ./public/tailwind.css --minify",
     "watch:css": "tailwindcss -i ./src/tailwind.css -o ./public/tailwind.css --watch",
-    "test:privileges": "node test/privileges/run.js"
+    "test:privileges": "node test/privileges/run.js",
+    "test:lead-status-sync": "node test/lead-status-sync/run.js"
   },
   "dependencies": {
     "@acpr/rate-limit-postgresql": "^1.4.1",

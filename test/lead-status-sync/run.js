@@ -1,0 +1,537 @@
+'use strict';
+// test/lead-status-sync/run.js
+//
+// End-to-end live test: lead status label rename → filter-dropdown sync.
+//
+// Covers two update paths defined in public/workflow-core.js (lines 340–362):
+//   (A) BroadcastChannel  — admin tab saves → channel message → customer tab re-renders
+//   (B) visibilitychange  — server-side label already changed → tab gains focus → refresh
+//   (C) count format      — filter options carry a "(N)" suffix after re-render
+//
+// The test server runs without a HubSpot token (stripped by the shared harness),
+// so contacts always fail to load with 503.  populateLeadStatusFilter() is
+// therefore not reached by the normal init flow (it sits after `await loader` in
+// customers.html and after the Promise.all in core.js bootstrap).  The test
+// compensates by calling loadLeadStatuses() + populateLeadStatusFilter() directly
+// in the page context to establish the initial filter baseline, then exercises
+// the two sync paths (BroadcastChannel and visibilitychange) whose handlers also
+// call those same functions — so the tested code paths are exercised faithfully.
+//
+// Usage:
+//   DATABASE_URL_TEST=<isolated-db> npm run test:lead-status-sync
+//   # or against the shared DB with the privtest- prefix cleanup:
+//   PRIVTEST_ALLOW_SHARED_DB=1 npm run test:lead-status-sync
+
+const fs   = require('fs');
+const path = require('path');
+const { Pool } = require('pg');
+
+const {
+  spawnServer,
+  waitForServer,
+  seedUsers,
+  cleanupTestData,
+  resetRateLimitStore,
+  login,
+  setPool,
+  PASSWORD,
+  BASE,
+} = require('../privileges/harness');
+
+let puppeteer = null;
+try { puppeteer = require('puppeteer'); } catch {}
+
+require('dotenv').config();
+
+// ── test fixtures ─────────────────────────────────────────────────────────────
+// A fixed key with the privtest- naming convention so cleanup is easy.
+const LS_KEY      = 'PRIVTEST_LS_SYNC';
+const LABEL_ORIG  = 'PrivTest Sync Label';
+const LABEL_BC    = 'PrivTest Renamed BC';
+const LABEL_VIS   = 'PrivTest Renamed Vis';
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+function parseCookieKV(jar) {
+  if (!jar) return null;
+  const idx = jar.indexOf('=');
+  if (idx < 0) return null;
+  return { name: jar.slice(0, idx), value: jar.slice(idx + 1) };
+}
+
+async function injectSession(page, jar) {
+  const kv = parseCookieKV(jar);
+  if (!kv) return;
+  const { hostname } = new URL(BASE);
+  await page.setCookie({
+    name: kv.name, value: kv.value,
+    domain: hostname, path: '/', httpOnly: true,
+  });
+}
+
+// Call loadLeadStatuses() then populateLeadStatusFilter() inside the page's JS
+// context so the filter dropdown is populated even when HubSpot is absent (the
+// test server strips HUBSPOT_TOKEN, making contacts load return 503 — which
+// prevents the normal init from reaching populateLeadStatusFilter).
+async function bootstrapFilter(page) {
+  return page.evaluate(async () => {
+    if (typeof loadLeadStatuses === 'function') await loadLeadStatuses();
+    if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
+  });
+}
+
+// Poll the #lead-status-filter <select> until an <option> whose text starts
+// with `label` appears, or until `timeoutMs` elapses.
+async function waitForFilterLabel(page, label, timeoutMs = 6000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const found = await page.evaluate((lbl) => {
+      const sel = document.getElementById('lead-status-filter');
+      if (!sel) return false;
+      return Array.from(sel.options).some(o => o.textContent.startsWith(lbl));
+    }, label);
+    if (found) return true;
+    await new Promise(r => setTimeout(r, 150));
+  }
+  return false;
+}
+
+async function getFilterOptions(page) {
+  return page.evaluate(() => {
+    const sel = document.getElementById('lead-status-filter');
+    if (!sel) return [];
+    return Array.from(sel.options).map(o => o.textContent.trim());
+  });
+}
+
+// ── main ──────────────────────────────────────────────────────────────────────
+async function main() {
+  const hasTestDb   = !!process.env.DATABASE_URL_TEST;
+  const allowShared = process.env.PRIVTEST_ALLOW_SHARED_DB === '1';
+  const connStr     = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL;
+
+  if (!connStr) {
+    console.error('DATABASE_URL_TEST (preferred) or DATABASE_URL is required.');
+    process.exit(2);
+  }
+  if (!hasTestDb && !allowShared) {
+    console.error(
+      '\n  ✘ Refuses to run against the shared DATABASE_URL by default.\n'
+      + '    Set DATABASE_URL_TEST=<disposable> or PRIVTEST_ALLOW_SHARED_DB=1.\n',
+    );
+    process.exit(2);
+  }
+
+  const runId = Math.random().toString(36).slice(2, 8);
+  console.log(`\n  lead-status-sync E2E  run=${runId}`);
+  console.log(`  Using ${hasTestDb ? 'DATABASE_URL_TEST (isolated)' : 'shared DATABASE_URL (PRIVTEST_ALLOW_SHARED_DB=1)'}`);
+
+  const pool = new Pool({ connectionString: connStr });
+  setPool(pool);
+
+  // Pre-clean stale fixtures from a prior crashed run.
+  await cleanupTestData(pool);
+  await pool.query(`DELETE FROM lead_status_config WHERE key = $1`, [LS_KEY]);
+
+  const users = await seedUsers(pool, runId);
+  console.log(`  Seeded users  admin=${users.admin.email}`);
+
+  // Insert the test lead-status row with a high sort_order so it doesn't
+  // conflict with real production statuses.
+  await pool.query(
+    `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
+     VALUES ($1, $2, 999, false)
+     ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label`,
+    [LS_KEY, LABEL_ORIG],
+  );
+  console.log(`  Inserted test lead-status  key="${LS_KEY}"  label="${LABEL_ORIG}"\n`);
+
+  const { child, logBuf } = spawnServer();
+  let exited = false;
+  child.on('exit', () => { exited = true; });
+
+  const findings = [];
+  function record(name, expected, observed, ok, detail = '') {
+    findings.push({ name, expected, observed, ok, detail });
+    const mark = ok ? '  ✓' : '  ✗';
+    console.log(`${mark}  ${name}`);
+    if (!ok) {
+      console.log(`     expected : ${expected}`);
+      console.log(`     observed : ${observed}`);
+      if (detail) console.log(`     detail   : ${detail}`);
+    }
+  }
+
+  let teardownInFlight = false;
+  const cleanupAndExit = async (code) => {
+    if (teardownInFlight) return;
+    teardownInFlight = true;
+    try { if (!exited) child.kill('SIGTERM'); } catch {}
+    try {
+      await pool.query(`DELETE FROM lead_status_config WHERE key = $1`, [LS_KEY]);
+      await cleanupTestData(pool);
+    } catch {}
+    await pool.end().catch(() => {});
+    process.exit(code);
+  };
+
+  process.on('SIGINT',  () => cleanupAndExit(130));
+  process.on('SIGTERM', () => cleanupAndExit(130));
+  process.on('uncaughtException',  (e) => { console.error('Uncaught:', e);   cleanupAndExit(2); });
+  process.on('unhandledRejection', (e) => { console.error('Unhandled:', e);  cleanupAndExit(2); });
+
+  // ── boot test server ───────────────────────────────────────────────────────
+  try {
+    await waitForServer();
+    await resetRateLimitStore(pool);
+    console.log(`  Server up at ${BASE}`);
+  } catch (e) {
+    console.error('Server boot failed:', e.message);
+    console.error(logBuf.join('').slice(-2000));
+    await cleanupAndExit(2);
+    return;
+  }
+
+  // ── verify API layer before opening any browser ────────────────────────────
+  // These checks run purely against the HTTP API so they surface useful
+  // diagnostics if the browser-level tests fail.
+  const adminClient = await login(users.admin.email, PASSWORD);
+
+  const listRes = await adminClient.get('/api/admin/lead-statuses');
+  const hasTestKey = Array.isArray(listRes.json) && listRes.json.some(s => s.key === LS_KEY);
+  record(
+    'GET /api/admin/lead-statuses returns the test status',
+    `status=200 and key "${LS_KEY}" present`,
+    `status=${listRes.status} found=${hasTestKey}`,
+    listRes.status === 200 && hasTestKey,
+  );
+
+  const pubRes = await adminClient.get('/api/lead-statuses');
+  const hasTestKeyPub = Array.isArray(pubRes.json) && pubRes.json.some(s => s.key === LS_KEY);
+  record(
+    'GET /api/lead-statuses (public, auth-gated) returns the test status',
+    `status=200 and key "${LS_KEY}" present`,
+    `status=${pubRes.status} found=${hasTestKeyPub}`,
+    pubRes.status === 200 && hasTestKeyPub,
+  );
+
+  // ── require puppeteer ──────────────────────────────────────────────────────
+  if (!puppeteer) {
+    record(
+      'puppeteer available',
+      'require("puppeteer") resolves',
+      'module not installed',
+      false,
+      'Install puppeteer (npm i -D puppeteer) and rerun.',
+    );
+    await writeReport(runId, findings);
+    await cleanupAndExit(1);
+    return;
+  }
+
+  // Locate the system Chromium (mirrors the approach in test/privileges/uiSmoke.js).
+  let executablePath;
+  const chromiumCandidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    '/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium',
+  ].filter(Boolean);
+  for (const p of chromiumCandidates) {
+    try { fs.accessSync(p); executablePath = p; break; } catch {}
+  }
+  if (!executablePath) {
+    try {
+      const { execSync } = require('child_process');
+      executablePath = execSync('which chromium', { encoding: 'utf8' }).trim() || undefined;
+    } catch {}
+  }
+
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      executablePath,
+      defaultViewport: { width: 1280, height: 800 },
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    });
+  } catch (e) {
+    record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
+    await writeReport(runId, findings);
+    await cleanupAndExit(1);
+    return;
+  }
+
+  try {
+    // ── (A) BroadcastChannel path ─────────────────────────────────────────────
+    // Two tabs in the *same* browser:
+    //   customerTab  – open /customers, has the filter dropdown + BC listener
+    //   adminTab     – simulates the admin settings page posting the broadcast
+    //
+    // BroadcastChannel does NOT deliver a message back to the same port that
+    // sent it, so the post from adminTab arrives at customerTab's listener which
+    // then calls loadLeadStatuses() → populateLeadStatusFilter().
+    console.log('\n  [A] BroadcastChannel path');
+
+    const customerTab = await browser.newPage();
+    await customerTab.setCacheEnabled(false);
+    await injectSession(customerTab, adminClient.cookie);
+
+    const adminTab = await browser.newPage();
+    await adminTab.setCacheEnabled(false);
+    await injectSession(adminTab, adminClient.cookie);
+
+    // Navigate to /customers and wait for the DOM + scripts to load.
+    // Use domcontentloaded because networkidle2 can stall indefinitely when
+    // contacts 503 and the page never fully quiesces.
+    await customerTab.goto(`${BASE}/customers`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+
+    // Give scripts a tick to execute (BroadcastChannel listener is registered
+    // synchronously after workflow-core.js evaluates).
+    await new Promise(r => setTimeout(r, 500));
+
+    // Seed the filter baseline: call loadLeadStatuses() then
+    // populateLeadStatusFilter() directly.  This is necessary because the
+    // normal init path (customers.html DOMContentLoaded) only reaches
+    // populateLeadStatusFilter() after a successful contacts fetch — which
+    // returns 503 when HUBSPOT_TOKEN is absent in the test server.
+    await bootstrapFilter(customerTab);
+
+    const initOpts = await getFilterOptions(customerTab);
+    const hasOrig = initOpts.some(t => t.startsWith(LABEL_ORIG));
+    record(
+      'filter shows original label after manual bootstrap',
+      `option starting with "${LABEL_ORIG}"`,
+      `options: ${JSON.stringify(initOpts.filter(t => t !== 'All statuses').slice(0, 6))}`,
+      hasOrig,
+    );
+
+    // Rename via the admin API (server-side state change).
+    const patchA = await adminClient.patch(
+      `/api/admin/lead-statuses/${encodeURIComponent(LS_KEY)}`,
+      { label: LABEL_BC },
+    );
+    record(
+      'PATCH /api/admin/lead-statuses/:key renames the label',
+      `status=200 label="${LABEL_BC}"`,
+      `status=${patchA.status} label="${patchA.json?.label}"`,
+      patchA.status === 200 && patchA.json?.label === LABEL_BC,
+    );
+
+    // Load any workflow-core.js-bearing page in adminTab so the BroadcastChannel
+    // API is available in its context, then post the channel message.
+    await adminTab.goto(`${BASE}/customers`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000,
+    });
+    await new Promise(r => setTimeout(r, 300));
+    await adminTab.evaluate(() => {
+      new BroadcastChannel('lead_statuses_changed').postMessage('changed');
+    });
+
+    // The listener in customerTab calls loadLeadStatuses() then
+    // populateLeadStatusFilter(); poll until the new label appears.
+    const bcUpdated = await waitForFilterLabel(customerTab, LABEL_BC, 7000);
+    const optsAfterBc = await getFilterOptions(customerTab);
+    record(
+      'BroadcastChannel message triggers filter dropdown to show new label',
+      `option starting with "${LABEL_BC}" within 7 s`,
+      `found=${bcUpdated} options: ${JSON.stringify(optsAfterBc.filter(t => t !== 'All statuses').slice(0, 6))}`,
+      bcUpdated,
+    );
+
+    // Old label must be gone (no stale entry).
+    const staleAfterBc = optsAfterBc.some(t => t.startsWith(LABEL_ORIG));
+    record(
+      'original label is absent from dropdown after BroadcastChannel rename',
+      `no option starting with "${LABEL_ORIG}"`,
+      `stalePresent=${staleAfterBc}`,
+      !staleAfterBc,
+    );
+
+    await customerTab.close();
+    await adminTab.close();
+
+    // ── (B) visibilitychange path ─────────────────────────────────────────────
+    // Open a fresh customers tab, bootstrap the filter to confirm it shows the
+    // BC-renamed label, rename again via API, then synthesise a hidden→visible
+    // visibilitychange sequence.  The handler (workflow-core.js lines 340–347)
+    // calls loadLeadStatuses() → populateLeadStatusFilter().
+    console.log('\n  [B] visibilitychange path');
+
+    const visTab = await browser.newPage();
+    await visTab.setCacheEnabled(false);
+    await injectSession(visTab, adminClient.cookie);
+    await visTab.goto(`${BASE}/customers`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+    await new Promise(r => setTimeout(r, 500));
+    await bootstrapFilter(visTab);
+
+    // Confirm BC-renamed label is the current state.
+    const optsBeforeVis = await getFilterOptions(visTab);
+    const hasBc = optsBeforeVis.some(t => t.startsWith(LABEL_BC));
+    record(
+      'filter shows BC-renamed label before visibilitychange rename',
+      `option starting with "${LABEL_BC}"`,
+      `found=${hasBc} options: ${JSON.stringify(optsBeforeVis.filter(t => t !== 'All statuses').slice(0, 6))}`,
+      hasBc,
+    );
+
+    // Rename server-side so the next GET /api/lead-statuses returns LABEL_VIS.
+    const patchB = await adminClient.patch(
+      `/api/admin/lead-statuses/${encodeURIComponent(LS_KEY)}`,
+      { label: LABEL_VIS },
+    );
+    record(
+      'second PATCH renames label for visibilitychange test',
+      `status=200 label="${LABEL_VIS}"`,
+      `status=${patchB.status} label="${patchB.json?.label}"`,
+      patchB.status === 200 && patchB.json?.label === LABEL_VIS,
+    );
+
+    // Synthesise the hidden → visible transition.
+    // The handler only runs when visibilityState === 'visible', so we need to:
+    //   1. Override visibilityState to 'hidden' and dispatch — handler skips.
+    //   2. Restore to 'visible' and dispatch — handler fires, fetches, re-renders.
+    await visTab.evaluate(() => {
+      const proto   = Document.prototype;
+      const ownDesc = Object.getOwnPropertyDescriptor(proto, 'visibilityState')
+                   || Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+      // Step 1: hidden
+      Object.defineProperty(document, 'visibilityState',
+        { get: () => 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      // Step 2: visible — this is what the real tab-focus event looks like
+      if (ownDesc) {
+        Object.defineProperty(document, 'visibilityState', ownDesc);
+      } else {
+        Object.defineProperty(document, 'visibilityState',
+          { get: () => 'visible', configurable: true });
+      }
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    // Poll for the newly renamed label.
+    const visUpdated = await waitForFilterLabel(visTab, LABEL_VIS, 7000);
+    const optsAfterVis = await getFilterOptions(visTab);
+    record(
+      'visibilitychange triggers filter dropdown to show new label',
+      `option starting with "${LABEL_VIS}" within 7 s`,
+      `found=${visUpdated} options: ${JSON.stringify(optsAfterVis.filter(t => t !== 'All statuses').slice(0, 6))}`,
+      visUpdated,
+    );
+
+    // Old BC label must be gone after the visibility-triggered refresh.
+    const staleAfterVis = optsAfterVis.some(t => t.startsWith(LABEL_BC));
+    record(
+      'BC-renamed label is absent from dropdown after visibilitychange refresh',
+      `no option starting with "${LABEL_BC}"`,
+      `stalePresent=${staleAfterVis}`,
+      !staleAfterVis,
+    );
+
+    await visTab.close();
+
+    // ── (C) count format ──────────────────────────────────────────────────────
+    // Verify populateLeadStatusFilter always appends " (N)" to each option.
+    // Contacts are empty in CI (no HubSpot) so every count will be 0, but the
+    // suffix must still appear.
+    console.log('\n  [C] count format');
+
+    const countTab = await browser.newPage();
+    await countTab.setCacheEnabled(false);
+    await injectSession(countTab, adminClient.cookie);
+    await countTab.goto(`${BASE}/customers`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+    await new Promise(r => setTimeout(r, 500));
+    await bootstrapFilter(countTab);
+
+    const optsCount = await getFilterOptions(countTab);
+    const statusOpts = optsCount.filter(t => t !== 'All statuses');
+    const countFormatOk = statusOpts.length > 0 && statusOpts.every(t => /\(\d+\)$/.test(t));
+    record(
+      'all filter options carry a "(N)" count suffix after render',
+      `every non-"All statuses" option ends with (N); at least 1 option`,
+      `count=${statusOpts.length} options: ${JSON.stringify(statusOpts.slice(0, 6))}`,
+      countFormatOk,
+    );
+
+    await countTab.close();
+
+  } finally {
+    await browser.close().catch(() => {});
+  }
+
+  // ── summary & report ──────────────────────────────────────────────────────
+  const pass = findings.filter(f => f.ok).length;
+  const fail = findings.filter(f => !f.ok).length;
+  console.log(`\n  Results: ${pass} passed, ${fail} failed`);
+
+  await writeReport(runId, findings);
+  await cleanupAndExit(fail > 0 ? 1 : 0);
+}
+
+// ── report writer ─────────────────────────────────────────────────────────────
+async function writeReport(runId, findings) {
+  const dir = path.resolve(__dirname, '..', '..', 'test-results');
+  fs.mkdirSync(dir, { recursive: true });
+  const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const lines = [
+    '# Lead-Status Label Rename Sync — E2E Test',
+    '',
+    `- Run ID: \`${runId}\``,
+    `- Date: ${new Date().toISOString()}`,
+    `- Command: \`npm run test:lead-status-sync\``,
+    '',
+    '## Summary',
+    '',
+    `- Passed: ${findings.filter(f => f.ok).length} / ${findings.length}`,
+    `- Failed: ${findings.filter(f => !f.ok).length} / ${findings.length}`,
+    '',
+    '## Results',
+    '',
+    '| Result | Probe | Expected | Observed |',
+    '|---|---|---|---|',
+    ...findings.map(f =>
+      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+    ),
+    '',
+    '## Coverage',
+    '',
+    '- **(API pre-checks)**: verifies `GET /api/admin/lead-statuses` and `GET /api/lead-statuses`',
+    '  both surface the test status before any browser tabs are opened.',
+    '- **(A) BroadcastChannel path**: renames a lead-status label via',
+    '  `PATCH /api/admin/lead-statuses/:key`, then posts a `lead_statuses_changed`',
+    '  BroadcastChannel message from a second same-browser tab, and asserts the',
+    '  `#lead-status-filter` dropdown on the Customers page reflects the new label',
+    '  text (exercising the `_lsChannel.addEventListener("message", …)` handler',
+    '  in `workflow-core.js` lines 353–361).  Also asserts the stale label is gone.',
+    '- **(B) visibilitychange path**: renames the label again server-side, then',
+    '  synthesises a hidden→visible visibilitychange event sequence and asserts',
+    '  the dropdown updates (exercising the',
+    '  `document.addEventListener("visibilitychange", …)` handler in',
+    '  `workflow-core.js` lines 340–347).  Also asserts the stale label is gone.',
+    '- **(C) count format**: verifies every filter option carries a "(N)" count',
+    '  suffix after `populateLeadStatusFilter` runs, confirming label+count are',
+    '  rendered together correctly.',
+    '',
+    '## Notes',
+    '',
+    '- The test server strips `HUBSPOT_TOKEN` so `loadAllContacts()` returns 503.',
+    '  Contact counts in the filter options will therefore all be 0 in CI.',
+    '  The `bootstrapFilter()` helper calls `loadLeadStatuses()` +',
+    '  `populateLeadStatusFilter()` directly in the page context to establish the',
+    '  initial filter state independently of the HubSpot contact load.',
+  ];
+  const outPath = path.join(dir, 'lead-status-sync.md');
+  fs.writeFileSync(outPath, lines.join('\n'));
+  console.log(`  Report: test-results/lead-status-sync.md`);
+}
+
+main();
