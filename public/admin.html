@@ -1660,6 +1660,10 @@
   );
   let _cardActionsData      = [];   // raw rows from /api/admin/stage-action-labels
   let _cardActionsEverLoaded = false; // becomes true the first time the tab is opened
+  // In-memory set of stage keys the admin has collapsed. Survives re-renders
+  // (e.g. after Save) while the admin tab stays mounted; resets on full reload.
+  const _collapsedCardActionStages = new Set();
+  let _cardActionsToggleBound = false;
 
   function _broadcastCardActionsChanged() {
     try { new BroadcastChannel('stage_action_labels_changed').postMessage({ ts: Date.now() }); } catch (_) {}
@@ -1783,12 +1787,18 @@
         </div>
       </section>`;
 
-    wrap.innerHTML = noStatusHtml + stages.map(stage => `
-      <section style="margin-bottom:22px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
-        <header style="padding:10px 14px;background:var(--stone-soft);border-bottom:1px solid var(--border);font-weight:600;font-size:.85rem;color:var(--ink-2);">
-          ${esc(stage.label)}
-        </header>
-
+    wrap.innerHTML = noStatusHtml + stages.map(stage => {
+      const collapsed = _collapsedCardActionStages.has(stage.key);
+      const bodyId    = `ca-stage-body-${esc(stage.key)}`;
+      return `
+      <section data-stage-section="${esc(stage.key)}" style="margin-bottom:22px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+        <button type="button" class="ca-stage-toggle" data-stage-toggle="${esc(stage.key)}"
+          aria-expanded="${collapsed ? 'false' : 'true'}" aria-controls="${bodyId}"
+          style="width:100%;display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--stone-soft);border:0;border-bottom:${collapsed ? '0' : '1px solid var(--border)'};font-weight:600;font-size:.85rem;color:var(--ink-2);cursor:pointer;text-align:left;font:inherit;">
+          <span class="ca-stage-chevron" aria-hidden="true" style="display:inline-block;width:10px;transition:transform .15s ease;transform:rotate(${collapsed ? '-90deg' : '0deg'});">▾</span>
+          <span style="font-weight:600;">${esc(stage.label)}</span>
+        </button>
+        <div id="${bodyId}" data-stage-body="${esc(stage.key)}"${collapsed ? ' hidden' : ''}>
         ${stage.statuses.length === 0 ? `
           <div style="padding:14px;font-size:.78rem;color:var(--ink-4);"><em>No lead statuses configured for this stage yet.</em></div>
         ` : stage.statuses.map(ls => `
@@ -1821,8 +1831,37 @@
             </div>
           </div>
         `).join('')}
+        </div>
       </section>
-    `).join('');
+    `;
+    }).join('');
+
+    if (!_cardActionsToggleBound) {
+      wrap.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-stage-toggle]');
+        if (!btn || !wrap.contains(btn)) return;
+        const key = btn.dataset.stageToggle;
+        if (_collapsedCardActionStages.has(key)) _collapsedCardActionStages.delete(key);
+        else _collapsedCardActionStages.add(key);
+        _applyCardActionStageCollapse(key);
+      });
+      _cardActionsToggleBound = true;
+    }
+  }
+
+  function _applyCardActionStageCollapse(stageKey) {
+    const wrap = document.getElementById('card-actions-table-wrap');
+    if (!wrap) return;
+    const btn  = wrap.querySelector(`[data-stage-toggle="${CSS.escape(stageKey)}"]`);
+    const body = wrap.querySelector(`[data-stage-body="${CSS.escape(stageKey)}"]`);
+    if (!btn || !body) return;
+    const collapsed = _collapsedCardActionStages.has(stageKey);
+    btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    btn.style.borderBottom = collapsed ? '0' : '1px solid var(--border)';
+    const chev = btn.querySelector('.ca-stage-chevron');
+    if (chev) chev.style.transform = `rotate(${collapsed ? '-90deg' : '0deg'})`;
+    if (collapsed) body.setAttribute('hidden', '');
+    else           body.removeAttribute('hidden');
   }
 
   function _renderSubstatusRow(lsKey, sub) {
@@ -1858,6 +1897,16 @@
   function addCardActionSubstatus(lsKey) {
     const list = document.querySelector(`[data-sub-list="${CSS.escape(lsKey)}"]`);
     if (!list) return;
+    // If the surrounding stage is currently collapsed, expand it so the new
+    // row is visible rather than appended into hidden DOM.
+    const stageBody = list.closest('[data-stage-body]');
+    if (stageBody) {
+      const stageKey = stageBody.dataset.stageBody;
+      if (_collapsedCardActionStages.has(stageKey)) {
+        _collapsedCardActionStages.delete(stageKey);
+        _applyCardActionStageCollapse(stageKey);
+      }
+    }
     _newSubstatusCounter++;
     const tmp = document.createElement('div');
     tmp.innerHTML = `
