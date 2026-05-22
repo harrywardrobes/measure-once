@@ -9,65 +9,58 @@
   <meta name="color-scheme" content="light">
   <title>Access Restricted · Measure Once</title>
   <link rel="stylesheet" href="/tailwind.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css">
   <style>
+    body {
+      background: #f5f4f1; color: #1c1917;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
     .restricted-wrap {
       display: flex;
       flex: 1;
+      min-height: 100vh;
       align-items: center;
       justify-content: center;
-      padding: 24px 16px;
+      padding: 24px;
     }
     .restricted-card {
-      background: var(--chalk);
-      border: 1px solid var(--stone);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--shadow-md);
-      padding: 40px 36px;
-      max-width: 420px;
+      background: #fff;
+      border: 2px solid #d6d3d1;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.06);
+      padding: 36px;
+      max-width: 440px;
       width: 100%;
       text-align: center;
     }
-    .restricted-icon {
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      background: var(--orchid-tint);
-      color: var(--orchid-deep);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 20px;
-    }
+    .logo-wrap { text-align: center; margin-bottom: 28px; }
+    .logo-wrap img { max-width: 180px; width: 100%; height: auto; display: inline-block; }
     .restricted-title {
-      font-size: 1.15rem;
+      font-size: 1.4rem;
       font-weight: 700;
-      color: var(--ink-1);
+      color: #0f0f0e;
+      letter-spacing: -.01em;
       margin: 0 0 10px;
     }
     .restricted-body {
-      font-size: 0.9rem;
-      color: var(--ink-3);
-      line-height: 1.6;
+      color: #44403c;
+      font-size: .95rem;
+      line-height: 1.5;
       margin: 0 0 28px;
     }
     .restricted-home-btn {
       display: inline-block;
-      background: var(--orchid);
+      background: #3d0f7a;
       color: #fff;
       text-decoration: none;
-      padding: 10px 22px;
-      border-radius: var(--radius-md);
-      font-weight: 600;
-      font-size: 0.875rem;
-      transition: background 0.15s;
+      padding: 14px 28px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: .02em;
+      transition: background .15s ease;
     }
-    .restricted-home-btn:hover {
-      background: var(--orchid-deep);
-    }
+    .restricted-home-btn:hover { background: #5a1fad; }
   </style>
 </head>
 <body>
@@ -75,11 +68,8 @@
   <div id="tab-restricted" class="app-body">
     <div class="restricted-wrap" id="main-content">
       <div class="restricted-card">
-        <div class="restricted-icon">
-          <svg width="26" height="26" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M12 15v2m0 0v2m0-2h2m-2 0H10m2-9a4 4 0 00-4 4v1H6a2 2 0 00-2 2v5a2 2 0 002 2h12a2 2 0 002-2v-5a2 2 0 00-2-2h-2v-1a4 4 0 00-4-4z"/>
-          </svg>
+        <div class="logo-wrap">
+          <img src="/harry-wardrobes-logo.png" alt="Harry Wardrobes">
         </div>
         <h1 class="restricted-title">Access restricted</h1>
         <p class="restricted-body">

@@ -1844,18 +1844,22 @@ app.get('/admin', async (req, res) => {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-         background: #f8f7f4; color: #141413; margin: 0;
+         background: #f5f4f1; color: #1c1917; margin: 0;
          min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
-  .card { background: #fff; border: 1px solid #e7e5e0; border-radius: 12px;
-          max-width: 420px; width: 100%; padding: 32px; text-align: center;
-          box-shadow: 0 1px 3px rgba(0,0,0,.04); }
-  h1 { font-size: 1.15rem; margin: 0 0 8px; }
-  p { color: #57534e; font-size: .9rem; margin: 0 0 20px; line-height: 1.5; }
+  .card { background: #fff; border: 2px solid #d6d3d1; border-radius: 12px;
+          max-width: 440px; width: 100%; padding: 36px; text-align: center;
+          box-shadow: 0 2px 6px rgba(0,0,0,.06); }
+  .logo-wrap { text-align: center; margin-bottom: 28px; }
+  .logo-wrap img { max-width: 180px; width: 100%; height: auto; display: inline-block; }
+  h1 { font-size: 1.4rem; font-weight: 700; margin: 0 0 8px; color: #0f0f0e; letter-spacing: -.01em; }
+  p { color: #44403c; font-size: .95rem; margin: 0 0 28px; line-height: 1.5; }
   a { display: inline-block; background: #3d0f7a; color: #fff; text-decoration: none;
-      padding: 9px 18px; border-radius: 6px; font-weight: 600; font-size: .88rem; }
-  a:hover { background: #2e0f5a; }
+      padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 1rem;
+      letter-spacing: .02em; transition: background .15s ease; }
+  a:hover { background: #5a1fad; }
 </style></head>
 <body><div class="card">
+  <div class="logo-wrap"><img src="/harry-wardrobes-logo.png" alt="Harry Wardrobes"></div>
   <h1>Admin access required</h1>
   <p>You're signed in, but your account doesn't have admin permissions. If you think this is a mistake, contact an admin.</p>
   <a href="/profile">Back to your profile</a>
