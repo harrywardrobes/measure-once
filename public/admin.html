@@ -1632,15 +1632,10 @@
           ${data.map((s, i) => `
             <tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? '' : 'background:var(--stone-soft);'}" data-ls-key="${esc(s.key)}">
               <td style="padding:7px 8px;">
-                <div style="display:flex;align-items:center;gap:5px;">
-                  <select class="field ls-stage-select" id="ls-stage-${esc(s.key)}" data-key="${esc(s.key)}"
-                    style="padding:4px 7px;font-size:.78rem;min-width:130px;">
-                    ${_stageOptionsHtml(s.stage)}
-                  </select>
-                  <button class="btn btn-ghost" title="Save stage"
-                    style="padding:3px 9px;font-size:.75rem;white-space:nowrap;"
-                    onclick="saveLeadStatusStage('${esc(s.key)}')">Save</button>
-                </div>
+                <select class="field ls-stage-select" id="ls-stage-${esc(s.key)}" data-key="${esc(s.key)}"
+                  style="padding:4px 7px;font-size:.78rem;min-width:130px;">
+                  ${_stageOptionsHtml(s.stage)}
+                </select>
               </td>
               <td style="padding:7px 8px;font-family:monospace;color:var(--ink-3);font-size:.78rem;">
                 ${s.key
@@ -1684,22 +1679,32 @@
     `;
   }
 
-  async function saveLeadStatusStage(key) {
-    const select = document.getElementById(`ls-stage-${key}`);
-    if (!select) return;
-    const stage = select.value || null;
-    const existing = _leadStatusesData.find(s => s.key === key);
-    const prevStage = existing?.stage || null;
-    try {
-      const updated = await api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(key)}`, { stage });
-      const idx = _leadStatusesData.findIndex(s => s.key === key);
-      if (idx !== -1) _leadStatusesData[idx] = updated;
-      toast(`Stage saved.`);
-      _notifyLeadStatusChanged();
-    } catch (e) {
-      toast(`Failed to update stage: ${e.message}`, true);
-      select.value = prevStage || '';
+  async function saveAllLeadStatusStages() {
+    const selects = document.querySelectorAll('.ls-stage-select');
+    const changed = [];
+    selects.forEach(sel => {
+      const key = sel.dataset.key;
+      const stage = sel.value || null;
+      const existing = _leadStatusesData.find(s => s.key === key);
+      if ((existing?.stage || null) !== stage) changed.push({ key, stage, select: sel });
+    });
+    if (!changed.length) { toast('No stage changes to save.'); return; }
+    let saved = 0, failed = 0;
+    for (const { key, stage, select } of changed) {
+      const existing = _leadStatusesData.find(s => s.key === key);
+      try {
+        const updated = await api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(key)}`, { stage });
+        const idx = _leadStatusesData.findIndex(s => s.key === key);
+        if (idx !== -1) _leadStatusesData[idx] = updated;
+        saved++;
+      } catch (e) {
+        select.value = existing?.stage || '';
+        failed++;
+      }
     }
+    if (failed) toast(`Saved ${saved}, failed ${failed}.`, true);
+    else toast(`${saved} stage${saved !== 1 ? 's' : ''} saved.`);
+    _notifyLeadStatusChanged();
   }
 
   async function saveLeadStatusKey(input) {
@@ -2051,6 +2056,7 @@
               <div style="font-weight:600;font-size:.875rem;color:var(--ink-1);">Lead Statuses</div>
               <p class="card-desc" style="margin:2px 0 0;">Define the HubSpot lead status values and their display labels. Statuses marked "Excl. from Sales" are hidden from the Sales board.</p>
             </div>
+            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="saveAllLeadStatusStages()">Save stages</button>
           </div>
 
           <div id="lead-statuses-table-wrap">
