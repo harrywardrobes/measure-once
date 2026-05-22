@@ -2013,7 +2013,7 @@ body.showing-workflow .workflow-panel { display: flex; }
   overflow: hidden;
 }
 .project-card-invoices {
-  padding: 8px 14px;
+  padding: 10px 14px;
   border-top: 1px solid var(--stone);
   display: flex;
   align-items: center;
