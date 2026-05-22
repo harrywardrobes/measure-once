@@ -186,9 +186,9 @@ function buildListItems() {
 
 // ── Customer List Navigation ──────────────────────────────────────────────────
 function goToCustomer(contactId) {
-  const list = document.getElementById('customer-list');
-  if (list) {
-    try { sessionStorage.setItem('customers_scroll', String(list.scrollTop)); } catch {}
+  const view = document.getElementById('customers-view');
+  if (view) {
+    try { sessionStorage.setItem('customers_scroll', String(view.scrollTop)); } catch {}
   }
   try {
     sessionStorage.setItem('customers_filters', JSON.stringify({
@@ -206,8 +206,8 @@ function restoreCustomerListScroll() {
   const saved = sessionStorage.getItem('customers_scroll');
   if (!saved) return;
   sessionStorage.removeItem('customers_scroll');
-  const list = document.getElementById('customer-list');
-  if (list) list.scrollTop = parseInt(saved, 10) || 0;
+  const view = document.getElementById('customers-view');
+  if (view) view.scrollTop = parseInt(saved, 10) || 0;
 }
 
 // Restore filter/sort state saved by goToCustomer before navigating away.
@@ -218,141 +218,208 @@ function restoreCustomerListFilters() {
   sessionStorage.removeItem('customers_filters');
   if (!saved) return false;
 
-  // Apply state values
+  // Apply state values — the renderer picks them up on next renderCustomerList()
   state.contactsViewMode  = saved.contactsViewMode  || 'all';
   state.stageFilter       = saved.stageFilter        || '';
   state.sortBy            = saved.sortBy             || 'newest';
   state.showArchived      = !!saved.showArchived;
   state.leadStatusFilter  = saved.leadStatusFilter   || '';
 
-  // Sync UI elements to restored state
-  const activeBtn = document.getElementById('view-active-btn');
-  const allBtn    = document.getElementById('view-all-btn');
-  if (activeBtn) activeBtn.classList.toggle('filter-btn-active', state.contactsViewMode === 'active');
-  if (allBtn)    allBtn.classList.toggle('filter-btn-active',   state.contactsViewMode === 'all');
-
-  const stageSelect = document.getElementById('stage-filter');
-  if (stageSelect) stageSelect.value = state.stageFilter;
-
-  const sortSelect = document.getElementById('sort-select');
-  if (sortSelect) sortSelect.value = state.sortBy;
-
-  const archivedBtn = document.getElementById('archived-toggle');
-  if (archivedBtn) archivedBtn.classList.toggle('filter-btn-active', state.showArchived);
-
-  const lsSelect = document.getElementById('lead-status-filter');
-  if (lsSelect) lsSelect.value = state.leadStatusFilter;
-
-  const lsRow = document.getElementById('lead-status-filter-row');
-  if (lsRow) lsRow.classList.toggle('hidden', state.contactsViewMode !== 'all');
-
   return true;
 }
 
 // ── Customer List ─────────────────────────────────────────────────────────────
-// Registered below as the renderer for pages that carry #customer-list.
+// Registered below as the renderer for pages that carry #customers-view.
 // sales.js registers renderSalesView on the sales page (see registerCustomerListRenderer
 // call at the top of sales.js), which overrides this registration on that page.
 function _renderCustomerListImpl() {
-  const list  = document.getElementById('customer-list');
-  if (!list) return; // Sales-only DOM; safe no-op on other pages
-  const count = document.getElementById('deal-count');
-  const items = buildListItems();
+  const view = document.getElementById('customers-view');
+  if (!view) return;
 
-  if (!items.length) {
-    list.innerHTML = `<div class="p-4 text-sm text-slate-400 text-center mt-4">No customers match</div>`;
-    count.textContent = '';
-    return;
+  const items    = buildListItems();
+  const viewMode = state.contactsViewMode || 'all';
+  const filter   = state.stageFilter || '';
+
+  // ── Stage tabs ──────────────────────────────────────────────────────────────
+  const stageTabs = [
+    { key: '__active__', label: 'Active' },
+    { key: '__all__',    label: 'All' },
+    ...Object.entries(state.workflow?.stages || {}).map(([k, s]) => ({ key: k, label: s.label })),
+  ].map(({ key, label }) => {
+    let isActive = false;
+    if (key === '__active__') isActive = viewMode === 'active' && !filter;
+    else if (key === '__all__') isActive = viewMode === 'all' && !filter;
+    else isActive = filter === key;
+    const colour = (key !== '__active__' && key !== '__all__') ? stageColour(key) : null;
+    const style  = isActive && colour
+      ? `background:${colour.bg};color:#fff;border-color:${colour.bg}`
+      : isActive
+        ? 'background:var(--plum);color:#fff;border-color:var(--plum)'
+        : '';
+    return `<button class="project-stage-tab${isActive ? ' project-stage-tab-active' : ''}"
+      style="${style}" data-tab-key="${escHtml(key)}">${escHtml(label)}</button>`;
+  }).join('');
+
+  // ── Sort bar ────────────────────────────────────────────────────────────────
+  const sortOptions = [
+    { value: 'newest',    label: 'Newest first' },
+    { value: 'name-asc',  label: 'Name A–Z' },
+    { value: 'name-desc', label: 'Name Z–A' },
+    { value: 'stage',     label: 'Stage order' },
+  ].map(({ value, label }) =>
+    `<option value="${value}"${(state.sortBy || 'newest') === value ? ' selected' : ''}>${escHtml(label)}</option>`
+  ).join('');
+
+  const lsCountMap = {};
+  for (const c of state.contacts) {
+    const s = c.properties?.hs_lead_status || '';
+    if (s) lsCountMap[s] = (lsCountMap[s] || 0) + 1;
   }
+  const lsOptions = LEAD_STATUS_OPTIONS.map(({ value, label }) => {
+    const n     = lsCountMap[value] || 0;
+    const attrs = n === 0 ? ' disabled style="color:#cbd5e1"' : '';
+    return `<option value="${escHtml(value)}"${state.leadStatusFilter === value ? ' selected' : ''}${attrs}>${escHtml(label)} (${n})</option>`;
+  }).join('');
 
-  count.textContent = `${items.length} item${items.length !== 1 ? 's' : ''}`;
+  const archivedActive = state.showArchived ? ' project-stage-tab-active' : '';
+  const archivedStyle  = state.showArchived ? 'background:var(--plum);color:#fff;border-color:var(--plum)' : '';
 
-  list.innerHTML = items.map(({ contact, roomIdx, roomName, stageKey, roomStatus }) => {
-    const name         = contactName(contact);
-    const email        = contact.properties?.email || '';
-    const customerNum  = contact.properties?.customer_number || '';
-    const colour     = stageKey ? stageColour(stageKey) : stageColour('sales');
-    const stageLabel = stageKey ? (state.workflow?.stages?.[stageKey]?.label || stageKey) : 'Sales';
-    const stageCode  = stageCodeFor(stageKey || 'sales');
-    const isSelected = contact.id === state.selectedContactId && roomIdx === state.selectedRoomIdx;
-    const urgency    = state.contactUrgencyCache[contact.id];
-    const isArchived = roomStatus !== 'active';
-    const multiRoom  = (state.contactStageCache[contact.id]?.length || 0) > 1;
-    const displayName = (multiRoom && roomName && roomName !== 'Main')
-      ? `${name} — ${roomName}` : name;
+  const sortBar = `
+    <div class="project-sort-bar">
+      <label class="project-sort-label" for="customers-sort-select">Sort by</label>
+      <select id="customers-sort-select" class="project-sort-select">${sortOptions}</select>
+      ${viewMode === 'all' ? `
+      <select id="lead-status-filter" class="project-sort-select" aria-label="Lead status filter">
+        <option value="">All statuses</option>
+        ${lsOptions}
+      </select>` : ''}
+      <button id="archived-toggle" class="project-stage-tab${archivedActive}" style="${archivedStyle};margin-left:auto"
+        aria-pressed="${state.showArchived}" aria-label="Show archived customers">Archived</button>
+    </div>`;
 
-    const urgencyDot = urgency === 'red'
-      ? `<span class="urgency-dot urgency-red" title="Urgent: task due within 1 working day" aria-label="Urgent: task due within 1 working day"></span>`
-      : urgency === 'orange'
-        ? `<span class="urgency-dot urgency-orange" title="Task due within 2 working days" aria-label="Task due within 2 working days"></span>`
+  // ── Cards ───────────────────────────────────────────────────────────────────
+  let bodyHtml;
+  if (!items.length) {
+    bodyHtml = `<p class="projects-empty-msg">No customers match</p>`;
+  } else {
+    bodyHtml = items.map(({ contact, roomIdx, roomName, stageKey, roomStatus }) => {
+      const name        = contactName(contact);
+      const email       = contact.properties?.email || '';
+      const customerNum = contact.properties?.customer_number || '';
+      const colour      = stageColour(stageKey || 'sales');
+      const stageLabel  = stageKey ? (state.workflow?.stages?.[stageKey]?.label || stageKey) : 'Sales';
+      const isSelected  = contact.id === state.selectedContactId && roomIdx === state.selectedRoomIdx;
+      const urgency     = state.contactUrgencyCache[contact.id];
+      const isArchived  = roomStatus !== 'active';
+      const multiRoom   = (state.contactStageCache[contact.id]?.length || 0) > 1;
+      const displayName = (multiRoom && roomName && roomName !== 'Main') ? `${name} — ${roomName}` : name;
+
+      const urgencyDot = urgency === 'red'
+        ? `<span class="urgency-dot urgency-red" title="Urgent: task due within 1 working day" aria-label="Urgent"></span>`
+        : urgency === 'orange'
+          ? `<span class="urgency-dot urgency-orange" title="Task due within 2 working days" aria-label="Task due soon"></span>`
+          : '';
+
+      const qbInvs       = matchInvoicesForContact(contact);
+      const qbTotal      = qbInvs.reduce((s, inv) => s + inv.balance, 0);
+      const qbInvIdsAttr = escHtml(JSON.stringify(qbInvs.map(inv => inv.id)));
+      const qbBadge      = qbInvs.length > 0
+        ? `<button class="qb-badge" title="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}" data-inv-ids="${qbInvIdsAttr}" onclick="event.stopPropagation();openInvoicePanelFromBadge(this)">£${qbTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</button>`
         : '';
 
-    const qbInvs    = matchInvoicesForContact(contact);
-    const qbTotal   = qbInvs.reduce((s, inv) => s + inv.balance, 0);
-    const qbInvIdsAttr = escHtml(JSON.stringify(qbInvs.map(inv => inv.id)));
-    const qbBadge   = qbInvs.length > 0
-      ? `<button class="qb-badge" title="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}" aria-label="${qbInvs.length} outstanding invoice${qbInvs.length !== 1 ? 's' : ''}, total £${qbTotal.toFixed(2)}" data-inv-ids="${qbInvIdsAttr}" onclick="event.stopPropagation();openInvoicePanelFromBadge(this)">£${qbTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</button>`
-      : '';
+      const customerNumBadge = customerNum
+        ? `<span class="customer-num-badge" title="Customer number">${escHtml(customerNum)}</span>`
+        : '';
 
-    const stagePillHtml = `<span class="stage-pill stage-pill-coded" style="background:${colour.light};color:${colour.text};border-color:${colour.text}33">
-        <span class="stage-pill-code" aria-hidden="true">${escHtml(stageCode)}</span>
-        <span class="stage-pill-label">${escHtml(stageLabel)}</span>
-      </span>`;
+      const leadStatusBadge = (() => {
+        if (viewMode !== 'all') return '';
+        const raw = contact.properties?.hs_lead_status || '';
+        const CSS_CLASS_MAP = {
+          'OPEN_DEAL': 'lsb-open-deal', 'NEW': 'lsb-new', 'IN_PROGRESS': 'lsb-in-progress',
+          'OPEN': 'lsb-new', 'CONNECTED': 'lsb-connected',
+          'ATTEMPTED_TO_CONTACT': '', 'UNQUALIFIED': 'lsb-unqualified', 'BAD_TIMING': 'lsb-bad-timing',
+        };
+        if (!raw) {
+          const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+          return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(nullLabel)}</span>`;
+        }
+        const opt   = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
+        const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        const cls   = CSS_CLASS_MAP[raw] || '';
+        return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(label)}</span>`;
+      })();
 
-    const statusLabel = roomStatus === 'declined' ? 'Declined' : roomStatus === 'complete' ? 'Complete' : roomStatus === 'remedial' ? 'Remedial' : 'Active';
-    const statusMini = `<span class="status-mini status-mini-${roomStatus}" onclick="openStatusPicker(event,'${contact.id}',${roomIdx})" title="Change status" role="button" tabindex="-1">${statusLabel}</span>`;
+      const statusLabel = roomStatus === 'declined' ? 'Declined' : roomStatus === 'complete' ? 'Complete' : roomStatus === 'remedial' ? 'Remedial' : 'Active';
+      const statusMini  = `<span class="status-mini status-mini-${roomStatus}" onclick="openStatusPicker(event,'${contact.id}',${roomIdx})" title="Change status" role="button" tabindex="-1">${statusLabel}</span>`;
 
-    const customerNumBadge = customerNum
-      ? `<span class="customer-num-badge" title="Customer number">${escHtml(customerNum)}</span>`
-      : '';
+      const secondaryBadges = [
+        email ? `<span class="customer-list-email">${escHtml(email)}</span>` : '',
+        leadStatusBadge, qbBadge, customerNumBadge,
+      ].filter(Boolean).join('');
 
-    const leadStatusBadge = (() => {
-      if (state.contactsViewMode !== 'all') return '';
-      const raw = contact.properties?.hs_lead_status || '';
-      const CSS_CLASS_MAP = {
-        'OPEN_DEAL':            'lsb-open-deal',
-        'NEW':                  'lsb-new',
-        'IN_PROGRESS':          'lsb-in-progress',
-        'OPEN':                 'lsb-new',
-        'CONNECTED':            'lsb-connected',
-        'ATTEMPTED_TO_CONTACT': '',
-        'UNQUALIFIED':          'lsb-unqualified',
-        'BAD_TIMING':           'lsb-bad-timing',
-      };
-      if (!raw) {
-        const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
-        return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(nullLabel)}</span>`;
-      }
-      const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
-      const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-      const cls = CSS_CLASS_MAP[raw] || '';
-      return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(label)}</span>`;
-    })();
-
-    const secondaryBadges = [leadStatusBadge, qbBadge, customerNumBadge].filter(Boolean).join('');
-
-    return `
-      <div class="customer-card ${isSelected ? 'selected' : ''} ${isArchived ? 'card-archived' : ''}"
-           data-contact-id="${contact.id}" data-room-idx="${roomIdx}"
-           role="button" tabindex="0"
-           aria-current="${isSelected ? 'true' : 'false'}"
-           aria-label="Open customer ${escHtml(displayName)}"
-           onclick="goToCustomer(this.dataset.contactId)"
-           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goToCustomer(this.dataset.contactId);}">
-        <div class="customer-card-row">
-          <div class="customer-card-name">
-            ${urgencyDot}<span class="name-text">${escHtml(displayName)}</span>
+      return `
+        <div class="customer-project-card${isSelected ? ' customer-project-card-selected' : ''}${isArchived ? ' card-archived' : ''}"
+             data-contact-id="${contact.id}" data-room-idx="${roomIdx}"
+             role="button" tabindex="0"
+             aria-current="${isSelected ? 'true' : 'false'}"
+             aria-label="Open customer ${escHtml(displayName)}"
+             onclick="goToCustomer(this.dataset.contactId)"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goToCustomer(this.dataset.contactId);}">
+          <div class="customer-project-header">
+            <div class="customer-project-name-row">
+              <div class="customer-project-name">${urgencyDot}${escHtml(displayName)}</div>
+            </div>
           </div>
-          ${statusMini}
-        </div>
-        <div class="customer-card-meta">
-          ${stagePillHtml}
-          ${email ? `<span class="customer-card-value">${escHtml(email)}</span>` : ''}
-        </div>
-        ${secondaryBadges ? `<div class="customer-card-secondary">${secondaryBadges}</div>` : ''}
-      </div>
-    `;
-  }).join('');
+          <div class="project-room-list">
+            <div class="project-room-row" data-contact-id="${contact.id}" data-room-idx="${roomIdx}">
+              <span class="project-room-row-name">${escHtml(roomName || 'Main')}</span>
+              ${statusMini}
+              <span class="stage-pill" style="background:${colour.light};color:${colour.text}">${escHtml(stageLabel)}</span>
+            </div>
+          </div>
+          ${secondaryBadges ? `<div class="project-card-invoices customer-list-secondary">${secondaryBadges}</div>` : ''}
+        </div>`;
+    }).join('');
+  }
+
+  view.innerHTML = `
+    <div class="project-stage-tabs-bar">${stageTabs}</div>
+    ${sortBar}
+    <div class="projects-inner">${bodyHtml}</div>
+  `;
+
+  // ── Event listeners ─────────────────────────────────────────────────────────
+  view.querySelector('.project-stage-tabs-bar').addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-tab-key]');
+    if (!btn) return;
+    const key = btn.dataset.tabKey;
+    if (key === '__active__') {
+      state.contactsViewMode = 'active';
+      state.stageFilter      = '';
+      state.leadStatusFilter = '';
+      loadOpenLeads().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
+    } else if (key === '__all__') {
+      state.contactsViewMode = 'all';
+      state.stageFilter      = '';
+      loadAllContacts().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
+    } else {
+      state.contactsViewMode = 'all';
+      state.stageFilter      = key;
+      renderCustomerList();
+    }
+  });
+
+  const sortSel = view.querySelector('#customers-sort-select');
+  if (sortSel) sortSel.addEventListener('change', () => setSortBy(sortSel.value));
+
+  const lsSel = view.querySelector('#lead-status-filter');
+  if (lsSel) lsSel.addEventListener('change', () => setLeadStatusFilter(lsSel.value));
+
+  const archivedBtn = view.querySelector('#archived-toggle');
+  if (archivedBtn) archivedBtn.addEventListener('click', () => {
+    state.showArchived = !state.showArchived;
+    renderCustomerList();
+  });
 }
 
 // Short stage code shown as a leading letter group on the stage pill — gives

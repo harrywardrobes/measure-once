@@ -349,11 +349,11 @@ async function bootstrap() {
     await Promise.all([loadOpenLeads(), loadWorkflowStages(), ensurePrefs(),
       typeof loadLeadStatuses === 'function' ? loadLeadStatuses() : Promise.resolve()]);
     populateStageFilter();
-    if (document.getElementById('customer-list') || document.getElementById('sales-view')) renderCustomerList();
+    if (document.getElementById('customers-view') || document.getElementById('sales-view')) renderCustomerList();
     if (priv === 'manager' || priv === 'admin') loadQBInvoices();
   } catch (e) {
     console.error('Bootstrap failed', e);
-    const list        = document.getElementById('customer-list');
+    const list        = document.getElementById('customers-view');
     const salesView   = document.getElementById('sales-view');
     const projectView = document.getElementById('projects-view');
     const target = list || salesView || projectView;
@@ -434,7 +434,7 @@ function onHeaderSearchSubmit(val) {
   if (location.pathname === '/customers') {
     filterDeals(val);
     setTimeout(() => {
-      const firstCard = document.querySelector('.customer-card');
+      const firstCard = document.querySelector('.customer-project-card');
       if (firstCard) firstCard.click();
     }, 50);
   } else {

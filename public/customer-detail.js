@@ -16,7 +16,7 @@ function _performGoBack() {
   state.workflowData      = null;
   state.customerNotes     = '';
   state.tasks             = [];
-  document.querySelectorAll('.customer-card').forEach(el => el.classList.remove('selected'));
+  document.querySelectorAll('.customer-project-card-selected').forEach(el => el.classList.remove('customer-project-card-selected'));
 }
 
 // ── Inline-edit commit / discard helpers ─────────────────────────────────────

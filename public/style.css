@@ -482,46 +482,7 @@ body.showing-workflow .workflow-panel { display: flex; }
 ::-webkit-scrollbar-thumb { background: var(--stone); border-radius: var(--radius-pill); }
 ::-webkit-scrollbar-thumb:hover { background: var(--stone-deep); }
 
-/* ── Customer List ───────────────────────────────────────────────────────────── */
-.customer-card {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--stone);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  border-left: 3px solid transparent;
-  transition: background 0.1s;
-  min-height: 60px;
-}
-.customer-card:hover  { background: var(--paper-deep); }
-.customer-card:active { background: var(--paper-deep); }
-.customer-card.selected {
-  background: var(--orchid-tint);
-  border-left-color: var(--orchid);
-}
-
-.customer-card-name {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--ink-1);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  overflow: hidden;
-}
-.customer-card-name .name-text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-.customer-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 5px;
-  flex-wrap: wrap;
-}
+/* ── Stage Pills ─────────────────────────────────────────────────────────────── */
 .stage-pill {
   font-size: 0.68rem;
   font-weight: 700;
@@ -586,15 +547,6 @@ body.showing-workflow .workflow-panel { display: flex; }
 .ls-stage-select[data-stage="AFTERCARE"]        { border-left-color: var(--stage-aftercare-bg); }
 .ls-stage-select[data-stage="CUSTOMER_SERVICE"] { border-left-color: var(--stage-customerservice-bg); }
 
-.customer-card-value {
-  font-size: 0.75rem;
-  color: var(--ink-3);
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 180px;
-}
 
 /* ── Customer List Skeleton ──────────────────────────────────────────────────── */
 @keyframes skeleton-shimmer {
@@ -4761,280 +4713,38 @@ details[open] .trades-history-summary::before { transform: rotate(90deg); }
   .trades-form-row-2 { grid-template-columns: 1fr; }
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   Customers page — accessibility-focused v2 (scoped to #tab-customers.cl-v2)
-   Larger text, bolder borders, strong focus rings, redundant stage cues.
-   Graduated from the AccessibilityReadability mockup variant.
-   ──────────────────────────────────────────────────────────────────────────── */
-
-.cl-v2 .cl-controls {
-  padding: 16px;
-  border-bottom: 2px solid var(--ink-1);
-  background: #fff;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  flex-shrink: 0;
-}
-.cl-v2 .cl-row {
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
-}
-.cl-v2 .cl-view-row { align-items: center; }
-.cl-v2 .cl-filter-row > .cl-field { flex: 1 1 0; min-width: 0; }
-.cl-v2 .cl-field { display: flex; flex-direction: column; gap: 6px; }
-.cl-v2 .cl-field-grow { flex: 1 1 auto; }
-.cl-v2 .cl-field-archived { flex: 0 0 auto; }
-.cl-v2 .cl-label {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--ink-1);
-  letter-spacing: 0.02em;
-}
-
-.cl-v2 .cl-view-toggle {
-  display: inline-flex;
-  border: 2px solid var(--ink-1);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  flex: 1;
-}
-.cl-v2 .cl-toggle-btn {
-  flex: 1;
-  border: none;
-  border-radius: 0;
-  background: #fff;
-  color: var(--ink-1);
-  font-size: 0.95rem;
-  font-weight: 700;
-  padding: 10px 14px;
-  min-height: 44px;
-  cursor: pointer;
-}
-.cl-v2 .cl-toggle-btn + .cl-toggle-btn { border-left: 2px solid var(--ink-1); }
-.cl-v2 .cl-toggle-btn.filter-btn-active {
-  background: var(--plum);
-  color: #fff;
-}
-.cl-v2 .cl-toggle-btn:hover:not(.filter-btn-active) { background: var(--paper-deep); }
-
-.cl-v2 .cl-new-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--plum);
-  color: #fff;
-  border: 2px solid var(--plum);
-  border-radius: var(--radius-md);
-  padding: 10px 16px;
-  font-size: 0.95rem;
-  font-weight: 700;
-  min-height: 44px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.cl-v2 .cl-new-btn:hover { background: #3d0f7a; border-color: #3d0f7a; }
-
-.cl-v2 .cl-select {
-  width: 100%;
-  background: #fff;
-  border: 2px solid var(--ink-1);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--ink-1);
-  min-height: 44px;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23141413' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  padding-right: 36px;
-}
-
-.cl-v2 .cl-archived-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: #fff;
-  color: var(--ink-1);
-  border: 2px solid var(--ink-1);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
-  font-size: 0.95rem;
-  font-weight: 700;
-  min-height: 44px;
-  cursor: pointer;
-}
-.cl-v2 .cl-archived-btn.filter-btn-active {
-  background: var(--plum);
-  color: #fff;
-  border-color: var(--plum);
-}
-.cl-v2 .cl-archived-btn:hover:not(.filter-btn-active) { background: var(--paper-deep); }
-
-.cl-v2 .cl-count {
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: var(--ink-2);
-  padding-top: 10px;
-  border-top: 2px solid var(--stone);
-}
-.cl-v2 .cl-count strong { color: var(--ink-1); font-weight: 800; }
-
-.cl-v2 .cl-list {
+/* ── Customers page — project-card layout ─────────────────────────────────── */
+.list-panel-fw > #customers-view {
   flex: 1;
   overflow-y: auto;
-  background: var(--chalk);
-}
-.cl-v2 .cl-list:focus { outline: none; }
-
-/* Cards */
-.cl-v2 #customer-list .customer-card {
-  padding: 16px 18px;
-  border-bottom: 2px solid var(--stone-light);
-  border-left: 6px solid transparent;
-  border-top: none;
-  border-right: none;
-  background: #fff;
-  cursor: pointer;
-  min-height: 88px;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  transition: background 0.1s;
 }
-.cl-v2 #customer-list .customer-card:hover { background: var(--paper); border-left-color: var(--stone); }
-.cl-v2 #customer-list .customer-card.selected {
+
+#customers-view .customer-project-card {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: box-shadow 0.12s, border-color 0.12s;
+}
+#customers-view .customer-project-card:hover {
+  border-color: var(--orchid);
+  box-shadow: var(--shadow-md);
+}
+#customers-view .customer-project-card.customer-project-card-selected {
+  border-color: var(--orchid);
   background: var(--orchid-tint);
-  border-left-color: var(--orchid-deep);
 }
-.cl-v2 #customer-list .customer-card:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 3px var(--plum), 0 0 0 3px var(--plum);
-  z-index: 1;
-  position: relative;
-}
-.cl-v2 #customer-list .customer-card.card-archived { opacity: 0.65; }
+#customers-view .customer-project-card.card-archived { opacity: 0.6; }
 
-.cl-v2 .customer-card-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.cl-v2 .customer-card-name {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--ink-1);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-}
-.cl-v2 .customer-card-name .name-text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-.cl-v2 .customer-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.customer-list-secondary {
   flex-wrap: wrap;
+  gap: 6px;
 }
-.cl-v2 .customer-card-secondary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding-top: 2px;
-}
-.cl-v2 .customer-card-value {
-  font-size: 0.9rem;
-  color: var(--ink-2);
+.customer-list-email {
+  font-size: 0.75rem;
+  color: var(--ink-3);
   font-weight: 500;
-  max-width: none;
-}
-
-/* Stage pill with redundant code letter — works in greyscale */
-.cl-v2 .stage-pill-coded {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  border: 2px solid;
-  border-radius: var(--radius-md);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
-}
-.cl-v2 .stage-pill-coded .stage-pill-code {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 4px;
-  background: currentColor;
-  color: #fff;
-  border-radius: var(--radius-sm);
-  font-weight: 800;
-  font-size: 0.72rem;
-}
-.cl-v2 .stage-pill-coded .stage-pill-code > * { color: #fff; }
-.cl-v2 .stage-pill-coded .stage-pill-label { font-size: 0.85rem; }
-
-/* Strong focus rings for all interactive controls inside the customers panel */
-.cl-v2 .cl-toggle-btn:focus-visible,
-.cl-v2 .cl-new-btn:focus-visible,
-.cl-v2 .cl-select:focus-visible,
-.cl-v2 .cl-archived-btn:focus-visible,
-.cl-v2 .qb-badge:focus-visible,
-.cl-v2 .lead-status-badge:focus-visible,
-.cl-v2 .status-mini:focus-visible {
-  outline: 3px solid var(--plum);
-  outline-offset: 2px;
-}
-
-/* Keyboard hints footer */
-.cl-v2 .cl-keyboard-hint {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-top: 2px solid var(--ink-1);
-  background: var(--chalk);
-  color: var(--ink-1);
-  font-size: 0.88rem;
-  font-weight: 500;
-  flex-shrink: 0;
-}
-.cl-v2 .cl-keyboard-hint kbd {
-  display: inline-block;
-  padding: 2px 7px;
-  background: #fff;
-  border: 2px solid var(--stone);
-  border-radius: var(--radius-sm);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-weight: 700;
-  font-size: 0.82rem;
-  color: var(--ink-1);
-  line-height: 1;
-}
-
-/* Skeleton cards inside cl-v2 inherit new height */
-.cl-v2 .skeleton-card {
-  min-height: 88px;
-  padding: 16px 18px;
-  border-bottom: 2px solid var(--stone-light);
-  border-left: 6px solid transparent;
 }
 
 /* ── Ideas & Feedback ─────────────────────────────────────────────────────────── */
