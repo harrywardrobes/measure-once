@@ -158,12 +158,7 @@ window.getShortcut = function (key) {
         ${NAV.map(n => {
           const active = n.href === path ? ' bottom-nav-active' : '';
           const hidden = (n.managerOnly || n.adminOnly) ? ' style="display:none"' : '';
-          return `<a class="bottom-nav-btn${active}" id="bnav-${n.key}" href="${n.href}" aria-label="${n.label}"${hidden}>
-            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" class="bottom-nav-icon">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${n.svg}"/>
-            </svg>
-            <span>${n.label}</span>
-          </a>`;
+          return `<a class="bottom-nav-btn${active}" id="bnav-${n.key}" href="${n.href}" aria-label="${n.label}"${hidden}>${n.label}</a>`;
         }).join('')}
       </div>
     </nav>`;

@@ -355,41 +355,71 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
   padding-bottom: env(safe-area-inset-bottom);
   background: #fff;
   border-top: 1px solid var(--stone);
-  display: flex;
-  align-items: stretch;
-  justify-content: center;
   z-index: 100;
 }
-.bottom-nav-inner {
-  max-width: 640px;
-  width: 100%;
-  display: flex;
-  align-items: stretch;
-}
 .bottom-nav-btn {
-  flex: 1;
   display: flex;
-  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 5px;
   border: none;
   border-top: 2px solid transparent;
   background: none;
   cursor: pointer;
   font-family: inherit;
   color: var(--ink-4);
-  font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   transition: color 0.15s, border-color 0.15s;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  padding: 0 4px;
   text-decoration: none;
 }
-.bottom-nav-btn svg { transition: color 0.15s; flex-shrink: 0; }
+
+/* Mobile: horizontal-scrolling, text-only nav */
+@media (max-width: 639px) {
+  .bottom-nav {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .bottom-nav::-webkit-scrollbar { display: none; }
+  .bottom-nav-inner {
+    display: flex;
+    align-items: stretch;
+    min-width: max-content;
+    height: 60px;
+  }
+  .bottom-nav-btn {
+    flex: none;
+    padding: 0 1.125rem;
+    font-size: 0.7rem;
+    white-space: nowrap;
+  }
+}
+
+/* Desktop/tablet: centred equal-width tabs (unchanged behaviour) */
+@media (min-width: 640px) {
+  .bottom-nav {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+  }
+  .bottom-nav-inner {
+    max-width: 640px;
+    width: 100%;
+    display: flex;
+    align-items: stretch;
+  }
+  .bottom-nav-btn {
+    flex: 1;
+    padding: 0 4px;
+    font-size: 0.6rem;
+  }
+}
+
 .bottom-nav-btn.bottom-nav-active { color: var(--orchid); border-top-color: var(--orchid); }
 
 /* Per-tab stage colour overrides — each mapped tab uses its stage accent */
