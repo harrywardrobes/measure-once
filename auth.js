@@ -1312,8 +1312,15 @@ async function setupAuth(app) {
 
       const meta = {};
       const str  = (v, max) => (v || '').toString().trim().slice(0, max) || null;
-      if (str(body.first_name,    100)) meta.first_name    = str(body.first_name, 100);
-      if (str(body.last_name,     100)) meta.last_name     = str(body.last_name,  100);
+      if (str(body.first_name, 100)) {
+        const tok = str(body.first_name, 100).split(/\s+/).filter(Boolean)[0] || '';
+        if (tok) meta.first_name = tok.charAt(0).toUpperCase() + tok.slice(1).toLowerCase();
+      }
+      if (str(body.last_name, 100)) {
+        const tokens = str(body.last_name, 100).split(/\s+/).filter(Boolean);
+        const tok = tokens[tokens.length - 1] || '';
+        if (tok) meta.last_name = tok.charAt(0).toUpperCase() + tok.slice(1).toLowerCase();
+      }
       if (str(body.date_of_birth,  20)) meta.date_of_birth = str(body.date_of_birth, 20);
       if (str(body.ni_number,      20)) meta.ni_number     = str(body.ni_number,  20);
       if (str(body.mobile_number,  30)) meta.mobile_number = str(body.mobile_number, 30);
