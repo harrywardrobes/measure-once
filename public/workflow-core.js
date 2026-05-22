@@ -355,6 +355,7 @@ if (typeof BroadcastChannel !== 'undefined') {
     loadLeadStatuses().then(() => {
       if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
       if (typeof renderCustomerList === 'function') renderCustomerList();
+      if (typeof renderEnquiryList === 'function') renderEnquiryList();
     });
   });
 }
