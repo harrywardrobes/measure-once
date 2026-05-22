@@ -16,11 +16,22 @@ const zxcvbn = require('zxcvbn');
 
 // ── Cloudflare Turnstile (captcha) ───────────────────────────────────────────
 // Verifies the user-supplied token against Cloudflare's siteverify endpoint.
-// If TURNSTILE_SECRET_KEY is not set the check is a no-op so local dev and
-// fresh deploys continue to work; in production the key should always be set.
+// In production (NODE_ENV=production) the key is required — if it is absent
+// the function fails closed so public auth endpoints cannot be reached without
+// captcha. In development/test mode the check is a no-op when the key is
+// absent, allowing local operation without Turnstile credentials.
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 async function verifyTurnstile(token, ip) {
-  if (!process.env.TURNSTILE_SECRET_KEY) return { ok: true, skipped: true };
+  if (!process.env.TURNSTILE_SECRET_KEY) {
+    if (process.env.NODE_ENV === 'production') {
+      // Fail closed: captcha is a required abuse control in production.
+      // An operator must set TURNSTILE_SECRET_KEY before public auth endpoints
+      // become reachable.
+      console.error('[SECURITY] TURNSTILE_SECRET_KEY is required in production but is not set — rejecting public auth request.');
+      return { ok: false, reason: 'captcha-not-configured' };
+    }
+    return { ok: true, skipped: true };
+  }
 
   // No token supplied — fail closed. The widget must complete before the form
   // can be submitted; omitting the token is a strong signal of automation.
@@ -746,6 +757,17 @@ async function setupAuth(app) {
   scheduleRateLimitCleanup();
   scheduleSessionCleanup();
 
+  // Warn operators when Turnstile is not configured. Without these keys every
+  // public auth endpoint (/api/login, /api/forgot-password, /api/request-access)
+  // runs with no bot challenge, leaving only rate limits as abuse protection.
+  if (!process.env.TURNSTILE_SECRET_KEY || !process.env.TURNSTILE_SITE_KEY) {
+    console.warn(
+      '[SECURITY] TURNSTILE_SECRET_KEY and/or TURNSTILE_SITE_KEY are not set. ' +
+      'Captcha protection is disabled on all public auth endpoints. ' +
+      'Set both secrets in production to enable bot and credential-stuffing protection.'
+    );
+  }
+
   passport.serializeUser((user, cb) => cb(null, user));
   passport.deserializeUser((user, cb) => cb(null, user));
 
@@ -768,17 +790,46 @@ async function setupAuth(app) {
       }
       const normalOk = dbUser.password_hash && await bcrypt.compare(password, dbUser.password_hash);
       if (!normalOk) {
-        const bootstrapHash = await getBootstrapAdminHash();
-        const bootstrapOk = bootstrapHash && isAdminEmail(email) &&
-          await bcrypt.compare(password, bootstrapHash);
-        if (bootstrapOk) {
-          console.warn(`  [SECURITY] Bootstrap admin login used for ${email}`);
-        } else if (!dbUser.password_hash) {
-          return res.status(401).json({
-            error: "This account hasn't set a password yet. Ask an admin to send you the set-password link.",
-            code: 'NO_PASSWORD',
-          });
-        } else {
+        // Bootstrap admin path: only accepted when ALL of the following hold:
+        //   1. The account has no password set yet (password_hash IS NULL).
+        //   2. There is no active force-password-reset token for this account —
+        //      such a token signals that an admin explicitly forced a reset, so
+        //      the account owner must use the emailed link rather than the
+        //      bootstrap secret.
+        //   3. The submitted email is in ADMIN_EMAILS.
+        //   4. BOOTSTRAP_ADMIN_PASSWORD is configured and the submitted password
+        //      matches it.
+        // Once an admin has ever set their own password the bootstrap secret is
+        // silently rejected for that account (condition 1 is false).
+        let bootstrapOk = false;
+        if (!dbUser.password_hash && isAdminEmail(email)) {
+          // Check for a pending force-reset token; if one exists the admin must
+          // use the emailed link — bootstrap is blocked for this window.
+          const resetTokenRow = await pool.query(
+            `SELECT 1 FROM password_set_tokens
+              WHERE LOWER(email) = LOWER($1)
+                AND purpose = 'reset'
+                AND used_at IS NULL
+                AND expires_at > NOW()
+              LIMIT 1`,
+            [email]
+          );
+          const hasPendingReset = resetTokenRow.rowCount > 0;
+          if (!hasPendingReset) {
+            const bootstrapHash = await getBootstrapAdminHash();
+            if (bootstrapHash && await bcrypt.compare(password, bootstrapHash)) {
+              bootstrapOk = true;
+              console.warn(`  [SECURITY] Bootstrap admin login used for ${email}`);
+            }
+          }
+        }
+        if (!bootstrapOk) {
+          if (!dbUser.password_hash) {
+            return res.status(401).json({
+              error: "This account hasn't set a password yet. Ask an admin to send you the set-password link.",
+              code: 'NO_PASSWORD',
+            });
+          }
           return res.status(401).json({ error: 'Invalid email or password.' });
         }
       }

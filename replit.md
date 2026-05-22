@@ -122,11 +122,21 @@ Sessions and users are stored in PostgreSQL (`sessions`, `users`,
 - `APP_URL` (or `REPLIT_DOMAINS`) — used to build the absolute link in emails
 - `HUBSPOT_TOKEN` — HubSpot private app token (otherwise `/api/*` HubSpot endpoints return 503)
 - `GOOGLE_*` — Google OAuth credentials for calendar integration
-- `BOOTSTRAP_ADMIN_PASSWORD` — **emergency-only** fallback password for all
-  accounts listed in `ADMIN_EMAILS`. When set, those accounts can log in with
-  this password even if their normal password is unset or forgotten, bypassing
-  the usual bcrypt check. Use a strong random value (e.g. a UUID or 32-char
-  random string). Every use is logged as `[SECURITY] Bootstrap admin login used`.
+- `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` — **required in production**
+  (`NODE_ENV=production`) for Cloudflare Turnstile captcha on the public auth
+  endpoints (`/api/login`, `/api/forgot-password`, `/api/request-access`). When
+  `TURNSTILE_SECRET_KEY` is absent in production, those endpoints fail closed
+  (503) rather than accepting unauthenticated requests without captcha. In
+  development mode the check is a no-op so local operation still works without
+  credentials. A `[SECURITY]` warning is logged on every server start when the
+  keys are unset.
+- `BOOTSTRAP_ADMIN_PASSWORD` — **emergency-only** fallback for accounts in
+  `ADMIN_EMAILS` that have **no password set yet** and have **no pending
+  force-reset token**. Specifically: bootstrap login is blocked (a) once an
+  admin sets their own password, and (b) during the window after a
+  `force-password-reset` (admin must use the emailed set-password link instead).
+  Use a strong random value (e.g. a UUID or 32-char random string). Every use
+  is logged as `[SECURITY] Bootstrap admin login used`.
   This secret is not required for normal operation — omit it until needed.
 
 `REPL_ID` and Replit OIDC are no longer used.
