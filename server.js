@@ -2876,6 +2876,70 @@ async function ensureStageActionLabelsTable() {
   `);
 }
 
+// Maps the uppercase lead_status_config.stage to the lowercase card stage key.
+const STAGE_ACTION_STAGE_MAP = {
+  SALES:        'sales',
+  DESIGN_VISIT: 'designvisit',
+  SURVEY:       'survey',
+};
+
+// Default action label per stage (used when no status-specific override is set).
+// For sales: no stage-wide default — each status carries its own copy.
+const STAGE_ACTION_STAGE_DEFAULTS = {
+  designvisit: 'Confirm design visit date',
+  survey:      'Await survey confirmation',
+};
+
+// Historic per-(stage, status) defaults preserved from the previously hardcoded
+// labels in public/sales.js — seeded so behaviour is unchanged after migration.
+const STAGE_ACTION_SEED_OVERRIDES = {
+  'sales|form_submission':   'Attempt contact',
+  'sales|attempted_contact': 'Follow up call',
+  'sales|open_deal':         'Schedule design visit',
+};
+
+// Seed one row per (card stage × lead status) combination so every card has an
+// editable label in the admin Card actions tab. Existing rows are never
+// overwritten — admin edits always win.
+async function seedStageActionLabelsDefaults() {
+  const { rows } = await pool.query(
+    `SELECT key, label, stage FROM lead_status_config
+     WHERE is_null_row IS NOT TRUE AND stage = ANY($1::text[])`,
+    [Object.keys(STAGE_ACTION_STAGE_MAP)]
+  );
+
+  const toInsert = [];
+
+  // (stage, '') rows so cards with no lead status also get a configurable label.
+  for (const stageKey of Object.values(STAGE_ACTION_STAGE_MAP)) {
+    const stageDefault = STAGE_ACTION_STAGE_DEFAULTS[stageKey];
+    if (stageDefault) toInsert.push([stageKey, '', stageDefault]);
+  }
+
+  // (stage, status) rows for every status assigned to a card-rendering stage.
+  for (const row of rows) {
+    const stageKey  = STAGE_ACTION_STAGE_MAP[row.stage];
+    if (!stageKey) continue;
+    const statusKey = String(row.key || '').toLowerCase();
+    if (!statusKey) continue;
+    const override     = STAGE_ACTION_SEED_OVERRIDES[`${stageKey}|${statusKey}`];
+    const stageDefault = STAGE_ACTION_STAGE_DEFAULTS[stageKey];
+    // Override → stage default → fall back to the lead status's display label
+    // so admins always see something sensible they can rename.
+    const label = override || stageDefault || String(row.label || statusKey);
+    toInsert.push([stageKey, statusKey, label]);
+  }
+
+  for (const [stageKey, statusKey, label] of toInsert) {
+    await pool.query(
+      `INSERT INTO stage_action_labels (stage_key, status_key, label)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (stage_key, status_key) DO NOTHING`,
+      [stageKey, statusKey, label]
+    );
+  }
+}
+
 function _normaliseStageActionInput(stage_key, status_key, label) {
   const s = String(stage_key || '').trim().toLowerCase();
   const k = String(status_key || '').trim().toLowerCase();
@@ -3253,6 +3317,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Lead status table setup failed:', e.message); }
     try { await ensureStageActionLabelsTable(); console.log('  Stage action labels table ready'); }
     catch (e) { console.error('  Stage action labels table setup failed:', e.message); }
+    try { await seedStageActionLabelsDefaults(); console.log('  Stage action labels defaults seeded'); }
+    catch (e) { console.error('  Stage action labels seed failed:', e.message); }
     try { await ensureSearchSettingsTable(); console.log('  Search settings table ready'); }
     catch (e) { console.error('  Search settings table setup failed:', e.message); }
     try { await ensureWhatsAppMessagesTable(); console.log('  WhatsApp messages table ready'); }

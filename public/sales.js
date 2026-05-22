@@ -424,19 +424,12 @@ function _eqRgb(hex) {
 }
 
 // ── Next action label ─────────────────────────────────────────────────────────
-// Admin-configurable per (stage_key, status_key) via the admin Card actions
-// tab, with hardcoded fallbacks below for stages with no DB mapping yet.
+// Fully admin-configurable via the admin Card actions tab. Returns '' when no
+// mapping exists, in which case the action strip is omitted entirely.
 function nextActionLabel(stageKey, substageId) {
   if (typeof stageActionLabelLookup === 'function') {
-    const fromDb = stageActionLabelLookup(stageKey, substageId);
-    if (fromDb) return fromDb;
+    return stageActionLabelLookup(stageKey, substageId) || '';
   }
-  if (stageKey === 'sales') {
-    if (substageId === 'form_submission')   return 'Attempt contact';
-    if (substageId === 'attempted_contact') return 'Follow up call';
-    if (substageId === 'open_deal')         return 'Schedule design visit';
-  }
-  if (stageKey === 'designvisit') return 'Confirm design visit date';
   return '';
 }
 

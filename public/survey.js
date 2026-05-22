@@ -172,13 +172,12 @@ function _svCardHtml(entry) {
   const sourceHtml = sourceId && SURVEY_SOURCE_LABELS[sourceId]
     ? `<span class="eq-card-source-pill">${escHtml(SURVEY_SOURCE_LABELS[sourceId])}</span>` : '';
 
-  // Admin-configurable action label per (stage, substage); falls back to the
-  // historical hardcoded copy when no DB mapping exists.
-  const fromDb = (typeof stageActionLabelLookup === 'function')
+  // Fully admin-configurable via the admin Card actions tab. When no mapping
+  // exists for this (stage, status) the action strip is omitted entirely.
+  const actionLabel = (typeof stageActionLabelLookup === 'function')
     ? stageActionLabelLookup(SURVEY_STAGE_KEY, substageId)
     : '';
-  const actionLabel = fromDb || 'Await survey confirmation';
-  const actionHtml = isTerminal ? '' : `
+  const actionHtml = (isTerminal || !actionLabel) ? '' : `
     <div class="eq-card-action" style="background:${SURVEY_ACTION_TINT}">
       <span class="eq-card-action-label" style="color:${SURVEY_ACTION_TEXT}">${escHtml(actionLabel)}</span>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${SURVEY_ACTION_TEXT}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
