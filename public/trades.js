@@ -24,7 +24,7 @@ const TRADE_AREAS = [
 
 let _tradeContacts = [];
 let _tradeDeleteId = null;
-let _tradeTypeFilter = '';
+let _tradeTypeFilter = (() => { try { return localStorage.getItem('tradesTypeFilter') || ''; } catch (_) { return ''; } })();
 let _tradeAreaFilter = '';
 let _tradeSearch = '';
 const MAX_CONTACTS = 3;
@@ -111,6 +111,7 @@ function populateTradeFilters() {
   tabsEl.querySelectorAll('.trades-type-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       _tradeTypeFilter = btn.dataset.type;
+      try { localStorage.setItem('tradesTypeFilter', _tradeTypeFilter); } catch (_) {}
       tabsEl.querySelectorAll('.trades-type-tab').forEach(b => {
         b.classList.toggle('active', b === btn);
         b.setAttribute('aria-selected', b === btn ? 'true' : 'false');

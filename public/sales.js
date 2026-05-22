@@ -29,6 +29,7 @@ registerProjectsViewRenderer(() => renderEnquiryList());
 // ── Stage filter ──────────────────────────────────────────────────────────────
 function setSalesStageFilter(key) {
   state.salesStageFilter = key;
+  try { localStorage.setItem('salesStageFilter', key); } catch (_) {}
   renderEnquiryList();
 }
 
@@ -151,9 +152,11 @@ async function renderEnquiryList() {
 
   _initSalesListeners();
 
-  // No "All" tab — default to the first stage
+  // No "All" tab — default to the first stage, restoring last-used from localStorage
   if (!state.salesStageFilter || !SALES_TAB_STAGES.includes(state.salesStageFilter)) {
-    state.salesStageFilter = SALES_TAB_STAGES[0];
+    let saved;
+    try { saved = localStorage.getItem('salesStageFilter'); } catch (_) {}
+    state.salesStageFilter = (saved && SALES_TAB_STAGES.includes(saved)) ? saved : SALES_TAB_STAGES[0];
   }
   const filter = state.salesStageFilter;
 

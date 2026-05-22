@@ -312,7 +312,15 @@ async function _doSelectContact(contactId, roomIdx) {
       }
     }
 
-    state.selectedRoomIdx = Math.min(roomIdx, state.allRooms.length - 1);
+    let resolvedRoomIdx = roomIdx;
+    try {
+      const saved = localStorage.getItem('customerRoomIdx_' + contactId);
+      if (saved !== null) {
+        const n = parseInt(saved, 10);
+        if (!isNaN(n) && n >= 0 && n < state.allRooms.length) resolvedRoomIdx = n;
+      }
+    } catch (_) {}
+    state.selectedRoomIdx = Math.min(resolvedRoomIdx, state.allRooms.length - 1);
     state.workflowData = state.allRooms[state.selectedRoomIdx];
 
     updateRoomCache();
@@ -385,6 +393,7 @@ function _doSwitchRoom(idx) {
   state.selectedRoomIdx = idx;
   state.workflowData = state.allRooms[idx];
   state.expandedStages = new Set();
+  try { localStorage.setItem('customerRoomIdx_' + state.selectedContactId, String(idx)); } catch (_) {}
   renderFullWorkflowView();
   _restoreNoteDraftIfPresent();
 }
