@@ -2799,10 +2799,16 @@ function requireWhatsAppConfig(req, res, next) {
   next();
 }
 
-// Cache the WABA ID derived from the phone number ID (valid for server lifetime)
+// Cache the WABA ID (valid for server lifetime).
+// Uses WHATSAPP_BUSINESS_ACCOUNT_ID directly if set; otherwise derives it
+// from the phone number ID via the Graph API.
 let _wabaId = null;
 async function getWabaId() {
   if (_wabaId) return _wabaId;
+  if (process.env.WHATSAPP_BUSINESS_ACCOUNT_ID) {
+    _wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+    return _wabaId;
+  }
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const r = await axios.get(
     `${META_GRAPH}/${encodeURIComponent(phoneNumberId)}`,
