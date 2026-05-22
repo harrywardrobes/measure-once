@@ -308,6 +308,18 @@ function _renderCustomerListImpl() {
   const showAllActive = state.showArchived ? ' project-stage-tab-active' : '';
   const showAllStyle  = state.showArchived ? 'background:var(--ink-2);color:#fff;border-color:var(--ink-2)' : '';
 
+  const searchChip = state.searchQuery
+    ? `<button class="search-active-chip" onclick="filterDeals('')" title="Clear search" aria-label="Clear search filter">
+        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+        </svg>
+        <span>${escHtml(state.searchQuery)}</span>
+        <svg class="search-active-chip-x" width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>`
+    : '';
+
   const sortBar = `
     <div class="project-sort-bar">
       <label class="project-sort-label" for="customers-sort-select">Sort by</label>
@@ -316,6 +328,7 @@ function _renderCustomerListImpl() {
         <option value="">All statuses</option>
         ${lsOptions}
       </select>
+      ${searchChip}
       <button id="archived-toggle" class="project-stage-tab${showAllActive}" style="${showAllStyle};margin-left:auto"
         aria-pressed="${state.showArchived}" aria-label="Show all HubSpot contacts">Show all</button>
       <button class="sales-new-btn" id="customers-new-btn" onclick="openNewCustomerModal()" title="Add new customer">

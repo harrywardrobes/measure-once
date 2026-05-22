@@ -1887,6 +1887,36 @@ body.showing-workflow .workflow-panel { display: flex; }
 .project-sort-select:focus {
   border-color: var(--plum);
 }
+.search-active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 7px;
+  background: var(--plum);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 200px;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.search-active-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.search-active-chip:hover {
+  background: var(--plum-dark, #5a2d82);
+}
+.search-active-chip-x {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
 .project-group-btn {
   font-size: 0.78rem;
   font-weight: 600;
