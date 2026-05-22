@@ -645,6 +645,93 @@ async function runUiSmoke({ users, runId, clients }) {
       record('filter-reset pagination regression probe ran', 'no error',
         `error: ${e.message}`, 'medium', false);
     }
+
+    // ── Mobile pagination overflow regression ───────────────────────────────
+    // Regression guard: the pagination bar must not overflow its container at
+    // 360 px viewport width (responsive rules added in task #429).
+    // Steps:
+    //   1. Open /customers at 360 px viewport with a 26-contact mock so the
+    //      pagination bar is rendered.
+    //   2. Assert scrollWidth <= clientWidth on .cl-pagination (no overflow).
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 360, height: 640 });
+      await page.setCacheEnabled(false);
+
+      const memberSess = await login(users.member.email, PASSWORD);
+      const kv = parseCookieKV(memberSess.cookie);
+      if (kv) {
+        const { hostname } = new URL(BASE);
+        await page.setCookie({
+          name: kv.name, value: kv.value,
+          domain: hostname, path: '/', httpOnly: true,
+        });
+      }
+
+      const syntheticContacts = Array.from({ length: 26 }, (_, i) => ({
+        id: `mobile-pg-${i + 1}`,
+        properties: {
+          firstname: 'Mobile',
+          lastname: `Page${String(i + 1).padStart(2, '0')}`,
+          email: `mobilepg${i + 1}@privtest.local`,
+          phone: '',
+          hs_lead_status: 'OPEN_DEAL',
+          city: '',
+          customer_number: `MP-${String(i + 1).padStart(2, '0')}`,
+          createdate: new Date(Date.now() - i * 1000).toISOString(),
+          closedate: null,
+          lastmodifieddate: new Date().toISOString(),
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        archived: false,
+      }));
+      const mockPayload  = JSON.stringify({ results: syntheticContacts, total: 26 });
+      const emptyPayload = JSON.stringify({ results: [], total: 0 });
+
+      await page.setRequestInterception(true);
+      page.on('request', req => {
+        const u = req.url();
+        if (u.includes('/api/contacts-all')) {
+          req.respond({ status: 200, contentType: 'application/json', body: mockPayload });
+        } else if (u.includes('/api/open-leads')) {
+          req.respond({ status: 200, contentType: 'application/json', body: emptyPayload });
+        } else {
+          req.continue();
+        }
+      });
+
+      await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded' });
+
+      const paginationElMobile = await page.waitForSelector('.cl-pagination', { timeout: 8000 }).catch(() => null);
+
+      let noOverflow = false;
+      let overflowDetail = 'pagination bar not found';
+
+      if (paginationElMobile) {
+        const dims = await page.$eval('.cl-pagination', el => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        })).catch(() => null);
+
+        if (dims) {
+          noOverflow = dims.scrollWidth <= dims.clientWidth;
+          overflowDetail = `scrollWidth=${dims.scrollWidth} clientWidth=${dims.clientWidth}`;
+        }
+      }
+
+      await safeShot(page, path.join(SCREENSHOT_DIR, `${runId}-mobile-pagination-overflow.png`));
+
+      record('pagination bar does not overflow at 360 px viewport width',
+        'scrollWidth <= clientWidth on .cl-pagination at 360 px',
+        overflowDetail,
+        'medium', noOverflow);
+
+      await page.close();
+    } catch (e) {
+      record('mobile pagination overflow regression probe ran', 'no error',
+        `error: ${e.message}`, 'medium', false);
+    }
   } finally {
     await browser.close().catch(() => {});
   }
