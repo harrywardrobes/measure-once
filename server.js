@@ -573,7 +573,7 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     let after = undefined;
     do {
       const body = {
-        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate', 'closedate'],
+        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
         sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
         limit: 100
       };

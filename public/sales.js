@@ -212,15 +212,24 @@ async function renderEnquiryList() {
     });
   }
 
+  // ── Drop stale Sales-column entries (last modified > 4 weeks ago) ─────────
+  const FOUR_WEEKS_MS = 4 * 7 * 24 * 60 * 60 * 1000;
+  const staleCutoff   = Date.now() - FOUR_WEEKS_MS;
+  const visibleEntries = allEntries.filter(e => {
+    if (e.stageKey !== 'sales') return true;
+    const lmd = parseInt(e.contact.properties?.lastmodifieddate || '0', 10);
+    return lmd >= staleCutoff;
+  });
+
   // ── Sort: priority band asc, then newest first ────────────────────────────
-  allEntries.sort((a, b) => {
+  visibleEntries.sort((a, b) => {
     if (a.priority !== b.priority) return a.priority - b.priority;
     return b.createdate - a.createdate;
   });
 
   // ── Group by stage ────────────────────────────────────────────────────────
   const byStage = Object.fromEntries(SALES_TAB_STAGES.map(k => [k, []]));
-  for (const e of allEntries) {
+  for (const e of visibleEntries) {
     if (byStage[e.stageKey]) byStage[e.stageKey].push(e);
   }
 
