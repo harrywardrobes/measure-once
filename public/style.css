@@ -4069,13 +4069,13 @@ body.showing-workflow .sales-layout #workflow-panel {
   align-items: center;
   flex-wrap: wrap;
   gap: 7px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .eq-card-substage {
   font-size: 0.6875rem;
   font-weight: 600;
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: var(--radius-pill);
   white-space: nowrap;
   letter-spacing: 0.01em;
@@ -4143,7 +4143,7 @@ body.showing-workflow .sales-layout #workflow-panel {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 12px;
+  padding: 12px 14px;
   background: var(--plum);
   cursor: pointer;
 }
