@@ -2443,17 +2443,27 @@ app.post('/api/ideas/:id/comments', async (req, res) => {
 });
 
 // ── Lead Status Config ─────────────────────────────────────────────────────────
-const DEFAULT_LEAD_STATUSES = [
-  { key: 'NEW',                  label: 'New',                  sort_order: 0,  excluded_from_sales: false },
-  { key: 'OPEN',                 label: 'Open',                 sort_order: 1,  excluded_from_sales: false },
-  { key: 'IN_PROGRESS',          label: 'In Progress',          sort_order: 2,  excluded_from_sales: false },
-  { key: 'OPEN_DEAL',            label: 'Open Deal',            sort_order: 3,  excluded_from_sales: false },
-  { key: 'VISIT_SCHEDULED',      label: 'Visit Scheduled',      sort_order: 4,  excluded_from_sales: false },
-  { key: 'CONNECTED',            label: 'Connected',            sort_order: 5,  excluded_from_sales: false },
-  { key: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact', sort_order: 6,  excluded_from_sales: false },
-  { key: 'UNQUALIFIED',          label: 'Unqualified',          sort_order: 7,  excluded_from_sales: true  },
-  { key: 'BAD_TIMING',           label: 'Bad Timing',           sort_order: 8,  excluded_from_sales: false },
-];
+
+// Push the full lead_status_config table to HubSpot as hs_lead_status options.
+// Called after every create / update / delete so HubSpot stays in sync.
+// Fire-and-forget callers should catch and log errors themselves.
+async function syncLeadStatusesToHubSpot() {
+  if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
+  const { rows } = await pool.query(
+    'SELECT key, label, sort_order FROM lead_status_config ORDER BY sort_order ASC, key ASC'
+  );
+  const options = rows.map((r, i) => ({
+    value:        r.key,
+    label:        r.label,
+    displayOrder: r.sort_order ?? i,
+    hidden:       false,
+  }));
+  await axios.patch(
+    `${HS}/crm/v3/properties/contacts/hs_lead_status`,
+    { options },
+    { headers: hsHeaders() }
+  );
+}
 
 async function ensureLeadStatusTable() {
   await pool.query(`
@@ -2464,16 +2474,54 @@ async function ensureLeadStatusTable() {
       excluded_from_sales BOOLEAN NOT NULL DEFAULT FALSE
     )
   `);
-  const { rows } = await pool.query('SELECT COUNT(*) AS cnt FROM lead_status_config');
-  if (parseInt(rows[0].cnt, 10) === 0) {
-    for (const s of DEFAULT_LEAD_STATUSES) {
-      await pool.query(
-        'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales) VALUES ($1, $2, $3, $4) ON CONFLICT (key) DO NOTHING',
-        [s.key, s.label, s.sort_order, s.excluded_from_sales]
+  const { rows: countRows } = await pool.query('SELECT COUNT(*) AS cnt FROM lead_status_config');
+  if (parseInt(countRows[0].cnt, 10) > 0) return;
+
+  // ── Seed from HubSpot if a token is available ──────────────────────────────
+  if (process.env.HUBSPOT_ACCESS_TOKEN) {
+    try {
+      const r = await axios.get(
+        `${HS}/crm/v3/properties/contacts/hs_lead_status`,
+        { headers: hsHeaders() }
       );
+      const options = (r.data.options || []).filter(o => !o.hidden);
+      if (options.length > 0) {
+        // Preserve any existing excluded_from_sales preferences; default UNQUALIFIED to true.
+        const EXCLUDED_DEFAULTS = new Set(['UNQUALIFIED', 'NOT_SUITABLE']);
+        for (let i = 0; i < options.length; i++) {
+          const o = options[i];
+          const key = (o.value || '').toUpperCase();
+          await pool.query(
+            'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales) VALUES ($1, $2, $3, $4) ON CONFLICT (key) DO NOTHING',
+            [key, o.label || key, o.displayOrder ?? i, EXCLUDED_DEFAULTS.has(key)]
+          );
+        }
+        console.log(`  Lead status config seeded from HubSpot (${options.length} statuses)`);
+        return;
+      }
+    } catch (e) {
+      console.warn('  Could not fetch hs_lead_status from HubSpot, falling back to defaults:', e.response?.data?.message || e.message);
     }
-    console.log('  Lead status config seeded with defaults');
   }
+
+  // ── Fallback: hardcoded defaults ───────────────────────────────────────────
+  const DEFAULT_LEAD_STATUSES = [
+    { key: 'NEW',                  label: 'New',                  sort_order: 0,  excluded_from_sales: false },
+    { key: 'OPEN',                 label: 'Open',                 sort_order: 1,  excluded_from_sales: false },
+    { key: 'IN_PROGRESS',          label: 'In Progress',          sort_order: 2,  excluded_from_sales: false },
+    { key: 'OPEN_DEAL',            label: 'Open Deal',            sort_order: 3,  excluded_from_sales: false },
+    { key: 'VISIT_SCHEDULED',      label: 'Visit Scheduled',      sort_order: 4,  excluded_from_sales: false },
+    { key: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact', sort_order: 5,  excluded_from_sales: false },
+    { key: 'UNQUALIFIED',          label: 'Unqualified',          sort_order: 6,  excluded_from_sales: true  },
+    { key: 'BAD_TIMING',           label: 'Bad Timing',           sort_order: 7,  excluded_from_sales: false },
+  ];
+  for (const s of DEFAULT_LEAD_STATUSES) {
+    await pool.query(
+      'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales) VALUES ($1, $2, $3, $4) ON CONFLICT (key) DO NOTHING',
+      [s.key, s.label, s.sort_order, s.excluded_from_sales]
+    );
+  }
+  console.log('  Lead status config seeded with defaults (no HubSpot token)');
 }
 
 // Public authenticated: full ordered list for all frontend pages
@@ -2517,6 +2565,7 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
       [key, label, next]
     );
     res.status(201).json(rows[0]);
+    syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
     if (e.code === '23505') return res.status(409).json({ error: 'A status with that key already exists.' });
     console.error('POST /api/admin/lead-statuses error:', e.message);
@@ -2541,6 +2590,7 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
       [newLabel, newOrder, newExcluded, key]
     );
     res.json(rows[0]);
+    syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
     console.error('PATCH /api/admin/lead-statuses/:key error:', e.message);
     res.status(500).json({ error: 'Could not update lead status.' });
@@ -2554,6 +2604,7 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
     const { rowCount } = await pool.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
     if (!rowCount) return res.status(404).json({ error: 'Status not found.' });
     res.json({ success: true });
+    syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
     console.error('DELETE /api/admin/lead-statuses/:key error:', e.message);
     res.status(500).json({ error: 'Could not delete lead status.' });
