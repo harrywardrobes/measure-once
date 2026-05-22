@@ -257,7 +257,7 @@ async function fetchLocaldataFromHubspot() {
       const rooms = JSON.parse(roomsJson);
       if (Array.isArray(rooms)) {
         result[contact.id] = rooms.map(r => ({
-          room: r.room || 'Main', stageKey: r.stageKey || 'sales', roomStatus: r.roomStatus || 'active',
+          room: r.room || 'Main', stageKey: r.stageKey || 'sales',
           assignedFitterId: r.assignedFitterId || null,
           installStart: r.installStart || null
         }));
@@ -1283,11 +1283,10 @@ async function fetchWorkflowStagesFromHubspot() {
       const json = JSON.parse(n.properties.hs_note_body.slice('WORKFLOW_DATA:'.length));
       const arr = Array.isArray(json)
         ? json
-        : [{ room: 'Main', stageKey: json.stageKey || 'sales', roomStatus: json.roomStatus || 'active' }];
+        : [{ room: 'Main', stageKey: json.stageKey || 'sales' }];
       noteData[n.id] = arr.map(r => ({
-        room:       r.room       || 'Main',
-        stageKey:   r.stageKey   || 'sales',
-        roomStatus: r.roomStatus || 'active'
+        room:     r.room     || 'Main',
+        stageKey: r.stageKey || 'sales',
       }));
     } catch {}
   });

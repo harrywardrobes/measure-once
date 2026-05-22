@@ -121,11 +121,7 @@ function syncRoomFromHubSpot(room, leadStatus) {
   if (HS_DECLINE_STATUSES.includes(ls)) {
     // Mark all sales tasks done and decline the room (only if still in Sales)
     cs.sales = allSalesTasks;
-    return {
-      ...room,
-      completedStatuses: cs,
-      roomStatus: room.stageKey === 'sales' ? 'declined' : room.roomStatus
-    };
+    return { ...room, completedStatuses: cs };
   }
 
   if (HS_ADVANCE_STATUSES.includes(ls) && room.stageKey === 'sales') {
@@ -263,7 +259,7 @@ async function _doSelectContact(contactId, roomIdx) {
       state.allRooms = localData.rooms;
       state.customerNotes = localData.notes || '';
     } else {
-      state.allRooms = [{ room: 'Main', stageKey: 'sales', completedStatuses: {}, comments: [], roomStatus: 'active', stageDates: { sales: todayISO() } }];
+      state.allRooms = [{ room: 'Main', stageKey: 'sales', completedStatuses: {}, comments: [], stageDates: { sales: todayISO() } }];
       state.customerNotes = '';
     }
 
@@ -295,7 +291,6 @@ async function _doSelectContact(contactId, roomIdx) {
         stageKey:          r.stageKey   || 'sales',
         completedStatuses: cs,
         comments:          r.comments   || [],
-        roomStatus:        r.roomStatus || 'active',
         stageDates,
         substateDates:     r.substateDates ? { ...r.substateDates } : {},
         installStart:      r.installStart  || null,
@@ -410,7 +405,7 @@ function hideAddRoomForm() {
 async function submitAddRoom() {
   const input = document.getElementById('new-room-name');
   const name = input?.value.trim() || `Room ${state.allRooms.length + 1}`;
-  state.allRooms.push({ room: name, stageKey: 'sales', completedStatuses: {}, comments: [], roomStatus: 'active', stageDates: { sales: todayISO() } });
+  state.allRooms.push({ room: name, stageKey: 'sales', completedStatuses: {}, comments: [], stageDates: { sales: todayISO() } });
   state.selectedRoomIdx = state.allRooms.length - 1;
   state.workflowData = state.allRooms[state.selectedRoomIdx];
   state.addingRoom = false;
@@ -449,15 +444,6 @@ function deleteRoom(idx) {
   scheduleSave(`Deleted "${removedName}"`, snapshot);
 }
 
-function setRoomStatus(value) {
-  const snapshot = JSON.parse(JSON.stringify(state.allRooms));
-  state.workflowData.roomStatus = value;
-  updateRoomCache();
-  renderCustomerList();
-  renderWorkflowHeader();
-  const labels = { active: 'Active', declined: 'Declined', complete: 'Complete', remedial: 'Remedial' };
-  scheduleSave(`Status changed to ${labels[value] || value}`, snapshot);
-}
 
 // ── Full Workflow View ────────────────────────────────────────────────────────
 function renderFullWorkflowView() {
@@ -758,20 +744,6 @@ function _renderWorkflowHeaderImpl() {
           ${phone ? `<span class="text-sm text-slate-500">${escHtml(phone)}</span>` : ''}
           ${city  ? `<span class="text-sm text-slate-400">${escHtml(city)}</span>`  : ''}
         </div>
-      </div>
-      <div class="flex items-center gap-2 flex-shrink-0">
-        ${(() => {
-          const rs = state.workflowData?.roomStatus || 'active';
-          const statusColors = { active: 'color:var(--ink-1)', declined: 'color:#dc2626', complete: 'color:#16a34a', remedial: 'color:#d97706' };
-          return `<select onchange="setRoomStatus(this.value)"
-            class="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-slate-50 focus:outline-none focus:border-blue-400"
-            style="font-size:13px;${statusColors[rs] || ''}">
-            <option value="active"   ${rs === 'active'   ? 'selected' : ''}>● Active</option>
-            <option value="declined" ${rs === 'declined' ? 'selected' : ''}>✕ Declined</option>
-            <option value="complete" ${rs === 'complete' ? 'selected' : ''}>✓ Complete</option>
-            <option value="remedial" ${rs === 'remedial' ? 'selected' : ''}>⚠ Remedial</option>
-          </select>`;
-        })()}
       </div>
     </div>
   `;
