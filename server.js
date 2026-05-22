@@ -3247,8 +3247,16 @@ async function syncLeadSubstatusesToHubSpot() {
              s.sort_order ASC, s.substatus_key ASC
   `);
   const options = rows.map((r, i) => ({
-    value:        `${r.status_key}__${r.substatus_key}`,
-    label:        `${r.ls_label || r.status_key} → ${r.sub_label}`,
+    // Internal name: keep "{STATUS_KEY}__{SUBSTATUS_KEY}" for normal rows so
+    // the value remains uniquely scoped to its lead status. The null sentinel
+    // (__NULL__) would otherwise produce ugly "__NULL____{SUBSTATUS_KEY}"
+    // values — drop the prefix for that row and emit just the substatus_key.
+    value:        r.status_key === '__NULL__'
+                    ? r.substatus_key
+                    : `${r.status_key}__${r.substatus_key}`,
+    // Label: only the sub-status label (no "{LS Label} → " prefix); the
+    // shorthand prefix inside substatus_key already disambiguates in HubSpot.
+    label:        r.sub_label,
     displayOrder: i,
     hidden:       false,
   }));
