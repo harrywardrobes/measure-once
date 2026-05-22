@@ -132,9 +132,11 @@ function _initSalesListeners() {
 
 // ── Best room selector (one row per contact) ──────────────────────────────────
 // The sales board is a 2-column view: 'sales' and 'designvisit'.
-// 'survey' is intentionally excluded here — survey contacts are remapped to the
-// designvisit column (terminal) by the lead-status override in renderEnquiryList,
-// and 'survey' appears only in the stage trail rendered on each card.
+// 'survey' rooms are intentionally excluded here. Returning null (empty cache OR
+// all rooms outside SALES_TAB_STAGES) signals renderEnquiryList to use the
+// lead-status fallback instead — which maps survey → designvisit (terminal) via
+// STAGE_COLUMN_INFO. Contacts with only survey-stage rooms therefore still appear
+// on the board; they are never silently dropped.
 // From all active rooms for a contact in the target stages,
 // return the single room that represents the highest-priority action.
 // Priority: lowest band first; within band, keep whichever appears first in the
@@ -202,7 +204,13 @@ async function renderEnquiryList() {
     const cached    = state.contactStageCache[contact.id];
     const createdate = parseInt(contact.properties?.createdate || '0', 10);
 
-    if (!cached || cached.length === 0) {
+    const best = (!cached || cached.length === 0) ? null : _bestRoom(cached);
+
+    if (!best) {
+      // Lead-status fallback: covers contacts with no local rooms AND contacts
+      // whose rooms are all in non-sales-board stages (e.g. survey-only rooms).
+      // STAGE_COLUMN_INFO maps survey → { column: 'designvisit', terminal: true }
+      // so survey-only contacts land in the Design Visit column and are not dropped.
       const lsInfo   = _columnForLeadStatus(ls);
       const lsColumn = lsInfo.column || 'sales';
       const lsOpt    = ls ? LEAD_STATUS_OPTIONS.find(o => o.value === ls) : null;
@@ -217,9 +225,6 @@ async function renderEnquiryList() {
       });
       continue;
     }
-
-    const best = _bestRoom(cached);
-    if (!best) continue;
 
     const statusId      = best.statusId || '';
     const substageDate  = statusId && best.substateDates?.[statusId]
