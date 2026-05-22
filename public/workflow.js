@@ -281,20 +281,19 @@ function _renderCustomerListImpl() {
     return `<option value="${escHtml(value)}"${state.leadStatusFilter === value ? ' selected' : ''}${attrs}>${escHtml(label)} (${n})</option>`;
   }).join('');
 
-  const archivedActive = state.showArchived ? ' project-stage-tab-active' : '';
-  const archivedStyle  = state.showArchived ? 'background:var(--plum);color:#fff;border-color:var(--plum)' : '';
+  const showAllActive = state.showArchived ? ' project-stage-tab-active' : '';
+  const showAllStyle  = state.showArchived ? 'background:var(--ink-2);color:#fff;border-color:var(--ink-2)' : '';
 
   const sortBar = `
     <div class="project-sort-bar">
       <label class="project-sort-label" for="customers-sort-select">Sort by</label>
       <select id="customers-sort-select" class="project-sort-select">${sortOptions}</select>
-      ${viewMode === 'all' ? `
       <select id="lead-status-filter" class="project-sort-select" aria-label="Lead status filter">
         <option value="">All statuses</option>
         ${lsOptions}
-      </select>` : ''}
-      <button id="archived-toggle" class="project-stage-tab${archivedActive}" style="${archivedStyle};margin-left:auto"
-        aria-pressed="${state.showArchived}" aria-label="Show archived customers">Archived</button>
+      </select>
+      <button id="archived-toggle" class="project-stage-tab${showAllActive}" style="${showAllStyle};margin-left:auto"
+        aria-pressed="${state.showArchived}" aria-label="Show all HubSpot contacts">Show all</button>
     </div>`;
 
   // ── Cards ───────────────────────────────────────────────────────────────────
@@ -332,7 +331,6 @@ function _renderCustomerListImpl() {
         : '';
 
       const leadStatusBadge = (() => {
-        if (viewMode !== 'all') return '';
         const raw = contact.properties?.hs_lead_status || '';
         const CSS_CLASS_MAP = {
           'OPEN_DEAL': 'lsb-open-deal', 'NEW': 'lsb-new', 'IN_PROGRESS': 'lsb-in-progress',
@@ -348,9 +346,6 @@ function _renderCustomerListImpl() {
         const cls   = CSS_CLASS_MAP[raw] || '';
         return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(label)}</span>`;
       })();
-
-      const statusLabel = roomStatus === 'declined' ? 'Declined' : roomStatus === 'complete' ? 'Complete' : roomStatus === 'remedial' ? 'Remedial' : 'Active';
-      const statusMini  = `<span class="status-mini status-mini-${roomStatus}" onclick="openStatusPicker(event,'${contact.id}',${roomIdx})" title="Change status" role="button" tabindex="-1">${statusLabel}</span>`;
 
       const secondaryBadges = [
         email ? `<span class="customer-list-email">${escHtml(email)}</span>` : '',
@@ -373,7 +368,6 @@ function _renderCustomerListImpl() {
           <div class="project-room-list">
             <div class="project-room-row" data-contact-id="${contact.id}" data-room-idx="${roomIdx}">
               <span class="project-room-row-name">${escHtml(roomName || 'Main')}</span>
-              ${statusMini}
               <span class="stage-pill" style="background:${colour.light};color:${colour.text}">${escHtml(stageLabel)}</span>
             </div>
           </div>
@@ -418,7 +412,14 @@ function _renderCustomerListImpl() {
   const archivedBtn = view.querySelector('#archived-toggle');
   if (archivedBtn) archivedBtn.addEventListener('click', () => {
     state.showArchived = !state.showArchived;
-    renderCustomerList();
+    if (state.showArchived) {
+      state.contactsViewMode = 'all';
+      loadAllContacts().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
+    } else {
+      state.contactsViewMode = 'active';
+      state.stageFilter      = '';
+      loadOpenLeads().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
+    }
   });
 }
 
