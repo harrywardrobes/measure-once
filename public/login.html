@@ -158,6 +158,11 @@
     document.getElementById('view-request').classList.toggle('hidden', name !== 'request');
     document.getElementById('view-forgot').classList.toggle('hidden', name !== 'forgot');
     if (name !== 'forgot') {
+      if (name === 'login') {
+        const forgotEmail = document.getElementById('forgot-email');
+        const loginEmail = document.getElementById('login-email');
+        if (forgotEmail && loginEmail && forgotEmail.value) loginEmail.value = forgotEmail.value;
+      }
       resetForgotView();
     } else {
       const loginEmail = document.getElementById('login-email');
