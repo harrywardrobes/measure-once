@@ -424,7 +424,13 @@ function _eqRgb(hex) {
 }
 
 // ── Next action label ─────────────────────────────────────────────────────────
+// Admin-configurable per (stage_key, status_key) via the admin Card actions
+// tab, with hardcoded fallbacks below for stages with no DB mapping yet.
 function nextActionLabel(stageKey, substageId) {
+  if (typeof stageActionLabelLookup === 'function') {
+    const fromDb = stageActionLabelLookup(stageKey, substageId);
+    if (fromDb) return fromDb;
+  }
   if (stageKey === 'sales') {
     if (substageId === 'form_submission')   return 'Attempt contact';
     if (substageId === 'attempted_contact') return 'Follow up call';
@@ -510,11 +516,13 @@ function enquiryRowHtml(entry) {
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${actionText}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
     </div>` : '';
 
+  // Only the body carries data-contact-id / role=button: clicking the bottom
+  // action strip must NOT navigate to the customer page.
   return `
-    <div class="eq-card${isTerminal ? ' eq-card-terminal' : ''}"
-         data-contact-id="${escHtml(contact.id)}"
-         role="button" tabindex="0">
-      <div class="eq-card-body">
+    <div class="eq-card${isTerminal ? ' eq-card-terminal' : ''}">
+      <div class="eq-card-body"
+           data-contact-id="${escHtml(contact.id)}"
+           role="button" tabindex="0">
         <div class="eq-card-name-row">
           <div class="eq-card-name-wrap">
             <span class="eq-card-name">${name}</span>

@@ -358,6 +358,35 @@ async function loadLeadStatusCounts() {
   }
 }
 
+// ── Stage action labels ──────────────────────────────────────────────────────
+// Map of `${stage_key}|${status_key}` → label. Populated from
+// /api/stage-action-labels at bootstrap and refreshed when the admin panel
+// broadcasts changes. Both keys are lowercase to match card substageIds.
+let STAGE_ACTION_LABEL_MAP = {};
+
+function stageActionLabelLookup(stageKey, statusKey) {
+  const s = String(stageKey  || '').toLowerCase();
+  const k = String(statusKey || '').toLowerCase();
+  return STAGE_ACTION_LABEL_MAP[`${s}|${k}`] || '';
+}
+
+async function loadStageActionLabels() {
+  try {
+    const rows = await GET('/api/stage-action-labels');
+    if (Array.isArray(rows)) {
+      const m = {};
+      for (const r of rows) {
+        const s = String(r.stage_key  || '').toLowerCase();
+        const k = String(r.status_key || '').toLowerCase();
+        if (s && r.label) m[`${s}|${k}`] = r.label;
+      }
+      STAGE_ACTION_LABEL_MAP = m;
+    }
+  } catch (e) {
+    console.warn('Could not load stage action labels:', e.message);
+  }
+}
+
 async function loadLeadStatuses() {
   try {
     const rows = await GET('/api/lead-statuses');
@@ -398,6 +427,15 @@ if (typeof BroadcastChannel !== 'undefined') {
       if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
       if (typeof renderCustomerList === 'function') renderCustomerList();
       if (typeof renderEnquiryList === 'function') renderEnquiryList();
+    });
+  });
+
+  const _sacChannel = new BroadcastChannel('stage_action_labels_changed');
+  _sacChannel.addEventListener('message', () => {
+    loadStageActionLabels().then(() => {
+      if (typeof renderCustomerList === 'function') renderCustomerList();
+      if (typeof renderEnquiryList   === 'function') renderEnquiryList();
+      if (typeof renderSurveyList    === 'function') renderSurveyList();
     });
   });
 }

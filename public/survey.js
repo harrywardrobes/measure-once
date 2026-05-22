@@ -172,17 +172,25 @@ function _svCardHtml(entry) {
   const sourceHtml = sourceId && SURVEY_SOURCE_LABELS[sourceId]
     ? `<span class="eq-card-source-pill">${escHtml(SURVEY_SOURCE_LABELS[sourceId])}</span>` : '';
 
+  // Admin-configurable action label per (stage, substage); falls back to the
+  // historical hardcoded copy when no DB mapping exists.
+  const fromDb = (typeof stageActionLabelLookup === 'function')
+    ? stageActionLabelLookup(SURVEY_STAGE_KEY, substageId)
+    : '';
+  const actionLabel = fromDb || 'Await survey confirmation';
   const actionHtml = isTerminal ? '' : `
     <div class="eq-card-action" style="background:${SURVEY_ACTION_TINT}">
-      <span class="eq-card-action-label" style="color:${SURVEY_ACTION_TEXT}">Await survey confirmation</span>
+      <span class="eq-card-action-label" style="color:${SURVEY_ACTION_TEXT}">${escHtml(actionLabel)}</span>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${SURVEY_ACTION_TEXT}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
     </div>`;
 
+  // Only the body carries data-contact-id / role=button: clicking the bottom
+  // action strip must NOT navigate to the customer page.
   return `
-    <div class="eq-card${isTerminal ? ' eq-card-terminal' : ''}"
-         data-contact-id="${escHtml(contact.id)}"
-         role="button" tabindex="0">
-      <div class="eq-card-body">
+    <div class="eq-card${isTerminal ? ' eq-card-terminal' : ''}">
+      <div class="eq-card-body"
+           data-contact-id="${escHtml(contact.id)}"
+           role="button" tabindex="0">
         <div class="eq-card-name-row">
           <div class="eq-card-name-wrap">
             <span class="eq-card-name">${name}</span>

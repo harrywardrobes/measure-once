@@ -350,6 +350,7 @@ async function bootstrap() {
     await loadWorkflow();
     await Promise.all([loadOpenLeads(), loadWorkflowStages(), ensurePrefs(),
       typeof loadLeadStatuses === 'function' ? loadLeadStatuses() : Promise.resolve(),
+      typeof loadStageActionLabels === 'function' ? loadStageActionLabels() : Promise.resolve(),
       GET('/api/whatsapp/config').then(cfg => { state.whatsappEnabled = !!cfg.enabled; }).catch(() => {}),
     ]);
     populateStageFilter();

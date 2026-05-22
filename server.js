@@ -2857,6 +2857,109 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
   }
 });
 
+// ── Stage action labels (per stage_key × status_key) ─────────────────────────
+// Bottom-strip "next action" label shown on Sales/Survey cards. Driven by
+// (stage_key, status_key) so admins can customize per-substage call-to-action.
+// status_key is lowercase to match the substageId values rendered on cards;
+// '' (empty) is a valid key for "no substage / null status".
+const STAGE_ACTION_STAGE_KEYS = new Set(['sales', 'designvisit', 'survey']);
+
+async function ensureStageActionLabelsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stage_action_labels (
+      stage_key   TEXT NOT NULL,
+      status_key  TEXT NOT NULL,
+      label       TEXT NOT NULL,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (stage_key, status_key)
+    )
+  `);
+}
+
+function _normaliseStageActionInput(stage_key, status_key, label) {
+  const s = String(stage_key || '').trim().toLowerCase();
+  const k = String(status_key || '').trim().toLowerCase();
+  const l = String(label || '').trim();
+  return { stage_key: s, status_key: k, label: l };
+}
+
+// Public (authenticated): used by Sales/Survey pages to render the action strip.
+app.get('/api/stage-action-labels', isAuthenticated, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT stage_key, status_key, label FROM stage_action_labels ORDER BY stage_key, status_key'
+    );
+    res.set('Cache-Control', 'no-store');
+    res.json(rows);
+  } catch (e) {
+    console.error('GET /api/stage-action-labels error:', e.message);
+    res.status(500).json({ error: 'Could not load stage action labels.' });
+  }
+});
+
+app.get('/api/admin/stage-action-labels', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT stage_key, status_key, label, updated_at FROM stage_action_labels ORDER BY stage_key, status_key'
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error('GET /api/admin/stage-action-labels error:', e.message);
+    res.status(500).json({ error: 'Could not load stage action labels.' });
+  }
+});
+
+// Upsert one mapping. Body: { stage_key, status_key, label }
+app.put('/api/admin/stage-action-labels', isAuthenticated, requireAdmin, async (req, res) => {
+  const { stage_key, status_key, label } = _normaliseStageActionInput(
+    req.body?.stage_key, req.body?.status_key, req.body?.label
+  );
+  if (!stage_key || !STAGE_ACTION_STAGE_KEYS.has(stage_key)) {
+    return res.status(400).json({ error: 'stage_key must be one of: sales, designvisit, survey.' });
+  }
+  if (!label) {
+    return res.status(400).json({ error: 'label cannot be empty.' });
+  }
+  if (label.length > 128) {
+    return res.status(400).json({ error: 'label must be 128 characters or fewer.' });
+  }
+  if (status_key.length > 64 || !/^[a-z0-9_]*$/.test(status_key)) {
+    return res.status(400).json({ error: 'status_key may only contain lowercase letters, digits, and underscores.' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO stage_action_labels (stage_key, status_key, label, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (stage_key, status_key)
+       DO UPDATE SET label = EXCLUDED.label, updated_at = NOW()
+       RETURNING stage_key, status_key, label, updated_at`,
+      [stage_key, status_key, label]
+    );
+    res.json(rows[0]);
+  } catch (e) {
+    console.error('PUT /api/admin/stage-action-labels error:', e.message);
+    res.status(500).json({ error: 'Could not save stage action label.' });
+  }
+});
+
+app.delete('/api/admin/stage-action-labels/:stage_key/:status_key', isAuthenticated, requireAdmin, async (req, res) => {
+  const stage_key  = String(req.params.stage_key  || '').toLowerCase();
+  const status_key = String(req.params.status_key || '').toLowerCase();
+  if (!STAGE_ACTION_STAGE_KEYS.has(stage_key)) {
+    return res.status(400).json({ error: 'Invalid stage_key.' });
+  }
+  try {
+    await pool.query(
+      'DELETE FROM stage_action_labels WHERE stage_key = $1 AND status_key = $2',
+      [stage_key, status_key]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /api/admin/stage-action-labels error:', e.message);
+    res.status(500).json({ error: 'Could not delete stage action label.' });
+  }
+});
+
 // ── WhatsApp config probe (no creds needed — just reports if configured) ──────
 app.get('/api/whatsapp/config', isAuthenticated, (req, res) => {
   res.json({
@@ -3148,6 +3251,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Ideas tables setup failed:', e.message); }
     try { await ensureLeadStatusTable(); console.log('  Lead status config table ready'); }
     catch (e) { console.error('  Lead status table setup failed:', e.message); }
+    try { await ensureStageActionLabelsTable(); console.log('  Stage action labels table ready'); }
+    catch (e) { console.error('  Stage action labels table setup failed:', e.message); }
     try { await ensureSearchSettingsTable(); console.log('  Search settings table ready'); }
     catch (e) { console.error('  Search settings table setup failed:', e.message); }
     try { await ensureWhatsAppMessagesTable(); console.log('  WhatsApp messages table ready'); }

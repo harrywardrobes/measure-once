@@ -4137,13 +4137,14 @@ body.showing-workflow .sales-layout #workflow-panel {
   border: 1px solid var(--stone);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-  cursor: pointer;
   transition: box-shadow 0.15s;
   -webkit-tap-highlight-color: transparent;
 }
 .eq-card:hover       { box-shadow: var(--shadow-md); }
-.eq-card:active      { opacity: 0.9; }
-.eq-card:focus-visible {
+/* Body is the clickable region — action strip below is independent. */
+.eq-card-body { cursor: pointer; }
+.eq-card-body:active { opacity: 0.9; }
+.eq-card-body:focus-visible {
   outline: 2px solid var(--orchid);
   outline-offset: 2px;
 }
@@ -4315,13 +4316,15 @@ body.showing-workflow .sales-layout #workflow-panel {
   min-width: 8px;
 }
 
-/* Action row — background and text colour driven by inline styles per stage */
+/* Action row — background and text colour driven by inline styles per stage.
+ * Not clickable yet (unique actions will be wired in a later task); cursor
+ * stays default so users don't expect navigation. */
 .eq-card-action {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 9px 12px;
-  cursor: pointer;
+  cursor: default;
   border-top: 1px solid rgba(0,0,0,0.06);
 }
 .eq-card-action-label {

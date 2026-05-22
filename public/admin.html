@@ -1637,6 +1637,137 @@
       ).join('');
   }
 
+  // ── Card action labels admin ─────────────────────────────────────────────
+  const CARD_ACTION_STAGES = [
+    { key: 'sales',       label: 'Sales' },
+    { key: 'designvisit', label: 'Design Visit' },
+    { key: 'survey',      label: 'Survey' },
+  ];
+  let _cardActionsData = [];
+
+  function _broadcastCardActionsChanged() {
+    try { new BroadcastChannel('stage_action_labels_changed').postMessage({ ts: Date.now() }); } catch (_) {}
+  }
+
+  async function loadCardActionsAdmin() {
+    const wrap = document.getElementById('card-actions-table-wrap');
+    if (!wrap) return;
+    try {
+      const [labels, statuses] = await Promise.all([
+        api('GET', '/api/admin/stage-action-labels'),
+        api('GET', '/api/admin/lead-statuses'),
+      ]);
+      _cardActionsData = Array.isArray(labels) ? labels : [];
+      // Populate the "Lead status" dropdown from lead_status_config (lowercased
+      // to match the substageId values used on cards).
+      const sel = document.getElementById('ca-new-status');
+      if (sel) {
+        const real = (statuses || []).filter(s => !s.is_null_row);
+        sel.innerHTML = '<option value="">— (no status)</option>' +
+          real.map(s => `<option value="${esc(String(s.key).toLowerCase())}">${esc(s.label)} <span style="color:#999">(${esc(s.key)})</span></option>`).join('');
+      }
+      renderCardActionsTable();
+    } catch (e) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load card actions: ${esc(e.message)}</p>`;
+    }
+  }
+
+  function _stageLabelFor(key) {
+    const s = CARD_ACTION_STAGES.find(x => x.key === key);
+    return s ? s.label : key;
+  }
+
+  function renderCardActionsTable() {
+    const wrap = document.getElementById('card-actions-table-wrap');
+    if (!wrap) return;
+    if (!_cardActionsData.length) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">No mappings yet — cards will fall back to their built-in labels.</p>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Stage</th>
+            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Lead status</th>
+            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Action label</th>
+            <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${_cardActionsData.map((r, i) => `
+            <tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? '' : 'background:var(--stone-soft);'}"
+                data-ca-stage="${esc(r.stage_key)}" data-ca-status="${esc(r.status_key)}">
+              <td style="padding:7px 8px;">${esc(_stageLabelFor(r.stage_key))}</td>
+              <td style="padding:7px 8px;font-family:monospace;color:var(--ink-3);font-size:.78rem;">${r.status_key ? esc(r.status_key) : '<em style="color:var(--ink-4);">— none —</em>'}</td>
+              <td style="padding:7px 8px;">
+                <input type="text" class="field ca-label-input" value="${esc(r.label)}" maxlength="128"
+                  style="padding:4px 7px;font-size:.82rem;width:100%;min-width:160px;"
+                  onkeydown="if(event.key==='Enter')updateCardActionLabel(this)">
+              </td>
+              <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
+                <button class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;"
+                  onclick="updateCardActionLabel(this.closest('tr').querySelector('.ca-label-input'))">Save</button>
+                <button class="btn btn-ghost" style="padding:3px 10px;font-size:.75rem;color:#991b1b;"
+                  onclick="deleteCardActionLabel('${esc(r.stage_key)}','${esc(r.status_key)}')">Delete</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  async function saveCardActionLabel() {
+    const stage  = document.getElementById('ca-new-stage').value;
+    const status = document.getElementById('ca-new-status').value;
+    const label  = document.getElementById('ca-new-label').value.trim();
+    const err    = document.getElementById('ca-save-error');
+    err.style.display = 'none';
+    if (!label) { err.textContent = 'Label is required.'; err.style.display = 'block'; return; }
+    try {
+      await api('PUT', '/api/admin/stage-action-labels', { stage_key: stage, status_key: status, label });
+      document.getElementById('ca-new-label').value = '';
+      _broadcastCardActionsChanged();
+      await loadCardActionsAdmin();
+    } catch (e) {
+      err.textContent = e.message || 'Could not save mapping.';
+      err.style.display = 'block';
+    }
+  }
+
+  async function updateCardActionLabel(inputEl) {
+    const tr     = inputEl.closest('tr');
+    const stage  = tr.dataset.caStage;
+    const status = tr.dataset.caStatus;
+    const label  = inputEl.value.trim();
+    if (!label) return;
+    try {
+      await api('PUT', '/api/admin/stage-action-labels', { stage_key: stage, status_key: status, label });
+      _broadcastCardActionsChanged();
+      await loadCardActionsAdmin();
+    } catch (e) {
+      alert('Could not save: ' + (e.message || 'unknown error'));
+    }
+  }
+
+  async function deleteCardActionLabel(stage, status) {
+    if (!confirm(`Remove the action label for ${_stageLabelFor(stage)} / ${status || '(no status)'}?`)) return;
+    try {
+      await api('DELETE', `/api/admin/stage-action-labels/${encodeURIComponent(stage)}/${encodeURIComponent(status)}`);
+      _broadcastCardActionsChanged();
+      await loadCardActionsAdmin();
+    } catch (e) {
+      alert('Could not delete: ' + (e.message || 'unknown error'));
+    }
+  }
+
+  // Expose handlers used from inline onclick handlers in renderCardActionsTable.
+  window.loadCardActionsAdmin   = loadCardActionsAdmin;
+  window.saveCardActionLabel    = saveCardActionLabel;
+  window.updateCardActionLabel  = updateCardActionLabel;
+  window.deleteCardActionLabel  = deleteCardActionLabel;
+
   async function loadLeadStatusesAdmin() {
     if (_leadStatusesLoaded) return;
     const wrap = document.getElementById('lead-statuses-table-wrap');
@@ -1948,6 +2079,7 @@
         <button class="tab-btn"        data-tab="requests"    onclick="switchTab('requests')">Pending Requests <span id="req-tab-badge">${reqBadge}</span></button>
         <button class="tab-btn"        data-tab="auditlog"    onclick="switchTab('auditlog')">Audit log</button>
         <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings');loadHubspotStatus();loadLeadStatusesAdmin()">Settings</button>
+        <button class="tab-btn"        data-tab="cardactions" onclick="switchTab('cardactions');loadCardActionsAdmin()">Card actions</button>
         <button class="tab-btn"        data-tab="search"      onclick="switchTab('search');loadSearchSettings()">Search</button>
       </div>
 
@@ -2175,6 +2307,46 @@
         </div>
       </div>
 
+      <!-- CARD ACTIONS -->
+      <div class="tab-panel" id="tab-cardactions">
+        <div class="card">
+          <div class="card-title">Card action labels</div>
+          <p class="card-desc" style="margin:0 0 18px;">
+            The bottom strip on Sales &amp; Survey cards (e.g. <em>Await survey confirmation</em>) is determined by the card's <strong>stage</strong> and <strong>lead status</strong>. Define a label for each combination below. If no label is defined, the card shows the built-in default (or nothing).
+          </p>
+
+          <div id="card-actions-table-wrap">
+            <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
+          </div>
+
+          <div style="margin-top:14px;padding:10px 12px;background:var(--stone-soft);border-radius:var(--radius);border:1px solid var(--border);">
+            <div style="font-size:.75rem;font-weight:600;color:var(--ink-3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Add or update mapping</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+              <div style="flex:1;min-width:130px;">
+                <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Stage</label>
+                <select id="ca-new-stage" class="field" style="font-size:.8rem;">
+                  <option value="sales">Sales</option>
+                  <option value="designvisit">Design Visit</option>
+                  <option value="survey">Survey</option>
+                </select>
+              </div>
+              <div style="flex:1;min-width:160px;">
+                <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Lead status</label>
+                <select id="ca-new-status" class="field" style="font-size:.8rem;">
+                  <option value="">— (no status)</option>
+                </select>
+              </div>
+              <div style="flex:2;min-width:180px;">
+                <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Action label</label>
+                <input id="ca-new-label" type="text" class="field" placeholder="e.g. Schedule design visit" maxlength="128">
+              </div>
+              <button class="btn btn-primary" onclick="saveCardActionLabel()" style="white-space:nowrap;align-self:flex-end;">Save</button>
+            </div>
+            <div id="ca-save-error" style="display:none;font-size:.78rem;color:#991b1b;margin-top:6px;"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- SEARCH SETTINGS -->
       <div class="tab-panel" id="tab-search">
         <div class="card">
@@ -2208,11 +2380,12 @@
     renderTradeSubmissions();
     await initAuditLog();
 
-    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'search'];
+    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'search'];
     let savedTab;
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) {
       if (savedTab === 'settings') { switchTab('settings'); loadHubspotStatus(); loadLeadStatusesAdmin(); }
+      else if (savedTab === 'cardactions') { switchTab('cardactions'); loadCardActionsAdmin(); }
       else if (savedTab === 'search') { switchTab('search'); loadSearchSettings(); }
       else { switchTab(savedTab); }
     }
