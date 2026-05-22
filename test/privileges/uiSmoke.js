@@ -283,6 +283,133 @@ async function runUiSmoke({ users, runId, clients }) {
       record('privilege downgrade UI staleness probe ran', 'no error',
         `error: ${e.message}`, 'medium', false);
     }
+
+    // ── Customer list pagination UI smoke ──────────────────────────────────
+    // Intercept /api/contacts-all at the Puppeteer level and return 26
+    // synthetic contacts (one more than PAGE_SIZE=25) so we can:
+    //   (a) verify the pagination bar renders when contacts > 25
+    //   (b) click Next to reach page 2
+    //   (c) click a contact card → /customers/:id
+    //   (d) navigate back to /customers and confirm sessionStorage restored page 2
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1280, height: 800 });
+      await page.setCacheEnabled(false);
+
+      const memberSess = await login(users.member.email, PASSWORD);
+      const kv = parseCookieKV(memberSess.cookie);
+      if (kv) {
+        const { hostname } = new URL(BASE);
+        await page.setCookie({
+          name: kv.name, value: kv.value,
+          domain: hostname, path: '/', httpOnly: true,
+        });
+      }
+
+      const syntheticContacts = Array.from({ length: 26 }, (_, i) => ({
+        id: `pag-test-${i + 1}`,
+        properties: {
+          firstname: 'Page',
+          lastname: `Test${String(i + 1).padStart(2, '0')}`,
+          email: `pagtest${i + 1}@privtest.local`,
+          phone: '',
+          hs_lead_status: 'OPEN_DEAL',
+          city: '',
+          customer_number: `PT-${String(i + 1).padStart(2, '0')}`,
+          createdate: new Date(Date.now() - i * 1000).toISOString(),
+          closedate: null,
+          lastmodifieddate: new Date().toISOString(),
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        archived: false,
+      }));
+      const mockPayload  = JSON.stringify({ results: syntheticContacts, total: 26 });
+      const emptyPayload = JSON.stringify({ results: [], total: 0 });
+
+      await page.setRequestInterception(true);
+      page.on('request', req => {
+        const u = req.url();
+        if (u.includes('/api/contacts-all')) {
+          req.respond({ status: 200, contentType: 'application/json', body: mockPayload });
+        } else if (u.includes('/api/open-leads')) {
+          req.respond({ status: 200, contentType: 'application/json', body: emptyPayload });
+        } else {
+          req.continue();
+        }
+      });
+
+      await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded' });
+
+      // (a) pagination bar appears when contacts > 25
+      const paginationEl = await page.waitForSelector('.cl-pagination', { timeout: 8000 }).catch(() => null);
+      record('pagination bar appears when contacts > 25',
+        '.cl-pagination element visible in DOM',
+        `found=${!!paginationEl}`,
+        'medium', !!paginationEl);
+
+      let page2InfoText = '';
+      let onDetailPage = false;
+      let restoredInfoText = '';
+
+      if (paginationEl) {
+        const infoText = await page.$eval('.cl-pagination-info', el => el.textContent).catch(() => '');
+        record('pagination info shows correct total on page 1',
+          'text contains "of 26"',
+          `text="${infoText}"`,
+          'medium', infoText.includes('of 26'));
+
+        // (b) click Next → page 2 (the 26th contact)
+        await page.click('#cl-next-btn');
+        await page.waitForFunction(() => {
+          const info = document.querySelector('.cl-pagination-info');
+          return info && info.textContent.includes('26');
+        }, { timeout: 5000 }).catch(() => {});
+
+        page2InfoText = await page.$eval('.cl-pagination-info', el => el.textContent).catch(() => '');
+        record('pagination advances to page 2 on Next click',
+          'info text contains "Showing 26" (the 26th item)',
+          `text="${page2InfoText}"`,
+          'medium', /Showing 26/.test(page2InfoText));
+
+        // (c) click the contact card on page 2 — goToCustomer saves sessionStorage
+        //     and navigates to /customers/:id
+        const contactCard = await page.$('[data-contact-id]');
+        if (contactCard) {
+          await Promise.all([
+            page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 8000 }),
+            contactCard.click(),
+          ]).catch(() => {});
+
+          const detailUrl = page.url();
+          onDetailPage = /\/customers\//.test(detailUrl);
+          record('clicking a contact on page 2 navigates to /customers/:id',
+            'url matches /customers/<id>',
+            `url=${detailUrl}`,
+            'medium', onDetailPage);
+
+          // (d) navigate back to the list — restoreCustomerListFilters() should
+          //     re-apply currentPage=2 from sessionStorage
+          await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded' });
+          await page.waitForFunction(() => {
+            const info = document.querySelector('.cl-pagination-info');
+            return info && info.textContent.includes('26');
+          }, { timeout: 8000 }).catch(() => {});
+
+          restoredInfoText = await page.$eval('.cl-pagination-info', el => el.textContent).catch(() => '');
+          record('returning to /customers restores page 2 from sessionStorage',
+            'pagination info still shows "Showing 26" after back-navigation',
+            `text="${restoredInfoText}"`,
+            'medium', /Showing 26/.test(restoredInfoText));
+        }
+      }
+
+      await safeShot(page, path.join(SCREENSHOT_DIR, `${runId}-pagination-smoke.png`));
+      await page.close();
+    } catch (e) {
+      record('customer list pagination smoke probe ran', 'no error',
+        `error: ${e.message}`, 'medium', false);
+    }
   } finally {
     await browser.close().catch(() => {});
   }
