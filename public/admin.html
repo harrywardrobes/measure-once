@@ -2164,6 +2164,40 @@
       }
     }
 
+    // 4) Persist DOM order per LS group. New rows POST with sort_order=0,
+    // and admins may also have manually rearranged rows (future drag-drop).
+    // For each LS group, walk rows in DOM order and PATCH any whose
+    // sort_order differs from its DOM index. Rows that just got saved have
+    // a fresh data-sub-id; rows that failed to save have no id and are
+    // skipped (otherwise we'd 404 on PATCH).
+    const groups = new Map(); // lsKey → [{id, idx}]
+    const allRows = document.querySelectorAll('#card-actions-table-wrap .ca-sub-row');
+    for (const row of allRows) {
+      const ls = row.dataset.subLs;
+      const id = row.dataset.subId ? Number(row.dataset.subId) : null;
+      if (!ls || !id) continue;
+      if (!groups.has(ls)) groups.set(ls, []);
+      groups.get(ls).push(id);
+    }
+    for (const [, ids] of groups) {
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        const sub = _cardSubstatusesData.find(s => Number(s.id) === id);
+        // If we don't know the current sort_order (e.g. just-created row
+        // not yet reloaded), treat it as "needs update".
+        const current = sub ? (sub.sort_order || 0) : -1;
+        if (current === i) continue;
+        try {
+          await api('PATCH', `/api/admin/lead-substatuses/${id}`, { sort_order: i });
+          if (sub) sub.sort_order = i;
+          saved++;
+        } catch (e) {
+          failed++;
+          failures.push(`reorder sub-status #${id}: ${e.message || 'error'}`);
+        }
+      }
+    }
+
     if (saved === 0 && failed === 0) { toast('No changes to save.'); return; }
     if (failed) {
       console.warn('Card actions save: some changes failed', failures);
