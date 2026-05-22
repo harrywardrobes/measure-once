@@ -503,8 +503,10 @@ function renderAuthStatus() {
   if (photoSrc && user.photo_v) {
     photoSrc += (photoSrc.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(user.photo_v);
   }
+  const adminPath = window.location.pathname;
+  const adminActive = (adminPath === '/admin' || adminPath.startsWith('/admin/')) ? ' header-icon-btn--active' : '';
   const adminIconHtml = user.privilege_level === 'admin'
-    ? `<a href="/admin" class="header-icon-btn" aria-label="Admin panel" title="Admin panel">
+    ? `<a href="/admin" class="header-icon-btn${adminActive}" aria-label="Admin panel" title="Admin panel">
          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622C17.176 19.29 21 14.591 21 9c0-1.052-.122-2.077-.354-3.057z"/>
          </svg>
