@@ -673,26 +673,6 @@ body.showing-workflow .workflow-panel { display: flex; }
   width: 38%;
 }
 
-/* ── Pipeline card skeleton ──────────────────────────────────────────────────── */
-.skeleton-pipeline-card {
-  pointer-events: none;
-}
-.skeleton-pipeline-card .customer-project-header {
-  display: flex;
-  align-items: center;
-  min-height: 42px;
-}
-.skeleton-room-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 9px 14px;
-  border-bottom: 1px solid var(--stone);
-}
-.skeleton-room-row:last-child {
-  border-bottom: none;
-}
 
 /* ── Trade card skeleton ─────────────────────────────────────────────────────── */
 .skeleton-trade-card {
