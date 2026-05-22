@@ -537,23 +537,42 @@ async function renderWhatsAppHistory() {
     `;
 
     const list = document.getElementById('whatsapp-history-list');
-    list.innerHTML = messages.map(m => {
+    list.innerHTML = messages.map((m, idx) => {
       const dateStr = m.sent_at
         ? new Date(m.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
         : '';
       const senderName = [m.first_name, m.last_name].filter(Boolean).join(' ') || m.sender_email || 'Unknown';
-      const preview = m.mode === 'template'
-        ? (m.template_name ? `Template: ${m.template_name}` : 'Template message')
-        : (m.message_text ? m.message_text : 'Free-form message');
+
+      let preview, fullContent;
+      if (m.mode === 'template') {
+        const tplLabel = m.template_name || 'Template message';
+        preview = `Template: ${tplLabel}`;
+        let params = null;
+        try { params = m.template_params ? JSON.parse(m.template_params) : null; } catch (_) {}
+        if (params && params.length > 0) {
+          const paramRows = params.map((v, i) =>
+            `<div style="margin-top:2px"><span style="color:#6b7280;font-size:0.75rem">{{${i+1}}}</span> ${escHtml(String(v))}</div>`
+          ).join('');
+          fullContent = `<div style="font-weight:500">${escHtml(tplLabel)}</div>${paramRows}`;
+        } else {
+          fullContent = `<div style="font-weight:500">${escHtml(tplLabel)}</div><div style="color:#6b7280;font-size:0.75rem;margin-top:2px">No parameter values recorded</div>`;
+        }
+      } else {
+        preview = m.message_text || 'Free-form message';
+        fullContent = escHtml(m.message_text || 'Free-form message');
+      }
+
       return `
-        <div class="comment-item" style="margin-bottom:6px">
+        <div class="comment-item" style="margin-bottom:6px;cursor:pointer" onclick="(function(el){var x=el.querySelector('.wa-full');var p=el.querySelector('.wa-preview');var t=el.querySelector('.wa-toggle');if(x.style.display==='none'){x.style.display='';p.style.display='none';t.textContent='▲';}else{x.style.display='none';p.style.display='';t.textContent='▼';}})(this)">
           <div class="comment-meta">
             <span class="comment-author">${escHtml(senderName)}</span>
             ${dateStr ? `<span class="comment-meta-sep">·</span><span class="comment-date">${escHtml(dateStr)}</span>` : ''}
             <span class="comment-meta-sep">·</span>
             <span style="font-size:0.75rem;background:#dcfce7;color:#15803d;border-radius:4px;padding:1px 6px;font-weight:500">WhatsApp</span>
+            <span class="wa-toggle" style="margin-left:auto;font-size:0.65rem;color:#9ca3af;padding-left:6px">▼</span>
           </div>
-          <div class="comment-text" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(preview)}</div>
+          <div class="comment-text wa-preview" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(preview)}</div>
+          <div class="wa-full" style="display:none;white-space:pre-wrap;font-size:0.85rem;line-height:1.5;padding-top:2px">${fullContent}</div>
         </div>
       `;
     }).join('');

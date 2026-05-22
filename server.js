@@ -2901,10 +2901,13 @@ app.post('/api/whatsapp/send', isAuthenticated, requireWhatsAppConfig, whatsappS
     if (contactId && /^\d+$/.test(String(contactId))) {
       const messageText = mode === 'freeform' ? (message || '').trim() : null;
       const tplName = mode === 'template' ? (templateName || null) : null;
+      const tplParams = (mode === 'template' && Array.isArray(templateParams) && templateParams.length > 0)
+        ? JSON.stringify(templateParams.map(v => String(v)))
+        : null;
       pool.query(
-        `INSERT INTO whatsapp_messages (contact_id, sender_user_id, mode, template_name, message_text)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [String(contactId), req.user.id, mode, tplName, messageText]
+        `INSERT INTO whatsapp_messages (contact_id, sender_user_id, mode, template_name, template_params, message_text)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [String(contactId), req.user.id, mode, tplName, tplParams, messageText]
       ).catch(e => console.error('whatsapp_messages insert error:', e.message));
     }
 
@@ -2939,9 +2942,11 @@ async function ensureWhatsAppMessagesTable() {
     sender_user_id  VARCHAR     NOT NULL REFERENCES users(id),
     mode            TEXT        NOT NULL CHECK (mode IN ('template','freeform')),
     template_name   TEXT,
+    template_params TEXT,
     message_text    TEXT,
     sent_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
+  await pool.query(`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS template_params TEXT`);
   await pool.query(`CREATE INDEX IF NOT EXISTS whatsapp_messages_contact_idx ON whatsapp_messages(contact_id, sent_at DESC)`);
 }
 
@@ -2952,7 +2957,7 @@ app.get('/api/whatsapp/history/:contactId', isAuthenticated, async (req, res) =>
   }
   try {
     const { rows } = await pool.query(
-      `SELECT w.id, w.contact_id, w.mode, w.template_name, w.message_text, w.sent_at,
+      `SELECT w.id, w.contact_id, w.mode, w.template_name, w.template_params, w.message_text, w.sent_at,
               u.first_name, u.last_name, u.email AS sender_email
        FROM whatsapp_messages w
        JOIN users u ON u.id = w.sender_user_id
