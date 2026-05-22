@@ -167,7 +167,8 @@ async function renderEnquiryList() {
     const createdate = parseInt(contact.properties?.createdate || '0', 10);
 
     if (!cached || cached.length === 0) {
-      const lsColumn = HS_STATUS_COLUMN[ls] || 'sales';
+      const lsInfo   = _columnForLeadStatus(ls);
+      const lsColumn = lsInfo.column || 'sales';
       const lsOpt    = ls ? LEAD_STATUS_OPTIONS.find(o => o.value === ls) : null;
       allEntries.push({
         contact,
@@ -175,7 +176,8 @@ async function renderEnquiryList() {
         substageId: ls || '',
         badgeLabel: lsOpt ? lsOpt.label : '',
         sourceId:   '',
-        createdate, stageTime: createdate, priority: 2,
+        createdate, stageTime: createdate,
+        priority: lsInfo.terminal ? 3 : 2,
       });
       continue;
     }
@@ -191,7 +193,8 @@ async function renderEnquiryList() {
 
     // Override the room's column with the HubSpot lead status if it maps to
     // a different column — local room substage/badge is still preserved.
-    const lsColumn   = HS_STATUS_COLUMN[ls];
+    const lsInfo     = _columnForLeadStatus(ls);
+    const lsColumn   = lsInfo.column;
     const finalStage = lsColumn || best.stageKey;
 
     // When the room has no substage but the column is driven by lead status,
@@ -199,6 +202,7 @@ async function renderEnquiryList() {
     const lsOpt2    = (!statusId && lsColumn) ? LEAD_STATUS_OPTIONS.find(o => o.value === ls) : null;
     const roomBadge = lsOpt2 ? lsOpt2.label : '';
 
+    const basePriority = priorityScore(finalStage, statusId);
     allEntries.push({
       contact,
       stageKey:   finalStage,
@@ -207,7 +211,7 @@ async function renderEnquiryList() {
       sourceId:   best.sourceId || '',
       createdate,
       stageTime:  substageDate || stageEntryDate || createdate,
-      priority:   priorityScore(finalStage, statusId),
+      priority:   lsInfo.terminal ? 3 : basePriority,
       roomIdx:    best.roomIdx,
     });
   }
@@ -288,6 +292,7 @@ async function renderEnquiryList() {
 
 // ── Lead-status → column map ──────────────────────────────────────────────────
 // Statuses not listed here (NOT_SUITABLE, UNQUALIFIED) are excluded upstream.
+// Legacy hardcoded fallback used only when the admin-configured stage is missing.
 const HS_STATUS_COLUMN = {
   OPEN_DEAL:            'designvisit',
   VISIT_SCHEDULED:      'designvisit',
@@ -298,6 +303,34 @@ const HS_STATUS_COLUMN = {
   ATTEMPTED_TO_CONTACT: 'sales',
   BAD_TIMING:           'sales',
 };
+
+// Map an admin-configured stage to a Sales-board column. Anything beyond
+// Design Visit (Survey, Order, Workshop, …) is treated as terminal and parked
+// in the Design Visit column so the customer is not silently dropped.
+const STAGE_COLUMN_INFO = {
+  SALES:            { column: 'sales',       terminal: false },
+  DESIGN_VISIT:     { column: 'designvisit', terminal: false },
+  SURVEY:           { column: 'designvisit', terminal: true  },
+  ORDER:            { column: 'designvisit', terminal: true  },
+  WORKSHOP:         { column: 'designvisit', terminal: true  },
+  PACKING:          { column: 'designvisit', terminal: true  },
+  DELIVERY:         { column: 'designvisit', terminal: true  },
+  INSTALLATION:     { column: 'designvisit', terminal: true  },
+  AFTERCARE:        { column: 'designvisit', terminal: true  },
+  CUSTOMER_SERVICE: { column: 'designvisit', terminal: true  },
+};
+
+// Resolve a hs_lead_status value to its Sales-board column + terminal flag.
+// Prefers the admin-configured stage on LEAD_STATUS_OPTIONS, falls back to
+// the legacy hardcoded HS_STATUS_COLUMN map for backwards compat.
+function _columnForLeadStatus(ls) {
+  if (!ls) return { column: null, terminal: false };
+  const opt = (typeof LEAD_STATUS_OPTIONS !== 'undefined')
+    ? LEAD_STATUS_OPTIONS.find(o => o.value === ls) : null;
+  const stage = opt?.stage;
+  if (stage && STAGE_COLUMN_INFO[stage]) return STAGE_COLUMN_INFO[stage];
+  return { column: HS_STATUS_COLUMN[ls] || null, terminal: false };
+}
 
 // ── Stage accent hex colours (B1 card design) ────────────────────────────────
 const STAGE_ACCENT = {

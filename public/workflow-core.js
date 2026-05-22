@@ -330,6 +330,7 @@ async function loadLeadStatuses() {
         value:               r.key,
         label:               r.label,
         excluded_from_sales: !!r.excluded_from_sales,
+        stage:               r.stage || null,
       }));
     }
   } catch (e) {

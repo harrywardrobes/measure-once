@@ -1575,6 +1575,26 @@
   const _lsBroadcast = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('lead_statuses_changed') : null;
   function _notifyLeadStatusChanged() { _lsBroadcast?.postMessage('changed'); }
 
+  const LEAD_STATUS_STAGES = [
+    { key: 'SALES',            label: 'Sales' },
+    { key: 'DESIGN_VISIT',     label: 'Design Visit' },
+    { key: 'SURVEY',           label: 'Survey' },
+    { key: 'ORDER',            label: 'Order' },
+    { key: 'WORKSHOP',         label: 'Workshop' },
+    { key: 'PACKING',          label: 'Packing' },
+    { key: 'DELIVERY',         label: 'Delivery' },
+    { key: 'INSTALLATION',     label: 'Installation' },
+    { key: 'AFTERCARE',        label: 'Aftercare' },
+    { key: 'CUSTOMER_SERVICE', label: 'Customer Service' },
+  ];
+  function _stageOptionsHtml(selected) {
+    const sel = selected || '';
+    return `<option value=""${sel === '' ? ' selected' : ''}>—</option>` +
+      LEAD_STATUS_STAGES.map(s =>
+        `<option value="${s.key}"${sel === s.key ? ' selected' : ''}>${esc(s.label)}</option>`
+      ).join('');
+  }
+
   async function loadLeadStatusesAdmin() {
     if (_leadStatusesLoaded) return;
     const wrap = document.getElementById('lead-statuses-table-wrap');
@@ -1600,6 +1620,7 @@
       <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
         <thead>
           <tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Stage</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Key</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Display Label</th>
             <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">Excl. from Sales</th>
@@ -1610,6 +1631,13 @@
         <tbody>
           ${data.map((s, i) => `
             <tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? '' : 'background:var(--stone-soft);'}" data-ls-key="${esc(s.key)}">
+              <td style="padding:7px 8px;">
+                <select class="field ls-stage-select" data-key="${esc(s.key)}"
+                  style="padding:4px 7px;font-size:.78rem;min-width:130px;"
+                  onchange="saveLeadStatusStage(this)">
+                  ${_stageOptionsHtml(s.stage)}
+                </select>
+              </td>
               <td style="padding:7px 8px;font-family:monospace;color:var(--ink-3);font-size:.78rem;">
                 ${s.key
                   ? esc(s.key)
@@ -1650,6 +1678,23 @@
         </tbody>
       </table>
     `;
+  }
+
+  async function saveLeadStatusStage(select) {
+    const key = select.dataset.key;
+    const stage = select.value || null;
+    const existing = _leadStatusesData.find(s => s.key === key);
+    const prevStage = existing?.stage || null;
+    if (prevStage === stage) return;
+    try {
+      const updated = await api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(key)}`, { stage });
+      const idx = _leadStatusesData.findIndex(s => s.key === key);
+      if (idx !== -1) _leadStatusesData[idx] = updated;
+      _notifyLeadStatusChanged();
+    } catch (e) {
+      toast(`Failed to update stage: ${e.message}`, true);
+      select.value = prevStage || '';
+    }
   }
 
   async function saveLeadStatusKey(input) {
@@ -1741,9 +1786,11 @@
   async function addLeadStatus() {
     const keyInput   = document.getElementById('ls-new-key');
     const labelInput = document.getElementById('ls-new-label');
+    const stageInput = document.getElementById('ls-new-stage');
     const errEl      = document.getElementById('ls-add-error');
     const key        = (keyInput?.value || '').trim().toUpperCase();
     const label      = (labelInput?.value || '').trim();
+    const stage      = (stageInput?.value || '').trim() || null;
 
     const showErr = msg => { if (errEl) { errEl.textContent = msg; errEl.style.display = ''; } };
     const clearErr = () => { if (errEl) errEl.style.display = 'none'; };
@@ -1753,10 +1800,11 @@
     clearErr();
 
     try {
-      const created = await api('POST', '/api/admin/lead-statuses', { key, label });
+      const created = await api('POST', '/api/admin/lead-statuses', { key, label, stage });
       _leadStatusesData.push(created);
       if (keyInput)   keyInput.value   = '';
       if (labelInput) labelInput.value = '';
+      if (stageInput) stageInput.value = '';
       renderLeadStatusesTable();
       _notifyLeadStatusChanged();
     } catch (e) {
@@ -2012,6 +2060,22 @@
                 <input id="ls-new-key" type="text" class="field" placeholder="KEY" maxlength="64"
                   style="font-family:monospace;font-size:.8rem;text-transform:uppercase;"
                   oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')">
+              </div>
+              <div style="flex:1;min-width:140px;">
+                <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Stage</label>
+                <select id="ls-new-stage" class="field" style="font-size:.8rem;">
+                  <option value="">—</option>
+                  <option value="SALES">Sales</option>
+                  <option value="DESIGN_VISIT">Design Visit</option>
+                  <option value="SURVEY">Survey</option>
+                  <option value="ORDER">Order</option>
+                  <option value="WORKSHOP">Workshop</option>
+                  <option value="PACKING">Packing</option>
+                  <option value="DELIVERY">Delivery</option>
+                  <option value="INSTALLATION">Installation</option>
+                  <option value="AFTERCARE">Aftercare</option>
+                  <option value="CUSTOMER_SERVICE">Customer Service</option>
+                </select>
               </div>
               <div style="flex:2;min-width:150px;">
                 <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Display label</label>

@@ -2465,6 +2465,18 @@ async function syncLeadStatusesToHubSpot() {
   );
 }
 
+const LEAD_STATUS_STAGE_KEYS = [
+  'SALES', 'DESIGN_VISIT', 'SURVEY', 'ORDER', 'WORKSHOP',
+  'PACKING', 'DELIVERY', 'INSTALLATION', 'AFTERCARE', 'CUSTOMER_SERVICE',
+];
+const LEAD_STATUS_STAGE_SET = new Set(LEAD_STATUS_STAGE_KEYS);
+
+const LEAD_STATUS_STAGE_SEEDS = {
+  SALES: ['FORM_SUBMISSION', 'CONTACTED', 'ATTEMPTED_TO_CONTACT', 'IN_PROGRESS', 'AWAITING_PHOTOS', 'ROUGH_ESTIMATE', 'UNQUALIFIED', 'NOT_SUITABLE', 'BAD_TIMING', 'NO_RESPONSE'],
+  DESIGN_VISIT: ['DESIGN_SCHEDULED', 'DESIGN_IN_PROGRESS', 'DESIGN_SENT', 'DESIGN_ACCEPTED'],
+  SURVEY: ['DEPOSIT_INVOICE', 'SURVEY_SCHEDULED', 'SURVEY_IN_PROGRESS', 'SURVEY_SENT', 'READY_FOR_PRODUCTION'],
+};
+
 async function ensureLeadStatusTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS lead_status_config (
@@ -2474,6 +2486,17 @@ async function ensureLeadStatusTable() {
       excluded_from_sales BOOLEAN NOT NULL DEFAULT FALSE
     )
   `);
+  await pool.query(`ALTER TABLE lead_status_config ADD COLUMN IF NOT EXISTS stage VARCHAR(32)`);
+
+  // Backfill stage for known seed keys (only where stage is still NULL — never overwrite admin choices).
+  for (const [stage, keys] of Object.entries(LEAD_STATUS_STAGE_SEEDS)) {
+    if (!keys.length) continue;
+    await pool.query(
+      `UPDATE lead_status_config SET stage = $1 WHERE stage IS NULL AND key = ANY($2::text[])`,
+      [stage, keys]
+    );
+  }
+
   const { rows: countRows } = await pool.query('SELECT COUNT(*) AS cnt FROM lead_status_config');
   if (parseInt(countRows[0].cnt, 10) > 0) return;
 
@@ -2528,7 +2551,7 @@ async function ensureLeadStatusTable() {
 app.get('/api/lead-statuses', isAuthenticated, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT key, label, sort_order, excluded_from_sales FROM lead_status_config ORDER BY sort_order ASC, key ASC'
+      'SELECT key, label, sort_order, excluded_from_sales, stage FROM lead_status_config ORDER BY sort_order ASC, key ASC'
     );
     res.set('Cache-Control', 'no-store');
     res.json(rows);
@@ -2542,7 +2565,7 @@ app.get('/api/lead-statuses', isAuthenticated, async (req, res) => {
 app.get('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT key, label, sort_order, excluded_from_sales FROM lead_status_config ORDER BY sort_order ASC, key ASC'
+      'SELECT key, label, sort_order, excluded_from_sales, stage FROM lead_status_config ORDER BY sort_order ASC, key ASC'
     );
     res.json(rows);
   } catch (e) {
@@ -2557,12 +2580,19 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
   const label = (req.body?.label || '').trim();
   if (!key || !label) return res.status(400).json({ error: 'key and label are required.' });
   if (!/^[A-Z0-9_]+$/.test(key)) return res.status(400).json({ error: 'key may only contain uppercase letters, digits, and underscores.' });
+  let stage = null;
+  if (req.body?.stage !== undefined && req.body.stage !== null && req.body.stage !== '') {
+    stage = String(req.body.stage).trim().toUpperCase();
+    if (!LEAD_STATUS_STAGE_SET.has(stage)) {
+      return res.status(400).json({ error: 'stage must be one of the allowed stage keys.' });
+    }
+  }
   try {
     const { rows: maxRows } = await pool.query('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM lead_status_config');
     const next = maxRows[0].next;
     const { rows } = await pool.query(
-      'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales) VALUES ($1, $2, $3, FALSE) RETURNING *',
-      [key, label, next]
+      'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage) VALUES ($1, $2, $3, FALSE, $4) RETURNING *',
+      [key, label, next, stage]
     );
     res.status(201).json(rows[0]);
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
@@ -2576,11 +2606,24 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
 // Admin: update label / sort_order / excluded_from_sales / key (key rename for empty-key rows)
 app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async (req, res) => {
   const key = req.params.key;
-  const { label, sort_order, excluded_from_sales, new_key } = req.body || {};
+  const { label, sort_order, excluded_from_sales, new_key, stage } = req.body || {};
   if (label !== undefined && !String(label).trim()) return res.status(400).json({ error: 'label cannot be empty.' });
   if (new_key !== undefined) {
     const nk = String(new_key).trim().toUpperCase();
     if (!nk || !/^[A-Z0-9_]+$/.test(nk)) return res.status(400).json({ error: 'new_key may only contain uppercase letters, digits, and underscores.' });
+  }
+  let stageProvided = false;
+  let stageValue = null;
+  if (stage !== undefined) {
+    stageProvided = true;
+    if (stage === null || stage === '') {
+      stageValue = null;
+    } else {
+      stageValue = String(stage).trim().toUpperCase();
+      if (!LEAD_STATUS_STAGE_SET.has(stageValue)) {
+        return res.status(400).json({ error: 'stage must be one of the allowed stage keys.' });
+      }
+    }
   }
   try {
     const { rows: existing } = await pool.query('SELECT * FROM lead_status_config WHERE key = $1', [key]);
@@ -2590,9 +2633,10 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
     const newOrder    = sort_order !== undefined ? parseInt(sort_order, 10) : cur.sort_order;
     const newExcluded = excluded_from_sales !== undefined ? !!excluded_from_sales : cur.excluded_from_sales;
     const finalKey    = new_key   !== undefined ? String(new_key).trim().toUpperCase() : key;
+    const newStage    = stageProvided ? stageValue : cur.stage;
     const { rows } = await pool.query(
-      'UPDATE lead_status_config SET key = $1, label = $2, sort_order = $3, excluded_from_sales = $4 WHERE key = $5 RETURNING *',
-      [finalKey, newLabel, newOrder, newExcluded, key]
+      'UPDATE lead_status_config SET key = $1, label = $2, sort_order = $3, excluded_from_sales = $4, stage = $5 WHERE key = $6 RETURNING *',
+      [finalKey, newLabel, newOrder, newExcluded, newStage, key]
     );
     res.json(rows[0]);
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
