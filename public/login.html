@@ -12,22 +12,25 @@
     .card { background:#fff; border:1px solid #e7e5e0; border-radius:12px;
             max-width:420px; width:100%; padding:32px;
             box-shadow:0 1px 3px rgba(0,0,0,.04); }
+    .logo-wrap { text-align:center; margin-bottom:24px; }
+    .logo-wrap img { max-width:180px; width:100%; height:auto; display:inline-block; }
     h1 { font-size:1.25rem; margin:0 0 4px; }
-    .sub { color:#57534e; font-size:.9rem; margin:0 0 24px; }
+    .sub { color:#57534e; font-size:.9rem; margin:0 0 20px; }
     label { display:block; font-size:.82rem; color:#374151; margin-bottom:6px; font-weight:500; }
     input { width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid #d6d3d1;
             border-radius:8px; font-size:.95rem; background:#fff; }
     input:focus { outline:none; border-color:#3d0f7a; box-shadow:0 0 0 3px rgba(61,15,122,.12); }
-    .field { margin-bottom:14px; }
+    .field { margin-bottom:16px; }
     button { width:100%; background:#3d0f7a; color:#fff; border:none; padding:11px 18px;
-             border-radius:8px; font-weight:600; font-size:.95rem; cursor:pointer; }
-    button:hover { background:#2e0f5a; }
-    button:disabled { opacity:.6; cursor:not-allowed; }
+             border-radius:8px; font-weight:600; font-size:.95rem; cursor:pointer;
+             transition:background .15s ease; }
+    button:hover { background:#5a1fad; }
+    button:disabled { opacity:.5; cursor:not-allowed; background:#3d0f7a; }
     .err { background:#fef2f2; border:1px solid #fecaca; color:#991b1b;
-           padding:10px 12px; border-radius:8px; font-size:.85rem; margin-bottom:14px; display:none; }
+           padding:10px 12px; border-radius:8px; font-size:.85rem; margin-bottom:16px; display:none; }
     .ok  { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534;
-           padding:10px 12px; border-radius:8px; font-size:.85rem; margin-bottom:14px; display:none; }
-    .footer { margin-top:18px; padding-top:16px; border-top:1px solid #f3f1ec;
+           padding:10px 12px; border-radius:8px; font-size:.85rem; margin-bottom:16px; display:none; }
+    .footer { margin-top:20px; padding-top:16px; border-top:1px solid #f3f1ec;
               font-size:.85rem; color:#57534e; text-align:center; }
     .footer a { color:#3d0f7a; text-decoration:none; font-weight:500; }
     .footer a:hover { text-decoration:underline; }
@@ -71,6 +74,9 @@
 </head>
 <body>
   <div class="card">
+    <div class="logo-wrap">
+      <img src="/harry-wardrobes-logo.png" alt="Harry Wardrobes">
+    </div>
     <div id="view-login">
       <h1>Sign in</h1>
       <p class="sub">Use the email + password for your Measure Once account.</p>
