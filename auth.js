@@ -1662,8 +1662,17 @@ async function setupAuth(app) {
         if (date_of_birth !== undefined) { const v = str(date_of_birth, 20);  if (v) newMeta.date_of_birth = v; else delete newMeta.date_of_birth; }
         if (ni_number !== undefined)     { const v = str(ni_number, 20);       if (v) newMeta.ni_number = v;     else delete newMeta.ni_number; }
         if (mobile_number !== undefined) { const v = str(mobile_number, 30);   if (v) newMeta.mobile_number = v; else delete newMeta.mobile_number; }
-        if (ec_first_name !== undefined) { const v = str(ec_first_name, 100);  if (v) newMeta.ec_first_name = v; else delete newMeta.ec_first_name; }
-        if (ec_last_name !== undefined)  { const v = str(ec_last_name, 100);   if (v) newMeta.ec_last_name = v;  else delete newMeta.ec_last_name; }
+        if (ec_first_name !== undefined) {
+          const tok = (ec_first_name || '').trim().split(/\s+/).filter(Boolean)[0] || '';
+          const v = tok ? tok.charAt(0).toUpperCase() + tok.slice(1).toLowerCase() : null;
+          if (v) newMeta.ec_first_name = v; else delete newMeta.ec_first_name;
+        }
+        if (ec_last_name !== undefined) {
+          const tokens = (ec_last_name || '').trim().split(/\s+/).filter(Boolean);
+          const tok = tokens[tokens.length - 1] || '';
+          const v = tok ? tok.charAt(0).toUpperCase() + tok.slice(1).toLowerCase() : null;
+          if (v) newMeta.ec_last_name = v; else delete newMeta.ec_last_name;
+        }
         if (ec_phone !== undefined)      { const v = str(ec_phone, 30);        if (v) newMeta.ec_phone = v;      else delete newMeta.ec_phone; }
         if (first_name !== undefined) { const v = (first_name || '').trim(); if (v) newMeta.first_name = v; else delete newMeta.first_name; }
         if (last_name !== undefined)  { const v = (last_name || '').trim();  if (v) newMeta.last_name = v;  else delete newMeta.last_name; }
