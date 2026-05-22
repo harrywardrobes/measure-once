@@ -1209,15 +1209,33 @@ function setStatusChecked(stageKey, statusId, checked) {
 }
 
 // ── Non-blocking HubSpot lead status write on stage change ───────────────────
-// Looks up the new stage in STAGE_LEAD_STATUS_MAP and fires a PATCH to HubSpot.
+// Resolves the HubSpot lead status to write for the given stageKey:
+//   1. Prefers a LEAD_STATUS_OPTIONS entry whose admin-configured `stage` field
+//      matches stageKey (populated at runtime from /api/lead-statuses).
+//   2. Falls back to the built-in STAGE_LEAD_STATUS_MAP constant.
+//   3. Skips the write entirely if the resolved value is absent from the live
+//      option set (e.g. renamed or removed in HubSpot).
 // The stage change is already committed locally before this runs; failure only
 // shows a toast — it does not revert the local change.
 function _syncStageLeadStatus(stageKey) {
   if (isViewerOnly()) return;
   const contactId = state.selectedContactId;
   if (!contactId) return;
-  const newStatus = STAGE_LEAD_STATUS_MAP[stageKey];
+
+  // Prefer a lead status whose admin-configured `stage` field matches this
+  // stageKey (loaded dynamically from /api/lead-statuses).  Only if no such
+  // entry exists do we fall back to the built-in static map.
+  const dynamicMatch = LEAD_STATUS_OPTIONS.find(o => o.stage === stageKey);
+  const newStatus = dynamicMatch
+    ? dynamicMatch.value
+    : STAGE_LEAD_STATUS_MAP[stageKey];
+
   if (!newStatus) return;
+
+  // Guard: skip the write if the resolved value isn't in the current live
+  // option set (e.g. the default was renamed or removed in HubSpot).
+  if (!LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)) return;
+
   PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: newStatus })
     .then(() => {
       const contact = state.contacts?.find(c => String(c.id) === String(contactId));
