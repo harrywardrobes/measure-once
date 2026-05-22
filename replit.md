@@ -75,6 +75,33 @@ back in with `PRIVTEST_USE_<NAME>=1 <NAME>=… npm run test:privileges` —
 required for the captcha tampering probes (`PRIVTEST_USE_TURNSTILE_SECRET_KEY=1`)
 and to resolve HubSpot/Google/QuickBooks-gated matrix cells.
 
+## Lead-status sync test
+Run `DATABASE_URL_TEST=<disposable connection string> npm run test:lead-status-sync`
+to boot a dedicated test server (reusing the privilege harness) and exercise the
+two real-time sync paths that keep the lead-status filter dropdown on the Customers
+page up to date after a label rename:
+
+- **(A) BroadcastChannel path** — a second same-browser tab posts a
+  `lead_statuses_changed` BroadcastChannel message; the Customers page listener
+  calls `loadLeadStatuses()` → `populateLeadStatusFilter()` and the dropdown
+  reflects the new label.
+- **(B) visibilitychange path** — after a server-side rename the test synthesises
+  a hidden→visible `visibilitychange` sequence; the handler fetches fresh statuses
+  and re-renders the dropdown.
+- **(C) count format** — every filter option must carry a `(N)` count suffix after
+  `populateLeadStatusFilter()` runs.
+
+The run also includes API pre-checks (`GET /api/admin/lead-statuses` and
+`GET /api/lead-statuses`) before any browser tabs open. A markdown report is
+written to `test-results/lead-status-sync.md`; the command exits non-zero when
+any probe fails.
+
+**Known limitation:** the test server strips `HUBSPOT_TOKEN`, so
+`loadAllContacts()` returns 503 and contact counts in the filter options will
+always be 0. The `bootstrapFilter()` helper compensates by calling
+`loadLeadStatuses()` + `populateLeadStatusFilter()` directly in the page context,
+so the sync-path handlers are still exercised faithfully.
+
 ### Migration note
 Users that existed before this change are backfilled to `active` (no onboarding
 prompt) but have **no password set**. An admin must click **Resend
