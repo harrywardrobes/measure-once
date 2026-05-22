@@ -564,9 +564,19 @@ app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), require
     if (!safeDealId) {
       return res.status(400).json({ error: 'Invalid deal id' });
     }
+    const DEAL_ALLOWED = ['dealname', 'dealstage', 'amount', 'closedate', 'pipeline', 'description'];
+    const properties = {};
+    for (const key of DEAL_ALLOWED) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        properties[key] = req.body[key];
+      }
+    }
+    if (Object.keys(properties).length === 0) {
+      return res.status(400).json({ error: 'No valid properties to update.' });
+    }
     const r = await axios.patch(
       `${HS}/crm/v3/objects/deals/${safeDealId}`,
-      { properties: req.body },
+      { properties },
       { headers: hsHeaders() }
     );
     res.json(r.data);
@@ -945,6 +955,38 @@ app.get('/api/deals/:id/notes', requireHubspotToken, async (req, res) => {
   }
 });
 
+// Verify that a HubSpot note is actually associated with the given object type + ID.
+// Returns true if the association exists, false otherwise (or on error).
+async function verifyNoteAssociation(noteId, objectType, objectId) {
+  try {
+    const r = await axios.get(
+      `${HS}/crm/v3/objects/notes/${encodeURIComponent(noteId)}/associations/${encodeURIComponent(objectType)}`,
+      { headers: hsHeaders(), timeout: 8000 }
+    );
+    const ids = (r.data?.results || []).map(a => String(a.id));
+    return ids.includes(String(objectId));
+  } catch (e) {
+    // If the note doesn't exist or the association call fails, deny the update.
+    return false;
+  }
+}
+
+// Verify that a HubSpot task is actually associated with the given object type + ID.
+// Returns true if the association exists, false otherwise (or on error).
+async function verifyTaskAssociation(taskId, objectType, objectId) {
+  try {
+    const r = await axios.get(
+      `${HS}/crm/v3/objects/tasks/${encodeURIComponent(taskId)}/associations/${encodeURIComponent(objectType)}`,
+      { headers: hsHeaders(), timeout: 8000 }
+    );
+    const ids = (r.data?.results || []).map(a => String(a.id));
+    return ids.includes(String(objectId));
+  } catch (e) {
+    // If the task doesn't exist or the association call fails, deny the update.
+    return false;
+  }
+}
+
 app.post('/api/deals/:id/checklist', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   try {
     const { checklistData, existingNoteId } = req.body;
@@ -960,6 +1002,11 @@ app.post('/api/deals/:id/checklist', isAuthenticated, requirePrivilege('member')
       const validatedExistingNoteId = String(existingNoteId);
       if (!/^[A-Za-z0-9_-]+$/.test(validatedExistingNoteId)) {
         return res.status(400).json({ error: 'Invalid existingNoteId' });
+      }
+
+      const associated = await verifyNoteAssociation(validatedExistingNoteId, 'deals', dealId);
+      if (!associated) {
+        return res.status(403).json({ error: 'Note is not associated with this deal.' });
       }
 
       const r = await axios.patch(
@@ -1152,6 +1199,10 @@ app.post('/api/contacts/:id/workflow', isAuthenticated, requirePrivilege('member
 
     if (existingNoteId) {
       const safeExistingNoteId = validateHsObjectId(existingNoteId, 'existingNoteId');
+      const associated = await verifyNoteAssociation(safeExistingNoteId, 'contacts', contactId);
+      if (!associated) {
+        return res.status(403).json({ error: 'Note is not associated with this contact.' });
+      }
       const r = await axios.patch(
         `${HS}/crm/v3/objects/notes/${safeExistingNoteId}`,
         { properties: { hs_note_body: noteBody } },
@@ -1192,6 +1243,10 @@ app.post('/api/deals/:id/workflow', isAuthenticated, requirePrivilege('member'),
 
     if (existingNoteId) {
       const safeExistingNoteId = validateHsObjectId(existingNoteId, 'existingNoteId');
+      const associated = await verifyNoteAssociation(safeExistingNoteId, 'deals', safeDealId);
+      if (!associated) {
+        return res.status(403).json({ error: 'Note is not associated with this deal.' });
+      }
       const r = await axios.patch(
         `${HS}/crm/v3/objects/notes/${safeExistingNoteId}`,
         { properties: { hs_note_body: noteBody } },
@@ -1298,9 +1353,31 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), require
       return res.status(400).json({ error: 'Invalid task id' });
     }
 
+    // Require the caller to identify the parent contact so we can verify the
+    // task actually belongs to it before mutating it (object-binding check).
+    const contactId = req.body.contactId != null ? String(req.body.contactId) : '';
+    if (!contactId || !/^\d+$/.test(contactId)) {
+      return res.status(400).json({ error: 'contactId is required.' });
+    }
+    const taskLinked = await verifyTaskAssociation(taskId, 'contacts', contactId);
+    if (!taskLinked) {
+      return res.status(403).json({ error: 'Task is not associated with this contact.' });
+    }
+
+    const TASK_ALLOWED = ['hs_task_status', 'hs_task_subject', 'hs_task_body', 'hs_timestamp', 'hs_task_priority', 'hs_task_type'];
+    const properties = {};
+    for (const key of TASK_ALLOWED) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        properties[key] = req.body[key];
+      }
+    }
+    if (Object.keys(properties).length === 0) {
+      return res.status(400).json({ error: 'No valid properties to update.' });
+    }
+
     const r = await axios.patch(
       `${HS}/crm/v3/objects/tasks/${taskId}`,
-      { properties: req.body },
+      { properties },
       { headers: hsHeaders() }
     );
     res.json(r.data);
@@ -2821,7 +2898,7 @@ async function getWabaId() {
   return _wabaId;
 }
 
-app.get('/api/whatsapp/templates', isAuthenticated, requireWhatsAppConfig, async (req, res) => {
+app.get('/api/whatsapp/templates', isAuthenticated, requirePrivilege('member'), requireWhatsAppConfig, async (req, res) => {
   try {
     const wabaId = await getWabaId();
     if (!wabaId) return res.json([]);
@@ -2856,7 +2933,7 @@ app.get('/api/whatsapp/templates', isAuthenticated, requireWhatsAppConfig, async
   }
 });
 
-app.post('/api/whatsapp/send', isAuthenticated, requireWhatsAppConfig, whatsappSendLimiter, async (req, res) => {
+app.post('/api/whatsapp/send', isAuthenticated, requirePrivilege('member'), requireWhatsAppConfig, whatsappSendLimiter, async (req, res) => {
   const { contactPhone, contactId, mode, templateName, templateLanguage, templateParams, message } = req.body;
 
   if (!contactPhone || typeof contactPhone !== 'string') {
@@ -2967,7 +3044,7 @@ async function ensureWhatsAppMessagesTable() {
   await pool.query(`CREATE INDEX IF NOT EXISTS whatsapp_messages_contact_idx ON whatsapp_messages(contact_id, sent_at DESC)`);
 }
 
-app.get('/api/whatsapp/history/:contactId', isAuthenticated, async (req, res) => {
+app.get('/api/whatsapp/history/:contactId', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const { contactId } = req.params;
   if (!contactId || !/^\d+$/.test(contactId)) {
     return res.status(400).json({ error: 'Invalid contactId.' });
