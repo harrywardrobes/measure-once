@@ -410,6 +410,126 @@ async function runUiSmoke({ users, runId, clients }) {
       record('customer list pagination smoke probe ran', 'no error',
         `error: ${e.message}`, 'medium', false);
     }
+
+    // ── Filter-reset pagination regression ─────────────────────────────────
+    // Regression guard: applying a filter while on page 2 must reset
+    // currentPage to 1.  If that reset is accidentally removed the list
+    // renders an empty page 2 while contacts exist on page 1.
+    // Steps:
+    //   1. Load /customers with a 26-contact mock → pagination bar appears.
+    //   2. Click Next → advance to page 2 ("Showing 26–26 of 26").
+    //   3. Apply a filter (click a stage tab) → currentPage must reset to 1.
+    //   4. Assert pagination info shows "Showing 1–" (not an empty page 2).
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1280, height: 800 });
+      await page.setCacheEnabled(false);
+
+      const memberSess = await login(users.member.email, PASSWORD);
+      const kv = parseCookieKV(memberSess.cookie);
+      if (kv) {
+        const { hostname } = new URL(BASE);
+        await page.setCookie({
+          name: kv.name, value: kv.value,
+          domain: hostname, path: '/', httpOnly: true,
+        });
+      }
+
+      const syntheticContacts = Array.from({ length: 26 }, (_, i) => ({
+        id: `freset-${i + 1}`,
+        properties: {
+          firstname: 'Reset',
+          lastname: `Test${String(i + 1).padStart(2, '0')}`,
+          email: `freset${i + 1}@privtest.local`,
+          phone: '',
+          hs_lead_status: 'OPEN_DEAL',
+          city: '',
+          customer_number: `FR-${String(i + 1).padStart(2, '0')}`,
+          createdate: new Date(Date.now() - i * 1000).toISOString(),
+          closedate: null,
+          lastmodifieddate: new Date().toISOString(),
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        archived: false,
+      }));
+      const mockPayload  = JSON.stringify({ results: syntheticContacts, total: 26 });
+      const emptyPayload = JSON.stringify({ results: [], total: 0 });
+
+      await page.setRequestInterception(true);
+      page.on('request', req => {
+        const u = req.url();
+        if (u.includes('/api/contacts-all')) {
+          req.respond({ status: 200, contentType: 'application/json', body: mockPayload });
+        } else if (u.includes('/api/open-leads')) {
+          req.respond({ status: 200, contentType: 'application/json', body: emptyPayload });
+        } else {
+          req.continue();
+        }
+      });
+
+      await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded' });
+
+      const paginationEl2 = await page.waitForSelector('.cl-pagination', { timeout: 8000 }).catch(() => null);
+
+      let onPage2Text = '';
+      let afterFilterText = '';
+      let filterApplied = false;
+
+      if (paginationEl2) {
+        // Step 2: advance to page 2
+        await page.click('#cl-next-btn');
+        await page.waitForFunction(() => {
+          const info = document.querySelector('.cl-pagination-info');
+          return info && info.textContent.includes('26');
+        }, { timeout: 5000 }).catch(() => {});
+        onPage2Text = await page.$eval('.cl-pagination-info', el => el.textContent).catch(() => '');
+
+        // Step 3: apply a filter that keeps contacts-all as the data source so
+        // the list remains non-empty after the reset and we can assert page 1.
+        // - "[data-tab-key='__all__']" always calls loadAllContacts (mocked →
+        //   26 contacts) and sets currentPage=1.
+        // - "#archived-toggle" (showArchived false→true) also calls
+        //   loadAllContacts and sets currentPage=1 — used as a fallback.
+        // Avoid "[data-tab-key='__active__']" / any tab that triggers
+        // open-leads (mocked empty), which removes pagination entirely.
+        const allTab = await page.$('[data-tab-key="__all__"]');
+        if (allTab) {
+          await allTab.click();
+          filterApplied = true;
+        } else {
+          const archivedBtn = await page.$('#archived-toggle');
+          if (archivedBtn) {
+            await archivedBtn.click();
+            filterApplied = true;
+          }
+        }
+
+        if (filterApplied) {
+          // Step 4: wait for re-render and assert page 1
+          // After the reset, 26 contacts are still loaded, so info should
+          // read "Showing 1–25 of 26".
+          await page.waitForFunction(() => {
+            const info = document.querySelector('.cl-pagination-info');
+            return info && /Showing 1[–\-]/.test(info.textContent);
+          }, { timeout: 8000 }).catch(() => {});
+          afterFilterText = await page.$eval('.cl-pagination-info', el => el.textContent).catch(() => '');
+        }
+      }
+
+      await safeShot(page, path.join(SCREENSHOT_DIR, `${runId}-filter-reset-pagination.png`));
+
+      record('filter applied on page 2 resets customer list to page 1',
+        'pagination info shows "Showing 1–25 of 26" after filter change from page 2',
+        `onPage2="${onPage2Text}" afterFilter="${afterFilterText}" filterApplied=${filterApplied}`,
+        'medium',
+        /Showing 26/.test(onPage2Text) && /Showing 1[–\-]25/.test(afterFilterText));
+
+      await page.close();
+    } catch (e) {
+      record('filter-reset pagination regression probe ran', 'no error',
+        `error: ${e.message}`, 'medium', false);
+    }
   } finally {
     await browser.close().catch(() => {});
   }
