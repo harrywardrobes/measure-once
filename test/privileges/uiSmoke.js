@@ -154,6 +154,37 @@ async function runUiSmoke({ users, runId, clients }) {
           'page HTML contains "Admin Panel" and URL is /admin',
           `url=${finalUrl} hasHeading=${hasHeading}`,
           'high', hasHeading && /\/admin(\?|#|$)/.test(finalUrl));
+
+        // ── Shared chrome assertions ─────────────────────────────────────────
+        // Verify chrome.js rendered its header elements and that the old
+        // bespoke "← Home" / "Sign out" nav buttons are gone.
+        const chromeInfo = await page.evaluate(() => {
+          const header = document.querySelector('.app-header');
+          const titleEl = document.querySelector('.header-page-title');
+          // Legacy bespoke buttons that must not exist now that chrome.js owns the header
+          const legacySignOut = Array.from(document.querySelectorAll('.nav-btn'))
+            .find(el => /sign\s*out/i.test(el.textContent));
+          return {
+            hasAppHeader: !!header,
+            pageTitleText: titleEl ? titleEl.textContent.trim() : '',
+            hasLegacySignOut: !!legacySignOut,
+          };
+        });
+
+        record('admin /admin renders .app-header (shared chrome)',
+          '.app-header element present in DOM',
+          `hasAppHeader=${chromeInfo.hasAppHeader}`,
+          'high', chromeInfo.hasAppHeader);
+
+        record('admin /admin .header-page-title contains "Admin"',
+          '.header-page-title text includes "Admin"',
+          `pageTitleText="${chromeInfo.pageTitleText}"`,
+          'high', /Admin/i.test(chromeInfo.pageTitleText));
+
+        record('admin /admin has no legacy bespoke "Sign out" nav-btn',
+          'no .nav-btn element with "Sign out" text',
+          `hasLegacySignOut=${chromeInfo.hasLegacySignOut}`,
+          'medium', !chromeInfo.hasLegacySignOut);
       } else {
         record(`${role} /admin returns 403 in the browser`,
           'status=403', `status=${adminStatus}`,
