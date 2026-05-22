@@ -199,6 +199,9 @@ window.getShortcut = function (key) {
 
   document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner);
   document.body.insertAdjacentHTML('beforeend', invoicePanel + bottomNav);
+
+  const activeNavBtn = document.querySelector('.bottom-nav-active');
+  if (activeNavBtn) activeNavBtn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'instant' });
 })();
 
 // ── Access request form ───────────────────────────────────────────────────────
