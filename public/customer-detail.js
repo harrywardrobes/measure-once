@@ -818,13 +818,24 @@ function _renderWorkflowStagesImpl() {
           transform="rotate(-90 15 15)"/>
       </svg>` : '';
 
+    // Past stages: only show a ring when tasks existed but were not all completed,
+    // and render it at reduced opacity to signal "historical gap" rather than active progress.
+    const pastRingOpacity = ringFraction === 0 ? '0.25' : '0.45';
+    const pastRingSvg = (stageTotalTasks > 0 && ringFraction < 1) ? `<svg class="stage-step-ring" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="15" cy="15" r="${ringR}" fill="none" stroke="${ringColour}" stroke-opacity="${pastRingOpacity}"
+          stroke-width="2.5" stroke-linecap="round"
+          stroke-dasharray="${ringCirc}"
+          stroke-dashoffset="${ringOffset}"
+          transform="rotate(-90 15 15)"/>
+      </svg>` : '';
+
     let iconHtml;
     if (isPast) {
       iconHtml = `<div class="stage-step-icon stage-step-done">
         <svg width="9" height="7" fill="none" stroke="#fff" viewBox="0 0 12 10">
           <polyline points="1,5 4.5,8.5 11,1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        ${ringSvg}
+        ${pastRingSvg}
       </div>`;
     } else if (isCurrent) {
       iconHtml = `<div class="stage-step-icon stage-step-current" style="background:${colour.bg};border-color:${colour.bg}">
