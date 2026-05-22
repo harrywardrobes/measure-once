@@ -917,38 +917,50 @@ function _renderWorkflowStagesImpl() {
   const hasPrev = focusedIdx > 0;
   const hasNext = focusedIdx < STAGE_KEYS.length - 1;
 
+  const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
   el.innerHTML = `
     <div class="stage-stepper-wrap">
       <div class="stage-stepper-row">${stepperHtml}</div>
     </div>
     <div class="stage-panel" style="border-top:3px solid ${focusedColour.bg}">
       <div class="stage-panel-header">
-        <div class="stage-panel-title-block">
-          <div class="stage-panel-name" style="color:${isFocusedFuture ? 'var(--ink-3)' : focusedColour.text}">${escHtml(focusedStage?.label || focusedKey)}</div>
-          <div class="stage-panel-meta">
-            ${totalTasks > 0 ? `<span class="stage-sublabel">${doneTasks} of ${totalTasks} tasks done</span>` : ''}
-            ${entryDate && !isFocusedFuture ? `<span class="stage-date-entered">${totalTasks > 0 ? ' · ' : ''}Entered ${formatShortDate(entryDate)}</span>` : ''}
-            ${isFocusedFuture ? `<span class="stage-date-entered">Not started yet</span>` : ''}
+        <div class="stage-panel-header-row">
+          <div class="stage-panel-title-block">
+            <div class="stage-panel-name" style="color:${isFocusedFuture ? 'var(--ink-3)' : focusedColour.text}">${escHtml(focusedStage?.label || focusedKey)}</div>
+            <div class="stage-panel-meta">
+              ${totalTasks > 0 ? `<span class="stage-sublabel">${doneTasks} of ${totalTasks} tasks done</span>` : ''}
+              ${entryDate && !isFocusedFuture ? `<span class="stage-date-entered">${totalTasks > 0 ? ' · ' : ''}Entered ${formatShortDate(entryDate)}</span>` : ''}
+              ${isFocusedFuture ? `<span class="stage-date-entered">Not started yet</span>` : ''}
+            </div>
+          </div>
+          <div class="stage-panel-nav">
+            <button class="stage-nav-btn" ${!hasPrev ? 'disabled' : ''} data-action="focusPrevStage" title="Previous stage">
+              <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+              </svg>
+            </button>
+            <button class="stage-nav-btn" ${!hasNext ? 'disabled' : ''} data-action="focusNextStage" title="Next stage">
+              <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
+              </svg>
+            </button>
           </div>
         </div>
-        <div class="stage-panel-nav">
-          <button class="stage-nav-btn" ${!hasPrev ? 'disabled' : ''} data-action="focusPrevStage" title="Previous stage">
-            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
-            </svg>
-          </button>
-          <button class="stage-nav-btn" ${!hasNext ? 'disabled' : ''} data-action="focusNextStage" title="Next stage">
-            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
-            </svg>
-          </button>
-        </div>
+        ${totalTasks > 0 ? `<div class="stage-panel-progress" role="progressbar" aria-valuenow="${doneTasks}" aria-valuemin="0" aria-valuemax="${totalTasks}"><div class="stage-panel-progress-bar" style="width:0%;background:${focusedColour.bg}"></div></div>` : ''}
       </div>
       ${totalTasks > 0 ? `<div class="stage-statuses">${tasksHtml}</div>` : ''}
       ${leadStatusRowHtml}
       ${actionHtml ? `<div class="stage-panel-actions">${actionHtml}</div>` : ''}
     </div>
   `;
+
+  if (totalTasks > 0) {
+    const bar = el.querySelector('.stage-panel-progress-bar');
+    if (bar) {
+      requestAnimationFrame(() => { bar.style.width = progressPct + '%'; });
+    }
+  }
 }
 
 // toggleStage is no longer used by the stepper UI but kept as a safe no-op

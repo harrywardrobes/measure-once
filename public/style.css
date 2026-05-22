@@ -1161,11 +1161,16 @@ body.showing-workflow .workflow-panel { display: flex; }
 
 .stage-panel-header {
   display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--stone-light);
+}
+
+.stage-panel-header-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 14px 16px 12px;
-  border-bottom: 1px solid var(--stone-light);
 }
 
 .stage-panel-title-block {
@@ -1211,6 +1216,19 @@ body.showing-workflow .workflow-panel { display: flex; }
 .stage-nav-btn:hover:not(:disabled) { background: var(--paper-deep); border-color: var(--stone-deep); }
 .stage-nav-btn:active:not(:disabled) { background: var(--paper-deep); }
 .stage-nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+/* ── Stage progress bar ───────────────────────────────────────────────────────── */
+.stage-panel-progress {
+  height: 4px;
+  background: var(--stone-light);
+  overflow: hidden;
+}
+
+.stage-panel-progress-bar {
+  height: 100%;
+  transition: width 0.35s ease;
+  border-radius: 0 2px 2px 0;
+}
 
 /* ── Stage advance button ─────────────────────────────────────────────────────── */
 .stage-panel-actions {
