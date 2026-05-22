@@ -465,6 +465,50 @@
     }
     .forbidden-card h2 { color: #991b1b; margin: 0 0 8px; }
     .forbidden-card p  { color: var(--ink-3); margin: 0; font-size: .9rem; }
+
+    /* ── Search Settings tab ── */
+    .ss-action-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 10px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      user-select: none;
+      transition: opacity 0.15s, background 0.1s;
+    }
+    .ss-action-row + .ss-action-row { margin-top: 4px; }
+    .ss-action-row.ss-action-disabled { opacity: 0.45; }
+    .ss-action-row.ss-drag-over { background: #f5f3ff; border-color: var(--plum); }
+    .ss-action-row.ss-dragging { opacity: 0.35; }
+    .ss-drag-handle {
+      cursor: grab; color: var(--ink-4); font-size: 1rem;
+      flex-shrink: 0; padding: 0 2px; line-height: 1;
+    }
+    .ss-toggle { position: relative; display: inline-flex; cursor: pointer; flex-shrink: 0; }
+    .ss-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .ss-toggle-track {
+      width: 32px; height: 18px;
+      background: var(--ink-5); border-radius: 9px;
+      transition: background 0.2s; position: relative;
+    }
+    .ss-toggle-track::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 14px; height: 14px; background: #fff; border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .ss-toggle input:checked + .ss-toggle-track { background: var(--plum); }
+    .ss-toggle input:checked + .ss-toggle-track::after { transform: translateX(14px); }
+    .ss-action-label { flex: 1; font-size: .875rem; font-weight: 600; color: var(--ink-1); min-width: 0; }
+    .ss-action-category {
+      font-size: .65rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--ink-3);
+      background: var(--stone-soft); border-radius: 4px; padding: 2px 6px; flex-shrink: 0;
+    }
+    .ss-action-hint {
+      font-size: .78rem; color: var(--ink-4);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;
+    }
+    @media (max-width: 640px) { .ss-action-hint { display: none; } }
   </style>
 </head>
 <body>
@@ -1894,6 +1938,7 @@
         <button class="tab-btn"        data-tab="requests"    onclick="switchTab('requests')">Pending Requests <span id="req-tab-badge">${reqBadge}</span></button>
         <button class="tab-btn"        data-tab="auditlog"    onclick="switchTab('auditlog')">Audit log</button>
         <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings');loadHubspotStatus();loadLeadStatusesAdmin()">Settings</button>
+        <button class="tab-btn"        data-tab="search"      onclick="switchTab('search');loadSearchSettings()">Search</button>
       </div>
 
       <!-- TEAM -->
@@ -2119,6 +2164,31 @@
           </div>
         </div>
       </div>
+
+      <!-- SEARCH SETTINGS -->
+      <div class="tab-panel" id="tab-search">
+        <div class="card">
+          <div class="card-title">Hint bar text</div>
+          <p class="card-desc" style="margin-bottom:14px;">The placeholder shown in the ghost search bar beneath the header on every page. Leave blank to use the default: <em>Search customers, actions…</em></p>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <input id="ss-hint-placeholder" type="text" class="field"
+              maxlength="120" placeholder="Search customers, actions…" style="flex:1;">
+          </div>
+        </div>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
+            <div>
+              <div class="card-title" style="margin-bottom:2px;">Quick actions</div>
+              <p class="card-desc" style="margin:0;">Toggle which actions appear in the palette and drag rows to reorder them.</p>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span id="ss-save-status" style="font-size:.8rem;"></span>
+              <button class="btn btn-primary" onclick="saveSearchSettings()" style="white-space:nowrap;padding:6px 16px;">Save</button>
+            </div>
+          </div>
+          <div id="ss-actions-list" style="margin-top:10px;"></div>
+        </div>
+      </div>
     `;
 
     renderTeam();
@@ -2128,11 +2198,12 @@
     renderTradeSubmissions();
     await initAuditLog();
 
-    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings'];
+    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'search'];
     let savedTab;
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) {
       if (savedTab === 'settings') { switchTab('settings'); loadHubspotStatus(); loadLeadStatusesAdmin(); }
+      else if (savedTab === 'search') { switchTab('search'); loadSearchSettings(); }
       else { switchTab(savedTab); }
     }
   }
@@ -2156,6 +2227,136 @@
       await revoke(revokeBtn.dataset.revokeEmail);
     }
   });
+
+  // ── Search Settings tab ──────────────────────────────────────────────────────
+  const SEARCH_ACTIONS_META = [
+    { id: 'new-customer',     label: 'New customer',             category: 'Action',   hint: 'Create a new customer record' },
+    { id: 'go-customers',     label: 'All customers',            category: 'Navigate', hint: 'Browse your customer list' },
+    { id: 'go-home',          label: 'Home dashboard',           category: 'Navigate', hint: 'Go to the main dashboard' },
+    { id: 'go-sales',         label: 'Sales board',              category: 'Navigate', hint: 'Manage leads and open deals' },
+    { id: 'go-survey',        label: 'Survey pipeline',          category: 'Navigate', hint: 'Track survey and design visit stages' },
+    { id: 'go-projects',      label: 'Projects tracker',         category: 'Navigate', hint: 'Active workshop and delivery jobs' },
+    { id: 'go-calendar',      label: 'Calendar',                 category: 'Navigate', hint: 'Appointments and scheduled visits' },
+    { id: 'go-invoices',      label: 'Invoices & payments',      category: 'Navigate', hint: 'View and send invoices via QuickBooks' },
+    { id: 'go-trades',        label: 'Trade contacts',           category: 'Navigate', hint: 'Suppliers and contractor directory' },
+    { id: 'go-ideas',         label: 'Ideas board',              category: 'Navigate', hint: 'Capture and review design ideas' },
+    { id: 'go-admin',         label: 'Admin panel',              category: 'Navigate', hint: 'Manage users and team access' },
+    { id: 'go-profile',       label: 'Your profile',             category: 'Account',  hint: 'Update your account details' },
+    { id: 'filter-sales',     label: 'Customers · Sales stage',  category: 'Filter',   hint: 'Show only customers in the Sales stage' },
+    { id: 'filter-workshop',  label: 'Customers · Workshop',     category: 'Filter',   hint: 'Show only customers in Workshop' },
+    { id: 'sign-out',         label: 'Sign out',                 category: 'Account',  hint: 'End your current session' },
+  ];
+
+  let _ssLoaded = false;
+  let _ssDisabled = new Set();
+  let _ssOrder = [];
+  let _ssDragSrc = null;
+
+  async function loadSearchSettings() {
+    if (_ssLoaded) return;
+    const listEl = document.getElementById('ss-actions-list');
+    const phEl   = document.getElementById('ss-hint-placeholder');
+    if (!listEl) return;
+    try {
+      const data = await api('GET', '/api/admin/search-settings');
+      _ssDisabled = new Set(data.disabled_actions || []);
+      _ssOrder = (data.action_order && data.action_order.length)
+        ? data.action_order
+        : SEARCH_ACTIONS_META.map(a => a.id);
+      if (phEl) phEl.value = data.hint_placeholder || '';
+      _ssLoaded = true;
+      renderSearchActionsList();
+    } catch (e) {
+      if (listEl) listEl.innerHTML = `<p style="color:#991b1b;font-size:.82rem;">Could not load: ${esc(e.message)}</p>`;
+    }
+  }
+
+  function _ssGetOrdered() {
+    const mapped = _ssOrder.map(id => SEARCH_ACTIONS_META.find(a => a.id === id)).filter(Boolean);
+    const extra  = SEARCH_ACTIONS_META.filter(a => !_ssOrder.includes(a.id));
+    return [...mapped, ...extra];
+  }
+
+  function renderSearchActionsList() {
+    const el = document.getElementById('ss-actions-list');
+    if (!el) return;
+    el.innerHTML = _ssGetOrdered().map(a => {
+      const on = !_ssDisabled.has(a.id);
+      return `<div class="ss-action-row${on ? '' : ' ss-action-disabled'}" draggable="true" data-id="${esc(a.id)}"
+        ondragstart="_ssDragStart(event,'${esc(a.id)}')" ondragover="_ssDragOver(event)"
+        ondrop="_ssDrop(event,'${esc(a.id)}')" ondragleave="_ssDragLeave(event)" ondragend="_ssDragEnd()">
+        <span class="ss-drag-handle" title="Drag to reorder">⠿</span>
+        <label class="ss-toggle" title="${on ? 'Disable' : 'Enable'}">
+          <input type="checkbox" ${on ? 'checked' : ''} onchange="_ssToggle('${esc(a.id)}',this.checked)">
+          <span class="ss-toggle-track"></span>
+        </label>
+        <span class="ss-action-label">${esc(a.label)}</span>
+        <span class="ss-action-category">${esc(a.category)}</span>
+        <span class="ss-action-hint">${esc(a.hint)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function _ssToggle(id, checked) {
+    if (checked) _ssDisabled.delete(id); else _ssDisabled.add(id);
+    const row = document.querySelector(`.ss-action-row[data-id="${id}"]`);
+    if (row) row.classList.toggle('ss-action-disabled', !checked);
+  }
+
+  function _ssDragStart(e, id) {
+    _ssDragSrc = id;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => { const r = document.querySelector(`.ss-action-row[data-id="${id}"]`); if (r) r.classList.add('ss-dragging'); }, 0);
+  }
+  function _ssDragOver(e) {
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    const row = e.target.closest('.ss-action-row');
+    if (row && row.dataset.id !== _ssDragSrc) row.classList.add('ss-drag-over');
+    return false;
+  }
+  function _ssDragLeave(e) {
+    const row = e.target.closest('.ss-action-row');
+    if (row) row.classList.remove('ss-drag-over');
+  }
+  function _ssDrop(e, id) {
+    e.preventDefault();
+    document.querySelectorAll('.ss-action-row').forEach(r => r.classList.remove('ss-drag-over'));
+    if (_ssDragSrc === id) return;
+    const ordered = _ssGetOrdered().map(a => a.id);
+    const fi = ordered.indexOf(_ssDragSrc), ti = ordered.indexOf(id);
+    if (fi === -1 || ti === -1) return;
+    ordered.splice(fi, 1);
+    ordered.splice(ti, 0, _ssDragSrc);
+    _ssOrder = ordered;
+    renderSearchActionsList();
+  }
+  function _ssDragEnd() {
+    _ssDragSrc = null;
+    document.querySelectorAll('.ss-action-row').forEach(r => r.classList.remove('ss-dragging', 'ss-drag-over'));
+  }
+
+  async function saveSearchSettings() {
+    const btn      = document.querySelector('[onclick="saveSearchSettings()"]');
+    const phEl     = document.getElementById('ss-hint-placeholder');
+    const statusEl = document.getElementById('ss-save-status');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      await api('PUT', '/api/admin/search-settings', {
+        disabled_actions: Array.from(_ssDisabled),
+        hint_placeholder: phEl ? phEl.value.trim() : '',
+        action_order:     _ssGetOrdered().map(a => a.id),
+      });
+      if (statusEl) {
+        statusEl.textContent = 'Saved ✓';
+        statusEl.style.color = '#166534';
+        setTimeout(() => { statusEl.textContent = ''; }, 2500);
+      }
+    } catch (e) {
+      if (statusEl) { statusEl.textContent = 'Save failed: ' + e.message; statusEl.style.color = '#991b1b'; }
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+    }
+  }
 
   init();
 </script>

@@ -88,6 +88,44 @@
     },
   };
 
+  let _searchSettings = null;
+
+  async function _fetchSearchSettings() {
+    if (_searchSettings !== null) return;
+    try {
+      const r = await fetch('/api/search-settings');
+      _searchSettings = r.ok ? await r.json() : { disabled_actions: [], hint_placeholder: '', action_order: [] };
+    } catch {
+      _searchSettings = { disabled_actions: [], hint_placeholder: '', action_order: [] };
+    }
+    _applyHintText();
+  }
+
+  function _applyHintText() {
+    const s = _searchSettings;
+    if (!s || !s.hint_placeholder) return;
+    document.querySelectorAll('.cp-hint-text').forEach(el => { el.textContent = s.hint_placeholder; });
+    const inp = document.getElementById('cp-input');
+    if (inp) inp.placeholder = s.hint_placeholder;
+  }
+
+  function _getActiveActions() {
+    const s = _searchSettings || { disabled_actions: [], action_order: [] };
+    const disabled = new Set(s.disabled_actions || []);
+    let active = ACTIONS.filter(a => !disabled.has(a.id));
+    const order = s.action_order || [];
+    if (order.length) {
+      active = [...active].sort((a, b) => {
+        const ai = order.indexOf(a.id), bi = order.indexOf(b.id);
+        if (ai === -1 && bi === -1) return 0;
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+      });
+    }
+    return active;
+  }
+
   function getContacts() {
     if (window.state && Array.isArray(window.state.contacts)) return window.state.contacts;
     if (window.allContacts && Array.isArray(window.allContacts)) return window.allContacts;
@@ -134,9 +172,10 @@
       }
     }
 
+    const activeActions = _getActiveActions();
     const filtered = q
-      ? ACTIONS.filter(a => a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q))
-      : ACTIONS;
+      ? activeActions.filter(a => a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q))
+      : activeActions;
 
     if (filtered.length) {
       const sectionLabel = q ? 'Actions' : 'Quick Actions';
@@ -209,8 +248,8 @@
     });
   }
 
-  document.addEventListener('DOMContentLoaded', injectModal);
-  if (document.readyState !== 'loading') injectModal();
+  document.addEventListener('DOMContentLoaded', () => { injectModal(); _fetchSearchSettings(); });
+  if (document.readyState !== 'loading') { injectModal(); _fetchSearchSettings(); }
 
   document.addEventListener('keydown', function (e) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -223,6 +262,7 @@
 
   window.openCommandPalette = function () {
     injectModal();
+    if (!_searchSettings) _fetchSearchSettings();
     const overlay = document.getElementById('cp-overlay');
     if (!overlay) return;
     overlay.style.display = 'flex';

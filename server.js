@@ -2687,6 +2687,61 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
   }
 });
 
+// ── Search Settings ──────────────────────────────────────────────────────────
+async function ensureSearchSettingsTable() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS search_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    disabled_actions JSONB NOT NULL DEFAULT '[]',
+    hint_placeholder TEXT NOT NULL DEFAULT '',
+    action_order JSONB NOT NULL DEFAULT '[]'
+  )`);
+  await pool.query(`INSERT INTO search_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`);
+}
+
+app.get('/api/search-settings', isAuthenticated, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT disabled_actions, hint_placeholder, action_order FROM search_settings WHERE id = 1'
+    );
+    res.json(rows[0] || { disabled_actions: [], hint_placeholder: '', action_order: [] });
+  } catch (e) {
+    console.error('GET /api/search-settings error:', e.message);
+    res.status(500).json({ error: 'Could not load search settings.' });
+  }
+});
+
+app.get('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT disabled_actions, hint_placeholder, action_order FROM search_settings WHERE id = 1'
+    );
+    res.json(rows[0] || { disabled_actions: [], hint_placeholder: '', action_order: [] });
+  } catch (e) {
+    console.error('GET /api/admin/search-settings error:', e.message);
+    res.status(500).json({ error: 'Could not load search settings.' });
+  }
+});
+
+app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req, res) => {
+  const { disabled_actions, hint_placeholder, action_order } = req.body;
+  try {
+    await pool.query(
+      `UPDATE search_settings
+       SET disabled_actions = $1::jsonb, hint_placeholder = $2, action_order = $3::jsonb
+       WHERE id = 1`,
+      [
+        JSON.stringify(Array.isArray(disabled_actions) ? disabled_actions : []),
+        typeof hint_placeholder === 'string' ? hint_placeholder.slice(0, 200) : '',
+        JSON.stringify(Array.isArray(action_order) ? action_order : []),
+      ]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('PUT /api/admin/search-settings error:', e.message);
+    res.status(500).json({ error: 'Could not save search settings.' });
+  }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 (async () => {
   try {
@@ -2713,5 +2768,7 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
     catch (e) { console.error('  Ideas tables setup failed:', e.message); }
     try { await ensureLeadStatusTable(); console.log('  Lead status config table ready'); }
     catch (e) { console.error('  Lead status table setup failed:', e.message); }
+    try { await ensureSearchSettingsTable(); console.log('  Search settings table ready'); }
+    catch (e) { console.error('  Search settings table setup failed:', e.message); }
   });
 })();
