@@ -1610,7 +1610,17 @@
         <tbody>
           ${data.map((s, i) => `
             <tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? '' : 'background:var(--stone-soft);'}" data-ls-key="${esc(s.key)}">
-              <td style="padding:7px 8px;font-family:monospace;color:var(--ink-3);font-size:.78rem;">${esc(s.key)}</td>
+              <td style="padding:7px 8px;font-family:monospace;color:var(--ink-3);font-size:.78rem;">
+                ${s.key
+                  ? esc(s.key)
+                  : `<input type="text" class="field ls-key-input" placeholder="SET_KEY"
+                       data-old-key="${esc(s.key)}"
+                       style="padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;width:100%;min-width:110px;border-color:#f59e0b;"
+                       oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')"
+                       onblur="saveLeadStatusKey(this)"
+                       onkeydown="if(event.key==='Enter')this.blur()">`
+                }
+              </td>
               <td style="padding:7px 8px;">
                 <input type="text" class="field ls-label-input" value="${esc(s.label)}" data-key="${esc(s.key)}"
                   style="padding:4px 7px;font-size:.82rem;width:100%;min-width:120px;"
@@ -1640,6 +1650,22 @@
         </tbody>
       </table>
     `;
+  }
+
+  async function saveLeadStatusKey(input) {
+    const oldKey = input.dataset.oldKey;
+    const newKey = input.value.trim().toUpperCase();
+    if (!newKey) return;
+    if (!/^[A-Z0-9_]+$/.test(newKey)) { toast('Key may only contain uppercase letters, digits, and underscores.', true); return; }
+    try {
+      const updated = await api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(oldKey)}`, { new_key: newKey });
+      const idx = _leadStatusesData.findIndex(s => s.key === oldKey);
+      if (idx !== -1) _leadStatusesData[idx] = updated;
+      renderLeadStatusesTable();
+      _notifyLeadStatusChanged();
+    } catch (e) {
+      toast(`Failed to set key: ${e.message}`, true);
+    }
   }
 
   async function saveLeadStatusLabel(input) {

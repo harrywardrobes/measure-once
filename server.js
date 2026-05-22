@@ -2573,25 +2573,31 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
   }
 });
 
-// Admin: update label / sort_order / excluded_from_sales
+// Admin: update label / sort_order / excluded_from_sales / key (key rename for empty-key rows)
 app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async (req, res) => {
   const key = req.params.key;
-  const { label, sort_order, excluded_from_sales } = req.body || {};
+  const { label, sort_order, excluded_from_sales, new_key } = req.body || {};
   if (label !== undefined && !String(label).trim()) return res.status(400).json({ error: 'label cannot be empty.' });
+  if (new_key !== undefined) {
+    const nk = String(new_key).trim().toUpperCase();
+    if (!nk || !/^[A-Z0-9_]+$/.test(nk)) return res.status(400).json({ error: 'new_key may only contain uppercase letters, digits, and underscores.' });
+  }
   try {
     const { rows: existing } = await pool.query('SELECT * FROM lead_status_config WHERE key = $1', [key]);
     if (!existing.length) return res.status(404).json({ error: 'Status not found.' });
     const cur = existing[0];
-    const newLabel    = label !== undefined ? String(label).trim() : cur.label;
+    const newLabel    = label     !== undefined ? String(label).trim()      : cur.label;
     const newOrder    = sort_order !== undefined ? parseInt(sort_order, 10) : cur.sort_order;
     const newExcluded = excluded_from_sales !== undefined ? !!excluded_from_sales : cur.excluded_from_sales;
+    const finalKey    = new_key   !== undefined ? String(new_key).trim().toUpperCase() : key;
     const { rows } = await pool.query(
-      'UPDATE lead_status_config SET label = $1, sort_order = $2, excluded_from_sales = $3 WHERE key = $4 RETURNING *',
-      [newLabel, newOrder, newExcluded, key]
+      'UPDATE lead_status_config SET key = $1, label = $2, sort_order = $3, excluded_from_sales = $4 WHERE key = $5 RETURNING *',
+      [finalKey, newLabel, newOrder, newExcluded, key]
     );
     res.json(rows[0]);
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'A status with that key already exists.' });
     console.error('PATCH /api/admin/lead-statuses/:key error:', e.message);
     res.status(500).json({ error: 'Could not update lead status.' });
   }
