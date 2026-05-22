@@ -227,24 +227,28 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
   }
 });
 
-// Read all contacts' stage summaries from HubSpot (for list-panel stage badges)
-// Cache: one shared result, refreshed at most every 60 seconds.
+// Shared full-contact scan — fetches all properties needed by both
+// /api/localdata/all and /api/contacts-all in a single paginated crawl.
+// Cache: one shared result, refreshed at most every 5 minutes.
 // Concurrency guard: if a scan is already in progress, new requests wait for
 // the same promise rather than each launching an independent HubSpot crawl.
-const LOCALDATA_CACHE_TTL_MS = 300_000; // 5 minutes
-let _localdataCache = null;       // { data, expiresAt }
-let _localdataInflight = null;    // Promise while a scan is running
+const ALL_CONTACTS_CACHE_TTL_MS = 300_000; // 5 minutes
+let _allContactsCache = null;     // { contacts: [...], expiresAt }
+let _allContactsInflight = null;  // Promise while a scan is running
 
-const CONTACTS_ALL_CACHE_TTL_MS = 300_000; // 5 minutes
-let _contactsAllCache = null;     // { data, expiresAt }
-let _contactsAllInflight = null;  // Promise while a scan is running
+const ALL_CONTACTS_PROPERTIES = [
+  'firstname', 'lastname', 'email', 'phone', 'hs_lead_status',
+  'city', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate',
+  'measure_once_rooms'
+];
 
-async function fetchLocaldataFromHubspot() {
+async function fetchAllContactsShared() {
   const allResults = [];
   let after;
   do {
     const body = {
-      properties: ['measure_once_rooms'],
+      properties: ALL_CONTACTS_PROPERTIES,
+      sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
       limit: 100
     };
     if (after) body.after = after;
@@ -252,23 +256,21 @@ async function fetchLocaldataFromHubspot() {
     allResults.push(...(r.data.results || []));
     after = r.data.paging?.next?.after;
   } while (after);
+  return allResults;
+}
 
-  const result = {};
-  for (const contact of allResults) {
-    const roomsJson = contact.properties?.measure_once_rooms;
-    if (!roomsJson) continue;
-    try {
-      const rooms = JSON.parse(roomsJson);
-      if (Array.isArray(rooms)) {
-        result[contact.id] = rooms.map(r => ({
-          room: r.room || 'Main', stageKey: r.stageKey || 'sales',
-          assignedFitterId: r.assignedFitterId || null,
-          installStart: r.installStart || null
-        }));
-      }
-    } catch {}
+async function getSharedContactsCache() {
+  if (_allContactsCache && Date.now() < _allContactsCache.expiresAt) {
+    return _allContactsCache.contacts;
   }
-  return result;
+  if (!_allContactsInflight) {
+    _allContactsInflight = fetchAllContactsShared().finally(() => {
+      _allContactsInflight = null;
+    });
+  }
+  const contacts = await _allContactsInflight;
+  _allContactsCache = { contacts, expiresAt: Date.now() + ALL_CONTACTS_CACHE_TTL_MS };
+  return contacts;
 }
 
 // Assign (or unassign) a fitter to a specific room on a contact (manager or admin only)
@@ -310,8 +312,8 @@ app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireMan
       { headers: hsHeaders() }
     );
 
-    // Bust cache so next /api/localdata/all reflects the new assignment
-    _localdataCache = null;
+    // Bust shared cache so next /api/localdata/all and /api/contacts-all reflect the new assignment
+    _allContactsCache = null;
 
     res.json({ success: true, rooms });
   } catch (e) {
@@ -328,21 +330,23 @@ app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireMan
 
 app.get('/api/localdata/all', isAuthenticated, async (req, res) => {
   try {
-    // Serve from cache if still fresh
-    if (_localdataCache && Date.now() < _localdataCache.expiresAt) {
-      return res.json(_localdataCache.data);
+    const contacts = await getSharedContactsCache();
+    const result = {};
+    for (const contact of contacts) {
+      const roomsJson = contact.properties?.measure_once_rooms;
+      if (!roomsJson) continue;
+      try {
+        const rooms = JSON.parse(roomsJson);
+        if (Array.isArray(rooms)) {
+          result[contact.id] = rooms.map(r => ({
+            room: r.room || 'Main', stageKey: r.stageKey || 'sales',
+            assignedFitterId: r.assignedFitterId || null,
+            installStart: r.installStart || null
+          }));
+        }
+      } catch {}
     }
-
-    // If a scan is already running, piggyback on it
-    if (!_localdataInflight) {
-      _localdataInflight = fetchLocaldataFromHubspot().finally(() => {
-        _localdataInflight = null;
-      });
-    }
-
-    const data = await _localdataInflight;
-    _localdataCache = { data, expiresAt: Date.now() + LOCALDATA_CACHE_TTL_MS };
-    res.json(data);
+    res.json(result);
   } catch {
     res.json({});
   }
@@ -571,27 +575,6 @@ app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), require
 });
 
 // ── HubSpot: All Contacts (no lead status filter) ─────────────────────────────
-async function fetchContactsAllFromHubspot() {
-  const allResults = [];
-  let after;
-  do {
-    const body = {
-      properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
-      sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
-      limit: 100
-    };
-    if (after) body.after = after;
-    const r = await axios.post(
-      `${HS}/crm/v3/objects/contacts/search`,
-      body,
-      { headers: hsHeaders() }
-    );
-    allResults.push(...(r.data.results || []));
-    after = r.data.paging?.next?.after;
-  } while (after);
-  return { results: allResults, total: allResults.length };
-}
-
 app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
   try {
     const page       = Math.max(1, parseInt(req.query.page  || '1',   10));
@@ -599,39 +582,31 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     const leadStatus = req.query.leadStatus || '';
     const sort       = req.query.sort || 'newest';
 
-    const sortMap = {
-      'newest':    { propertyName: 'createdate', direction: 'DESCENDING' },
-      'oldest':    { propertyName: 'createdate', direction: 'ASCENDING'  },
-      'name-asc':  { propertyName: 'lastname',   direction: 'ASCENDING'  },
-      'name-desc': { propertyName: 'lastname',   direction: 'DESCENDING' },
+    const sortComparators = {
+      'newest':    (a, b) => (b.properties.createdate || '').localeCompare(a.properties.createdate || ''),
+      'oldest':    (a, b) => (a.properties.createdate || '').localeCompare(b.properties.createdate || ''),
+      'name-asc':  (a, b) => (a.properties.lastname || '').localeCompare(b.properties.lastname || ''),
+      'name-desc': (a, b) => (b.properties.lastname || '').localeCompare(a.properties.lastname || ''),
     };
-    const sortObj = sortMap[sort] || sortMap['newest'];
+    const comparator = sortComparators[sort] || sortComparators['newest'];
 
-    const after = (page - 1) * limit;
-    const body = {
-      properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
-      sorts: [sortObj],
-      limit,
-    };
-    if (after > 0) body.after = after;
+    let contacts = await getSharedContactsCache();
 
     if (leadStatus) {
       if (leadStatus === '__no_status__') {
-        body.filterGroups = [{ filters: [{ propertyName: 'hs_lead_status', operator: 'NOT_HAS_PROPERTY' }] }];
+        contacts = contacts.filter(c => !c.properties?.hs_lead_status);
       } else {
-        body.filterGroups = [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: leadStatus }] }];
+        contacts = contacts.filter(c => c.properties?.hs_lead_status === leadStatus);
       }
     }
 
-    const r = await axios.post(
-      `${HS}/crm/v3/objects/contacts/search`,
-      body,
-      { headers: hsHeaders() }
-    );
+    contacts = [...contacts].sort(comparator);
 
-    const results    = r.data.results || [];
-    const total      = r.data.total != null ? r.data.total : results.length;
+    const total      = contacts.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));
+    const offset     = (page - 1) * limit;
+    const results    = contacts.slice(offset, offset + limit);
+
     res.json({ results, total, page, totalPages });
   } catch (e) {
     const status = e.response?.status;
@@ -727,7 +702,7 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHu
     );
 
     contact.properties.customer_number = customerNumber;
-    _contactsAllCache = null;
+    _allContactsCache = null;
     return res.status(201).json(contact);
   } catch (e) {
     const status = e.response?.status;
@@ -857,7 +832,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
       }
     }
 
-    _contactsAllCache = null;
+    _allContactsCache = null;
     res.json(patchResp.data);
   } catch (e) {
     const status = e.response?.status;
