@@ -1105,8 +1105,14 @@ async function setupAuth(app) {
     const body = req.body || {};
     const str  = (v, max) => (v || '').toString().trim().slice(0, max) || null;
 
-    const first_name = str(body.first_name, 100);
-    const last_name  = str(body.last_name, 100);
+    const _fnRaw = str(body.first_name, 100);
+    const _fnTok = _fnRaw ? (_fnRaw.split(/\s+/).filter(Boolean)[0] || '') : '';
+    const first_name = _fnTok ? _fnTok.charAt(0).toUpperCase() + _fnTok.slice(1).toLowerCase() : null;
+
+    const _lnRaw    = str(body.last_name, 100);
+    const _lnTokens = _lnRaw ? _lnRaw.split(/\s+/).filter(Boolean) : [];
+    const _lnTok    = _lnTokens[_lnTokens.length - 1] || '';
+    const last_name  = _lnTok ? _lnTok.charAt(0).toUpperCase() + _lnTok.slice(1).toLowerCase() : null;
     // job_role is intentionally ignored — it is set by the admin at approval
     // time and must not be overwritten by user submission.
     const date_of_birth = str(body.date_of_birth, 20);
