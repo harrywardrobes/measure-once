@@ -102,6 +102,9 @@
       </div>
     </div>`;
 
+  const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+  const kbdHint = isMac ? '⌘K' : 'Ctrl K';
+
   const backBtn = path !== '/' ? `
     <button onclick="history.length > 1 ? history.back() : location.href = '/'" class="header-back-btn" aria-label="Go back" title="Back">
       <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -122,10 +125,11 @@
           <span class="header-page-title">${pageTitle}</span>
         </div>
         <div class="header-right">
-          <button onclick="openCommandPalette()" class="header-icon-btn" aria-label="Search (⌘K)" title="Search (⌘K)">
+          <button onclick="openCommandPalette()" class="header-icon-btn header-search-btn" aria-label="Search (${kbdHint})" title="Search (${kbdHint})">
             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
             </svg>
+            <span class="search-kbd-hint" aria-hidden="true">${kbdHint}</span>
           </button>
           ${HEADER_ICONS.map(icon => {
             const active = path === icon.href || path.startsWith(icon.activePrefix || (icon.href + '/')) ? ' header-icon-btn--active' : '';
