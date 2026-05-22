@@ -328,6 +328,7 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
 }
 .header-icon-btn:hover { background: rgba(255,255,255,0.14); }
 .header-icon-btn:active { background: rgba(255,255,255,0.2); }
+.header-icon-btn--active { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.35); color: #fff; }
 
 /* ── Bottom Navigation ───────────────────────────────────────────────────────── */
 .bottom-nav {
