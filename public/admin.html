@@ -1747,13 +1747,36 @@
       stage.statuses.push({
         key:          statusKey,
         label:        s.label,
+        shorthand:    s.shorthand || '',
         defaultLabel: labelByKey[`${stageKey}|${statusKey.toLowerCase()}`] || '',
+        // Most rows use the same key for both stage_action_labels lookup and
+        // sub-status operations; the synthetic null row below diverges.
+        defaultStatusKey: statusKey.toLowerCase(),
+        isNullRow:    false,
         substatuses:  (subsByLs[statusKey.toUpperCase()] || []).slice()
                         .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
       });
     }
     // Stages with no lead statuses yet still get their "no status" row.
     for (const cs of CARD_ACTION_STAGES) ensureStage(cs.key);
+
+    // Synthetic "No lead status" row — lives inside the Sales section.
+    // Backed by stage_action_labels[sales|''] for its default action label,
+    // and by lead_substatuses with status_key='__NULL__' for sub-statuses.
+    const nullRow = (_leadStatusesData || []).find(s => s.is_null_row);
+    const salesStage = stages.find(s => s.key === 'sales');
+    if (salesStage) {
+      salesStage.statuses.unshift({
+        key:              '__NULL__',
+        label:            nullRow ? nullRow.label : 'No lead status',
+        shorthand:        '',
+        defaultLabel:     labelByKey['sales|'] || '',
+        defaultStatusKey: '',
+        isNullRow:        true,
+        substatuses:      (subsByLs['__NULL__'] || []).slice()
+                            .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+      });
+    }
 
     return stages;
   }
@@ -1763,31 +1786,7 @@
     if (!wrap) return;
     const stages = _buildCardActionsModel();
 
-    // Top-level "No lead status" row — covers contacts with no hs_lead_status
-    // regardless of stage. Backed by the three stage_action_labels[stage|''] rows
-    // (sales / designvisit / survey) kept in lock-step on Save.
-    const noStatusValue = stages.reduce(
-      (acc, s) => acc || s.noStatusLabel || '', ''
-    );
-
-    const noStatusHtml = `
-      <section style="margin-bottom:22px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
-        <div style="padding:10px 14px;display:flex;align-items:center;gap:12px;background:#fff;">
-          <div style="flex:0 0 220px;font-size:.78rem;color:var(--ink-3);">
-            <em>No lead status</em>
-            <div style="font-size:.7rem;color:var(--ink-4);margin-top:2px;">Default action label when contact has no <code>hs_lead_status</code>.</div>
-          </div>
-          <input type="text" class="field ca-default-input" maxlength="128"
-            data-kind="no-status-global"
-            data-original="${esc(noStatusValue)}"
-            value="${esc(noStatusValue)}"
-            placeholder="(no label — strip hidden)"
-            style="flex:1;padding:5px 8px;font-size:.82rem;"
-            onkeydown="if(event.key==='Enter')this.blur()">
-        </div>
-      </section>`;
-
-    wrap.innerHTML = noStatusHtml + stages.map(stage => {
+    wrap.innerHTML = stages.map(stage => {
       const collapsed = _collapsedCardActionStages.has(stage.key);
       const bodyId    = `ca-stage-body-${esc(stage.key)}`;
       return `
@@ -1804,15 +1803,17 @@
         ` : stage.statuses.map(ls => `
           <div data-ls-block="${esc(ls.key)}" style="padding:12px 14px;border-bottom:1px solid var(--border);">
             <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">
-              <strong style="font-size:.85rem;color:var(--ink-1);">${esc(ls.label)}</strong>
-              <span style="font-family:monospace;font-size:.7rem;color:var(--ink-4);">${esc(ls.key)}</span>
+              <strong style="font-size:.85rem;color:var(--ink-1);${ls.isNullRow ? 'font-style:italic;' : ''}">${esc(ls.label)}</strong>
+              ${ls.isNullRow
+                ? `<span style="font-size:.7rem;color:var(--ink-4);">contact has no <code>hs_lead_status</code></span>`
+                : `<span style="font-family:monospace;font-size:.7rem;color:var(--ink-4);">${esc(ls.key)}</span>`}
             </div>
 
             <!-- Lead-status default row -->
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
               <div style="flex:0 0 220px;font-size:.78rem;color:var(--ink-3);">Default action label</div>
               <input type="text" class="field ca-default-input" maxlength="128"
-                data-kind="ls-default" data-stage="${esc(stage.key)}" data-status="${esc(ls.key.toLowerCase())}"
+                data-kind="ls-default" data-stage="${esc(stage.key)}" data-status="${esc(ls.defaultStatusKey)}"
                 data-original="${esc(ls.defaultLabel)}"
                 value="${esc(ls.defaultLabel)}"
                 placeholder="(used when no sub-status set)"
@@ -2013,27 +2014,8 @@
       }
       if (value === original) continue;
 
-      if (input.dataset.kind === 'no-status-global') {
-        // The global "no lead status" row writes through to all three
-        // stage_action_labels[stage|''] rows so contacts with no hs_lead_status
-        // get the same label regardless of which column they land in.
-        let allOk = true;
-        for (const stageKey of ['sales', 'designvisit', 'survey']) {
-          try {
-            await api('PUT', '/api/admin/stage-action-labels', {
-              stage_key: stageKey, status_key: '', label: value,
-            });
-          } catch (e) {
-            allOk = false;
-            failures.push(`no-status (${stageKey}): ${e.message || 'error'}`);
-          }
-        }
-        if (allOk) { input.dataset.original = value; saved++; }
-        else       { input.value = original;          failed++; }
-        continue;
-      }
-
-      // Per-lead-status default.
+      // Per-lead-status default (includes the synthetic "No lead status" row
+      // inside Sales, which uses data-stage="sales" data-status="").
       try {
         await api('PUT', '/api/admin/stage-action-labels', {
           stage_key: input.dataset.stage,
