@@ -197,6 +197,7 @@ function goToCustomer(contactId) {
       sortBy:            state.sortBy              || 'newest',
       showArchived:      !!state.showArchived,
       leadStatusFilter:  state.leadStatusFilter    || '',
+      currentPage:       state.currentPage         || 1,
     }));
   } catch {}
   location.href = '/customers/' + contactId;
@@ -224,9 +225,12 @@ function restoreCustomerListFilters() {
   state.sortBy            = saved.sortBy             || 'newest';
   state.showArchived      = !!saved.showArchived;
   state.leadStatusFilter  = saved.leadStatusFilter   || '';
+  state.currentPage       = saved.currentPage        || 1;
 
   return true;
 }
+
+const PAGE_SIZE = 25;
 
 // ── Customer List ─────────────────────────────────────────────────────────────
 // Registered below as the renderer for pages that carry #customers-view.
@@ -236,7 +240,17 @@ function _renderCustomerListImpl() {
   const view = document.getElementById('customers-view');
   if (!view) return;
 
-  const items    = buildListItems();
+  const allItems = buildListItems();
+  const totalItems = allItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+
+  // Clamp current page to valid range
+  if (!state.currentPage || state.currentPage < 1) state.currentPage = 1;
+  if (state.currentPage > totalPages) state.currentPage = totalPages;
+
+  const pageStart = (state.currentPage - 1) * PAGE_SIZE;
+  const items     = allItems.slice(pageStart, pageStart + PAGE_SIZE);
+
   const viewMode = state.contactsViewMode || 'all';
   const filter   = state.stageFilter || '';
 
@@ -376,10 +390,28 @@ function _renderCustomerListImpl() {
     }).join('');
   }
 
+  // ── Pagination bar ──────────────────────────────────────────────────────────
+  let paginationHtml = '';
+  if (totalPages > 1) {
+    const rangeStart = totalItems === 0 ? 0 : pageStart + 1;
+    const rangeEnd   = Math.min(pageStart + PAGE_SIZE, totalItems);
+    const prevDisabled = state.currentPage <= 1            ? ' disabled' : '';
+    const nextDisabled = state.currentPage >= totalPages   ? ' disabled' : '';
+    paginationHtml = `
+      <div class="cl-pagination">
+        <span class="cl-pagination-info">Showing ${rangeStart}–${rangeEnd} of ${totalItems}</span>
+        <div class="cl-pagination-btns">
+          <button class="cl-pagination-btn" id="cl-prev-btn"${prevDisabled} aria-label="Previous page">← Prev</button>
+          <button class="cl-pagination-btn" id="cl-next-btn"${nextDisabled} aria-label="Next page">Next →</button>
+        </div>
+      </div>`;
+  }
+
   view.innerHTML = `
     <div class="project-stage-tabs-bar">${stageTabs}</div>
     ${sortBar}
     <div class="projects-inner">${bodyHtml}</div>
+    ${paginationHtml}
   `;
 
   // ── Event listeners ─────────────────────────────────────────────────────────
@@ -391,14 +423,17 @@ function _renderCustomerListImpl() {
       state.contactsViewMode = 'active';
       state.stageFilter      = '';
       state.leadStatusFilter = '';
+      state.currentPage      = 1;
       loadOpenLeads().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
     } else if (key === '__all__') {
       state.contactsViewMode = 'all';
       state.stageFilter      = '';
+      state.currentPage      = 1;
       loadAllContacts().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
     } else {
       state.contactsViewMode = 'all';
       state.stageFilter      = key;
+      state.currentPage      = 1;
       renderCustomerList();
     }
   });
@@ -412,6 +447,7 @@ function _renderCustomerListImpl() {
   const archivedBtn = view.querySelector('#archived-toggle');
   if (archivedBtn) archivedBtn.addEventListener('click', () => {
     state.showArchived = !state.showArchived;
+    state.currentPage  = 1;
     if (state.showArchived) {
       state.contactsViewMode = 'all';
       loadAllContacts().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
@@ -420,6 +456,16 @@ function _renderCustomerListImpl() {
       state.stageFilter      = '';
       loadOpenLeads().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
     }
+  });
+
+  const prevBtn = view.querySelector('#cl-prev-btn');
+  if (prevBtn) prevBtn.addEventListener('click', () => {
+    if (state.currentPage > 1) { state.currentPage--; renderCustomerList(); }
+  });
+
+  const nextBtn = view.querySelector('#cl-next-btn');
+  if (nextBtn) nextBtn.addEventListener('click', () => {
+    if (state.currentPage < totalPages) { state.currentPage++; renderCustomerList(); }
   });
 
   const inner = view.querySelector('.projects-inner');

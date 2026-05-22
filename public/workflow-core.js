@@ -403,21 +403,25 @@ function _filterDealsImpl(query) {
         contactName(c).toLowerCase().includes(q) ||
         (c.properties?.email || '').toLowerCase().includes(q))
     : [...state.contacts];
+  state.currentPage = 1;
   renderCustomerList();
 }
 
 function setStageFilter(value) {
   state.stageFilter = value;
+  state.currentPage = 1;
   renderCustomerList();
 }
 
 function setLeadStatusFilter(value) {
   state.leadStatusFilter = value;
+  state.currentPage = 1;
   renderCustomerList();
 }
 
 function setSortBy(value) {
   state.sortBy = value;
+  state.currentPage = 1;
   renderCustomerList();
 }
 
