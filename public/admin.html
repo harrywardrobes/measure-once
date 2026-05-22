@@ -2034,11 +2034,23 @@
         'value=', JSON.stringify(value), 'orig=', JSON.stringify(original),
         'changed=', value && value !== original);
       if (!value) {
-        // Empty: server requires non-empty label. Surface this so the admin
-        // knows their clear-attempt didn't save (rather than silently skipping).
+        // Empty + had an original value → user wants to clear the action
+        // label. The server stores these in stage_action_labels and treats
+        // a missing row as "no label", so DELETE the row to honour the
+        // clear. (PUT with an empty label is rejected server-side.)
         if (original) {
-          failures.push(`${input.dataset.kind} (${input.dataset.stage || ''}/${input.dataset.status || ''}): label cannot be empty.`);
-          failed++;
+          try {
+            await api(
+              'DELETE',
+              `/api/admin/stage-action-labels/${encodeURIComponent(input.dataset.stage)}/${encodeURIComponent(input.dataset.status || '')}`
+            );
+            input.dataset.original = '';
+            saved++;
+          } catch (e) {
+            input.value = original;
+            failed++;
+            failures.push(`default (${input.dataset.stage}/${input.dataset.status || '—'}): ${e.message || 'error'}`);
+          }
         }
         continue;
       }
