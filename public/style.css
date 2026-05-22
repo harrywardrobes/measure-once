@@ -3862,16 +3862,15 @@ body.showing-workflow .sales-layout #workflow-panel {
 
 .eq-ls-filter-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   padding: 10px 10px;
   background: var(--chalk);
   border-bottom: 1px solid var(--stone);
   flex-shrink: 0;
-  overflow-x: auto;
 }
 .eq-ls-pills {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 6px;
   align-items: center;
   min-width: 0;
