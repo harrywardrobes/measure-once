@@ -125,6 +125,15 @@
       // Restore any filter/sort state saved when the user navigated to a profile.
       const hadSavedFilters = restoreCustomerListFilters();
 
+      // If a text search was saved, repopulate the visible search input (mirrors
+      // the ?q= URL param handling below) and the clear button.
+      if (state.searchQuery) {
+        const inp = document.getElementById('search');
+        if (inp) { inp.value = state.searchQuery; }
+        const clear = document.getElementById('search-clear');
+        if (clear) clear.classList.remove('hidden');
+      }
+
       // Render from cache immediately so back-navigation feels instant.
       // Only use the all-contacts cache when we are (or restored to) 'all' mode.
       let renderedFromCache = false;
@@ -133,7 +142,7 @@
           const cached = sessionStorage.getItem('contacts_all_cache');
           if (cached) {
             state.contacts = JSON.parse(cached);
-            state.filteredContacts = [...state.contacts];
+            state.filteredContacts = applySearchFilter(state.contacts);
             renderCustomerList();
             restoreCustomerListScroll();
             renderedFromCache = true;
@@ -145,7 +154,7 @@
       try {
         const loader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
         await loader;
-        state.filteredContacts = [...state.contacts];
+        state.filteredContacts = applySearchFilter(state.contacts);
         populateLeadStatusFilter();
         renderCustomerList();
         if (!renderedFromCache) restoreCustomerListScroll();

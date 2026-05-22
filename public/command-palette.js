@@ -384,8 +384,15 @@
     overlay.style.display = 'flex';
     requestAnimationFrame(() => {
       const input = document.getElementById('cp-input');
-      if (input) { input.value = ''; input.focus(); }
-      renderResults('');
+      if (input) {
+        const seed = (location.pathname === '/customers' && window.state && window.state.searchQuery)
+          ? window.state.searchQuery : '';
+        input.value = seed;
+        input.focus();
+        renderResults(seed);
+      } else {
+        renderResults('');
+      }
     });
     document.body.style.overflow = 'hidden';
   };

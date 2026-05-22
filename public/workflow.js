@@ -214,6 +214,7 @@ function goToCustomer(contactId) {
       showArchived:      !!state.showArchived,
       leadStatusFilter:  state.leadStatusFilter    || '',
       currentPage:       state.currentPage         || 1,
+      searchQuery:       state.searchQuery         || '',
     }));
   } catch {}
   location.href = '/customers/' + contactId;
@@ -242,6 +243,7 @@ function restoreCustomerListFilters() {
   state.showArchived      = !!saved.showArchived;
   state.leadStatusFilter  = saved.leadStatusFilter   || '';
   state.currentPage       = saved.currentPage        || 1;
+  state.searchQuery       = saved.searchQuery        || '';
 
   return true;
 }

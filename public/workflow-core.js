@@ -396,13 +396,18 @@ function populateLeadStatusFilter() {
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
-function _filterDealsImpl(query) {
-  const q = (query || '').toLowerCase();
-  state.filteredContacts = q
-    ? state.contacts.filter(c =>
+function applySearchFilter(contacts) {
+  const q = (state.searchQuery || '').toLowerCase();
+  return q
+    ? contacts.filter(c =>
         contactName(c).toLowerCase().includes(q) ||
         (c.properties?.email || '').toLowerCase().includes(q))
-    : [...state.contacts];
+    : [...contacts];
+}
+
+function _filterDealsImpl(query) {
+  state.searchQuery = query || '';
+  state.filteredContacts = applySearchFilter(state.contacts);
   state.currentPage = 1;
   renderCustomerList();
 }
