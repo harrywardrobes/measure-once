@@ -22,15 +22,15 @@ const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/sit
 async function verifyTurnstile(token, ip) {
   if (!process.env.TURNSTILE_SECRET_KEY) return { ok: true, skipped: true };
 
-  // No token: the widget either hasn't loaded yet or couldn't connect to
-  // Cloudflare (e.g. sandbox / network-restricted environment). Fail open and
-  // rely on the rate limiter — bots are still capped at 20 attempts / 15 min.
+  // No token supplied — fail closed. The widget must complete before the form
+  // can be submitted; omitting the token is a strong signal of automation.
   if (!token || typeof token !== 'string' || !token.trim()) {
-    console.warn('  Turnstile: no token supplied — failing open (rate limiter applies)');
-    return { ok: true, skipped: true };
+    console.warn('  Turnstile: no token supplied — rejecting request');
+    return { ok: false, reason: 'missing-input-response' };
   }
 
-  // Token present — verify it. If Cloudflare is unreachable, also fail open.
+  // Token present — verify it. If Cloudflare is unreachable, fail closed so
+  // that a network outage cannot be leveraged to bypass the captcha requirement.
   try {
     const body = new URLSearchParams();
     body.set('secret', process.env.TURNSTILE_SECRET_KEY);
@@ -53,9 +53,10 @@ async function verifyTurnstile(token, ip) {
     if (data && data.success) return { ok: true };
     return { ok: false, reason: (data && data['error-codes'] && data['error-codes'][0]) || 'verify-failed' };
   } catch (e) {
-    // Cloudflare unreachable — fail open; rate limiter still applies.
-    console.warn('  Turnstile: Cloudflare unreachable, failing open —', e.message);
-    return { ok: true, skipped: true };
+    // Cloudflare unreachable — fail closed; a verification outage must not open
+    // the door to automated credential-stuffing or flood attacks.
+    console.warn('  Turnstile: Cloudflare unreachable, rejecting request —', e.message);
+    return { ok: false, reason: 'cloudflare-unreachable' };
   }
 }
 function turnstileError(res) {
