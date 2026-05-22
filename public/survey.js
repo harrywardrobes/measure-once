@@ -143,7 +143,7 @@ function _svCardHtml(entry) {
 
   const name        = escHtml(contactName(contact));
   const customerNum = contact.properties?.customer_number || '';
-  const postcode    = escHtml((contact.properties?.zip || '').toUpperCase());
+  const postcode    = escHtml((contact.properties?.zip || '').trim().toUpperCase().split(/\s+/)[0]);
   const subLabel    = escHtml(_svSubstageLabel(substageId));
   const lmdRaw      = contact.properties?.lastmodifieddate;
   const lmdMs       = lmdRaw ? new Date(lmdRaw).getTime() : NaN;

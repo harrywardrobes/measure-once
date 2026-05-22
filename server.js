@@ -707,7 +707,7 @@ app.get('/api/open-leads', async (req, res) => {
         filterGroups: [{
           filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' }]
         }],
-        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate', 'closedate'],
+        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
         sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
         limit: 100
       };
