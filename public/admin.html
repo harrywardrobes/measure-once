@@ -2039,14 +2039,19 @@
         // a missing row as "no label", so DELETE the row to honour the
         // clear. (PUT with an empty label is rejected server-side.)
         if (original) {
+          // The (stage, '') row maps to status_key='' which Express's
+          // /:stage_key/:status_key route cannot match. Encode the empty
+          // segment as a literal '_EMPTY_' sentinel that the server
+          // translates back to ''.
+          const statusSeg = input.dataset.status ? encodeURIComponent(input.dataset.status) : '_EMPTY_';
+          const url = `/api/admin/stage-action-labels/${encodeURIComponent(input.dataset.stage)}/${statusSeg}`;
+          console.log('[card-actions] clearing default label via DELETE', url);
           try {
-            await api(
-              'DELETE',
-              `/api/admin/stage-action-labels/${encodeURIComponent(input.dataset.stage)}/${encodeURIComponent(input.dataset.status || '')}`
-            );
+            await api('DELETE', url);
             input.dataset.original = '';
             saved++;
           } catch (e) {
+            console.warn('[card-actions] DELETE failed', e);
             input.value = original;
             failed++;
             failures.push(`default (${input.dataset.stage}/${input.dataset.status || '—'}): ${e.message || 'error'}`);

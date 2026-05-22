@@ -3157,7 +3157,11 @@ app.put('/api/admin/stage-action-labels', isAuthenticated, requireAdmin, async (
 
 app.delete('/api/admin/stage-action-labels/:stage_key/:status_key', isAuthenticated, requireAdmin, async (req, res) => {
   const stage_key  = String(req.params.stage_key  || '').toLowerCase();
-  const status_key = String(req.params.status_key || '').toLowerCase();
+  // The (stage, '') "no lead status" row can't be represented in a URL
+  // path segment, so the client sends the literal sentinel '_EMPTY_' which
+  // we translate back to ''.
+  const rawStatus  = String(req.params.status_key || '');
+  const status_key = rawStatus === '_EMPTY_' ? '' : rawStatus.toLowerCase();
   if (!STAGE_ACTION_STAGE_KEYS.has(stage_key)) {
     return res.status(400).json({ error: 'Invalid stage_key.' });
   }
