@@ -151,7 +151,13 @@
     document.getElementById('view-login').classList.toggle('hidden', name !== 'login');
     document.getElementById('view-request').classList.toggle('hidden', name !== 'request');
     document.getElementById('view-forgot').classList.toggle('hidden', name !== 'forgot');
-    if (name !== 'forgot') resetForgotView();
+    if (name !== 'forgot') {
+      resetForgotView();
+    } else {
+      const loginEmail = document.getElementById('login-email');
+      const forgotEmail = document.getElementById('forgot-email');
+      if (loginEmail && forgotEmail) forgotEmail.value = loginEmail.value;
+    }
   }
   function resetForgotView() {
     const confirmEl = document.getElementById('forgot-confirm');
