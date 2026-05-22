@@ -132,11 +132,11 @@ function _initSalesListeners() {
 }
 
 // ── Best room selector (one row per contact) ──────────────────────────────────
-// From all active rooms for a contact in the target stages (filtered if needed),
+// From all active rooms for a contact in the target stages,
 // return the single room that represents the highest-priority action.
 // Priority: lowest band first; within band, keep whichever appears first in the
 // cache (data insertion order reflects original creation).
-function _bestRoom(cached, filter) {
+function _bestRoom(cached) {
   if (!cached || cached.length === 0) return null;
 
   let best = null;
@@ -146,7 +146,6 @@ function _bestRoom(cached, filter) {
     const r = cached[idx];
     if ((r.roomStatus || 'active') !== 'active') continue;
     if (!SALES_TAB_STAGES.includes(r.stageKey)) continue;
-    if (filter && r.stageKey !== filter) continue;
 
     const score = priorityScore(r.stageKey, r.statusId || '');
     if (score < bestScore) {
@@ -216,7 +215,7 @@ async function renderEnquiryList() {
       continue;
     }
 
-    const best = _bestRoom(cached, ''); // '' = no stage filter
+    const best = _bestRoom(cached);
     if (!best) continue;
 
     const statusId      = best.statusId || '';
