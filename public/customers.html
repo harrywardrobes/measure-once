@@ -147,7 +147,10 @@
       state.sortBy           = initSort;
 
       try {
-        await loadContactsPage({ page: initPage, leadStatus: initStatus, sort: initSort });
+        await Promise.all([
+          loadContactsPage({ page: initPage, leadStatus: initStatus, sort: initSort }),
+          loadLeadStatusCounts(),
+        ]);
         renderCustomerList();
         restoreCustomerListScroll();
       } catch (e) {

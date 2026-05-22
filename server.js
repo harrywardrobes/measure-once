@@ -627,6 +627,54 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
   }
 });
 
+// ── HubSpot: Lead-status counts (for filter dropdown) ─────────────────────────
+// In-memory cache — invalidated after a lead-status PATCH or 120 s, whichever
+// comes first, so the N+1 fan-out only fires once per two-minute window.
+let _leadStatusCountsCache = null;   // { counts: {…}, expiresAt: ms }
+function _invalidateLeadStatusCountsCache() { _leadStatusCountsCache = null; }
+
+app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken, async (req, res) => {
+  try {
+    if (_leadStatusCountsCache && Date.now() < _leadStatusCountsCache.expiresAt) {
+      return res.json(_leadStatusCountsCache.counts);
+    }
+
+    const { rows: statusRows } = await pool.query(
+      'SELECT key FROM lead_status_config WHERE is_null_row IS NOT TRUE ORDER BY sort_order ASC, key ASC'
+    );
+    const keys = statusRows.map(r => r.key);
+
+    const searches = [
+      axios.post(
+        `${HS}/crm/v3/objects/contacts/search`,
+        { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'NOT_HAS_PROPERTY' }] }], limit: 1 },
+        { headers: hsHeaders() }
+      ).then(r => ['__no_status__', r.data.total ?? 0]),
+      ...keys.map(key =>
+        axios.post(
+          `${HS}/crm/v3/objects/contacts/search`,
+          { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: key }] }], limit: 1 },
+          { headers: hsHeaders() }
+        ).then(r => [key, r.data.total ?? 0])
+      ),
+    ];
+
+    const entries = await Promise.all(searches);
+    const counts = Object.fromEntries(entries);
+    _leadStatusCountsCache = { counts, expiresAt: Date.now() + 120_000 };
+    res.json(counts);
+  } catch (e) {
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+  }
+});
+
 // ── HubSpot: Open Leads (contacts with hs_lead_status = OPEN_DEAL) ────────────
 app.get('/api/open-leads', async (req, res) => {
   try {
@@ -840,6 +888,9 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     }
 
     bustSharedCache();
+    if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status')) {
+      _invalidateLeadStatusCountsCache();
+    }
     res.json(patchResp.data);
   } catch (e) {
     const status = e.response?.status;

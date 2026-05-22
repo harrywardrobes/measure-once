@@ -346,6 +346,17 @@ let LEAD_STATUS_OPTIONS = [
 
 let NULL_LEAD_STATUS_LABEL = 'No status';
 
+async function loadLeadStatusCounts() {
+  try {
+    const counts = await GET('/api/contacts-lead-status-counts');
+    if (counts && typeof counts === 'object') {
+      state.leadStatusCounts = counts;
+    }
+  } catch (e) {
+    console.warn('Could not load lead status counts:', e.message);
+  }
+}
+
 async function loadLeadStatuses() {
   try {
     const rows = await GET('/api/lead-statuses');
@@ -368,7 +379,7 @@ async function loadLeadStatuses() {
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
-  loadLeadStatuses().then(() => {
+  Promise.all([loadLeadStatuses(), loadLeadStatusCounts()]).then(() => {
     if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
     if (typeof renderCustomerList === 'function') renderCustomerList();
     if (typeof renderEnquiryList === 'function') renderEnquiryList();
@@ -382,7 +393,7 @@ document.addEventListener('visibilitychange', () => {
 if (typeof BroadcastChannel !== 'undefined') {
   const _lsChannel = new BroadcastChannel('lead_statuses_changed');
   _lsChannel.addEventListener('message', () => {
-    loadLeadStatuses().then(() => {
+    Promise.all([loadLeadStatuses(), loadLeadStatusCounts()]).then(() => {
       if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
       if (typeof renderCustomerList === 'function') renderCustomerList();
       if (typeof renderEnquiryList === 'function') renderEnquiryList();
@@ -394,12 +405,20 @@ function populateLeadStatusFilter() {
   const sel = document.getElementById('lead-status-filter');
   if (!sel) return;
 
-  const counts = {};
-  let nullCount = 0;
-  for (const c of state.contacts) {
-    const s = c.properties?.hs_lead_status || '';
-    if (s) counts[s] = (counts[s] || 0) + 1;
-    else nullCount++;
+  const serverCounts = state.leadStatusCounts && Object.keys(state.leadStatusCounts).length > 0;
+
+  let counts, nullCount;
+  if (serverCounts) {
+    counts = state.leadStatusCounts;
+    nullCount = counts['__no_status__'] || 0;
+  } else {
+    counts = {};
+    nullCount = 0;
+    for (const c of state.contacts) {
+      const s = c.properties?.hs_lead_status || '';
+      if (s) counts[s] = (counts[s] || 0) + 1;
+      else nullCount++;
+    }
   }
 
   const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';

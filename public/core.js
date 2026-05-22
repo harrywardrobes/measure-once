@@ -101,6 +101,7 @@ const state = {
   addingRoom: false,
   stageFilter: '',
   leadStatusFilter: '',
+  leadStatusCounts: {},
   sortBy: 'newest',
   showArchived: false,
   projectStageFilter: '',

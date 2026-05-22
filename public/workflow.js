@@ -118,7 +118,7 @@ async function submitNewCustomer(ev) {
     showToast(`Customer created${customerNum ? ` — ${customerNum}` : ''}`);
     // Background refresh to pick up server sort order (respect current view mode)
     if (state.contactsViewMode === 'all' && typeof loadContactsPage === 'function') {
-      _customersLoadAndRender({ page: 1 });
+      _customersLoadAndRender({ page: 1, fetchCounts: true });
     } else {
       const refreshLoader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
       refreshLoader.then(() => { state.filteredContacts = [...state.contacts]; if (state.contactsViewMode === 'all') populateLeadStatusFilter(); renderCustomerList(); }).catch(() => {});
@@ -498,7 +498,7 @@ function _renderCustomerListImpl() {
       state.contactsViewMode = 'all';
       state.stageFilter      = '';
       state.currentPage      = 1;
-      _customersLoadAndRender({ page: 1 });
+      _customersLoadAndRender({ page: 1, fetchCounts: true });
     } else {
       state.contactsViewMode = 'all';
       state.stageFilter      = key;
@@ -527,7 +527,7 @@ function _renderCustomerListImpl() {
     state.currentPage  = 1;
     if (state.showArchived) {
       state.contactsViewMode = 'all';
-      _customersLoadAndRender({ page: 1 });
+      _customersLoadAndRender({ page: 1, fetchCounts: true });
     } else {
       state.contactsViewMode = 'active';
       state.stageFilter      = '';
@@ -581,6 +581,10 @@ function _renderCustomerListImpl() {
       prev.focus();
     }
   });
+
+  // Apply lead-status counts to the just-rendered <select> (must run after
+  // view.innerHTML is set, since that recreates the DOM element).
+  if (state.contactsViewMode === 'all') populateLeadStatusFilter();
 }
 
 registerCustomerListRenderer(_renderCustomerListImpl);
@@ -598,12 +602,17 @@ function _updateCustomersUrl({ page, leadStatus, sort } = {}) {
   history.replaceState(null, '', qs.toString() ? '?' + qs.toString() : location.pathname);
 }
 
-function _customersLoadAndRender({ page } = {}) {
+function _customersLoadAndRender({ page, fetchCounts = false } = {}) {
   const targetPage = page || state.currentPage || 1;
   const leadStatus = state.leadStatusFilter || '';
   const sort       = state.sortBy || 'newest';
   _updateCustomersUrl({ page: targetPage, leadStatus, sort });
-  loadContactsPage({ page: targetPage, leadStatus, sort })
+  const pageLoader = loadContactsPage({ page: targetPage, leadStatus, sort });
+  // Only fetch counts when explicitly requested (initial "All" load or after
+  // a status change) — page turns reuse the cached state.leadStatusCounts.
+  const needCounts = fetchCounts && typeof loadLeadStatusCounts === 'function';
+  const countsLoader = needCounts ? loadLeadStatusCounts() : Promise.resolve();
+  Promise.all([pageLoader, countsLoader])
     .then(() => renderCustomerList())
     .catch(() => {});
 }
@@ -1067,13 +1076,22 @@ async function quickSetLeadStatus(contactId, newStatus) {
     await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: newStatus });
     // PATCH succeeded — server now has the new value, so no longer pending.
     if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
+    // Refresh counts in the background so dropdown totals stay accurate.
+    if (typeof loadLeadStatusCounts === 'function') {
+      loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
+    }
     const _nullLbl3 = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
     const newLabel = newStatus ? (LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)?.label || newStatus) : null;
     showBottomUndo(newLabel ? `Lead status set to ${newLabel}` : `Lead status set to ${_nullLbl3}`, async () => {
       _applyLeadStatus(prevStatus || '');
       await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: prevStatus || '' })
         .catch(() => {})
-        .finally(() => { if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId]; });
+        .finally(() => {
+          if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
+          if (typeof loadLeadStatusCounts === 'function') {
+            loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
+          }
+        });
     });
   } catch (e) {
     // Revert on failure: update pending to the reverted value, then clear once
