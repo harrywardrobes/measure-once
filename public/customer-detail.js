@@ -968,8 +968,25 @@ function _scrollStepperToFocused(stagesEl) {
   const row     = (stagesEl || document.getElementById('workflow-stages'))?.querySelector('.stage-stepper-row');
   const focused = row?.querySelector('.stage-step-focused');
   if (!row || !focused) return;
-  const targetLeft = focused.offsetLeft - row.clientWidth / 2 + focused.offsetWidth / 2;
-  row.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+  const targetLeft = Math.max(0, focused.offsetLeft - row.clientWidth / 2 + focused.offsetWidth / 2);
+  _smoothScrollLeft(row, targetLeft, 350);
+}
+
+function _smoothScrollLeft(el, target, duration) {
+  const start     = el.scrollLeft;
+  const distance  = target - start;
+  if (distance === 0) return;
+  const startTime = performance.now();
+  function step(now) {
+    const elapsed  = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const ease     = progress < 0.5
+      ? 2 * progress * progress
+      : -1 + (4 - 2 * progress) * progress;
+    el.scrollLeft  = start + distance * ease;
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
 
 // toggleStage is no longer used by the stepper UI but kept as a safe no-op
