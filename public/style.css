@@ -4894,6 +4894,15 @@ details[open] .trades-history-summary::before { transform: rotate(90deg); }
   padding: 10px 12px 12px;
   flex-shrink: 0;
 }
+.cl-stage-filter-note {
+  font-size: 0.72rem;
+  color: var(--ink-3);
+  background: var(--surface-2, #f8f5ff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin: 0 0 8px;
+}
 .cl-pagination-info {
   font-size: 0.75rem;
   color: var(--ink-3);

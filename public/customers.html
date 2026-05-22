@@ -122,11 +122,12 @@
       // Default to "All contacts" view on the customers page.
       state.contactsViewMode = 'all';
 
-      // Restore any filter/sort state saved when the user navigated to a profile.
-      const hadSavedFilters = restoreCustomerListFilters();
+      // Restore non-URL filter/sort state (stageFilter, showArchived, contactsViewMode)
+      // saved when the user last navigated to a profile. URL params override for
+      // page, leadStatus, and sort (handled inside restoreCustomerListFilters).
+      restoreCustomerListFilters();
 
-      // If a text search was saved, repopulate the visible search input (mirrors
-      // the ?q= URL param handling below) and the clear button.
+      // If a text search was saved, repopulate the visible search input and clear button.
       if (state.searchQuery) {
         const inp = document.getElementById('search');
         if (inp) { inp.value = state.searchQuery; }
@@ -134,30 +135,21 @@
         if (clear) clear.classList.remove('hidden');
       }
 
-      // Render from cache immediately so back-navigation feels instant.
-      // Only use the all-contacts cache when we are (or restored to) 'all' mode.
-      let renderedFromCache = false;
-      if (state.contactsViewMode === 'all') {
-        try {
-          const cached = sessionStorage.getItem('contacts_all_cache');
-          if (cached) {
-            state.contacts = JSON.parse(cached);
-            state.filteredContacts = applySearchFilter(state.contacts);
-            renderCustomerList();
-            restoreCustomerListScroll();
-            renderedFromCache = true;
-          }
-        } catch {}
-      }
+      // Read pagination/filter params from the URL.
+      const urlParams  = new URLSearchParams(location.search);
+      const initPage   = Math.max(1, parseInt(urlParams.get('page')       || '1',      10));
+      const initStatus = urlParams.get('leadStatus') || '';
+      const initSort   = urlParams.get('sort')       || state.sortBy || 'newest';
 
-      // Always fetch fresh data using the correct loader for the current view mode.
+      // Apply URL params to state so the first render uses them.
+      state.currentPage      = initPage;
+      state.leadStatusFilter = initStatus;
+      state.sortBy           = initSort;
+
       try {
-        const loader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
-        await loader;
-        state.filteredContacts = applySearchFilter(state.contacts);
-        populateLeadStatusFilter();
+        await loadContactsPage({ page: initPage, leadStatus: initStatus, sort: initSort });
         renderCustomerList();
-        if (!renderedFromCache) restoreCustomerListScroll();
+        restoreCustomerListScroll();
       } catch (e) {
         console.error('Failed to load contacts', e);
         const view = document.getElementById('customers-view');

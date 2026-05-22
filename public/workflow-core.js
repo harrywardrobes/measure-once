@@ -265,11 +265,33 @@ async function _loadOpenLeadsImpl() {
 }
 
 async function loadAllContacts() {
-  const data = await GET('/api/contacts-all');
-  state.contacts = data.results || [];
+  const allResults = [];
+  let page = 1;
+  const limit = 100;
+  let totalPages = 1;
+  do {
+    const qs = new URLSearchParams({ page, limit });
+    const data = await GET(`/api/contacts-all?${qs}`);
+    allResults.push(...(data.results || []));
+    totalPages = data.totalPages || 1;
+    page++;
+  } while (page <= totalPages);
+  state.contacts = allResults;
   _reapplyPendingLeadStatuses();
   state.filteredContacts = [...state.contacts];
-  try { sessionStorage.setItem('contacts_all_cache', JSON.stringify(state.contacts)); } catch {}
+}
+
+async function loadContactsPage({ page = 1, leadStatus = '', sort = 'newest' } = {}) {
+  const qs = new URLSearchParams({ page, limit: 25 });
+  if (leadStatus) qs.set('leadStatus', leadStatus);
+  if (sort && sort !== 'newest') qs.set('sort', sort);
+  const data = await GET(`/api/contacts-all?${qs}`);
+  state.contacts = data.results || [];
+  state.currentPage = data.page || page;
+  state.totalPages  = data.totalPages || 1;
+  state.total       = data.total != null ? data.total : state.contacts.length;
+  _reapplyPendingLeadStatuses();
+  state.filteredContacts = [...state.contacts];
 }
 
 function setContactsViewMode(mode) {

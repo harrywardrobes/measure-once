@@ -117,8 +117,12 @@ async function submitNewCustomer(ev) {
     const customerNum = contact.properties?.customer_number;
     showToast(`Customer created${customerNum ? ` — ${customerNum}` : ''}`);
     // Background refresh to pick up server sort order (respect current view mode)
-    const refreshLoader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
-    refreshLoader.then(() => { state.filteredContacts = [...state.contacts]; if (state.contactsViewMode === 'all') populateLeadStatusFilter(); renderCustomerList(); }).catch(() => {});
+    if (state.contactsViewMode === 'all' && typeof loadContactsPage === 'function') {
+      _customersLoadAndRender({ page: 1 });
+    } else {
+      const refreshLoader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
+      refreshLoader.then(() => { state.filteredContacts = [...state.contacts]; if (state.contactsViewMode === 'all') populateLeadStatusFilter(); renderCustomerList(); }).catch(() => {});
+    }
   } catch (e) {
     if (e.code === 'HUBSPOT_AUTH') {
       showError('HubSpot token is invalid or expired — ask an admin to update the token.');
@@ -136,16 +140,6 @@ async function submitNewCustomer(ev) {
 function buildListItems() {
   const items = [];
   for (const contact of state.filteredContacts) {
-    // Apply lead-status filter (only relevant in "all" view)
-    if (state.leadStatusFilter) {
-      const ls = contact.properties?.hs_lead_status || '';
-      if (state.leadStatusFilter === '__no_status__') {
-        if (ls) continue;
-      } else {
-        if (ls !== state.leadStatusFilter) continue;
-      }
-    }
-
     const cached = state.contactStageCache[contact.id];
     let rooms;
     if (cached && cached.length > 0) {
@@ -208,13 +202,10 @@ function goToCustomer(contactId) {
   }
   try {
     sessionStorage.setItem('customers_filters', JSON.stringify({
-      contactsViewMode:  state.contactsViewMode   || 'all',
-      stageFilter:       state.stageFilter         || '',
-      sortBy:            state.sortBy              || 'newest',
-      showArchived:      !!state.showArchived,
-      leadStatusFilter:  state.leadStatusFilter    || '',
-      currentPage:       state.currentPage         || 1,
-      searchQuery:       state.searchQuery         || '',
+      contactsViewMode: state.contactsViewMode || 'all',
+      stageFilter:      state.stageFilter      || '',
+      showArchived:     !!state.showArchived,
+      searchQuery:      state.searchQuery      || '',
     }));
   } catch {}
   location.href = '/customers/' + contactId;
@@ -230,20 +221,29 @@ function restoreCustomerListScroll() {
 
 // Restore filter/sort state saved by goToCustomer before navigating away.
 // Returns true if any saved state was found and applied.
+// Page, leadStatus, and sort are restored from URL params, not session storage.
 function restoreCustomerListFilters() {
   let saved;
   try { saved = JSON.parse(sessionStorage.getItem('customers_filters')); } catch {}
   sessionStorage.removeItem('customers_filters');
+
+  // Always read page/leadStatus/sort from URL
+  const urlParams  = new URLSearchParams(location.search);
+  const urlPage    = Math.max(1, parseInt(urlParams.get('page') || '1', 10));
+  const urlStatus  = urlParams.get('leadStatus') || '';
+  const urlSort    = urlParams.get('sort') || 'newest';
+
+  state.currentPage      = urlPage;
+  state.leadStatusFilter = urlStatus;
+  state.sortBy           = urlSort;
+
   if (!saved) return false;
 
-  // Apply state values — the renderer picks them up on next renderCustomerList()
-  state.contactsViewMode  = saved.contactsViewMode  || 'all';
-  state.stageFilter       = saved.stageFilter        || '';
-  state.sortBy            = saved.sortBy             || 'newest';
-  state.showArchived      = !!saved.showArchived;
-  state.leadStatusFilter  = saved.leadStatusFilter   || '';
-  state.currentPage       = saved.currentPage        || 1;
-  state.searchQuery       = saved.searchQuery        || '';
+  // Apply non-URL state values
+  state.contactsViewMode = saved.contactsViewMode || 'all';
+  state.stageFilter      = saved.stageFilter      || '';
+  state.showArchived     = !!saved.showArchived;
+  state.searchQuery      = saved.searchQuery      || '';
 
   return true;
 }
@@ -258,16 +258,13 @@ function _renderCustomerListImpl() {
   const view = document.getElementById('customers-view');
   if (!view) return;
 
-  const allItems = buildListItems();
-  const totalItems = allItems.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const items      = buildListItems();
+  const totalItems = state.total != null ? state.total : items.length;
+  const totalPages = state.totalPages || Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
 
-  // Clamp current page to valid range
   if (!state.currentPage || state.currentPage < 1) state.currentPage = 1;
-  if (state.currentPage > totalPages) state.currentPage = totalPages;
 
   const pageStart = (state.currentPage - 1) * PAGE_SIZE;
-  const items     = allItems.slice(pageStart, pageStart + PAGE_SIZE);
 
   const viewMode = state.contactsViewMode || 'all';
   const filter   = state.stageFilter || '';
@@ -302,16 +299,11 @@ function _renderCustomerListImpl() {
     `<option value="${value}"${(state.sortBy || 'newest') === value ? ' selected' : ''}>${escHtml(label)}</option>`
   ).join('');
 
-  const lsCountMap = {};
-  for (const c of state.contacts) {
-    const s = c.properties?.hs_lead_status || '';
-    if (s) lsCountMap[s] = (lsCountMap[s] || 0) + 1;
-  }
-  const lsOptions = LEAD_STATUS_OPTIONS.map(({ value, label }) => {
-    const n     = lsCountMap[value] || 0;
-    const attrs = n === 0 ? ' disabled style="color:#cbd5e1"' : '';
-    return `<option value="${escHtml(value)}"${state.leadStatusFilter === value ? ' selected' : ''}${attrs}>${escHtml(label)} (${n})</option>`;
-  }).join('');
+  const nullLbl   = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+  const lsOptions = `<option value="__no_status__"${state.leadStatusFilter === '__no_status__' ? ' selected' : ''}>${escHtml(nullLbl)}</option>` +
+    LEAD_STATUS_OPTIONS.map(({ value, label }) =>
+      `<option value="${escHtml(value)}"${state.leadStatusFilter === value ? ' selected' : ''}>${escHtml(label)}</option>`
+    ).join('');
 
   const showAllActive = state.showArchived ? ' project-stage-tab-active' : '';
   const showAllStyle  = state.showArchived ? 'background:var(--ink-2);color:#fff;border-color:var(--ink-2)' : '';
@@ -465,9 +457,14 @@ function _renderCustomerListImpl() {
       </div>`;
   }
 
+  const stageFilterNote = state.stageFilter
+    ? `<p class="cl-stage-filter-note" role="note">Stage filter applies to this page only. Switch pages to find more matches.</p>`
+    : '';
+
   view.innerHTML = `
     <div class="project-stage-tabs-bar">${stageTabs}</div>
     ${sortBar}
+    ${stageFilterNote}
     <div class="projects-inner">${bodyHtml}</div>
     ${paginationHtml}
   `;
@@ -482,12 +479,13 @@ function _renderCustomerListImpl() {
       state.stageFilter      = '';
       state.leadStatusFilter = '';
       state.currentPage      = 1;
+      _updateCustomersUrl({ page: 1, leadStatus: '', sort: state.sortBy });
       loadOpenLeads().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
     } else if (key === '__all__') {
       state.contactsViewMode = 'all';
       state.stageFilter      = '';
       state.currentPage      = 1;
-      loadAllContacts().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
+      _customersLoadAndRender({ page: 1 });
     } else {
       state.contactsViewMode = 'all';
       state.stageFilter      = key;
@@ -497,10 +495,18 @@ function _renderCustomerListImpl() {
   });
 
   const sortSel = view.querySelector('#customers-sort-select');
-  if (sortSel) sortSel.addEventListener('change', () => setSortBy(sortSel.value));
+  if (sortSel) sortSel.addEventListener('change', () => {
+    state.sortBy = sortSel.value;
+    state.currentPage = 1;
+    _customersLoadAndRender({ page: 1 });
+  });
 
   const lsSel = view.querySelector('#lead-status-filter');
-  if (lsSel) lsSel.addEventListener('change', () => setLeadStatusFilter(lsSel.value));
+  if (lsSel) lsSel.addEventListener('change', () => {
+    state.leadStatusFilter = lsSel.value;
+    state.currentPage = 1;
+    _customersLoadAndRender({ page: 1 });
+  });
 
   const archivedBtn = view.querySelector('#archived-toggle');
   if (archivedBtn) archivedBtn.addEventListener('click', () => {
@@ -508,30 +514,31 @@ function _renderCustomerListImpl() {
     state.currentPage  = 1;
     if (state.showArchived) {
       state.contactsViewMode = 'all';
-      loadAllContacts().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
+      _customersLoadAndRender({ page: 1 });
     } else {
       state.contactsViewMode = 'active';
       state.stageFilter      = '';
+      state.leadStatusFilter = '';
+      _updateCustomersUrl({ page: 1, leadStatus: '', sort: state.sortBy });
       loadOpenLeads().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
     }
   });
 
   const prevBtn = view.querySelector('#cl-prev-btn');
   if (prevBtn) prevBtn.addEventListener('click', () => {
-    if (state.currentPage > 1) { state.currentPage--; renderCustomerList(); }
+    if (state.currentPage > 1) { _customersLoadAndRender({ page: state.currentPage - 1 }); }
   });
 
   const nextBtn = view.querySelector('#cl-next-btn');
   if (nextBtn) nextBtn.addEventListener('click', () => {
-    if (state.currentPage < totalPages) { state.currentPage++; renderCustomerList(); }
+    if (state.currentPage < totalPages) { _customersLoadAndRender({ page: state.currentPage + 1 }); }
   });
 
   view.querySelectorAll('.cl-pagination-page').forEach(btn => {
     btn.addEventListener('click', () => {
       const p = parseInt(btn.dataset.page, 10);
       if (p !== state.currentPage && p >= 1 && p <= totalPages) {
-        state.currentPage = p;
-        renderCustomerList();
+        _customersLoadAndRender({ page: p });
       }
     });
   });
@@ -542,7 +549,7 @@ function _renderCustomerListImpl() {
     const input = jumpForm.querySelector('#cl-jump-input');
     const p = Math.round(Number(input.value));
     if (!Number.isFinite(p) || p < 1 || p > totalPages) { input.select(); return; }
-    if (p !== state.currentPage) { state.currentPage = p; renderCustomerList(); }
+    if (p !== state.currentPage) { _customersLoadAndRender({ page: p }); }
   });
 
   const inner = view.querySelector('.projects-inner');
@@ -564,6 +571,94 @@ function _renderCustomerListImpl() {
 }
 
 registerCustomerListRenderer(_renderCustomerListImpl);
+
+// ── Customers page helpers ────────────────────────────────────────────────────
+
+function _updateCustomersUrl({ page, leadStatus, sort } = {}) {
+  const qs = new URLSearchParams();
+  const p  = page || state.currentPage || 1;
+  const ls = leadStatus !== undefined ? leadStatus : (state.leadStatusFilter || '');
+  const s  = sort !== undefined ? sort : (state.sortBy || 'newest');
+  if (p > 1)  qs.set('page', p);
+  if (ls)     qs.set('leadStatus', ls);
+  if (s && s !== 'newest') qs.set('sort', s);
+  history.replaceState(null, '', qs.toString() ? '?' + qs.toString() : location.pathname);
+}
+
+function _customersLoadAndRender({ page } = {}) {
+  const targetPage = page || state.currentPage || 1;
+  const leadStatus = state.leadStatusFilter || '';
+  const sort       = state.sortBy || 'newest';
+  _updateCustomersUrl({ page: targetPage, leadStatus, sort });
+  loadContactsPage({ page: targetPage, leadStatus, sort })
+    .then(() => renderCustomerList())
+    .catch(() => {});
+}
+
+// ── Quick Card Actions ────────────────────────────────────────────────────────
+
+// Load, apply an updater fn, save, and refresh the list — without opening the workflow
+async function quickLoadAndUpdate(contactId, roomIdx, updater) {
+  if (contactId === state.selectedContactId) {
+    // Modify in-memory state directly
+    updater(state.allRooms, roomIdx);
+    updateRoomCache();
+    try { await saveWorkflowData(); } catch (e) {
+      if (e.code === 'HUBSPOT_AUTH') {
+        showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+      } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+        showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+      } else {
+        showToast('Failed to save', true);
+      }
+      return;
+    }
+    renderCustomerList();
+    if (state.selectedRoomIdx === roomIdx) {
+      renderWorkflowHeader();
+      renderRoomTabs();
+      renderWorkflowStages();
+    }
+    return;
+  }
+  let rawData;
+  try { rawData = await GET(`/api/contacts/${contactId}/localdata`); } catch { rawData = null; }
+  let rooms;
+  let notes = '';
+  if (Array.isArray(rawData) && rawData.length > 0) {
+    rooms = rawData;
+  } else if (rawData && Array.isArray(rawData.rooms) && rawData.rooms.length > 0) {
+    rooms = rawData.rooms;
+    notes = rawData.notes || '';
+  } else {
+    rooms = [{ room: 'Main', stageKey: 'sales', statusId: null, comments: [], roomStatus: 'active' }];
+  }
+  rooms = rooms.map(r => ({
+    ...r,
+    room: r.room || 'Main', stageKey: r.stageKey || 'sales',
+    statusId: r.statusId || null, comments: r.comments || [],
+    roomStatus: r.roomStatus || 'active'
+  }));
+  if (roomIdx >= rooms.length) roomIdx = rooms.length - 1;
+  updater(rooms, roomIdx);
+  try { await POST(`/api/contacts/${contactId}/localdata`, { rooms, notes }); } catch (e) {
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else {
+      showToast('Failed to save', true);
+    }
+    return;
+  }
+  state.contactStageCache[contactId] = rooms.map(r => ({
+    room: r.room, stageKey: r.stageKey, roomStatus: r.roomStatus || 'active',
+    statusId: r.statusId || null,
+    sourceId: r.sourceId || null,
+    stageDates: r.stageDates || null,
+  }));
+  renderCustomerList();
+}
 
 function closeCardPicker() {
   document.getElementById('card-picker-popup')?.remove();
@@ -607,7 +702,6 @@ async function openLeadStatusPicker(event, contactId) {
       if (typeof _mergeContactIntoState === 'function') {
         _mergeContactIntoState(fresh);
       }
-      _syncLeadStatusCache(contactId, freshStatus);
       populateLeadStatusFilter();
       renderCustomerList();
       if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
@@ -925,19 +1019,6 @@ function closeContactEditIfPristine() {
   }
 }
 
-function _syncLeadStatusCache(contactId, status) {
-  try {
-    const cached = sessionStorage.getItem('contacts_all_cache');
-    if (!cached) return;
-    const arr = JSON.parse(cached);
-    const ci = arr.findIndex(c => c.id === contactId);
-    if (ci >= 0) {
-      arr[ci].properties = { ...(arr[ci].properties || {}), hs_lead_status: status };
-      sessionStorage.setItem('contacts_all_cache', JSON.stringify(arr));
-    }
-  } catch {}
-}
-
 async function quickSetLeadStatus(contactId, newStatus) {
   closeCardPicker();
   const contact = state.contacts.find(c => c.id === contactId);
@@ -961,7 +1042,6 @@ async function quickSetLeadStatus(contactId, newStatus) {
     // resolves, not when the status value is empty.
     state.pendingLeadStatus = state.pendingLeadStatus || {};
     state.pendingLeadStatus[contactId] = status;
-    _syncLeadStatusCache(contactId, status);
     populateLeadStatusFilter();
     renderCustomerList();
     if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();

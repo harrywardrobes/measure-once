@@ -569,24 +569,45 @@ app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), require
 // ── HubSpot: All Contacts (no lead status filter) ─────────────────────────────
 app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
   try {
-    const allResults = [];
-    let after = undefined;
-    do {
-      const body = {
-        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
-        sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
-        limit: 100
-      };
-      if (after) body.after = after;
-      const r = await axios.post(
-        `${HS}/crm/v3/objects/contacts/search`,
-        body,
-        { headers: hsHeaders() }
-      );
-      allResults.push(...(r.data.results || []));
-      after = r.data.paging?.next?.after;
-    } while (after);
-    res.json({ results: allResults, total: allResults.length });
+    const page       = Math.max(1, parseInt(req.query.page  || '1',   10));
+    const limit      = Math.min(100, Math.max(1, parseInt(req.query.limit || '25', 10)));
+    const leadStatus = req.query.leadStatus || '';
+    const sort       = req.query.sort || 'newest';
+
+    const sortMap = {
+      'newest':    { propertyName: 'createdate', direction: 'DESCENDING' },
+      'oldest':    { propertyName: 'createdate', direction: 'ASCENDING'  },
+      'name-asc':  { propertyName: 'lastname',   direction: 'ASCENDING'  },
+      'name-desc': { propertyName: 'lastname',   direction: 'DESCENDING' },
+    };
+    const sortObj = sortMap[sort] || sortMap['newest'];
+
+    const after = (page - 1) * limit;
+    const body = {
+      properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
+      sorts: [sortObj],
+      limit,
+    };
+    if (after > 0) body.after = after;
+
+    if (leadStatus) {
+      if (leadStatus === '__no_status__') {
+        body.filterGroups = [{ filters: [{ propertyName: 'hs_lead_status', operator: 'NOT_HAS_PROPERTY' }] }];
+      } else {
+        body.filterGroups = [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: leadStatus }] }];
+      }
+    }
+
+    const r = await axios.post(
+      `${HS}/crm/v3/objects/contacts/search`,
+      body,
+      { headers: hsHeaders() }
+    );
+
+    const results    = r.data.results || [];
+    const total      = r.data.total != null ? r.data.total : results.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    res.json({ results, total, page, totalPages });
   } catch (e) {
     const status = e.response?.status;
     if (status === 401 || status === 403) {
