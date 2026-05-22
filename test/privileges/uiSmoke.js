@@ -363,8 +363,8 @@ async function runUiSmoke({ users, runId, clients }) {
         updatedAt: new Date().toISOString(),
         archived: false,
       }));
-      const mockPayload  = JSON.stringify({ results: syntheticContacts, total: 26 });
-      const emptyPayload = JSON.stringify({ results: [], total: 0 });
+      const mockPayload  = JSON.stringify({ results: syntheticContacts, total: 26, page: 1, totalPages: 2 });
+      const emptyPayload = JSON.stringify({ results: [], total: 0, page: 1, totalPages: 1 });
 
       await page.setRequestInterception(true);
       page.on('request', req => {
@@ -492,8 +492,8 @@ async function runUiSmoke({ users, runId, clients }) {
         updatedAt: new Date().toISOString(),
         archived: false,
       }));
-      const mockPayload  = JSON.stringify({ results: syntheticContacts, total: 26 });
-      const emptyPayload = JSON.stringify({ results: [], total: 0 });
+      const mockPayload  = JSON.stringify({ results: syntheticContacts, total: 26, page: 1, totalPages: 2 });
+      const emptyPayload = JSON.stringify({ results: [], total: 0, page: 1, totalPages: 1 });
 
       await page.setRequestInterception(true);
       page.on('request', req => {
@@ -526,10 +526,10 @@ async function runUiSmoke({ users, runId, clients }) {
 
         // Step 3: apply a filter that keeps contacts-all as the data source so
         // the list remains non-empty after the reset and we can assert page 1.
-        // - "[data-tab-key='__all__']" always calls loadAllContacts (mocked →
+        // - "[data-tab-key='__all__']" always calls loadContactsPage (mocked →
         //   26 contacts) and sets currentPage=1.
         // - "#archived-toggle" (showArchived false→true) also calls
-        //   loadAllContacts and sets currentPage=1 — used as a fallback.
+        //   loadContactsPage and sets currentPage=1 — used as a fallback.
         // Avoid "[data-tab-key='__active__']" / any tab that triggers
         // open-leads (mocked empty), which removes pagination entirely.
         const allTab = await page.$('[data-tab-key="__all__"]');
@@ -696,8 +696,8 @@ async function runUiSmoke({ users, runId, clients }) {
         updatedAt: new Date().toISOString(),
         archived: false,
       }));
-      const mockPayload  = JSON.stringify({ results: syntheticContacts, total: 26 });
-      const emptyPayload = JSON.stringify({ results: [], total: 0 });
+      const mockPayload  = JSON.stringify({ results: syntheticContacts, total: 26, page: 1, totalPages: 2 });
+      const emptyPayload = JSON.stringify({ results: [], total: 0, page: 1, totalPages: 1 });
 
       await page.setRequestInterception(true);
       page.on('request', req => {
@@ -783,8 +783,8 @@ async function runUiSmoke({ users, runId, clients }) {
         updatedAt: new Date().toISOString(),
         archived: false,
       }));
-      const manyPayload  = JSON.stringify({ results: manyContacts, total: 201 });
-      const emptyPayload = JSON.stringify({ results: [], total: 0 });
+      const manyPayload  = JSON.stringify({ results: manyContacts, total: 201, page: 1, totalPages: 9 });
+      const emptyPayload = JSON.stringify({ results: [], total: 0, page: 1, totalPages: 1 });
 
       await page.setRequestInterception(true);
       page.on('request', req => {
@@ -885,8 +885,8 @@ async function runUiSmoke({ users, runId, clients }) {
         updatedAt: new Date().toISOString(),
         archived: false,
       }));
-      const tabletPayload = JSON.stringify({ results: tabletContacts, total: 201 });
-      const emptyPayload  = JSON.stringify({ results: [], total: 0 });
+      const tabletPayload = JSON.stringify({ results: tabletContacts, total: 201, page: 1, totalPages: 9 });
+      const emptyPayload  = JSON.stringify({ results: [], total: 0, page: 1, totalPages: 1 });
 
       await page.setRequestInterception(true);
       page.on('request', req => {
