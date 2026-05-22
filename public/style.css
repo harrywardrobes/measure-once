@@ -5033,6 +5033,20 @@ details[open] .trades-history-summary::before { transform: rotate(90deg); }
   padding: 4px 10px;
 }
 
+@media (max-width: 540px) {
+  .cl-pagination-page,
+  .cl-pagination-ellipsis {
+    display: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .cl-pagination-info,
+  .cl-pagination-jump-label {
+    display: none;
+  }
+}
+
 /* ── Ideas & Feedback ─────────────────────────────────────────────────────────── */
 .ideas-page-wrap {
   max-width: 640px;
