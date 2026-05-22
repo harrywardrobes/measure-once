@@ -1091,6 +1091,9 @@ body.showing-workflow .workflow-panel { display: flex; }
   pointer-events: none;
   overflow: visible;
 }
+.stage-step-ring circle {
+  transition: stroke-dashoffset 300ms ease;
+}
 
 .stage-step-connector {
   flex: 1;

@@ -847,6 +847,7 @@ function _renderWorkflowStagesImpl() {
     }
 
     return `<div class="stage-step ${isFocused ? 'stage-step-focused' : ''} ${!isFuture ? 'stage-step-clickable' : ''}"
+              data-stage-key="${escHtml(key)}"
               ${!isFuture ? `data-action="setFocusedStage" data-key="${escHtml(key)}"` : ''}
               title="${escHtml(stage.label)}">
         ${iconHtml}
@@ -954,6 +955,13 @@ function _renderWorkflowStagesImpl() {
 
   const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
+  // Snapshot current ring offsets before replacing DOM (keyed by stage, all dots including future)
+  const _oldRingOffsets = {};
+  el.querySelectorAll('.stage-step[data-stage-key]').forEach(step => {
+    const circle = step.querySelector('.stage-step-ring circle');
+    if (circle) _oldRingOffsets[step.dataset.stageKey] = circle.getAttribute('stroke-dashoffset');
+  });
+
   el.innerHTML = `
     <div class="stage-stepper-wrap">
       <div class="stage-stepper-row">${stepperHtml}</div>
@@ -996,6 +1004,20 @@ function _renderWorkflowStagesImpl() {
       if (bar) bar.style.width = progressPct + '%';
     }
     _scrollStepperToFocused(el);
+
+    // Animate ring stroke-dashoffset from old value → new value when it changed
+    el.querySelectorAll('.stage-step[data-stage-key]').forEach(step => {
+      const key = step.dataset.stageKey;
+      if (!Object.prototype.hasOwnProperty.call(_oldRingOffsets, key)) return;
+      const circle = step.querySelector('.stage-step-ring circle');
+      if (!circle) return;
+      const newOffset = circle.getAttribute('stroke-dashoffset');
+      const oldOffset = _oldRingOffsets[key];
+      if (oldOffset === newOffset) return;
+      circle.setAttribute('stroke-dashoffset', oldOffset);
+      circle.getBoundingClientRect(); // force reflow so transition fires
+      circle.setAttribute('stroke-dashoffset', newOffset);
+    });
   });
 }
 
