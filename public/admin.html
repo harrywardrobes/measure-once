@@ -1820,7 +1820,7 @@
 
             <!-- Sub-statuses -->
             <div data-sub-list="${esc(ls.key)}" style="margin-top:8px;">
-              ${ls.substatuses.map(sub => _renderSubstatusRow(ls.key, sub)).join('')}
+              ${ls.substatuses.map((sub, i, arr) => _renderSubstatusRow(ls.key, sub, i, arr.length)).join('')}
             </div>
 
             <div style="margin-top:8px;">
@@ -1862,13 +1862,15 @@
     else           body.removeAttribute('hidden');
   }
 
-  function _renderSubstatusRow(lsKey, sub) {
+  function _renderSubstatusRow(lsKey, sub, idx, total) {
     // Existing row: data-sub-id is the DB id and inputs carry originals so Save
     // only PATCHes when something changed.
     const id           = sub.id;
     const subKey       = sub.substatus_key || '';
     const subLabel     = sub.label || '';
     const subAction    = sub.action_label || '';
+    const isFirst      = idx === 0;
+    const isLast       = idx === (total - 1);
     // Mirror the new-row layout from addCardActionSubstatus: when the LS has a
     // shorthand and this row's key starts with "{SHORTHAND}_", render the
     // prefix as a non-editable pill and put only the suffix inside the input.
@@ -1890,6 +1892,14 @@
       <div class="ca-sub-row" data-sub-id="${esc(id)}" data-sub-ls="${esc(lsKey)}"
            data-orig-key="${esc(subKey)}" data-orig-label="${esc(subLabel)}" data-orig-action="${esc(subAction)}"
            style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px dashed var(--border);">
+        <div style="flex:0 0 auto;display:flex;flex-direction:column;line-height:1;">
+          <button class="btn btn-ghost" title="Move up" ${isFirst ? 'disabled' : ''}
+            style="padding:0 5px;font-size:.7rem;line-height:1;${isFirst ? 'opacity:.3;' : ''}"
+            onclick="moveCardActionSubstatus(${esc(id)}, 'up')">▲</button>
+          <button class="btn btn-ghost" title="Move down" ${isLast ? 'disabled' : ''}
+            style="padding:0 5px;font-size:.7rem;line-height:1;${isLast ? 'opacity:.3;' : ''}"
+            onclick="moveCardActionSubstatus(${esc(id)}, 'down')">▼</button>
+        </div>
         <div style="display:flex;align-items:stretch;flex:0 0 auto;">
           ${prefixHtml}
           <input type="text" class="field ca-sub-key" maxlength="64"
@@ -1907,6 +1917,43 @@
           placeholder="Action label"
           style="flex:1;padding:4px 7px;font-size:.78rem;">
       </div>`;
+  }
+
+  // Reorder a sub-status within its lead-status group. Mirrors moveLeadStatus:
+  // swap sort_order with the adjacent sibling via two PATCH calls, then mutate
+  // local data and re-render. Unsaved edits in other rows are lost on
+  // re-render — accept this to match the lead-status pattern.
+  async function moveCardActionSubstatus(id, direction) {
+    const subId = Number(id);
+    const me = _cardSubstatusesData.find(s => Number(s.id) === subId);
+    if (!me) return;
+    // Siblings = same status_key, sorted as they are rendered.
+    const siblings = _cardSubstatusesData
+      .filter(s => String(s.status_key) === String(me.status_key))
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    const idx     = siblings.findIndex(s => Number(s.id) === subId);
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= siblings.length) return;
+    const a = siblings[idx];
+    const b = siblings[swapIdx];
+    // If both sort_orders are equal (e.g. all 0 by default), assign a
+    // sequence first so the swap actually changes order on reload.
+    if ((a.sort_order || 0) === (b.sort_order || 0)) {
+      siblings.forEach((s, i) => { s.sort_order = i; });
+    }
+    const aOrder = a.sort_order;
+    const bOrder = b.sort_order;
+    try {
+      await Promise.all([
+        api('PATCH', `/api/admin/lead-substatuses/${a.id}`, { sort_order: bOrder }),
+        api('PATCH', `/api/admin/lead-substatuses/${b.id}`, { sort_order: aOrder }),
+      ]);
+      a.sort_order = bOrder;
+      b.sort_order = aOrder;
+      renderCardActionsTable();
+    } catch (e) {
+      toast(`Failed to reorder: ${e.message}`, true);
+    }
   }
 
   // Append an empty sub-status row to the named lead status block. New rows
@@ -2137,6 +2184,7 @@
   window.loadCardActionsAdmin       = loadCardActionsAdmin;
   window.saveAllCardActionLabels    = saveAllCardActionLabels;
   window.addCardActionSubstatus     = addCardActionSubstatus;
+  window.moveCardActionSubstatus    = moveCardActionSubstatus;
 
   async function loadLeadStatusesAdmin() {
     if (_leadStatusesLoaded) return;
