@@ -1686,7 +1686,6 @@
       _leadStatusesData    = Array.isArray(statuses)    ? statuses    : _leadStatusesData;
       _cardSubstatusesData = Array.isArray(substatuses) ? substatuses : [];
       _leadStatusesLoaded  = true;
-      _pendingSubstatusDeletes = new Set();
       _newSubstatusCounter = 0;
       renderCardActionsTable();
     } catch (e) {
@@ -1695,12 +1694,10 @@
   }
 
   // Sub-status state. _cardSubstatusesData holds the server's view; the DOM
-  // is the source of truth for unsaved edits / additions. Deletions are
-  // tracked in _pendingSubstatusDeletes (set of numeric ids) so Save can DELETE
-  // them after the user confirms. New (unsaved) rows have no data-sub-id but
-  // do have data-sub-new="1".
+  // is the source of truth for unsaved edits / additions. New (unsaved) rows
+  // have no data-sub-id but do have data-sub-new="1". Deletion is intentionally
+  // not supported in this UI — sub-statuses must be removed in HubSpot.
   let _cardSubstatusesData     = [];
-  let _pendingSubstatusDeletes = new Set();
   let _newSubstatusCounter     = 0;
 
   function _stageLabelFor(key) {
@@ -1909,8 +1906,6 @@
           value="${esc(subAction)}"
           placeholder="Action label"
           style="flex:1;padding:4px 7px;font-size:.78rem;">
-        <button class="btn btn-ghost" style="padding:3px 9px;font-size:.74rem;color:#991b1b;"
-          onclick="deleteCardActionSubstatus(this)">Delete</button>
       </div>`;
   }
 
@@ -1964,8 +1959,6 @@
         <input type="text" class="field ca-sub-action" maxlength="128"
           placeholder="Action label"
           style="flex:1;padding:4px 7px;font-size:.78rem;">
-        <button class="btn btn-ghost" style="padding:3px 9px;font-size:.74rem;color:#991b1b;"
-          onclick="deleteCardActionSubstatus(this)">Delete</button>
       </div>`;
     list.appendChild(tmp.firstElementChild);
     const newRow = list.lastElementChild;
@@ -1973,43 +1966,12 @@
     if (keyInput) keyInput.focus();
   }
 
-  // Delete a sub-status row. New (unsaved) rows just vanish; existing rows are
-  // queued for deletion on next Save.
-  function deleteCardActionSubstatus(btn) {
-    const row = btn.closest('.ca-sub-row');
-    if (!row) return;
-    if (row.dataset.subNew) {
-      row.remove();
-      return;
-    }
-    const id = parseInt(row.dataset.subId, 10);
-    if (!Number.isInteger(id)) { row.remove(); return; }
-    if (!confirm('Delete this sub-status? It will also be removed from HubSpot on Save.')) return;
-    _pendingSubstatusDeletes.add(id);
-    row.style.opacity   = '0.4';
-    row.style.background = '#fee2e2';
-    row.querySelectorAll('input,button').forEach(el => { el.disabled = true; });
-    // Re-enable the delete button so users can undo their queued deletion.
-    const undoBtn = document.createElement('button');
-    undoBtn.className = 'btn btn-ghost';
-    undoBtn.style.cssText = 'padding:3px 9px;font-size:.74rem;';
-    undoBtn.textContent = 'Undo';
-    undoBtn.onclick = () => {
-      _pendingSubstatusDeletes.delete(id);
-      row.style.opacity = '';
-      row.style.background = '';
-      row.querySelectorAll('input').forEach(el => { el.disabled = false; });
-      undoBtn.replaceWith(btn);
-      btn.disabled = false;
-    };
-    btn.replaceWith(undoBtn);
-  }
-
   // Save sweeps every dirty row, in order:
   //   1. stage-default + ls-default inputs → PUT /api/admin/stage-action-labels
   //   2. existing sub-status rows with changes → PATCH /api/admin/lead-substatuses/:id
   //   3. new sub-status rows → POST /api/admin/lead-substatuses
-  //   4. queued deletes → DELETE /api/admin/lead-substatuses/:id
+  // Deletion is intentionally not supported — admins must remove sub-statuses
+  // in HubSpot, after which they stop appearing here on the next sync.
   async function saveAllCardActionLabels() {
     let saved = 0, failed = 0;
     const failures = [];
@@ -2057,9 +2019,6 @@
     for (const row of subRows) {
       const isNew = !!row.dataset.subNew;
       const idStr = row.dataset.subId;
-      // Skip rows queued for delete — handled below.
-      if (!isNew && _pendingSubstatusDeletes.has(parseInt(idStr, 10))) continue;
-
       const lsKey      = row.dataset.subLs;
       const keyInput   = row.querySelector('.ca-sub-key');
       const labelInput = row.querySelector('.ca-sub-label');
@@ -2141,20 +2100,6 @@
       }
     }
 
-    // 4) Deletes.
-    for (const id of Array.from(_pendingSubstatusDeletes)) {
-      try {
-        await api('DELETE', `/api/admin/lead-substatuses/${id}`);
-        _pendingSubstatusDeletes.delete(id);
-        const row = document.querySelector(`.ca-sub-row[data-sub-id="${id}"]`);
-        if (row) row.remove();
-        saved++;
-      } catch (e) {
-        failed++;
-        failures.push(`delete sub-status #${id}: ${e.message || 'error'}`);
-      }
-    }
-
     if (saved === 0 && failed === 0) { toast('No changes to save.'); return; }
     if (failed) {
       console.warn('Card actions save: some changes failed', failures);
@@ -2192,7 +2137,6 @@
   window.loadCardActionsAdmin       = loadCardActionsAdmin;
   window.saveAllCardActionLabels    = saveAllCardActionLabels;
   window.addCardActionSubstatus     = addCardActionSubstatus;
-  window.deleteCardActionSubstatus  = deleteCardActionSubstatus;
 
   async function loadLeadStatusesAdmin() {
     if (_leadStatusesLoaded) return;

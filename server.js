@@ -3394,22 +3394,6 @@ app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asyn
   }
 });
 
-app.delete('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id.' });
-  try {
-    const r = await pool.query('DELETE FROM lead_substatuses WHERE id = $1', [id]);
-    if (!r.rowCount) return res.status(404).json({ error: 'Sub-status not found.' });
-    syncLeadSubstatusesToHubSpot().catch(e =>
-      console.warn('  hw_lead_substatus sync failed after delete:', e.response?.data?.message || e.message)
-    );
-    res.json({ ok: true });
-  } catch (e) {
-    console.error('DELETE /api/admin/lead-substatuses error:', e.message);
-    res.status(500).json({ error: 'Could not delete sub-status.' });
-  }
-});
-
 // ── WhatsApp config probe (no creds needed — just reports if configured) ──────
 app.get('/api/whatsapp/config', isAuthenticated, (req, res) => {
   res.json({
