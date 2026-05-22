@@ -798,67 +798,74 @@ function _renderWorkflowHeaderImpl() {
   const name       = contactName(contact);
   const email      = contact?.properties?.email || '';
   const phone      = contact?.properties?.phone || '';
+  const address    = contact?.properties?.address || '';
   const city       = contact?.properties?.city  || '';
+  const zip        = contact?.properties?.zip   || '';
   const customerNum = contact?.properties?.customer_number || '';
   const stageKey   = state.workflowData?.stageKey || 'sales';
   const colour     = stageColour(stageKey);
   const stageLabel = state.workflow?.stages?.[stageKey]?.label || stageKey;
 
-  const stageOptions = Object.entries(state.workflow?.stages || {}).map(([key, s]) =>
-    `<option value="${escHtml(key)}" ${key === stageKey ? 'selected' : ''}>${escHtml(s.label)}</option>`
-  ).join('');
+  const cityLine = [city, zip].filter(Boolean).join(' ');
+
+  const leadStatusHtml = (() => {
+    const raw = contact?.properties?.hs_lead_status || '';
+    const CSS_CLASS_MAP = {
+      'OPEN_DEAL':            'lsb-open-deal',
+      'NEW':                  'lsb-new',
+      'IN_PROGRESS':          'lsb-in-progress',
+      'OPEN':                 'lsb-new',
+      'CONNECTED':            'lsb-connected',
+      'ATTEMPTED_TO_CONTACT': '',
+      'UNQUALIFIED':          'lsb-unqualified',
+      'BAD_TIMING':           'lsb-bad-timing',
+    };
+    const cid = contact?.id || '';
+    const editable = canEditPipeline();
+    if (!raw) {
+      const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+      if (!editable) return `<span class="lead-status-badge lsb-empty">${escHtml(nullLabel)}</span>`;
+      return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(nullLabel)}</span>`;
+    }
+    const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
+    const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    const cls = CSS_CLASS_MAP[raw] || '';
+    if (!editable) return `<span class="lead-status-badge ${cls}">${escHtml(label)}</span>`;
+    return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(label)}</span>`;
+  })();
 
   el.innerHTML = `
-    <div class="flex items-start justify-between gap-4 flex-wrap">
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2.5 min-w-0">
-          <h1 class="text-xl font-bold text-slate-900 truncate">${escHtml(name)}</h1>
-          ${customerNum ? `<span class="customer-num-badge">${escHtml(customerNum)}</span>` : ''}
-          <button class="contact-edit-btn" onclick="openContactEdit()" title="Edit contact details" data-viewer-hide>
-            <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-            </svg>
-          </button>
+    <div class="customer-header-wrap" style="max-width:1100px;margin:0 auto;">
+      <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <h1 class="text-xl font-bold text-slate-900 truncate">${escHtml(name)}</h1>
+            ${customerNum ? `<span class="customer-num-badge">${escHtml(customerNum)}</span>` : ''}
+            <button class="contact-edit-btn" onclick="openContactEdit()" title="Edit contact details" data-viewer-hide>
+              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="mt-1.5 space-y-0.5">
+            ${address  ? `<div class="text-sm text-slate-500">${escHtml(address)}</div>` : ''}
+            ${cityLine ? `<div class="text-sm text-slate-500">${escHtml(cityLine)}</div>` : ''}
+            ${email ? `<div><a href="mailto:${escHtml(email)}" class="text-sm text-blue-600 hover:underline">${escHtml(email)}</a></div>` : ''}
+            ${phone ? `<div class="text-sm text-slate-500 flex items-center gap-1.5">
+              <span>${escHtml(phone)}</span>
+              ${state.whatsappEnabled ? `<button onclick="openWhatsAppModal()" title="Send WhatsApp message" data-viewer-hide
+                style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#25D366;border:none;cursor:pointer;flex-shrink:0;padding:0;vertical-align:middle">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+              </button>` : ''}
+            </div>` : ''}
+          </div>
         </div>
-        <div class="flex flex-wrap items-center gap-2 mt-1.5">
+        <div class="flex flex-wrap items-center justify-end gap-2 shrink-0">
           <span class="text-xs font-semibold px-2.5 py-1 rounded-full"
                 style="background:${colour.light};color:${colour.text}">${escHtml(stageLabel)}</span>
-          ${(() => {
-            const raw = contact?.properties?.hs_lead_status || '';
-            const CSS_CLASS_MAP = {
-              'OPEN_DEAL':            'lsb-open-deal',
-              'NEW':                  'lsb-new',
-              'IN_PROGRESS':          'lsb-in-progress',
-              'OPEN':                 'lsb-new',
-              'CONNECTED':            'lsb-connected',
-              'ATTEMPTED_TO_CONTACT': '',
-              'UNQUALIFIED':          'lsb-unqualified',
-              'BAD_TIMING':           'lsb-bad-timing',
-            };
-            const cid = contact?.id || '';
-            const editable = canEditPipeline();
-            if (!raw) {
-              const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
-              if (!editable) return `<span class="lead-status-badge lsb-empty">${escHtml(nullLabel)}</span>`;
-              return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(nullLabel)}</span>`;
-            }
-            const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
-            const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-            const cls = CSS_CLASS_MAP[raw] || '';
-            if (!editable) return `<span class="lead-status-badge ${cls}">${escHtml(label)}</span>`;
-            return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(label)}</span>`;
-          })()}
-          ${email ? `<a href="mailto:${escHtml(email)}" class="text-sm text-blue-600 hover:underline">${escHtml(email)}</a>` : ''}
-          ${phone ? `<span class="text-sm text-slate-500 flex items-center gap-1">
-            ${escHtml(phone)}
-            ${state.whatsappEnabled ? `<button onclick="openWhatsAppModal()" title="Send WhatsApp message" data-viewer-hide
-              style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#25D366;border:none;cursor:pointer;flex-shrink:0;padding:0;vertical-align:middle">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-              </svg>
-            </button>` : ''}
-          </span>` : ''}
-          ${city  ? `<span class="text-sm text-slate-400">${escHtml(city)}</span>`  : ''}
+          ${leadStatusHtml}
         </div>
       </div>
     </div>
