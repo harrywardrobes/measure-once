@@ -97,6 +97,10 @@
 /* ── Reset ───────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
+/* ── Global utility ──────────────────────────────────────────────────────────── */
+/* Mirrors Tailwind's .hidden so non-Tailwind pages (e.g. admin.html) honour it. */
+.hidden { display: none; }
+
 body {
   font-family: 'Open Sans', system-ui, sans-serif;
   background: var(--paper);
