@@ -200,8 +200,32 @@ window.getShortcut = function (key) {
   document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner);
   document.body.insertAdjacentHTML('beforeend', invoicePanel + bottomNav);
 
-  const activeNavBtn = document.querySelector('.bottom-nav-active');
-  if (activeNavBtn) activeNavBtn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'instant' });
+  function scrollActiveNavIntoView(behavior) {
+    const btn = document.querySelector('.bottom-nav-active');
+    if (btn) btn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: behavior || 'instant' });
+  }
+
+  function syncActiveNav(behavior) {
+    const currentPath = location.pathname;
+    const buttons = document.querySelectorAll('.bottom-nav-btn');
+    let changed = false;
+    buttons.forEach(btn => {
+      const href = btn.getAttribute('href');
+      const wasActive = btn.classList.contains('bottom-nav-active');
+      const isActive = href === currentPath;
+      if (isActive !== wasActive) {
+        btn.classList.toggle('bottom-nav-active', isActive);
+        changed = true;
+      }
+    });
+    if (changed) scrollActiveNavIntoView(behavior);
+  }
+
+  scrollActiveNavIntoView('instant');
+
+  window.addEventListener('popstate', () => syncActiveNav('smooth'));
+  window.addEventListener('hashchange', () => syncActiveNav('smooth'));
+  window.addEventListener('mo:navigation', () => syncActiveNav('smooth'));
 })();
 
 // ── Access request form ───────────────────────────────────────────────────────
