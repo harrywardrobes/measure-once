@@ -1908,12 +1908,20 @@
       }
     }
     _newSubstatusCounter++;
+    // Prefill the KEY input with the LS shorthand + underscore so admins start
+    // from a unique, predictable prefix (e.g. "ATCT_" for Attempted to Contact).
+    // Falls back to empty if the LS has no shorthand yet (older row that
+    // hasn't been backfilled, or sentinel).
+    const ls = (_leadStatusesData || []).find(s => s.key === lsKey);
+    const sh = (ls && ls.shorthand) ? String(ls.shorthand).toUpperCase() : '';
+    const keyPrefill = sh ? `${sh}_` : '';
     const tmp = document.createElement('div');
     tmp.innerHTML = `
       <div class="ca-sub-row" data-sub-new="1" data-sub-ls="${esc(lsKey)}"
            data-orig-key="" data-orig-label="" data-orig-action=""
            style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px dashed var(--border);background:#fffbeb;">
         <input type="text" class="field ca-sub-key" maxlength="64"
+          value="${esc(keyPrefill)}"
           placeholder="KEY"
           style="flex:0 0 140px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;">
         <input type="text" class="field ca-sub-label" maxlength="128"
@@ -1926,6 +1934,13 @@
           onclick="deleteCardActionSubstatus(this)">Delete</button>
       </div>`;
     list.appendChild(tmp.firstElementChild);
+    // Drop the cursor after the prefill so the admin types the unique suffix.
+    const newRow = list.lastElementChild;
+    const keyInput = newRow && newRow.querySelector('.ca-sub-key');
+    if (keyInput) {
+      keyInput.focus();
+      try { keyInput.setSelectionRange(keyPrefill.length, keyPrefill.length); } catch (_) {}
+    }
   }
 
   // Delete a sub-status row. New (unsaved) rows just vanish; existing rows are
@@ -2181,6 +2196,7 @@
         </td>
         <td style="padding:7px 8px;color:var(--ink-4);font-size:.78rem;font-style:italic;">—</td>
         <td style="padding:7px 8px;font-family:monospace;color:var(--ink-4);font-size:.78rem;font-style:italic;">— none —</td>
+        <td style="padding:7px 8px;font-family:monospace;color:var(--ink-4);font-size:.78rem;font-style:italic;">—</td>
         <td style="padding:7px 8px;">
           <input type="text" class="field ls-label-input" value="${esc(nullRow.label)}" data-key="${esc(nullRow.key)}"
             style="padding:4px 7px;font-size:.82rem;width:100%;min-width:120px;"
@@ -2197,6 +2213,7 @@
             <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Order</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Stage</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Key</th>
+            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;" title="4-character shorthand used to prefix new sub-status keys (must be unique).">Shorthand</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Display Label</th>
             <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">Excl. from Sales</th>
           </tr>
@@ -2233,6 +2250,14 @@
                 }
               </td>
               <td style="padding:7px 8px;">
+                <input type="text" class="field ls-shorthand-input" maxlength="4"
+                  value="${esc(s.shorthand || '')}" data-key="${esc(s.key)}"
+                  title="4-character shorthand (must be unique). Used to prefix new sub-status keys."
+                  style="padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;width:62px;letter-spacing:.05em;"
+                  oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4)"
+                  onkeydown="if(event.key==='Enter')this.blur()">
+              </td>
+              <td style="padding:7px 8px;">
                 <input type="text" class="field ls-label-input" value="${esc(s.label)}" data-key="${esc(s.key)}"
                   style="padding:4px 7px;font-size:.82rem;width:100%;min-width:120px;"
                   onkeydown="if(event.key==='Enter')this.blur()">
@@ -2259,19 +2284,31 @@
       const labelEl   = row.querySelector('.ls-label-input');
       const stageEl   = row.querySelector('.ls-stage-select');
       const exclEl    = row.querySelector('input[type="checkbox"]');
-      const newLabel   = labelEl  ? labelEl.value.trim()      : existing.label;
-      const newStage   = stageEl  ? (stageEl.value || null)   : existing.stage;
-      const newExcl    = exclEl   ? exclEl.checked             : existing.excluded_from_sales;
+      const shortEl   = row.querySelector('.ls-shorthand-input');
+      const newLabel     = labelEl  ? labelEl.value.trim()      : existing.label;
+      const newStage     = stageEl  ? (stageEl.value || null)   : existing.stage;
+      const newExcl      = exclEl   ? exclEl.checked             : existing.excluded_from_sales;
+      const newShorthand = shortEl  ? shortEl.value.trim().toUpperCase() : (existing.shorthand || '');
+      const curShorthand = (existing.shorthand || '').toUpperCase();
       const diff = {};
       if (newLabel !== existing.label)                 diff.label = newLabel;
       if (newStage !== (existing.stage || null))       diff.stage = newStage;
       if (newExcl  !== existing.excluded_from_sales)   diff.excluded_from_sales = newExcl;
+      if (newShorthand && newShorthand !== curShorthand) {
+        if (!/^[A-Z0-9]{4}$/.test(newShorthand)) {
+          toast(`Shorthand for ${key} must be 4 characters (A–Z, 0–9).`, true);
+          if (shortEl) shortEl.value = curShorthand;
+          return;
+        }
+        diff.shorthand = newShorthand;
+      }
       if (!newLabel) return;
-      if (Object.keys(diff).length) changed.push({ key, diff, labelEl, stageEl, exclEl, existing });
+      if (Object.keys(diff).length) changed.push({ key, diff, labelEl, stageEl, exclEl, shortEl, existing });
     });
     if (!changed.length) { toast('No changes to save.'); return; }
     let saved = 0, failed = 0;
-    for (const { key, diff, labelEl, stageEl, exclEl, existing } of changed) {
+    const failureMessages = [];
+    for (const { key, diff, labelEl, stageEl, exclEl, shortEl, existing } of changed) {
       try {
         const updated = await api('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(key)}`, diff);
         const idx = _leadStatusesData.findIndex(s => s.key === key);
@@ -2281,10 +2318,12 @@
         if (labelEl)  labelEl.value   = existing.label;
         if (stageEl)  stageEl.value   = existing.stage || '';
         if (exclEl)   exclEl.checked  = existing.excluded_from_sales;
+        if (shortEl)  shortEl.value   = existing.shorthand || '';
+        failureMessages.push(`${key}: ${e.message}`);
         failed++;
       }
     }
-    if (failed) toast(`Saved ${saved}, failed ${failed}.`, true);
+    if (failed) toast(`Saved ${saved}, failed ${failed}. ${failureMessages[0] || ''}`.trim(), true);
     else toast(`${saved} change${saved !== 1 ? 's' : ''} saved.`);
     _notifyLeadStatusChanged();
   }

@@ -2650,6 +2650,87 @@ const LEAD_STATUS_STAGE_SEEDS = {
   SURVEY: ['DEPOSIT_INVOICE', 'SURVEY_SCHEDULED', 'SURVEY_IN_PROGRESS', 'SURVEY_SENT', 'READY_FOR_PRODUCTION'],
 };
 
+// ── Lead-status shorthand ────────────────────────────────────────────────────
+// Each non-sentinel lead_status_config row gets a stable, unique 4-character
+// shorthand (uppercase A-Z0-9). Used to prefix newly-created sub-status keys
+// in the admin Card Actions tab. Generated from the label on create, kept
+// stable across renames, editable by the admin (validated unique).
+const _SHORTHAND_SKIP_WORDS = new Set([
+  'to','of','the','a','an','and','in','on','for','with','or','at','by'
+]);
+const _SHORTHAND_VOWELS = new Set(['A','E','I','O','U']);
+
+function generateShorthandCandidate(label) {
+  const tokens = String(label || '')
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(w => w && !_SHORTHAND_SKIP_WORDS.has(w.toLowerCase()));
+  let out = '';
+  if (tokens.length === 0) {
+    const raw = String(label || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    out = raw.slice(0, 4);
+  } else if (tokens.length === 1) {
+    const w = tokens[0].toUpperCase();
+    out = w[0] || '';
+    for (let i = 1; i < w.length && out.length < 4; i++) {
+      if (!_SHORTHAND_VOWELS.has(w[i])) out += w[i];
+    }
+    for (let i = 1; i < w.length && out.length < 4; i++) {
+      if (_SHORTHAND_VOWELS.has(w[i])) out += w[i];
+    }
+  } else if (tokens.length === 2) {
+    // Pattern that produces ATCT from "Attempted Contact", AWPH from "Awaiting Photos":
+    // first letter of each word + first consonant after position 0 in each word.
+    for (const w of tokens) {
+      const u = w.toUpperCase();
+      out += u[0] || '';
+      let pad = '';
+      for (let i = 1; i < u.length; i++) {
+        if (!_SHORTHAND_VOWELS.has(u[i]) && /[A-Z0-9]/.test(u[i])) { pad = u[i]; break; }
+      }
+      if (!pad) {
+        for (let i = 1; i < u.length; i++) {
+          if (/[A-Z0-9]/.test(u[i])) { pad = u[i]; break; }
+        }
+      }
+      out += pad || u[u.length - 1] || 'X';
+    }
+  } else {
+    for (const w of tokens.slice(0, 4)) out += (w[0] || '').toUpperCase();
+    const first = (tokens[0] || '').toUpperCase();
+    for (let i = 1; i < first.length && out.length < 4; i++) out += first[i];
+  }
+  out = out.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  while (out.length < 4) out += 'X';
+  return out.slice(0, 4);
+}
+
+async function generateUniqueShorthand(label, excludeKey) {
+  const base = generateShorthandCandidate(label);
+  const { rows } = await pool.query(
+    `SELECT shorthand FROM lead_status_config
+     WHERE shorthand IS NOT NULL AND ($1::text IS NULL OR key <> $1)`,
+    [excludeKey || null]
+  );
+  const taken = new Set(rows.map(r => (r.shorthand || '').toUpperCase()));
+  if (!taken.has(base)) return base;
+  // Vary the 4th, then 3rd, character through a consonant-first alphabet.
+  const ALPHA = 'BCDFGHJKLMNPQRSTVWXYZ0123456789AEIOU';
+  for (const c of ALPHA) {
+    const cand = base.slice(0, 3) + c;
+    if (!taken.has(cand)) return cand;
+  }
+  for (const c of ALPHA) {
+    const cand = base.slice(0, 2) + c + base[3];
+    if (!taken.has(cand)) return cand;
+  }
+  for (let n = 0; n < 1000; n++) {
+    const suf = String(n).padStart(2, '0');
+    const cand = (base.slice(0, 2) + suf).slice(0, 4);
+    if (!taken.has(cand)) return cand;
+  }
+  throw new Error('Could not generate a unique 4-character shorthand.');
+}
+
 async function ensureLeadStatusTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS lead_status_config (
@@ -2661,6 +2742,14 @@ async function ensureLeadStatusTable() {
   `);
   await pool.query(`ALTER TABLE lead_status_config ADD COLUMN IF NOT EXISTS stage VARCHAR(32)`);
   await pool.query(`ALTER TABLE lead_status_config ADD COLUMN IF NOT EXISTS is_null_row BOOLEAN NOT NULL DEFAULT FALSE`);
+  // Stable 4-char shorthand per lead status. Nullable so the null-sentinel row
+  // (is_null_row=TRUE) can stay without one; a partial UNIQUE index keeps
+  // non-null values unique.
+  await pool.query(`ALTER TABLE lead_status_config ADD COLUMN IF NOT EXISTS shorthand CHAR(4)`);
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS lead_status_config_shorthand_uniq
+       ON lead_status_config(shorthand) WHERE shorthand IS NOT NULL`
+  );
 
   // Ensure the sentinel null-status row exists (never overwrite an admin-changed label).
   await pool.query(
@@ -2728,11 +2817,31 @@ async function ensureLeadStatusTable() {
   console.log('  Lead status config seeded with defaults (no HubSpot token)');
 }
 
+// Backfill 4-char shorthand for any non-sentinel row that doesn't have one yet.
+// Called after seeding so it covers both HubSpot-seeded and default-seeded rows.
+async function backfillLeadStatusShorthands() {
+  const { rows } = await pool.query(
+    `SELECT key, label FROM lead_status_config
+       WHERE shorthand IS NULL AND is_null_row IS NOT TRUE
+       ORDER BY sort_order ASC, key ASC`
+  );
+  if (!rows.length) return;
+  for (const r of rows) {
+    try {
+      const sh = await generateUniqueShorthand(r.label, r.key);
+      await pool.query('UPDATE lead_status_config SET shorthand = $1 WHERE key = $2', [sh, r.key]);
+    } catch (e) {
+      console.warn(`  Could not backfill shorthand for lead status ${r.key}:`, e.message);
+    }
+  }
+  console.log(`  Backfilled shorthand for ${rows.length} lead status(es).`);
+}
+
 // Public authenticated: full ordered list for all frontend pages
 app.get('/api/lead-statuses', isAuthenticated, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT key, label, sort_order, excluded_from_sales, stage, is_null_row FROM lead_status_config ORDER BY sort_order ASC, key ASC'
+      'SELECT key, label, sort_order, excluded_from_sales, stage, is_null_row, shorthand FROM lead_status_config ORDER BY sort_order ASC, key ASC'
     );
     res.set('Cache-Control', 'no-store');
     res.json(rows);
@@ -2746,7 +2855,7 @@ app.get('/api/lead-statuses', isAuthenticated, async (req, res) => {
 app.get('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT key, label, sort_order, excluded_from_sales, stage, is_null_row FROM lead_status_config ORDER BY sort_order ASC, key ASC'
+      'SELECT key, label, sort_order, excluded_from_sales, stage, is_null_row, shorthand FROM lead_status_config ORDER BY sort_order ASC, key ASC'
     );
     res.json(rows);
   } catch (e) {
@@ -2768,17 +2877,34 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
       return res.status(400).json({ error: 'stage must be one of the allowed stage keys.' });
     }
   }
+  // Shorthand: caller may supply one (must be 4× [A-Z0-9]); otherwise auto-generated.
+  let shorthand = null;
+  if (req.body?.shorthand !== undefined && req.body.shorthand !== null && req.body.shorthand !== '') {
+    shorthand = String(req.body.shorthand).trim().toUpperCase();
+    if (!/^[A-Z0-9]{4}$/.test(shorthand)) {
+      return res.status(400).json({ error: 'shorthand must be exactly 4 characters (A–Z or 0–9).' });
+    }
+  } else {
+    try { shorthand = await generateUniqueShorthand(label); }
+    catch (e) { return res.status(500).json({ error: e.message }); }
+  }
   try {
     const { rows: maxRows } = await pool.query('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM lead_status_config');
     const next = maxRows[0].next;
     const { rows } = await pool.query(
-      'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage) VALUES ($1, $2, $3, FALSE, $4) RETURNING *',
-      [key, label, next, stage]
+      'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage, shorthand) VALUES ($1, $2, $3, FALSE, $4, $5) RETURNING *',
+      [key, label, next, stage, shorthand]
     );
     res.status(201).json(rows[0]);
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
-    if (e.code === '23505') return res.status(409).json({ error: 'A status with that key already exists.' });
+    if (e.code === '23505') {
+      // Could be key collision or shorthand collision — distinguish by constraint name.
+      if (String(e.constraint || '').includes('shorthand')) {
+        return res.status(409).json({ error: 'That shorthand is already in use.' });
+      }
+      return res.status(409).json({ error: 'A status with that key already exists.' });
+    }
     console.error('POST /api/admin/lead-statuses error:', e.message);
     res.status(500).json({ error: 'Could not add lead status.' });
   }
@@ -2787,11 +2913,23 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
 // Admin: update label / sort_order / excluded_from_sales / key (key rename for empty-key rows)
 app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async (req, res) => {
   const key = req.params.key;
-  const { label, sort_order, excluded_from_sales, new_key, stage } = req.body || {};
+  const { label, sort_order, excluded_from_sales, new_key, stage, shorthand } = req.body || {};
   if (label !== undefined && !String(label).trim()) return res.status(400).json({ error: 'label cannot be empty.' });
   if (new_key !== undefined) {
     const nk = String(new_key).trim().toUpperCase();
     if (!nk || !/^[A-Z0-9_]+$/.test(nk)) return res.status(400).json({ error: 'new_key may only contain uppercase letters, digits, and underscores.' });
+  }
+  // Shorthand is editable but stable across label renames (we only update it
+  // when the caller explicitly sends it).
+  let shorthandProvided = false;
+  let shorthandValue = null;
+  if (shorthand !== undefined) {
+    shorthandProvided = true;
+    const sv = String(shorthand || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{4}$/.test(sv)) {
+      return res.status(400).json({ error: 'shorthand must be exactly 4 characters (A–Z or 0–9).' });
+    }
+    shorthandValue = sv;
   }
   let stageProvided = false;
   let stageValue = null;
@@ -2827,14 +2965,20 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
     const newExcluded = excluded_from_sales !== undefined ? !!excluded_from_sales : cur.excluded_from_sales;
     const finalKey    = new_key   !== undefined ? String(new_key).trim().toUpperCase() : key;
     const newStage    = stageProvided ? stageValue : cur.stage;
+    const newShorthand = shorthandProvided ? shorthandValue : cur.shorthand;
     const { rows } = await pool.query(
-      'UPDATE lead_status_config SET key = $1, label = $2, sort_order = $3, excluded_from_sales = $4, stage = $5 WHERE key = $6 RETURNING *',
-      [finalKey, newLabel, newOrder, newExcluded, newStage, key]
+      'UPDATE lead_status_config SET key = $1, label = $2, sort_order = $3, excluded_from_sales = $4, stage = $5, shorthand = $6 WHERE key = $7 RETURNING *',
+      [finalKey, newLabel, newOrder, newExcluded, newStage, newShorthand, key]
     );
     res.json(rows[0]);
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
-    if (e.code === '23505') return res.status(409).json({ error: 'A status with that key already exists.' });
+    if (e.code === '23505') {
+      if (String(e.constraint || '').includes('shorthand')) {
+        return res.status(409).json({ error: 'That shorthand is already in use.' });
+      }
+      return res.status(409).json({ error: 'A status with that key already exists.' });
+    }
     console.error('PATCH /api/admin/lead-statuses/:key error:', e.message);
     res.status(500).json({ error: 'Could not update lead status.' });
   }
@@ -3548,6 +3692,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Ideas tables setup failed:', e.message); }
     try { await ensureLeadStatusTable(); console.log('  Lead status config table ready'); }
     catch (e) { console.error('  Lead status table setup failed:', e.message); }
+    try { await backfillLeadStatusShorthands(); }
+    catch (e) { console.error('  Lead status shorthand backfill failed:', e.message); }
     try { await ensureStageActionLabelsTable(); console.log('  Stage action labels table ready'); }
     catch (e) { console.error('  Stage action labels table setup failed:', e.message); }
     try { await seedStageActionLabelsDefaults(); console.log('  Stage action labels defaults seeded'); }
