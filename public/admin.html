@@ -1872,14 +1872,35 @@
     const subKey       = sub.substatus_key || '';
     const subLabel     = sub.label || '';
     const subAction    = sub.action_label || '';
+    // Mirror the new-row layout from addCardActionSubstatus: when the LS has a
+    // shorthand and this row's key starts with "{SHORTHAND}_", render the
+    // prefix as a non-editable pill and put only the suffix inside the input.
+    // data-orig-key still holds the full key so PATCH diffing is unchanged
+    // (saveAllCardActionLabels rebuilds subKey = prefix + suffix on Save).
+    const ls = (_leadStatusesData || []).find(s => s.key === lsKey);
+    const sh = (ls && ls.shorthand) ? String(ls.shorthand).toUpperCase() : '';
+    const prefix = (sh && subKey.toUpperCase().startsWith(`${sh}_`)) ? `${sh}_` : '';
+    const suffix = prefix ? subKey.slice(prefix.length) : subKey;
+    const prefixHtml = prefix
+      ? `<span class="ca-sub-key-prefix"
+            title="Lead-status shorthand (not editable)"
+            style="flex:0 0 auto;padding:4px 0 4px 7px;font-size:.78rem;font-family:monospace;color:var(--ink-3);background:#f3f4f6;border:1px solid var(--border);border-right:none;border-radius:6px 0 0 6px;line-height:1.4;user-select:none;">${esc(prefix)}</span>`
+      : '';
+    const keyInputStyle = prefix
+      ? 'flex:0 0 90px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;border-radius:0 6px 6px 0;'
+      : 'flex:0 0 140px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;';
     return `
       <div class="ca-sub-row" data-sub-id="${esc(id)}" data-sub-ls="${esc(lsKey)}"
            data-orig-key="${esc(subKey)}" data-orig-label="${esc(subLabel)}" data-orig-action="${esc(subAction)}"
            style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px dashed var(--border);">
-        <input type="text" class="field ca-sub-key" maxlength="64"
-          value="${esc(subKey)}"
-          placeholder="KEY"
-          style="flex:0 0 140px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;">
+        <div style="display:flex;align-items:stretch;flex:0 0 auto;">
+          ${prefixHtml}
+          <input type="text" class="field ca-sub-key" maxlength="64"
+            data-key-prefix="${esc(prefix)}"
+            value="${esc(suffix)}"
+            placeholder="${prefix ? 'SUFFIX' : 'KEY'}"
+            style="${keyInputStyle}">
+        </div>
         <input type="text" class="field ca-sub-label" maxlength="128"
           value="${esc(subLabel)}"
           placeholder="Display label"
