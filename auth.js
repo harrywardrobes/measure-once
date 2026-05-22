@@ -1584,8 +1584,17 @@ async function setupAuth(app) {
 
       const userCols = [];
       const userVals = [];
-      if (first_name !== undefined)      { userCols.push(`first_name = $${userCols.length+1}`);      userVals.push(first_name?.trim() || null); }
-      if (last_name !== undefined)       { userCols.push(`last_name = $${userCols.length+1}`);       userVals.push(last_name?.trim() || null); }
+      if (first_name !== undefined) {
+        const fnTok = (first_name || '').trim().split(/\s+/).filter(Boolean)[0] || '';
+        userCols.push(`first_name = $${userCols.length+1}`);
+        userVals.push(fnTok ? fnTok.charAt(0).toUpperCase() + fnTok.slice(1).toLowerCase() : null);
+      }
+      if (last_name !== undefined) {
+        const lnTokens = (last_name || '').trim().split(/\s+/).filter(Boolean);
+        const lnTok = lnTokens[lnTokens.length - 1] || '';
+        userCols.push(`last_name = $${userCols.length+1}`);
+        userVals.push(lnTok ? lnTok.charAt(0).toUpperCase() + lnTok.slice(1).toLowerCase() : null);
+      }
       if (job_role !== undefined)        { userCols.push(`job_role = $${userCols.length+1}`);        userVals.push(job_role || null); }
       if (privilege_level !== undefined) { userCols.push(`privilege_level = $${userCols.length+1}`); userVals.push(privilege_level); }
       if (newEmail !== undefined)        { userCols.push(`email = $${userCols.length+1}`);           userVals.push(newEmail || null); }
