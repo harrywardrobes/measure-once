@@ -2482,6 +2482,7 @@ app.get('/api/lead-statuses', isAuthenticated, async (req, res) => {
     const { rows } = await pool.query(
       'SELECT key, label, sort_order, excluded_from_sales FROM lead_status_config ORDER BY sort_order ASC, key ASC'
     );
+    res.set('Cache-Control', 'no-store');
     res.json(rows);
   } catch (e) {
     console.error('GET /api/lead-statuses error:', e.message);

@@ -337,6 +337,13 @@ async function loadLeadStatuses() {
   }
 }
 
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  loadLeadStatuses().then(() => {
+    if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
+  });
+});
+
 function populateLeadStatusFilter() {
   const sel = document.getElementById('lead-status-filter');
   if (!sel) return;
