@@ -4984,7 +4984,7 @@ details[open] .trades-history-summary::before { transform: rotate(90deg); }
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
+  padding: 10px 14px;
   border-top: 1px solid var(--stone);
 }
 .cl-badge {
