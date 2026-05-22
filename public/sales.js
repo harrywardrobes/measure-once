@@ -108,8 +108,6 @@ function _initSalesListeners() {
     const stageBtn = e.target.closest('[data-sales-stage]');
     if (stageBtn) { setSalesStageFilter(stageBtn.dataset.salesStage); return; }
 
-    if (e.target.closest('#sales-new-btn')) { openNewCustomerModal(); return; }
-
     const lsPill = e.target.closest('.eq-ls-pill');
     if (lsPill && !lsPill.disabled) { setEnquiryLeadStatusFilter(lsPill.dataset.lsValue); return; }
 
@@ -346,12 +344,7 @@ async function renderEnquiryList() {
   view.innerHTML = `
     <div class="sales-stage-bar">
       ${tabs}
-      <button class="sales-new-btn" id="sales-new-btn" title="New Enquiry">
-        <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
-        </svg>
-        New
-      </button>
+
     </div>
     ${lsFilterHtml}
     <div class="sales-board">
