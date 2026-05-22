@@ -1908,22 +1908,34 @@
       }
     }
     _newSubstatusCounter++;
-    // Prefill the KEY input with the LS shorthand + underscore so admins start
-    // from a unique, predictable prefix (e.g. "ATCT_" for Attempted to Contact).
-    // Falls back to empty if the LS has no shorthand yet (older row that
-    // hasn't been backfilled, or sentinel).
+    // Render the LS shorthand as a non-editable prefix (e.g. "ATCT_") shown
+    // immediately before the KEY input — visible context for the admin but
+    // not deletable. The actual substatus_key is rebuilt at Save time by
+    // concatenating data-key-prefix + the input value.
+    // Falls back to no prefix if the LS has no shorthand yet.
     const ls = (_leadStatusesData || []).find(s => s.key === lsKey);
     const sh = (ls && ls.shorthand) ? String(ls.shorthand).toUpperCase() : '';
-    const keyPrefill = sh ? `${sh}_` : '';
+    const prefix = sh ? `${sh}_` : '';
+    const prefixHtml = prefix
+      ? `<span class="ca-sub-key-prefix"
+            title="Lead-status shorthand (not editable)"
+            style="flex:0 0 auto;padding:4px 0 4px 7px;font-size:.78rem;font-family:monospace;color:var(--ink-3);background:#f3f4f6;border:1px solid var(--border);border-right:none;border-radius:6px 0 0 6px;line-height:1.4;user-select:none;">${esc(prefix)}</span>`
+      : '';
+    const keyInputStyle = prefix
+      ? 'flex:0 0 90px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;border-radius:0 6px 6px 0;'
+      : 'flex:0 0 140px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;';
     const tmp = document.createElement('div');
     tmp.innerHTML = `
       <div class="ca-sub-row" data-sub-new="1" data-sub-ls="${esc(lsKey)}"
            data-orig-key="" data-orig-label="" data-orig-action=""
            style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px dashed var(--border);background:#fffbeb;">
-        <input type="text" class="field ca-sub-key" maxlength="64"
-          value="${esc(keyPrefill)}"
-          placeholder="KEY"
-          style="flex:0 0 140px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;">
+        <div style="display:flex;align-items:stretch;flex:0 0 auto;">
+          ${prefixHtml}
+          <input type="text" class="field ca-sub-key" maxlength="64"
+            data-key-prefix="${esc(prefix)}"
+            placeholder="SUFFIX"
+            style="${keyInputStyle}">
+        </div>
         <input type="text" class="field ca-sub-label" maxlength="128"
           placeholder="Display label"
           style="flex:1;padding:4px 7px;font-size:.78rem;">
@@ -1934,13 +1946,9 @@
           onclick="deleteCardActionSubstatus(this)">Delete</button>
       </div>`;
     list.appendChild(tmp.firstElementChild);
-    // Drop the cursor after the prefill so the admin types the unique suffix.
     const newRow = list.lastElementChild;
     const keyInput = newRow && newRow.querySelector('.ca-sub-key');
-    if (keyInput) {
-      keyInput.focus();
-      try { keyInput.setSelectionRange(keyPrefill.length, keyPrefill.length); } catch (_) {}
-    }
+    if (keyInput) keyInput.focus();
   }
 
   // Delete a sub-status row. New (unsaved) rows just vanish; existing rows are
@@ -2053,11 +2061,24 @@
       const keyInput   = row.querySelector('.ca-sub-key');
       const labelInput = row.querySelector('.ca-sub-label');
       const actInput   = row.querySelector('.ca-sub-action');
-      const subKey     = keyInput.value.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+      // New rows split the key into a non-editable prefix span + suffix input;
+      // rebuild the full substatus_key here. Existing rows have no data-key-prefix
+      // and the input still holds the full key.
+      const keyPrefix  = keyInput.dataset.keyPrefix || '';
+      const keySuffix  = keyInput.value.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+      const subKey     = (keyPrefix + keySuffix).toUpperCase().replace(/[^A-Z0-9_]/g, '_');
       const label      = labelInput.value.trim();
       const action     = actInput.value.trim();
 
       if (isNew) {
+        // Reject prefix-only keys ("ATCT_" alone is meaningless without a suffix).
+        if (keyPrefix && !keySuffix) {
+          if (label || action) {
+            failed++;
+            failures.push(`new sub-status (${lsKey}): type a suffix after ${keyPrefix}`);
+          }
+          continue;
+        }
         if (!subKey || !label) {
           if (subKey || label || action) {
             failed++;
