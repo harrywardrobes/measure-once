@@ -3855,7 +3855,7 @@ body.showing-workflow .sales-layout #workflow-panel {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 12px 10px;
   background: var(--chalk);
   border-bottom: 1px solid var(--stone);
   flex-shrink: 0;
@@ -3863,13 +3863,13 @@ body.showing-workflow .sales-layout #workflow-panel {
 }
 @media (min-width: 768px) {
   .sales-stage-bar .project-stage-tab { display: none; }
-  .sales-stage-bar { justify-content: flex-end; padding: 6px 10px; }
+  .sales-stage-bar { justify-content: flex-end; padding: 10px 10px; }
 }
 
 .eq-ls-filter-row {
   display: flex;
   align-items: center;
-  padding: 6px 10px;
+  padding: 10px 10px;
   background: var(--chalk);
   border-bottom: 1px solid var(--stone);
   flex-shrink: 0;
@@ -3922,7 +3922,7 @@ body.showing-workflow .sales-layout #workflow-panel {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 11px 12px 10px;
+  padding: 14px 14px 13px;
   flex-shrink: 0;
   background: var(--chalk);
   border-bottom: 1px solid var(--stone);
@@ -3971,8 +3971,8 @@ body.showing-workflow .sales-layout #workflow-panel {
 .enquiry-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px;
+  gap: 12px;
+  padding: 12px;
   background: var(--paper);
 }
 
@@ -3996,7 +3996,7 @@ body.showing-workflow .sales-layout #workflow-panel {
 
 .eq-card-stripe { height: 3px; }
 
-.eq-card-body { padding: 11px 12px 12px; }
+.eq-card-body { padding: 14px 14px 16px; }
 
 .eq-card-name-row {
   display: flex;
@@ -4052,7 +4052,7 @@ body.showing-workflow .sales-layout #workflow-panel {
   align-items: center;
   flex-wrap: wrap;
   gap: 7px;
-  margin-bottom: 11px;
+  margin-bottom: 14px;
 }
 
 .eq-card-substage {
