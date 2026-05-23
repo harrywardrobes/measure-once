@@ -126,6 +126,23 @@ const STAGE_LEAD_STATUS_MAP = {
   aftercare:    null,
 };
 
+// Map the admin-configured lead_status_config.stage (uppercase) to the
+// lowercase stageKey used in DEFAULT_WORKFLOW. Only the three "pipeline"
+// stages drive lead-status sync; later stages (order/workshop/…) have no
+// dedicated lead-status mapping.
+const LS_STAGE_TO_KEY = {
+  SALES:        'sales',
+  DESIGN_VISIT: 'designvisit',
+  SURVEY:       'survey',
+};
+
+function _lsMappedStageKey(leadStatus) {
+  if (!leadStatus || typeof LEAD_STATUS_OPTIONS === 'undefined') return null;
+  const opt = LEAD_STATUS_OPTIONS.find(o => o.value === String(leadStatus).toUpperCase());
+  const upper = opt?.stage;
+  return upper ? (LS_STAGE_TO_KEY[upper] || null) : null;
+}
+
 function syncRoomFromHubSpot(room, leadStatus) {
   if (!leadStatus) return room;
   const ls = leadStatus.toLowerCase().replace(/-/g, '_');
@@ -151,6 +168,23 @@ function syncRoomFromHubSpot(room, leadStatus) {
     // Set which Sales tasks are completed based on lead status
     cs.sales = HS_SALES_PROGRESSION[ls];
     return { ...room, completedStatuses: cs };
+  }
+
+  // Pull back: if the admin-mapped stage for this lead status sits BEFORE
+  // the room's current stageKey, drag the room back to the LS-mapped stage.
+  // Handles the case where a user walked HubSpot LS backward (e.g. Survey →
+  // Open Deal) and the local workflow row went stale. Only applies to the
+  // three pipeline stages (sales/designvisit/survey); order/workshop/…
+  // intentionally have no LS mapping and are left untouched.
+  const targetKey = _lsMappedStageKey(leadStatus);
+  if (targetKey && STAGE_KEYS.indexOf(targetKey) !== -1) {
+    const curIdx = STAGE_KEYS.indexOf(room.stageKey || 'sales');
+    const tgtIdx = STAGE_KEYS.indexOf(targetKey);
+    if (curIdx !== -1 && tgtIdx < curIdx) {
+      const stageDates = { ...(room.stageDates || {}) };
+      if (!stageDates[targetKey]) stageDates[targetKey] = todayISO();
+      return { ...room, stageKey: targetKey, stageDates };
+    }
   }
 
   return room;
