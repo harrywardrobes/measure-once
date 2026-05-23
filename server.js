@@ -306,7 +306,7 @@ let _allContactsInflight = null;  // Promise while a scan is running
 
 const ALL_CONTACTS_PROPERTIES = [
   'firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'hw_lead_substatus',
-  'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate',
+  'address', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate',
   'measure_once_rooms'
 ];
 

@@ -836,7 +836,7 @@ function _renderWorkflowHeaderImpl() {
 
   el.innerHTML = `
     <div class="customer-header-wrap" style="max-width:1100px;margin:0 auto;">
-      <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div class="flex items-start justify-between gap-6 flex-wrap">
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2.5 min-w-0">
             <h1 class="text-xl font-bold text-slate-900 truncate">${escHtml(name)}</h1>
@@ -847,9 +847,11 @@ function _renderWorkflowHeaderImpl() {
               </svg>
             </button>
           </div>
-          <div class="mt-1.5 space-y-0.5">
+          ${(address || cityLine) ? `<div class="mt-3 space-y-0.5">
             ${address  ? `<div class="text-sm text-slate-500">${escHtml(address)}</div>` : ''}
             ${cityLine ? `<div class="text-sm text-slate-500">${escHtml(cityLine)}</div>` : ''}
+          </div>` : ''}
+          ${(email || phone) ? `<div class="mt-3 space-y-1">
             ${email ? `<div><a href="mailto:${escHtml(email)}" class="text-sm text-blue-600 hover:underline">${escHtml(email)}</a></div>` : ''}
             ${phone ? `<div class="text-sm text-slate-500 flex items-center gap-1.5">
               <span>${escHtml(phone)}</span>
@@ -860,7 +862,7 @@ function _renderWorkflowHeaderImpl() {
                 </svg>
               </button>` : ''}
             </div>` : ''}
-          </div>
+          </div>` : ''}
         </div>
         <div class="flex flex-wrap items-center justify-end gap-2 shrink-0">
           <span class="text-xs font-semibold px-2.5 py-1 rounded-full"
