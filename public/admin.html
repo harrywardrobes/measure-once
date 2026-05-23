@@ -1778,6 +1778,49 @@
     return stages;
   }
 
+  // Find any handlers bound to a given slot. `slot` is either
+  // { stage_key, status_key } (status_key may be '' for the "no lead status"
+  // row) or { substatus_id }. Returns an array of matching _handlersData rows.
+  function _handlersForSlot(slot) {
+    if (!Array.isArray(_handlersData) || !_handlersData.length) return [];
+    const out = [];
+    for (const h of _handlersData) {
+      for (const b of (h.bindings || [])) {
+        if (slot.substatus_id != null) {
+          if (Number(b.substatus_id) === Number(slot.substatus_id)) {
+            out.push(h); break;
+          }
+        } else if (b.substatus_id == null) {
+          const bStage  = (b.stage_key  || '').toLowerCase();
+          const bStatus = (b.status_key || '').toLowerCase();
+          const sStage  = (slot.stage_key  || '').toLowerCase();
+          const sStatus = (slot.status_key || '').toLowerCase();
+          if (bStage === sStage && bStatus === sStatus) { out.push(h); break; }
+        }
+      }
+    }
+    return out;
+  }
+
+  // Render one badge per handler bound to the row. Shows the handler name and
+  // its type label so admins can see at a glance what's wired without scrolling
+  // down to the handlers card.
+  function _handlerBadgesHtml(slot) {
+    const handlers = _handlersForSlot(slot);
+    if (!handlers.length) return '';
+    return handlers.map(h => {
+      const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
+      const title = `${typeLbl} — click Edit in the Action handlers card to change`;
+      return `<span class="ca-handler-badge" title="${esc(title)}"
+        style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;margin-left:6px;
+          background:#ede0ff;color:#3d0f7a;border-radius:999px;font-size:.7rem;font-weight:600;
+          line-height:1.5;white-space:nowrap;vertical-align:middle;">
+        <span aria-hidden="true">⚡</span><span>${esc(h.name)}</span>
+        <span style="opacity:.7;font-weight:500;">· ${esc(typeLbl)}</span>
+      </span>`;
+    }).join('');
+  }
+
   function renderCardActionsTable() {
     const wrap = document.getElementById('card-actions-table-wrap');
     if (!wrap) return;
@@ -1807,15 +1850,16 @@
             </div>
 
             <!-- Lead-status default row -->
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
               <div style="flex:0 0 220px;font-size:.78rem;color:var(--ink-3);">Default action label</div>
               <input type="text" class="field ca-default-input" maxlength="128"
                 data-kind="ls-default" data-stage="${esc(stage.key)}" data-status="${esc(ls.defaultStatusKey)}"
                 data-original="${esc(ls.defaultLabel)}"
                 value="${esc(ls.defaultLabel)}"
                 placeholder="(used when no sub-status set)"
-                style="flex:1;padding:5px 8px;font-size:.82rem;"
+                style="flex:1;min-width:160px;padding:5px 8px;font-size:.82rem;"
                 onkeydown="if(event.key==='Enter')this.blur()">
+              ${_handlerBadgesHtml({ stage_key: stage.key, status_key: ls.defaultStatusKey })}
             </div>
 
             <!-- Sub-statuses -->
@@ -1916,6 +1960,7 @@
           value="${esc(subAction)}"
           placeholder="Action label"
           style="flex:1;padding:4px 7px;font-size:.78rem;">
+        ${_handlerBadgesHtml({ substatus_id: id })}
       </div>`;
   }
 
@@ -2230,6 +2275,16 @@
         if (_cardActionsEverLoaded) loadCardActionsAdmin();
       });
     } catch (_) {}
+    // When handlers are added / edited / deleted (here or in another tab),
+    // refresh _handlersData so the per-row badges in the labels table stay
+    // in sync. loadCardActionHandlersAdmin() also re-renders the table.
+    try {
+      new BroadcastChannel('card_action_handlers_changed').addEventListener('message', () => {
+        if (document.getElementById('card-action-handlers-wrap')) {
+          loadCardActionHandlersAdmin();
+        }
+      });
+    } catch (_) {}
   }
 
   // Expose handlers used from inline onclick handlers + the lead-status
@@ -2261,6 +2316,11 @@
       if (Array.isArray(subs))   _cardSubstatusesData = subs;
       _handlersLoaded = true;
       renderHandlersTable();
+      // The labels table above shows a per-row badge for any attached
+      // handler; re-render it now that we know the bindings.
+      if (document.getElementById('card-actions-table-wrap')) {
+        renderCardActionsTable();
+      }
     } catch (e) {
       wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load handlers: ${esc(e.message)}</p>`;
     }
