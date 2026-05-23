@@ -98,6 +98,36 @@ any probe fails.
 
 If a disposable database is unavailable, `PRIVTEST_ALLOW_SHARED_DB=1 npm run test:lead-status-sync` is accepted as a fallback — synthetic rows are namespaced behind the `privtest-` prefix and cleaned up on exit, but a crash mid-run can leave stale fixtures.
 
+## Lead-status tracker (customer-detail) sync test
+Sibling of `test:lead-status-sync` that covers the per-contact tracker at the
+top of the customer-detail page (`_renderWorkflowStagesImpl` in
+`public/customer-detail.js`). Run with
+`DATABASE_URL_TEST=<disposable> npm run test:lead-status-sync-customer-detail`
+(or `PRIVTEST_ALLOW_SHARED_DB=1 npm run test:lead-status-sync-customer-detail`
+against the shared DB). The harness seeds two visible lead statuses (KEY_A
+before KEY_B in `sort_order`), one `excluded_from_sales` decoy, and two
+sub-statuses for KEY_A; then for an admin-seeded contact on `/customers/:id`:
+
+- Asserts the rail renders one row per non-`excluded_from_sales` status in
+  admin order, the seeded `hs_lead_status` row is marked current
+  (`ls-rail-item-current`), and the focused panel lists `LEAD_SUBSTATUSES`
+  rows in `sort_order`.
+- Exercises both the `lead_statuses_changed` and `lead_substatuses_changed`
+  BroadcastChannel listeners (`workflow-core.js` lines 482–534) after admin
+  PATCHes, asserting the rail/panel update in place.
+- Exercises the `visibilitychange` handler the same way.
+- Every BC/visibility re-render assertion also verifies
+  `window.__renderToken` is preserved, proving no full page reload occurred.
+
+The test server strips `HUBSPOT_TOKEN`, so `GET /api/contacts/:id` 503s and
+the page replaces `#workflow-view` with an error. The test compensates by
+re-injecting a minimal `#workflow-stages` mount and seeding
+`state.selectedContact` directly — lead statuses + sub-statuses come from
+PostgreSQL, not HubSpot, so the renderer paths under test are exercised
+faithfully. A markdown report is written to
+`test-results/lead-status-sync-customer-detail.md` and the command exits
+non-zero on failure. `npm run test:ci` now runs all three test suites.
+
 **Known limitation:** the test server strips `HUBSPOT_TOKEN`, so
 `loadAllContacts()` returns 503 and contact counts in the filter options will
 always be 0. The `bootstrapFilter()` helper compensates by calling

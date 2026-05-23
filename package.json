@@ -10,9 +10,10 @@
     "watch:css": "tailwindcss -i ./src/tailwind.css -o ./public/tailwind.css --watch",
     "test:privileges": "node test/privileges/run.js",
     "test:lead-status-sync": "node test/lead-status-sync/run.js",
+    "test:lead-status-sync-customer-detail": "node test/lead-status-sync/customer-detail.js",
     "test:card-action-handlers": "node test/card-action-handlers/run.js",
     "test:keyboard-shortcuts": "node test/keyboard-shortcuts/run.js",
-    "test:ci": "npm run test:privileges && npm run test:lead-status-sync",
+    "test:ci": "npm run test:privileges && npm run test:lead-status-sync && npm run test:lead-status-sync-customer-detail",
     "backfill:ec-name-casing": "node scripts/backfill-ec-name-casing.js"
   },
   "dependencies": {
