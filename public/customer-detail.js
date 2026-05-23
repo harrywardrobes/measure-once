@@ -2242,9 +2242,23 @@ async function editUpcomingVisit(id) {
   const v = (visits || []).find(x => x.id === id);
   if (!v) { showToast('Visit not found', true); return; }
 
+  if (!state.platformUsers || !state.platformUsers.length) {
+    try { state.platformUsers = await GET('/api/platform-users'); }
+    catch { state.platformUsers = []; }
+  }
+
   const startDef = _toLocalDtInput(new Date(v.startAt));
   const duration = Math.max(5, Math.round((new Date(v.endAt) - new Date(v.startAt)) / 60000));
   const label    = VISIT_TYPE_LABELS[v.type] || 'Visit';
+  const roleOptions = ['designer','surveyor','fitter','manager'].map(r => {
+    const sel = v.assigneeRole === r ? 'selected' : '';
+    return `<option value="${r}" ${sel}>${r.charAt(0).toUpperCase()+r.slice(1)}</option>`;
+  }).join('');
+  const userOptions = (state.platformUsers || []).map(u => {
+    const name = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
+    const sel = v.assigneeId === u.id ? 'selected' : '';
+    return `<option value="${escHtml(u.id)}" ${sel}>${escHtml(name)}</option>`;
+  }).join('');
 
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px';
@@ -2265,6 +2279,22 @@ async function editUpcomingVisit(id) {
       </div>
       <label style="display:block;font-size:0.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600">Location</label>
       <input id="uv-location" type="text" maxlength="300" value="${escHtml(v.location || '')}" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.92rem;box-sizing:border-box">
+      <div style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label style="display:block;font-size:0.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600">Assigned role</label>
+          <select id="uv-assignee-role" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.92rem;box-sizing:border-box">
+            <option value="">— None —</option>
+            ${roleOptions}
+          </select>
+        </div>
+        <div style="flex:1">
+          <label style="display:block;font-size:0.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600">Assigned to</label>
+          <select id="uv-assignee-id" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.92rem;box-sizing:border-box">
+            <option value="">— None —</option>
+            ${userOptions}
+          </select>
+        </div>
+      </div>
       <label style="display:block;font-size:0.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600">Notes</label>
       <textarea id="uv-notes" maxlength="4000" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.92rem;box-sizing:border-box;resize:vertical;min-height:90px">${escHtml(v.notes || '')}</textarea>
       <div id="uv-error" style="color:#b91c1c;font-size:0.82rem;margin-top:8px;min-height:18px"></div>
@@ -2287,6 +2317,8 @@ async function editUpcomingVisit(id) {
     const durationV = parseInt(overlay.querySelector('#uv-duration').value, 10);
     const locationV = overlay.querySelector('#uv-location').value.trim();
     const notesV    = overlay.querySelector('#uv-notes').value.trim();
+    const roleV     = overlay.querySelector('#uv-assignee-role').value || null;
+    const userV     = overlay.querySelector('#uv-assignee-id').value || null;
     if (!startV) { errEl.textContent = 'Start time is required.'; return; }
     if (!Number.isInteger(durationV) || durationV < 5) { errEl.textContent = 'Duration must be ≥ 5 minutes.'; return; }
     const start = new Date(startV);
@@ -2302,8 +2334,8 @@ async function editUpcomingVisit(id) {
         endAt:        end.toISOString(),
         location:     locationV || null,
         notes:        notesV    || null,
-        assigneeId:   v.assigneeId   || null,
-        assigneeRole: v.assigneeRole || null,
+        assigneeId:   userV,
+        assigneeRole: roleV,
       });
       overlay.remove();
       showToast('Visit updated');
