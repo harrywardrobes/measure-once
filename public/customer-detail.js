@@ -1260,6 +1260,7 @@ function setStatusChecked(stageKey, statusId, checked) {
   let message = checked ? `Checked: ${taskLabel}` : `Unchecked: ${taskLabel}`;
 
   // If unchecking a task in a past stage, revert to that stage
+  let stageChangedTo = null;
   if (!checked) {
     const stageIdx   = STAGE_KEYS.indexOf(stageKey);
     const currentIdx = STAGE_KEYS.indexOf(state.workflowData.stageKey);
@@ -1271,6 +1272,7 @@ function setStatusChecked(stageKey, statusId, checked) {
       renderCustomerList();
       renderProjectsView();
       message = `Moved back to ${state.workflow?.stages?.[stageKey]?.label || stageKey}`;
+      stageChangedTo = stageKey;
     }
   }
 
@@ -1299,12 +1301,14 @@ function setStatusChecked(stageKey, statusId, checked) {
         renderCustomerList();
         renderProjectsView();
         message = `Advanced to ${state.workflow.stages[nextKey].label}`;
+        stageChangedTo = nextKey;
       }
     }
   }
 
   renderWorkflowStages();
   renderWorkflowHeader();
+  if (stageChangedTo) _syncStageLeadStatus(stageChangedTo);
   scheduleSave(message, snapshot);
 }
 
