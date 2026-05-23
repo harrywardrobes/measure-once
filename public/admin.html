@@ -1811,7 +1811,7 @@
   function _handlerBadgesHtml(slot) {
     const handlers = _handlersForSlot(slot);
     if (!handlers.length) return '';
-    return handlers.map(h => {
+    const badges = handlers.map(h => {
       const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
       const title = `${typeLbl} — manage in the Action handlers card below`;
       return `<span class="ca-handler-badge" title="${esc(title)}"
@@ -1821,6 +1821,16 @@
         <span aria-hidden="true">⚡</span><span>${esc(typeLbl)}</span>
       </span>`;
     }).join('');
+    const warningBadge = handlers.length > 1
+      ? `<span class="ca-handler-conflict-badge" title="${esc(`${handlers.length} handlers bound to this slot — usually a mistake`)}"
+          style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;margin-left:4px;
+            background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:999px;
+            font-size:.7rem;font-weight:700;line-height:1.5;white-space:nowrap;vertical-align:middle;
+            cursor:default;">
+          <span aria-hidden="true">⚠</span><span>${handlers.length} bound</span>
+        </span>`
+      : '';
+    return badges + warningBadge;
   }
 
   function renderCardActionsTable() {
