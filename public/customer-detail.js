@@ -523,6 +523,7 @@ function renderFullWorkflowView() {
       <div id="room-tabs-section" class="mb-5"></div>
       <div id="invoices-section" class="mb-5"></div>
       <div id="upcoming-visits-section" class="mb-5"></div>
+      <div id="past-visits-section" class="mb-5"></div>
       <div id="tasks-section" class="mb-6"></div>
       <div id="google-emails-section" class="mb-5"></div>
       <div id="whatsapp-history-section" class="mb-5"></div>
@@ -552,6 +553,7 @@ function renderFullWorkflowView() {
   renderRoomTabs();
   renderWorkflowInvoices();
   renderUpcomingVisits();
+  renderPastVisits();
   renderTasks();
   renderGoogleEmailSection();
   renderWhatsAppHistory();
@@ -2221,6 +2223,80 @@ async function renderUpcomingVisits() {
           <button class="btn-cancel-note" style="padding:4px 10px;font-size:0.75rem" onclick="editUpcomingVisit(${v.id})">Edit</button>
           <button class="btn-cancel-note" style="padding:4px 10px;font-size:0.75rem;color:#b91c1c" onclick="cancelUpcomingVisit(${v.id})">Cancel</button>
         </div>`}
+      </div>
+    `;
+  }).join('');
+}
+
+const _pastVisitsExpanded = new Map();
+
+async function renderPastVisits() {
+  const el = document.getElementById('past-visits-section');
+  if (!el) return;
+  const contactId = state.selectedContactId;
+  if (!contactId) { el.innerHTML = ''; return; }
+
+  const cidStr = String(contactId);
+  const expanded = _pastVisitsExpanded.get(cidStr) === true;
+
+  el.innerHTML = `
+    <div class="notes-header" style="cursor:pointer;user-select:none" id="past-visits-toggle">
+      <span class="notes-header-label">Past visits</span>
+      <span id="past-visits-caret" style="font-size:0.75rem;color:var(--stone-deep);margin-left:6px">${expanded ? '▾' : '▸'}</span>
+    </div>
+    <div id="past-visits-list" class="text-sm" style="color:var(--stone-deep);${expanded ? '' : 'display:none'}">
+      <p style="font-size:0.85rem;padding:4px 0;font-style:italic">Loading…</p>
+    </div>
+  `;
+
+  const toggle = document.getElementById('past-visits-toggle');
+  toggle.addEventListener('click', () => {
+    const next = !(_pastVisitsExpanded.get(cidStr) === true);
+    _pastVisitsExpanded.set(cidStr, next);
+    renderPastVisits();
+  });
+
+  if (!expanded) return;
+
+  const now = new Date();
+  const from = new Date(Date.now() - 366 * 24 * 60 * 60 * 1000);
+  let visits;
+  try {
+    visits = await GET(`/api/visits?from=${from.toISOString()}&to=${now.toISOString()}`);
+  } catch {
+    const list = document.getElementById('past-visits-list');
+    if (list) list.innerHTML = `<p style="font-size:0.85rem;color:#b91c1c;padding:4px 0">Could not load visits.</p>`;
+    return;
+  }
+
+  const mine = (visits || [])
+    .filter(v => String(v.customerId || '') === cidStr && new Date(v.endAt) < now)
+    .sort((a, b) => new Date(b.startAt) - new Date(a.startAt));
+
+  const list = document.getElementById('past-visits-list');
+  if (!list) return;
+
+  if (!mine.length) {
+    list.innerHTML = `<p style="font-size:0.85rem;padding:4px 0;font-style:italic">No past visits in the last year.</p>`;
+    return;
+  }
+
+  list.innerHTML = mine.map(v => {
+    const label = VISIT_TYPE_LABELS[v.type] || 'Visit';
+    const when  = _fmtVisitWhen(v.startAt, v.endAt);
+    const title = v.title || label;
+    return `
+      <div class="comment-item" style="margin-bottom:6px">
+        <div style="flex:1;min-width:0">
+          <div class="comment-text" style="font-weight:500">${escHtml(title)}</div>
+          <div class="comment-meta" style="margin-top:2px">
+            <span style="font-size:0.7rem;background:#e5e7eb;color:#374151;border-radius:4px;padding:1px 6px;font-weight:600">${escHtml(label)}</span>
+            <span class="comment-meta-sep">·</span>
+            <span class="comment-date">${escHtml(when)}</span>
+            ${v.location ? `<span class="comment-meta-sep">·</span><span class="comment-date">${escHtml(v.location)}</span>` : ''}
+          </div>
+          ${v.notes ? `<div class="comment-text" style="font-size:0.8rem;opacity:0.75;white-space:pre-wrap;margin-top:4px">${escHtml(v.notes)}</div>` : ''}
+        </div>
       </div>
     `;
   }).join('');
