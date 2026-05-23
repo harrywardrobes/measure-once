@@ -1059,7 +1059,39 @@ function _renderWorkflowStagesImpl() {
   // removed. The stage auto-advances when the last task in the current
   // stage is ticked (see setStatusChecked) and updates from HubSpot lead
   // status (see syncRoomFromHubSpot / _syncStageLeadStatus).
-  const actionHtml = '';
+  //
+  // Card-action label strip — mirrors the strip rendered on Sales / Survey
+  // cards. Uses the same workflow-core helpers (substatusActionLabelLookup,
+  // stageOrLeadStatusActionLabel) so a label change in Admin → Card actions
+  // is picked up via the existing `stage_action_labels_changed` channel.
+  let actionHtml = '';
+  {
+    const _TERMINAL_SUBSTAGES = new Set(['unqualified', 'not_suitable', 'bad_timing', 'no_response_x3']);
+    const focusedStatuses = focusedStage?.statuses || [];
+    const lastDone = [...focusedStatuses].reverse().find(s => doneIds.includes(s.id));
+    const focusedSubstageId = lastDone?.id || '';
+    const contact   = state.selectedContact;
+    const leadKey   = contact?.properties?.hs_lead_status || '';
+    const hwSubVal  = contact?.properties?.hw_lead_substatus || '';
+    const isTerminalSub = _TERMINAL_SUBSTAGES.has(focusedSubstageId);
+    let label = '';
+    if (!isTerminalSub) {
+      if (typeof substatusActionLabelLookup === 'function') {
+        label = substatusActionLabelLookup(leadKey, hwSubVal) || '';
+      }
+      if (!label && typeof stageOrLeadStatusActionLabel === 'function') {
+        label = stageOrLeadStatusActionLabel(focusedKey, leadKey, focusedSubstageId) || '';
+      }
+    }
+    if (label) {
+      const actionTint = focusedColour.light || '#f3f4f6';
+      const actionText = focusedColour.text  || '#374151';
+      actionHtml = `
+        <div class="eq-card-action" style="background:${actionTint}">
+          <span class="eq-card-action-label" style="color:${actionText}">${escHtml(label)}</span>
+        </div>`;
+    }
+  }
 
   const hasPrev = focusedIdx > 0;
   const hasNext = focusedIdx < STAGE_KEYS.length - 1;
