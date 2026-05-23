@@ -187,29 +187,11 @@ async function renderEnquiryList() {
 
   // ── Collect ALL entries across every stage ────────────────────────────────
   const EXCLUDED_LEAD_STATUSES = new Set(LEAD_STATUS_OPTIONS.filter(o => o.excluded_from_sales).map(o => o.value));
-  const lsFilter = state.enquiryLeadStatusFilter || '';
-
-  // Compute lead-status counts for the filter dropdown (over all non-excluded contacts)
-  const _lsCounts = {};
-  let _nullCount = 0;
-  for (const c of state.contacts) {
-    const s = (c.properties?.hs_lead_status || '').toUpperCase();
-    if (EXCLUDED_LEAD_STATUSES.has(s)) continue;
-    if (s) _lsCounts[s] = (_lsCounts[s] || 0) + 1;
-    else _nullCount++;
-  }
-
   const allEntries = [];
   for (const contact of state.filteredContacts) {
     const ls = (contact.properties?.hs_lead_status || '').toUpperCase();
     if (EXCLUDED_LEAD_STATUSES.has(ls)) continue;
 
-    // Apply lead-status filter
-    if (lsFilter === '__no_status__') {
-      if (ls) continue;
-    } else if (lsFilter) {
-      if (ls !== lsFilter) continue;
-    }
     const cached    = state.contactStageCache[contact.id];
     const createdate = parseInt(contact.properties?.createdate || '0', 10);
 
@@ -328,39 +310,11 @@ async function renderEnquiryList() {
       </div>`;
   }).join('');
 
-  // ── Lead-status filter pills ───────────────────────────────────────────────
-  const _nullLbl = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
-  const _allPill = `<button class="eq-ls-pill${!lsFilter ? ' active' : ''}" data-ls-value="">All statuses</button>`;
-  const _nullPill = (() => {
-    const active = lsFilter === '__no_status__' ? ' active' : '';
-    const dim = _nullCount === 0 ? ' dimmed' : '';
-    const dis = _nullCount === 0 ? ' disabled' : '';
-    return `<button class="eq-ls-pill${active}${dim}" data-ls-value="__no_status__"${dis}>${escHtml(_nullLbl)} (${_nullCount})</button>`;
-  })();
-  const _lsPills = LEAD_STATUS_OPTIONS
-    .filter(o => !o.excluded_from_sales)
-    .map(({ value, label }) => {
-      const n = _lsCounts[value] || 0;
-      const active = lsFilter === value ? ' active' : '';
-      const dim = n === 0 ? ' dimmed' : '';
-      const dis = n === 0 ? ' disabled' : '';
-      return `<button class="eq-ls-pill${active}${dim}" data-ls-value="${escHtml(value)}"${dis}>${escHtml(label)} (${n})</button>`;
-    }).join('');
-  const lsFilterHtml = `
-    <div class="eq-ls-filter-row">
-      <div class="eq-ls-pills">
-        ${_allPill}
-        ${_nullPill}
-        ${_lsPills}
-      </div>
-    </div>`;
-
   view.innerHTML = `
     <div class="sales-stage-bar">
       ${tabs}
 
     </div>
-    ${lsFilterHtml}
     <div class="sales-board">
       ${colsHtml}
     </div>
