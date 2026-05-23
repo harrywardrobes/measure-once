@@ -3745,9 +3745,11 @@ app.get('/api/admin/card-action-handlers', isAuthenticated, requireAdmin, async 
 });
 
 app.post('/api/admin/card-action-handlers', isAuthenticated, requireAdmin, async (req, res) => {
+  // `name` is optional and now derives from the bound row's action label
+  // on the client. Empty/missing is accepted; a non-empty value is still
+  // length-checked for safety.
   const name = String(req.body?.name || '').trim();
   const type = String(req.body?.type || '').trim();
-  if (!name) return res.status(400).json({ error: 'name is required.' });
   if (name.length > 80) return res.status(400).json({ error: 'name must be 80 characters or fewer.' });
   if (!CARD_ACTION_HANDLER_TYPES.has(type)) {
     return res.status(400).json({ error: 'type must be add_design_visit_to_calendar or summarise_phone_call.' });
@@ -3791,7 +3793,6 @@ app.patch('/api/admin/card-action-handlers/:id', isAuthenticated, requireAdmin, 
   const params  = [];
   if (req.body?.name !== undefined) {
     const v = String(req.body.name || '').trim();
-    if (!v) return res.status(400).json({ error: 'name cannot be empty.' });
     if (v.length > 80) return res.status(400).json({ error: 'name must be 80 characters or fewer.' });
     params.push(v); updates.push(`name = $${params.length}`);
   }

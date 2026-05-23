@@ -2283,6 +2283,22 @@
     return `${stageKey} → ${lsLabel}`;
   }
 
+  // The action label that appears on the actual card for a given binding —
+  // used as the handler's derived name in the table.
+  function _bindingActionLabel(b) {
+    if (b.substatus_id) {
+      const row = _cardSubstatusesData.find(s => s.id === b.substatus_id);
+      return row?.action_label || '';
+    }
+    const stageKey  = (b.stage_key  || '').toLowerCase();
+    const statusKey = (b.status_key || '').toLowerCase();
+    const row = _cardActionsData.find(l =>
+      (l.stage_key || '').toLowerCase() === stageKey &&
+      (l.status_key || '').toLowerCase() === statusKey
+    );
+    return row?.label || '';
+  }
+
   function renderHandlersTable() {
     const wrap = document.getElementById('card-action-handlers-wrap');
     if (!wrap) return;
@@ -2292,11 +2308,13 @@
     }
     const rows = _handlersData.map(h => {
       const typeLbl  = HANDLER_TYPE_LABELS[h.type] || h.type;
+      const bindingItems = (h.bindings || []).map(b => _bindingActionLabel(b)).filter(Boolean);
+      const derivedName  = bindingItems.length ? bindingItems.join(', ') : (h.name || '(unbound)');
       const bindings = (h.bindings || []).map(b => `<li>${esc(_bindingLabel(b))}</li>`).join('') ||
         '<li style="color:var(--ink-4);">No bindings — click Edit to attach one.</li>';
       return `
         <tr>
-          <td style="font-weight:600;">${esc(h.name)}</td>
+          <td style="font-weight:600;">${esc(derivedName)}</td>
           <td>${esc(typeLbl)}</td>
           <td><ul style="margin:0;padding-left:18px;font-size:.82rem;">${bindings}</ul></td>
           <td style="white-space:nowrap;text-align:right;">
@@ -2321,21 +2339,25 @@
 
   function openHandlerEditor(id) {
     const editing = id ? _handlersData.find(h => h.id === id) : null;
-    const name    = editing?.name || '';
     const type    = editing?.type || 'add_design_visit_to_calendar';
     const config  = editing?.config || {};
     const bindings = editing?.bindings || [];
 
-    // Build (stage, status) options from existing label rows.
-    const labelOpts = _cardActionsData.map(l => {
-      const v = `${l.stage_key}|${l.status_key || ''}`;
-      const txt = `${l.stage_key} → ${l.label || (l.status_key || '(no lead status)')}`;
-      return { value: v, label: txt };
-    });
-    const subOpts = _cardSubstatusesData.map(s => ({
-      value: `sub:${s.id}`,
-      label: `Sub-status: ${s.status_key} → ${s.label}`,
-    }));
+    // Only rows that actually have an action label are bindable — the row's
+    // label is what shows on the card and becomes the handler's name.
+    const labelOpts = _cardActionsData
+      .filter(l => (l.label || '').trim())
+      .map(l => {
+        const v = `${l.stage_key}|${l.status_key || ''}`;
+        const txt = `${l.stage_key} → ${l.label}`;
+        return { value: v, label: txt };
+      });
+    const subOpts = _cardSubstatusesData
+      .filter(s => (s.action_label || '').trim())
+      .map(s => ({
+        value: `sub:${s.id}`,
+        label: `Sub-status: ${s.status_key} → ${s.action_label}`,
+      }));
     const allOpts = [...labelOpts, ...subOpts];
 
     const selectedKeys = new Set(bindings.map(b =>
@@ -2351,8 +2373,7 @@
     wrap.innerHTML = `
       <div style="background:#fff;border-radius:12px;padding:20px;width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,0.25);max-height:90vh;overflow:auto;">
         <h3 style="margin:0 0 14px;font-size:1.05rem;font-weight:700;">${editing ? 'Edit' : 'New'} action handler</h3>
-        <label style="display:block;font-size:.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600;">Name</label>
-        <input id="cah-name" type="text" class="field" maxlength="80" value="${esc(name)}" placeholder="e.g. Book design visit">
+        <p style="margin:0 0 10px;font-size:.78rem;color:var(--ink-4);">The handler is named after the action label of the row you bind it to.</p>
         <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Type</label>
         <select id="cah-type" class="field">
           ${Object.entries(HANDLER_TYPE_LABELS).map(([k, v]) =>
@@ -2376,22 +2397,25 @@
     wrap.querySelector('#cah-save').addEventListener('click', async () => {
       const errEl = wrap.querySelector('#cah-edit-err');
       errEl.textContent = '';
-      const nm = wrap.querySelector('#cah-name').value.trim();
       const tp = wrap.querySelector('#cah-type').value;
       const cfgTxt = wrap.querySelector('#cah-config').value.trim() || '{}';
       let cfg;
       try { cfg = JSON.parse(cfgTxt); } catch { errEl.textContent = 'Configuration is not valid JSON.'; return; }
       const sel = Array.from(wrap.querySelector('#cah-bindings').selectedOptions).map(o => o.value);
+      if (!sel.length) { errEl.textContent = 'Pick at least one row to bind this handler to.'; return; }
       const newBindings = sel.map(v => {
         if (v.startsWith('sub:')) return { substatus_id: parseInt(v.slice(4), 10) };
         const [stage, status] = v.split('|');
         return { stage_key: stage, status_key: status };
       });
+      // Name is derived from the bound row's action label — send empty so
+      // future label edits flow through without an admin re-save.
+      const payload = { name: '', type: tp, config: cfg, bindings: newBindings };
       try {
         if (editing) {
-          await api('PATCH', `/api/admin/card-action-handlers/${editing.id}`, { name: nm, type: tp, config: cfg, bindings: newBindings });
+          await api('PATCH', `/api/admin/card-action-handlers/${editing.id}`, payload);
         } else {
-          await api('POST', '/api/admin/card-action-handlers', { name: nm, type: tp, config: cfg, bindings: newBindings });
+          await api('POST', '/api/admin/card-action-handlers', payload);
         }
         wrap.remove();
         await loadCardActionHandlersAdmin();
