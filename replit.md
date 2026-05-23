@@ -126,13 +126,37 @@ re-injecting a minimal `#workflow-stages` mount and seeding
 PostgreSQL, not HubSpot, so the renderer paths under test are exercised
 faithfully. A markdown report is written to
 `test-results/lead-status-sync-customer-detail.md` and the command exits
-non-zero on failure. `npm run test:ci` now runs all three test suites.
+non-zero on failure. `npm run test:ci` now runs all four test suites.
 
 **Known limitation:** the test server strips `HUBSPOT_TOKEN`, so
 `loadAllContacts()` returns 503 and contact counts in the filter options will
 always be 0. The `bootstrapFilter()` helper compensates by calling
 `loadLeadStatuses()` + `populateLeadStatusFilter()` directly in the page context,
 so the sync-path handlers are still exercised faithfully.
+
+## Card-action-handlers test
+End-to-end live test for the card-action-handlers feature. Run with
+`DATABASE_URL_TEST=<disposable> npm run test:card-action-handlers`
+(or `PRIVTEST_ALLOW_SHARED_DB=1 npm run test:card-action-handlers`
+against the shared DB). Mirrors the lead-status-sync harness pattern: boots a
+disposable server, drives the UI with Puppeteer, writes a markdown report to
+`test-results/card-action-handlers.md`, and exits non-zero on failure.
+
+Probes covered:
+
+- **(A) BroadcastChannel path** — admin creates a handler in `admin.html`; the
+  `card_action_handlers_changed` BroadcastChannel fires and another open Sales
+  tab refreshes its in-page handler lookup.
+- **(B) Modal dispatch** — clicking a bound `.eq-card-action` strip opens the
+  correct modal (datetime-local picker for `add_design_visit_to_calendar`,
+  textarea for `summarise_phone_call`) and submitting the form posts to the
+  expected backend route.
+- **(C) Substatus-binding precedence** — a substatus binding wins over a label
+  binding when both exist for the same `(stage_key, status_key)` the substatus
+  belongs to.
+
+API pre-checks run before any browser tab opens so failures in the API surface
+clearly. `npm run test:ci` includes this suite.
 
 ### Migration note
 Users that existed before this change are backfilled to `active` (no onboarding
