@@ -4037,21 +4037,7 @@ body.showing-workflow .sales-layout #workflow-panel {
   display: flex !important;
 }
 
-/* ── Sales board: stage-bar + 3-column layout ────────────────────────────── */
-.sales-stage-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 12px 10px;
-  background: var(--chalk);
-  border-bottom: 1px solid var(--stone);
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-@media (min-width: 768px) {
-  .sales-stage-bar .project-stage-tab { display: none; }
-  .sales-stage-bar { justify-content: flex-end; padding: 10px 10px; }
-}
+/* ── Sales board: 3-column layout ────────────────────────────────────────── */
 
 .eq-ls-filter-row {
   display: flex;

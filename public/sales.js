@@ -274,18 +274,6 @@ async function renderEnquiryList() {
     if (byStage[e.stageKey]) byStage[e.stageKey].push(e);
   }
 
-  // ── Mobile tab pills ──────────────────────────────────────────────────────
-  // SALES_TAB_STAGES = ['sales', 'designvisit'] — 'survey' is never k here.
-  const tabs = SALES_TAB_STAGES.map(k => {
-    const label  = escHtml(state.workflow?.stages?.[k]?.label ||
-      (k === 'designvisit' ? 'Design Visit' : 'Sales'));
-    const active = filter === k;
-    const hex    = STAGE_ACCENT[k] || '#8B2BFF';
-    const style  = active ? `background:${hex};color:#fff;border-color:${hex}` : '';
-    return `<button class="project-stage-tab${active ? ' project-stage-tab-active' : ''}"
-      style="${style}" data-sales-stage="${k}">${label}</button>`;
-  }).join('');
-
   // ── Build columns (sales + designvisit) ──────────────────────────────────
   // 'survey' appears only in the stage trail on each card, not as a board column.
   const colsHtml = SALES_TAB_STAGES.map(sk => {
@@ -312,10 +300,6 @@ async function renderEnquiryList() {
   }).join('');
 
   view.innerHTML = `
-    <div class="sales-stage-bar">
-      ${tabs}
-
-    </div>
     <div class="sales-board">
       ${colsHtml}
     </div>
