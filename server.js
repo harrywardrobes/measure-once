@@ -3194,35 +3194,25 @@ const STAGE_ACTION_SEED_OVERRIDES = {
 };
 
 // Seed one row per (card stage × lead status) combination so every card has an
-// editable label in the admin Card actions tab. Existing rows are never
-// overwritten — admin edits always win.
+// editable per-LS row in the admin Card-actions tab. Idempotent: only inserts
+// rows that are missing, and never overwrites existing values (admin edits
+// always win). An admin who wants to suppress a specific LS uses the
+// "clear" UX in the admin tab, which now PUTs an empty label rather than
+// DELETEing the row — so existing-row-with-empty-label is preserved and a
+// re-run of this seed will not resurrect it.
 async function seedStageActionLabelsDefaults() {
-  // True first-run detection: if the table has *any* row at all, we have
-  // already seeded once before. An admin may since have cleared specific
-  // per-(stage, lead status) rows, and we must not resurrect them — so the
-  // per-LS seed loop below only runs on a genuinely empty table. The per-
-  // stage `(stage_key, '')` rows are part of that initial seed too.
-  const { rows: existingAny } = await pool.query(
-    'SELECT 1 FROM stage_action_labels LIMIT 1'
-  );
-  const isFirstRun = existingAny.length === 0;
-
-  // (stage, '') rows so cards with no lead status also get a configurable
-  // label. Seeded only on first run alongside the per-LS rows.
-  if (isFirstRun) {
-    for (const stageKey of Object.values(STAGE_ACTION_STAGE_MAP)) {
-      const stageDefault = STAGE_ACTION_STAGE_DEFAULTS[stageKey];
-      if (!stageDefault) continue;
-      await pool.query(
-        `INSERT INTO stage_action_labels (stage_key, status_key, label)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (stage_key, status_key) DO NOTHING`,
-        [stageKey, '', stageDefault]
-      );
-    }
+  // Per-stage `(stage_key, '')` "No lead status" rows — still the global
+  // default for cards genuinely missing a lead status.
+  for (const stageKey of Object.values(STAGE_ACTION_STAGE_MAP)) {
+    const stageDefault = STAGE_ACTION_STAGE_DEFAULTS[stageKey];
+    if (!stageDefault) continue;
+    await pool.query(
+      `INSERT INTO stage_action_labels (stage_key, status_key, label)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (stage_key, status_key) DO NOTHING`,
+      [stageKey, '', stageDefault]
+    );
   }
-
-  if (!isFirstRun) return;
 
   const { rows } = await pool.query(
     `SELECT key, label, stage FROM lead_status_config
