@@ -252,6 +252,7 @@ async function _doSelectContact(contactId, roomIdx) {
   state.workflowData      = null;
   state.expandedStages    = new Set();
   state.focusedStageKey   = null;
+  state.focusedLeadStatus = null;
   state.tasks             = [];
   state.showAddTask       = false;
   state.addingRoom        = false;
@@ -546,6 +547,23 @@ function renderFullWorkflowView() {
       if (idx < STAGE_KEYS.length - 1) { state.focusedStageKey = STAGE_KEYS[idx + 1]; renderWorkflowStages(); }
     } else if (action === 'setStatusChecked' && key) {
       setStatusChecked(key, target.dataset.statusId, target.dataset.checked === 'true');
+    } else if (action === 'setFocusedLeadStatus' && target.dataset.value) {
+      state.focusedLeadStatus = target.dataset.value;
+      renderWorkflowStages();
+    } else if (action === 'focusPrevLeadStatus' || action === 'focusNextLeadStatus') {
+      const rail = (typeof LEAD_STATUS_OPTIONS !== 'undefined' ? LEAD_STATUS_OPTIONS : [])
+        .filter(o => !o.excluded_from_sales);
+      if (rail.length) {
+        const cur = state.focusedLeadStatus || rail[0].value;
+        const i = rail.findIndex(e => e.value === cur);
+        const next = action === 'focusPrevLeadStatus' ? i - 1 : i + 1;
+        if (next >= 0 && next < rail.length) {
+          state.focusedLeadStatus = rail[next].value;
+          renderWorkflowStages();
+        }
+      }
+    } else if (action === 'setLeadSubstatusChecked') {
+      setLeadSubstatusChecked(target.dataset.statusValue, target.dataset.substatusKey, target.dataset.checked === 'true');
     }
   });
   renderWorkflowHeader();
@@ -919,7 +937,285 @@ function _renderWorkflowHeaderImpl() {
 
 // ── Workflow Stages ───────────────────────────────────────────────────────────
 // Implementation registered with core.js via registerWorkflowStagesRenderer below.
+// The customer-detail tracker is driven by the admin-configured lead statuses
+// (loaded from /api/lead-statuses via workflow-core's loadLeadStatuses).  Each
+// rail entry corresponds to one lead status; its checklist rows are the
+// sub-statuses (loaded via /api/lead-substatuses).  If LEAD_STATUS_OPTIONS
+// hasn't loaded yet, or no entries are visible after filtering, we fall back
+// to the legacy stage-driven layout so nothing regresses for non-HubSpot
+// setups or cold-start renders.
 function _renderWorkflowStagesImpl() {
+  const el = document.getElementById('workflow-stages');
+  if (!el) return;
+
+  // Three states:
+  //   1. /api/lead-statuses hasn't responded yet → keep the existing skeleton
+  //      so we don't flash the seeded NEW/OPEN/IN_PROGRESS defaults (they may
+  //      not match the admin's real config). The skeleton is already in the
+  //      page on first render; on subsequent renders fall through to legacy
+  //      so the panel isn't blank.
+  //   2. Loaded but the admin has no visible lead statuses → fall back to the
+  //      legacy stage-driven rail so non-HubSpot setups still work.
+  //   3. Loaded with visible entries → drive the rail from them.
+  const loaded = (typeof LEAD_STATUSES_LOADED !== 'undefined' && LEAD_STATUSES_LOADED);
+  const rail = loaded
+    ? (typeof LEAD_STATUS_OPTIONS !== 'undefined' ? LEAD_STATUS_OPTIONS : [])
+        .filter(o => !o.excluded_from_sales)
+    : [];
+
+  if (!loaded) {
+    // Cold start / API 503 — keep the skeleton if it's still in the DOM,
+    // otherwise render the legacy stage tracker so the panel isn't blank.
+    if (el.querySelector('.skeleton-stage-row')) return;
+    return _renderWorkflowStagesLegacy();
+  }
+  if (rail.length === 0) {
+    return _renderWorkflowStagesLegacy();
+  }
+
+  const contact     = state.selectedContact || null;
+  const props       = contact?.properties || {};
+  const currentLs   = String(props.hs_lead_status || '').toUpperCase();
+  const currentSub  = String(props.hw_lead_substatus || '');
+  const currentIdx  = rail.findIndex(e => String(e.value).toUpperCase() === currentLs);
+
+  // Resolve / clamp the focused entry.
+  let focusedValue = state.focusedLeadStatus;
+  if (!focusedValue || !rail.find(e => e.value === focusedValue)) {
+    focusedValue = currentIdx !== -1 ? rail[currentIdx].value : rail[0].value;
+    state.focusedLeadStatus = focusedValue;
+  }
+  const focusedIdx    = rail.findIndex(e => e.value === focusedValue);
+  const focusedEntry  = rail[focusedIdx];
+  const focusedColour = STAGE_COLOURS[focusedIdx % STAGE_COLOURS.length] || STAGE_COLOURS[0];
+
+  const isFocusedCurrent = focusedIdx === currentIdx;
+  const isFocusedPast    = currentIdx !== -1 && focusedIdx < currentIdx;
+  const isFocusedFuture  = currentIdx === -1 || focusedIdx > currentIdx;
+
+  const canEdit = canEditPipeline();
+
+  // Sub-statuses for the focused entry, in admin order.
+  const allSubs = (typeof LEAD_SUBSTATUSES !== 'undefined' ? LEAD_SUBSTATUSES : []);
+  const focusedSubs = allSubs
+    .filter(s => String(s.status_key).toUpperCase() === String(focusedValue).toUpperCase())
+    .slice()
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+  // The currently-ticked sub-status key (only meaningful when the focused
+  // entry IS the contact's current lead status — sub-status belongs to one LS).
+  const focusPrefix    = `${String(focusedValue).toUpperCase()}__`;
+  const tickedSubKey   = isFocusedCurrent && currentSub.toUpperCase().startsWith(focusPrefix)
+    ? currentSub.slice(focusPrefix.length).toUpperCase()
+    : '';
+
+  // ── Vertical numbered rail ─────────────────────────────────────────────────
+  const railHtml = rail.map((entry, i) => {
+    const colour    = STAGE_COLOURS[i % STAGE_COLOURS.length] || STAGE_COLOURS[0];
+    const isCurrent = i === currentIdx;
+    const isPast    = currentIdx !== -1 && i < currentIdx;
+    const isFocused = entry.value === focusedValue;
+
+    let badge;
+    if (isPast) {
+      badge = `<div class="ls-rail-badge ls-rail-badge-done" style="background:${colour.bg};border-color:${colour.bg}">
+        <svg width="11" height="9" fill="none" stroke="#fff" viewBox="0 0 12 10" aria-hidden="true">
+          <polyline points="1,5 4.5,8.5 11,1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>`;
+    } else if (isCurrent) {
+      badge = `<div class="ls-rail-badge ls-rail-badge-current" style="background:${colour.bg};border-color:${colour.bg};color:#fff">${i + 1}</div>`;
+    } else {
+      badge = `<div class="ls-rail-badge ls-rail-badge-future">${i + 1}</div>`;
+    }
+
+    const labelStyle = isCurrent
+      ? `color:${colour.text};font-weight:700`
+      : isPast
+        ? 'color:var(--ink-2);font-weight:600'
+        : 'color:var(--ink-3);font-weight:500';
+
+    const focusStyle = isFocused ? `--ls-focus-bg:${colour.bg};--ls-focus-tint:${colour.light}` : '';
+
+    return `<div class="ls-rail-item ${isFocused ? 'ls-rail-item-focused' : ''} ${isPast ? 'ls-rail-item-past' : ''} ${isCurrent ? 'ls-rail-item-current' : ''}"
+              role="listitem"
+              data-action="setFocusedLeadStatus" data-value="${escHtml(entry.value)}"
+              style="${focusStyle}"
+              title="${escHtml(entry.label)}">
+        ${badge}
+        <span class="ls-rail-label" style="${labelStyle}">${escHtml(entry.label)}</span>
+      </div>`;
+  }).join('');
+
+  // ── Task rows (sub-statuses) ───────────────────────────────────────────────
+  let tasksHtml;
+  if (focusedSubs.length === 0) {
+    tasksHtml = `<div class="ls-empty-tasks">No sub-statuses configured for this stage.</div>`;
+  } else {
+    tasksHtml = focusedSubs.map(s => {
+      const subKey  = String(s.substatus_key).toUpperCase();
+      const done    = subKey === tickedSubKey;
+      const checkBg = done ? `background:${focusedColour.bg};border-color:${focusedColour.bg}` : '';
+      const tick    = done ? `<svg width="10" height="8" fill="none" stroke="#fff" viewBox="0 0 12 10" aria-hidden="true">
+          <polyline points="1,5 4.5,8.5 11,1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>` : '';
+      if (!canEdit) {
+        return `<div class="status-task-row ${done ? 'status-task-done' : ''}" style="cursor:default;pointer-events:none">
+          <div class="status-task-check ${done ? 'status-task-check-done' : ''}" style="${checkBg}">${tick}</div>
+          <div class="status-text">
+            <span class="status-label ${done ? 'status-label-done' : ''}">${escHtml(s.label)}</span>
+          </div>
+        </div>`;
+      }
+      return `<div class="status-task-row ${done ? 'status-task-done' : ''}"
+           data-action="setLeadSubstatusChecked"
+           data-status-value="${escHtml(focusedValue)}"
+           data-substatus-key="${escHtml(subKey)}"
+           data-checked="${!done}">
+        <div class="status-task-check ${done ? 'status-task-check-done' : ''}" style="${checkBg}">${tick}</div>
+        <div class="status-text">
+          <span class="status-label ${done ? 'status-label-done' : ''}">${escHtml(s.label)}</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Card-action label strip (mirrors Sales/Survey card actions) ────────────
+  let actionHtml = '';
+  {
+    const leadKey  = focusedValue || '';
+    const hwSubVal = isFocusedCurrent ? currentSub : '';
+    const stageKeyForAction = (focusedEntry?.stage && LS_STAGE_TO_KEY[focusedEntry.stage]) || '';
+    let label = '';
+    if (typeof substatusActionLabelLookup === 'function') {
+      label = substatusActionLabelLookup(leadKey, hwSubVal) || '';
+    }
+    if (!label && stageKeyForAction && typeof stageOrLeadStatusActionLabel === 'function') {
+      label = stageOrLeadStatusActionLabel(stageKeyForAction, leadKey, '') || '';
+    }
+    if (label) {
+      const actionTint = focusedColour.light || '#f3f4f6';
+      const actionText = focusedColour.text  || '#374151';
+      const handlerAttrs = (typeof cardActionHandlerAttrs === 'function')
+        ? cardActionHandlerAttrs(stageKeyForAction, leadKey, hwSubVal, {
+            contactId:    contact?.id,
+            contactName:  (typeof contactName === 'function' ? contactName(contact || {}) : ''),
+            contactEmail: props.email || '',
+          })
+        : '';
+      const interactiveAttrs = handlerAttrs
+        ? `${handlerAttrs} role="button" tabindex="0" title="Run action" style="background:${actionTint};cursor:pointer"`
+        : `style="background:${actionTint}"`;
+      actionHtml = `
+        <div class="eq-card-action" ${interactiveAttrs}>
+          <span class="eq-card-action-label" style="color:${actionText}">${escHtml(label)}</span>
+        </div>`;
+    }
+  }
+
+  const hasPrev = focusedIdx > 0;
+  const hasNext = focusedIdx < rail.length - 1;
+
+  el.innerHTML = `
+    <div class="ls-tracker">
+      <div class="ls-rail" role="list">${railHtml}</div>
+      <div class="ls-panel" style="border-top:3px solid ${focusedColour.bg}">
+        <div class="stage-panel-header">
+          <div class="stage-panel-header-row">
+            <div class="stage-panel-title-block">
+              <div class="stage-panel-name" style="color:${isFocusedFuture ? 'var(--ink-3)' : focusedColour.text}">${escHtml(focusedEntry.label)}</div>
+              <div class="stage-panel-meta">
+                ${isFocusedCurrent ? `<span class="stage-sublabel">Current stage</span>` : ''}
+                ${isFocusedPast    ? `<span class="stage-sublabel">Completed</span>`     : ''}
+                ${isFocusedFuture  ? `<span class="stage-sublabel">Upcoming</span>`      : ''}
+              </div>
+            </div>
+            <div class="stage-panel-nav">
+              <button class="stage-nav-btn" ${!hasPrev ? 'disabled' : ''} data-action="focusPrevLeadStatus" title="Previous stage">
+                <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
+                </svg>
+              </button>
+              <button class="stage-nav-btn" ${!hasNext ? 'disabled' : ''} data-action="focusNextLeadStatus" title="Next stage">
+                <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="stage-statuses">${tasksHtml}</div>
+        ${actionHtml ? `<div class="stage-panel-actions">${actionHtml}</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+// Write a sub-status tick back to HubSpot. When ticking a row that belongs to
+// a different lead status than the contact's current one, hs_lead_status is
+// updated in the same PATCH so the rail's "current" marker follows along.
+function setLeadSubstatusChecked(statusValue, substatusKey, checked) {
+  if (!canEditPipeline()) return;
+  const contact   = state.selectedContact;
+  const contactId = contact?.id;
+  if (!contactId) return;
+
+  const newLs   = String(statusValue || '').toUpperCase();
+  const subKey  = String(substatusKey || '').toUpperCase();
+  if (!newLs) return;
+
+  const fullVal = checked ? `${newLs}__${subKey}` : '';
+  const prevLs  = String(contact.properties?.hs_lead_status || '').toUpperCase();
+  const changeLs = checked && newLs !== prevLs;
+
+  const body = { hw_lead_substatus: fullVal };
+  if (changeLs) body.hs_lead_status = newLs;
+
+  // Optimistic local update so the rail/tick reflects the click immediately.
+  const prevProps   = { ...(contact.properties || {}) };
+  const nextProps   = {
+    ...(contact.properties || {}),
+    hw_lead_substatus: fullVal,
+    ...(changeLs ? { hs_lead_status: newLs } : {}),
+  };
+  contact.properties = nextProps;
+  if (state.selectedContact) state.selectedContact.properties = nextProps;
+  const listEntry = state.contacts?.find(c => String(c.id) === String(contactId));
+  if (listEntry) listEntry.properties = nextProps;
+
+  if (changeLs) state.focusedLeadStatus = newLs;
+  renderWorkflowStages();
+  if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+  if (typeof renderCustomerList   === 'function') renderCustomerList();
+
+  PATCH_REQ(`/api/contacts/${contactId}`, body)
+    .then(() => {
+      if (typeof loadLeadStatusCounts === 'function' && changeLs) {
+        loadLeadStatusCounts()
+          .then(() => { if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter(); })
+          .catch(() => {});
+      }
+    })
+    .catch(err => {
+      contact.properties = prevProps;
+      if (state.selectedContact) state.selectedContact.properties = prevProps;
+      if (listEntry) listEntry.properties = prevProps;
+      renderWorkflowStages();
+      if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+      if (typeof renderCustomerList   === 'function') renderCustomerList();
+      if (err?.code === 'HUBSPOT_AUTH') {
+        showToast('Could not update — HubSpot token is invalid or expired.', true);
+      } else if (err?.code === 'HUBSPOT_RATE_LIMIT') {
+        showToast('Could not update — HubSpot rate limit reached. Please try again.', true);
+      } else {
+        showToast('Could not update sub-status in HubSpot', true);
+      }
+    });
+}
+
+// Legacy renderer — used when LEAD_STATUS_OPTIONS hasn't loaded yet or when
+// the admin has hidden every lead status.  Mirrors the previous behaviour.
+function _renderWorkflowStagesLegacy() {
   const el = document.getElementById('workflow-stages');
   if (!el || !state.workflow) return;
 

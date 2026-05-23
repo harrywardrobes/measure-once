@@ -453,10 +453,15 @@ async function loadStageActionLabels() {
   }
 }
 
+// True once /api/lead-statuses has responded (success or empty). Lets renderers
+// distinguish "haven't tried yet" (show skeleton / keep seeded defaults) from
+// "server returned an empty config" (fall back to the legacy workflow tracker).
+let LEAD_STATUSES_LOADED = false;
+
 async function loadLeadStatuses() {
   try {
     const rows = await GET('/api/lead-statuses');
-    if (Array.isArray(rows) && rows.length > 0) {
+    if (Array.isArray(rows)) {
       const nullRow = rows.find(r => r.is_null_row);
       if (nullRow) NULL_LEAD_STATUS_LABEL = nullRow.label || 'No status';
       LEAD_STATUS_OPTIONS = rows
@@ -467,6 +472,7 @@ async function loadLeadStatuses() {
           excluded_from_sales: !!r.excluded_from_sales,
           stage:               r.stage || null,
         }));
+      LEAD_STATUSES_LOADED = true;
     }
   } catch (e) {
     console.warn('Could not load lead statuses from server, using defaults:', e.message);
@@ -475,10 +481,13 @@ async function loadLeadStatuses() {
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
-  Promise.all([loadLeadStatuses(), loadLeadStatusCounts()]).then(() => {
+  Promise.all([loadLeadStatuses(), loadLeadStatusCounts(), loadLeadSubstatuses()]).then(() => {
     if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
     if (typeof renderCustomerList === 'function') renderCustomerList();
     if (typeof renderEnquiryList === 'function') renderEnquiryList();
+    if (typeof renderWorkflowStages === 'function' && document.getElementById('workflow-stages')) {
+      renderWorkflowStages();
+    }
   });
 });
 
@@ -487,12 +496,19 @@ document.addEventListener('visibilitychange', () => {
 // it broadcasts on this channel so open contact lists can re-render immediately
 // without requiring the user to leave and return to the tab.
 if (typeof BroadcastChannel !== 'undefined') {
+  const _maybeRenderStages = () => {
+    if (typeof renderWorkflowStages === 'function' && document.getElementById('workflow-stages')) {
+      renderWorkflowStages();
+    }
+  };
+
   const _lsChannel = new BroadcastChannel('lead_statuses_changed');
   _lsChannel.addEventListener('message', () => {
     Promise.all([loadLeadStatuses(), loadLeadStatusCounts()]).then(() => {
       if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
       if (typeof renderCustomerList === 'function') renderCustomerList();
       if (typeof renderEnquiryList === 'function') renderEnquiryList();
+      _maybeRenderStages();
     });
   });
 
@@ -502,6 +518,7 @@ if (typeof BroadcastChannel !== 'undefined') {
       if (typeof renderCustomerList === 'function') renderCustomerList();
       if (typeof renderEnquiryList   === 'function') renderEnquiryList();
       if (typeof renderSurveyList    === 'function') renderSurveyList();
+      _maybeRenderStages();
     });
   });
 
@@ -512,6 +529,7 @@ if (typeof BroadcastChannel !== 'undefined') {
       if (typeof renderEnquiryList    === 'function') renderEnquiryList();
       if (typeof renderSurveyList     === 'function') renderSurveyList();
       if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+      _maybeRenderStages();
     });
   });
 }
