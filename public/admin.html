@@ -2666,7 +2666,35 @@
   }
   window.deleteHandler = deleteHandler;
 
-  // Lightweight conflict-resolver modal — opened from the ⚠ Fix button that
+  // Briefly flashes a "✓ Resolved" green pill on the table row that corresponds
+  // to the given slot, immediately after the conflict modal auto-closes.
+  // Called after renderCardActionsTable has already re-rendered the row.
+  function _flashResolvedBadge(slot) {
+    const tableWrap = document.getElementById('card-actions-table-wrap');
+    if (!tableWrap) return;
+    let target;
+    if (slot.substatus_id != null) {
+      target = tableWrap.querySelector(`.ca-sub-row[data-sub-id="${CSS.escape(String(slot.substatus_id))}"]`);
+    } else {
+      const input = tableWrap.querySelector(
+        `.ca-default-input[data-stage="${CSS.escape(String(slot.stage_key))}"][data-status="${CSS.escape(String(slot.status_key))}"]`
+      );
+      target = input ? input.parentElement : null;
+    }
+    if (!target) return;
+    const pill = document.createElement('span');
+    pill.textContent = '✓ Resolved';
+    pill.style.cssText = 'display:inline-flex;align-items:center;padding:1px 8px;margin-left:6px;' +
+      'background:#d1fae5;color:#065f46;border-radius:999px;font-size:.7rem;font-weight:600;' +
+      'line-height:1.5;white-space:nowrap;vertical-align:middle;transition:opacity .4s ease;';
+    target.appendChild(pill);
+    setTimeout(() => {
+      pill.style.opacity = '0';
+      setTimeout(() => pill.remove(), 400);
+    }, 1500);
+  }
+
+  // Lightweight conflict-resolver modal — opened from the Fix button that
   // appears in _handlerBadgesHtml whenever a slot has more than one handler.
   // Args are decoded back into a slot object so _handlersForSlot can be reused.
   function openConflictResolver(stageKey, statusKey, substatusId) {
@@ -2747,6 +2775,7 @@
         const remaining = _handlersForSlot(slot);
         if (remaining.length <= 1) {
           wrap.remove();
+          _flashResolvedBadge(slot);
         } else {
           // Remove just the row that was deleted so the admin can continue.
           const row = wrap.querySelector(`.ca-conflict-row[data-handler-id="${id}"]`);
