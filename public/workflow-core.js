@@ -3,109 +3,36 @@
 // Loaded only on pages that show workflow data (sales, projects).
 
 // ── Workflow Definition ────────────────────────────────────────────────────────
+// Cold-start fallback only. The runtime workflow is loaded from /api/workflow
+// (backed by workflow.json) into state.workflow; this object is consulted ONLY
+// when that fetch returns null (see _loadWorkflowImpl below).
+//
+// Kept on purpose:
+//   - The 9 stage keys, in pipeline order. STAGE_KEYS is derived from them and
+//     is used across projects.js / workflow.js / customer-detail.js to order
+//     and compare stages.
+//   - A `label` per stage so labels rendered from state.workflow.stages[k].label
+//     don't fall through to the raw key on cold-start.
+//
+// The per-stage `statuses` arrays that used to live here drove the legacy
+// stage-and-sub-task tracker on the customer page. That tracker has been
+// replaced by the admin-configured lead-status tracker (task #597), so the
+// hardcoded sub-tasks were just drifting from the live admin data — they are
+// intentionally omitted here. Runtime code that still touches
+// state.workflow.stages[k].statuses (e.g. sales / survey cards, workflow.js,
+// _saveWorkflowDataImpl) reads the live array loaded from workflow.json and
+// degrades gracefully when it's absent.
 const DEFAULT_WORKFLOW = {
   stages: {
-    sales: {
-      label: 'Sales',
-      statuses: [
-        {
-          id: 'form_submission', label: 'Form submission',
-          hint: 'Email + WhatsApp customer asking for more information',
-          subStatuses: [
-            { id: 'website',   label: 'Website contact received' },
-            { id: 'whatsapp',  label: 'WhatsApp message received' },
-            { id: 'call',      label: 'Call received' },
-            { id: 'instagram', label: 'Instagram message received' },
-            { id: 'facebook',  label: 'Facebook message received' },
-            { id: 'email',     label: 'Email received' },
-          ]
-        },
-        {
-          id: 'attempted_contact', label: 'Attempted to contact',
-          hint: 'If no response in 2 working days, call to discuss',
-          subStatuses: [
-            { id: 'email_sent',       label: 'Email sent' },
-            { id: 'whatsapp_sent',    label: 'WhatsApp sent' },
-            { id: 'called_customer',  label: 'Called customer' },
-            { id: 'no_response',      label: 'No response' },
-          ]
-        },
-        { id: 'in_progress',    label: 'In progress',    hint: '' },
-        { id: 'awaiting_photos', label: 'Awaiting photos', hint: '' },
-        { id: 'rough_estimate', label: 'Rough estimate',  hint: 'Data collected: rough dimensions, photos, ideas, price range' },
-        { id: 'unqualified',    label: 'Unqualified',     hint: '',                                               terminal: true },
-        { id: 'not_suitable',   label: 'Not suitable',    hint: '',                                               terminal: true },
-        { id: 'bad_timing',     label: 'Bad timing',      hint: 'Get back in touch in 1 month, or suggested date', terminal: true },
-        { id: 'no_response_x3', label: 'No response ×3',  hint: 'Mark as cold lead, archive after 4 weeks',       terminal: true },
-      ]
-    },
-    designvisit: {
-      label: 'Design Visit',
-      statuses: [
-        { id: 'scheduled',   label: 'Scheduled',   hint: 'Add date to calendar' },
-        { id: 'open_deal',   label: 'Open deal',   hint: '' }
-      ]
-    },
-    survey: {
-      label: 'Survey',
-      statuses: [
-        { id: 'design_accepted',      label: 'Design accepted',          hint: '' },
-        { id: 'awaiting_deposit',     label: 'Awaiting deposit invoice', hint: '' },
-        { id: 'scheduled',            label: 'Scheduled',                hint: '' },
-        { id: 'in_progress',          label: 'In progress',              hint: 'Check date with customer' },
-        { id: 'ready_for_production', label: 'Ready for production',     hint: 'Email to customer, confirm date of installation' }
-      ]
-    },
-    order: {
-      label: 'Order',
-      statuses: [
-        { id: 'order_doors',    label: 'Order doors',    hint: 'Order in for previous Monday or Tuesday' },
-        { id: 'order_sheets',   label: 'Order sheets',   hint: '' },
-        { id: 'order_hardware', label: 'Order hardware', hint: '' }
-      ]
-    },
-    workshop: {
-      label: 'Workshop',
-      statuses: [
-        { id: 'print_installer_pack', label: 'Print installer pack',               hint: 'Renders, cutlist, any installation instructions' },
-        { id: 'print_labels',         label: 'Print labels',                       hint: '' },
-        { id: 'notify_customer',      label: 'Notify customer production is underway', hint: '' },
-        { id: 'prep_framework',       label: 'Prep framework, timber and MDF',     hint: '' },
-        { id: 'prep_sheet_materials', label: 'Prep sheet materials',               hint: '' },
-        { id: 'cut_sheet_materials',  label: 'Cut sheet materials',                hint: '' }
-      ]
-    },
-    packing: {
-      label: 'Packing',
-      statuses: [
-        { id: 'in_progress',   label: 'In progress',                     hint: '' },
-        { id: 'date_agreed',   label: 'Date / time agreed with customer', hint: '' },
-        { id: 'ready_to_load', label: 'Ready to load into van',          hint: '' }
-      ]
-    },
-    delivery: {
-      label: 'Delivery',
-      statuses: [
-        { id: 'loaded',    label: 'Loaded into van', hint: '' },
-        { id: 'delivered', label: 'Delivered',        hint: 'Note date, time, and any comments' }
-      ]
-    },
-    installation: {
-      label: 'Installation',
-      statuses: [
-        { id: 'scheduled',          label: 'Scheduled',          hint: '' },
-        { id: 'in_progress',        label: 'In progress',        hint: '' },
-        { id: 'complete',           label: 'Complete',           hint: '' },
-        { id: 'final_invoice_sent', label: 'Final invoice sent', hint: '' }
-      ]
-    },
-    aftercare: {
-      label: 'Aftercare',
-      statuses: [
-        { id: 'final_payment', label: 'Final payment received',  hint: '' },
-        { id: 'thank_you',     label: 'Thank you message sent', hint: 'Email customer thanking them and requesting a review' }
-      ]
-    }
+    sales:        { label: 'Sales' },
+    designvisit:  { label: 'Design Visit' },
+    survey:       { label: 'Survey' },
+    order:        { label: 'Order' },
+    workshop:     { label: 'Workshop' },
+    packing:      { label: 'Packing' },
+    delivery:     { label: 'Delivery' },
+    installation: { label: 'Installation' },
+    aftercare:    { label: 'Aftercare' },
   }
 };
 

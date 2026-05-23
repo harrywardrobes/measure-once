@@ -97,39 +97,12 @@ async function goBack() {
   _performGoBack();
 }
 
-// ── HubSpot lead status → Sales stage sync ───────────────────────────────────
-// Maps a contact's HubSpot hs_lead_status to Sales stage tasks + auto-rules.
-// Only applies if the room is currently at the Sales stage.
-const HS_SALES_PROGRESSION = {
-  'form_submission':        ['form_submission'],
-  'attempted_contact':      ['form_submission', 'attempted_contact'],
-  'attempted_to_contact':   ['form_submission', 'attempted_contact'],
-  'in_progress':            ['form_submission', 'attempted_contact', 'in_progress'],
-  'awaiting_photos':        ['form_submission', 'attempted_contact', 'in_progress', 'awaiting_photos'],
-  'rough_estimate':         ['form_submission', 'attempted_contact', 'in_progress', 'awaiting_photos', 'rough_estimate'],
-};
-const HS_DECLINE_STATUSES = ['unqualified', 'not_suitable', 'bad_timing'];
-const HS_ADVANCE_STATUSES  = ['open_deal', 'visit_scheduled'];
-
-// ── Stage → HubSpot lead status mapping ──────────────────────────────────────
-// When a user explicitly advances or moves back to a stage, this map decides
-// which hs_lead_status value is written back to HubSpot. null = no update sent.
-const STAGE_LEAD_STATUS_MAP = {
-  sales:        'IN_PROGRESS',
-  designvisit:  'VISIT_SCHEDULED',
-  survey:       'OPEN_DEAL',
-  order:        'OPEN_DEAL',
-  workshop:     'OPEN_DEAL',
-  packing:      'OPEN_DEAL',
-  delivery:     'OPEN_DEAL',
-  installation: 'OPEN_DEAL',
-  aftercare:    null,
-};
-
+// ── HubSpot lead status → workflow stage sync ────────────────────────────────
 // Map the admin-configured lead_status_config.stage (uppercase) to the
-// lowercase stageKey used in DEFAULT_WORKFLOW. Only the three "pipeline"
-// stages drive lead-status sync; later stages (order/workshop/…) have no
-// dedicated lead-status mapping.
+// lowercase stageKey used in STAGE_KEYS. Only the three "pipeline" stages
+// drive lead-status sync; later stages (order/workshop/…) have no dedicated
+// lead-status mapping. Still required: consulted by syncRoomFromHubSpot below
+// and by the per-LS card-action label lookup in renderWorkflowStages.
 const LS_STAGE_TO_KEY = {
   SALES:        'sales',
   DESIGN_VISIT: 'designvisit',
@@ -143,51 +116,22 @@ function _lsMappedStageKey(leadStatus) {
   return upper ? (LS_STAGE_TO_KEY[upper] || null) : null;
 }
 
+// Pull a room back to the admin-mapped stage for its HubSpot lead status
+// when the local stageKey sits AHEAD of the LS-mapped one. Handles the case
+// where a user walked HubSpot LS backward (e.g. Survey → Open Deal) and the
+// local workflow row went stale. Only applies to the three pipeline stages
+// (sales / designvisit / survey); order/workshop/… intentionally have no LS
+// mapping and are left untouched.
 function syncRoomFromHubSpot(room, leadStatus) {
   if (!leadStatus) return room;
-  const ls = leadStatus.toLowerCase().replace(/-/g, '_');
-
-  const allSalesTasks = DEFAULT_WORKFLOW.stages.sales.statuses.map(s => s.id);
-  const cs = { ...room.completedStatuses };
-
-  if (HS_DECLINE_STATUSES.includes(ls)) {
-    // Mark all sales tasks done and decline the room (only if still in Sales)
-    cs.sales = allSalesTasks;
-    return { ...room, completedStatuses: cs };
-  }
-
-  if (HS_ADVANCE_STATUSES.includes(ls) && room.stageKey === 'sales') {
-    // All sales tasks done, advance to Design Visit
-    cs.sales = allSalesTasks;
-    const stageDates = { ...(room.stageDates || {}) };
-    if (!stageDates.designvisit) stageDates.designvisit = todayISO();
-    return { ...room, stageKey: 'designvisit', completedStatuses: cs, stageDates };
-  }
-
-  if (HS_SALES_PROGRESSION[ls] && room.stageKey === 'sales') {
-    // Set which Sales tasks are completed based on lead status
-    cs.sales = HS_SALES_PROGRESSION[ls];
-    return { ...room, completedStatuses: cs };
-  }
-
-  // Pull back: if the admin-mapped stage for this lead status sits BEFORE
-  // the room's current stageKey, drag the room back to the LS-mapped stage.
-  // Handles the case where a user walked HubSpot LS backward (e.g. Survey →
-  // Open Deal) and the local workflow row went stale. Only applies to the
-  // three pipeline stages (sales/designvisit/survey); order/workshop/…
-  // intentionally have no LS mapping and are left untouched.
   const targetKey = _lsMappedStageKey(leadStatus);
-  if (targetKey && STAGE_KEYS.indexOf(targetKey) !== -1) {
-    const curIdx = STAGE_KEYS.indexOf(room.stageKey || 'sales');
-    const tgtIdx = STAGE_KEYS.indexOf(targetKey);
-    if (curIdx !== -1 && tgtIdx < curIdx) {
-      const stageDates = { ...(room.stageDates || {}) };
-      if (!stageDates[targetKey]) stageDates[targetKey] = todayISO();
-      return { ...room, stageKey: targetKey, stageDates };
-    }
-  }
-
-  return room;
+  if (!targetKey || STAGE_KEYS.indexOf(targetKey) === -1) return room;
+  const curIdx = STAGE_KEYS.indexOf(room.stageKey || 'sales');
+  const tgtIdx = STAGE_KEYS.indexOf(targetKey);
+  if (curIdx === -1 || tgtIdx >= curIdx) return room;
+  const stageDates = { ...(room.stageDates || {}) };
+  if (!stageDates[targetKey]) stageDates[targetKey] = todayISO();
+  return { ...room, stageKey: targetKey, stageDates };
 }
 
 // ── Contact Selection ─────────────────────────────────────────────────────────
@@ -535,19 +479,7 @@ function renderFullWorkflowView() {
     const target = e.target.closest('[data-action]');
     if (!target) return;
     const action = target.dataset.action;
-    const key = target.dataset.key;
-    if (action === 'setFocusedStage' && key) {
-      state.focusedStageKey = key;
-      renderWorkflowStages();
-    } else if (action === 'focusPrevStage') {
-      const idx = STAGE_KEYS.indexOf(state.focusedStageKey || state.workflowData?.stageKey || 'sales');
-      if (idx > 0) { state.focusedStageKey = STAGE_KEYS[idx - 1]; renderWorkflowStages(); }
-    } else if (action === 'focusNextStage') {
-      const idx = STAGE_KEYS.indexOf(state.focusedStageKey || state.workflowData?.stageKey || 'sales');
-      if (idx < STAGE_KEYS.length - 1) { state.focusedStageKey = STAGE_KEYS[idx + 1]; renderWorkflowStages(); }
-    } else if (action === 'setStatusChecked' && key) {
-      setStatusChecked(key, target.dataset.statusId, target.dataset.checked === 'true');
-    } else if (action === 'setFocusedLeadStatus' && target.dataset.value) {
+    if (action === 'setFocusedLeadStatus' && target.dataset.value) {
       state.focusedLeadStatus = target.dataset.value;
       renderWorkflowStages();
     } else if (action === 'focusPrevLeadStatus' || action === 'focusNextLeadStatus') {
@@ -938,25 +870,22 @@ function _renderWorkflowHeaderImpl() {
 // ── Workflow Stages ───────────────────────────────────────────────────────────
 // Implementation registered with core.js via registerWorkflowStagesRenderer below.
 // The customer-detail tracker is driven by the admin-configured lead statuses
-// (loaded from /api/lead-statuses via workflow-core's loadLeadStatuses).  Each
+// (loaded from /api/lead-statuses via workflow-core's loadLeadStatuses). Each
 // rail entry corresponds to one lead status; its checklist rows are the
-// sub-statuses (loaded via /api/lead-substatuses).  If LEAD_STATUS_OPTIONS
-// hasn't loaded yet, or no entries are visible after filtering, we fall back
-// to the legacy stage-driven layout so nothing regresses for non-HubSpot
-// setups or cold-start renders.
+// sub-statuses (loaded via /api/lead-substatuses).
+//
+// Cold-start / empty-config handling:
+//   1. /api/lead-statuses hasn't responded yet → keep the existing skeleton
+//      so we don't flash the seeded NEW/OPEN/IN_PROGRESS defaults (they may
+//      not match the admin's real config). On subsequent renders before the
+//      fetch resolves, render an empty wrapper so the panel isn't blank.
+//   2. Loaded but the admin has no visible lead statuses → render an
+//      explanatory empty state pointing to the admin tab.
+//   3. Loaded with visible entries → drive the rail from them.
 function _renderWorkflowStagesImpl() {
   const el = document.getElementById('workflow-stages');
   if (!el) return;
 
-  // Three states:
-  //   1. /api/lead-statuses hasn't responded yet → keep the existing skeleton
-  //      so we don't flash the seeded NEW/OPEN/IN_PROGRESS defaults (they may
-  //      not match the admin's real config). The skeleton is already in the
-  //      page on first render; on subsequent renders fall through to legacy
-  //      so the panel isn't blank.
-  //   2. Loaded but the admin has no visible lead statuses → fall back to the
-  //      legacy stage-driven rail so non-HubSpot setups still work.
-  //   3. Loaded with visible entries → drive the rail from them.
   const loaded = (typeof LEAD_STATUSES_LOADED !== 'undefined' && LEAD_STATUSES_LOADED);
   const rail = loaded
     ? (typeof LEAD_STATUS_OPTIONS !== 'undefined' ? LEAD_STATUS_OPTIONS : [])
@@ -965,12 +894,16 @@ function _renderWorkflowStagesImpl() {
 
   if (!loaded) {
     // Cold start / API 503 — keep the skeleton if it's still in the DOM,
-    // otherwise render the legacy stage tracker so the panel isn't blank.
+    // otherwise leave the panel empty until the fetch resolves.
     if (el.querySelector('.skeleton-stage-row')) return;
-    return _renderWorkflowStagesLegacy();
+    el.innerHTML = '';
+    return;
   }
   if (rail.length === 0) {
-    return _renderWorkflowStagesLegacy();
+    el.innerHTML = `<div class="ls-empty-tasks" style="padding:1rem;text-align:center;color:var(--ink-3)">
+      No lead statuses configured. An admin can add them in Settings → Lead statuses.
+    </div>`;
+    return;
   }
 
   const contact     = state.selectedContact || null;
@@ -1213,516 +1146,6 @@ function setLeadSubstatusChecked(statusValue, substatusKey, checked) {
     });
 }
 
-// Legacy renderer — used when LEAD_STATUS_OPTIONS hasn't loaded yet or when
-// the admin has hidden every lead status.  Mirrors the previous behaviour.
-function _renderWorkflowStagesLegacy() {
-  const el = document.getElementById('workflow-stages');
-  if (!el || !state.workflow) return;
-
-  const currentStageKey = state.workflowData?.stageKey || 'sales';
-  const currentStageIdx = STAGE_KEYS.indexOf(currentStageKey);
-
-  // Ensure focusedStageKey is initialised
-  if (!state.focusedStageKey) state.focusedStageKey = currentStageKey;
-  const focusedKey = state.focusedStageKey;
-  const focusedIdx = STAGE_KEYS.indexOf(focusedKey);
-
-  const completedStatuses = state.workflowData?.completedStatuses || {};
-
-  // ── Stepper row ─────────────────────────────────────────────────────────────
-  const stageEntries = Object.entries(state.workflow.stages);
-  const stepperItems = stageEntries.map(([key, stage], i) => {
-    const colour    = STAGE_COLOURS[i] || STAGE_COLOURS[0];
-    const isCurrent = key === currentStageKey;
-    const isPast    = i < currentStageIdx;
-    const isFuture  = i > currentStageIdx;
-    const isFocused = key === focusedKey;
-
-    // Progress ring values for this stage
-    const stageDoneIds    = completedStatuses[key] || [];
-    const stageTotalTasks = stage?.statuses?.length || 0;
-    const stageDoneTasks  = stage?.statuses?.filter(s => stageDoneIds.includes(s.id)).length || 0;
-    const ringFraction    = stageTotalTasks > 0 ? stageDoneTasks / stageTotalTasks : 0;
-    // Show ring on any stage that has at least one task defined
-    const showRing = stageTotalTasks > 0;
-    const ringR = 12;
-    const ringCirc = +(2 * Math.PI * ringR).toFixed(2);
-    const ringOffset = ringFraction >= 1
-      ? 0
-      : +(ringCirc * (1 - ringFraction)).toFixed(2);
-    const ringColour = colour.bg;
-    const ringOpacity = ringFraction === 0 ? '0.25' : '1';
-    const ringSvg = showRing ? `<svg class="stage-step-ring" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <circle cx="15" cy="15" r="${ringR}" fill="none" stroke="${ringColour}" stroke-opacity="${ringOpacity}"
-          stroke-width="2.5" stroke-linecap="round"
-          stroke-dasharray="${ringCirc}"
-          stroke-dashoffset="${ringOffset}"
-          transform="rotate(-90 15 15)"/>
-      </svg>` : '';
-
-    // Past stages: only show a ring when tasks existed but were not all completed,
-    // and render it at reduced opacity to signal "historical gap" rather than active progress.
-    const pastRingOpacity = ringFraction === 0 ? '0.25' : '0.45';
-    const pastRingSvg = (stageTotalTasks > 0 && ringFraction < 1) ? `<svg class="stage-step-ring" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <circle cx="15" cy="15" r="${ringR}" fill="none" stroke="${ringColour}" stroke-opacity="${pastRingOpacity}"
-          stroke-width="2.5" stroke-linecap="round"
-          stroke-dasharray="${ringCirc}"
-          stroke-dashoffset="${ringOffset}"
-          transform="rotate(-90 15 15)"/>
-      </svg>` : '';
-
-    let iconHtml;
-    if (isPast) {
-      iconHtml = `<div class="stage-step-icon stage-step-done">
-        <svg width="9" height="7" fill="none" stroke="#fff" viewBox="0 0 12 10">
-          <polyline points="1,5 4.5,8.5 11,1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        ${pastRingSvg}
-      </div>`;
-    } else if (isCurrent) {
-      iconHtml = `<div class="stage-step-icon stage-step-current" style="background:${colour.bg};border-color:${colour.bg}">
-        <span style="display:block;width:6px;height:6px;border-radius:50%;background:#fff;flex-shrink:0"></span>
-        ${ringSvg}
-      </div>`;
-    } else {
-      iconHtml = `<div class="stage-step-icon stage-step-future">${ringSvg}</div>`;
-    }
-
-    return `<div class="stage-step ${isFocused ? 'stage-step-focused' : ''} ${!isFuture ? 'stage-step-clickable' : ''}"
-              data-stage-key="${escHtml(key)}"
-              ${!isFuture ? `data-action="setFocusedStage" data-key="${escHtml(key)}"` : ''}
-              title="${escHtml(stage.label)}">
-        ${iconHtml}
-        <div class="stage-step-label" style="${isCurrent ? `color:${colour.text};font-weight:700` : isFuture ? 'color:var(--stone-deep)' : 'color:var(--ink-3)'}">${escHtml(stage.label)}</div>
-        ${isFocused ? `<div class="stage-step-underline" style="background:${colour.bg}"></div>` : '<div class="stage-step-underline stage-step-underline-empty"></div>'}
-      </div>`;
-  });
-
-  // Interleave connectors between steps
-  const stepperHtml = stageEntries.map((_, i) =>
-    i < stageEntries.length - 1
-      ? stepperItems[i] + '<div class="stage-step-connector"></div>'
-      : stepperItems[i]
-  ).join('');
-
-  // ── Focused stage detail panel ───────────────────────────────────────────────
-  const focusedStage  = state.workflow.stages[focusedKey];
-  const focusedColour = STAGE_COLOURS[focusedIdx] || STAGE_COLOURS[0];
-  const isFocusedCurrent = focusedKey === currentStageKey;
-  const isFocusedPast    = focusedIdx < currentStageIdx;
-  const isFocusedFuture  = focusedIdx > currentStageIdx;
-
-  const doneIds    = completedStatuses[focusedKey] || [];
-  const totalTasks = focusedStage?.statuses?.length || 0;
-  const doneTasks  = focusedStage?.statuses?.filter(s => doneIds.includes(s.id)).length || 0;
-  const allDone    = totalTasks > 0 && doneTasks === totalTasks;
-  const entryDate  = state.workflowData?.stageDates?.[focusedKey];
-
-  // Task rows
-  const _canEdit = canEditPipeline();
-  const tasksHtml = (focusedStage?.statuses || []).map(status => {
-    const done = doneIds.includes(status.id);
-    if (isFocusedFuture || !_canEdit) {
-      // Members/viewers see read-only rows: keep the tick visible for completed
-      // tasks but disable interaction.
-      const checkBg = done ? `background:${focusedColour.bg};border-color:${focusedColour.bg}` : '';
-      const tick = done ? `<svg width="10" height="8" fill="none" stroke="#fff" viewBox="0 0 12 10">
-          <polyline points="1,5 4.5,8.5 11,1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>` : '';
-      const dimStyle = isFocusedFuture ? 'opacity:0.4;cursor:default;pointer-events:none' : 'cursor:default;pointer-events:none';
-      return `<div class="status-task-row ${done ? 'status-task-done' : ''}" style="${dimStyle}">
-        <div class="status-task-check ${done ? 'status-task-check-done' : ''}" style="${checkBg}">${tick}</div>
-        <div class="status-text">
-          <span class="status-label ${done ? 'status-label-done' : ''}">${escHtml(status.label)}</span>
-          ${status.hint ? `<span class="status-hint">${escHtml(status.hint)}</span>` : ''}
-        </div>
-      </div>`;
-    }
-    return `<div class="status-task-row ${done ? 'status-task-done' : ''}"
-         data-action="setStatusChecked" data-key="${escHtml(focusedKey)}" data-status-id="${escHtml(status.id)}" data-checked="${!done}">
-      <div class="status-task-check ${done ? 'status-task-check-done' : ''}"
-           style="${done ? `background:${focusedColour.bg};border-color:${focusedColour.bg}` : ''}">
-        ${done ? `<svg width="10" height="8" fill="none" stroke="#fff" viewBox="0 0 12 10">
-          <polyline points="1,5 4.5,8.5 11,1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>` : ''}
-      </div>
-      <div class="status-text">
-        <span class="status-label ${done ? 'status-label-done' : ''}">${escHtml(status.label)}</span>
-        ${status.hint ? `<span class="status-hint">${escHtml(status.hint)}</span>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-
-  // Lead status row — only in the Sales panel
-  let leadStatusRowHtml = '';
-  if (focusedKey === 'sales') {
-    const contact  = state.selectedContact;
-    const cid      = contact?.id || '';
-    const raw      = contact?.properties?.hs_lead_status || '';
-    const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
-    const CSS_CLASS_MAP = {
-      'OPEN_DEAL': 'lsb-open-deal', 'NEW': 'lsb-new', 'IN_PROGRESS': 'lsb-in-progress',
-      'OPEN': 'lsb-new', 'CONNECTED': 'lsb-connected', 'ATTEMPTED_TO_CONTACT': '',
-      'UNQUALIFIED': 'lsb-unqualified', 'BAD_TIMING': 'lsb-bad-timing',
-    };
-    let lsLabel, lsCls;
-    if (!raw) {
-      lsLabel = nullLabel; lsCls = 'lsb-empty';
-    } else {
-      const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
-      lsLabel = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-      lsCls = CSS_CLASS_MAP[raw] || '';
-    }
-    if (_canEdit) {
-      leadStatusRowHtml = `<div class="stage-lead-status-row">
-        <span class="stage-lead-status-label">HubSpot status</span>
-        <span class="lead-status-badge ${lsCls} ${raw ? 'lsb-clickable' : 'lsb-empty'}"
-              title="${raw ? 'Change lead status' : 'Set lead status'}"
-              onclick="openLeadStatusPicker(event,'${escHtml(cid)}')">${escHtml(lsLabel)}</span>
-      </div>`;
-    } else {
-      leadStatusRowHtml = `<div class="stage-lead-status-row">
-        <span class="stage-lead-status-label">HubSpot status</span>
-        <span class="lead-status-badge ${lsCls}">${escHtml(lsLabel)}</span>
-      </div>`;
-    }
-  }
-
-  // Stage is derived from lead status and task/sub-status logic only —
-  // manual stage controls (Advance / Set as current stage) intentionally
-  // removed. The stage auto-advances when the last task in the current
-  // stage is ticked (see setStatusChecked) and updates from HubSpot lead
-  // status (see syncRoomFromHubSpot / _syncStageLeadStatus).
-  //
-  // Card-action label strip — mirrors the strip rendered on Sales / Survey
-  // cards. Uses the same workflow-core helpers (substatusActionLabelLookup,
-  // stageOrLeadStatusActionLabel) so a label change in Admin → Card actions
-  // is picked up via the existing `stage_action_labels_changed` channel.
-  let actionHtml = '';
-  {
-    const _TERMINAL_SUBSTAGES = new Set(['unqualified', 'not_suitable', 'bad_timing', 'no_response_x3']);
-    const focusedStatuses = focusedStage?.statuses || [];
-    const lastDone = [...focusedStatuses].reverse().find(s => doneIds.includes(s.id));
-    const focusedSubstageId = lastDone?.id || '';
-    const contact   = state.selectedContact;
-    const leadKey   = contact?.properties?.hs_lead_status || '';
-    const hwSubVal  = contact?.properties?.hw_lead_substatus || '';
-    const isTerminalSub = _TERMINAL_SUBSTAGES.has(focusedSubstageId);
-    let label = '';
-    if (!isTerminalSub) {
-      if (typeof substatusActionLabelLookup === 'function') {
-        label = substatusActionLabelLookup(leadKey, hwSubVal) || '';
-      }
-      if (!label && typeof stageOrLeadStatusActionLabel === 'function') {
-        label = stageOrLeadStatusActionLabel(focusedKey, leadKey, focusedSubstageId) || '';
-      }
-    }
-    if (label) {
-      const actionTint = focusedColour.light || '#f3f4f6';
-      const actionText = focusedColour.text  || '#374151';
-      const contact = state.selectedContact || {};
-      const handlerAttrs = (typeof cardActionHandlerAttrs === 'function')
-        ? cardActionHandlerAttrs(focusedKey, leadKey, hwSubVal, {
-            contactId:    contact.id,
-            contactName:  (typeof contactName === 'function' ? contactName(contact) : ''),
-            contactEmail: contact.properties?.email || '',
-          })
-        : '';
-      const interactiveAttrs = handlerAttrs
-        ? `${handlerAttrs} role="button" tabindex="0" title="Run action" style="background:${actionTint};cursor:pointer"`
-        : `style="background:${actionTint}"`;
-      actionHtml = `
-        <div class="eq-card-action" ${interactiveAttrs}>
-          <span class="eq-card-action-label" style="color:${actionText}">${escHtml(label)}</span>
-        </div>`;
-    }
-  }
-
-  const hasPrev = focusedIdx > 0;
-  const hasNext = focusedIdx < STAGE_KEYS.length - 1;
-
-  const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-
-  // Snapshot current ring offsets before replacing DOM (keyed by stage, all dots including future)
-  const _oldRingOffsets = {};
-  el.querySelectorAll('.stage-step[data-stage-key]').forEach(step => {
-    const circle = step.querySelector('.stage-step-ring circle');
-    if (circle) _oldRingOffsets[step.dataset.stageKey] = circle.getAttribute('stroke-dashoffset');
-  });
-
-  el.innerHTML = `
-    <div class="stage-stepper-wrap">
-      <div class="stage-stepper-row">${stepperHtml}</div>
-    </div>
-    <div class="stage-panel" style="border-top:3px solid ${focusedColour.bg}">
-      <div class="stage-panel-header">
-        <div class="stage-panel-header-row">
-          <div class="stage-panel-title-block">
-            <div class="stage-panel-name" style="color:${isFocusedFuture ? 'var(--ink-3)' : focusedColour.text}">${escHtml(focusedStage?.label || focusedKey)}</div>
-            <div class="stage-panel-meta">
-              ${totalTasks > 0 ? `<span class="stage-sublabel">${doneTasks} of ${totalTasks} tasks done</span>` : ''}
-              ${entryDate && !isFocusedFuture ? `<span class="stage-date-entered">${totalTasks > 0 ? ' · ' : ''}Entered ${formatShortDate(entryDate)}</span>` : ''}
-              ${isFocusedFuture ? `<span class="stage-date-entered">Not started yet</span>` : ''}
-            </div>
-          </div>
-          <div class="stage-panel-nav">
-            <button class="stage-nav-btn" ${!hasPrev ? 'disabled' : ''} data-action="focusPrevStage" title="Previous stage">
-              <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
-              </svg>
-            </button>
-            <button class="stage-nav-btn" ${!hasNext ? 'disabled' : ''} data-action="focusNextStage" title="Next stage">
-              <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-        ${totalTasks > 0 ? `<div class="stage-panel-progress" role="progressbar" aria-valuenow="${doneTasks}" aria-valuemin="0" aria-valuemax="${totalTasks}"><div class="stage-panel-progress-bar" style="width:0%;background:${focusedColour.bg}"></div></div>` : ''}
-      </div>
-      ${totalTasks > 0 ? `<div class="stage-statuses">${tasksHtml}</div>` : ''}
-      ${leadStatusRowHtml}
-      ${actionHtml ? `<div class="stage-panel-actions">${actionHtml}</div>` : ''}
-    </div>
-  `;
-
-  requestAnimationFrame(() => {
-    if (totalTasks > 0) {
-      const bar = el.querySelector('.stage-panel-progress-bar');
-      if (bar) bar.style.width = progressPct + '%';
-    }
-    _scrollStepperToFocused(el);
-
-    // Animate ring stroke-dashoffset from old value → new value when it changed
-    el.querySelectorAll('.stage-step[data-stage-key]').forEach(step => {
-      const key = step.dataset.stageKey;
-      if (!Object.prototype.hasOwnProperty.call(_oldRingOffsets, key)) return;
-      const circle = step.querySelector('.stage-step-ring circle');
-      if (!circle) return;
-      const newOffset = circle.getAttribute('stroke-dashoffset');
-      const oldOffset = _oldRingOffsets[key];
-      if (oldOffset === newOffset) return;
-      circle.setAttribute('stroke-dashoffset', oldOffset);
-      circle.getBoundingClientRect(); // force reflow so transition fires
-      circle.setAttribute('stroke-dashoffset', newOffset);
-    });
-  });
-}
-
-function _scrollStepperToFocused(stagesEl) {
-  const row     = (stagesEl || document.getElementById('workflow-stages'))?.querySelector('.stage-stepper-row');
-  const focused = row?.querySelector('.stage-step-focused');
-  if (!row || !focused) return;
-  const targetLeft = Math.max(0, focused.offsetLeft - row.clientWidth / 2 + focused.offsetWidth / 2);
-  _smoothScrollLeft(row, targetLeft, 350);
-}
-
-function _smoothScrollLeft(el, target, duration) {
-  const start     = el.scrollLeft;
-  const distance  = target - start;
-  if (distance === 0) return;
-  const startTime = performance.now();
-  function step(now) {
-    const elapsed  = now - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    const ease     = progress < 0.5
-      ? 2 * progress * progress
-      : -1 + (4 - 2 * progress) * progress;
-    el.scrollLeft  = start + distance * ease;
-    if (progress < 1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
-}
-
-// toggleStage is no longer used by the stepper UI but kept as a safe no-op
-// in case any external call path references it.
-function toggleStage(_key) {}
-
-// ── Tick off sub-tasks (auto-advances stage when all done) ────────────────────
-function setStatusChecked(stageKey, statusId, checked) {
-  if (!state.workflowData) return;
-  if (!canEditPipeline()) return;
-
-  // Snapshot before any change
-  const snapshot = JSON.parse(JSON.stringify(state.allRooms));
-
-  const cs   = { ...(state.workflowData.completedStatuses || {}) };
-  const done = [...(cs[stageKey] || [])];
-
-  if (checked && !done.includes(statusId)) done.push(statusId);
-  else if (!checked) { const i = done.indexOf(statusId); if (i > -1) done.splice(i, 1); }
-  cs[stageKey] = done;
-  state.workflowData.completedStatuses = cs;
-
-  const taskLabel = state.workflow?.stages?.[stageKey]?.statuses?.find(s => s.id === statusId)?.label || statusId;
-  let message = checked ? `Checked: ${taskLabel}` : `Unchecked: ${taskLabel}`;
-
-  // If unchecking a task in a past stage, revert to that stage
-  let stageChangedTo = null;
-  if (!checked) {
-    const stageIdx   = STAGE_KEYS.indexOf(stageKey);
-    const currentIdx = STAGE_KEYS.indexOf(state.workflowData.stageKey);
-    if (stageIdx < currentIdx) {
-      state.workflowData.stageKey = stageKey;
-      state.expandedStages = new Set([stageKey]);
-      state.focusedStageKey = stageKey;
-      updateRoomCache();
-      renderCustomerList();
-      renderProjectsView();
-      message = `Moved back to ${state.workflow?.stages?.[stageKey]?.label || stageKey}`;
-      stageChangedTo = stageKey;
-    }
-  }
-
-  // Stamp substage date when a status is checked and becomes the new "current"
-  // substage (i.e. the last completed status in the current stage by order).
-  if (checked && state.workflowData.stageKey === stageKey) {
-    const stageStatuses = state.workflow?.stages?.[stageKey]?.statuses || [];
-    const lastCompleted = [...stageStatuses].reverse().find(s => done.includes(s.id));
-    if (lastCompleted && lastCompleted.id === statusId) {
-      recordSubstageDate(state.workflowData, statusId);
-    }
-  }
-
-  // Auto-advance if all tasks in the current stage are ticked
-  if (checked && state.workflowData.stageKey === stageKey) {
-    const stage = state.workflow?.stages?.[stageKey];
-    const allDone = stage?.statuses?.length > 0 && stage.statuses.every(s => done.includes(s.id));
-    if (allDone) {
-      const nextKey = STAGE_KEYS[STAGE_KEYS.indexOf(stageKey) + 1];
-      if (nextKey) {
-        state.workflowData.stageKey = nextKey;
-        recordStageDate(state.workflowData, nextKey);
-        state.expandedStages = new Set();
-        state.focusedStageKey = nextKey;
-        updateRoomCache();
-        renderCustomerList();
-        renderProjectsView();
-        message = `Advanced to ${state.workflow.stages[nextKey].label}`;
-        stageChangedTo = nextKey;
-      }
-    }
-  }
-
-  renderWorkflowStages();
-  renderWorkflowHeader();
-  if (stageChangedTo) _syncStageLeadStatus(stageChangedTo);
-  scheduleSave(message, snapshot);
-}
-
-// ── Non-blocking HubSpot lead status write on stage change ───────────────────
-// Resolves the HubSpot lead status to write for the given stageKey:
-//   1. Prefers a LEAD_STATUS_OPTIONS entry whose admin-configured `stage` field
-//      matches stageKey (populated at runtime from /api/lead-statuses).
-//   2. Falls back to the built-in STAGE_LEAD_STATUS_MAP constant.
-//   3. Skips the write entirely if the resolved value is absent from the live
-//      option set (e.g. renamed or removed in HubSpot).
-// The stage change is already committed locally before this runs; failure only
-// shows a toast — it does not revert the local change.
-function _syncStageLeadStatus(stageKey) {
-  if (!canEditPipeline()) return;
-  const contactId = state.selectedContactId;
-  if (!contactId) return;
-
-  // Prefer a lead status whose admin-configured `stage` field matches this
-  // stageKey (loaded dynamically from /api/lead-statuses).  Only if no such
-  // entry exists do we fall back to the built-in static map.
-  const dynamicMatch = LEAD_STATUS_OPTIONS.find(o => o.stage === stageKey);
-  const newStatus = dynamicMatch
-    ? dynamicMatch.value
-    : STAGE_LEAD_STATUS_MAP[stageKey];
-
-  if (!newStatus) return;
-
-  // Guard: skip the write if the resolved value isn't in the current live
-  // option set (e.g. the default was renamed or removed in HubSpot).
-  if (!LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)) return;
-
-  // If the contact's current sub-status belongs to the previous lead status,
-  // clear it on the same PATCH so we don't leave a stale cross-status value
-  // in HubSpot.
-  const _currentContact = state.contacts?.find(c => String(c.id) === String(contactId))
-    || (state.selectedContact?.id === contactId ? state.selectedContact : null);
-  const prevStatus    = _currentContact?.properties?.hs_lead_status || '';
-  const prevSubstatus = _currentContact?.properties?.hw_lead_substatus || '';
-  const subBelongsToPrev = !!prevSubstatus && !!prevStatus &&
-    String(prevSubstatus).toUpperCase()
-      .startsWith(`${String(prevStatus).toUpperCase()}__`);
-  const clearSub = subBelongsToPrev;
-  const patchBody = clearSub
-    ? { hs_lead_status: newStatus, hw_lead_substatus: '' }
-    : { hs_lead_status: newStatus };
-
-  PATCH_REQ(`/api/contacts/${contactId}`, patchBody)
-    .then(() => {
-      const contact = state.contacts?.find(c => String(c.id) === String(contactId));
-      if (contact) {
-        contact.properties = {
-          ...(contact.properties || {}),
-          hs_lead_status: newStatus,
-          ...(clearSub ? { hw_lead_substatus: '' } : {}),
-        };
-      }
-      if (state.selectedContact) {
-        state.selectedContact.properties = {
-          ...(state.selectedContact.properties || {}),
-          hs_lead_status: newStatus,
-          ...(clearSub ? { hw_lead_substatus: '' } : {}),
-        };
-        if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
-      }
-      if (typeof loadLeadStatusCounts === 'function') {
-        loadLeadStatusCounts()
-          .then(() => { if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter(); })
-          .catch(() => {});
-      }
-    })
-    .catch(err => {
-      if (err.code === 'HUBSPOT_AUTH') {
-        showToast('Could not update lead status — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
-      } else if (err.code === 'HUBSPOT_RATE_LIMIT') {
-        showToast('Could not update lead status — HubSpot rate limit reached. Please try again in a moment.', true);
-      } else {
-        showToast('Could not update lead status in HubSpot', true);
-      }
-    });
-}
-
-function moveBackToStage(stageKey) {
-  if (!state.workflowData) return;
-  if (!canEditPipeline()) return;
-  const snapshot = JSON.parse(JSON.stringify(state.allRooms));
-  state.workflowData.stageKey = stageKey;
-  state.expandedStages = new Set([stageKey]);
-  state.focusedStageKey = stageKey;
-  updateRoomCache();
-  renderCustomerList();
-  renderProjectsView();
-  renderWorkflowStages();
-  renderWorkflowHeader();
-  const label = state.workflow?.stages?.[stageKey]?.label || stageKey;
-  scheduleSave(`Moved back to ${label}`, snapshot);
-  _syncStageLeadStatus(stageKey);
-}
-
-// ── Advance to a specific stage (explicit button action) ──────────────────────
-function advanceToStage(nextKey) {
-  if (!state.workflowData) return;
-  if (!canEditPipeline()) return;
-  const snapshot = JSON.parse(JSON.stringify(state.allRooms));
-  state.workflowData.stageKey = nextKey;
-  recordStageDate(state.workflowData, nextKey);
-  state.expandedStages = new Set();
-  state.focusedStageKey = nextKey;
-  updateRoomCache();
-  renderCustomerList();
-  renderProjectsView();
-  renderWorkflowStages();
-  renderWorkflowHeader();
-  const label = state.workflow?.stages?.[nextKey]?.label || nextKey;
-  scheduleSave(`Advanced to ${label}`, snapshot);
-  _syncStageLeadStatus(nextKey);
-}
 
 // ── Save Workflow Data ────────────────────────────────────────────────────────
 // Implementation registered with core.js via registerWorkflowDataSaver below.
