@@ -49,16 +49,21 @@ require('dotenv').config();
 // ── fixtures ──────────────────────────────────────────────────────────────────
 // Use lowercase letters/digits/underscores only — these are what the server-side
 // label-binding validator (_validateHandlerBinding) accepts for status_key.
-const LBL_KEY_DV    = 'privtest_cah_dv';    // bound to add_design_visit_to_calendar
-const LBL_KEY_PC    = 'privtest_cah_pc';    // bound to summarise_phone_call
-const LBL_KEY_OVR   = 'privtest_cah_ovr';   // (sales, this) -> handler A (label binding)
-const SUB_STATUS_K  = 'PRIVTEST_CAH_OVR';   // matching status_key (uppercase in lead_substatuses)
-const SUB_SUB_K     = 'PRIVTEST_SUB';
+const LBL_KEY_DV       = 'privtest_cah_dv';       // bound to add_design_visit_to_calendar
+const LBL_KEY_PC       = 'privtest_cah_pc';        // bound to summarise_phone_call
+const LBL_KEY_OVR      = 'privtest_cah_ovr';       // (sales, this) -> handler A (label binding)
+const SUB_STATUS_K     = 'PRIVTEST_CAH_OVR';       // matching status_key (uppercase in lead_substatuses)
+const SUB_SUB_K        = 'PRIVTEST_SUB';
+// (D) conflict-fix fixtures
+const LBL_KEY_CONFLICT    = 'privtest_cah_conflict'; // status_key for conflicting bindings (lowercase)
+const LBL_KEY_CONFLICT_LS = 'PRIVTEST_CAH_CONFLICT'; // key in lead_status_config (uppercase, stage=SALES)
 
-const HANDLER_NAME_DV  = 'PrivTest design visit handler';
-const HANDLER_NAME_PC  = 'PrivTest phone summary handler';
-const HANDLER_NAME_LBL = 'PrivTest label-binding handler';
-const HANDLER_NAME_SUB = 'PrivTest substatus-binding handler';
+const HANDLER_NAME_DV         = 'PrivTest design visit handler';
+const HANDLER_NAME_PC         = 'PrivTest phone summary handler';
+const HANDLER_NAME_LBL        = 'PrivTest label-binding handler';
+const HANDLER_NAME_SUB        = 'PrivTest substatus-binding handler';
+const HANDLER_NAME_CONFLICT_A = 'PrivTest conflict handler A';
+const HANDLER_NAME_CONFLICT_B = 'PrivTest conflict handler B';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function parseCookieKV(jar) {
@@ -83,8 +88,9 @@ async function purgeFixtures(pool) {
   // cascades to any binding pointing at it.
   await pool.query(
     `DELETE FROM card_action_handlers
-       WHERE name IN ($1, $2, $3, $4)`,
-    [HANDLER_NAME_DV, HANDLER_NAME_PC, HANDLER_NAME_LBL, HANDLER_NAME_SUB]
+       WHERE name IN ($1, $2, $3, $4, $5, $6)`,
+    [HANDLER_NAME_DV, HANDLER_NAME_PC, HANDLER_NAME_LBL, HANDLER_NAME_SUB,
+     HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B]
   );
   await pool.query(
     `DELETE FROM lead_substatuses
@@ -94,6 +100,24 @@ async function purgeFixtures(pool) {
   await pool.query(
     `DELETE FROM visits WHERE customer_id LIKE 'privtest-cah-%'`
   );
+  // Remove the conflict-test lead status if it was seeded.
+  try {
+    await pool.query(
+      `DELETE FROM lead_status_config WHERE key = $1`,
+      [LBL_KEY_CONFLICT_LS]
+    );
+  } catch (_) {}
+  // Recreate the unique label-binding index if it was temporarily dropped
+  // during probe (D) to seed the conflict state.  Safe to run even if the
+  // index still exists — CREATE … IF NOT EXISTS is a no-op in that case.
+  // If conflicting rows somehow remain this will throw; that is intentional.
+  try {
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS cahb_label_uniq
+        ON card_action_handler_bindings (stage_key, status_key)
+        WHERE substatus_id IS NULL
+    `);
+  } catch (_) {}
 }
 
 // Poll an in-page predicate until it returns truthy or the deadline expires.
@@ -1017,6 +1041,182 @@ async function main() {
       !!bogusFallsBack && bogusFallsBack.id === lblHandlerId,
     );
 
+    // ── (D) Conflict-fix flow ─────────────────────────────────────────────────
+    //
+    // The unique binding index normally prevents two handlers sharing a slot.
+    // We temporarily drop it to seed the conflict state that the ⚠ Fix button
+    // is designed to resolve, then verify the end-to-end fix flow.
+    //
+    // Flow:
+    //   1. Seed a test lead-status row (stage=SALES) so the slot appears in
+    //      the card-actions table, then POST handler A via the API.
+    //   2. Drop the unique label-binding index and insert handler B + its
+    //      duplicate binding directly in the DB.
+    //   3. Open a fresh admin tab, switch to Card actions, wait for the ⚠ Fix
+    //      button to appear next to the conflicted slot.
+    //   4. Click Fix — assert the resolver modal opens with 2 handler rows.
+    //   5. Click Remove on the first row — assert the modal closes and the
+    //      ⚠ Fix button is no longer shown for the slot.
+    console.log('\n  [D] Conflict-fix flow');
+
+    // Seed a lead status so the conflict slot renders in the card-actions
+    // table (the table only shows statuses that have stage=SALES/DESIGN_VISIT/SURVEY).
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+       VALUES ($1, 'PrivTest Conflict Status', 9998, false, 'SALES')
+       ON CONFLICT (key) DO UPDATE
+         SET label             = EXCLUDED.label,
+             sort_order        = EXCLUDED.sort_order,
+             excluded_from_sales = EXCLUDED.excluded_from_sales,
+             stage             = EXCLUDED.stage`,
+      [LBL_KEY_CONFLICT_LS],
+    );
+    console.log(`  Seeded lead_status_config key=${LBL_KEY_CONFLICT_LS}`);
+
+    // Create handler A via API — this also creates the binding normally.
+    const createConflictARes = await adminClient.post('/api/admin/card-action-handlers', {
+      name:     HANDLER_NAME_CONFLICT_A,
+      type:     'add_design_visit_to_calendar',
+      config:   {},
+      bindings: [{ stage_key: 'sales', status_key: LBL_KEY_CONFLICT }],
+    });
+    record(
+      '(D) POST handler A for conflict slot returns 201',
+      'status=201 with numeric id',
+      `status=${createConflictARes.status} id=${createConflictARes.json?.id}`,
+      createConflictARes.status === 201 && Number.isInteger(createConflictARes.json?.id),
+    );
+    const conflictAId = createConflictARes.json?.id;
+
+    // Temporarily drop the unique label-binding index so we can insert a
+    // second binding for the same slot — this is the only way to reproduce
+    // the conflict state that the Fix button is designed to clear.
+    await pool.query('DROP INDEX IF EXISTS cahb_label_uniq');
+
+    // Insert handler B and its duplicate binding directly in the DB.
+    const hbInsert = await pool.query(
+      `INSERT INTO card_action_handlers (name, type, config)
+       VALUES ($1, $2, '{}'::jsonb) RETURNING id`,
+      [HANDLER_NAME_CONFLICT_B, 'summarise_phone_call'],
+    );
+    const conflictBId = hbInsert.rows[0].id;
+    await pool.query(
+      `INSERT INTO card_action_handler_bindings
+         (handler_id, stage_key, status_key, substatus_id)
+       VALUES ($1, $2, $3, null)`,
+      [conflictBId, 'sales', LBL_KEY_CONFLICT],
+    );
+    record(
+      '(D) handler B seeded directly with the same (sales, LBL_KEY_CONFLICT) binding',
+      'DB insert succeeds after unique index drop',
+      `conflictAId=${conflictAId} conflictBId=${conflictBId}`,
+      Number.isInteger(conflictAId) && Number.isInteger(conflictBId),
+    );
+
+    // Open a fresh admin page tab.
+    const conflictAdminTab = await browser.newPage();
+    await conflictAdminTab.setCacheEnabled(false);
+    await injectSession(conflictAdminTab, adminClient.cookie);
+    await conflictAdminTab.goto(`${BASE}/admin`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+    await new Promise(r => setTimeout(r, 400));
+
+    // Switch to the Card actions tab and trigger the data load.
+    await conflictAdminTab.evaluate(() => {
+      if (typeof switchTab === 'function') switchTab('cardactions');
+      const p1 = typeof loadCardActionsAdmin === 'function'
+        ? loadCardActionsAdmin() : Promise.resolve();
+      const p2 = typeof loadCardActionHandlersAdmin === 'function'
+        ? loadCardActionHandlersAdmin() : Promise.resolve();
+      return Promise.all([p1, p2]);
+    });
+
+    // Wait for the ⚠ Fix button to appear next to our conflict slot.
+    const fixBtnVisible = await pollPage(
+      conflictAdminTab,
+      (lsKey) => {
+        const block = document.querySelector(`[data-ls-block="${lsKey}"]`);
+        if (!block) return null;
+        return block.querySelector('.ca-fix-conflict-btn') ? 'found' : null;
+      },
+      LBL_KEY_CONFLICT_LS,
+      10000,
+    );
+    record(
+      '(D) ⚠ Fix button appears in the card-actions table for the conflicted slot',
+      `button.ca-fix-conflict-btn inside [data-ls-block="${LBL_KEY_CONFLICT_LS}"]`,
+      `found=${fixBtnVisible}`,
+      fixBtnVisible === 'found',
+    );
+
+    // Click the Fix button (JS click bypasses Puppeteer visibility checks).
+    await conflictAdminTab.evaluate((lsKey) => {
+      const block = document.querySelector(`[data-ls-block="${lsKey}"]`);
+      const btn   = block && block.querySelector('.ca-fix-conflict-btn');
+      if (btn) btn.click();
+    }, LBL_KEY_CONFLICT_LS);
+
+    // Assert the conflict-resolver modal opens with 2 handler rows.
+    const conflictModalRows = await pollPage(
+      conflictAdminTab,
+      () => {
+        const rows = document.querySelectorAll('.ca-conflict-row');
+        return rows.length >= 2 ? rows.length : null;
+      },
+      null,
+      5000,
+    );
+    record(
+      '(D) conflict-resolver modal opens with 2 handler rows',
+      '2 .ca-conflict-row elements present',
+      `rows=${conflictModalRows}`,
+      conflictModalRows === 2,
+    );
+
+    // Click Remove on the first row.
+    await conflictAdminTab.evaluate(() => {
+      const btn = document.querySelector('.ca-conflict-remove-btn');
+      if (btn) btn.click();
+    });
+
+    // Assert the modal closes once only one handler remains.
+    const modalClosed = await pollPage(
+      conflictAdminTab,
+      () => document.querySelectorAll('.ca-conflict-row').length === 0 ? 'closed' : null,
+      null,
+      7000,
+    );
+    record(
+      '(D) conflict-resolver modal closes after removing one handler',
+      'no .ca-conflict-row elements (modal wrapper removed from DOM)',
+      `result=${modalClosed}`,
+      modalClosed === 'closed',
+    );
+
+    // Assert the ⚠ Fix button is no longer shown for the slot.
+    // loadCardActionHandlersAdmin() is called inside the Remove handler
+    // before the modal is closed, so the badge area is already re-rendered.
+    const fixBtnGone = await pollPage(
+      conflictAdminTab,
+      (lsKey) => {
+        const block = document.querySelector(`[data-ls-block="${lsKey}"]`);
+        if (!block) return 'block-missing';
+        return block.querySelector('.ca-fix-conflict-btn') ? null : 'gone';
+      },
+      LBL_KEY_CONFLICT_LS,
+      6000,
+    );
+    record(
+      '(D) ⚠ Fix button no longer shown after conflict is resolved',
+      `no .ca-fix-conflict-btn inside [data-ls-block="${LBL_KEY_CONFLICT_LS}"]`,
+      `result=${fixBtnGone}`,
+      fixBtnGone === 'gone',
+    );
+
+    await conflictAdminTab.close();
+
     await salesTab.close();
   } finally {
     await browser.close().catch(() => {});
@@ -1102,6 +1302,18 @@ async function writeReport(runId, findings) {
     '  matches LBL, `cardActionHandlerFor()` returns A when no substatus value',
     '  is passed and B when the matching substatus value is passed.  A bogus',
     '  substatus value falls back to A, confirming the override is conditional.',
+    '- **(D) Conflict-fix flow**: a test lead-status row (stage=SALES) is',
+    '  seeded so the slot appears in the card-actions table.  Handler A is',
+    '  created via the API; the unique label-binding index is then temporarily',
+    '  dropped and handler B is inserted directly in the DB with the same',
+    '  (sales, LBL_KEY_CONFLICT) binding — the only way to reproduce the',
+    '  conflict state the Fix button is designed to clear.  The harness then',
+    '  opens a fresh admin tab, switches to the Card actions panel, and waits',
+    '  for the ⚠ Fix button to appear beside the conflicted slot.  Clicking Fix',
+    '  must open the conflict-resolver modal with exactly 2 handler rows;',
+    '  clicking Remove on one row must close the modal and remove the ⚠ Fix',
+    '  button from the badge area.  `purgeFixtures()` re-creates the unique',
+    '  index after deleting the conflicting rows.',
     '',
     '## Notes',
     '',
@@ -1110,8 +1322,10 @@ async function writeReport(runId, findings) {
     '  succeed in this harness).  The design-visit handler\'s primary backend',
     '  (`/api/visits`) does not require HubSpot, so the database write is',
     '  verified end-to-end.',
-    '- Fixtures (handlers by name, the test lead_substatus row, and the',
-    '  synthetic `privtest-cah-*` visits) are purged in `cleanupAndExit()`.',
+    '- Fixtures (handlers by name, the test lead_substatus row, the conflict',
+    '  test lead-status row, and the synthetic `privtest-cah-*` visits) are',
+    '  purged in `cleanupAndExit()`.  The unique label-binding index is',
+    '  recreated there after the conflicting rows are removed.',
   ];
   const outPath = path.join(dir, 'card-action-handlers.md');
   fs.writeFileSync(outPath, lines.join('\n'));
