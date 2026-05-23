@@ -510,6 +510,83 @@ async function main() {
     }
   }
 
+  // ── (PRIV) Member-privilege probes ────────────────────────────────────────
+  //
+  // Verify that the `requireAdmin` middleware on the /api/admin/card-action-
+  // handlers routes actually blocks a regular approved member.  Each attempt
+  // must return 403 (or a redirect to login, which node-fetch follows to a
+  // non-2xx page — either way, NOT 2xx).
+  //
+  //   PRIV-01  member POST  /api/admin/card-action-handlers        → 403
+  //   PRIV-02  member PATCH /api/admin/card-action-handlers/:id    → 403
+  //   PRIV-03  member DELETE /api/admin/card-action-handlers/:id   → 403
+
+  console.log('\n  [PRIV] Member-privilege probes');
+
+  const memberClient = await login(users.member.email, PASSWORD);
+
+  // Create a scaffold handler as admin so PRIV-02 / PRIV-03 have a real ID.
+  let privScaffoldId = null;
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'privtest-priv-scaffold',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [],
+    });
+    privScaffoldId = r.json?.id ?? null;
+  }
+
+  // PRIV-01: member POST
+  {
+    const r = await memberClient.post('/api/admin/card-action-handlers', {
+      name: 'privtest-member-attempt',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [],
+    });
+    const blocked = r.status === 403 || r.status === 401 || r.status === 302;
+    record(
+      'PRIV-01: member POST /api/admin/card-action-handlers blocked',
+      'status=403 (or 401/302)',
+      `status=${r.status}`,
+      blocked,
+    );
+  }
+
+  // PRIV-02: member PATCH
+  {
+    const targetId = privScaffoldId ?? 999999;
+    const r = await memberClient.patch(`/api/admin/card-action-handlers/${targetId}`, {
+      config: {},
+    });
+    const blocked = r.status === 403 || r.status === 401 || r.status === 302;
+    record(
+      'PRIV-02: member PATCH /api/admin/card-action-handlers/:id blocked',
+      'status=403 (or 401/302)',
+      `status=${r.status}`,
+      blocked,
+    );
+  }
+
+  // PRIV-03: member DELETE
+  {
+    const targetId = privScaffoldId ?? 999999;
+    const r = await memberClient.delete(`/api/admin/card-action-handlers/${targetId}`);
+    const blocked = r.status === 403 || r.status === 401 || r.status === 302;
+    record(
+      'PRIV-03: member DELETE /api/admin/card-action-handlers/:id blocked',
+      'status=403 (or 401/302)',
+      `status=${r.status}`,
+      blocked,
+    );
+  }
+
+  // Clean up the scaffold handler (admin delete).
+  if (privScaffoldId) {
+    await adminClient.delete(`/api/admin/card-action-handlers/${privScaffoldId}`);
+  }
+
   // ── puppeteer required ─────────────────────────────────────────────────────
   if (!puppeteer) {
     record(
@@ -983,6 +1060,11 @@ async function writeReport(runId, findings) {
     '',
     '- **(API pre-checks)**: verify `GET /api/admin/card-action-handlers` and',
     '  `GET /api/card-action-handlers` respond before any browser tab opens.',
+    '- **(PRIV) Member-privilege probes** — 3 pure-REST probes that confirm a',
+    '  regular approved member is blocked (403) from mutating admin routes:',
+    '  - PRIV-01: member POST `/api/admin/card-action-handlers` → 403.',
+    '  - PRIV-02: member PATCH `/api/admin/card-action-handlers/:id` → 403.',
+    '  - PRIV-03: member DELETE `/api/admin/card-action-handlers/:id` → 403.',
     '- **(NEG) Negative-path validation probes** — 18 pure-REST probes that',
     '  POST or PATCH `/api/admin/card-action-handlers` with each known-bad',
     '  payload and assert the server returns 400 with a descriptive error:',
