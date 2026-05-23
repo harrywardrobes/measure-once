@@ -3290,9 +3290,10 @@ app.put('/api/admin/stage-action-labels', isAuthenticated, requireAdmin, async (
   if (!stage_key || !STAGE_ACTION_STAGE_KEYS.has(stage_key)) {
     return res.status(400).json({ error: 'stage_key must be one of: sales, designvisit, survey.' });
   }
-  if (!label) {
-    return res.status(400).json({ error: 'label cannot be empty.' });
-  }
+  // An empty `label` is allowed and means "admin explicitly cleared this
+  // per-LS row" — the row is still inserted so the client can distinguish
+  // "no row" (use per-stage default) from "row present but cleared"
+  // (suppress the action strip). See workflow-core.js for the resolver.
   if (label.length > 128) {
     return res.status(400).json({ error: 'label must be 128 characters or fewer.' });
   }

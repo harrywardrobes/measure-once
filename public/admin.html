@@ -2035,23 +2035,21 @@
         'changed=', value && value !== original);
       if (!value) {
         // Empty + had an original value → user wants to clear the action
-        // label. The server stores these in stage_action_labels and treats
-        // a missing row as "no label", so DELETE the row to honour the
-        // clear. (PUT with an empty label is rejected server-side.)
+        // label. PUT an empty label so the row stays in the table marked
+        // as "explicitly cleared"; the client resolver uses presence-with-
+        // empty-label to suppress the strip for that LS only (without
+        // resurrecting the per-stage default fallback).
         if (original) {
-          // The (stage, '') row maps to status_key='' which Express's
-          // /:stage_key/:status_key route cannot match. Encode the empty
-          // segment as a literal '_EMPTY_' sentinel that the server
-          // translates back to ''.
-          const statusSeg = input.dataset.status ? encodeURIComponent(input.dataset.status) : '_EMPTY_';
-          const url = `/api/admin/stage-action-labels/${encodeURIComponent(input.dataset.stage)}/${statusSeg}`;
-          console.log('[card-actions] clearing default label via DELETE', url);
           try {
-            await api('DELETE', url);
+            await api('PUT', '/api/admin/stage-action-labels', {
+              stage_key: input.dataset.stage,
+              status_key: input.dataset.status,
+              label: '',
+            });
             input.dataset.original = '';
             saved++;
           } catch (e) {
-            console.warn('[card-actions] DELETE failed', e);
+            console.warn('[card-actions] PUT empty failed', e);
             input.value = original;
             failed++;
             failures.push(`default (${input.dataset.stage}/${input.dataset.status || '—'}): ${e.message || 'error'}`);

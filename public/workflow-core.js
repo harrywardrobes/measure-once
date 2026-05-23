@@ -363,6 +363,11 @@ async function loadLeadStatusCounts() {
 // /api/stage-action-labels at bootstrap and refreshed when the admin panel
 // broadcasts changes. Both keys are lowercase to match card substageIds.
 let STAGE_ACTION_LABEL_MAP = {};
+// Set of `${stage}|${status}` keys for rows that exist in the DB with an
+// empty label — i.e. admin explicitly cleared this per-LS entry. Used by
+// `stageOrLeadStatusActionLabel` to distinguish "row absent → use per-stage
+// default" from "row cleared → suppress strip".
+let STAGE_ACTION_LABEL_CLEARED = new Set();
 
 function stageActionLabelLookup(stageKey, statusKey) {
   const s = String(stageKey  || '').toLowerCase();
@@ -376,23 +381,29 @@ function stageActionLabelLookup(stageKey, statusKey) {
 // finally the per-stage "no lead status" row. Returns '' when nothing matches
 // — the caller is expected to omit the action strip entirely in that case.
 function stageOrLeadStatusActionLabel(stageKey, leadStatusKey, substageId) {
+  const sKey  = String(stageKey || '').toLowerCase();
   const lsKey = String(leadStatusKey || '').toLowerCase();
   if (lsKey) {
-    // The admin Card actions tab is keyed by lead status, so a contact with
-    // a lead status set must resolve via that LS row. If the admin has
-    // cleared that row (deleted from stage_action_labels), return '' so the
-    // caller omits the action strip — do NOT fall back to the per-stage
-    // (stage_key, '') "no lead status" default, which would resurrect the
-    // wrong label on every card with that status.
-    return stageActionLabelLookup(stageKey, lsKey) || '';
+    // Priority for contacts with a lead status set:
+    //   1. Per-LS row exists with a non-empty label → use it.
+    //   2. Per-LS row exists but is explicitly cleared (admin emptied the
+    //      label in Card Actions) → return '' to suppress the strip for
+    //      this LS only. Honours the fix from Task #582.
+    //   3. No per-LS row at all → fall back to the per-stage `(stage, '')`
+    //      "No lead status" default so every card still gets a sensible
+    //      strip out of the box.
+    const fromLs = stageActionLabelLookup(sKey, lsKey);
+    if (fromLs) return fromLs;
+    if (STAGE_ACTION_LABEL_CLEARED.has(`${sKey}|${lsKey}`)) return '';
+    return stageActionLabelLookup(sKey, '') || '';
   }
   if (substageId) {
-    const fromSub = stageActionLabelLookup(stageKey, substageId);
+    const fromSub = stageActionLabelLookup(sKey, substageId);
     if (fromSub) return fromSub;
   }
   // Contact genuinely has no lead status: use the per-stage "no lead status"
   // row (stored as stage_action_labels[stage|'']).
-  return stageActionLabelLookup(stageKey, '') || '';
+  return stageActionLabelLookup(sKey, '') || '';
 }
 
 // ── Lead sub-statuses ────────────────────────────────────────────────────────
@@ -436,12 +447,24 @@ async function loadStageActionLabels() {
     const rows = await GET('/api/stage-action-labels');
     if (Array.isArray(rows)) {
       const m = {};
+      const cleared = new Set();
       for (const r of rows) {
         const s = String(r.stage_key  || '').toLowerCase();
         const k = String(r.status_key || '').toLowerCase();
-        if (s && r.label) m[`${s}|${k}`] = r.label;
+        if (!s) continue;
+        const label = String(r.label || '').trim();
+        if (label) {
+          m[`${s}|${k}`] = label;
+        } else if (k) {
+          // Row exists for a specific lead status with an empty label →
+          // admin explicitly cleared this LS. (We never treat the per-stage
+          // `(stage, '')` "No lead status" row as cleared — it's the global
+          // default and falling back to itself is a no-op.)
+          cleared.add(`${s}|${k}`);
+        }
       }
       STAGE_ACTION_LABEL_MAP = m;
+      STAGE_ACTION_LABEL_CLEARED = cleared;
     }
   } catch (e) {
     console.warn('Could not load stage action labels:', e.message);
