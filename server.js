@@ -4,7 +4,7 @@ const axios = require('axios').create({ timeout: 10000 });
 const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
-const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool } = require('./auth');
+const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction } = require('./auth');
 const {
   hubspotMutationLimiter,
   gmailSendLimiter,
@@ -4109,7 +4109,71 @@ app.get('/api/whatsapp/history/:contactId', isAuthenticated, requireAdmin, async
   }
 });
 
-// ── Search Settings ──────────────────────────────────────────────────────────
+// ── Workshop Settings ─────────────────────────────────────────────────────────
+const WORKSHOP_SETTINGS_DEFAULTS = [
+  { key: 'integral_lead_time_days',       label: 'Integral Lead Times',            value: '14' },
+  { key: 'interfit_drawer_box_lead_time_days', label: 'Interfit Drawer Box Lead Times', value: '14' },
+];
+
+async function ensureWorkshopSettingsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workshop_settings (
+      key        TEXT PRIMARY KEY,
+      label      TEXT NOT NULL,
+      value      TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMP DEFAULT NOW(),
+      updated_by TEXT
+    )
+  `);
+  for (const row of WORKSHOP_SETTINGS_DEFAULTS) {
+    await pool.query(
+      `INSERT INTO workshop_settings (key, label, value)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (key) DO NOTHING`,
+      [row.key, row.label, row.value]
+    );
+  }
+}
+
+app.get('/api/admin/workshop-settings', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT key, label, value, updated_at, updated_by FROM workshop_settings ORDER BY key ASC'
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error('GET /api/admin/workshop-settings error:', e.message);
+    res.status(500).json({ error: 'Could not load workshop settings.' });
+  }
+});
+
+app.patch('/api/admin/workshop-settings', isAuthenticated, requireAdmin, async (req, res) => {
+  const { key, value } = req.body || {};
+  if (!key || typeof key !== 'string') return res.status(400).json({ error: 'key is required.' });
+  const trimmedValue = typeof value === 'string' ? value.trim() : String(value ?? '');
+  const adminEmail = req.user?.claims?.email || req.user?.email || 'unknown';
+  try {
+    const existing = await pool.query('SELECT value, label FROM workshop_settings WHERE key = $1', [key]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Setting not found.' });
+    const oldValue = existing.rows[0].value;
+    const label    = existing.rows[0].label;
+    await pool.query(
+      `UPDATE workshop_settings SET value = $1, updated_at = NOW(), updated_by = $2 WHERE key = $3`,
+      [trimmedValue, adminEmail, key]
+    );
+    await logAdminAction(
+      adminEmail,
+      'edit_workshop_setting',
+      null,
+      `${label} (${key}): ${oldValue} → ${trimmedValue}`
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('PATCH /api/admin/workshop-settings error:', e.message);
+    res.status(500).json({ error: 'Could not save workshop setting.' });
+  }
+});
+
 async function ensureSearchSettingsTable() {
   await pool.query(`CREATE TABLE IF NOT EXISTS search_settings (
     id INTEGER PRIMARY KEY DEFAULT 1,
@@ -4206,6 +4270,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Card action handlers tables setup failed:', e.message); }
     try { await ensureSearchSettingsTable(); console.log('  Search settings table ready'); }
     catch (e) { console.error('  Search settings table setup failed:', e.message); }
+    try { await ensureWorkshopSettingsTable(); console.log('  Workshop settings table ready'); }
+    catch (e) { console.error('  Workshop settings table setup failed:', e.message); }
     try { await ensureWhatsAppMessagesTable(); console.log('  WhatsApp messages table ready'); }
     catch (e) { console.error('  WhatsApp messages table setup failed:', e.message); }
   });
