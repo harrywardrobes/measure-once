@@ -101,6 +101,8 @@ const state = {
   addingRoom: false,
   stageFilter: '',
   leadStatusFilter: '',
+  substatusFilter: '',
+  showExcludedLeadStatuses: false,
   leadStatusCounts: {},
   sortBy: 'newest',
   showArchived: false,

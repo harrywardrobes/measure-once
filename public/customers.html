@@ -139,11 +139,13 @@
       const urlParams  = new URLSearchParams(location.search);
       const initPage   = Math.max(1, parseInt(urlParams.get('page')       || '1',      10));
       const initStatus = urlParams.get('leadStatus') || '';
+      const initSub    = initStatus ? (urlParams.get('substatus') || '') : '';
       const initSort   = urlParams.get('sort')       || state.sortBy || 'newest';
 
       // Apply URL params to state so the first render uses them.
       state.currentPage      = initPage;
       state.leadStatusFilter = initStatus;
+      state.substatusFilter  = initSub;
       state.sortBy           = initSort;
 
       try {

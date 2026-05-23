@@ -139,7 +139,14 @@ async function submitNewCustomer(ev) {
 // ── Build List Items ──────────────────────────────────────────────────────────
 function buildListItems() {
   const items = [];
+  const subFilter = state.substatusFilter || '';
   for (const contact of state.filteredContacts) {
+    // Sub-status filter is client-side: hw_lead_substatus is namespaced as
+    // `${LS_KEY}__${SUB_KEY}` so we only need an exact match.
+    if (subFilter) {
+      const v = String(contact.properties?.hw_lead_substatus || '').toUpperCase();
+      if (v !== subFilter) continue;
+    }
     const cached = state.contactStageCache[contact.id];
     let rooms;
     if (cached && cached.length > 0) {
@@ -299,11 +306,62 @@ function _renderCustomerListImpl() {
     `<option value="${value}"${(state.sortBy || 'newest') === value ? ' selected' : ''}>${escHtml(label)}</option>`
   ).join('');
 
-  const nullLbl   = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
-  const lsOptions = `<option value="__no_status__"${state.leadStatusFilter === '__no_status__' ? ' selected' : ''}>${escHtml(nullLbl)}</option>` +
-    LEAD_STATUS_OPTIONS.map(({ value, label }) =>
-      `<option value="${escHtml(value)}"${state.leadStatusFilter === value ? ' selected' : ''}>${escHtml(label)}</option>`
-    ).join('');
+  const nullLbl = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
+
+  // ── Lead-status pill row (below stage tabs) ────────────────────────────────
+  // Hides statuses with excluded_from_sales = true by default. Pills carry the
+  // server-side counts from /api/contacts-lead-status-counts so users can see
+  // at a glance how many contacts each status has.
+  const lsCounts    = (state.leadStatusCounts && typeof state.leadStatusCounts === 'object') ? state.leadStatusCounts : {};
+  const lsCurrent   = state.leadStatusFilter || '';
+  const showLsExcl  = !!state.showExcludedLeadStatuses;
+  const lsAllActive = !lsCurrent ? ' project-stage-tab-active' : '';
+  const lsAllStyle  = !lsCurrent ? 'background:var(--plum);color:#fff;border-color:var(--plum)' : '';
+  const lsNoneN     = lsCounts['__no_status__'] || 0;
+  const lsNoneActive = lsCurrent === '__no_status__' ? ' project-stage-tab-active' : '';
+  const lsNoneStyle  = lsCurrent === '__no_status__' ? 'background:var(--ink-2);color:#fff;border-color:var(--ink-2)' : '';
+  const lsPills = [
+    `<button class="project-stage-tab${lsAllActive}" style="${lsAllStyle}" data-ls-key="">All statuses</button>`,
+    `<button class="project-stage-tab${lsNoneActive}" style="${lsNoneStyle}" data-ls-key="__no_status__"${lsNoneN === 0 ? ' disabled' : ''}>${escHtml(nullLbl)} (${lsNoneN})</button>`,
+    ...LEAD_STATUS_OPTIONS
+      .filter(o => showLsExcl || !o.excluded_from_sales)
+      .map(({ value, label, excluded_from_sales }) => {
+        const n = lsCounts[value] || 0;
+        const isActive = lsCurrent === value;
+        const activeCls = isActive ? ' project-stage-tab-active' : '';
+        const style = isActive ? 'background:var(--plum);color:#fff;border-color:var(--plum)' : '';
+        const exclMark = excluded_from_sales ? ' · excl.' : '';
+        return `<button class="project-stage-tab${activeCls}" style="${style}" data-ls-key="${escHtml(value)}"${n === 0 ? ' disabled' : ''}>${escHtml(label)}${exclMark} (${n})</button>`;
+      }),
+  ].join('');
+  const exclToggle = `<button id="ls-show-excluded" class="project-stage-tab${showLsExcl ? ' project-stage-tab-active' : ''}" style="${showLsExcl ? 'background:var(--ink-2);color:#fff;border-color:var(--ink-2);' : ''}margin-left:auto" aria-pressed="${showLsExcl}" title="Show statuses marked Excl. from Sales">${showLsExcl ? 'Hide excl.' : 'Show excl.'}</button>`;
+  const lsPillBar = `<div class="project-stage-tabs-bar lead-status-pill-bar">${lsPills}${exclToggle}</div>`;
+
+  // ── Sub-status pill row (only when a lead status is selected) ──────────────
+  let subPillBar = '';
+  if (lsCurrent && lsCurrent !== '__no_status__' && Array.isArray(LEAD_SUBSTATUSES)) {
+    const subs = LEAD_SUBSTATUSES
+      .filter(r => String(r.status_key || '').toUpperCase() === String(lsCurrent).toUpperCase())
+      .slice()
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    if (subs.length) {
+      const subCurrent = state.substatusFilter || '';
+      const allActive  = !subCurrent ? ' project-stage-tab-active' : '';
+      const allStyle   = !subCurrent ? 'background:var(--plum);color:#fff;border-color:var(--plum)' : '';
+      const subPills = [
+        `<button class="project-stage-tab${allActive}" style="${allStyle}" data-sub-key="">All sub-statuses</button>`,
+        ...subs.map(r => {
+          const subKey = String(r.substatus_key || '').toUpperCase();
+          const fullValue = `${String(lsCurrent).toUpperCase()}__${subKey}`;
+          const isActive = subCurrent === fullValue;
+          const activeCls = isActive ? ' project-stage-tab-active' : '';
+          const style = isActive ? 'background:var(--plum);color:#fff;border-color:var(--plum)' : '';
+          return `<button class="project-stage-tab${activeCls}" style="${style}" data-sub-key="${escHtml(fullValue)}">${escHtml(r.label || subKey)}</button>`;
+        }),
+      ].join('');
+      subPillBar = `<div class="project-stage-tabs-bar lead-substatus-pill-bar">${subPills}</div>`;
+    }
+  }
 
   const showAllActive = state.showArchived ? ' project-stage-tab-active' : '';
   const showAllStyle  = state.showArchived ? 'background:var(--ink-2);color:#fff;border-color:var(--ink-2)' : '';
@@ -324,10 +382,6 @@ function _renderCustomerListImpl() {
     <div class="project-sort-bar">
       <label class="project-sort-label" for="customers-sort-select">Sort by</label>
       <select id="customers-sort-select" class="project-sort-select">${sortOptions}</select>
-      <select id="lead-status-filter" class="project-sort-select" aria-label="Lead status filter">
-        <option value="">All statuses</option>
-        ${lsOptions}
-      </select>
       ${searchChip}
       <button id="archived-toggle" class="project-stage-tab${showAllActive}" style="${showAllStyle};margin-left:auto"
         aria-pressed="${state.showArchived}" aria-label="Show all HubSpot contacts">Show all</button>
@@ -477,6 +531,8 @@ function _renderCustomerListImpl() {
 
   view.innerHTML = `
     <div class="project-stage-tabs-bar">${stageTabs}</div>
+    ${lsPillBar}
+    ${subPillBar}
     ${sortBar}
     ${stageFilterNote}
     <div class="projects-inner">${bodyHtml}</div>
@@ -492,6 +548,7 @@ function _renderCustomerListImpl() {
       state.contactsViewMode = 'active';
       state.stageFilter      = '';
       state.leadStatusFilter = '';
+      state.substatusFilter  = '';
       state.currentPage      = 1;
       _updateCustomersUrl({ page: 1, leadStatus: '', sort: state.sortBy });
       loadOpenLeads().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
@@ -515,11 +572,36 @@ function _renderCustomerListImpl() {
     _customersLoadAndRender({ page: 1 });
   });
 
-  const lsSel = view.querySelector('#lead-status-filter');
-  if (lsSel) lsSel.addEventListener('change', () => {
-    state.leadStatusFilter = lsSel.value;
-    state.currentPage = 1;
+  // Lead-status pill row
+  const lsBar = view.querySelector('.lead-status-pill-bar');
+  if (lsBar) lsBar.addEventListener('click', function(e) {
+    const exclBtn = e.target.closest('#ls-show-excluded');
+    if (exclBtn) {
+      state.showExcludedLeadStatuses = !state.showExcludedLeadStatuses;
+      renderCustomerList();
+      return;
+    }
+    const btn = e.target.closest('[data-ls-key]');
+    if (!btn || btn.disabled) return;
+    const key = btn.dataset.lsKey || '';
+    if (key === state.leadStatusFilter) return;
+    state.leadStatusFilter = key;
+    state.substatusFilter  = '';
+    state.currentPage      = 1;
     _customersLoadAndRender({ page: 1 });
+  });
+
+  // Sub-status pill row
+  const subBar = view.querySelector('.lead-substatus-pill-bar');
+  if (subBar) subBar.addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-sub-key]');
+    if (!btn) return;
+    const key = btn.dataset.subKey || '';
+    if (key === (state.substatusFilter || '')) return;
+    state.substatusFilter = key;
+    state.currentPage     = 1;
+    _updateCustomersUrl();
+    renderCustomerList();
   });
 
   const archivedBtn = view.querySelector('#archived-toggle');
@@ -533,6 +615,7 @@ function _renderCustomerListImpl() {
       state.contactsViewMode = 'active';
       state.stageFilter      = '';
       state.leadStatusFilter = '';
+      state.substatusFilter  = '';
       _updateCustomersUrl({ page: 1, leadStatus: '', sort: state.sortBy });
       loadOpenLeads().then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); }).catch(() => {});
     }
@@ -592,13 +675,15 @@ registerCustomerListRenderer(_renderCustomerListImpl);
 
 // ── Customers page helpers ────────────────────────────────────────────────────
 
-function _updateCustomersUrl({ page, leadStatus, sort } = {}) {
+function _updateCustomersUrl({ page, leadStatus, sort, substatus } = {}) {
   const qs = new URLSearchParams();
   const p  = page || state.currentPage || 1;
   const ls = leadStatus !== undefined ? leadStatus : (state.leadStatusFilter || '');
   const s  = sort !== undefined ? sort : (state.sortBy || 'newest');
+  const sub = substatus !== undefined ? substatus : (state.substatusFilter || '');
   if (p > 1)  qs.set('page', p);
   if (ls)     qs.set('leadStatus', ls);
+  if (sub && ls) qs.set('substatus', sub);
   if (s && s !== 'newest') qs.set('sort', s);
   history.replaceState(null, '', qs.toString() ? '?' + qs.toString() : location.pathname);
 }
