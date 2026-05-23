@@ -3558,7 +3558,8 @@ function _validateHandlerConfig(type, configRaw) {
       out.defaultDurationMin = n;
     }
     if (cfg.defaultTitle !== undefined) {
-      const v = String(cfg.defaultTitle || '').slice(0, 120);
+      const v = String(cfg.defaultTitle || '');
+      if (v.length > 120) return { error: 'defaultTitle must be 120 characters or fewer.' };
       out.defaultTitle = v;
     }
     if (cfg.addToGoogleCalendar !== undefined) {
@@ -3569,7 +3570,9 @@ function _validateHandlerConfig(type, configRaw) {
   if (type === 'summarise_phone_call') {
     const out = {};
     if (cfg.notePrefix !== undefined) {
-      out.notePrefix = String(cfg.notePrefix || '').slice(0, 120);
+      const v = String(cfg.notePrefix || '');
+      if (v.length > 120) return { error: 'notePrefix must be 120 characters or fewer.' };
+      out.notePrefix = v;
     }
     if (cfg.draftEmailSubject !== undefined) {
       out.draftEmailSubject = String(cfg.draftEmailSubject || '').slice(0, 200);

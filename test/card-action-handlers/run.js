@@ -232,6 +232,284 @@ async function main() {
     pubListRes.status === 200 && Array.isArray(pubListRes.json),
   );
 
+  // ── (NEG) Negative-path validation probes ─────────────────────────────────
+  //
+  // Each probe sends a known-bad payload to POST or PATCH
+  // /api/admin/card-action-handlers and asserts a 400 with a non-empty error
+  // string.  This section is pure REST — no browser required.
+  //
+  // Handler-config probes (add_design_visit_to_calendar):
+  //   NEG-01  defaultDurationMin below minimum (4)
+  //   NEG-02  defaultDurationMin above maximum (1441)
+  //   NEG-03  defaultDurationMin is not a number
+  //   NEG-04  config is an array (not a JSON object)
+  //   NEG-05  config payload exceeds 4 KB
+  //   NEG-06  defaultTitle longer than 120 chars is silently truncated (201, not 400)
+  //
+  // Handler-config probes (summarise_phone_call):
+  //   NEG-07  notePrefix longer than 120 chars is silently truncated (201, not 400)
+  //
+  // Handler-config probes (show_message):
+  //   NEG-08  message field is absent → required error
+  //   NEG-09  message field exceeds 2000 chars
+  //
+  // Handler-level probes:
+  //   NEG-10  unknown handler type
+  //   NEG-11  name longer than 80 chars
+  //
+  // Binding probes (POST):
+  //   NEG-12  stage_key is not one of the allowed values
+  //   NEG-13  status_key contains uppercase letters / special chars
+  //   NEG-14  binding with neither stage_key nor substatus_id
+  //   NEG-15  substatus_id = 0 (not positive)
+  //   NEG-16  substatus_id is a non-numeric string
+  //
+  // PATCH config probes:
+  //   NEG-17  PATCH sends defaultDurationMin < 5 → 400
+  //   NEG-18  PATCH sends invalid binding stage_key → 400
+
+  console.log('\n  [NEG] Negative-path validation probes');
+
+  // Helper: assert 400 with a non-empty error string.
+  function assertBadRequest(probeName, res, fragmentIfAny) {
+    const is400      = res.status === 400;
+    const hasMessage = typeof res.json?.error === 'string' && res.json.error.length > 0;
+    const fragOk     = !fragmentIfAny || (hasMessage && res.json.error.includes(fragmentIfAny));
+    record(
+      probeName,
+      `status=400 with error message${fragmentIfAny ? ` containing "${fragmentIfAny}"` : ''}`,
+      `status=${res.status} error=${JSON.stringify(res.json?.error)}`,
+      is400 && hasMessage && fragOk,
+    );
+  }
+
+  // NEG-01: defaultDurationMin below minimum
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'add_design_visit_to_calendar',
+      config: { defaultDurationMin: 4 },
+      bindings: [],
+    });
+    assertBadRequest('NEG-01: defaultDurationMin < 5 rejected', r, 'defaultDurationMin');
+  }
+
+  // NEG-02: defaultDurationMin above maximum
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'add_design_visit_to_calendar',
+      config: { defaultDurationMin: 1441 },
+      bindings: [],
+    });
+    assertBadRequest('NEG-02: defaultDurationMin > 1440 rejected', r, 'defaultDurationMin');
+  }
+
+  // NEG-03: defaultDurationMin is not a number
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'add_design_visit_to_calendar',
+      config: { defaultDurationMin: 'banana' },
+      bindings: [],
+    });
+    assertBadRequest('NEG-03: defaultDurationMin non-numeric rejected', r, 'defaultDurationMin');
+  }
+
+  // NEG-04: config is an array
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'add_design_visit_to_calendar',
+      config: [1, 2, 3],
+      bindings: [],
+    });
+    assertBadRequest('NEG-04: config as array rejected', r, 'config must be a JSON object');
+  }
+
+  // NEG-05: config payload exceeds 4 KB
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'add_design_visit_to_calendar',
+      config: { pad: 'x'.repeat(5000) },
+      bindings: [],
+    });
+    assertBadRequest('NEG-05: config > 4 KB rejected', r, 'too large');
+  }
+
+  // NEG-06: defaultTitle > 120 chars must be rejected with 400
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'add_design_visit_to_calendar',
+      config: { defaultTitle: 'A'.repeat(121) },
+      bindings: [],
+    });
+    assertBadRequest('NEG-06: defaultTitle > 120 chars rejected', r, 'defaultTitle');
+  }
+
+  // NEG-07: notePrefix > 120 chars must be rejected with 400
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'summarise_phone_call',
+      config: { notePrefix: 'B'.repeat(121) },
+      bindings: [],
+    });
+    assertBadRequest('NEG-07: notePrefix > 120 chars rejected', r, 'notePrefix');
+  }
+
+  // NEG-08: show_message with no message → required error
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'show_message',
+      config: {},
+      bindings: [],
+    });
+    assertBadRequest('NEG-08: show_message with absent message rejected', r, 'message');
+  }
+
+  // NEG-09: show_message with message > 2000 chars
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'show_message',
+      config: { message: 'Z'.repeat(2001) },
+      bindings: [],
+    });
+    assertBadRequest('NEG-09: show_message with message > 2000 chars rejected', r, '2000');
+  }
+
+  // NEG-10: unknown handler type
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'fly_to_moon',
+      config: {},
+      bindings: [],
+    });
+    assertBadRequest('NEG-10: unknown handler type rejected', r, null);
+  }
+
+  // NEG-11: name exceeds 80 chars
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'N'.repeat(81),
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [],
+    });
+    assertBadRequest('NEG-11: name > 80 chars rejected', r, '80');
+  }
+
+  // NEG-12: binding with invalid stage_key
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [{ stage_key: 'bogus_stage', status_key: 'some_key' }],
+    });
+    assertBadRequest('NEG-12: binding with invalid stage_key rejected', r, 'stage_key');
+  }
+
+  // NEG-13: binding with status_key containing uppercase / illegal chars
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [{ stage_key: 'sales', status_key: 'UPPER_CASE_KEY!' }],
+    });
+    assertBadRequest('NEG-13: binding with illegal status_key chars rejected', r, 'status_key');
+  }
+
+  // NEG-14: binding with neither stage_key nor substatus_id
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [{}],
+    });
+    assertBadRequest('NEG-14: binding missing both stage_key and substatus_id rejected', r, 'stage_key');
+  }
+
+  // NEG-15: substatus_id = 0 (not a positive integer)
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'add_design_visit_to_calendar',
+      config: {},
+      bindings: [{ substatus_id: 0 }],
+    });
+    assertBadRequest('NEG-15: substatus_id = 0 rejected', r, 'substatus_id');
+  }
+
+  // NEG-16: substatus_id is a non-numeric string
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'add_design_visit_to_calendar',
+      config: {},
+      bindings: [{ substatus_id: 'not-a-number' }],
+    });
+    assertBadRequest('NEG-16: substatus_id non-numeric string rejected', r, 'substatus_id');
+  }
+
+  // NEG-17: PATCH with defaultDurationMin < 5
+  // Scaffold: create a valid DV handler to patch against.
+  {
+    const scaffoldRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'privtest-neg17-scaffold',
+      type: 'add_design_visit_to_calendar',
+      config: { defaultDurationMin: 60 },
+      bindings: [],
+    });
+    const scaffoldId = scaffoldRes.json?.id;
+    if (scaffoldId) {
+      const r = await adminClient.patch(`/api/admin/card-action-handlers/${scaffoldId}`, {
+        config: { defaultDurationMin: 2 },
+      });
+      assertBadRequest('NEG-17: PATCH with defaultDurationMin < 5 rejected', r, 'defaultDurationMin');
+      await adminClient.delete(`/api/admin/card-action-handlers/${scaffoldId}`);
+    } else {
+      record(
+        'NEG-17: PATCH with defaultDurationMin < 5 rejected',
+        'status=400 with error',
+        `skipped — scaffold POST failed (status=${scaffoldRes.status})`,
+        false,
+      );
+    }
+  }
+
+  // NEG-18: PATCH with invalid binding stage_key
+  {
+    const scaffoldRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'privtest-neg18-scaffold',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [],
+    });
+    const scaffoldId = scaffoldRes.json?.id;
+    if (scaffoldId) {
+      const r = await adminClient.patch(`/api/admin/card-action-handlers/${scaffoldId}`, {
+        bindings: [{ stage_key: 'not_valid', status_key: 'some_key' }],
+      });
+      assertBadRequest('NEG-18: PATCH with invalid binding stage_key rejected', r, 'stage_key');
+      await adminClient.delete(`/api/admin/card-action-handlers/${scaffoldId}`);
+    } else {
+      record(
+        'NEG-18: PATCH with invalid binding stage_key rejected',
+        'status=400 with error',
+        `skipped — scaffold POST failed (status=${scaffoldRes.status})`,
+        false,
+      );
+    }
+  }
+
   // ── puppeteer required ─────────────────────────────────────────────────────
   if (!puppeteer) {
     record(
@@ -705,6 +983,25 @@ async function writeReport(runId, findings) {
     '',
     '- **(API pre-checks)**: verify `GET /api/admin/card-action-handlers` and',
     '  `GET /api/card-action-handlers` respond before any browser tab opens.',
+    '- **(NEG) Negative-path validation probes** — 18 pure-REST probes that',
+    '  POST or PATCH `/api/admin/card-action-handlers` with each known-bad',
+    '  payload and assert the server returns 400 with a descriptive error:',
+    '  - NEG-01/02/03: `defaultDurationMin` below 5, above 1440, non-numeric.',
+    '  - NEG-04: `config` is an array (not a JSON object).',
+    '  - NEG-05: `config` payload > 4 KB.',
+    '  - NEG-06: `defaultTitle` > 120 chars is rejected with 400.',
+    '  - NEG-07: `notePrefix` > 120 chars is rejected with 400.',
+    '  - NEG-08/09: `show_message` with absent or overlong `message`.',
+    '  - NEG-10: unknown handler type.',
+    '  - NEG-11: `name` > 80 chars.',
+    '  - NEG-12: binding with an invalid `stage_key`.',
+    '  - NEG-13: binding with illegal `status_key` characters (uppercase / special).',
+    '  - NEG-14: binding with neither `stage_key` nor `substatus_id`.',
+    '  - NEG-15/16: `substatus_id` = 0 or a non-numeric string.',
+    '  - NEG-17: PATCH with `defaultDurationMin` < 5.',
+    '  - NEG-18: PATCH with an invalid binding `stage_key`.',
+    '  Both handler types (`add_design_visit_to_calendar`, `summarise_phone_call`)',
+    '  and both binding shapes (label and substatus) are exercised.',
     '- **(A) BroadcastChannel cross-tab refresh**: a second same-browser tab',
     '  posts `card_action_handlers_changed`; the Sales-tab listener re-fetches',
     '  and its `cardActionHandlerFor()` lookup resolves the newly-created',
