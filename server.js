@@ -3137,21 +3137,39 @@ const STAGE_ACTION_SEED_OVERRIDES = {
 // editable label in the admin Card actions tab. Existing rows are never
 // overwritten — admin edits always win.
 async function seedStageActionLabelsDefaults() {
+  // True first-run detection: if the table has *any* row at all, we have
+  // already seeded once before. An admin may since have cleared specific
+  // per-(stage, lead status) rows, and we must not resurrect them — so the
+  // per-LS seed loop below only runs on a genuinely empty table. The per-
+  // stage `(stage_key, '')` rows are part of that initial seed too.
+  const { rows: existingAny } = await pool.query(
+    'SELECT 1 FROM stage_action_labels LIMIT 1'
+  );
+  const isFirstRun = existingAny.length === 0;
+
+  // (stage, '') rows so cards with no lead status also get a configurable
+  // label. Seeded only on first run alongside the per-LS rows.
+  if (isFirstRun) {
+    for (const stageKey of Object.values(STAGE_ACTION_STAGE_MAP)) {
+      const stageDefault = STAGE_ACTION_STAGE_DEFAULTS[stageKey];
+      if (!stageDefault) continue;
+      await pool.query(
+        `INSERT INTO stage_action_labels (stage_key, status_key, label)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (stage_key, status_key) DO NOTHING`,
+        [stageKey, '', stageDefault]
+      );
+    }
+  }
+
+  if (!isFirstRun) return;
+
   const { rows } = await pool.query(
     `SELECT key, label, stage FROM lead_status_config
      WHERE is_null_row IS NOT TRUE AND stage = ANY($1::text[])`,
     [Object.keys(STAGE_ACTION_STAGE_MAP)]
   );
 
-  const toInsert = [];
-
-  // (stage, '') rows so cards with no lead status also get a configurable label.
-  for (const stageKey of Object.values(STAGE_ACTION_STAGE_MAP)) {
-    const stageDefault = STAGE_ACTION_STAGE_DEFAULTS[stageKey];
-    if (stageDefault) toInsert.push([stageKey, '', stageDefault]);
-  }
-
-  // (stage, status) rows for every status assigned to a card-rendering stage.
   for (const row of rows) {
     const stageKey  = STAGE_ACTION_STAGE_MAP[row.stage];
     if (!stageKey) continue;
@@ -3162,10 +3180,6 @@ async function seedStageActionLabelsDefaults() {
     // Override → stage default → fall back to the lead status's display label
     // so admins always see something sensible they can rename.
     const label = override || stageDefault || String(row.label || statusKey);
-    toInsert.push([stageKey, statusKey, label]);
-  }
-
-  for (const [stageKey, statusKey, label] of toInsert) {
     await pool.query(
       `INSERT INTO stage_action_labels (stage_key, status_key, label)
        VALUES ($1, $2, $3)

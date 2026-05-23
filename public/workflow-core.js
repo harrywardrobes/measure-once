@@ -378,15 +378,20 @@ function stageActionLabelLookup(stageKey, statusKey) {
 function stageOrLeadStatusActionLabel(stageKey, leadStatusKey, substageId) {
   const lsKey = String(leadStatusKey || '').toLowerCase();
   if (lsKey) {
-    const fromLs = stageActionLabelLookup(stageKey, lsKey);
-    if (fromLs) return fromLs;
+    // The admin Card actions tab is keyed by lead status, so a contact with
+    // a lead status set must resolve via that LS row. If the admin has
+    // cleared that row (deleted from stage_action_labels), return '' so the
+    // caller omits the action strip — do NOT fall back to the per-stage
+    // (stage_key, '') "no lead status" default, which would resurrect the
+    // wrong label on every card with that status.
+    return stageActionLabelLookup(stageKey, lsKey) || '';
   }
   if (substageId) {
     const fromSub = stageActionLabelLookup(stageKey, substageId);
     if (fromSub) return fromSub;
   }
-  // Last resort: the global "no lead status" row (stored per-stage as
-  // stage_action_labels[stage|'']).
+  // Contact genuinely has no lead status: use the per-stage "no lead status"
+  // row (stored as stage_action_labels[stage|'']).
   return stageActionLabelLookup(stageKey, '') || '';
 }
 
