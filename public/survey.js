@@ -159,11 +159,10 @@ function _svCardHtml(entry) {
   // Filled stage pill (clickable for managers when there's a real room)
   const _editable = canEditPipeline();
   const hasRoom   = Number.isInteger(entry.roomIdx);
-  const stageEditAttrs = (_editable && hasRoom && !isTerminal)
-    ? `data-card-edit="stage" data-contact-id="${escHtml(contact.id)}" data-room-idx="${entry.roomIdx}" role="button" tabindex="-1" title="Change stage" style="background:${hex};color:#fff;cursor:pointer"`
-    : `style="background:${hex};color:#fff"`;
+  // Stage pill is non-interactive — stage is derived from lead status /
+  // sub-status, never set manually.
   const stagePillHtml = isTerminal ? '' :
-    `<span class="eq-card-stage-pill" ${stageEditAttrs}>Survey</span>`;
+    `<span class="eq-card-stage-pill" style="background:${hex};color:#fff">Survey</span>`;
 
   // Substage pill
   let subPillHtml = '';
@@ -265,8 +264,9 @@ function _initSurveyListeners() {
       const cid  = cardEdit.dataset.contactId;
       const kind = cardEdit.dataset.cardEdit;
       const idx  = parseInt(cardEdit.dataset.roomIdx, 10);
-      if (kind === 'stage')      openCardStagePicker({ stopPropagation(){}, currentTarget: cardEdit }, cid, idx);
-      else if (kind === 'substage') openCardSubstagePicker({ stopPropagation(){}, currentTarget: cardEdit }, cid, idx);
+      // 'stage' is intentionally NOT handled — workflow stage is derived
+      // from lead status and sub-status, never set manually.
+      if (kind === 'substage') openCardSubstagePicker({ stopPropagation(){}, currentTarget: cardEdit }, cid, idx);
       else if (kind === 'leadstatus') openLeadStatusPicker({ stopPropagation(){}, currentTarget: cardEdit }, cid);
       return;
     }

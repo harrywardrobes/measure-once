@@ -921,48 +921,11 @@ async function _saveCardRoomMutation(contactId, mutateRoom) {
   return true;
 }
 
-async function openCardStagePicker(event, contactId, roomIdx) {
-  event.stopPropagation();
-  if (!canEditPipeline()) return;
+// Stage is derived from lead status and sub-status logic only — never set
+// manually. This function is kept as a no-op so any stale call site (or
+// dynamically generated handler) fails closed instead of throwing.
+async function openCardStagePicker(_event, _contactId, _roomIdx) {
   closeCardPicker();
-
-  const rect = event.currentTarget.getBoundingClientRect();
-  const popup = document.createElement('div');
-  popup.id = 'card-picker-popup';
-  popup.className = 'card-picker-popup';
-  const top = Math.min(rect.bottom + 4, window.innerHeight - 320);
-  popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
-
-  // Determine current stage of the target room (best-effort from cache).
-  const cached = state.contactStageCache?.[contactId] || [];
-  const currentStageKey = cached[roomIdx]?.stageKey || '';
-
-  const stages = Object.entries(state.workflow?.stages || {});
-  if (!stages.length) return;
-
-  stages.forEach(([key, stage]) => {
-    const btn = document.createElement('button');
-    btn.className = 'card-picker-opt' + (key === currentStageKey ? ' card-picker-opt--active' : '');
-    btn.textContent = stage.label || key;
-    btn.addEventListener('click', async () => {
-      closeCardPicker();
-      if (key === currentStageKey) return;
-      await _saveCardRoomMutation(contactId, rooms => {
-        const room = rooms[roomIdx];
-        if (!room) { showToast('Room no longer exists', true); return false; }
-        room.stageKey = key;
-        room.stageDates = room.stageDates || {};
-        room.stageDates[key] = room.stageDates[key] || todayISO();
-        // Clear the recorded substage when moving into a different stage.
-        if (room.statusId) room.statusId = '';
-        return true;
-      });
-    });
-    popup.appendChild(btn);
-  });
-
-  document.body.appendChild(popup);
-  setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
 }
 
 async function openCardSubstagePicker(event, contactId, roomIdx) {

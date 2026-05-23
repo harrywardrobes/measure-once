@@ -510,10 +510,6 @@ function renderFullWorkflowView() {
       if (idx < STAGE_KEYS.length - 1) { state.focusedStageKey = STAGE_KEYS[idx + 1]; renderWorkflowStages(); }
     } else if (action === 'setStatusChecked' && key) {
       setStatusChecked(key, target.dataset.statusId, target.dataset.checked === 'true');
-    } else if (action === 'moveBackToStage' && key) {
-      moveBackToStage(key);
-    } else if (action === 'advanceToStage' && key) {
-      advanceToStage(key);
     }
   });
   renderWorkflowHeader();
@@ -1058,24 +1054,12 @@ function _renderWorkflowStagesImpl() {
     }
   }
 
-  // Action buttons
-  let actionHtml = '';
-  if (!isFocusedFuture && _canEdit) {
-    if (isFocusedCurrent) {
-      const nextKey = STAGE_KEYS[focusedIdx + 1];
-      if (nextKey && allDone) {
-        const nextLabel = state.workflow.stages[nextKey]?.label || nextKey;
-        actionHtml = `<button class="stage-advance-btn" data-action="advanceToStage" data-key="${escHtml(nextKey)}"
-                style="background:${focusedColour.bg}">
-          Advance to ${escHtml(nextLabel)} →
-        </button>`;
-      }
-    } else if (isFocusedPast) {
-      actionHtml = `<button class="btn-move-back stage-move-back-btn" data-action="moveBackToStage" data-key="${escHtml(focusedKey)}">
-        ← Set as current stage
-      </button>`;
-    }
-  }
+  // Stage is derived from lead status and task/sub-status logic only —
+  // manual stage controls (Advance / Set as current stage) intentionally
+  // removed. The stage auto-advances when the last task in the current
+  // stage is ticked (see setStatusChecked) and updates from HubSpot lead
+  // status (see syncRoomFromHubSpot / _syncStageLeadStatus).
+  const actionHtml = '';
 
   const hasPrev = focusedIdx > 0;
   const hasNext = focusedIdx < STAGE_KEYS.length - 1;

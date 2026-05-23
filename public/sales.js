@@ -119,8 +119,9 @@ function _initSalesListeners() {
       const cid  = cardEdit.dataset.contactId;
       const kind = cardEdit.dataset.cardEdit;
       const idx  = parseInt(cardEdit.dataset.roomIdx, 10);
-      if (kind === 'stage')      openCardStagePicker({ stopPropagation(){}, currentTarget: cardEdit }, cid, idx);
-      else if (kind === 'substage') openCardSubstagePicker({ stopPropagation(){}, currentTarget: cardEdit }, cid, idx);
+      // 'stage' is intentionally NOT handled — workflow stage is derived
+      // from lead status and sub-status, never set manually.
+      if (kind === 'substage') openCardSubstagePicker({ stopPropagation(){}, currentTarget: cardEdit }, cid, idx);
       else if (kind === 'leadstatus') openLeadStatusPicker({ stopPropagation(){}, currentTarget: cardEdit }, cid);
       return;
     }
@@ -467,11 +468,10 @@ function enquiryRowHtml(entry) {
   // room — roomIdx is undefined for lead-status-only fallback entries).
   const _editable = canEditPipeline();
   const hasRoom   = Number.isInteger(entry.roomIdx);
-  const editAttrs = (_editable && hasRoom && !isTerminal)
-    ? `data-card-edit="stage" data-contact-id="${escHtml(contact.id)}" data-room-idx="${entry.roomIdx}" role="button" tabindex="-1" title="Change stage" style="background:${accent};color:#fff;cursor:pointer"`
-    : `style="background:${accent};color:#fff"`;
+  // Stage pill is non-interactive — stage is derived from lead status /
+  // sub-status, never set manually.
   const stagePillHtml = isTerminal ? '' :
-    `<span class="eq-card-stage-pill" ${editAttrs}>${escHtml(_stageLabel(stageKey))}</span>`;
+    `<span class="eq-card-stage-pill" style="background:${accent};color:#fff">${escHtml(_stageLabel(stageKey))}</span>`;
 
   // Substage pill
   let subPillHtml = '';

@@ -204,6 +204,66 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
       return res.status(400).json({ error: 'Invalid contact id' });
     }
 
+    // Stage-derivation guard (defense-in-depth): a customer's workflow
+    // stage is derived from lead status and sub-status / task logic only —
+    // never set manually. Silently revert any stageKey change on an
+    // existing room unless it is accompanied by a completedStatuses or
+    // statusId change on the same room (the markers for the auto-advance /
+    // auto-revert paths in setStatusChecked and the HubSpot lead-status
+    // sync in syncRoomFromHubSpot). Room creation may still set an
+    // initial stageKey.
+    if (Array.isArray(rooms)) {
+      try {
+        let existingRoomsForStageGuard = [];
+        try {
+          const cur = await axios.get(
+            `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+            { headers: hsHeaders(), params: { properties: 'measure_once_rooms' } }
+          );
+          const json = cur.data?.properties?.measure_once_rooms;
+          if (json) existingRoomsForStageGuard = JSON.parse(json) || [];
+        } catch { /* treat as no prior rooms */ }
+
+        const sameCompletedForGuard = (a, b) => {
+          const norm = c => {
+            const out = {};
+            const src = c || {};
+            for (const k of Object.keys(src)) out[k] = [...(src[k] || [])].map(String).sort();
+            return out;
+          };
+          const na = norm(a), nb = norm(b);
+          const ka = Object.keys(na).sort(), kb = Object.keys(nb).sort();
+          if (ka.length !== kb.length || ka.some((k, i) => k !== kb[i])) return false;
+          return ka.every(k => {
+            const va = na[k], vb = nb[k] || [];
+            if (va.length !== vb.length) return false;
+            return va.every((v, i) => v === vb[i]);
+          });
+        };
+
+        const pairLen = Math.min(rooms.length, existingRoomsForStageGuard.length);
+        for (let i = 0; i < pairLen; i++) {
+          const incoming = rooms[i] || {};
+          const existing = existingRoomsForStageGuard[i] || {};
+          const incomingStage = incoming.stageKey || '';
+          const existingStage = existing.stageKey || '';
+          if (incomingStage === existingStage) continue;
+          const statusChanged    = (incoming.statusId || '') !== (existing.statusId || '');
+          const completedChanged = !sameCompletedForGuard(incoming.completedStatuses, existing.completedStatuses);
+          if (!statusChanged && !completedChanged) {
+            // Standalone stageKey rewrite — silently revert, and drop the
+            // stage-date stamp that the client may have added for the
+            // rejected destination stage.
+            incoming.stageKey = existingStage;
+            if (incoming.stageDates && existing.stageDates && incoming.stageDates[incomingStage]
+                && !existing.stageDates[incomingStage]) {
+              delete incoming.stageDates[incomingStage];
+            }
+          }
+        }
+      } catch { /* on guard failure, fall through to existing privilege gate */ }
+    }
+
     // Pipeline-field gate: only managers/admins may change stageKey or
     // completedStatuses on any room. Fetch current rooms to detect mutations
     // and reject the whole save with a clear 403 if a member/viewer attempts
