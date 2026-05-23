@@ -271,7 +271,7 @@
             return;
           }
         }
-        _toast('Design visit scheduled');
+        _toast('Visit scheduled');
         wrap.remove();
         if (typeof window.renderUpcomingVisits === 'function') {
           try { window.renderUpcomingVisits(); } catch (_) {}

@@ -3178,42 +3178,17 @@ const STAGE_ACTION_STAGE_MAP = {
   SURVEY:       'survey',
 };
 
-// Default action label per stage (used when no status-specific override is set).
-// For sales: no stage-wide default — each status carries its own copy.
-const STAGE_ACTION_STAGE_DEFAULTS = {
-  designvisit: 'Confirm design visit date',
-  survey:      'Await survey confirmation',
-};
-
-// Historic per-(stage, status) defaults preserved from the previously hardcoded
-// labels in public/sales.js — seeded so behaviour is unchanged after migration.
-const STAGE_ACTION_SEED_OVERRIDES = {
-  'sales|form_submission':   'Attempt contact',
-  'sales|attempted_contact': 'Follow up call',
-  'sales|open_deal':         'Schedule design visit',
-};
-
 // Seed one row per (card stage × lead status) combination so every card has an
 // editable per-LS row in the admin Card-actions tab. Idempotent: only inserts
 // rows that are missing, and never overwrites existing values (admin edits
 // always win). An admin who wants to suppress a specific LS uses the
-// "clear" UX in the admin tab, which now PUTs an empty label rather than
+// "clear" UX in the admin tab, which PUTs an empty label rather than
 // DELETEing the row — so existing-row-with-empty-label is preserved and a
 // re-run of this seed will not resurrect it.
+// No hardcoded default labels are seeded — the admin fills them in via
+// the Card-actions tab. The seed just ensures every live lead status has
+// a row to edit (defaulting to the LS display label on first boot).
 async function seedStageActionLabelsDefaults() {
-  // Per-stage `(stage_key, '')` "No lead status" rows — still the global
-  // default for cards genuinely missing a lead status.
-  for (const stageKey of Object.values(STAGE_ACTION_STAGE_MAP)) {
-    const stageDefault = STAGE_ACTION_STAGE_DEFAULTS[stageKey];
-    if (!stageDefault) continue;
-    await pool.query(
-      `INSERT INTO stage_action_labels (stage_key, status_key, label)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (stage_key, status_key) DO NOTHING`,
-      [stageKey, '', stageDefault]
-    );
-  }
-
   const { rows } = await pool.query(
     `SELECT key, label, stage FROM lead_status_config
      WHERE is_null_row IS NOT TRUE AND stage = ANY($1::text[])`,
@@ -3225,11 +3200,7 @@ async function seedStageActionLabelsDefaults() {
     if (!stageKey) continue;
     const statusKey = String(row.key || '').toLowerCase();
     if (!statusKey) continue;
-    const override     = STAGE_ACTION_SEED_OVERRIDES[`${stageKey}|${statusKey}`];
-    const stageDefault = STAGE_ACTION_STAGE_DEFAULTS[stageKey];
-    // Override → stage default → fall back to the lead status's display label
-    // so admins always see something sensible they can rename.
-    const label = override || stageDefault || String(row.label || statusKey);
+    const label = String(row.label || statusKey);
     await pool.query(
       `INSERT INTO stage_action_labels (stage_key, status_key, label)
        VALUES ($1, $2, $3)
