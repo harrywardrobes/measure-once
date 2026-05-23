@@ -101,7 +101,26 @@
   function dispatchCardActionHandler(handler, ctx) {
     if (handler.type === 'add_design_visit_to_calendar') return openDesignVisitModal(handler, ctx);
     if (handler.type === 'summarise_phone_call')        return openPhoneSummaryModal(handler, ctx);
+    if (handler.type === 'show_message')                return openMessagePopup(handler, ctx);
     console.warn('Unknown card action handler type:', handler.type);
+  }
+
+  // ── Handler: show_message ─────────────────────────────────────────────────
+  // Informational-only action. Admin types a message in admin → that message
+  // shows in a simple modal when the operator clicks the action label.
+  function openMessagePopup(handler /*, ctx */) {
+    const cfg = handler.config || {};
+    const title   = cfg.title   || 'Action required';
+    const message = cfg.message || '';
+    const wrap = _openModal(`
+      <h3>${_esc(title)}</h3>
+      <div style="font-size:0.9rem;color:#374151;line-height:1.5;white-space:pre-line;">${_esc(message)}</div>
+      <div class="cah-actions">
+        <button class="cah-primary" type="button">OK</button>
+      </div>
+    `);
+    const close = () => wrap.remove();
+    wrap.querySelector('.cah-primary').addEventListener('click', close);
   }
   window.dispatchCardActionHandler = dispatchCardActionHandler;
 

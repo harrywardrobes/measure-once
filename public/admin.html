@@ -2302,6 +2302,7 @@
   const HANDLER_TYPE_LABELS = {
     add_design_visit_to_calendar: 'Add design visit to calendar',
     summarise_phone_call:         'Summarise phone call',
+    show_message:                 'Show informational message',
   };
   // Detailed, plain-English description of what each handler actually does at
   // run-time — shown on the row once an action is attached so admins can see
@@ -2327,6 +2328,13 @@
       '• The summary is saved as a timestamped note against the HubSpot ' +
       'contact (HubSpot Engagements API). No email or calendar event is ' +
       'created.',
+    show_message:
+      'Clicking the action on a Sales/Survey card opens a simple popup ' +
+      'showing the message you write below. Nothing else happens — no API ' +
+      'call, no email, no calendar event, no HubSpot or CRM record change. ' +
+      'Use this when you just need to remind the operator what to do for ' +
+      'this stage/lead-status (e.g. "Send the quote PDF from the shared ' +
+      'drive and tick the next step manually.").',
   };
 
   async function loadCardActionHandlersAdmin() {
@@ -2354,43 +2362,50 @@
   }
   window.loadCardActionHandlersAdmin = loadCardActionHandlersAdmin;
 
-  // Enumerate every "action slot" — i.e. every place on a card that has a
-  // visible action label and can therefore be wired to a handler. That's
-  // every (stage, lead-status) row with a non-empty label, plus every
-  // sub-status with a non-empty action_label.
-  function _allActionSlots() {
-    const slots = [];
-    for (const l of _cardActionsData) {
-      const label = (l.label || '').trim();
-      if (!label) continue;
-      slots.push({
-        kind: 'ls',
-        stage_key: l.stage_key,
-        status_key: l.status_key || '',
-        label,
-      });
+  // Walk the same model the labels table renders, in the same order, and
+  // emit one "action slot" per place that has a visible action label. Each
+  // stage section in the output mirrors a stage section above (Sales →
+  // Design Visit → Survey); within a stage, lead statuses appear in the
+  // same order, with the LS default row first and its sub-statuses after.
+  // Result shape: [{ stage:{key,label}, groups:[{ls:{key,label}, slots:[…]}] }]
+  function _buildActionSlotGroups() {
+    const stages = (typeof _buildCardActionsModel === 'function') ? _buildCardActionsModel() : [];
+    const out = [];
+    for (const stage of stages) {
+      const groups = [];
+      for (const ls of stage.statuses) {
+        const slots = [];
+        const dflt = (ls.defaultLabel || '').trim();
+        if (dflt) {
+          slots.push({
+            kind: 'ls',
+            stage_key:  stage.key,
+            status_key: ls.defaultStatusKey || '',
+            label:      dflt,
+            rowLabel:   'Default action',
+          });
+        }
+        for (const sub of ls.substatuses || []) {
+          const action = (sub.action_label || '').trim();
+          if (!action) continue;
+          slots.push({
+            kind:         'sub',
+            substatus_id: Number(sub.id),
+            status_key:   sub.status_key,
+            label:        action,
+            rowLabel:     `Sub-status${sub.label ? ' · ' + sub.label : ''}`,
+          });
+        }
+        if (slots.length) {
+          groups.push({
+            ls: { key: ls.key, label: ls.label, isNullRow: !!ls.isNullRow },
+            slots,
+          });
+        }
+      }
+      if (groups.length) out.push({ stage: { key: stage.key, label: stage.label }, groups });
     }
-    for (const s of _cardSubstatusesData) {
-      const action = (s.action_label || '').trim();
-      if (!action) continue;
-      slots.push({
-        kind: 'sub',
-        substatus_id: Number(s.id),
-        status_key: s.status_key,
-        sub_label: s.label || '',
-        label: action,
-      });
-    }
-    return slots;
-  }
-
-  function _slotDisplayName(slot) {
-    if (slot.kind === 'sub') {
-      return `${slot.status_key} → ${slot.label}` +
-        (slot.sub_label ? ` (sub-status “${slot.sub_label}”)` : '');
-    }
-    const stage = (slot.stage_key || '').toUpperCase();
-    return `${stage} → ${slot.label}`;
+    return out;
   }
 
   // Detailed, plain-English summary of the handler currently attached to a
@@ -2410,49 +2425,64 @@
   function renderHandlersTable() {
     const wrap = document.getElementById('card-action-handlers-wrap');
     if (!wrap) return;
-    const slots = _allActionSlots();
-    if (!slots.length) {
+    const stages = _buildActionSlotGroups();
+    if (!stages.length) {
       wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">No action labels defined yet — add labels in the table above first.</p>`;
       return;
     }
-    const rows = slots.map((slot, idx) => {
-      const handlers   = _handlersForSlot(slot);
-      const handler    = handlers[0] || null; // one action per label
-      const actionHtml = handler
-        ? _handlerSummaryHtml(handler)
-        : `<em style="color:var(--ink-4);font-size:.82rem;">No action attached.</em>`;
-      const btnHtml = handler
-        ? `<button class="btn btn-ghost" data-slot-idx="${idx}" data-act="change">Change</button>
-           <button class="btn btn-ghost" data-handler-id="${handler.id}" data-act="remove" style="color:#991b1b;">Remove</button>`
-        : `<button class="btn btn-primary" data-slot-idx="${idx}" data-act="add" style="padding:4px 12px;font-size:.78rem;">+ Add action</button>`;
+    // Flat index so row buttons can resolve back to the slot they were
+    // rendered from without depending on DOM ordering.
+    const slotIndex = [];
+    const html = stages.map(stage => {
+      const groupsHtml = stage.groups.map(g => {
+        const rowsHtml = g.slots.map(slot => {
+          const idx = slotIndex.push(slot) - 1;
+          const handler = _handlersForSlot(slot)[0] || null;
+          const actionHtml = handler
+            ? _handlerSummaryHtml(handler)
+            : `<em style="color:var(--ink-4);font-size:.82rem;">No action attached.</em>`;
+          const btnHtml = handler
+            ? `<button class="btn btn-ghost" data-slot-idx="${idx}" data-act="change">Change</button>
+               <button class="btn btn-ghost" data-handler-id="${handler.id}" data-act="remove" style="color:#991b1b;">Remove</button>`
+            : `<button class="btn btn-primary" data-slot-idx="${idx}" data-act="add" style="padding:4px 12px;font-size:.78rem;">+ Add action</button>`;
+          return `
+            <tr style="border-top:1px solid var(--stone-light);">
+              <td style="padding:10px 12px;vertical-align:top;width:34%;">
+                <div style="font-weight:600;font-size:.85rem;color:var(--ink-1);">${esc(slot.label)}</div>
+                <div style="font-size:.72rem;color:var(--ink-4);margin-top:2px;">${esc(slot.rowLabel)}</div>
+              </td>
+              <td style="padding:10px 12px;vertical-align:top;">${actionHtml}</td>
+              <td style="padding:10px 12px;vertical-align:top;text-align:right;white-space:nowrap;">${btnHtml}</td>
+            </tr>`;
+        }).join('');
+        const lsLabel = g.ls.isNullRow ? `${esc(g.ls.label)} (no lead status)` : esc(g.ls.label);
+        return `
+          <div style="border-top:1px solid var(--stone-light);">
+            <div style="padding:7px 12px;font-size:.74rem;font-weight:600;color:var(--ink-3);background:#fafaf7;text-transform:uppercase;letter-spacing:.04em;">
+              ${lsLabel}
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
+              <tbody>${rowsHtml}</tbody>
+            </table>
+          </div>`;
+      }).join('');
       return `
-        <tr style="border-bottom:1px solid var(--stone-light);">
-          <td style="padding:10px 8px;vertical-align:top;width:32%;font-weight:600;font-size:.82rem;">${esc(_slotDisplayName(slot))}</td>
-          <td style="padding:10px 8px;vertical-align:top;">${actionHtml}</td>
-          <td style="padding:10px 8px;vertical-align:top;text-align:right;white-space:nowrap;">${btnHtml}</td>
-        </tr>`;
+        <section style="margin-bottom:18px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+          <div style="padding:10px 14px;background:var(--stone-soft);font-weight:600;font-size:.85rem;color:var(--ink-2);">
+            ${esc(stage.stage.label)}
+          </div>
+          ${groupsHtml}
+        </section>`;
     }).join('');
-    wrap.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
-        <thead>
-          <tr style="text-align:left;border-bottom:1px solid var(--stone-light);">
-            <th style="padding:6px 8px;">Action label</th>
-            <th style="padding:6px 8px;">Attached action</th>
-            <th style="padding:6px 8px;"></th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>`;
+    wrap.innerHTML = html;
 
-    // Wire row buttons. Keep slot lookup local — slots array index stays
-    // stable for the lifetime of this render.
     wrap.querySelectorAll('[data-act]').forEach(btn => {
       btn.addEventListener('click', () => {
         const act = btn.dataset.act;
         if (act === 'remove') {
           deleteHandler(Number(btn.dataset.handlerId));
         } else {
-          const slot = slots[Number(btn.dataset.slotIdx)];
+          const slot = slotIndex[Number(btn.dataset.slotIdx)];
           const existing = _handlersForSlot(slot)[0] || null;
           openHandlerEditor(slot, existing);
         }
@@ -2465,7 +2495,6 @@
   function openHandlerEditor(slot, existing) {
     const type   = existing?.type   || 'add_design_visit_to_calendar';
     const config = existing?.config || {};
-    const slotLabel = _slotDisplayName(slot);
     const binding = slot.kind === 'sub'
       ? { substatus_id: slot.substatus_id }
       : { stage_key: slot.stage_key, status_key: slot.status_key };
@@ -2475,15 +2504,29 @@
     wrap.innerHTML = `
       <div style="background:#fff;border-radius:12px;padding:20px;width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,0.25);max-height:90vh;overflow:auto;">
         <h3 style="margin:0 0 4px;font-size:1.05rem;font-weight:700;">${existing ? 'Change action' : 'Add action'}</h3>
-        <p style="margin:0 0 14px;font-size:.78rem;color:var(--ink-4);">for <strong>${esc(slotLabel)}</strong></p>
+        <p style="margin:0 0 14px;font-size:.78rem;color:var(--ink-4);">for <strong>${esc(slot.label)}</strong> <span style="color:var(--ink-4);font-weight:normal;">(${esc(slot.rowLabel || '')})</span></p>
         <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Action type</label>
         <select id="cah-type" class="field">
           ${Object.entries(HANDLER_TYPE_LABELS).map(([k, v]) =>
             `<option value="${k}" ${k === type ? 'selected' : ''}>${esc(v)}</option>`).join('')}
         </select>
         <div id="cah-type-desc" style="margin-top:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--stone-soft);font-size:.78rem;color:var(--ink-2);line-height:1.5;white-space:pre-line;"></div>
-        <label style="display:block;font-size:.78rem;color:#4b5563;margin:12px 0 4px;font-weight:600;">Advanced configuration (JSON, optional)</label>
-        <textarea id="cah-config" class="field" rows="4" style="font-family:monospace;font-size:.82rem;">${esc(JSON.stringify(config, null, 2))}</textarea>
+
+        <!-- show_message: dedicated message field. Hidden for other types. -->
+        <div id="cah-msg-block" style="display:none;margin-top:12px;">
+          <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Popup title (optional)</label>
+          <input id="cah-msg-title" type="text" class="field" maxlength="120" style="font-size:.85rem;">
+          <label style="display:block;font-size:.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600;">Message to display <span style="color:#991b1b;">*</span></label>
+          <textarea id="cah-msg-body" class="field" rows="4" maxlength="2000" placeholder="What should the operator do when they click this label?" style="font-size:.85rem;"></textarea>
+          <div style="font-size:.7rem;color:var(--ink-4);margin-top:3px;">Shown verbatim in a popup. Plain text only; line breaks are preserved.</div>
+        </div>
+
+        <!-- Advanced JSON config: hidden for show_message since it has its own field. -->
+        <div id="cah-cfg-block" style="margin-top:12px;">
+          <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Advanced configuration (JSON, optional)</label>
+          <textarea id="cah-config" class="field" rows="4" style="font-family:monospace;font-size:.82rem;">${esc(JSON.stringify(config, null, 2))}</textarea>
+        </div>
+
         <div id="cah-edit-err" style="color:#b91c1c;font-size:.82rem;margin-top:8px;min-height:18px;"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
           <button class="btn btn-ghost" id="cah-cancel">Cancel</button>
@@ -2491,22 +2534,44 @@
         </div>
       </div>`;
     document.body.appendChild(wrap);
-    const descEl  = wrap.querySelector('#cah-type-desc');
-    const typeSel = wrap.querySelector('#cah-type');
-    const renderDesc = () => {
-      descEl.textContent = HANDLER_TYPE_DESCRIPTIONS[typeSel.value] || 'No description available for this handler type.';
+    const descEl   = wrap.querySelector('#cah-type-desc');
+    const typeSel  = wrap.querySelector('#cah-type');
+    const msgBlock = wrap.querySelector('#cah-msg-block');
+    const cfgBlock = wrap.querySelector('#cah-cfg-block');
+    const msgTitle = wrap.querySelector('#cah-msg-title');
+    const msgBody  = wrap.querySelector('#cah-msg-body');
+    // Pre-fill message fields from existing show_message config.
+    if (type === 'show_message') {
+      msgTitle.value = String(config.title   || '');
+      msgBody.value  = String(config.message || '');
+    }
+    const renderForType = () => {
+      const t = typeSel.value;
+      descEl.textContent = HANDLER_TYPE_DESCRIPTIONS[t] || 'No description available for this handler type.';
+      const isMsg = (t === 'show_message');
+      msgBlock.style.display = isMsg ? '' : 'none';
+      cfgBlock.style.display = isMsg ? 'none' : '';
     };
-    renderDesc();
-    typeSel.addEventListener('change', renderDesc);
+    renderForType();
+    typeSel.addEventListener('change', renderForType);
     wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
     wrap.querySelector('#cah-cancel').addEventListener('click', () => wrap.remove());
     wrap.querySelector('#cah-save').addEventListener('click', async () => {
       const errEl = wrap.querySelector('#cah-edit-err');
       errEl.textContent = '';
       const tp = typeSel.value;
-      const cfgTxt = wrap.querySelector('#cah-config').value.trim() || '{}';
       let cfg;
-      try { cfg = JSON.parse(cfgTxt); } catch { errEl.textContent = 'Configuration is not valid JSON.'; return; }
+      if (tp === 'show_message') {
+        const message = msgBody.value.trim();
+        if (!message) { errEl.textContent = 'Message is required for "Show informational message".'; return; }
+        cfg = { message };
+        const titleV = msgTitle.value.trim();
+        if (titleV) cfg.title = titleV;
+      } else {
+        const cfgTxt = wrap.querySelector('#cah-config').value.trim() || '{}';
+        try { cfg = JSON.parse(cfgTxt); }
+        catch { errEl.textContent = 'Configuration is not valid JSON.'; return; }
+      }
       const payload = { name: '', type: tp, config: cfg, bindings: [binding] };
       try {
         if (existing) {

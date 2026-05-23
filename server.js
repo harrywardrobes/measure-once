@@ -3565,6 +3565,7 @@ app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asyn
 const CARD_ACTION_HANDLER_TYPES = new Set([
   'add_design_visit_to_calendar',
   'summarise_phone_call',
+  'show_message',
 ]);
 
 function _validateHandlerConfig(type, configRaw) {
@@ -3601,6 +3602,16 @@ function _validateHandlerConfig(type, configRaw) {
     }
     if (cfg.draftEmailSubject !== undefined) {
       out.draftEmailSubject = String(cfg.draftEmailSubject || '').slice(0, 200);
+    }
+    return { value: out };
+  }
+  if (type === 'show_message') {
+    const message = String(cfg.message || '').trim();
+    if (!message) return { error: 'message is required for show_message handlers.' };
+    if (message.length > 2000) return { error: 'message must be 2000 characters or fewer.' };
+    const out = { message };
+    if (cfg.title !== undefined) {
+      out.title = String(cfg.title || '').slice(0, 120);
     }
     return { value: out };
   }
