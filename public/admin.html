@@ -1810,13 +1810,12 @@
     if (!handlers.length) return '';
     return handlers.map(h => {
       const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
-      const title = `${typeLbl} — click Edit in the Action handlers card to change`;
+      const title = `${typeLbl} — manage in the Action handlers card below`;
       return `<span class="ca-handler-badge" title="${esc(title)}"
         style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;margin-left:6px;
           background:#ede0ff;color:#3d0f7a;border-radius:999px;font-size:.7rem;font-weight:600;
           line-height:1.5;white-space:nowrap;vertical-align:middle;">
-        <span aria-hidden="true">⚡</span><span>${esc(h.name)}</span>
-        <span style="opacity:.7;font-weight:500;">· ${esc(typeLbl)}</span>
+        <span aria-hidden="true">⚡</span><span>${esc(typeLbl)}</span>
       </span>`;
     }).join('');
   }
@@ -2301,6 +2300,31 @@
     add_design_visit_to_calendar: 'Add design visit to calendar',
     summarise_phone_call:         'Summarise phone call',
   };
+  // Detailed, plain-English description of what each handler actually does at
+  // run-time — shown on the row once an action is attached so admins can see
+  // exactly which emails get sent, which calendars get amended, etc.
+  const HANDLER_TYPE_DESCRIPTIONS = {
+    add_design_visit_to_calendar:
+      'Clicking the action on a Sales/Survey card opens a modal asking for ' +
+      'visit date, time, duration, title and notes.\n' +
+      '• On submit, a visit is created in this CRM (POST /api/visits) and ' +
+      'appears in the "Upcoming visits" section of the customer page.\n' +
+      '• If the operator ticks "Also add to my Google Calendar", a matching ' +
+      'event is also created in their personal Google Calendar (POST ' +
+      '/api/events) using their stored Google OAuth credentials. No email is ' +
+      'sent by this app — Google Calendar may email invitees if attendees ' +
+      'are added.\n' +
+      '• No HubSpot record is changed by this action.',
+    summarise_phone_call:
+      'Clicking the action on a Sales/Survey card opens a modal with a ' +
+      'textarea for raw call notes.\n' +
+      '• On submit the notes are sent to POST ' +
+      '/api/card-actions/phone-call-summary, which asks the LLM to produce ' +
+      'a structured summary.\n' +
+      '• The summary is saved as a timestamped note against the HubSpot ' +
+      'contact (HubSpot Engagements API). No email or calendar event is ' +
+      'created.',
+  };
 
   async function loadCardActionHandlersAdmin() {
     const wrap = document.getElementById('card-action-handlers-wrap');
@@ -2327,160 +2351,170 @@
   }
   window.loadCardActionHandlersAdmin = loadCardActionHandlersAdmin;
 
-  function _bindingLabel(b) {
-    if (b.substatus_id) {
-      const row = _cardSubstatusesData.find(s => s.id === b.substatus_id);
-      if (!row) return `Sub-status #${b.substatus_id}`;
-      return `Sub-status: ${row.status_key} → ${row.label}`;
+  // Enumerate every "action slot" — i.e. every place on a card that has a
+  // visible action label and can therefore be wired to a handler. That's
+  // every (stage, lead-status) row with a non-empty label, plus every
+  // sub-status with a non-empty action_label.
+  function _allActionSlots() {
+    const slots = [];
+    for (const l of _cardActionsData) {
+      const label = (l.label || '').trim();
+      if (!label) continue;
+      slots.push({
+        kind: 'ls',
+        stage_key: l.stage_key,
+        status_key: l.status_key || '',
+        label,
+      });
     }
-    const stageKey  = (b.stage_key  || '').toLowerCase();
-    const statusKey = (b.status_key || '').toLowerCase();
-    const labelRow = _cardActionsData.find(l =>
-      (l.stage_key || '').toLowerCase() === stageKey &&
-      (l.status_key || '').toLowerCase() === statusKey
-    );
-    const lsLabel = labelRow?.label || (statusKey ? statusKey : '(no lead status)');
-    return `${stageKey} → ${lsLabel}`;
+    for (const s of _cardSubstatusesData) {
+      const action = (s.action_label || '').trim();
+      if (!action) continue;
+      slots.push({
+        kind: 'sub',
+        substatus_id: Number(s.id),
+        status_key: s.status_key,
+        sub_label: s.label || '',
+        label: action,
+      });
+    }
+    return slots;
   }
 
-  // The action label that appears on the actual card for a given binding —
-  // used as the handler's derived name in the table.
-  function _bindingActionLabel(b) {
-    if (b.substatus_id) {
-      const row = _cardSubstatusesData.find(s => s.id === b.substatus_id);
-      return row?.action_label || '';
+  function _slotDisplayName(slot) {
+    if (slot.kind === 'sub') {
+      return `${slot.status_key} → ${slot.label}` +
+        (slot.sub_label ? ` (sub-status “${slot.sub_label}”)` : '');
     }
-    const stageKey  = (b.stage_key  || '').toLowerCase();
-    const statusKey = (b.status_key || '').toLowerCase();
-    const row = _cardActionsData.find(l =>
-      (l.stage_key || '').toLowerCase() === stageKey &&
-      (l.status_key || '').toLowerCase() === statusKey
-    );
-    return row?.label || '';
+    const stage = (slot.stage_key || '').toUpperCase();
+    return `${stage} → ${slot.label}`;
+  }
+
+  // Detailed, plain-English summary of the handler currently attached to a
+  // slot. This is the "what does this actually do" block the user asked for.
+  function _handlerSummaryHtml(h) {
+    const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
+    const desc    = HANDLER_TYPE_DESCRIPTIONS[h.type] || 'No description available for this handler type.';
+    return `
+      <div style="border:1px solid #d8c7f5;border-radius:8px;padding:8px 10px;background:#f7f2ff;">
+        <div style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:.82rem;color:#3d0f7a;">
+          <span aria-hidden="true">⚡</span><span>${esc(typeLbl)}</span>
+        </div>
+        <div style="margin-top:5px;font-size:.78rem;color:var(--ink-2);line-height:1.5;white-space:pre-line;">${esc(desc)}</div>
+      </div>`;
   }
 
   function renderHandlersTable() {
     const wrap = document.getElementById('card-action-handlers-wrap');
     if (!wrap) return;
-    if (!_handlersData.length) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">No handlers yet. Click <em>+ New handler</em> to add one.</p>`;
+    const slots = _allActionSlots();
+    if (!slots.length) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">No action labels defined yet — add labels in the table above first.</p>`;
       return;
     }
-    const rows = _handlersData.map(h => {
-      const typeLbl  = HANDLER_TYPE_LABELS[h.type] || h.type;
-      const bindingItems = (h.bindings || []).map(b => _bindingActionLabel(b)).filter(Boolean);
-      const derivedName  = bindingItems.length ? bindingItems.join(', ') : (h.name || '(unbound)');
-      const bindings = (h.bindings || []).map(b => `<li>${esc(_bindingLabel(b))}</li>`).join('') ||
-        '<li style="color:var(--ink-4);">No bindings — click Edit to attach one.</li>';
+    const rows = slots.map((slot, idx) => {
+      const handlers   = _handlersForSlot(slot);
+      const handler    = handlers[0] || null; // one action per label
+      const actionHtml = handler
+        ? _handlerSummaryHtml(handler)
+        : `<em style="color:var(--ink-4);font-size:.82rem;">No action attached.</em>`;
+      const btnHtml = handler
+        ? `<button class="btn btn-ghost" data-slot-idx="${idx}" data-act="change">Change</button>
+           <button class="btn btn-ghost" data-handler-id="${handler.id}" data-act="remove" style="color:#991b1b;">Remove</button>`
+        : `<button class="btn btn-primary" data-slot-idx="${idx}" data-act="add" style="padding:4px 12px;font-size:.78rem;">+ Add action</button>`;
       return `
-        <tr>
-          <td style="font-weight:600;">${esc(derivedName)}</td>
-          <td>${esc(typeLbl)}</td>
-          <td><ul style="margin:0;padding-left:18px;font-size:.82rem;">${bindings}</ul></td>
-          <td style="white-space:nowrap;text-align:right;">
-            <button class="btn btn-ghost" onclick="openHandlerEditor(${h.id})">Edit</button>
-            <button class="btn btn-ghost" onclick="deleteHandler(${h.id})" style="color:#991b1b;">Delete</button>
-          </td>
+        <tr style="border-bottom:1px solid var(--stone-light);">
+          <td style="padding:10px 8px;vertical-align:top;width:32%;font-weight:600;font-size:.82rem;">${esc(_slotDisplayName(slot))}</td>
+          <td style="padding:10px 8px;vertical-align:top;">${actionHtml}</td>
+          <td style="padding:10px 8px;vertical-align:top;text-align:right;white-space:nowrap;">${btnHtml}</td>
         </tr>`;
     }).join('');
     wrap.innerHTML = `
       <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
         <thead>
           <tr style="text-align:left;border-bottom:1px solid var(--stone-light);">
-            <th style="padding:6px 8px;">Name</th>
-            <th style="padding:6px 8px;">Type</th>
-            <th style="padding:6px 8px;">Bindings</th>
+            <th style="padding:6px 8px;">Action label</th>
+            <th style="padding:6px 8px;">Attached action</th>
             <th style="padding:6px 8px;"></th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>`;
+
+    // Wire row buttons. Keep slot lookup local — slots array index stays
+    // stable for the lifetime of this render.
+    wrap.querySelectorAll('[data-act]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const act = btn.dataset.act;
+        if (act === 'remove') {
+          deleteHandler(Number(btn.dataset.handlerId));
+        } else {
+          const slot = slots[Number(btn.dataset.slotIdx)];
+          const existing = _handlersForSlot(slot)[0] || null;
+          openHandlerEditor(slot, existing);
+        }
+      });
+    });
   }
 
-  function openHandlerEditor(id) {
-    const editing = id ? _handlersData.find(h => h.id === id) : null;
-    const type    = editing?.type || 'add_design_visit_to_calendar';
-    const config  = editing?.config || {};
-    const bindings = editing?.bindings || [];
-
-    // Only rows that actually have an action label are bindable — the row's
-    // label is what shows on the card and becomes the handler's name.
-    const labelOpts = _cardActionsData
-      .filter(l => (l.label || '').trim())
-      .map(l => {
-        const v = `${l.stage_key}|${l.status_key || ''}`;
-        const txt = `${l.stage_key} → ${l.label}`;
-        return { value: v, label: txt };
-      });
-    const subOpts = _cardSubstatusesData
-      .filter(s => (s.action_label || '').trim())
-      .map(s => ({
-        value: `sub:${s.id}`,
-        label: `Sub-status: ${s.status_key} → ${s.action_label}`,
-      }));
-    const allOpts = [...labelOpts, ...subOpts];
-
-    const selectedKeys = new Set(bindings.map(b =>
-      b.substatus_id ? `sub:${b.substatus_id}` : `${b.stage_key}|${b.status_key || ''}`
-    ));
-
-    const optionsHtml = allOpts.map(o =>
-      `<option value="${esc(o.value)}" ${selectedKeys.has(o.value) ? 'selected' : ''}>${esc(o.label)}</option>`
-    ).join('');
+  // Per-slot editor: pick the handler type and (optional) JSON config. The
+  // binding is fixed to the row the admin clicked from.
+  function openHandlerEditor(slot, existing) {
+    const type   = existing?.type   || 'add_design_visit_to_calendar';
+    const config = existing?.config || {};
+    const slotLabel = _slotDisplayName(slot);
+    const binding = slot.kind === 'sub'
+      ? { substatus_id: slot.substatus_id }
+      : { stage_key: slot.stage_key, status_key: slot.status_key };
 
     const wrap = document.createElement('div');
     wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
     wrap.innerHTML = `
       <div style="background:#fff;border-radius:12px;padding:20px;width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,0.25);max-height:90vh;overflow:auto;">
-        <h3 style="margin:0 0 14px;font-size:1.05rem;font-weight:700;">${editing ? 'Edit' : 'New'} action handler</h3>
-        <p style="margin:0 0 10px;font-size:.78rem;color:var(--ink-4);">The handler is named after the action label of the row you bind it to.</p>
-        <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Type</label>
+        <h3 style="margin:0 0 4px;font-size:1.05rem;font-weight:700;">${existing ? 'Change action' : 'Add action'}</h3>
+        <p style="margin:0 0 14px;font-size:.78rem;color:var(--ink-4);">for <strong>${esc(slotLabel)}</strong></p>
+        <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Action type</label>
         <select id="cah-type" class="field">
           ${Object.entries(HANDLER_TYPE_LABELS).map(([k, v]) =>
             `<option value="${k}" ${k === type ? 'selected' : ''}>${esc(v)}</option>`).join('')}
         </select>
-        <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Configuration (JSON)</label>
+        <div id="cah-type-desc" style="margin-top:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--stone-soft);font-size:.78rem;color:var(--ink-2);line-height:1.5;white-space:pre-line;"></div>
+        <label style="display:block;font-size:.78rem;color:#4b5563;margin:12px 0 4px;font-weight:600;">Advanced configuration (JSON, optional)</label>
         <textarea id="cah-config" class="field" rows="4" style="font-family:monospace;font-size:.82rem;">${esc(JSON.stringify(config, null, 2))}</textarea>
-        <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Bind to (hold Cmd/Ctrl for multiple)</label>
-        <select id="cah-bindings" class="field" multiple size="8" style="font-size:.82rem;">
-          ${optionsHtml || '<option disabled>No label rows or sub-statuses yet — add some first.</option>'}
-        </select>
         <div id="cah-edit-err" style="color:#b91c1c;font-size:.82rem;margin-top:8px;min-height:18px;"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
           <button class="btn btn-ghost" id="cah-cancel">Cancel</button>
-          <button class="btn btn-primary" id="cah-save">${editing ? 'Save' : 'Create'}</button>
+          <button class="btn btn-primary" id="cah-save">${existing ? 'Save' : 'Add'}</button>
         </div>
       </div>`;
     document.body.appendChild(wrap);
+    const descEl  = wrap.querySelector('#cah-type-desc');
+    const typeSel = wrap.querySelector('#cah-type');
+    const renderDesc = () => {
+      descEl.textContent = HANDLER_TYPE_DESCRIPTIONS[typeSel.value] || 'No description available for this handler type.';
+    };
+    renderDesc();
+    typeSel.addEventListener('change', renderDesc);
     wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
     wrap.querySelector('#cah-cancel').addEventListener('click', () => wrap.remove());
     wrap.querySelector('#cah-save').addEventListener('click', async () => {
       const errEl = wrap.querySelector('#cah-edit-err');
       errEl.textContent = '';
-      const tp = wrap.querySelector('#cah-type').value;
+      const tp = typeSel.value;
       const cfgTxt = wrap.querySelector('#cah-config').value.trim() || '{}';
       let cfg;
       try { cfg = JSON.parse(cfgTxt); } catch { errEl.textContent = 'Configuration is not valid JSON.'; return; }
-      const sel = Array.from(wrap.querySelector('#cah-bindings').selectedOptions).map(o => o.value);
-      if (!sel.length) { errEl.textContent = 'Pick at least one row to bind this handler to.'; return; }
-      const newBindings = sel.map(v => {
-        if (v.startsWith('sub:')) return { substatus_id: parseInt(v.slice(4), 10) };
-        const [stage, status] = v.split('|');
-        return { stage_key: stage, status_key: status };
-      });
-      // Name is derived from the bound row's action label — send empty so
-      // future label edits flow through without an admin re-save.
-      const payload = { name: '', type: tp, config: cfg, bindings: newBindings };
+      const payload = { name: '', type: tp, config: cfg, bindings: [binding] };
       try {
-        if (editing) {
-          await api('PATCH', `/api/admin/card-action-handlers/${editing.id}`, payload);
+        if (existing) {
+          await api('PATCH', `/api/admin/card-action-handlers/${existing.id}`, payload);
         } else {
           await api('POST', '/api/admin/card-action-handlers', payload);
         }
         wrap.remove();
         await loadCardActionHandlersAdmin();
         try { new BroadcastChannel('card_action_handlers_changed').postMessage({ ts: Date.now() }); } catch (_) {}
-        toast(editing ? 'Handler updated.' : 'Handler created.');
+        toast(existing ? 'Action updated.' : 'Action added.');
       } catch (e) {
         errEl.textContent = e.message || 'Save failed.';
       }
@@ -2489,14 +2523,14 @@
   window.openHandlerEditor = openHandlerEditor;
 
   async function deleteHandler(id) {
-    if (!confirm('Delete this handler? Its bindings will be removed.')) return;
+    if (!confirm('Remove this action from the label?')) return;
     try {
       await api('DELETE', `/api/admin/card-action-handlers/${id}`);
       await loadCardActionHandlersAdmin();
       try { new BroadcastChannel('card_action_handlers_changed').postMessage({ ts: Date.now() }); } catch (_) {}
-      toast('Handler deleted.');
+      toast('Action removed.');
     } catch (e) {
-      toast('Delete failed: ' + e.message, true);
+      toast('Remove failed: ' + e.message, true);
     }
   }
   window.deleteHandler = deleteHandler;
@@ -3091,9 +3125,8 @@
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
             <div>
               <div class="card-title" style="margin:0;">Action handlers</div>
-              <p class="card-desc" style="margin:2px 0 0;">Make a card action label clickable. Attach a handler to a (stage × lead status) slot or to a specific sub-status, and clicking the label on a Sales / Survey card opens the matching workflow.</p>
+              <p class="card-desc" style="margin:2px 0 0;">Every action label from the table above is listed here. Use <em>+ Add action</em> on a row to make that label clickable on Sales / Survey cards; the attached action's exact behaviour (which APIs are called, which calendars or emails are affected) is described inline once added.</p>
             </div>
-            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openHandlerEditor()">+ New handler</button>
           </div>
           <div id="card-action-handlers-wrap">
             <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
