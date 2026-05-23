@@ -2529,6 +2529,14 @@
           <textarea id="cah-config" class="field" rows="4" style="font-family:monospace;font-size:.82rem;">${esc(JSON.stringify(config, null, 2))}</textarea>
         </div>
 
+        <div id="cah-conflict" style="display:none;margin-top:12px;padding:10px 12px;border:1px solid #fbbf24;border-radius:8px;background:#fffbeb;">
+          <div style="font-size:.8rem;font-weight:600;color:#92400e;margin-bottom:6px;">⚠️ Slot already has a handler</div>
+          <div id="cah-conflict-list" style="font-size:.78rem;color:#78350f;margin-bottom:10px;line-height:1.6;"></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost" id="cah-conflict-cancel" style="font-size:.78rem;padding:4px 12px;">Keep editing</button>
+            <button class="btn" id="cah-conflict-confirm" style="font-size:.78rem;padding:4px 12px;background:#d97706;color:#fff;border:none;border-radius:6px;cursor:pointer;">Bind anyway</button>
+          </div>
+        </div>
         <div id="cah-edit-err" style="color:#b91c1c;font-size:.82rem;margin-top:8px;min-height:18px;"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
           <button class="btn btn-ghost" id="cah-cancel">Cancel</button>
@@ -2536,12 +2544,14 @@
         </div>
       </div>`;
     document.body.appendChild(wrap);
-    const descEl   = wrap.querySelector('#cah-type-desc');
-    const typeSel  = wrap.querySelector('#cah-type');
-    const msgBlock = wrap.querySelector('#cah-msg-block');
-    const cfgBlock = wrap.querySelector('#cah-cfg-block');
-    const msgTitle = wrap.querySelector('#cah-msg-title');
-    const msgBody  = wrap.querySelector('#cah-msg-body');
+    const descEl       = wrap.querySelector('#cah-type-desc');
+    const typeSel      = wrap.querySelector('#cah-type');
+    const msgBlock     = wrap.querySelector('#cah-msg-block');
+    const cfgBlock     = wrap.querySelector('#cah-cfg-block');
+    const msgTitle     = wrap.querySelector('#cah-msg-title');
+    const msgBody      = wrap.querySelector('#cah-msg-body');
+    const conflictBox  = wrap.querySelector('#cah-conflict');
+    const conflictList = wrap.querySelector('#cah-conflict-list');
     // Pre-fill message fields from existing show_message config.
     if (type === 'show_message') {
       msgTitle.value = String(config.title   || '');
@@ -2555,26 +2565,32 @@
       cfgBlock.style.display = isMsg ? 'none' : '';
     };
     renderForType();
-    typeSel.addEventListener('change', renderForType);
+    typeSel.addEventListener('change', () => { conflictBox.style.display = 'none'; renderForType(); });
     wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
     wrap.querySelector('#cah-cancel').addEventListener('click', () => wrap.remove());
-    wrap.querySelector('#cah-save').addEventListener('click', async () => {
+    wrap.querySelector('#cah-conflict-cancel').addEventListener('click', () => { conflictBox.style.display = 'none'; });
+
+    const buildPayload = () => {
+      const tp = typeSel.value;
       const errEl = wrap.querySelector('#cah-edit-err');
       errEl.textContent = '';
-      const tp = typeSel.value;
       let cfg;
       if (tp === 'show_message') {
         const message = msgBody.value.trim();
-        if (!message) { errEl.textContent = 'Message is required for "Show informational message".'; return; }
+        if (!message) { errEl.textContent = 'Message is required for "Show informational message".'; return null; }
         cfg = { message };
         const titleV = msgTitle.value.trim();
         if (titleV) cfg.title = titleV;
       } else {
         const cfgTxt = wrap.querySelector('#cah-config').value.trim() || '{}';
         try { cfg = JSON.parse(cfgTxt); }
-        catch { errEl.textContent = 'Configuration is not valid JSON.'; return; }
+        catch { errEl.textContent = 'Configuration is not valid JSON.'; return null; }
       }
-      const payload = { name: '', type: tp, config: cfg, bindings: [binding] };
+      return { name: '', type: tp, config: cfg, bindings: [binding] };
+    };
+
+    const doSave = async (payload) => {
+      const errEl = wrap.querySelector('#cah-edit-err');
       try {
         if (existing) {
           await api('PATCH', `/api/admin/card-action-handlers/${existing.id}`, payload);
@@ -2588,6 +2604,35 @@
       } catch (e) {
         errEl.textContent = e.message || 'Save failed.';
       }
+    };
+
+    wrap.querySelector('#cah-conflict-confirm').addEventListener('click', async () => {
+      conflictBox.style.display = 'none';
+      const payload = buildPayload();
+      if (!payload) return;
+      await doSave(payload);
+    });
+
+    wrap.querySelector('#cah-save').addEventListener('click', async () => {
+      const payload = buildPayload();
+      if (!payload) return;
+
+      // Conflict detection: find handlers already bound to this slot that aren't the one being edited.
+      const conflicts = _handlersForSlot(slot).filter(h => !existing || h.id !== existing.id);
+      if (conflicts.length > 0) {
+        const slotLabel = slot.label || (slot.substatus_id != null
+          ? `sub-status #${slot.substatus_id}`
+          : `${slot.stage_key} / ${slot.status_key}`);
+        conflictList.innerHTML = conflicts.map(h => {
+          const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
+          return `<div>• <strong>${esc(slotLabel)}</strong> is already wired to <strong>${esc(h.name || typeLbl)}</strong> (${esc(typeLbl)}) — bind anyway?</div>`;
+        }).join('');
+        conflictBox.style.display = '';
+        conflictBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
+
+      await doSave(payload);
     });
   }
   window.openHandlerEditor = openHandlerEditor;
