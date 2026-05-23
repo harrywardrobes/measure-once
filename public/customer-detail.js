@@ -1120,8 +1120,19 @@ function _renderWorkflowStagesImpl() {
     if (label) {
       const actionTint = focusedColour.light || '#f3f4f6';
       const actionText = focusedColour.text  || '#374151';
+      const contact = state.selectedContact || {};
+      const handlerAttrs = (typeof cardActionHandlerAttrs === 'function')
+        ? cardActionHandlerAttrs(focusedKey, leadKey, hwSubVal, {
+            contactId:    contact.id,
+            contactName:  (typeof contactName === 'function' ? contactName(contact) : ''),
+            contactEmail: contact.properties?.email || '',
+          })
+        : '';
+      const interactiveAttrs = handlerAttrs
+        ? `${handlerAttrs} role="button" tabindex="0" title="Run action" style="background:${actionTint};cursor:pointer"`
+        : `style="background:${actionTint}"`;
       actionHtml = `
-        <div class="eq-card-action" style="background:${actionTint}">
+        <div class="eq-card-action" ${interactiveAttrs}>
           <span class="eq-card-action-label" style="color:${actionText}">${escHtml(label)}</span>
         </div>`;
     }

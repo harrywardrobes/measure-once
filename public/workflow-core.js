@@ -421,6 +421,7 @@ async function loadLeadSubstatuses() {
     const rows = await GET('/api/lead-substatuses');
     if (Array.isArray(rows)) {
       LEAD_SUBSTATUSES = rows;
+      window.LEAD_SUBSTATUSES = rows;
       const m = {};
       for (const r of rows) {
         if (!r.action_label) continue;

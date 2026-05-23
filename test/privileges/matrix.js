@@ -66,6 +66,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/calendar/upcoming',         level: 'auth',    needsGoogle: true },
   { method: 'GET',    path: '/api/localdata/all',             level: 'auth',    needsHubspot: true },
   { method: 'GET',    path: '/api/workflow',                  level: 'auth' },
+  { method: 'GET',    path: '/api/card-action-handlers',      level: 'auth' },
   { method: 'GET',    path: '/api/workflow-stages',           level: 'auth' },
   { method: 'GET',    path: '/api/personal-tasks',            level: 'auth' },
   { method: 'GET',    path: '/api/visits',                    level: 'auth' },
@@ -95,6 +96,7 @@ const ROUTES = [
   { method: 'PATCH',  path: '/api/personal-tasks/0',          level: 'member',  body: {} },
   { method: 'DELETE', path: '/api/personal-tasks/0',          level: 'member' },
   { method: 'POST',   path: '/api/visits',                    level: 'member',  body: {} },
+  { method: 'POST',   path: '/api/card-actions/phone-call-summary', level: 'member', body: { contactId: '0', summary: 'noop' }, needsHubspot: true },
   { method: 'PATCH',  path: '/api/visits/0',                  level: 'member',  body: {} },
   { method: 'DELETE', path: '/api/visits/0',                  level: 'member' },
 
@@ -144,6 +146,10 @@ const ROUTES = [
   { method: 'POST',   path: '/auth/quickbooks/disconnect',                     level: 'admin', body: {} },
   { method: 'POST',   path: '/api/quickbooks/invoice/0',                       level: 'admin', body: {}, needsQB: true },
   { method: 'POST',   path: '/api/quickbooks/invoice/0/send',                  level: 'admin', body: {}, needsQB: true },
+  { method: 'GET',    path: '/api/admin/card-action-handlers',                 level: 'admin' },
+  { method: 'POST',   path: '/api/admin/card-action-handlers',                 level: 'admin', body: { name: '__noop__', type: 'summarise_phone_call' } },
+  { method: 'PATCH',  path: '/api/admin/card-action-handlers/0',               level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/card-action-handlers/0',               level: 'admin' },
 
   // ── Logout MUST be last per actor (it destroys the session). The run.js
   // matrix loop is route-outer/actor-inner, so this row fires once per actor

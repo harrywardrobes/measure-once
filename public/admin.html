@@ -2239,6 +2239,184 @@
   window.addCardActionSubstatus     = addCardActionSubstatus;
   window.moveCardActionSubstatus    = moveCardActionSubstatus;
 
+  // ── Card Action Handlers ───────────────────────────────────────────────────
+  let _handlersData     = [];
+  let _handlersLoaded   = false;
+  const HANDLER_TYPE_LABELS = {
+    add_design_visit_to_calendar: 'Add design visit to calendar',
+    summarise_phone_call:         'Summarise phone call',
+  };
+
+  async function loadCardActionHandlersAdmin() {
+    const wrap = document.getElementById('card-action-handlers-wrap');
+    if (!wrap) return;
+    try {
+      const [handlers, labels, subs] = await Promise.all([
+        api('GET', '/api/admin/card-action-handlers'),
+        _cardActionsData.length ? Promise.resolve(_cardActionsData) : api('GET', '/api/admin/stage-action-labels'),
+        _cardSubstatusesData.length ? Promise.resolve(_cardSubstatusesData) : api('GET', '/api/admin/lead-substatuses'),
+      ]);
+      _handlersData = Array.isArray(handlers) ? handlers : [];
+      if (Array.isArray(labels)) _cardActionsData = labels;
+      if (Array.isArray(subs))   _cardSubstatusesData = subs;
+      _handlersLoaded = true;
+      renderHandlersTable();
+    } catch (e) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load handlers: ${esc(e.message)}</p>`;
+    }
+  }
+  window.loadCardActionHandlersAdmin = loadCardActionHandlersAdmin;
+
+  function _bindingLabel(b) {
+    if (b.substatus_id) {
+      const row = _cardSubstatusesData.find(s => s.id === b.substatus_id);
+      if (!row) return `Sub-status #${b.substatus_id}`;
+      return `Sub-status: ${row.status_key} → ${row.label}`;
+    }
+    const stageKey  = (b.stage_key  || '').toLowerCase();
+    const statusKey = (b.status_key || '').toLowerCase();
+    const labelRow = _cardActionsData.find(l =>
+      (l.stage_key || '').toLowerCase() === stageKey &&
+      (l.status_key || '').toLowerCase() === statusKey
+    );
+    const lsLabel = labelRow?.label || (statusKey ? statusKey : '(no lead status)');
+    return `${stageKey} → ${lsLabel}`;
+  }
+
+  function renderHandlersTable() {
+    const wrap = document.getElementById('card-action-handlers-wrap');
+    if (!wrap) return;
+    if (!_handlersData.length) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">No handlers yet. Click <em>+ New handler</em> to add one.</p>`;
+      return;
+    }
+    const rows = _handlersData.map(h => {
+      const typeLbl  = HANDLER_TYPE_LABELS[h.type] || h.type;
+      const bindings = (h.bindings || []).map(b => `<li>${esc(_bindingLabel(b))}</li>`).join('') ||
+        '<li style="color:var(--ink-4);">No bindings — click Edit to attach one.</li>';
+      return `
+        <tr>
+          <td style="font-weight:600;">${esc(h.name)}</td>
+          <td>${esc(typeLbl)}</td>
+          <td><ul style="margin:0;padding-left:18px;font-size:.82rem;">${bindings}</ul></td>
+          <td style="white-space:nowrap;text-align:right;">
+            <button class="btn btn-ghost" onclick="openHandlerEditor(${h.id})">Edit</button>
+            <button class="btn btn-ghost" onclick="deleteHandler(${h.id})" style="color:#991b1b;">Delete</button>
+          </td>
+        </tr>`;
+    }).join('');
+    wrap.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
+        <thead>
+          <tr style="text-align:left;border-bottom:1px solid var(--stone-light);">
+            <th style="padding:6px 8px;">Name</th>
+            <th style="padding:6px 8px;">Type</th>
+            <th style="padding:6px 8px;">Bindings</th>
+            <th style="padding:6px 8px;"></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  function openHandlerEditor(id) {
+    const editing = id ? _handlersData.find(h => h.id === id) : null;
+    const name    = editing?.name || '';
+    const type    = editing?.type || 'add_design_visit_to_calendar';
+    const config  = editing?.config || {};
+    const bindings = editing?.bindings || [];
+
+    // Build (stage, status) options from existing label rows.
+    const labelOpts = _cardActionsData.map(l => {
+      const v = `${l.stage_key}|${l.status_key || ''}`;
+      const txt = `${l.stage_key} → ${l.label || (l.status_key || '(no lead status)')}`;
+      return { value: v, label: txt };
+    });
+    const subOpts = _cardSubstatusesData.map(s => ({
+      value: `sub:${s.id}`,
+      label: `Sub-status: ${s.status_key} → ${s.label}`,
+    }));
+    const allOpts = [...labelOpts, ...subOpts];
+
+    const selectedKeys = new Set(bindings.map(b =>
+      b.substatus_id ? `sub:${b.substatus_id}` : `${b.stage_key}|${b.status_key || ''}`
+    ));
+
+    const optionsHtml = allOpts.map(o =>
+      `<option value="${esc(o.value)}" ${selectedKeys.has(o.value) ? 'selected' : ''}>${esc(o.label)}</option>`
+    ).join('');
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+    wrap.innerHTML = `
+      <div style="background:#fff;border-radius:12px;padding:20px;width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,0.25);max-height:90vh;overflow:auto;">
+        <h3 style="margin:0 0 14px;font-size:1.05rem;font-weight:700;">${editing ? 'Edit' : 'New'} action handler</h3>
+        <label style="display:block;font-size:.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600;">Name</label>
+        <input id="cah-name" type="text" class="field" maxlength="80" value="${esc(name)}" placeholder="e.g. Book design visit">
+        <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Type</label>
+        <select id="cah-type" class="field">
+          ${Object.entries(HANDLER_TYPE_LABELS).map(([k, v]) =>
+            `<option value="${k}" ${k === type ? 'selected' : ''}>${esc(v)}</option>`).join('')}
+        </select>
+        <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Configuration (JSON)</label>
+        <textarea id="cah-config" class="field" rows="4" style="font-family:monospace;font-size:.82rem;">${esc(JSON.stringify(config, null, 2))}</textarea>
+        <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Bind to (hold Cmd/Ctrl for multiple)</label>
+        <select id="cah-bindings" class="field" multiple size="8" style="font-size:.82rem;">
+          ${optionsHtml || '<option disabled>No label rows or sub-statuses yet — add some first.</option>'}
+        </select>
+        <div id="cah-edit-err" style="color:#b91c1c;font-size:.82rem;margin-top:8px;min-height:18px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+          <button class="btn btn-ghost" id="cah-cancel">Cancel</button>
+          <button class="btn btn-primary" id="cah-save">${editing ? 'Save' : 'Create'}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+    wrap.querySelector('#cah-cancel').addEventListener('click', () => wrap.remove());
+    wrap.querySelector('#cah-save').addEventListener('click', async () => {
+      const errEl = wrap.querySelector('#cah-edit-err');
+      errEl.textContent = '';
+      const nm = wrap.querySelector('#cah-name').value.trim();
+      const tp = wrap.querySelector('#cah-type').value;
+      const cfgTxt = wrap.querySelector('#cah-config').value.trim() || '{}';
+      let cfg;
+      try { cfg = JSON.parse(cfgTxt); } catch { errEl.textContent = 'Configuration is not valid JSON.'; return; }
+      const sel = Array.from(wrap.querySelector('#cah-bindings').selectedOptions).map(o => o.value);
+      const newBindings = sel.map(v => {
+        if (v.startsWith('sub:')) return { substatus_id: parseInt(v.slice(4), 10) };
+        const [stage, status] = v.split('|');
+        return { stage_key: stage, status_key: status };
+      });
+      try {
+        if (editing) {
+          await api('PATCH', `/api/admin/card-action-handlers/${editing.id}`, { name: nm, type: tp, config: cfg, bindings: newBindings });
+        } else {
+          await api('POST', '/api/admin/card-action-handlers', { name: nm, type: tp, config: cfg, bindings: newBindings });
+        }
+        wrap.remove();
+        await loadCardActionHandlersAdmin();
+        try { new BroadcastChannel('card_action_handlers_changed').postMessage({ ts: Date.now() }); } catch (_) {}
+        toast(editing ? 'Handler updated.' : 'Handler created.');
+      } catch (e) {
+        errEl.textContent = e.message || 'Save failed.';
+      }
+    });
+  }
+  window.openHandlerEditor = openHandlerEditor;
+
+  async function deleteHandler(id) {
+    if (!confirm('Delete this handler? Its bindings will be removed.')) return;
+    try {
+      await api('DELETE', `/api/admin/card-action-handlers/${id}`);
+      await loadCardActionHandlersAdmin();
+      try { new BroadcastChannel('card_action_handlers_changed').postMessage({ ts: Date.now() }); } catch (_) {}
+      toast('Handler deleted.');
+    } catch (e) {
+      toast('Delete failed: ' + e.message, true);
+    }
+  }
+  window.deleteHandler = deleteHandler;
+
   async function loadLeadStatusesAdmin() {
     if (_leadStatusesLoaded) return;
     const wrap = document.getElementById('lead-statuses-table-wrap');
@@ -2581,7 +2759,7 @@
         <button class="tab-btn"        data-tab="requests"    onclick="switchTab('requests')">Pending Requests <span id="req-tab-badge">${reqBadge}</span></button>
         <button class="tab-btn"        data-tab="auditlog"    onclick="switchTab('auditlog')">Audit log</button>
         <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings');loadHubspotStatus();loadLeadStatusesAdmin()">Settings</button>
-        <button class="tab-btn"        data-tab="cardactions" onclick="switchTab('cardactions');loadCardActionsAdmin()">Card actions</button>
+        <button class="tab-btn"        data-tab="cardactions" onclick="switchTab('cardactions');loadCardActionsAdmin();loadCardActionHandlersAdmin()">Card actions</button>
         <button class="tab-btn"        data-tab="search"      onclick="switchTab('search');loadSearchSettings()">Search</button>
       </div>
 
@@ -2824,6 +3002,19 @@
             <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
           </div>
         </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+            <div>
+              <div class="card-title" style="margin:0;">Action handlers</div>
+              <p class="card-desc" style="margin:2px 0 0;">Make a card action label clickable. Attach a handler to a (stage × lead status) slot or to a specific sub-status, and clicking the label on a Sales / Survey card opens the matching workflow.</p>
+            </div>
+            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openHandlerEditor()">+ New handler</button>
+          </div>
+          <div id="card-action-handlers-wrap">
+            <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
+          </div>
+        </div>
       </div>
 
       <!-- SEARCH SETTINGS -->
@@ -2864,7 +3055,7 @@
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) {
       if (savedTab === 'settings') { switchTab('settings'); loadHubspotStatus(); loadLeadStatusesAdmin(); }
-      else if (savedTab === 'cardactions') { switchTab('cardactions'); loadCardActionsAdmin(); }
+      else if (savedTab === 'cardactions') { switchTab('cardactions'); loadCardActionsAdmin(); loadCardActionHandlersAdmin(); }
       else if (savedTab === 'search') { switchTab('search'); loadSearchSettings(); }
       else { switchTab(savedTab); }
     }

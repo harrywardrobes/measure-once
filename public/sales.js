@@ -482,9 +482,19 @@ function enquiryRowHtml(entry) {
   );
   const actionTint = STAGE_TINT[stageKey] || '#f3f4f6';
   const actionText = STAGE_ACTION_TEXT[stageKey] || '#374151';
-  const actionEditAttrs = _editable
-    ? `data-card-edit="leadstatus" data-contact-id="${escHtml(contact.id)}" role="button" tabindex="-1" title="Change lead status" style="background:${actionTint};cursor:pointer"`
-    : `style="background:${actionTint}"`;
+  const handlerAttrs = (typeof cardActionHandlerAttrs === 'function')
+    ? cardActionHandlerAttrs(stageKey, contact.properties?.hs_lead_status, contact.properties?.hw_lead_substatus, {
+        contactId:    contact.id,
+        contactName:  contactName(contact),
+        contactEmail: contact.properties?.email || '',
+      })
+    : '';
+  const hasHandler = !!handlerAttrs;
+  const actionEditAttrs = hasHandler
+    ? `${handlerAttrs} role="button" tabindex="-1" title="Run action" style="background:${actionTint};cursor:pointer"`
+    : (_editable
+        ? `data-card-edit="leadstatus" data-contact-id="${escHtml(contact.id)}" role="button" tabindex="-1" title="Change lead status" style="background:${actionTint};cursor:pointer"`
+        : `style="background:${actionTint}"`);
   const actionHtml = next ? `
     <div class="eq-card-action" ${actionEditAttrs}>
       <span class="eq-card-action-label" style="color:${actionText}">${escHtml(next)}</span>

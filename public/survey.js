@@ -204,9 +204,19 @@ function _svCardHtml(entry) {
   } else if (!actionLabel && typeof stageActionLabelLookup === 'function') {
     actionLabel = stageActionLabelLookup(SURVEY_STAGE_KEY, substageId);
   }
-  const actionEditAttrs = _editable
-    ? `data-card-edit="leadstatus" data-contact-id="${escHtml(contact.id)}" role="button" tabindex="-1" title="Change lead status" style="background:${SURVEY_ACTION_TINT};cursor:pointer"`
-    : `style="background:${SURVEY_ACTION_TINT}"`;
+  const handlerAttrs = (typeof cardActionHandlerAttrs === 'function')
+    ? cardActionHandlerAttrs(SURVEY_STAGE_KEY, contact.properties?.hs_lead_status, contact.properties?.hw_lead_substatus, {
+        contactId:    contact.id,
+        contactName:  (typeof contactName === 'function' ? contactName(contact) : ''),
+        contactEmail: contact.properties?.email || '',
+      })
+    : '';
+  const hasHandler = !!handlerAttrs;
+  const actionEditAttrs = hasHandler
+    ? `${handlerAttrs} role="button" tabindex="-1" title="Run action" style="background:${SURVEY_ACTION_TINT};cursor:pointer"`
+    : (_editable
+        ? `data-card-edit="leadstatus" data-contact-id="${escHtml(contact.id)}" role="button" tabindex="-1" title="Change lead status" style="background:${SURVEY_ACTION_TINT};cursor:pointer"`
+        : `style="background:${SURVEY_ACTION_TINT}"`);
   const actionHtml = (isTerminal || !actionLabel) ? '' : `
     <div class="eq-card-action" ${actionEditAttrs}>
       <span class="eq-card-action-label" style="color:${SURVEY_ACTION_TEXT}">${escHtml(actionLabel)}</span>

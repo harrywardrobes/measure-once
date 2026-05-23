@@ -3549,6 +3549,345 @@ app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asyn
   }
 });
 
+// ── Card action handlers ─────────────────────────────────────────────────────
+// Admins can attach an interactive "handler" to a card action label. Two
+// built-in handler types:
+//   • add_design_visit_to_calendar — click opens a date/time picker; on submit
+//     a `visits` row + (optionally) a Google Calendar event are created via
+//     existing endpoints (POST /api/visits, POST /api/events).
+//   • summarise_phone_call — click opens a textarea modal; on submit a HubSpot
+//     note is created against the active contact, then the UI offers to draft
+//     a follow-up email.
+//
+// A handler can be bound to a (stage_key, status_key) pair OR a
+// lead_substatus_id. Both binding shapes are mutually exclusive per row, and
+// each target slot can hold at most one handler.
+const CARD_ACTION_HANDLER_TYPES = new Set([
+  'add_design_visit_to_calendar',
+  'summarise_phone_call',
+]);
+
+function _validateHandlerConfig(type, configRaw) {
+  let cfg = configRaw;
+  if (cfg == null) cfg = {};
+  if (typeof cfg !== 'object' || Array.isArray(cfg)) {
+    return { error: 'config must be a JSON object.' };
+  }
+  if (JSON.stringify(cfg).length > 4096) {
+    return { error: 'config payload is too large (max 4KB).' };
+  }
+  if (type === 'add_design_visit_to_calendar') {
+    const out = {};
+    if (cfg.defaultDurationMin !== undefined) {
+      const n = parseInt(cfg.defaultDurationMin, 10);
+      if (!Number.isInteger(n) || n < 5 || n > 24 * 60) {
+        return { error: 'defaultDurationMin must be 5–1440.' };
+      }
+      out.defaultDurationMin = n;
+    }
+    if (cfg.defaultTitle !== undefined) {
+      const v = String(cfg.defaultTitle || '').slice(0, 120);
+      out.defaultTitle = v;
+    }
+    if (cfg.addToGoogleCalendar !== undefined) {
+      out.addToGoogleCalendar = !!cfg.addToGoogleCalendar;
+    }
+    return { value: out };
+  }
+  if (type === 'summarise_phone_call') {
+    const out = {};
+    if (cfg.notePrefix !== undefined) {
+      out.notePrefix = String(cfg.notePrefix || '').slice(0, 120);
+    }
+    if (cfg.draftEmailSubject !== undefined) {
+      out.draftEmailSubject = String(cfg.draftEmailSubject || '').slice(0, 200);
+    }
+    return { value: out };
+  }
+  return { error: 'Unknown handler type.' };
+}
+
+function _validateHandlerBinding(b) {
+  const hasSubstatus = b.substatus_id !== undefined && b.substatus_id !== null && b.substatus_id !== '';
+  const stage  = b.stage_key  ? String(b.stage_key).trim().toLowerCase()  : '';
+  const status = b.status_key !== undefined && b.status_key !== null
+    ? String(b.status_key).trim().toLowerCase()
+    : '';
+  if (hasSubstatus) {
+    const id = parseInt(b.substatus_id, 10);
+    if (!Number.isInteger(id) || id <= 0) return { error: 'substatus_id must be a positive integer.' };
+    return { value: { substatus_id: id, stage_key: null, status_key: null } };
+  }
+  if (!stage) return { error: 'Each binding requires a stage_key or substatus_id.' };
+  if (!STAGE_ACTION_STAGE_KEYS.has(stage)) {
+    return { error: 'stage_key must be one of: sales, designvisit, survey.' };
+  }
+  if (status.length > 64 || !/^[a-z0-9_]*$/.test(status)) {
+    return { error: 'status_key may only contain lowercase letters, digits, and underscores.' };
+  }
+  return { value: { stage_key: stage, status_key: status, substatus_id: null } };
+}
+
+async function ensureCardActionHandlersTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS card_action_handlers (
+      id          SERIAL PRIMARY KEY,
+      name        TEXT NOT NULL,
+      type        TEXT NOT NULL,
+      config      JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS card_action_handler_bindings (
+      id            SERIAL PRIMARY KEY,
+      handler_id    INT  NOT NULL REFERENCES card_action_handlers(id) ON DELETE CASCADE,
+      stage_key     TEXT,
+      status_key    TEXT,
+      substatus_id  INT  REFERENCES lead_substatuses(id) ON DELETE CASCADE,
+      CHECK (
+        (stage_key IS NOT NULL AND substatus_id IS NULL) OR
+        (stage_key IS NULL AND substatus_id IS NOT NULL)
+      )
+    )
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS cahb_label_uniq
+      ON card_action_handler_bindings (stage_key, status_key)
+      WHERE substatus_id IS NULL
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS cahb_substatus_uniq
+      ON card_action_handler_bindings (substatus_id)
+      WHERE substatus_id IS NOT NULL
+  `);
+}
+
+async function _loadHandlerWithBindings(id) {
+  const h = await pool.query(
+    `SELECT id, name, type, config, created_at, updated_at
+     FROM card_action_handlers WHERE id = $1`,
+    [id]
+  );
+  if (!h.rows.length) return null;
+  const b = await pool.query(
+    `SELECT id, stage_key, status_key, substatus_id
+     FROM card_action_handler_bindings WHERE handler_id = $1
+     ORDER BY id ASC`,
+    [id]
+  );
+  return { ...h.rows[0], bindings: b.rows };
+}
+
+async function _replaceHandlerBindings(client, handlerId, bindings) {
+  await client.query(`DELETE FROM card_action_handler_bindings WHERE handler_id = $1`, [handlerId]);
+  if (!Array.isArray(bindings) || !bindings.length) return;
+  for (const raw of bindings) {
+    const { error, value } = _validateHandlerBinding(raw);
+    if (error) throw Object.assign(new Error(error), { _userError: true });
+    await client.query(
+      `INSERT INTO card_action_handler_bindings (handler_id, stage_key, status_key, substatus_id)
+       VALUES ($1, $2, $3, $4)`,
+      [handlerId, value.stage_key, value.status_key, value.substatus_id]
+    );
+  }
+}
+
+// Authenticated read — used by Sales/Survey/customer-detail to discover which
+// label slots are clickable and what they do.
+app.get('/api/card-action-handlers', isAuthenticated, async (req, res) => {
+  try {
+    const h = await pool.query(
+      `SELECT id, name, type, config FROM card_action_handlers ORDER BY id ASC`
+    );
+    const b = await pool.query(
+      `SELECT handler_id, stage_key, status_key, substatus_id
+       FROM card_action_handler_bindings`
+    );
+    const byId = {};
+    for (const r of h.rows) byId[r.id] = { ...r, bindings: [] };
+    for (const r of b.rows) {
+      if (byId[r.handler_id]) byId[r.handler_id].bindings.push({
+        stage_key: r.stage_key, status_key: r.status_key, substatus_id: r.substatus_id,
+      });
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json(Object.values(byId));
+  } catch (e) {
+    console.error('GET /api/card-action-handlers error:', e.message);
+    res.status(500).json({ error: 'Could not load card action handlers.' });
+  }
+});
+
+app.get('/api/admin/card-action-handlers', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const h = await pool.query(
+      `SELECT id, name, type, config, created_at, updated_at
+       FROM card_action_handlers ORDER BY id ASC`
+    );
+    const b = await pool.query(
+      `SELECT id, handler_id, stage_key, status_key, substatus_id
+       FROM card_action_handler_bindings ORDER BY id ASC`
+    );
+    const byId = {};
+    for (const r of h.rows) byId[r.id] = { ...r, bindings: [] };
+    for (const r of b.rows) {
+      if (byId[r.handler_id]) byId[r.handler_id].bindings.push({
+        id: r.id, stage_key: r.stage_key, status_key: r.status_key, substatus_id: r.substatus_id,
+      });
+    }
+    res.json(Object.values(byId));
+  } catch (e) {
+    console.error('GET /api/admin/card-action-handlers error:', e.message);
+    res.status(500).json({ error: 'Could not load card action handlers.' });
+  }
+});
+
+app.post('/api/admin/card-action-handlers', isAuthenticated, requireAdmin, async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  const type = String(req.body?.type || '').trim();
+  if (!name) return res.status(400).json({ error: 'name is required.' });
+  if (name.length > 80) return res.status(400).json({ error: 'name must be 80 characters or fewer.' });
+  if (!CARD_ACTION_HANDLER_TYPES.has(type)) {
+    return res.status(400).json({ error: 'type must be add_design_visit_to_calendar or summarise_phone_call.' });
+  }
+  const cfgValidation = _validateHandlerConfig(type, req.body?.config);
+  if (cfgValidation.error) return res.status(400).json({ error: cfgValidation.error });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `INSERT INTO card_action_handlers (name, type, config)
+       VALUES ($1, $2, $3::jsonb)
+       RETURNING id`,
+      [name, type, JSON.stringify(cfgValidation.value)]
+    );
+    const handlerId = rows[0].id;
+    await _replaceHandlerBindings(client, handlerId, req.body?.bindings || []);
+    await client.query('COMMIT');
+    const full = await _loadHandlerWithBindings(handlerId);
+    res.status(201).json(full);
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (e._userError) return res.status(400).json({ error: e.message });
+    if (e.code === '23505') return res.status(409).json({ error: 'A handler is already bound to that slot.' });
+    console.error('POST /api/admin/card-action-handlers error:', e.message);
+    res.status(500).json({ error: 'Could not create handler.' });
+  } finally {
+    client.release();
+  }
+});
+
+app.patch('/api/admin/card-action-handlers/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id.' });
+
+  const existing = await _loadHandlerWithBindings(id);
+  if (!existing) return res.status(404).json({ error: 'Handler not found.' });
+
+  const updates = [];
+  const params  = [];
+  if (req.body?.name !== undefined) {
+    const v = String(req.body.name || '').trim();
+    if (!v) return res.status(400).json({ error: 'name cannot be empty.' });
+    if (v.length > 80) return res.status(400).json({ error: 'name must be 80 characters or fewer.' });
+    params.push(v); updates.push(`name = $${params.length}`);
+  }
+  let effectiveType = existing.type;
+  if (req.body?.type !== undefined) {
+    const t = String(req.body.type || '').trim();
+    if (!CARD_ACTION_HANDLER_TYPES.has(t)) {
+      return res.status(400).json({ error: 'Invalid type.' });
+    }
+    effectiveType = t;
+    params.push(t); updates.push(`type = $${params.length}`);
+  }
+  if (req.body?.config !== undefined) {
+    const cv = _validateHandlerConfig(effectiveType, req.body.config);
+    if (cv.error) return res.status(400).json({ error: cv.error });
+    params.push(JSON.stringify(cv.value)); updates.push(`config = $${params.length}::jsonb`);
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (updates.length) {
+      updates.push(`updated_at = NOW()`);
+      params.push(id);
+      await client.query(
+        `UPDATE card_action_handlers SET ${updates.join(', ')} WHERE id = $${params.length}`,
+        params
+      );
+    }
+    if (req.body?.bindings !== undefined) {
+      await _replaceHandlerBindings(client, id, req.body.bindings || []);
+    }
+    await client.query('COMMIT');
+    const full = await _loadHandlerWithBindings(id);
+    res.json(full);
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (e._userError) return res.status(400).json({ error: e.message });
+    if (e.code === '23505') return res.status(409).json({ error: 'A handler is already bound to that slot.' });
+    console.error('PATCH /api/admin/card-action-handlers error:', e.message);
+    res.status(500).json({ error: 'Could not update handler.' });
+  } finally {
+    client.release();
+  }
+});
+
+app.delete('/api/admin/card-action-handlers/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id.' });
+  try {
+    const r = await pool.query(`DELETE FROM card_action_handlers WHERE id = $1 RETURNING id`, [id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Handler not found.' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /api/admin/card-action-handlers error:', e.message);
+    res.status(500).json({ error: 'Could not delete handler.' });
+  }
+});
+
+// Execute: summarise_phone_call → posts a HubSpot note against the contact.
+app.post('/api/card-actions/phone-call-summary',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,
+  async (req, res) => {
+    const contactId = String(req.body?.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+    const summary = String(req.body?.summary || '').trim();
+    if (!summary) return res.status(400).json({ error: 'summary is required.' });
+    if (summary.length > 8000) return res.status(400).json({ error: 'summary must be 8000 characters or fewer.' });
+    const prefix = String(req.body?.notePrefix || '').slice(0, 120);
+    const body = prefix ? `${prefix}\n\n${summary}` : summary;
+    try {
+      const noteR = await axios.post(
+        `${HS}/crm/v3/objects/notes`,
+        { properties: { hs_note_body: body, hs_timestamp: new Date().toISOString() } },
+        { headers: hsHeaders() }
+      );
+      await axios.put(
+        `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/contacts/${encodeURIComponent(contactId)}/note_to_contact`,
+        {},
+        { headers: hsHeaders() }
+      );
+      res.json({ ok: true, noteId: noteR.data.id });
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      console.error('POST /api/card-actions/phone-call-summary error:', e.response?.data || e.message);
+      res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
 // ── WhatsApp config probe (no creds needed — just reports if configured) ──────
 app.get('/api/whatsapp/config', isAuthenticated, (req, res) => {
   res.json({
@@ -3880,6 +4219,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  hw_lead_substatus property setup failed:', e.message); }
     try { await syncLeadSubstatusesToHubSpot(); console.log('  hw_lead_substatus options synced'); }
     catch (e) { console.warn('  hw_lead_substatus sync skipped:', e.response?.data?.message || e.message); }
+    try { await ensureCardActionHandlersTables(); console.log('  Card action handlers tables ready'); }
+    catch (e) { console.error('  Card action handlers tables setup failed:', e.message); }
     try { await ensureSearchSettingsTable(); console.log('  Search settings table ready'); }
     catch (e) { console.error('  Search settings table setup failed:', e.message); }
     try { await ensureWhatsAppMessagesTable(); console.log('  WhatsApp messages table ready'); }
