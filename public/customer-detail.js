@@ -822,16 +822,25 @@ function _renderWorkflowHeaderImpl() {
     };
     const cid = contact?.id || '';
     const editable = canEditPipeline();
+    const subAffordance = (typeof renderSubstatusAffordance === 'function')
+      ? renderSubstatusAffordance(contact) : '';
+    let pillHtml;
     if (!raw) {
       const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
-      if (!editable) return `<span class="lead-status-badge lsb-empty">${escHtml(nullLabel)}</span>`;
-      return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(nullLabel)}</span>`;
+      pillHtml = editable
+        ? `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(nullLabel)}</span>`
+        : `<span class="lead-status-badge lsb-empty">${escHtml(nullLabel)}</span>`;
+    } else {
+      const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
+      const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+      const cls = CSS_CLASS_MAP[raw] || '';
+      pillHtml = editable
+        ? `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(label)}</span>`
+        : `<span class="lead-status-badge ${cls}">${escHtml(label)}</span>`;
     }
-    const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
-    const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-    const cls = CSS_CLASS_MAP[raw] || '';
-    if (!editable) return `<span class="lead-status-badge ${cls}">${escHtml(label)}</span>`;
-    return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(label)}</span>`;
+    return subAffordance
+      ? `<span class="lead-status-group">${pillHtml}${subAffordance}</span>`
+      : pillHtml;
   })();
 
   el.innerHTML = `
@@ -1264,16 +1273,36 @@ function _syncStageLeadStatus(stageKey) {
   // option set (e.g. the default was renamed or removed in HubSpot).
   if (!LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)) return;
 
-  PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: newStatus })
+  // If the contact's current sub-status belongs to the previous lead status,
+  // clear it on the same PATCH so we don't leave a stale cross-status value
+  // in HubSpot.
+  const _currentContact = state.contacts?.find(c => String(c.id) === String(contactId))
+    || (state.selectedContact?.id === contactId ? state.selectedContact : null);
+  const prevStatus    = _currentContact?.properties?.hs_lead_status || '';
+  const prevSubstatus = _currentContact?.properties?.hw_lead_substatus || '';
+  const subBelongsToPrev = !!prevSubstatus && !!prevStatus &&
+    String(prevSubstatus).toUpperCase()
+      .startsWith(`${String(prevStatus).toUpperCase()}__`);
+  const clearSub = subBelongsToPrev;
+  const patchBody = clearSub
+    ? { hs_lead_status: newStatus, hw_lead_substatus: '' }
+    : { hs_lead_status: newStatus };
+
+  PATCH_REQ(`/api/contacts/${contactId}`, patchBody)
     .then(() => {
       const contact = state.contacts?.find(c => String(c.id) === String(contactId));
       if (contact) {
-        contact.properties = { ...(contact.properties || {}), hs_lead_status: newStatus };
+        contact.properties = {
+          ...(contact.properties || {}),
+          hs_lead_status: newStatus,
+          ...(clearSub ? { hw_lead_substatus: '' } : {}),
+        };
       }
       if (state.selectedContact) {
         state.selectedContact.properties = {
           ...(state.selectedContact.properties || {}),
           hs_lead_status: newStatus,
+          ...(clearSub ? { hw_lead_substatus: '' } : {}),
         };
         if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
       }

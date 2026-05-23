@@ -498,9 +498,10 @@ if (typeof BroadcastChannel !== 'undefined') {
   const _subChannel = new BroadcastChannel('lead_substatuses_changed');
   _subChannel.addEventListener('message', () => {
     loadLeadSubstatuses().then(() => {
-      if (typeof renderCustomerList === 'function') renderCustomerList();
-      if (typeof renderEnquiryList   === 'function') renderEnquiryList();
-      if (typeof renderSurveyList    === 'function') renderSurveyList();
+      if (typeof renderCustomerList   === 'function') renderCustomerList();
+      if (typeof renderEnquiryList    === 'function') renderEnquiryList();
+      if (typeof renderSurveyList     === 'function') renderSurveyList();
+      if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
     });
   });
 }

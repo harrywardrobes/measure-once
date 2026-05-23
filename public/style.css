@@ -1860,6 +1860,39 @@ body.showing-workflow .workflow-panel { display: flex; }
 .lead-status-badge.lsb-empty       { background: none; color: var(--ink-4); border: 1px dashed var(--stone); cursor: pointer; }
 .lead-status-badge.lsb-empty:hover { background: var(--paper-deep); color: var(--ink-2); }
 
+/* Sub-status affordance shown next to the lead-status pill */
+.lead-status-group { display: inline-flex; align-items: center; gap: 4px; }
+.lead-substatus-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--paper-deep);
+  color: var(--ink-2);
+  border: 1px solid var(--border);
+  line-height: 1.4;
+}
+.lead-substatus-chip.lsb-clickable        { cursor: pointer; }
+.lead-substatus-chip.lsb-clickable:hover  { filter: brightness(0.95); }
+.lead-substatus-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px dashed var(--stone);
+  background: none;
+  color: var(--ink-4);
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+}
+.lead-substatus-add:hover { background: var(--paper-deep); color: var(--ink-2); }
+
 /* ── Projects stage filter tabs ──────────────────────────────────────────────── */
 .project-stage-tabs-bar {
   display: flex;

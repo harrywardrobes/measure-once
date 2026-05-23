@@ -427,20 +427,24 @@ function _renderCustomerListImpl() {
           'ATTEMPTED_TO_CONTACT': '', 'UNQUALIFIED': 'lsb-unqualified', 'BAD_TIMING': 'lsb-bad-timing',
         };
         const editable = canEditPipeline();
+        const subAffordance = renderSubstatusAffordance(contact);
+        let pillHtml;
         if (!raw) {
           const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
-          if (!editable) {
-            return `<span class="lead-status-badge lsb-empty">${escHtml(nullLabel)}</span>`;
-          }
-          return `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(nullLabel)}</span>`;
+          pillHtml = editable
+            ? `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(nullLabel)}</span>`
+            : `<span class="lead-status-badge lsb-empty">${escHtml(nullLabel)}</span>`;
+        } else {
+          const opt   = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
+          const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+          const cls   = CSS_CLASS_MAP[raw] || '';
+          pillHtml = editable
+            ? `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(label)}</span>`
+            : `<span class="lead-status-badge ${cls}">${escHtml(label)}</span>`;
         }
-        const opt   = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
-        const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-        const cls   = CSS_CLASS_MAP[raw] || '';
-        if (!editable) {
-          return `<span class="lead-status-badge ${cls}">${escHtml(label)}</span>`;
-        }
-        return `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${contact.id}')" role="button" tabindex="-1">${escHtml(label)}</span>`;
+        return subAffordance
+          ? `<span class="lead-status-group">${pillHtml}${subAffordance}</span>`
+          : pillHtml;
       })();
 
       const qbInvs       = matchInvoicesForContact(contact);
@@ -1306,13 +1310,48 @@ function closeContactEditIfPristine() {
 
 async function quickSetLeadStatus(contactId, newStatus) {
   closeCardPicker();
-  const contact = state.contacts.find(c => c.id === contactId);
-  const prevStatus = contact?.properties?.hs_lead_status || null;
+  // On the customer-detail page state.contacts may not include the open
+  // contact, so fall back to state.selectedContact when ids match. Without
+  // this, _applyLeadStatus would no-op and the header would snap back to
+  // the previous value on the next render, masking a PATCH that did succeed.
+  let contact = state.contacts.find(c => c.id === contactId);
+  if (!contact && state.selectedContact?.id === contactId) {
+    contact = state.selectedContact;
+  }
+  const prevStatus    = contact?.properties?.hs_lead_status || null;
+  const prevSubstatus = contact?.properties?.hw_lead_substatus || '';
   if (prevStatus === newStatus) return;
 
-  function _applyLeadStatus(status) {
+  // If the contact's current sub-status belongs to the old lead status, it
+  // is meaningless under the new lead status — clear it (locally + on save)
+  // so we don't leave stale cross-status values in HubSpot.
+  const subBelongsToPrev = (() => {
+    if (!prevSubstatus || !prevStatus) return false;
+    return String(prevSubstatus).toUpperCase()
+      .startsWith(`${String(prevStatus).toUpperCase()}__`);
+  })();
+  const clearSub = subBelongsToPrev;
+
+  function _applyLeadStatus(status, substatus) {
+    // Mutate the underlying contact (whichever source we found above) so
+    // both the list card and the detail header observe the change.
     if (contact) {
-      contact.properties = { ...(contact.properties || {}), hs_lead_status: status };
+      contact.properties = {
+        ...(contact.properties || {}),
+        hs_lead_status: status,
+        ...(substatus !== undefined ? { hw_lead_substatus: substatus } : {}),
+      };
+    }
+    // Also update state.selectedContact directly when it isn't already
+    // pointing at `contact` (e.g. detail page where the contact lives only
+    // in state.selectedContact).
+    if (state.selectedContact && state.selectedContact.id === contactId &&
+        state.selectedContact !== contact) {
+      state.selectedContact.properties = {
+        ...(state.selectedContact.properties || {}),
+        hs_lead_status: status,
+        ...(substatus !== undefined ? { hw_lead_substatus: substatus } : {}),
+      };
     }
     // Defensive refresh: re-read selectedContact from the contacts array so the
     // detail panel always sees the freshly-mutated object, regardless of which
@@ -1333,11 +1372,14 @@ async function quickSetLeadStatus(contactId, newStatus) {
     if (typeof renderWorkflowStages === 'function') renderWorkflowStages();
   }
 
-  // Optimistic update
-  _applyLeadStatus(newStatus);
+  // Optimistic update (also clears stale sub-status locally if applicable).
+  _applyLeadStatus(newStatus, clearSub ? '' : undefined);
 
   try {
-    await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: newStatus });
+    const patchBody = clearSub
+      ? { hs_lead_status: newStatus, hw_lead_substatus: '' }
+      : { hs_lead_status: newStatus };
+    await PATCH_REQ(`/api/contacts/${contactId}`, patchBody);
     // PATCH succeeded — server now has the new value, so no longer pending.
     if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
     // Refresh counts in the background so dropdown totals stay accurate.
@@ -1347,8 +1389,11 @@ async function quickSetLeadStatus(contactId, newStatus) {
     const _nullLbl3 = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
     const newLabel = newStatus ? (LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)?.label || newStatus) : null;
     showBottomUndo(newLabel ? `Lead status set to ${newLabel}` : `Lead status set to ${_nullLbl3}`, async () => {
-      _applyLeadStatus(prevStatus || '');
-      await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: prevStatus || '' })
+      _applyLeadStatus(prevStatus || '', clearSub ? prevSubstatus : undefined);
+      const undoBody = clearSub
+        ? { hs_lead_status: prevStatus || '', hw_lead_substatus: prevSubstatus || '' }
+        : { hs_lead_status: prevStatus || '' };
+      await PATCH_REQ(`/api/contacts/${contactId}`, undoBody)
         .catch(() => {})
         .finally(() => {
           if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
@@ -1361,7 +1406,7 @@ async function quickSetLeadStatus(contactId, newStatus) {
     // Revert on failure: update pending to the reverted value, then clear once
     // we know the PATCH round-trip is done (no second request needed since we
     // never sent a successful change).
-    _applyLeadStatus(prevStatus || '');
+    _applyLeadStatus(prevStatus || '', clearSub ? prevSubstatus : undefined);
     if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
     if (e.code === 'HUBSPOT_AUTH') {
       showToast('Could not update lead status — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
@@ -1371,6 +1416,170 @@ async function quickSetLeadStatus(contactId, newStatus) {
       showToast("Lead status didn't save in HubSpot — please try again.", true);
     } else {
       showToast('Failed to update lead status', true);
+    }
+  }
+}
+
+// ── Lead Sub-Status (helpers, picker, save) ────────────────────────────────
+
+// Returns sub-status rows configured for `statusKey`, sorted.
+function _substatusesForStatus(statusKey) {
+  if (!statusKey) return [];
+  if (typeof LEAD_SUBSTATUSES === 'undefined' || !Array.isArray(LEAD_SUBSTATUSES)) return [];
+  const sk = String(statusKey).toUpperCase();
+  return LEAD_SUBSTATUSES
+    .filter(s => String(s.status_key).toUpperCase() === sk)
+    .slice()
+    .sort((a, b) =>
+      (a.sort_order || 0) - (b.sort_order || 0) ||
+      String(a.substatus_key).localeCompare(String(b.substatus_key))
+    );
+}
+
+// Returns {key,label} for the contact's currently-set sub-status, or null
+// when none is set, or when the stored hw_lead_substatus belongs to a
+// different lead status than the contact's current hs_lead_status.
+function _currentSubstatusFor(contact) {
+  const statusKey = contact?.properties?.hs_lead_status || '';
+  const hwVal     = contact?.properties?.hw_lead_substatus || '';
+  if (!statusKey || !hwVal) return null;
+  const sk = String(statusKey).toUpperCase();
+  const v  = String(hwVal).toUpperCase();
+  const prefix = `${sk}__`;
+  if (!v.startsWith(prefix)) return null;
+  const subKey = v.slice(prefix.length);
+  const row = _substatusesForStatus(statusKey)
+    .find(s => String(s.substatus_key).toUpperCase() === subKey);
+  return row ? { key: row.substatus_key, label: row.label || row.substatus_key } : null;
+}
+
+// HTML fragment shown next to the lead-status pill: chip (current sub) or +.
+// Returns '' when there's nothing to show.
+function renderSubstatusAffordance(contact) {
+  const statusKey = contact?.properties?.hs_lead_status || '';
+  if (!statusKey) return '';
+  const subs = _substatusesForStatus(statusKey);
+  if (!subs.length) return '';
+  const cid = contact?.id || '';
+  const editable = (typeof canEditPipeline === 'function') ? canEditPipeline() : false;
+  const current = _currentSubstatusFor(contact);
+  if (current) {
+    const label = escHtml(current.label);
+    if (!editable) return `<span class="lead-substatus-chip" title="Sub-status">${label}</span>`;
+    return `<span class="lead-substatus-chip lsb-clickable" title="Change sub-status" role="button" tabindex="-1" onclick="openLeadSubstatusPicker(event,'${cid}')">${label}</span>`;
+  }
+  if (!editable) return '';
+  return `<button type="button" class="lead-substatus-add" title="Set sub-status" onclick="openLeadSubstatusPicker(event,'${cid}')">+</button>`;
+}
+
+async function openLeadSubstatusPicker(event, contactId) {
+  event.stopPropagation();
+  if (typeof canEditPipeline === 'function' && !canEditPipeline()) return;
+  closeCardPicker();
+
+  let contact = state.contacts.find(c => c.id === contactId);
+  if (!contact && state.selectedContact?.id === contactId) contact = state.selectedContact;
+  const statusKey = contact?.properties?.hs_lead_status || '';
+  const subs = _substatusesForStatus(statusKey);
+  if (!statusKey || !subs.length) return;
+
+  const current = _currentSubstatusFor(contact);
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const popup = document.createElement('div');
+  popup.id = 'card-picker-popup';
+  popup.className = 'card-picker-popup';
+  const top = Math.min(rect.bottom + 4, window.innerHeight - 300);
+  popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
+
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'card-picker-opt card-picker-opt--clear' + (current ? '' : ' card-picker-opt--disabled');
+  clearBtn.textContent = '✕ Clear sub-status';
+  if (current) {
+    clearBtn.addEventListener('click', () => quickSetLeadSubstatus(contactId, ''));
+  } else {
+    clearBtn.disabled = true;
+  }
+  popup.appendChild(clearBtn);
+
+  subs.forEach(sub => {
+    const btn = document.createElement('button');
+    const isActive = current && current.key === sub.substatus_key;
+    btn.className = 'card-picker-opt' + (isActive ? ' card-picker-opt--active' : '');
+    btn.textContent = sub.label || sub.substatus_key;
+    btn.addEventListener('click', () => quickSetLeadSubstatus(contactId, sub.substatus_key));
+    popup.appendChild(btn);
+  });
+
+  document.body.appendChild(popup);
+  setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
+}
+
+async function quickSetLeadSubstatus(contactId, newSubKey) {
+  closeCardPicker();
+
+  let contact = state.contacts.find(c => c.id === contactId);
+  if (!contact && state.selectedContact?.id === contactId) contact = state.selectedContact;
+  if (!contact) return;
+
+  const statusKey = contact.properties?.hs_lead_status || '';
+  if (!statusKey && newSubKey) {
+    showToast('Set a lead status before choosing a sub-status.', true);
+    return;
+  }
+
+  const prevHw = contact.properties?.hw_lead_substatus || '';
+  // Storage convention: ${STATUS_KEY}__${SUBSTATUS_KEY} (see server.js).
+  const newHw = newSubKey
+    ? `${String(statusKey).toUpperCase()}__${String(newSubKey).toUpperCase()}`
+    : '';
+  if (prevHw === newHw) return;
+
+  function _applySubstatus(hw) {
+    if (contact) {
+      contact.properties = { ...(contact.properties || {}), hw_lead_substatus: hw };
+    }
+    if (state.selectedContact && state.selectedContact.id === contactId &&
+        state.selectedContact !== contact) {
+      state.selectedContact.properties = {
+        ...(state.selectedContact.properties || {}),
+        hw_lead_substatus: hw,
+      };
+    }
+    if (state.selectedContactId) {
+      const fresh = state.contacts.find(c => c.id === state.selectedContactId);
+      if (fresh) state.selectedContact = fresh;
+    }
+    renderCustomerList();
+    if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+  }
+
+  _applySubstatus(newHw);
+
+  try {
+    await PATCH_REQ(`/api/contacts/${contactId}`, { hw_lead_substatus: newHw });
+    const subs = _substatusesForStatus(statusKey);
+    const newLabel = newSubKey
+      ? (subs.find(s => String(s.substatus_key).toUpperCase() === String(newSubKey).toUpperCase())?.label || newSubKey)
+      : null;
+    if (typeof showBottomUndo === 'function') {
+      showBottomUndo(newLabel ? `Sub-status set to ${newLabel}` : `Sub-status cleared`, async () => {
+        _applySubstatus(prevHw);
+        await PATCH_REQ(`/api/contacts/${contactId}`, { hw_lead_substatus: prevHw }).catch(() => {});
+      });
+    }
+  } catch (e) {
+    _applySubstatus(prevHw);
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not update sub-status — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not update sub-status — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else if (e.code === 'HUBSPOT_VERIFY_FAILED') {
+      showToast("Sub-status didn't save in HubSpot — please try again.", true);
+    } else if (e.code === 'PIPELINE_EDIT_FORBIDDEN') {
+      showToast('You do not have permission to change the sub-status.', true);
+    } else {
+      showToast('Failed to update sub-status', true);
     }
   }
 }

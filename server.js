@@ -892,7 +892,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     if (!/^\d+$/.test(contactId)) {
       return res.status(400).json({ error: 'Invalid contact id.' });
     }
-    const allowed = ['hs_lead_status', 'firstname', 'lastname', 'email', 'phone', 'address', 'city', 'zip'];
+    const allowed = ['hs_lead_status', 'hw_lead_substatus', 'firstname', 'lastname', 'email', 'phone', 'address', 'city', 'zip'];
     const properties = {};
     for (const key of allowed) {
       if (Object.prototype.hasOwnProperty.call(req.body, key)) {
@@ -902,9 +902,11 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     if (Object.keys(properties).length === 0) {
       return res.status(400).json({ error: 'No valid properties to update.' });
     }
-    // Pipeline-field gate: only managers/admins may change hs_lead_status.
-    // Other contact fields remain editable at the route's base member level.
-    if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status')) {
+    // Pipeline-field gate: only managers/admins may change hs_lead_status or
+    // hw_lead_substatus. Other contact fields remain editable at the route's
+    // base member level.
+    if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status') ||
+        Object.prototype.hasOwnProperty.call(properties, 'hw_lead_substatus')) {
       try {
         const userId = req.user?.claims?.sub;
         const ur = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
@@ -981,9 +983,10 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
       });
     }
     const returnedProps = verifyResp.data?.properties || {};
+    const _normCmp = v => (v === null || v === undefined) ? '' : String(v).trim();
     for (const key of propsToVerify) {
-      const expected = (properties[key] ?? '').trim();
-      const actual   = (returnedProps[key] ?? '').trim();
+      const expected = _normCmp(properties[key]);
+      const actual   = _normCmp(returnedProps[key]);
       if (actual !== expected) {
         return res.status(502).json({
           error: 'HubSpot did not save the updated contact details. Please try again.',
