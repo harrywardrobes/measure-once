@@ -1672,6 +1672,9 @@
   async function loadCardActionsAdmin() {
     const wrap = document.getElementById('card-actions-table-wrap');
     if (!wrap) return;
+    if (!_cardActionsEverLoaded) {
+      for (const s of CARD_ACTION_STAGES) _collapsedCardActionStages.add(s.key);
+    }
     _cardActionsEverLoaded = true;
     try {
       // Always fetch all three fresh so a rename / reorder in the Lead
