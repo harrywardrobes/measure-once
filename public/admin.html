@@ -1807,7 +1807,8 @@
 
   // Render one badge per handler bound to the row. Shows the handler name and
   // its type label so admins can see at a glance what's wired without scrolling
-  // down to the handlers card.
+  // down to the handlers card. When more than one handler is bound, a "Fix"
+  // button appears so the admin can remove the conflicting entry in-context.
   function _handlerBadgesHtml(slot) {
     const handlers = _handlersForSlot(slot);
     if (!handlers.length) return '';
@@ -1821,16 +1822,21 @@
         <span aria-hidden="true">⚡</span><span>${esc(typeLbl)}</span>
       </span>`;
     }).join('');
-    const warningBadge = handlers.length > 1
-      ? `<span class="ca-handler-conflict-badge" title="${esc(`${handlers.length} handlers bound to this slot — usually a mistake`)}"
-          style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;margin-left:4px;
-            background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:999px;
-            font-size:.7rem;font-weight:700;line-height:1.5;white-space:nowrap;vertical-align:middle;
-            cursor:default;">
-          <span aria-hidden="true">⚠</span><span>${handlers.length} bound</span>
-        </span>`
-      : '';
-    return badges + warningBadge;
+    if (handlers.length <= 1) return badges;
+    // Build a serialised slot reference that openConflictResolver can decode.
+    const slotArg = slot.substatus_id != null
+      ? `null,null,${Number(slot.substatus_id)}`
+      : `${JSON.stringify(String(slot.stage_key))},${JSON.stringify(String(slot.status_key))},null`;
+    const fixBtn = `<button type="button" class="ca-fix-conflict-btn"
+      onclick="openConflictResolver(${slotArg})"
+      title="Multiple handlers are bound to this slot — click to resolve"
+      style="display:inline-flex;align-items:center;gap:3px;padding:1px 8px;margin-left:4px;
+        background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:999px;
+        font-size:.7rem;font-weight:700;line-height:1.5;white-space:nowrap;
+        vertical-align:middle;cursor:pointer;">
+      ⚠ Fix
+    </button>`;
+    return badges + fixBtn;
   }
 
   function renderCardActionsTable() {
@@ -2659,6 +2665,103 @@
     }
   }
   window.deleteHandler = deleteHandler;
+
+  // Lightweight conflict-resolver modal — opened from the ⚠ Fix button that
+  // appears in _handlerBadgesHtml whenever a slot has more than one handler.
+  // Args are decoded back into a slot object so _handlersForSlot can be reused.
+  function openConflictResolver(stageKey, statusKey, substatusId) {
+    const slot = substatusId != null
+      ? { substatus_id: Number(substatusId) }
+      : { stage_key: stageKey, status_key: statusKey };
+
+    const handlers = _handlersForSlot(slot);
+    if (!handlers.length) return;
+
+    // Build a human-readable slot description for the modal heading.
+    let slotDesc;
+    if (substatusId != null) {
+      const sub = (_cardSubstatusesData || []).find(s => Number(s.id) === Number(substatusId));
+      slotDesc = sub ? `sub-status "${esc(sub.label || sub.substatus_key)}"` : `sub-status #${substatusId}`;
+    } else {
+      const ls = (_leadStatusesData || []).find(s => s.key === statusKey);
+      slotDesc = ls ? `"${esc(ls.label)}"` : `${esc(stageKey)} / ${esc(statusKey)}`;
+    }
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+
+    const rowsHtml = handlers.map(h => {
+      const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
+      const desc    = HANDLER_TYPE_DESCRIPTIONS[h.type] || '';
+      return `
+        <div class="ca-conflict-row" data-handler-id="${h.id}"
+          style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#fafaf7;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:.85rem;color:var(--ink-1);">
+              <span aria-hidden="true" style="margin-right:4px;">⚡</span>${esc(typeLbl)}
+            </div>
+            ${desc ? `<div style="font-size:.75rem;color:var(--ink-4);margin-top:2px;line-height:1.4;">${esc(desc)}</div>` : ''}
+          </div>
+          <button type="button" class="btn btn-ghost ca-conflict-remove-btn"
+            data-handler-id="${h.id}"
+            style="flex:0 0 auto;font-size:.78rem;padding:4px 12px;color:#991b1b;white-space:nowrap;">
+            Remove
+          </button>
+        </div>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <div style="background:#fff;border-radius:12px;padding:20px;width:100%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,0.25);max-height:90vh;overflow:auto;">
+        <h3 style="margin:0 0 6px;font-size:1.05rem;font-weight:700;">Fix conflicting handlers</h3>
+        <p style="margin:0 0 14px;font-size:.8rem;color:var(--ink-4);line-height:1.5;">
+          The slot ${slotDesc} has <strong>${handlers.length} handlers</strong> bound to it.
+          Remove all but one to resolve the conflict.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:8px;" id="ca-conflict-list">
+          ${rowsHtml}
+        </div>
+        <div id="ca-conflict-err" style="color:#b91c1c;font-size:.82rem;margin-top:8px;min-height:18px;"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+          <button class="btn btn-ghost" id="ca-conflict-close">Close</button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+    wrap.querySelector('#ca-conflict-close').addEventListener('click', () => wrap.remove());
+
+    wrap.querySelector('#ca-conflict-list').addEventListener('click', async e => {
+      const btn = e.target.closest('.ca-conflict-remove-btn');
+      if (!btn) return;
+      const id = Number(btn.dataset.handlerId);
+      const errEl = wrap.querySelector('#ca-conflict-err');
+      errEl.textContent = '';
+      btn.disabled = true;
+      btn.textContent = 'Removing…';
+      try {
+        await api('DELETE', `/api/admin/card-action-handlers/${id}`);
+        await loadCardActionHandlersAdmin();
+        try { new BroadcastChannel('card_action_handlers_changed').postMessage({ ts: Date.now() }); } catch (_) {}
+        toast('Handler removed.');
+        // If only one handler remains, close the modal; otherwise re-check.
+        const remaining = _handlersForSlot(slot);
+        if (remaining.length <= 1) {
+          wrap.remove();
+        } else {
+          // Remove just the row that was deleted so the admin can continue.
+          const row = wrap.querySelector(`.ca-conflict-row[data-handler-id="${id}"]`);
+          if (row) row.remove();
+          btn.disabled = false;
+          btn.textContent = 'Remove';
+        }
+      } catch (err) {
+        errEl.textContent = 'Remove failed: ' + (err.message || 'unknown error');
+        btn.disabled = false;
+        btn.textContent = 'Remove';
+      }
+    });
+  }
+  window.openConflictResolver = openConflictResolver;
 
   async function loadLeadStatusesAdmin() {
     if (_leadStatusesLoaded) return;
