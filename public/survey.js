@@ -315,6 +315,19 @@ async function renderSurveyList() {
   // Collect contacts with an active survey-stage room
   const allEntries = [];
   for (const contact of state.filteredContacts) {
+    // HubSpot lead status is the source of truth for which board a contact
+    // belongs on — locally-cached room.stageKey can be stale after a status
+    // change (e.g. moved back from Survey to Design Visit). If the contact
+    // has a lead status that the admin has mapped to a non-SURVEY stage,
+    // exclude them here even when an old survey-stage room is cached.
+    const ls = (contact.properties?.hs_lead_status || '').toUpperCase();
+    if (ls) {
+      const lsOpt = (typeof LEAD_STATUS_OPTIONS !== 'undefined')
+        ? LEAD_STATUS_OPTIONS.find(o => o.value === ls) : null;
+      const lsStage = lsOpt?.stage;
+      if (lsStage && lsStage !== 'SURVEY') continue;
+    }
+
     const cached     = state.contactStageCache[contact.id];
     const createdate = parseInt(contact.properties?.createdate || '0', 10);
     if (!cached || cached.length === 0) continue;
