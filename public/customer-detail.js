@@ -522,6 +522,7 @@ function renderFullWorkflowView() {
       <div id="comments-section" class="mb-5"></div>
       <div id="room-tabs-section" class="mb-5"></div>
       <div id="invoices-section" class="mb-5"></div>
+      <div id="upcoming-visits-section" class="mb-5"></div>
       <div id="tasks-section" class="mb-6"></div>
       <div id="google-emails-section" class="mb-5"></div>
       <div id="whatsapp-history-section" class="mb-5"></div>
@@ -550,6 +551,7 @@ function renderFullWorkflowView() {
   renderComments();
   renderRoomTabs();
   renderWorkflowInvoices();
+  renderUpcomingVisits();
   renderTasks();
   renderGoogleEmailSection();
   renderWhatsAppHistory();
@@ -2135,6 +2137,191 @@ document.addEventListener('keydown', e => {
     if (modal && modal.style.display !== 'none') closeWhatsAppModal();
   }
 });
+
+// ── Upcoming visits (per-customer) ────────────────────────────────────────────
+const VISIT_TYPE_LABELS = {
+  design:       'Design visit',
+  survey:       'Survey',
+  installation: 'Installation',
+  remedial:     'Remedial',
+  workshop:     'Workshop',
+  other:        'Visit',
+};
+
+function _fmtVisitWhen(startIso, endIso) {
+  const s = new Date(startIso);
+  const e = new Date(endIso);
+  const datePart = s.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+  const tFmt = d => d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  return `${datePart} · ${tFmt(s)}–${tFmt(e)}`;
+}
+
+async function renderUpcomingVisits() {
+  const el = document.getElementById('upcoming-visits-section');
+  if (!el) return;
+  const contactId = state.selectedContactId;
+  if (!contactId) { el.innerHTML = ''; return; }
+
+  el.innerHTML = `
+    <div class="notes-header">
+      <span class="notes-header-label">Upcoming visits</span>
+    </div>
+    <div id="upcoming-visits-list" class="text-sm" style="color:var(--stone-deep)">
+      <p style="font-size:0.85rem;padding:4px 0;font-style:italic">Loading…</p>
+    </div>
+  `;
+
+  const from = new Date();
+  const to   = new Date(Date.now() + 366 * 24 * 60 * 60 * 1000);
+  let visits;
+  try {
+    visits = await GET(`/api/visits?from=${from.toISOString()}&to=${to.toISOString()}`);
+  } catch {
+    const list = document.getElementById('upcoming-visits-list');
+    if (list) list.innerHTML = `<p style="font-size:0.85rem;color:#b91c1c;padding:4px 0">Could not load visits.</p>`;
+    return;
+  }
+
+  const cidStr = String(contactId);
+  const mine = (visits || [])
+    .filter(v => String(v.customerId || '') === cidStr && new Date(v.endAt) > from)
+    .sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
+
+  const list = document.getElementById('upcoming-visits-list');
+  if (!list) return;
+
+  if (!mine.length) {
+    list.innerHTML = `<p style="font-size:0.85rem;padding:4px 0;font-style:italic">No upcoming visits scheduled.</p>`;
+    return;
+  }
+
+  const viewer = isViewerOnly();
+  list.innerHTML = mine.map(v => {
+    const label = VISIT_TYPE_LABELS[v.type] || 'Visit';
+    const when  = _fmtVisitWhen(v.startAt, v.endAt);
+    const title = v.title || label;
+    return `
+      <div class="comment-item" style="margin-bottom:6px;display:flex;align-items:flex-start;gap:8px;justify-content:space-between">
+        <div style="flex:1;min-width:0">
+          <div class="comment-text" style="font-weight:500">${escHtml(title)}</div>
+          <div class="comment-meta" style="margin-top:2px">
+            <span style="font-size:0.7rem;background:#ede9fe;color:#6b21a8;border-radius:4px;padding:1px 6px;font-weight:600">${escHtml(label)}</span>
+            <span class="comment-meta-sep">·</span>
+            <span class="comment-date">${escHtml(when)}</span>
+            ${v.location ? `<span class="comment-meta-sep">·</span><span class="comment-date">${escHtml(v.location)}</span>` : ''}
+          </div>
+          ${v.notes ? `<div class="comment-text" style="font-size:0.8rem;opacity:0.75;white-space:pre-wrap;margin-top:4px">${escHtml(v.notes)}</div>` : ''}
+        </div>
+        ${viewer ? '' : `
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn-cancel-note" style="padding:4px 10px;font-size:0.75rem" onclick="editUpcomingVisit(${v.id})">Edit</button>
+          <button class="btn-cancel-note" style="padding:4px 10px;font-size:0.75rem;color:#b91c1c" onclick="cancelUpcomingVisit(${v.id})">Cancel</button>
+        </div>`}
+      </div>
+    `;
+  }).join('');
+}
+
+function _toLocalDtInput(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function editUpcomingVisit(id) {
+  if (isViewerOnly()) return;
+  let visits;
+  const from = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const to   = new Date(Date.now() + 366 * 24 * 60 * 60 * 1000);
+  try {
+    visits = await GET(`/api/visits?from=${from.toISOString()}&to=${to.toISOString()}`);
+  } catch { showToast('Could not load visit', true); return; }
+  const v = (visits || []).find(x => x.id === id);
+  if (!v) { showToast('Visit not found', true); return; }
+
+  const startDef = _toLocalDtInput(new Date(v.startAt));
+  const duration = Math.max(5, Math.round((new Date(v.endAt) - new Date(v.startAt)) / 60000));
+  const label    = VISIT_TYPE_LABELS[v.type] || 'Visit';
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:20px 22px;width:100%;max-width:460px;box-shadow:0 20px 60px rgba(0,0,0,0.25);font-family:inherit">
+      <h3 style="margin:0 0 14px;font-size:1.05rem;font-weight:700;color:#1f2937">Edit ${escHtml(label)}</h3>
+      <label style="display:block;font-size:0.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600">Title</label>
+      <input id="uv-title" type="text" maxlength="120" value="${escHtml(v.title || '')}" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.92rem;box-sizing:border-box">
+      <div style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label style="display:block;font-size:0.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600">Start</label>
+          <input id="uv-start" type="datetime-local" value="${escHtml(startDef)}" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.92rem;box-sizing:border-box">
+        </div>
+        <div style="flex:1">
+          <label style="display:block;font-size:0.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600">Duration (min)</label>
+          <input id="uv-duration" type="number" min="5" max="1440" step="5" value="${duration}" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.92rem;box-sizing:border-box">
+        </div>
+      </div>
+      <label style="display:block;font-size:0.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600">Location</label>
+      <input id="uv-location" type="text" maxlength="300" value="${escHtml(v.location || '')}" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.92rem;box-sizing:border-box">
+      <label style="display:block;font-size:0.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600">Notes</label>
+      <textarea id="uv-notes" maxlength="4000" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.92rem;box-sizing:border-box;resize:vertical;min-height:90px">${escHtml(v.notes || '')}</textarea>
+      <div id="uv-error" style="color:#b91c1c;font-size:0.82rem;margin-top:8px;min-height:18px"></div>
+      <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+        <button id="uv-cancel" type="button" style="padding:8px 16px;border-radius:8px;border:none;font-size:0.88rem;font-weight:600;cursor:pointer;background:#f3f4f6;color:#374151">Cancel</button>
+        <button id="uv-save" type="button" style="padding:8px 16px;border-radius:8px;border:none;font-size:0.88rem;font-weight:600;cursor:pointer;background:#8B2BFF;color:#fff">Save</button>
+      </div>
+    </div>
+  `;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  overlay.querySelector('#uv-cancel').addEventListener('click', () => overlay.remove());
+
+  const saveBtn = overlay.querySelector('#uv-save');
+  saveBtn.addEventListener('click', async () => {
+    const errEl = overlay.querySelector('#uv-error');
+    errEl.textContent = '';
+    const titleV    = overlay.querySelector('#uv-title').value.trim();
+    const startV    = overlay.querySelector('#uv-start').value;
+    const durationV = parseInt(overlay.querySelector('#uv-duration').value, 10);
+    const locationV = overlay.querySelector('#uv-location').value.trim();
+    const notesV    = overlay.querySelector('#uv-notes').value.trim();
+    if (!startV) { errEl.textContent = 'Start time is required.'; return; }
+    if (!Number.isInteger(durationV) || durationV < 5) { errEl.textContent = 'Duration must be ≥ 5 minutes.'; return; }
+    const start = new Date(startV);
+    const end   = new Date(start.getTime() + durationV * 60000);
+    saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+    try {
+      await PATCH_REQ(`/api/visits/${id}`, {
+        type:         v.type,
+        title:        titleV || null,
+        customerId:   v.customerId || null,
+        customerName: v.customerName || null,
+        startAt:      start.toISOString(),
+        endAt:        end.toISOString(),
+        location:     locationV || null,
+        notes:        notesV    || null,
+        assigneeId:   v.assigneeId   || null,
+        assigneeRole: v.assigneeRole || null,
+      });
+      overlay.remove();
+      showToast('Visit updated');
+      renderUpcomingVisits();
+    } catch (e) {
+      saveBtn.disabled = false; saveBtn.textContent = 'Save';
+      errEl.textContent = 'Could not save: ' + (e.message || 'error');
+    }
+  });
+}
+
+async function cancelUpcomingVisit(id) {
+  if (isViewerOnly()) return;
+  if (!confirm('Cancel this visit?')) return;
+  try {
+    await DELETE_REQ(`/api/visits/${id}`);
+    showToast('Visit cancelled');
+    renderUpcomingVisits();
+  } catch {
+    showToast('Failed to cancel visit', true);
+  }
+}
 
 // ── Register implementations with core.js dispatchers ─────────────────────────
 registerRoomTabsRenderer(_renderRoomTabsImpl);

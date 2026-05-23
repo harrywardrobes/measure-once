@@ -246,11 +246,17 @@
           } catch (e) {
             _toast('Visit saved; Google Calendar add failed: ' + (e.message || 'error'), true);
             wrap.remove();
+            if (typeof window.renderUpcomingVisits === 'function') {
+              try { window.renderUpcomingVisits(); } catch (_) {}
+            }
             return;
           }
         }
         _toast('Design visit scheduled');
         wrap.remove();
+        if (typeof window.renderUpcomingVisits === 'function') {
+          try { window.renderUpcomingVisits(); } catch (_) {}
+        }
       } catch (e) {
         submitBtn.disabled = false; submitBtn.textContent = 'Schedule';
         errEl.textContent = 'Could not save: ' + (e.message || 'error');
