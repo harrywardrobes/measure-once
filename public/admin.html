@@ -2374,17 +2374,22 @@
     for (const stage of stages) {
       const groups = [];
       for (const ls of stage.statuses) {
-        const slots = [];
+        // Per the admin's request, the handlers section should only show
+        // statuses and sub-statuses that *themselves* have an action label.
+        // If the lead status has no default action label, hide the whole
+        // group (even if some of its sub-statuses have action labels) —
+        // those sub-statuses aren't reachable on a card without a parent
+        // status action label, so attaching a handler to them would be a
+        // no-op.
         const dflt = (ls.defaultLabel || '').trim();
-        if (dflt) {
-          slots.push({
-            kind: 'ls',
-            stage_key:  stage.key,
-            status_key: ls.defaultStatusKey || '',
-            label:      dflt,
-            rowLabel:   'Default action',
-          });
-        }
+        if (!dflt) continue;
+        const slots = [{
+          kind:       'ls',
+          stage_key:  stage.key,
+          status_key: ls.defaultStatusKey || '',
+          label:      dflt,
+          rowLabel:   'Default action',
+        }];
         for (const sub of ls.substatuses || []) {
           const action = (sub.action_label || '').trim();
           if (!action) continue;
@@ -2396,12 +2401,10 @@
             rowLabel:     `Sub-status${sub.label ? ' · ' + sub.label : ''}`,
           });
         }
-        if (slots.length) {
-          groups.push({
-            ls: { key: ls.key, label: ls.label, isNullRow: !!ls.isNullRow },
-            slots,
-          });
-        }
+        groups.push({
+          ls: { key: ls.key, label: ls.label, isNullRow: !!ls.isNullRow },
+          slots,
+        });
       }
       if (groups.length) out.push({ stage: { key: stage.key, label: stage.label }, groups });
     }
