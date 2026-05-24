@@ -906,6 +906,113 @@ async function main() {
 
     await detailTab.close();
 
+    // ── (G) Viewer role: pill is read-only and does NOT open the picker ──────
+    // Regression guard for the `canEditPipeline()` gate in
+    // _renderWorkflowHeaderImpl (public/customer-detail.js lines 808–832).
+    // If that guard ever regresses, viewer-role users would see a clickable
+    // pill that opens the unified picker and can submit status changes.
+    console.log('\n  [G] Viewer role: lead-status pill is read-only (no picker)');
+
+    const viewerClient = await login(users.viewer.email, PASSWORD);
+
+    // Use a fresh browser context so the viewer session cookie does not
+    // clobber the admin session in the default context above.
+    const viewerCtx = await (browser.createBrowserContext
+      ? browser.createBrowserContext()
+      : browser.createIncognitoBrowserContext());
+    const viewerTab = await viewerCtx.newPage();
+    await viewerTab.setCacheEnabled(false);
+
+    // Inject the viewer session cookie into this context only.
+    {
+      const kv = parseCookieKV(viewerClient.cookie);
+      if (kv) {
+        const { hostname } = new URL(BASE);
+        await viewerTab.setCookie({
+          name: kv.name, value: kv.value,
+          domain: hostname, path: '/', httpOnly: true,
+        });
+      }
+    }
+
+    await viewerTab.goto(`${BASE}/customers/${CONTACT_ID}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+    // Let bootstrap() in customer-detail.html run so viewer-mode body class
+    // is applied (core.js line 337).
+    await new Promise(r => setTimeout(r, 900));
+
+    const viewerModeApplied = await viewerTab.evaluate(() =>
+      document.body.classList.contains('viewer-mode'));
+    record(
+      'viewer login applies viewer-mode body class on /customers/:id',
+      'document.body.classList contains "viewer-mode"',
+      `viewerMode=${viewerModeApplied}`,
+      viewerModeApplied,
+    );
+
+    // Re-establish the workflow-header mount + contact state and render the
+    // pill (mirrors what the real page does after selectContact() succeeds).
+    // The page bootstrap can't render its own header because /api/contacts/:id
+    // 503s under the stripped HUBSPOT_TOKEN, so we inject a #workflow-header
+    // mount the same way probe C does for #workflow-stages.
+    await bootstrapTracker(viewerTab, KEY_A, '');
+    await viewerTab.evaluate(() => {
+      const wv = document.getElementById('workflow-view');
+      if (wv && !document.getElementById('workflow-header')) {
+        const hdr = document.createElement('div');
+        hdr.id = 'workflow-header';
+        wv.insertBefore(hdr, wv.firstChild);
+      }
+      if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+    });
+    await new Promise(r => setTimeout(r, 300));
+
+    const viewerPill = await viewerTab.evaluate(() => {
+      const pill = document.querySelector('#workflow-header .lead-status-badge');
+      return {
+        present:    !!pill,
+        clickable:  !!pill && pill.classList.contains('lsb-clickable'),
+        hasOnclick: !!pill && !!pill.getAttribute('onclick'),
+      };
+    });
+    record(
+      'viewer sees a lead-status pill (read-only)',
+      'pill present in #workflow-header',
+      `present=${viewerPill.present}`,
+      viewerPill.present,
+    );
+    record(
+      'viewer pill does NOT have class lsb-clickable',
+      'classList lacks "lsb-clickable"',
+      `clickable=${viewerPill.clickable}`,
+      !viewerPill.clickable,
+    );
+    record(
+      'viewer pill has no onclick handler that would open the picker',
+      'getAttribute("onclick") returns null/empty',
+      `hasOnclick=${viewerPill.hasOnclick}`,
+      !viewerPill.hasOnclick,
+    );
+
+    // Belt-and-braces: click the pill anyway and confirm no picker popup.
+    if (viewerPill.present) {
+      await viewerTab.click('#workflow-header .lead-status-badge').catch(() => {});
+      await new Promise(r => setTimeout(r, 500));
+      const pickerOpenedForViewer = await viewerTab.evaluate(() =>
+        !!document.getElementById('card-picker-popup'));
+      record(
+        'clicking the viewer pill does NOT open the unified picker popup',
+        '#card-picker-popup is absent from DOM',
+        `pickerOpened=${pickerOpenedForViewer}`,
+        !pickerOpenedForViewer,
+      );
+    }
+
+    await viewerTab.close();
+    await viewerCtx.close().catch(() => {});
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -994,6 +1101,14 @@ async function writeReport(runId, findings) {
     '  regressions where the pill shows the parent label instead of the sub-status',
     '  label. Exercises `_renderWorkflowHeaderImpl` lines 820–823 of',
     '  `customer-detail.js`.',
+    '- **(G) Viewer role — read-only pill**: logs in as the seeded viewer-role user',
+    '  in an isolated browser context, navigates to `/customers/:id`, asserts that',
+    '  `bootstrap()` applied the `viewer-mode` body class, re-renders the workflow',
+    '  header, and asserts that the `.lead-status-badge` pill does NOT have class',
+    '  `lsb-clickable` and has no `onclick` handler. Clicks the pill anyway and',
+    '  confirms `#card-picker-popup` never appears. Regression guard for the',
+    '  `canEditPipeline()` gate in `_renderWorkflowHeaderImpl`',
+    '  (`public/customer-detail.js` lines 808–832).',
     '- **(F) BC + visibilitychange: pill reflects renamed sub-status**: renames the',
     '  selected sub-status via `PATCH /api/admin/lead-substatuses/:id` and fires',
     '  a `lead_substatuses_changed` BroadcastChannel message from a second tab;',

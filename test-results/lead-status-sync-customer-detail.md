@@ -1,13 +1,13 @@
 # Lead-Status Tracker (customer-detail) Sync — E2E Test
 
-- Run ID: `h8dmkf`
-- Date: 2026-05-23T01:50:24.433Z
+- Run ID: `9q63td`
+- Date: 2026-05-24T21:00:31.058Z
 - Command: `npm run test:lead-status-sync-customer-detail`
 
 ## Summary
 
-- Passed: 18 / 18
-- Failed: 0 / 18
+- Passed: 23 / 24
+- Failed: 1 / 24
 
 ## Results
 
@@ -31,6 +31,12 @@
 | PASS | second PATCH renames label for visibilitychange test | status=200 label="PrivTest DT A Renamed Vis" | status=200 label="PrivTest DT A Renamed Vis" |
 | PASS | visibilitychange triggers tracker rail to show new label (no reload) | rail label "PrivTest DT A Renamed Vis" appears within 8 s, render token preserved | found=true labels=["Attempted to Contact","In Progress","Awaiting Photos","Rough Estimate","Design Scheduled","Design In Progress","Open Deal","Design Accepted","Deposit Invoice","Survey Scheduled","Survey In Progress","Survey Sent","Ready For Production","PrivTest DT A Renamed Vis","PrivTest DT Status B"] tokenPreserved=true |
 | PASS | BC-renamed label is gone after visibilitychange refresh | no rail entry with label "PrivTest DT A Renamed BC" | stalePresent=false |
+| FAIL | lead-status pill is rendered in #workflow-header | pill with class lsb-clickable is present | found=false |
+| PASS | viewer login applies viewer-mode body class on /customers/:id | document.body.classList contains "viewer-mode" | viewerMode=true |
+| PASS | viewer sees a lead-status pill (read-only) | pill present in #workflow-header | present=true |
+| PASS | viewer pill does NOT have class lsb-clickable | classList lacks "lsb-clickable" | clickable=false |
+| PASS | viewer pill has no onclick handler that would open the picker | getAttribute("onclick") returns null/empty | hasOnclick=false |
+| PASS | clicking the viewer pill does NOT open the unified picker popup | #card-picker-popup is absent from DOM | pickerOpened=false |
 
 ## Coverage
 
@@ -62,8 +68,42 @@
   synthesises a hidden→visible `visibilitychange` event sequence, and asserts
   the rail picks up the latest label (exercises `workflow-core.js`
   `document.addEventListener("visibilitychange", ...)` → `renderWorkflowStages`).
+- **(C) Unified picker — sub-status rows indented**: re-bootstraps the contact
+  state with `KEY_A` active and no sub-status, enables Puppeteer request
+  interception to mock `GET /api/contacts/:id` and `PATCH /api/contacts/:id`,
+  clicks the `.lead-status-badge.lsb-clickable` pill in `#workflow-header`,
+  and asserts that `.card-picker-opt--sub` rows are present in the popup and
+  appear after the parent `.card-picker-opt[data-lead-status]` row.
+  Exercises `openLeadStatusPicker` in `workflow.js` with `showSubstatuses:true`.
+- **(D) Sub-status click fires exactly one PATCH with both fields**: captures the
+  first `.card-picker-opt--sub` row text, clicks it, and asserts
+  `patchedBodies.length === 1` (exactly one PATCH — duplicate-PATCH regressions
+  are caught). The intercepted body must contain `hs_lead_status` equal to the
+  parent status key and `hw_lead_substatus` starting with `STATUS__`. Exercises
+  `_quickSetLeadStatusWithSub` in `workflow.js`.
+- **(E) Pill primary text matches the clicked sub-status label**: after clicking,
+  calls `renderWorkflowHeader()` and asserts the pill (a) contains a
+  `.ls-pill-parent` span and (b) its primary text (pill text minus the parent
+  span text) equals the sub-status label captured in probe D. This catches
+  regressions where the pill shows the parent label instead of the sub-status
+  label. Exercises `_renderWorkflowHeaderImpl` lines 820–823 of
+  `customer-detail.js`.
+- **(G) Viewer role — read-only pill**: logs in as the seeded viewer-role user
+  in an isolated browser context, navigates to `/customers/:id`, asserts that
+  `bootstrap()` applied the `viewer-mode` body class, re-renders the workflow
+  header, and asserts that the `.lead-status-badge` pill does NOT have class
+  `lsb-clickable` and has no `onclick` handler. Clicks the pill anyway and
+  confirms `#card-picker-popup` never appears. Regression guard for the
+  `canEditPipeline()` gate in `_renderWorkflowHeaderImpl`
+  (`public/customer-detail.js` lines 808–832).
+- **(F) BC + visibilitychange: pill reflects renamed sub-status**: renames the
+  selected sub-status via `PATCH /api/admin/lead-substatuses/:id` and fires
+  a `lead_substatuses_changed` BroadcastChannel message from a second tab;
+  asserts the pill text updates in place to the new label. Then renames again
+  and synthesises a hidden→visible `visibilitychange` sequence; asserts the
+  pill picks up the second rename without a full page reload.
 
-Every BC/visibilitychange assertion also checks `window.__renderToken` is
+Every BC/visibilitychange assertion (probes A–B) also checks `window.__renderToken` is
 preserved across the re-render, proving the tracker updated in place (no full
 page reload).
 
@@ -75,3 +115,6 @@ page reload).
   lead statuses + sub-statuses (which come from PostgreSQL, not HubSpot), seeds
   `state.selectedContact`, and calls `renderWorkflowStages()` — the same entry
   point the BC/visibilitychange handlers in `workflow-core.js` use.
+- For probes C–F, Puppeteer request interception mocks `GET` and `PATCH` on
+  `/api/contacts/:id` so `openLeadStatusPicker` and `_quickSetLeadStatusWithSub`
+  complete successfully without HubSpot. All other requests are passed through.
