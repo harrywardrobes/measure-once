@@ -897,6 +897,98 @@ async function main() {
         );
 
         await senderTab2.close();
+
+        // ── (G) Clear status from the unified picker also clears sub-status ───
+        console.log('\n  [G] Unified picker "Clear status" clears both hs_lead_status and hw_lead_substatus');
+
+        // After (D)/(E)/(F) state.selectedContact has hs_lead_status=KEY_A
+        // and hw_lead_substatus=KEY_A__STEP_ONE (the value never changed —
+        // only its label was renamed). Re-open the picker against that state.
+        const pillStillThere = await detailTab.evaluate(() =>
+          !!document.querySelector('#workflow-header .lead-status-badge.lsb-clickable'));
+        record(
+          'lead-status pill is still clickable before Clear-status probe',
+          'pill with class lsb-clickable is present',
+          `found=${pillStillThere}`,
+          pillStillThere,
+        );
+
+        if (pillStillThere) {
+          await detailTab.click('#workflow-header .lead-status-badge.lsb-clickable');
+          await detailTab.waitForSelector('#card-picker-popup .card-picker-opt--clear', { timeout: 6000 })
+            .catch(() => {});
+
+          const clearBtnState = await detailTab.evaluate(() => {
+            const btn = document.querySelector('#card-picker-popup .card-picker-opt--clear');
+            return {
+              present:  !!btn,
+              disabled: btn ? (btn.disabled || btn.classList.contains('card-picker-opt--disabled')) : true,
+              text:     btn ? btn.textContent.trim() : '',
+            };
+          });
+          record(
+            'unified picker shows an enabled "Clear status" button when a status is set',
+            'card-picker-opt--clear button present and enabled',
+            `present=${clearBtnState.present} disabled=${clearBtnState.disabled} text="${clearBtnState.text}"`,
+            clearBtnState.present && !clearBtnState.disabled,
+          );
+
+          patchedBodies.length = 0;
+
+          await detailTab.evaluate(() => {
+            const btn = document.querySelector('#card-picker-popup .card-picker-opt--clear');
+            if (btn) btn.click();
+          });
+
+          // Allow the async PATCH (intercepted above) to fire.
+          await new Promise(r => setTimeout(r, 1500));
+
+          record(
+            'clicking "Clear status" fires exactly one PATCH request',
+            'patchedBodies.length === 1',
+            `count=${patchedBodies.length}`,
+            patchedBodies.length === 1,
+          );
+
+          const clrBody = patchedBodies[0] || {};
+          record(
+            'PATCH body clears hs_lead_status',
+            `hs_lead_status === ""`,
+            `hs_lead_status=${JSON.stringify(clrBody.hs_lead_status)}`,
+            clrBody.hs_lead_status === '',
+          );
+          record(
+            'PATCH body clears hw_lead_substatus alongside hs_lead_status',
+            `hw_lead_substatus === ""`,
+            `hw_lead_substatus=${JSON.stringify(clrBody.hw_lead_substatus)}`,
+            clrBody.hw_lead_substatus === '',
+          );
+
+          // Re-render the header so the pill reflects the optimistic state.
+          await detailTab.evaluate(() => {
+            if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+          });
+          await new Promise(r => setTimeout(r, 400));
+
+          const emptyPill = await detailTab.evaluate(() => {
+            const pill = document.querySelector('#workflow-header .lead-status-badge');
+            if (!pill) return { present: false };
+            return {
+              present:  true,
+              isEmpty:  pill.classList.contains('lsb-empty'),
+              text:     pill.textContent.trim(),
+              hasParent: !!pill.querySelector('.ls-pill-parent'),
+            };
+          });
+          const nullLabel = await detailTab.evaluate(() =>
+            (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' && NULL_LEAD_STATUS_LABEL) || 'No status');
+          record(
+            'pill reverts to the "No status" empty state after Clear status',
+            `pill has class lsb-empty, text="${nullLabel}", no .ls-pill-parent span`,
+            `present=${emptyPill.present} isEmpty=${emptyPill.isEmpty} text="${emptyPill.text}" hasParent=${emptyPill.hasParent}`,
+            emptyPill.present && emptyPill.isEmpty && emptyPill.text === nullLabel && !emptyPill.hasParent,
+          );
+        }
       }
     }
 
@@ -1115,6 +1207,15 @@ async function writeReport(runId, findings) {
     '  asserts the pill text updates in place to the new label. Then renames again',
     '  and synthesises a hidden→visible `visibilitychange` sequence; asserts the',
     '  pill picks up the second rename without a full page reload.',
+    '- **(G) Unified picker "Clear status" clears both fields**: re-opens the picker',
+    '  while the contact still has `hs_lead_status=KEY_A` and an active sub-status,',
+    '  clicks the `.card-picker-opt--clear` button (calls',
+    '  `quickSetLeadStatus(contactId, "")` in `workflow.js`), and asserts the',
+    '  intercepted PATCH body sets both `hs_lead_status` and `hw_lead_substatus`',
+    '  to `""` (regression guard: the bare clear-status call previously left a',
+    '  stale `hw_lead_substatus` value attached to the contact). Then calls',
+    '  `renderWorkflowHeader()` and asserts the pill reverts to the `lsb-empty`',
+    '  "No status" empty state with no `.ls-pill-parent` span.',
     '',
     'Every BC/visibilitychange assertion (probes A–B) also checks `window.__renderToken` is',
     'preserved across the re-render, proving the tracker updated in place (no full',
