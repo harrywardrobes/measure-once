@@ -75,6 +75,9 @@ const LBL_KEY_CONFLICT_LS = 'PRIVTEST_CAH_CONFLICT'; // key in lead_status_confi
 const LBL_KEY_ANAME       = 'privtest_cah_aname';    // status_key for the action_name probe
 // (F) action_name snake_case enforcement fixtures
 const LBL_KEY_NAMING      = 'privtest_cah_naming';   // status_key for the editor-modal naming probe
+// (H) intermediateLeadStatus on wizard open
+const LBL_KEY_ILS         = 'privtest_cah_ils';      // status_key for the intermediateLeadStatus probe
+const INTERMEDIATE_LS     = 'PRIVTEST_INPROGRESS';   // value sent on PATCH /api/contacts/:id when wizard opens
 
 const HANDLER_NAME_DV         = 'PrivTest design visit handler';
 const HANDLER_NAME_PC         = 'PrivTest phone summary handler';
@@ -84,6 +87,7 @@ const HANDLER_NAME_CONFLICT_A = 'PrivTest conflict handler A';
 const HANDLER_NAME_CONFLICT_B = 'PrivTest conflict handler B';
 const HANDLER_NAME_ANAME      = 'PrivTest action-name handler';
 const HANDLER_NAME_NAMING     = 'PrivTest naming handler';
+const HANDLER_NAME_ILS        = 'PrivTest intermediate-status handler';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function parseCookieKV(jar) {
@@ -108,10 +112,10 @@ async function purgeFixtures(pool) {
   // cascades to any binding pointing at it.
   await pool.query(
     `DELETE FROM card_action_handlers
-       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [HANDLER_NAME_DV, HANDLER_NAME_PC, HANDLER_NAME_LBL, HANDLER_NAME_SUB,
      HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B, HANDLER_NAME_ANAME,
-     HANDLER_NAME_NAMING]
+     HANDLER_NAME_NAMING, HANDLER_NAME_ILS]
   );
   // Catalogue-reorder fixtures (probe G).  Tables may not exist on first run.
   try {
@@ -1529,6 +1533,107 @@ async function main() {
       stripLabel?.label === 'Send Quote',
     );
 
+    // ── (H) intermediateLeadStatus PATCH fired on wizard open ────────────────
+    //
+    // Seeds a `start_design_visit` handler with `config.intermediateLeadStatus`
+    // set and bound to (sales, LBL_KEY_ILS).  Clicking a bound `.eq-card-action`
+    // strip must:
+    //   H.1  Fire a PATCH /api/contacts/:id whose JSON body carries
+    //        `hs_lead_status` equal to the configured intermediate value.
+    //   H.2  Still open the wizard (.dv-wizard-backdrop visible) even though
+    //        the PATCH returns non-2xx — the harness strips HUBSPOT_TOKEN, so
+    //        PATCH /api/contacts/:id naturally returns 503 via
+    //        `requireHubspotToken`, exercising the .catch / non-ok branch in
+    //        public/card-action-handlers.js lines 388–395.
+    console.log('\n  [H] intermediateLeadStatus PATCH on wizard open');
+
+    const createIlsRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name:     HANDLER_NAME_ILS,
+      type:     'start_design_visit',
+      config:   { intermediateLeadStatus: INTERMEDIATE_LS, defaultDurationMin: 90 },
+      bindings: [{ stage_key: 'sales', status_key: LBL_KEY_ILS }],
+    });
+    record(
+      '(H) POST handler with intermediateLeadStatus returns 201',
+      `status=201; config.intermediateLeadStatus="${INTERMEDIATE_LS}"`,
+      `status=${createIlsRes.status} id=${createIlsRes.json?.id} ils=${createIlsRes.json?.config?.intermediateLeadStatus}`,
+      createIlsRes.status === 201
+        && Number.isInteger(createIlsRes.json?.id)
+        && createIlsRes.json?.config?.intermediateLeadStatus === INTERMEDIATE_LS,
+    );
+    const ilsHandlerId = createIlsRes.json?.id;
+
+    // Capture PATCH /api/contacts/:id requests with their body.
+    const ilsPatches = [];
+    const ilsReqListener = (req) => {
+      const u = req.url();
+      if (req.method() === 'PATCH' && /\/api\/contacts\/[^/?#]+(?:$|\?)/.test(u)) {
+        let body = null;
+        try { body = JSON.parse(req.postData() || 'null'); } catch {}
+        ilsPatches.push({ url: u, body });
+      }
+    };
+    salesTab.on('request', ilsReqListener);
+
+    const FAKE_CONTACT_ID_ILS = 'privtest-cah-ils-001';
+    await salesTab.evaluate(({ id, name, email, handlerId }) => {
+      if (typeof window.loadCardActionHandlers === 'function') {
+        return window.loadCardActionHandlers().then(() => {
+          const div = document.createElement('div');
+          div.className = 'eq-card-action';
+          div.id = '__cah-test-card-ils';
+          div.setAttribute('data-card-action-handler-id',    handlerId);
+          div.setAttribute('data-card-action-handler-type',  'start_design_visit');
+          div.setAttribute('data-card-action-contact-id',    id);
+          div.setAttribute('data-card-action-contact-name',  name);
+          div.setAttribute('data-card-action-contact-email', email);
+          div.textContent = 'Start design visit';
+          document.body.appendChild(div);
+        });
+      }
+    }, { id: FAKE_CONTACT_ID_ILS, name: 'PrivTest Contact ILS', email: 'ils@privtest.local', handlerId: ilsHandlerId });
+
+    await salesTab.evaluate(() => document.getElementById('__cah-test-card-ils').click());
+
+    // H.2 — wizard opens despite the PATCH failure path.
+    const wizardOpened = await pollPage(
+      salesTab,
+      () => document.querySelector('.dv-wizard-backdrop .dv-wizard') ? 'open' : null,
+      null,
+      6000,
+    );
+    record(
+      '(H.2) wizard opens even though PATCH /api/contacts/:id returns non-2xx',
+      '.dv-wizard-backdrop .dv-wizard present (HUBSPOT_TOKEN-stripped harness → PATCH 503)',
+      `result=${wizardOpened}`,
+      wizardOpened === 'open',
+    );
+
+    // Give the in-flight PATCH a moment to land in our request log.
+    await new Promise(r => setTimeout(r, 600));
+    salesTab.off('request', ilsReqListener);
+
+    // H.1 — PATCH /api/contacts/<FAKE_CONTACT_ID_ILS> was issued with the
+    // configured intermediate status as the hs_lead_status body field.
+    const ilsHit = ilsPatches.find(p =>
+      p.url.includes(`/api/contacts/${FAKE_CONTACT_ID_ILS}`)
+        && p.body && p.body.hs_lead_status === INTERMEDIATE_LS,
+    );
+    record(
+      '(H.1) PATCH /api/contacts/:id fired with hs_lead_status on wizard open',
+      `one PATCH to /api/contacts/${FAKE_CONTACT_ID_ILS} with body.hs_lead_status="${INTERMEDIATE_LS}"`,
+      `patches=${JSON.stringify(ilsPatches)}`,
+      !!ilsHit,
+    );
+
+    // Close the wizard so we leave the page clean for any later probes.
+    await salesTab.evaluate(() => {
+      const btn = document.querySelector('.dv-wizard-backdrop .dv-wizard-close');
+      if (btn) btn.click();
+      const bd = document.querySelector('.dv-wizard-backdrop');
+      if (bd) bd.remove();
+    });
+
     await salesTab.close();
 
     // ── (F) action_name snake_case enforcement in the editor modal ────────────
@@ -2151,6 +2256,15 @@ async function writeReport(runId, findings) {
     '    sender\'s context).',
     '  - A follow-up GET on the catalogue endpoint confirms the swapped',
     '    `sort_order` values were persisted server-side.',
+    '- **(H) intermediateLeadStatus PATCH on wizard open** (task #652): a',
+    '  `start_design_visit` handler with `config.intermediateLeadStatus` is',
+    '  seeded and bound to `(sales, LBL_KEY_ILS)`.  An injected',
+    '  `.eq-card-action` strip is clicked; the test asserts (H.1) a PATCH to',
+    '  `/api/contacts/:id` was issued with `body.hs_lead_status` equal to the',
+    '  configured value, and (H.2) the wizard (`.dv-wizard-backdrop .dv-wizard`)',
+    '  still opens even though the PATCH naturally returns 503 in this harness',
+    '  (HUBSPOT_TOKEN stripped → `requireHubspotToken` rejects).  This exercises',
+    '  the `.catch` / non-ok branch in `public/card-action-handlers.js` 388–395.',
     '',
     '## Notes',
     '',
