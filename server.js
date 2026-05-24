@@ -3805,23 +3805,11 @@ app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asyn
 // A handler can be bound to a (stage_key, status_key) pair OR a
 // lead_substatus_id. Both binding shapes are mutually exclusive per row, and
 // each target slot can hold at most one handler.
-const CARD_ACTION_HANDLER_TYPES = new Set([
-  'add_design_visit_to_calendar',
-  'summarise_phone_call',
-  'show_message',
-  'start_design_visit',
-]);
-
-function _validateHandlerConfig(type, configRaw) {
-  let cfg = configRaw;
-  if (cfg == null) cfg = {};
-  if (typeof cfg !== 'object' || Array.isArray(cfg)) {
-    return { error: 'config must be a JSON object.' };
-  }
-  if (JSON.stringify(cfg).length > 4096) {
-    return { error: 'config payload is too large (max 4KB).' };
-  }
-  if (type === 'add_design_visit_to_calendar') {
+// Per-type config validators. The set of valid handler types is derived from
+// the keys of this map, so adding a new handler type here automatically adds
+// it to CARD_ACTION_HANDLER_TYPES — the two cannot drift out of sync.
+const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
+  add_design_visit_to_calendar(cfg) {
     const out = {};
     if (cfg.defaultDurationMin !== undefined) {
       const n = parseInt(cfg.defaultDurationMin, 10);
@@ -3839,8 +3827,8 @@ function _validateHandlerConfig(type, configRaw) {
       out.addToGoogleCalendar = !!cfg.addToGoogleCalendar;
     }
     return { value: out };
-  }
-  if (type === 'summarise_phone_call') {
+  },
+  summarise_phone_call(cfg) {
     const out = {};
     if (cfg.notePrefix !== undefined) {
       const v = String(cfg.notePrefix || '');
@@ -3851,8 +3839,8 @@ function _validateHandlerConfig(type, configRaw) {
       out.draftEmailSubject = String(cfg.draftEmailSubject || '').slice(0, 200);
     }
     return { value: out };
-  }
-  if (type === 'show_message') {
+  },
+  show_message(cfg) {
     const message = String(cfg.message || '').trim();
     if (!message) return { error: 'message is required for show_message handlers.' };
     if (message.length > 2000) return { error: 'message must be 2000 characters or fewer.' };
@@ -3861,8 +3849,8 @@ function _validateHandlerConfig(type, configRaw) {
       out.title = String(cfg.title || '').slice(0, 120);
     }
     return { value: out };
-  }
-  if (type === 'start_design_visit') {
+  },
+  start_design_visit(cfg) {
     const out = {};
     if (cfg.defaultDurationMin !== undefined) {
       const n = parseInt(cfg.defaultDurationMin, 10);
@@ -3890,8 +3878,25 @@ function _validateHandlerConfig(type, configRaw) {
       out.termsAndConditions = v;
     }
     return { value: out };
+  },
+};
+
+const CARD_ACTION_HANDLER_TYPES = new Set(
+  Object.keys(CARD_ACTION_HANDLER_CONFIG_VALIDATORS)
+);
+
+function _validateHandlerConfig(type, configRaw) {
+  let cfg = configRaw;
+  if (cfg == null) cfg = {};
+  if (typeof cfg !== 'object' || Array.isArray(cfg)) {
+    return { error: 'config must be a JSON object.' };
   }
-  return { error: 'Unknown handler type.' };
+  if (JSON.stringify(cfg).length > 4096) {
+    return { error: 'config payload is too large (max 4KB).' };
+  }
+  const validator = CARD_ACTION_HANDLER_CONFIG_VALIDATORS[type];
+  if (!validator) return { error: 'Unknown handler type.' };
+  return validator(cfg);
 }
 
 function _validateHandlerBinding(b) {
