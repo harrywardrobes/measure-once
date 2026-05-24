@@ -18,10 +18,18 @@
 //   NEG       Input-validation probes on the PATCH endpoint
 //   PROD      Second server with NODE_ENV=production — PATCH returns 404,
 //             seed-contacts-cache returns 404, dev-mode returns false
+//   REAL-HS   (opt-in) Third dev server pointed at real HubSpot. Verifies
+//             /api/open-leads and /api/contacts-lead-status-counts apply the
+//             hw_test_user filter against live data. Only runs when
+//             PRIVTEST_USE_HUBSPOT_TOKEN=1 and HUBSPOT_TOKEN are set.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:hw-test-user
 //   PRIVTEST_ALLOW_SHARED_DB=1      npm run test:hw-test-user
+//
+//   # Opt-in: also run the [REAL-HS] phase against the live HubSpot account
+//   PRIVTEST_USE_HUBSPOT_TOKEN=1 HUBSPOT_TOKEN=… \
+//     DATABASE_URL_TEST=<isolated-db> npm run test:hw-test-user
 
 const fs   = require('fs');
 const path = require('path');
@@ -47,8 +55,10 @@ require('dotenv').config();
 // ── ports ──────────────────────────────────────────────────────────────────────
 const MOCK_HS_PORT = TEST_PORT + 2;   // e.g. 5052 — mock HubSpot
 const PROD_PORT    = TEST_PORT + 1;   // e.g. 5051 — production server
+const REAL_HS_PORT = TEST_PORT + 3;   // e.g. 5053 — dev server pointed at real HubSpot
 const MOCK_HS_URL  = `http://127.0.0.1:${MOCK_HS_PORT}`;
 const PROD_BASE    = `http://127.0.0.1:${PROD_PORT}`;
+const REAL_HS_BASE = `http://127.0.0.1:${REAL_HS_PORT}`;
 
 // ── spawn dev server (with mock HubSpot) ──────────────────────────────────────
 function spawnDevServer(connStr) {
@@ -118,6 +128,124 @@ async function waitForProdServer(timeoutMs = 15000) {
     await new Promise(r => setTimeout(r, 200));
   }
   throw new Error(`Production test server did not start on ${PROD_BASE} within ${timeoutMs}ms`);
+}
+
+// ── spawn dev server pointed at the REAL HubSpot API ──────────────────────────
+// Used only when PRIVTEST_USE_HUBSPOT_TOKEN=1 and HUBSPOT_TOKEN is set.
+// Does NOT override HUBSPOT_API_URL — requests go to api.hubapi.com.
+function spawnRealHubspotServer(connStr) {
+  const token = process.env.HUBSPOT_TOKEN;
+  const env = {
+    ...process.env,
+    DATABASE_URL:         connStr,
+    PORT:                 String(REAL_HS_PORT),
+    NODE_ENV:             'development',
+    HUBSPOT_ACCESS_TOKEN: token,
+    HUBSPOT_TOKEN:        token,
+    TURNSTILE_SECRET_KEY: '',
+    TURNSTILE_SITE_KEY:   '',
+    SMTP_HOST: '', SMTP_PORT: '', SMTP_USER: '', SMTP_PASS: '', SMTP_FROM: '',
+    GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '',
+    QB_CLIENT_ID: '', QB_CLIENT_SECRET: '',
+    APP_URL:  REAL_HS_BASE,
+    ADMIN_EMAILS: '',
+  };
+  delete env.HUBSPOT_API_URL;
+  const child = spawn('node', ['server.js'], {
+    cwd: path.resolve(__dirname, '..', '..'),
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const logBuf = [];
+  child.stdout.on('data', d => logBuf.push(d.toString()));
+  child.stderr.on('data', d => logBuf.push(d.toString()));
+  return { child, logBuf };
+}
+
+async function waitForRealHubspotServer(timeoutMs = 15000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const r = await fetch(`${REAL_HS_BASE}/api/turnstile-config`);
+      if (r.status < 500) return true;
+    } catch {}
+    await new Promise(r => setTimeout(r, 200));
+  }
+  throw new Error(`Real-HubSpot test server did not start on ${REAL_HS_BASE} within ${timeoutMs}ms`);
+}
+
+// Scoped HTTP client for the real-HubSpot dev server.
+function makeRealHsClient(initialCookie = null) {
+  let jar = initialCookie;
+  async function req(method, urlPath, { body } = {}) {
+    const h = { 'Accept': 'application/json' };
+    if (body !== undefined) h['Content-Type'] = 'application/json';
+    if (jar) h['Cookie'] = jar;
+    const res = await fetch(`${REAL_HS_BASE}${urlPath}`, {
+      method, headers: h,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      redirect: 'manual',
+    });
+    const sc = res.headers.get('set-cookie');
+    if (sc) {
+      const first = sc.split(',').find(p => p.trim().startsWith('connect.sid=')) || sc;
+      const kv = first.split(';')[0].trim();
+      if (kv.startsWith('connect.sid=')) jar = kv;
+    }
+    const text = await res.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch {}
+    return { status: res.status, json };
+  }
+  return {
+    get:   (p)       => req('GET',   p),
+    post:  (p, body) => req('POST',  p, { body }),
+    patch: (p, body) => req('PATCH', p, { body }),
+  };
+}
+
+async function loginRealHs(pool, email) {
+  const crypto = require('crypto');
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error('SESSION_SECRET is required for loginRealHs');
+  const TTL = 7 * 24 * 60 * 60;
+  const r = await pool.query(
+    `SELECT id, email, first_name, last_name, profile_image_url,
+            privilege_level, onboarding_status
+     FROM users WHERE LOWER(email) = LOWER($1)`,
+    [email],
+  );
+  if (!r.rows[0]) throw new Error(`loginRealHs: user not found — ${email}`);
+  const u = r.rows[0];
+  const sessionUser = {
+    claims: {
+      sub: u.id, email: u.email,
+      first_name: u.first_name || null,
+      last_name:  u.last_name  || null,
+      profile_image_url: u.profile_image_url || null,
+    },
+    privilege_level:   u.privilege_level   || 'member',
+    onboarding_status: u.onboarding_status || 'active',
+    expires_at: Math.floor(Date.now() / 1000) + TTL,
+  };
+  const sid    = crypto.randomUUID();
+  const expire = new Date(Date.now() + TTL * 1000);
+  const sess   = JSON.stringify({
+    cookie: {
+      originalMaxAge: TTL * 1000, expires: expire.toISOString(),
+      secure: false, httpOnly: true, path: '/', sameSite: 'lax',
+    },
+    passport: { user: sessionUser },
+  });
+  await pool.query(
+    `INSERT INTO sessions (sid, sess, expire) VALUES ($1, $2::jsonb, $3)
+     ON CONFLICT (sid) DO UPDATE SET sess = EXCLUDED.sess, expire = EXCLUDED.expire`,
+    [sid, sess, expire],
+  );
+  const sig = crypto.createHmac('sha256', secret)
+    .update(sid).digest('base64').replace(/=+$/, '');
+  const cookie = `connect.sid=${encodeURIComponent('s:' + sid + '.' + sig)}`;
+  return makeRealHsClient(cookie);
 }
 
 // ── prod client: scoped to PROD_BASE ─────────────────────────────────────────
@@ -261,12 +389,15 @@ async function main() {
 
   let prodChild  = null;
   let prodExited = false;
+  let realHsChild  = null;
+  let realHsExited = false;
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
     if (teardownInFlight) return;
     teardownInFlight = true;
     try { if (!devExited)          child.kill('SIGTERM'); } catch {}
     try { if (prodChild && !prodExited) prodChild.kill('SIGTERM'); } catch {}
+    try { if (realHsChild && !realHsExited) realHsChild.kill('SIGTERM'); } catch {}
     try { await stopMockHubspot(mockHsServer); } catch {}
     try { await cleanupTestData(pool); } catch {}
     await pool.end().catch(() => {});
@@ -700,6 +831,177 @@ async function main() {
         false,
         'Investigate why the production test server failed to start',
       );
+    }
+  }
+
+  // ── [REAL-HS] Live HubSpot filter probes (opt-in) ─────────────────────────
+  // Runs only when PRIVTEST_USE_HUBSPOT_TOKEN=1 and a real HUBSPOT_TOKEN is
+  // set. Spawns a third dev server with NO HUBSPOT_API_URL override so that
+  // /api/open-leads and /api/contacts-lead-status-counts call the real
+  // HubSpot API. Verifies the dev hw_test_user filter is applied:
+  //   • every contact returned by /api/open-leads has hw_test_user=true
+  //   • per-key counts from /api/contacts-lead-status-counts are <= the
+  //     unfiltered counts (after toggling dev-filter OFF and back ON), and
+  //     the sum of dev-filtered counts matches the total of contacts
+  //     returned by /api/contacts-all in dev mode (which only includes
+  //     hw_test_user=true contacts).
+  console.log('\n  [REAL-HS] Live HubSpot dev-filter probes (PRIVTEST_USE_HUBSPOT_TOKEN=1)');
+
+  const realHsOptIn = process.env.PRIVTEST_USE_HUBSPOT_TOKEN === '1'
+    && !!process.env.HUBSPOT_TOKEN;
+
+  if (!realHsOptIn) {
+    console.log('  (skipped — set PRIVTEST_USE_HUBSPOT_TOKEN=1 and HUBSPOT_TOKEN to enable)');
+  } else {
+    let realHsClient = null;
+    try {
+      const realSpawn = spawnRealHubspotServer(connStr);
+      realHsChild = realSpawn.child;
+      realHsChild.on('exit', () => { realHsExited = true; });
+      await waitForRealHubspotServer();
+      console.log(`  Real-HubSpot server up at ${REAL_HS_BASE}`);
+      realHsClient = await loginRealHs(pool, users.admin.email);
+      console.log(`  [REAL-HS] Session injected for ${users.admin.email}`);
+    } catch (e) {
+      console.warn(`  [REAL-HS] real-HubSpot server failed to start: ${e.message}`);
+      record(
+        'REAL-HS-00: real-HubSpot dev server is reachable',
+        'server up + admin session',
+        `failed: ${e.message}`,
+        false,
+      );
+    }
+
+    if (realHsClient) {
+      // Make sure the dev-filter toggle is ON before measuring filtered values.
+      const onPatch = await realHsClient.patch('/api/admin/hubspot/dev-filter', { enabled: true });
+      record(
+        'REAL-HS-01: PATCH /api/admin/hubspot/dev-filter enabled=true succeeds',
+        'status=200 enabled=true',
+        `status=${onPatch.status} enabled=${onPatch.json?.enabled}`,
+        onPatch.status === 200 && onPatch.json?.enabled === true,
+      );
+
+      // /api/open-leads — every result must be hw_test_user=true.
+      const openLeads = await realHsClient.get('/api/open-leads');
+      record(
+        'REAL-HS-02: /api/open-leads responds 200 against real HubSpot (dev-filter on)',
+        'status=200',
+        `status=${openLeads.status}`,
+        openLeads.status === 200,
+      );
+      if (openLeads.status === 200) {
+        const results = openLeads.json?.results || [];
+        const offenders = results
+          .filter(c => c.properties?.hw_test_user !== 'true')
+          .map(c => c.id);
+        record(
+          'REAL-HS-03: every /api/open-leads result has hw_test_user=true',
+          'offenders=[] (total: ' + results.length + ')',
+          'offenders=[' + offenders.join(',') + ']',
+          offenders.length === 0,
+          results.length === 0
+            ? 'WARNING: real HubSpot returned 0 open leads with hw_test_user=true — assertion is vacuous. Tag at least one OPEN_DEAL contact in HubSpot with hw_test_user=true for a meaningful run.'
+            : '',
+        );
+      }
+
+      // /api/contacts-lead-status-counts — cross-check against /api/contacts-all.
+      const countsOn = await realHsClient.get('/api/contacts-lead-status-counts');
+      record(
+        'REAL-HS-04: /api/contacts-lead-status-counts responds 200 (dev-filter on)',
+        'status=200',
+        `status=${countsOn.status}`,
+        countsOn.status === 200,
+      );
+
+      // Pull the dev-filtered contacts-all list (which only returns
+      // hw_test_user=true contacts in dev mode) and group by hs_lead_status.
+      // /api/contacts-all paginates server-side; fetch enough pages to cover
+      // the whole filtered set (capped at 50 pages × 200 = 10k contacts).
+      const tally = {};
+      let tallyTotal = 0;
+      let contactsAllOk = true;
+      let contactsAllStatus = 0;
+      for (let page = 1; page <= 50; page += 1) {
+        const r = await realHsClient.get(`/api/contacts-all?page=${page}&limit=200`);
+        contactsAllStatus = r.status;
+        if (r.status !== 200) { contactsAllOk = false; break; }
+        const results = r.json?.results || [];
+        for (const c of results) {
+          const k = c.properties?.hs_lead_status || '__no_status__';
+          tally[k] = (tally[k] || 0) + 1;
+          tallyTotal += 1;
+        }
+        const totalPages = r.json?.totalPages || 1;
+        if (page >= totalPages) break;
+      }
+      record(
+        'REAL-HS-05: /api/contacts-all paginates cleanly in dev mode',
+        'status=200 across pages',
+        `last status=${contactsAllStatus}`,
+        contactsAllOk,
+      );
+
+      if (countsOn.status === 200 && contactsAllOk) {
+        // Every key whose count > 0 in the filtered counts must equal the
+        // tally derived from contacts-all (the filtered ground truth).
+        const counts = countsOn.json || {};
+        const mismatches = [];
+        const keys = new Set([...Object.keys(counts), ...Object.keys(tally)]);
+        for (const k of keys) {
+          const cv = counts[k] ?? 0;
+          const tv = tally[k]  ?? 0;
+          if (cv !== tv) mismatches.push(`${k}: counts=${cv} tally=${tv}`);
+        }
+        record(
+          'REAL-HS-06: per-key dev counts match contacts-all tally (hw_test_user-only)',
+          'mismatches=[]  tallyTotal=' + tallyTotal,
+          'mismatches=[' + mismatches.join(' ; ') + ']',
+          mismatches.length === 0,
+          tallyTotal === 0
+            ? 'WARNING: real HubSpot returned 0 contacts with hw_test_user=true — assertion is vacuous. Tag at least one contact in HubSpot with hw_test_user=true for a meaningful run.'
+            : '',
+        );
+      }
+
+      // Toggle dev-filter OFF and re-check counts: for every key, the
+      // unfiltered count must be >= the filtered count.
+      const offPatch = await realHsClient.patch('/api/admin/hubspot/dev-filter', { enabled: false });
+      record(
+        'REAL-HS-07: PATCH /api/admin/hubspot/dev-filter enabled=false succeeds',
+        'status=200 enabled=false',
+        `status=${offPatch.status} enabled=${offPatch.json?.enabled}`,
+        offPatch.status === 200 && offPatch.json?.enabled === false,
+      );
+
+      const countsOff = await realHsClient.get('/api/contacts-lead-status-counts');
+      record(
+        'REAL-HS-08: /api/contacts-lead-status-counts responds 200 (dev-filter off)',
+        'status=200',
+        `status=${countsOff.status}`,
+        countsOff.status === 200,
+      );
+
+      if (countsOn.status === 200 && countsOff.status === 200) {
+        const on  = countsOn.json  || {};
+        const off = countsOff.json || {};
+        const violations = [];
+        for (const k of Object.keys(on)) {
+          const onV  = on[k]  ?? 0;
+          const offV = off[k] ?? 0;
+          if (onV > offV) violations.push(`${k}: on=${onV} > off=${offV}`);
+        }
+        record(
+          'REAL-HS-09: dev-filtered counts <= unfiltered counts for every key',
+          'violations=[]',
+          'violations=[' + violations.join(' ; ') + ']',
+          violations.length === 0,
+        );
+      }
+
+      // Restore dev-filter to ON so the test leaves the DB in a sane state.
+      await realHsClient.patch('/api/admin/hubspot/dev-filter', { enabled: true }).catch(() => {});
     }
   }
 
