@@ -17,7 +17,12 @@
 //   (C) Substatus binding wins over a label binding when both exist for the
 //       same (stage_key, status_key) the substatus belongs to.
 //   (D) Conflict-fix flow: the ⚠ Fix button appears for a duplicate-bound
-//       slot and the resolver modal removes the conflict end-to-end.
+//       slot and the resolver modal removes the conflict end-to-end. Also
+//       covers the admin in-page conflict banner
+//       (#card-action-handlers-conflict-banner) — D.banner-1: appears and
+//       lists the conflicting slot; D.banner-2: its Fix button opens the
+//       resolver modal for the right slot; D.banner-3: disappears once the
+//       duplicate is removed.
 //   (E) action_name field: a handler seeded with config.action_name =
 //       'send_quote' shows the badge in the admin table (E.1), causes
 //       cardActionHandlerAttrs() to emit data-card-action-name="send_quote"
@@ -1258,6 +1263,82 @@ async function main() {
       return Promise.all([p1, p2]);
     });
 
+    // (D.banner-1) The in-page conflict banner
+    // (#card-action-handlers-conflict-banner) appears once
+    // loadCardActionHandlersAdmin() finishes and the conflict count > 0. Its
+    // body must list our conflicted slot — the lead-status label
+    // "PrivTest Conflict Status" — and both handler names.
+    const bannerState = await pollPage(
+      conflictAdminTab,
+      () => {
+        const banner = document.getElementById('card-action-handlers-conflict-banner');
+        if (!banner) return null;
+        if (banner.style.display === 'none') return null;
+        if (!banner.innerHTML.trim()) return null;
+        return {
+          visible: true,
+          text:    banner.textContent || '',
+          fixBtns: banner.querySelectorAll('[data-cah-fix]').length,
+        };
+      },
+      null,
+      10000,
+    );
+    const bannerListsSlot =
+      !!bannerState
+      && bannerState.text.includes('PrivTest Conflict Status')
+      && bannerState.text.includes(HANDLER_NAME_CONFLICT_A)
+      && bannerState.text.includes(HANDLER_NAME_CONFLICT_B)
+      && bannerState.fixBtns >= 1;
+    record(
+      '(D.banner-1) conflict banner is visible and lists the conflicting slot',
+      '#card-action-handlers-conflict-banner shown; body mentions slot label + both handler names; ≥1 [data-cah-fix] button',
+      `state=${JSON.stringify(bannerState)}`,
+      bannerListsSlot,
+    );
+
+    // (D.banner-2) Clicking the banner's Fix button opens the conflict
+    // resolver modal for the correct slot. We assert the modal lists both
+    // seeded handlers, then close it so the existing in-table Fix flow below
+    // remains the authoritative path that actually removes a handler.
+    await conflictAdminTab.evaluate(() => {
+      const banner = document.getElementById('card-action-handlers-conflict-banner');
+      const btn    = banner && banner.querySelector('[data-cah-fix]');
+      if (btn) btn.click();
+    });
+    const bannerModalState = await pollPage(
+      conflictAdminTab,
+      (names) => {
+        const rows = document.querySelectorAll('.ca-conflict-row');
+        if (rows.length < 2) return null;
+        const text = document.body.textContent || '';
+        // Modal heading mentions the slot via the lead-status label.
+        const hasSlot = text.includes('PrivTest Conflict Status');
+        const hasA    = text.includes(names[0]);
+        const hasB    = text.includes(names[1]);
+        return { rows: rows.length, hasSlot, hasA, hasB };
+      },
+      [HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B],
+      5000,
+    );
+    record(
+      '(D.banner-2) Banner Fix button opens the conflict-resolver modal for the right slot',
+      'modal shows ≥2 .ca-conflict-row entries and references the conflicted slot + both handler names',
+      `state=${JSON.stringify(bannerModalState)}`,
+      !!bannerModalState
+        && bannerModalState.rows >= 2
+        && bannerModalState.hasSlot
+        && bannerModalState.hasA
+        && bannerModalState.hasB,
+    );
+
+    // Close the modal without removing anything so the existing in-table
+    // flow below still has 2 handlers bound to the slot.
+    await conflictAdminTab.evaluate(() => {
+      const closeBtn = document.getElementById('ca-conflict-close');
+      if (closeBtn) closeBtn.click();
+    });
+
     // Wait for the ⚠ Fix button to appear next to our conflict slot.
     const fixBtnVisible = await pollPage(
       conflictAdminTab,
@@ -1381,6 +1462,29 @@ async function main() {
       `no .ca-fix-conflict-btn inside [data-ls-block="${LBL_KEY_CONFLICT_LS}"]`,
       `result=${fixBtnGone}`,
       fixBtnGone === 'gone',
+    );
+
+    // (D.banner-3) Once the duplicate is removed,
+    // refreshHandlerConflictsBanner() (called from loadCardActionHandlersAdmin
+    // inside the resolver) must hide the banner: display becomes 'none' and
+    // its innerHTML is cleared.  Poll because the refresh runs async.
+    const bannerHidden = await pollPage(
+      conflictAdminTab,
+      () => {
+        const banner = document.getElementById('card-action-handlers-conflict-banner');
+        if (!banner) return 'missing';
+        if (banner.style.display !== 'none') return null;
+        if (banner.innerHTML.trim() !== '') return null;
+        return 'hidden';
+      },
+      null,
+      6000,
+    );
+    record(
+      '(D.banner-3) conflict banner disappears after the duplicate is removed',
+      '#card-action-handlers-conflict-banner has display:none and empty innerHTML',
+      `result=${bannerHidden}`,
+      bannerHidden === 'hidden',
     );
 
     await conflictAdminTab.close();
