@@ -4110,6 +4110,7 @@
       } else {
         renderDvList(wrap, _dvDoorStylesData, 'door-style', { fields: ['name','image_url'], labels: ['Name','Image URL'] });
       }
+      _broadcastDvCatalogueChange(type);
     } catch (e) {
       toast(`Failed to reorder: ${e.message}`, true);
     }

@@ -113,6 +113,16 @@ async function purgeFixtures(pool) {
      HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B, HANDLER_NAME_ANAME,
      HANDLER_NAME_NAMING]
   );
+  // Catalogue-reorder fixtures (probe G).  Tables may not exist on first run.
+  try {
+    await pool.query(`DELETE FROM design_visit_handles          WHERE name LIKE 'privtest-reorder-%'`);
+  } catch (_) {}
+  try {
+    await pool.query(`DELETE FROM design_visit_furniture_ranges WHERE name LIKE 'privtest-reorder-%'`);
+  } catch (_) {}
+  try {
+    await pool.query(`DELETE FROM design_visit_door_styles      WHERE name LIKE 'privtest-reorder-%'`);
+  } catch (_) {}
   await pool.query(
     `DELETE FROM lead_substatuses
        WHERE status_key = $1 AND substatus_key = $2`,
@@ -1722,6 +1732,290 @@ async function main() {
     }
 
     await namingAdminTab.close();
+
+    // ── (G) DV catalogue arrow-reordering ────────────────────────────────────
+    //
+    // Exercises the moveDvItem path added in task #666 across all three
+    // catalogues (handles, furniture ranges, door styles).  For each type:
+    //   - Seeds 3 rows with distinct sort_order values via the admin REST API.
+    //   - Opens a fresh admin tab on the Design visit panel.
+    //   - Captures PATCH /api/admin/design-visit-<type>/:id requests and the
+    //     BroadcastChannel `design_visit_<type>_changed` notification.
+    //   - Asserts the first-row ▲ and last-row ▼ buttons render `disabled`.
+    //   - Clicks ▲ on the last row, expects exactly two PATCH calls that
+    //     swap the sort_order values of the last and middle rows.
+    //   - Asserts the rendered row order updates in place (no full reload —
+    //     verified by a sentinel `window.__reorderToken` set before the click
+    //     and still present afterwards), and the BroadcastChannel fires once.
+    console.log('\n  [G] DV catalogue arrow reordering');
+
+    // Configuration per catalogue type.
+    const REORDER_TYPES = [
+      {
+        type: 'handle',
+        endpoint: '/api/admin/design-visit-handles',
+        wrapId: 'dv-handles-wrap',
+        broadcastChannel: 'design_visit_handles_changed',
+        // POST requires `style` for handles; the other fields are optional.
+        extraPostFields: { style: 'Bar' },
+      },
+      {
+        type: 'furniture',
+        endpoint: '/api/admin/design-visit-furniture-ranges',
+        wrapId: 'dv-furniture-wrap',
+        broadcastChannel: 'design_visit_furniture_ranges_changed',
+        extraPostFields: {},
+      },
+      {
+        type: 'door-style',
+        endpoint: '/api/admin/design-visit-door-styles',
+        wrapId: 'dv-door-styles-wrap',
+        broadcastChannel: 'design_visit_door_styles_changed',
+        extraPostFields: {},
+      },
+    ];
+
+    for (const cfg of REORDER_TYPES) {
+      const tag = cfg.type;
+      // Seed three rows with sort_order 10/20/30 so swaps produce unambiguous
+      // before/after values.  Names use the `privtest-reorder-` prefix so
+      // purgeFixtures() can clean them up at the end of the run.
+      const seedNames = [
+        `privtest-reorder-${tag}-A-${runId}`,
+        `privtest-reorder-${tag}-B-${runId}`,
+        `privtest-reorder-${tag}-C-${runId}`,
+      ];
+      const seedIds = [];
+      for (let i = 0; i < 3; i++) {
+        const body = { name: seedNames[i], sort_order: 10 * (i + 1), ...cfg.extraPostFields };
+        const r = await adminClient.post(cfg.endpoint, body);
+        if (r.status !== 201 || !r.json?.id) {
+          record(
+            `(G/${tag}) seed row ${i + 1} via POST ${cfg.endpoint}`,
+            'status=201 with numeric id',
+            `status=${r.status} body=${JSON.stringify(r.json).slice(0, 160)}`,
+            false,
+          );
+          seedIds.length = 0;
+          break;
+        }
+        seedIds.push(r.json.id);
+      }
+      if (seedIds.length !== 3) continue;
+
+      record(
+        `(G/${tag}) seeded 3 rows with sort_order 10/20/30`,
+        '3 ids returned',
+        `ids=${seedIds.join(',')}`,
+        true,
+      );
+
+      const reorderTab = await browser.newPage();
+      await reorderTab.setCacheEnabled(false);
+      await injectSession(reorderTab, adminClient.cookie);
+
+      // Capture PATCH requests fired by moveDvItem().
+      const patches = [];
+      const patchListener = (req) => {
+        const u = req.url();
+        const m = new RegExp(`${cfg.endpoint.replace(/[-/]/g, '\\$&')}/(\\d+)$`).exec(u);
+        if (m && req.method() === 'PATCH') {
+          let body = null;
+          try { body = JSON.parse(req.postData() || 'null'); } catch (_) {}
+          patches.push({ id: Number(m[1]), body });
+        }
+      };
+      reorderTab.on('request', patchListener);
+
+      await reorderTab.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+
+      // Install a BroadcastChannel listener for this catalogue's channel
+      // before triggering the move, then switch to the Design visit panel.
+      await reorderTab.evaluate((chanName) => {
+        window.__reorderBcCount = 0;
+        const ch = new BroadcastChannel(chanName);
+        ch.onmessage = () => { window.__reorderBcCount++; };
+        window.__reorderBc = ch;
+      }, cfg.broadcastChannel);
+
+      await reorderTab.evaluate(() => {
+        if (typeof switchTab === 'function') switchTab('designvisit');
+        return typeof loadDvCatalogue === 'function' ? loadDvCatalogue() : Promise.resolve();
+      });
+
+      // Wait for our 3 seeded rows to appear in the catalogue list.
+      const initialRender = await pollPage(
+        reorderTab,
+        ({ wrapId, ids }) => {
+          const wrap = document.getElementById(wrapId);
+          if (!wrap) return null;
+          const rowOnclicks = Array.from(wrap.querySelectorAll('tbody tr')).map(tr => {
+            const btn = tr.querySelector('button[onclick*="moveDvItem"]');
+            return btn ? btn.getAttribute('onclick') : '';
+          });
+          // Extract ordered ids from the up/down onclick attributes.
+          const orderedIds = rowOnclicks
+            .map(s => { const m = /moveDvItem\('[^']+',\s*(\d+),/.exec(s || ''); return m ? Number(m[1]) : null; })
+            .filter(v => v !== null);
+          const seedRows = orderedIds.filter(id => ids.includes(id));
+          if (seedRows.length !== 3) return null;
+          return { orderedIds: seedRows };
+        },
+        { wrapId: cfg.wrapId, ids: seedIds },
+        8000,
+      );
+      record(
+        `(G/${tag}) catalogue panel renders the seeded rows in sort_order`,
+        `ordered ids = [${seedIds.join(',')}]`,
+        `got=${initialRender ? JSON.stringify(initialRender.orderedIds) : 'null'}`,
+        !!initialRender && JSON.stringify(initialRender.orderedIds) === JSON.stringify(seedIds),
+      );
+      if (!initialRender) {
+        reorderTab.off('request', patchListener);
+        await reorderTab.close();
+        continue;
+      }
+
+      // Assert disabled state on the first row's ▲ and the last row's ▼.
+      const disabledState = await reorderTab.evaluate(({ wrapId, ids }) => {
+        const wrap = document.getElementById(wrapId);
+        const rows = Array.from(wrap.querySelectorAll('tbody tr')).filter(tr => {
+          const btn = tr.querySelector('button[onclick*="moveDvItem"]');
+          if (!btn) return false;
+          const m = /moveDvItem\('[^']+',\s*(\d+),/.exec(btn.getAttribute('onclick') || '');
+          return m && ids.includes(Number(m[1]));
+        });
+        const first = rows[0];
+        const last  = rows[rows.length - 1];
+        const firstUp   = first.querySelector(`button[onclick*="'up'"]`);
+        const lastDown  = last .querySelector(`button[onclick*="'down'"]`);
+        const middleUp  = rows[1].querySelector(`button[onclick*="'up'"]`);
+        const middleDown= rows[1].querySelector(`button[onclick*="'down'"]`);
+        return {
+          firstUpDisabled:  firstUp  ? firstUp.hasAttribute('disabled')  : null,
+          lastDownDisabled: lastDown ? lastDown.hasAttribute('disabled') : null,
+          middleUpEnabled:    middleUp   ? !middleUp.hasAttribute('disabled')   : null,
+          middleDownEnabled:  middleDown ? !middleDown.hasAttribute('disabled') : null,
+        };
+      }, { wrapId: cfg.wrapId, ids: seedIds });
+      record(
+        `(G/${tag}) first row ▲ and last row ▼ render with disabled, middle row's are enabled`,
+        'firstUpDisabled=true, lastDownDisabled=true, middleUpEnabled=true, middleDownEnabled=true',
+        JSON.stringify(disabledState),
+        disabledState.firstUpDisabled === true
+          && disabledState.lastDownDisabled === true
+          && disabledState.middleUpEnabled === true
+          && disabledState.middleDownEnabled === true,
+      );
+
+      // Plant a sentinel so we can prove no full page reload happened.
+      await reorderTab.evaluate(() => { window.__reorderToken = 'sentinel-' + Date.now(); });
+      const tokenBefore = await reorderTab.evaluate(() => window.__reorderToken);
+
+      // Click ▲ on the last row (id seedIds[2]) — this should swap it with the
+      // middle row (seedIds[1]) via two PATCH calls and re-render with order
+      // [A, C, B] (i.e. [seedIds[0], seedIds[2], seedIds[1]]).
+      patches.length = 0;
+      await reorderTab.evaluate(({ wrapId, lastId }) => {
+        const wrap = document.getElementById(wrapId);
+        const btn = wrap.querySelector(
+          `button[onclick="moveDvItem('${wrap.id === 'dv-handles-wrap' ? 'handle' : (wrap.id === 'dv-furniture-wrap' ? 'furniture' : 'door-style')}', ${lastId}, 'up')"]`
+        );
+        if (btn) btn.click();
+      }, { wrapId: cfg.wrapId, lastId: seedIds[2] });
+
+      // Wait for the two PATCH requests to land.
+      const patchesDone = await pollPage(
+        reorderTab,
+        () => null,            // dummy — we drive timing via the outer loop
+        null,
+        50,
+      );
+      // Simpler: just sleep up to 5s polling the captured array.
+      const deadline = Date.now() + 5000;
+      while (patches.length < 2 && Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      const patchById = new Map(patches.map(p => [p.id, p.body?.sort_order]));
+      const swappedOk = patches.length === 2
+        && patchById.get(seedIds[2]) === 20   // C moves up to B's slot
+        && patchById.get(seedIds[1]) === 30;  // B moves down to C's slot
+      record(
+        `(G/${tag}) clicking ▲ on the last row sends 2 PATCH calls that swap sort_order`,
+        `2 PATCHes — id ${seedIds[2]} → sort_order=20, id ${seedIds[1]} → sort_order=30`,
+        `count=${patches.length} ${seedIds[2]}=${patchById.get(seedIds[2])} ${seedIds[1]}=${patchById.get(seedIds[1])}`,
+        swappedOk,
+      );
+
+      // Wait for the in-place re-render to reflect the new order.
+      const renderedAfter = await pollPage(
+        reorderTab,
+        ({ wrapId, ids }) => {
+          const wrap = document.getElementById(wrapId);
+          if (!wrap) return null;
+          const orderedIds = Array.from(wrap.querySelectorAll('tbody tr'))
+            .map(tr => {
+              const btn = tr.querySelector('button[onclick*="moveDvItem"]');
+              if (!btn) return null;
+              const m = /moveDvItem\('[^']+',\s*(\d+),/.exec(btn.getAttribute('onclick') || '');
+              return m ? Number(m[1]) : null;
+            })
+            .filter(v => v !== null)
+            .filter(id => ids.includes(id));
+          return orderedIds.length === 3 ? orderedIds : null;
+        },
+        { wrapId: cfg.wrapId, ids: seedIds },
+        5000,
+      );
+      const expectedOrder = [seedIds[0], seedIds[2], seedIds[1]];
+      record(
+        `(G/${tag}) rows re-render in the new order after the swap (no page reload)`,
+        `ordered ids = [${expectedOrder.join(',')}]`,
+        `got=${JSON.stringify(renderedAfter)}`,
+        !!renderedAfter && JSON.stringify(renderedAfter) === JSON.stringify(expectedOrder),
+      );
+
+      const tokenAfter = await reorderTab.evaluate(() => window.__reorderToken);
+      record(
+        `(G/${tag}) the page was not fully reloaded (window.__reorderToken preserved)`,
+        `__reorderToken === "${tokenBefore}"`,
+        `before=${tokenBefore} after=${tokenAfter}`,
+        !!tokenBefore && tokenBefore === tokenAfter,
+      );
+
+      // BroadcastChannel: poll until the listener has observed at least one
+      // message on the per-type channel.  Allow up to 3s.
+      const bcDeadline = Date.now() + 3000;
+      let bcCount = 0;
+      while (Date.now() < bcDeadline) {
+        bcCount = await reorderTab.evaluate(() => window.__reorderBcCount || 0);
+        if (bcCount >= 1) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
+      record(
+        `(G/${tag}) BroadcastChannel "${cfg.broadcastChannel}" fires after a swap`,
+        '__reorderBcCount >= 1',
+        `count=${bcCount}`,
+        bcCount >= 1,
+      );
+
+      // Also verify the swap is reflected server-side (durable, not just DOM).
+      const verifyRes = await adminClient.get(cfg.endpoint);
+      const verifyById = new Map(
+        (Array.isArray(verifyRes.json) ? verifyRes.json : []).map(r => [r.id, r.sort_order]),
+      );
+      record(
+        `(G/${tag}) GET ${cfg.endpoint} shows the swapped sort_order values persisted`,
+        `id ${seedIds[2]} → 20, id ${seedIds[1]} → 30`,
+        `${seedIds[2]}=${verifyById.get(seedIds[2])} ${seedIds[1]}=${verifyById.get(seedIds[1])}`,
+        verifyById.get(seedIds[2]) === 20 && verifyById.get(seedIds[1]) === 30,
+      );
+
+      reorderTab.off('request', patchListener);
+      await reorderTab.evaluate(() => { try { window.__reorderBc && window.__reorderBc.close(); } catch (_) {} });
+      await reorderTab.close();
+    }
   } finally {
     await browser.close().catch(() => {});
   }
@@ -1839,6 +2133,24 @@ async function writeReport(runId, findings) {
     '    asserting it equals `"Send Quote"`.  Because `LBL_KEY_ANAME` is a',
     '    synthetic key absent from the workflow config, `nextActionLabel()`',
     '    returns empty — proving `_cahName` wins over the fallback.',
+    '- **(G) DV catalogue arrow-reordering** (task #669): for each of the',
+    '  three catalogues (handles, furniture ranges, door styles) the harness',
+    '  seeds 3 rows with `sort_order` 10/20/30, opens a fresh admin tab on',
+    '  the Design visit panel, and asserts:',
+    '  - The first row\'s ▲ button and the last row\'s ▼ button render with',
+    '    the `disabled` attribute; the middle row\'s ▲/▼ are enabled.',
+    '  - Clicking ▲ on the last row sends exactly two PATCH calls to',
+    '    `/api/admin/design-visit-<type>/:id` that swap the `sort_order`',
+    '    values of the moved and previous rows.',
+    '  - The list re-renders in the new order without a full page reload',
+    '    (verified via a `window.__reorderToken` sentinel set before the',
+    '    click and read back afterwards).',
+    '  - The per-type `design_visit_<type>_changed` BroadcastChannel fires',
+    '    after the swap (a listener installed in the same tab observes the',
+    '    self-posted message — `_broadcastDvCatalogueChange()` runs in the',
+    '    sender\'s context).',
+    '  - A follow-up GET on the catalogue endpoint confirms the swapped',
+    '    `sort_order` values were persisted server-side.',
     '',
     '## Notes',
     '',
