@@ -171,7 +171,41 @@ const ROUTES = [
   { method: 'GET',    path: '/api/admin/hubspot/dev-filter',                   level: 'admin' },
   { method: 'GET',    path: '/api/admin/lead-substatuses',                     level: 'admin' },
   { method: 'GET',    path: '/api/admin/workshop-settings',                    level: 'admin' },
+  { method: 'PATCH',  path: '/api/admin/workshop-settings',                    level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/search-settings',                      level: 'admin' },
+  { method: 'PUT',    path: '/api/admin/search-settings',                      level: 'admin', body: {} },
+
+  // Admin-only writes for lead-statuses, stage labels, lead-substatuses,
+  // dev filters, etc. The audit in test/privileges/routeAudit.js will fail
+  // the run if any new /api/admin/* route ships without a row here.
+  { method: 'POST',   path: '/api/admin/lead-statuses',                        level: 'admin', body: {} },
+  { method: 'PATCH',  path: '/api/admin/lead-statuses/__noop__',               level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/lead-statuses/__noop__',               level: 'admin' },
+  { method: 'PUT',    path: '/api/admin/stage-action-labels',                  level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/stage-action-labels/__noop__/__noop__', level: 'admin' },
+  { method: 'PATCH',  path: '/api/admin/hubspot/dev-filter',                   level: 'admin', body: {} },
+  { method: 'POST',   path: '/api/admin/hubspot/backfill-test-user-defaults',  level: 'admin', body: {}, needsHubspot: true },
+  { method: 'POST',   path: '/api/admin/lead-substatuses',                     level: 'admin', body: {} },
+  { method: 'PATCH',  path: '/api/admin/lead-substatuses/0',                   level: 'admin', body: {} },
+  { method: 'GET',    path: '/api/admin/pending-count',                        level: 'admin' },
+
+  // Design-visit catalogue admin endpoints (design-visits.js).
+  { method: 'GET',    path: '/api/admin/design-visit-handles',                 level: 'admin' },
+  { method: 'POST',   path: '/api/admin/design-visit-handles',                 level: 'admin', body: {} },
+  { method: 'PATCH',  path: '/api/admin/design-visit-handles/0',               level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/design-visit-handles/0',               level: 'admin' },
+  { method: 'GET',    path: '/api/admin/design-visit-furniture-ranges',        level: 'admin' },
+  { method: 'POST',   path: '/api/admin/design-visit-furniture-ranges',        level: 'admin', body: {} },
+  { method: 'PATCH',  path: '/api/admin/design-visit-furniture-ranges/0',      level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/design-visit-furniture-ranges/0',      level: 'admin' },
+  { method: 'GET',    path: '/api/admin/design-visit-door-styles',             level: 'admin' },
+  { method: 'POST',   path: '/api/admin/design-visit-door-styles',             level: 'admin', body: {} },
+  { method: 'PATCH',  path: '/api/admin/design-visit-door-styles/0',           level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/design-visit-door-styles/0',           level: 'admin' },
+  { method: 'GET',    path: '/api/admin/settings/design-visit-terms',          level: 'admin' },
+  { method: 'PUT',    path: '/api/admin/settings/design-visit-terms',          level: 'admin', body: {} },
+  { method: 'GET',    path: '/api/admin/terms-conditions/versions',            level: 'admin' },
+  { method: 'POST',   path: '/api/admin/terms-conditions/versions',            level: 'admin', body: {} },
 
   // ── Logout MUST be last per actor (it destroys the session). The run.js
   // matrix loop is route-outer/actor-inner, so this row fires once per actor
