@@ -2319,6 +2319,7 @@
     add_design_visit_to_calendar: 'Add design visit to calendar',
     summarise_phone_call:         'Summarise phone call',
     show_message:                 'Show informational message',
+    start_design_visit:           'Start design visit wizard',
   };
   // Detailed, plain-English description of what each handler actually does at
   // run-time — shown on the row once an action is attached so admins can see
@@ -2351,6 +2352,12 @@
       'Use this when you just need to remind the operator what to do for ' +
       'this stage/lead-status (e.g. "Send the quote PDF from the shared ' +
       'drive and tick the next step manually.").',
+    start_design_visit:
+      'Clicking the action on a Sales/Survey card opens a full multi-step design visit wizard.\n' +
+      '• Step 1 — Visit details: date/time, designer name, handle selection, furniture range, T&C acceptance.\n' +
+      '• Step 2 — Rooms: add/remove rooms with name, door style, dimensions (mm), unit count, unit price, notes, and optional photo upload.\n' +
+      '• Step 3 — Review: read-only summary before submission.\n' +
+      '• On submit: creates a design_visits DB record, updates HubSpot lead status to the configured submittedLeadStatus, creates a HubSpot note, attempts a QuickBooks Estimate (non-fatal), generates a single-use sign-off token, emails the customer a "See Your Design & Sign Off" link, and notifies the admin team.',
   };
 
   async function loadCardActionHandlersAdmin() {
@@ -2544,7 +2551,31 @@
           <div style="font-size:.7rem;color:var(--ink-4);margin-top:3px;">Shown verbatim in a popup. Plain text only; line breaks are preserved.</div>
         </div>
 
-        <!-- Advanced JSON config: hidden for show_message since it has its own field. -->
+        <!-- start_design_visit: dedicated config fields. -->
+        <div id="cah-sdv-block" style="display:none;margin-top:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Default duration (min)</label>
+              <input id="cah-sdv-duration" type="number" class="field" min="5" max="1440" step="5" value="${esc(String(config.defaultDurationMin || 90))}" style="font-size:.85rem;">
+            </div>
+            <div>
+              <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Submitted lead status key</label>
+              <input id="cah-sdv-lead-status" type="text" class="field" maxlength="60" placeholder="e.g. DESIGN_VISIT_SENT" value="${esc(config.submittedLeadStatus || '')}" style="font-size:.85rem;text-transform:uppercase;">
+            </div>
+          </div>
+          <div style="margin-top:10px;">
+            <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Terms &amp; Conditions <span style="font-weight:400;color:var(--ink-4);">(optional, ≤4000 chars — also editable in the T&C section below)</span></label>
+            <textarea id="cah-sdv-terms" class="field" rows="4" maxlength="4000" placeholder="Your terms and conditions text…" style="font-size:.82rem;">${esc(config.termsAndConditions || '')}</textarea>
+          </div>
+          <div style="margin-top:8px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;color:#4b5563;cursor:pointer;">
+              <input type="checkbox" id="cah-sdv-google" ${config.addToGoogleCalendar !== false ? 'checked' : ''}>
+              Also add to Google Calendar
+            </label>
+          </div>
+        </div>
+
+        <!-- Advanced JSON config: hidden for show_message and start_design_visit since they have dedicated fields. -->
         <div id="cah-cfg-block" style="margin-top:12px;">
           <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Advanced configuration (JSON, optional)</label>
           <textarea id="cah-config" class="field" rows="4" style="font-family:monospace;font-size:.82rem;">${esc(JSON.stringify(config, null, 2))}</textarea>
@@ -2568,6 +2599,7 @@
     const descEl       = wrap.querySelector('#cah-type-desc');
     const typeSel      = wrap.querySelector('#cah-type');
     const msgBlock     = wrap.querySelector('#cah-msg-block');
+    const sdvBlock     = wrap.querySelector('#cah-sdv-block');
     const cfgBlock     = wrap.querySelector('#cah-cfg-block');
     const msgTitle     = wrap.querySelector('#cah-msg-title');
     const msgBody      = wrap.querySelector('#cah-msg-body');
@@ -2582,8 +2614,10 @@
       const t = typeSel.value;
       descEl.textContent = HANDLER_TYPE_DESCRIPTIONS[t] || 'No description available for this handler type.';
       const isMsg = (t === 'show_message');
+      const isSdv = (t === 'start_design_visit');
       msgBlock.style.display = isMsg ? '' : 'none';
-      cfgBlock.style.display = isMsg ? 'none' : '';
+      sdvBlock.style.display = isSdv ? '' : 'none';
+      cfgBlock.style.display = (isMsg || isSdv) ? 'none' : '';
     };
     renderForType();
     typeSel.addEventListener('change', () => { conflictBox.style.display = 'none'; renderForType(); });
@@ -2614,6 +2648,20 @@
         cfg = { message };
         const titleV = msgTitle.value.trim();
         if (titleV) cfg.title = titleV;
+      } else if (tp === 'start_design_visit') {
+        const durVal  = parseInt(wrap.querySelector('#cah-sdv-duration').value, 10);
+        const lsKey   = wrap.querySelector('#cah-sdv-lead-status').value.trim().toUpperCase();
+        const terms   = wrap.querySelector('#cah-sdv-terms').value;
+        const gcal    = wrap.querySelector('#cah-sdv-google').checked;
+        if (durVal && (isNaN(durVal) || durVal < 5 || durVal > 1440)) {
+          errEl.textContent = 'Default duration must be between 5 and 1440 minutes.'; return null;
+        }
+        if (lsKey.length > 60) { errEl.textContent = 'Submitted lead status key must be ≤ 60 characters.'; return null; }
+        cfg = {};
+        if (durVal) cfg.defaultDurationMin = durVal;
+        if (lsKey)  cfg.submittedLeadStatus = lsKey;
+        if (terms)  cfg.termsAndConditions = terms;
+        cfg.addToGoogleCalendar = gcal;
       } else {
         const cfgTxt = wrap.querySelector('#cah-config').value.trim() || '{}';
         try { cfg = JSON.parse(cfgTxt); }
@@ -3155,7 +3203,7 @@
         <button class="tab-btn"        data-tab="requests"    onclick="switchTab('requests')">Pending Requests <span id="req-tab-badge">${reqBadge}</span></button>
         <button class="tab-btn"        data-tab="auditlog"    onclick="switchTab('auditlog')">Audit log</button>
         <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings');loadHubspotStatus();loadLeadStatusesAdmin()">Settings</button>
-        <button class="tab-btn"        data-tab="cardactions" onclick="switchTab('cardactions');loadCardActionsAdmin();loadCardActionHandlersAdmin()">Card actions</button>
+        <button class="tab-btn"        data-tab="cardactions" onclick="switchTab('cardactions');loadCardActionsAdmin();loadCardActionHandlersAdmin();loadDvCatalogue()">Card actions</button>
         <button class="tab-btn"        data-tab="search"      onclick="switchTab('search');loadSearchSettings()">Search</button>
         <button class="tab-btn"        data-tab="workshop"    onclick="switchTab('workshop');loadWorkshopSettings()">Workshop</button>
       </div>
@@ -3411,6 +3459,51 @@
             <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
           </div>
         </div>
+
+        <!-- ── Design Visit Catalogue ──────────────────────────────────── -->
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
+            <div>
+              <div class="card-title" style="margin:0;">Design Visit — Handles</div>
+              <p class="card-desc" style="margin:2px 0 0;">Handle options displayed in the design visit wizard for the customer to choose from.</p>
+            </div>
+            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openDvHandleEditor()">+ Add handle</button>
+          </div>
+          <div id="dv-handles-wrap"><p style="font-size:.82rem;color:var(--ink-4);">Loading…</p></div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
+            <div>
+              <div class="card-title" style="margin:0;">Design Visit — Furniture Ranges</div>
+              <p class="card-desc" style="margin:2px 0 0;">Furniture ranges displayed in the design visit wizard.</p>
+            </div>
+            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openDvFurnitureEditor()">+ Add range</button>
+          </div>
+          <div id="dv-furniture-wrap"><p style="font-size:.82rem;color:var(--ink-4);">Loading…</p></div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
+            <div>
+              <div class="card-title" style="margin:0;">Design Visit — Door Styles</div>
+              <p class="card-desc" style="margin:2px 0 0;">Door styles the designer can select per room in the wizard.</p>
+            </div>
+            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openDvDoorStyleEditor()">+ Add style</button>
+          </div>
+          <div id="dv-door-styles-wrap"><p style="font-size:.82rem;color:var(--ink-4);">Loading…</p></div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+            <div>
+              <div class="card-title" style="margin:0;">Design Visit — Terms &amp; Conditions</div>
+              <p class="card-desc" style="margin:2px 0 0;">Default T&amp;C shown to the customer on the sign-off page and included in the email. Can be overridden per handler in the handler editor above.</p>
+            </div>
+            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="saveDvTerms()">Save</button>
+          </div>
+          <textarea id="dv-terms-text" class="field" rows="6" maxlength="4000" placeholder="Enter your terms and conditions here…" style="font-size:.85rem;width:100%;"></textarea>
+        </div>
       </div>
 
       <!-- SEARCH SETTINGS -->
@@ -3462,7 +3555,7 @@
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) {
       if (savedTab === 'settings') { switchTab('settings'); loadHubspotStatus(); loadLeadStatusesAdmin(); }
-      else if (savedTab === 'cardactions') { switchTab('cardactions'); loadCardActionsAdmin(); loadCardActionHandlersAdmin(); }
+      else if (savedTab === 'cardactions') { switchTab('cardactions'); loadCardActionsAdmin(); loadCardActionHandlersAdmin(); loadDvCatalogue(); }
       else if (savedTab === 'search') { switchTab('search'); loadSearchSettings(); }
       else if (savedTab === 'workshop') { switchTab('workshop'); loadWorkshopSettings(); }
       else { switchTab(savedTab); }
@@ -3488,6 +3581,230 @@
       await revoke(revokeBtn.dataset.revokeEmail);
     }
   });
+
+  // ── Design Visit Catalogue (Handles, Furniture Ranges, Door Styles, T&C) ──────
+  let _dvCatalogueLoaded = false;
+
+  async function loadDvCatalogue() {
+    if (_dvCatalogueLoaded) return;
+    _dvCatalogueLoaded = true;
+    await Promise.all([
+      loadDvHandles(), loadDvFurniture(), loadDvDoorStyles(), loadDvTerms(),
+    ]);
+  }
+  window.loadDvCatalogue = loadDvCatalogue;
+
+  // ── Handles ───────────────────────────────────────────────────────────────
+  async function loadDvHandles() {
+    const wrap = document.getElementById('dv-handles-wrap');
+    if (!wrap) return;
+    try {
+      const items = await api('GET', '/api/admin/design-visit-handles');
+      renderDvList(wrap, items, 'handle', {
+        fields: ['name','description','image_url'],
+        labels: ['Name','Description','Image URL'],
+      });
+    } catch (e) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load handles: ${esc(e.message)}</p>`;
+    }
+  }
+
+  // ── Furniture Ranges ──────────────────────────────────────────────────────
+  async function loadDvFurniture() {
+    const wrap = document.getElementById('dv-furniture-wrap');
+    if (!wrap) return;
+    try {
+      const items = await api('GET', '/api/admin/design-visit-furniture-ranges');
+      renderDvList(wrap, items, 'furniture', {
+        fields: ['name','description'],
+        labels: ['Name','Description'],
+      });
+    } catch (e) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load furniture ranges: ${esc(e.message)}</p>`;
+    }
+  }
+
+  // ── Door Styles ───────────────────────────────────────────────────────────
+  async function loadDvDoorStyles() {
+    const wrap = document.getElementById('dv-door-styles-wrap');
+    if (!wrap) return;
+    try {
+      const items = await api('GET', '/api/admin/design-visit-door-styles');
+      renderDvList(wrap, items, 'door-style', {
+        fields: ['name','image_url'],
+        labels: ['Name','Image URL'],
+      });
+    } catch (e) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load door styles: ${esc(e.message)}</p>`;
+    }
+  }
+
+  // Generic list renderer for catalogue sections
+  function renderDvList(wrap, items, type, { fields, labels }) {
+    if (!items.length) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">None added yet.</p>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);">
+            ${labels.map(l => `<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">${esc(l)}</th>`).join('')}
+            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Order</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item, i) => `
+            <tr style="border-bottom:1px solid var(--border);${i % 2 ? 'background:var(--stone-soft);' : ''}">
+              ${fields.map(f => `<td style="padding:7px 8px;">${esc(item[f] || '—')}</td>`).join('')}
+              <td style="padding:7px 8px;color:var(--ink-4);">${item.sort_order}</td>
+              <td style="padding:7px 8px;text-align:right;white-space:nowrap;">
+                <button class="btn btn-ghost" style="padding:3px 8px;font-size:.75rem;"
+                  onclick="openDvItemEditor('${esc(type)}', ${item.id})">Edit</button>
+                <button class="btn btn-ghost" style="padding:3px 8px;font-size:.75rem;color:#991b1b;"
+                  onclick="deleteDvItem('${esc(type)}', ${item.id})">Delete</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  function _broadcastDvCatalogueChange(type) {
+    const chanMap = {
+      handle:       'design_visit_handles_changed',
+      furniture:    'design_visit_furniture_ranges_changed',
+      'door-style': 'design_visit_door_styles_changed',
+    };
+    const chanName = chanMap[type];
+    if (!chanName) return;
+    try { const ch = new BroadcastChannel(chanName); ch.postMessage({ ts: Date.now() }); ch.close(); } catch {}
+  }
+
+  async function deleteDvItem(type, id) {
+    if (!confirm('Delete this item? This cannot be undone.')) return;
+    const urlMap = {
+      handle:      `/api/admin/design-visit-handles/${id}`,
+      furniture:   `/api/admin/design-visit-furniture-ranges/${id}`,
+      'door-style': `/api/admin/design-visit-door-styles/${id}`,
+    };
+    try {
+      await api('DELETE', urlMap[type]);
+      toast('Deleted.');
+      _broadcastDvCatalogueChange(type);
+      if (type === 'handle')      return loadDvHandles();
+      if (type === 'furniture')   return loadDvFurniture();
+      if (type === 'door-style')  return loadDvDoorStyles();
+    } catch (e) {
+      toast('Delete failed: ' + e.message, true);
+    }
+  }
+  window.deleteDvItem = deleteDvItem;
+
+  function openDvHandleEditor(id)     { openDvItemEditor('handle', id); }
+  function openDvFurnitureEditor(id)  { openDvItemEditor('furniture', id); }
+  function openDvDoorStyleEditor(id)  { openDvItemEditor('door-style', id); }
+  window.openDvHandleEditor     = openDvHandleEditor;
+  window.openDvFurnitureEditor  = openDvFurnitureEditor;
+  window.openDvDoorStyleEditor  = openDvDoorStyleEditor;
+
+  async function openDvItemEditor(type, existingId) {
+    let item = null;
+    if (existingId) {
+      try {
+        const listUrl = {
+          handle:      '/api/admin/design-visit-handles',
+          furniture:   '/api/admin/design-visit-furniture-ranges',
+          'door-style': '/api/admin/design-visit-door-styles',
+        }[type];
+        const list = await api('GET', listUrl);
+        item = list.find(x => x.id === existingId) || null;
+      } catch {}
+    }
+    const typeLabels = {
+      handle:      'Handle', furniture: 'Furniture Range', 'door-style': 'Door Style',
+    };
+    const hasDescription = (type !== 'door-style');
+    const hasImageUrl    = (type !== 'furniture');
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9998;padding:16px;';
+    wrap.innerHTML = `
+      <div style="background:#fff;border-radius:12px;padding:22px 24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+        <h3 style="margin:0 0 16px;font-size:1rem;font-weight:700;">${item ? 'Edit' : 'Add'} ${esc(typeLabels[type])}</h3>
+        <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Name <span style="color:#991b1b;">*</span></label>
+        <input id="dvie-name" type="text" class="field" maxlength="200" value="${esc(item?.name || '')}" style="font-size:.88rem;">
+        ${hasDescription ? `
+          <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Description</label>
+          <textarea id="dvie-desc" class="field" rows="2" maxlength="500" style="font-size:.85rem;resize:vertical;">${esc(item?.description || '')}</textarea>
+        ` : ''}
+        ${hasImageUrl ? `
+          <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Image URL</label>
+          <input id="dvie-img" type="url" class="field" maxlength="500" value="${esc(item?.image_url || '')}" placeholder="https://…" style="font-size:.85rem;">
+        ` : ''}
+        <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Sort order</label>
+        <input id="dvie-sort" type="number" class="field" min="0" value="${item?.sort_order ?? 0}" style="font-size:.85rem;width:100px;">
+        <div id="dvie-err" style="color:#b91c1c;font-size:.82rem;margin-top:8px;min-height:16px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+          <button class="btn btn-ghost" id="dvie-cancel">Cancel</button>
+          <button class="btn btn-primary" id="dvie-save">${item ? 'Save' : 'Add'}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
+    wrap.querySelector('#dvie-cancel').addEventListener('click', () => wrap.remove());
+    wrap.querySelector('#dvie-save').addEventListener('click', async () => {
+      const errEl = wrap.querySelector('#dvie-err');
+      const name = wrap.querySelector('#dvie-name').value.trim();
+      if (!name) { errEl.textContent = 'Name is required.'; return; }
+      const payload = { name, sort_order: parseInt(wrap.querySelector('#dvie-sort').value, 10) || 0 };
+      if (hasDescription) payload.description = wrap.querySelector('#dvie-desc').value;
+      if (hasImageUrl)    payload.image_url    = wrap.querySelector('#dvie-img')?.value || '';
+      const postUrl = {
+        handle:      '/api/admin/design-visit-handles',
+        furniture:   '/api/admin/design-visit-furniture-ranges',
+        'door-style': '/api/admin/design-visit-door-styles',
+      }[type];
+      try {
+        if (item) {
+          await api('PATCH', `${postUrl}/${item.id}`, payload);
+          toast('Saved.');
+        } else {
+          await api('POST', postUrl, payload);
+          toast('Added.');
+        }
+        _broadcastDvCatalogueChange(type);
+        wrap.remove();
+        if (type === 'handle')      return loadDvHandles();
+        if (type === 'furniture')   return loadDvFurniture();
+        if (type === 'door-style')  return loadDvDoorStyles();
+      } catch (e) {
+        errEl.textContent = e.message || 'Save failed.';
+      }
+    });
+  }
+  window.openDvItemEditor = openDvItemEditor;
+
+  // ── T&C ───────────────────────────────────────────────────────────────────
+  async function loadDvTerms() {
+    const el = document.getElementById('dv-terms-text');
+    if (!el) return;
+    try {
+      const r = await api('GET', '/api/admin/settings/design-visit-terms');
+      el.value = r.terms || '';
+    } catch {}
+  }
+
+  async function saveDvTerms() {
+    const el = document.getElementById('dv-terms-text');
+    if (!el) return;
+    try {
+      await api('PUT', '/api/admin/settings/design-visit-terms', { terms: el.value });
+      toast('Terms & conditions saved.');
+    } catch (e) {
+      toast('Save failed: ' + e.message, true);
+    }
+  }
+  window.saveDvTerms = saveDvTerms;
 
   // ── Search Settings tab ──────────────────────────────────────────────────────
   const SEARCH_ACTIONS_META = [

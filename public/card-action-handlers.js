@@ -103,6 +103,7 @@
     if (handler.type === 'add_design_visit_to_calendar') return openDesignVisitModal(handler, ctx);
     if (handler.type === 'summarise_phone_call')        return openPhoneSummaryModal(handler, ctx);
     if (handler.type === 'show_message')                return openMessagePopup(handler, ctx);
+    if (handler.type === 'start_design_visit')          return openDesignVisitWizard(handler, ctx);
     console.warn('Unknown card action handler type:', handler.type);
   }
 
@@ -366,6 +367,465 @@
         window.location.href = mailto;
       }
     });
+  }
+
+  // ── Handler: start_design_visit ────────────────────────────────────────────
+  // Full multi-step wizard. Three steps:
+  //   Step 1 — Visit details (date/time, location, handle, furniture range, T&C)
+  //   Step 2 — Rooms (add/remove rooms with door style, dimensions, units, price)
+  //   Step 3 — Review + submit
+  async function openDesignVisitWizard(handler, ctx) {
+    _injectStyle();
+    const cfg = handler.config || {};
+    const defaultDuration = cfg.defaultDurationMin || 90;
+    const contactId       = ctx?.contactId    || ctx?.contact_id    || '';
+    const contactName     = ctx?.contactName  || ctx?.contact_name  || '';
+    const contactEmail    = ctx?.contactEmail || ctx?.contact_email || '';
+
+    // Pre-load catalogue + T&C in parallel
+    let handles = [], furnitureRanges = [], doorStyles = [], termsText = '';
+    try {
+      [handles, furnitureRanges, doorStyles] = await Promise.all([
+        fetch('/api/design-visit-handles').then(r => r.ok ? r.json() : []),
+        fetch('/api/design-visit-furniture-ranges').then(r => r.ok ? r.json() : []),
+        fetch('/api/design-visit-door-styles').then(r => r.ok ? r.json() : []),
+      ]);
+    } catch {}
+    // Load T&C text from the member-accessible route (no admin required)
+    try {
+      const tr = await fetch('/api/design-visit-terms');
+      if (tr.ok) { const td = await tr.json(); termsText = td.terms || ''; }
+    } catch {}
+
+    // Wizard state
+    let step = 1;
+    let rooms = [_makeRoom()];
+    const wizardStyle = `
+      .dv-wizard-backdrop {
+        position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;
+        align-items:stretch;justify-content:flex-end;z-index:10000; }
+      .dv-wizard {
+        background:#fff;width:min(680px,100%);height:100%;display:flex;flex-direction:column;
+        box-shadow:-6px 0 40px rgba(0,0,0,.2);font-family:inherit; }
+      .dv-wizard-header {
+        display:flex;align-items:center;justify-content:space-between;
+        padding:18px 24px 14px;border-bottom:1px solid #e5e7eb;flex-shrink:0; }
+      .dv-wizard-header h2 { margin:0;font-size:1.1rem;font-weight:700;color:#1f2937; }
+      .dv-wizard-close { background:none;border:none;font-size:1.5rem;cursor:pointer;
+        color:#9ca3af;padding:0 4px;line-height:1; }
+      .dv-wizard-close:hover { color:#1f2937; }
+      .dv-wizard-body { flex:1;overflow-y:auto;padding:20px 24px; }
+      .dv-wizard .dv-step-indicator { display:flex;gap:6px;margin-bottom:20px; }
+      .dv-wizard .dv-step-dot { flex:1;height:4px;border-radius:2px;background:#e5e7eb;transition:background .2s; }
+      .dv-wizard .dv-step-dot.active { background:#8B2BFF; }
+      .dv-wizard .dv-step-dot.done   { background:#c4b5fd; }
+      .dv-wizard label.dv-label { display:block;font-size:.78rem;font-weight:600;color:#4b5563;margin:12px 0 4px; }
+      .dv-wizard input[type=text],.dv-wizard input[type=number],.dv-wizard input[type=datetime-local],
+      .dv-wizard input[type=url],.dv-wizard select,.dv-wizard textarea {
+        width:100%;padding:9px 11px;border:1.5px solid #d1d5db;border-radius:8px;
+        font-size:.9rem;font-family:inherit;box-sizing:border-box;background:#fff; }
+      .dv-wizard input:focus,.dv-wizard select:focus,.dv-wizard textarea:focus {
+        outline:none;border-color:#8B2BFF; }
+      .dv-wizard .dv-grid2 { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+      .dv-wizard .dv-grid3 { display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px; }
+      .dv-wizard .dv-room-card { border:1.5px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px; }
+      .dv-wizard .dv-room-header { display:flex;align-items:center;gap:8px;margin-bottom:10px; }
+      .dv-wizard .dv-room-title { font-weight:700;font-size:.9rem;color:#374151;flex:1; }
+      .dv-wizard .dv-rm-btn { padding:4px 10px;border-radius:7px;border:1.5px solid #d1d5db;
+        background:#fff;font-size:.8rem;cursor:pointer;color:#374151; }
+      .dv-wizard .dv-rm-btn:hover { background:#fef2f2;border-color:#fca5a5;color:#dc2626; }
+      .dv-wizard .dv-ord-btn { padding:4px 8px;border-radius:7px;border:1.5px solid #d1d5db;
+        background:#fff;font-size:.75rem;cursor:pointer;color:#6b7280;line-height:1; }
+      .dv-wizard .dv-ord-btn:hover:not(:disabled) { background:#f3f4f6; }
+      .dv-wizard .dv-ord-btn:disabled { opacity:.35;cursor:not-allowed; }
+      .dv-wizard .dv-add-room { width:100%;padding:10px;border:2px dashed #d1d5db;border-radius:10px;
+        background:transparent;font-size:.88rem;color:#6b7280;cursor:pointer;margin-top:4px; }
+      .dv-wizard .dv-add-room:hover { border-color:#8B2BFF;color:#8B2BFF; }
+      .dv-wizard .dv-photo-list { display:flex;flex-wrap:wrap;gap:8px;margin-top:6px; }
+      .dv-wizard .dv-photo-thumb { width:64px;height:64px;object-fit:cover;
+        border-radius:6px;border:1px solid #e5e7eb; }
+      .dv-wizard .dv-terms-box { background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;
+        padding:10px 12px;font-size:.78rem;color:#4b5563;max-height:120px;overflow-y:auto;
+        white-space:pre-wrap;margin-bottom:6px;line-height:1.5; }
+      .dv-wizard .dv-review-section { margin-bottom:18px; }
+      .dv-wizard .dv-review-label { font-size:.7rem;font-weight:700;text-transform:uppercase;
+        letter-spacing:.06em;color:#9ca3af;margin-bottom:8px; }
+      .dv-wizard .dv-review-row { display:flex;justify-content:space-between;font-size:.88rem;
+        padding:5px 0;border-bottom:1px solid #f3f4f6; }
+      .dv-wizard .dv-review-row:last-child { border-bottom:none; }
+      .dv-wizard .dv-review-row strong { color:#6b7280; }
+      .dv-wizard .dv-review-total { font-size:1rem;font-weight:700;text-align:right;
+        padding-top:10px;color:#1f2937; }
+      .dv-wizard .dv-footer { display:flex;gap:10px;justify-content:flex-end;
+        padding:14px 24px;border-top:1px solid #e5e7eb;flex-shrink:0;background:#fff; }
+      .dv-wizard .dv-btn-back { padding:9px 18px;border-radius:8px;border:1.5px solid #d1d5db;
+        background:#fff;font-size:.9rem;font-weight:600;cursor:pointer;color:#374151; }
+      .dv-wizard .dv-btn-next { padding:9px 20px;border-radius:8px;border:none;
+        background:#8B2BFF;color:#fff;font-size:.9rem;font-weight:600;cursor:pointer; }
+      .dv-wizard .dv-btn-next:disabled { opacity:.55;cursor:not-allowed; }
+      .dv-wizard .dv-err { color:#b91c1c;font-size:.82rem;margin-top:8px;min-height:18px; }
+      .dv-wizard .dv-checkbox-row { display:flex;align-items:flex-start;gap:8px;margin-top:10px; }
+      .dv-wizard .dv-checkbox-row input[type=checkbox] { width:auto;margin-top:2px;flex-shrink:0; }
+      .dv-wizard .dv-checkbox-row label { font-size:.82rem;color:#374151;margin:0; }
+    `;
+    if (!document.getElementById('dv-wizard-style')) {
+      const s = document.createElement('style');
+      s.id = 'dv-wizard-style'; s.textContent = wizardStyle;
+      document.head.appendChild(s);
+    }
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'dv-wizard-backdrop';
+    backdrop.innerHTML = `
+      <div class="dv-wizard" role="dialog" aria-modal="true" aria-label="Design Visit Wizard">
+        <div class="dv-wizard-header">
+          <h2>Design Visit</h2>
+          <button class="dv-wizard-close" id="dv-close-x" aria-label="Close">×</button>
+        </div>
+        <div class="dv-wizard-body"><div id="dv-wiz-inner"></div></div>
+        <div class="dv-footer" id="dv-wiz-footer"></div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const inner  = backdrop.querySelector('#dv-wiz-inner');
+    const footer = backdrop.querySelector('#dv-wiz-footer');
+    backdrop.querySelector('#dv-close-x').addEventListener('click', () => backdrop.remove());
+
+    // Live catalogue refresh while wizard is open
+    const _dvChans = [];
+    for (const name of ['design_visit_handles_changed','design_visit_furniture_ranges_changed','design_visit_door_styles_changed']) {
+      try {
+        const ch = new BroadcastChannel(name);
+        ch.addEventListener('message', async () => {
+          try {
+            [handles, furnitureRanges, doorStyles] = await Promise.all([
+              fetch('/api/design-visit-handles').then(r => r.ok ? r.json() : handles),
+              fetch('/api/design-visit-furniture-ranges').then(r => r.ok ? r.json() : furnitureRanges),
+              fetch('/api/design-visit-door-styles').then(r => r.ok ? r.json() : doorStyles),
+            ]);
+          } catch {}
+          // Re-render current step with fresh data
+          if (step === 1) renderStep1();
+          else if (step === 2) { _saveRoomsFromDom(); renderStep2(); }
+        });
+        _dvChans.push(ch);
+      } catch {}
+    }
+    const _cleanupChans = () => { _dvChans.forEach(ch => { try { ch.close(); } catch {} }); };
+    backdrop.querySelector('#dv-close-x').addEventListener('click', _cleanupChans);
+
+    // State for step 1
+    const s1 = {
+      visitDate: '', duration: String(defaultDuration), location: '',
+      designerName: '', handleId: '', furnitureRangeId: '', termsAccepted: false,
+    };
+
+    function renderStepIndicator() {
+      return `<div class="dv-step-indicator">
+        <div class="dv-step-dot ${step >= 1 ? 'active' : ''}"></div>
+        <div class="dv-step-dot ${step >= 2 ? 'active' : (step > 2 ? 'done' : '')}"></div>
+        <div class="dv-step-dot ${step >= 3 ? 'active' : ''}"></div>
+      </div>`;
+    }
+
+    function _selOptions(items, selectedId, placeholder) {
+      return `<option value="">${_esc(placeholder)}</option>` +
+        items.map(i => `<option value="${i.id}" ${String(selectedId) === String(i.id) ? 'selected' : ''}>${_esc(i.name)}</option>`).join('');
+    }
+
+    function _dsOptions(selectedId) {
+      return `<option value="">— none —</option>` +
+        doorStyles.map(ds => `<option value="${ds.id}" ${String(selectedId) === String(ds.id) ? 'selected' : ''}>${_esc(ds.name)}</option>`).join('');
+    }
+
+    function _renderFooter(leftBtn, rightBtns) {
+      footer.innerHTML = '';
+      if (leftBtn) { const b = document.createElement('button'); b.className = leftBtn.cls; b.textContent = leftBtn.label; b.addEventListener('click', leftBtn.fn); footer.appendChild(b); }
+      const spacer = document.createElement('div'); spacer.style.flex = '1'; footer.appendChild(spacer);
+      for (const rb of rightBtns) {
+        const b = document.createElement('button'); b.className = rb.cls; b.textContent = rb.label;
+        if (rb.id) b.id = rb.id;
+        b.addEventListener('click', rb.fn); footer.appendChild(b);
+      }
+    }
+
+    function renderStep1() {
+      inner.innerHTML = `
+        ${renderStepIndicator()}
+        <p style="font-size:.82rem;color:#6b7280;margin:0 0 16px;">Step 1 of 3 — Visit details</p>
+        <div class="dv-grid2">
+          <div>
+            <label class="dv-label">Visit date &amp; time</label>
+            <input type="datetime-local" id="dv-visit-date" value="${_esc(s1.visitDate)}">
+          </div>
+          <div>
+            <label class="dv-label">Duration (minutes)</label>
+            <input type="number" id="dv-duration" min="15" max="1440" step="15" value="${_esc(s1.duration)}">
+          </div>
+        </div>
+        <label class="dv-label">Location</label>
+        <input type="text" id="dv-location" placeholder="e.g. 12 Baker Street, London" value="${_esc(s1.location)}">
+        <label class="dv-label">Designer name</label>
+        <input type="text" id="dv-designer" placeholder="e.g. Sarah Jones" maxlength="200" value="${_esc(s1.designerName)}">
+        ${handles.length ? `
+          <label class="dv-label">Handle selection</label>
+          <select id="dv-handle">${_selOptions(handles, s1.handleId, '— select handle —')}</select>
+        ` : ''}
+        ${furnitureRanges.length ? `
+          <label class="dv-label">Furniture range</label>
+          <select id="dv-furniture">${_selOptions(furnitureRanges, s1.furnitureRangeId, '— select range —')}</select>
+        ` : ''}
+        ${termsText ? `
+          <label class="dv-label">Terms &amp; Conditions</label>
+          <div class="dv-terms-box">${_esc(termsText)}</div>
+        ` : ''}
+        <div class="dv-checkbox-row">
+          <input type="checkbox" id="dv-terms" ${s1.termsAccepted ? 'checked' : ''}>
+          <label for="dv-terms">Customer has read and accepted the terms &amp; conditions</label>
+        </div>
+        <div class="dv-err" id="dv-s1-err"></div>`;
+      _renderFooter(null, [
+        { cls: 'dv-btn-next', label: 'Next: Rooms →', fn: () => {
+          const errEl = inner.querySelector('#dv-s1-err');
+          s1.visitDate        = inner.querySelector('#dv-visit-date')?.value || '';
+          s1.duration         = inner.querySelector('#dv-duration')?.value || String(defaultDuration);
+          s1.location         = inner.querySelector('#dv-location')?.value.trim() || '';
+          s1.designerName     = inner.querySelector('#dv-designer')?.value.trim() || '';
+          s1.handleId         = inner.querySelector('#dv-handle')?.value || '';
+          s1.furnitureRangeId = inner.querySelector('#dv-furniture')?.value || '';
+          s1.termsAccepted    = inner.querySelector('#dv-terms')?.checked || false;
+          if (!s1.termsAccepted) { errEl.textContent = 'Please confirm the customer has accepted the terms and conditions.'; return; }
+          errEl.textContent = '';
+          step = 2; renderStep2();
+        }},
+      ]);
+    }
+
+    function renderStep2() {
+      function renderRoomCard(room, idx) {
+        const prevPhotos = (room.images || []).map(img =>
+          `<img class="dv-photo-thumb" src="${_esc(img.storageKey)}" alt="Room photo">`
+        ).join('');
+        return `
+          <div class="dv-room-card" data-ridx="${idx}">
+            <div class="dv-room-header">
+              <button class="dv-ord-btn dv-mv-up" data-ridx="${idx}" title="Move up" ${idx === 0 ? 'disabled' : ''}>↑</button>
+              <button class="dv-ord-btn dv-mv-dn" data-ridx="${idx}" title="Move down" ${idx === rooms.length - 1 ? 'disabled' : ''}>↓</button>
+              <span class="dv-room-title">Room ${idx + 1}</span>
+              ${rooms.length > 1 ? `<button class="dv-rm-btn dv-rm-room" data-ridx="${idx}">Remove</button>` : ''}
+            </div>
+            <label class="dv-label">Room name <span style="color:#991b1b;">*</span></label>
+            <input type="text" class="dv-rn" data-ridx="${idx}" maxlength="200" placeholder="e.g. Kitchen" value="${_esc(room.roomName)}">
+            ${doorStyles.length ? `
+              <label class="dv-label">Door style</label>
+              <select class="dv-ds" data-ridx="${idx}">${_dsOptions(room.doorStyleId)}</select>
+            ` : ''}
+            <div class="dv-grid3" style="margin-top:10px;">
+              <div>
+                <label class="dv-label">Width (mm)</label>
+                <input type="number" class="dv-wm" data-ridx="${idx}" min="0" placeholder="e.g. 3500" value="${room.widthMm || ''}">
+              </div>
+              <div>
+                <label class="dv-label">Height (mm)</label>
+                <input type="number" class="dv-hm" data-ridx="${idx}" min="0" placeholder="e.g. 2400" value="${room.heightMm || ''}">
+              </div>
+              <div>
+                <label class="dv-label">Depth (mm)</label>
+                <input type="number" class="dv-dm" data-ridx="${idx}" min="0" placeholder="e.g. 600" value="${room.depthMm || ''}">
+              </div>
+            </div>
+            <div class="dv-grid2" style="margin-top:10px;">
+              <div>
+                <label class="dv-label">Unit count <span style="color:#991b1b;">*</span></label>
+                <input type="number" class="dv-uc" data-ridx="${idx}" min="1" value="${room.unitCount || 1}">
+              </div>
+              <div>
+                <label class="dv-label">Unit price (£)</label>
+                <input type="number" class="dv-up" data-ridx="${idx}" min="0" step="0.01" placeholder="0.00" value="${room.unitPricePence ? (room.unitPricePence / 100).toFixed(2) : ''}">
+              </div>
+            </div>
+            <label class="dv-label">Room notes</label>
+            <textarea class="dv-rnotes" data-ridx="${idx}" rows="2" maxlength="2000" placeholder="Any additional notes for this room…">${_esc(room.notes || '')}</textarea>
+            <label class="dv-label">Photos (optional)</label>
+            <input type="file" class="dv-photo-input" data-ridx="${idx}" accept="image/*" multiple style="font-size:.82rem;">
+            ${prevPhotos ? `<div class="dv-photo-list">${prevPhotos}</div>` : ''}
+          </div>`;
+      }
+
+      inner.innerHTML = `
+        ${renderStepIndicator()}
+        <p style="font-size:.82rem;color:#6b7280;margin:0 0 16px;">Step 2 of 3 — Rooms</p>
+        <div id="dv-rooms-list">${rooms.map((r, i) => renderRoomCard(r, i)).join('')}</div>
+        <button class="dv-add-room" id="dv-add-room">+ Add room</button>
+        <div class="dv-err" id="dv-s2-err"></div>`;
+
+      _renderFooter(null, [
+        { cls: 'dv-btn-back', label: '← Back', fn: () => { step = 1; renderStep1(); }},
+        { cls: 'dv-btn-next', label: 'Review →', fn: async () => {
+          await _saveRoomsFromDom();
+          const errEl = inner.querySelector('#dv-s2-err');
+          const emptyRooms = rooms.filter(r => !r.roomName.trim());
+          if (emptyRooms.length) { errEl.textContent = 'Every room needs a name.'; return; }
+          if (!rooms.length) { errEl.textContent = 'Add at least one room.'; return; }
+          errEl.textContent = '';
+          step = 3; renderStep3();
+        }},
+      ]);
+
+      inner.querySelector('#dv-add-room').addEventListener('click', async () => {
+        await _saveRoomsFromDom(); rooms.push(_makeRoom()); renderStep2();
+      });
+      inner.addEventListener('click', async e => {
+        const rmBtn = e.target.closest('.dv-rm-room');
+        if (rmBtn) {
+          const idx = parseInt(rmBtn.dataset.ridx, 10);
+          await _saveRoomsFromDom(); rooms.splice(idx, 1); renderStep2(); return;
+        }
+        const upBtn = e.target.closest('.dv-mv-up');
+        if (upBtn) {
+          const idx = parseInt(upBtn.dataset.ridx, 10);
+          if (idx === 0) return;
+          await _saveRoomsFromDom();
+          [rooms[idx-1], rooms[idx]] = [rooms[idx], rooms[idx-1]]; renderStep2(); return;
+        }
+        const dnBtn = e.target.closest('.dv-mv-dn');
+        if (dnBtn) {
+          const idx = parseInt(dnBtn.dataset.ridx, 10);
+          if (idx >= rooms.length - 1) return;
+          await _saveRoomsFromDom();
+          [rooms[idx], rooms[idx+1]] = [rooms[idx+1], rooms[idx]]; renderStep2(); return;
+        }
+      });
+    }
+
+    async function _saveRoomsFromDom() {
+      const cards = inner.querySelectorAll('.dv-room-card');
+      const reads = [];
+      cards.forEach(card => {
+        const idx = parseInt(card.dataset.ridx, 10);
+        if (!rooms[idx]) return;
+        rooms[idx].roomName      = card.querySelector('.dv-rn')?.value || '';
+        rooms[idx].doorStyleId   = card.querySelector('.dv-ds')?.value || '';
+        rooms[idx].widthMm       = parseInt(card.querySelector('.dv-wm')?.value, 10) || null;
+        rooms[idx].heightMm      = parseInt(card.querySelector('.dv-hm')?.value, 10) || null;
+        rooms[idx].depthMm       = parseInt(card.querySelector('.dv-dm')?.value, 10) || null;
+        rooms[idx].unitCount     = Math.max(1, parseInt(card.querySelector('.dv-uc')?.value, 10) || 1);
+        const priceStr           = card.querySelector('.dv-up')?.value.trim() || '0';
+        rooms[idx].unitPricePence = Math.round(parseFloat(priceStr) * 100) || 0;
+        rooms[idx].notes          = card.querySelector('.dv-rnotes')?.value || '';
+        // Read new photos from file input
+        const fileInput = card.querySelector('.dv-photo-input');
+        if (fileInput && fileInput.files && fileInput.files.length > 0) {
+          for (const file of fileInput.files) {
+            reads.push(new Promise(resolve => {
+              const fr = new FileReader();
+              fr.onload = () => {
+                if (!rooms[idx].images) rooms[idx].images = [];
+                rooms[idx].images.push({ storageKey: fr.result, mimeType: file.type });
+                resolve();
+              };
+              fr.onerror = resolve;
+              fr.readAsDataURL(file);
+            }));
+          }
+        }
+      });
+      if (reads.length) await Promise.all(reads);
+    }
+
+    function renderStep3() {
+      const handleName   = handles.find(h => String(h.id) === String(s1.handleId))?.name || '—';
+      const furnitureName = furnitureRanges.find(f => String(f.id) === String(s1.furnitureRangeId))?.name || '—';
+      let grandTotal = 0;
+      const roomRows = rooms.map(r => {
+        const ds   = doorStyles.find(d => String(d.id) === String(r.doorStyleId))?.name || '—';
+        const tot  = r.unitCount * r.unitPricePence;
+        grandTotal += tot;
+        return `<div class="dv-review-row">
+          <strong>${_esc(r.roomName)} <span style="font-weight:400;color:#9ca3af;">(${_esc(ds)}, ${r.unitCount} unit${r.unitCount !== 1 ? 's' : ''})</span></strong>
+          <span>£${(tot / 100).toFixed(2)}</span>
+        </div>`;
+      }).join('');
+
+      inner.innerHTML = `
+        ${renderStepIndicator()}
+        <p style="font-size:.82rem;color:#6b7280;margin:0 0 16px;">Step 3 of 3 — Review &amp; submit</p>
+        <div class="dv-review-section">
+          <div class="dv-review-label">Visit details</div>
+          ${s1.visitDate   ? `<div class="dv-review-row"><strong>Date</strong><span>${_esc(new Date(s1.visitDate).toLocaleString())}</span></div>` : ''}
+          <div class="dv-review-row"><strong>Duration</strong><span>${_esc(s1.duration)} min</span></div>
+          ${s1.location    ? `<div class="dv-review-row"><strong>Location</strong><span>${_esc(s1.location)}</span></div>` : ''}
+          ${s1.designerName ? `<div class="dv-review-row"><strong>Designer</strong><span>${_esc(s1.designerName)}</span></div>` : ''}
+          ${handles.length ? `<div class="dv-review-row"><strong>Handle</strong><span>${_esc(handleName)}</span></div>` : ''}
+          ${furnitureRanges.length ? `<div class="dv-review-row"><strong>Furniture range</strong><span>${_esc(furnitureName)}</span></div>` : ''}
+        </div>
+        <div class="dv-review-section">
+          <div class="dv-review-label">Room breakdown</div>
+          ${roomRows}
+          <div class="dv-review-total">Estimate total: £${(grandTotal / 100).toFixed(2)}</div>
+        </div>
+        <div class="dv-err" id="dv-s3-err"></div>`;
+
+      _renderFooter(null, [
+        { cls: 'dv-btn-back', label: '← Back', fn: () => { step = 2; renderStep2(); }},
+        { cls: 'dv-btn-next', id: 'dv-submit', label: 'Submit visit', fn: async () => {
+          const errEl = inner.querySelector('#dv-s3-err');
+          const btn   = footer.querySelector('#dv-submit');
+          btn.disabled = true; btn.textContent = 'Submitting…';
+          errEl.textContent = '';
+          try {
+            const payload = {
+              contactId,
+              contactName,
+              contactEmail,
+              handleId:         s1.handleId        || undefined,
+              furnitureRangeId: s1.furnitureRangeId || undefined,
+              visitDate:        s1.visitDate        || undefined,
+              durationMin:      parseInt(s1.duration, 10) || defaultDuration,
+              location:         s1.location         || undefined,
+              notes:            s1.designerName ? `Designer: ${s1.designerName}` : undefined,
+              termsAccepted:    true,
+              rooms: rooms.map(r => ({
+                roomName:       r.roomName,
+                doorStyleId:    r.doorStyleId || undefined,
+                widthMm:        r.widthMm     || undefined,
+                heightMm:       r.heightMm    || undefined,
+                depthMm:        r.depthMm     || undefined,
+                unitCount:      r.unitCount,
+                unitPricePence: r.unitPricePence,
+                notes:          r.notes       || undefined,
+                images:         (r.images || []).map(img => ({
+                  storageKey: img.storageKey, mimeType: img.mimeType,
+                })),
+              })),
+              handlerConfig: cfg,
+            };
+            const resp = await fetch('/api/design-visits', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Submission failed');
+            _cleanupChans();
+            backdrop.remove();
+            if (typeof window.toast === 'function') {
+              window.toast('Design visit submitted. Customer sign-off email sent.');
+            } else {
+              alert('Design visit submitted successfully. The customer will receive a sign-off link by email.');
+            }
+          } catch (e) {
+            btn.disabled = false; btn.textContent = 'Submit visit';
+            errEl.textContent = e.message || 'Submission failed. Please try again.';
+          }
+        }},
+      ]);
+    }
+
+    renderStep1();
+  }
+
+  function _makeRoom() {
+    return { roomName: '', doorStyleId: '', widthMm: null, heightMm: null, depthMm: null, unitCount: 1, unitPricePence: 0, notes: '' };
   }
 
   // ── Bootstrap + cross-tab refresh ──────────────────────────────────────────

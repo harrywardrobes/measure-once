@@ -16,6 +16,7 @@ const {
 } = require('./rate-limiters');
 const qbRoutes = require('./quickbooks');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
+const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -85,6 +86,10 @@ app.get('/survey.html',   (req, res) => res.redirect(301, '/survey'));
 app.get('/projects.html', (req, res) => res.redirect(301, '/projects'));
 app.get('/invoices.html', (req, res) => res.redirect(301, '/invoices'));
 
+// Public design-visit sign-off page (no auth required — token-gated)
+app.get('/design-visit/sign-off', (_req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'design-visit-signoff.html')));
+
 // Public auth pages (no Replit/OIDC anymore — email + password handled in-app).
 app.get('/login', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
 app.get('/set-password', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'set-password.html')));
@@ -112,6 +117,7 @@ function requireHubspotToken(req, res, next) {
 // QuickBooks routes (auth enforced inside the router)
 app.use(qbRoutes);
 app.use(visitsRouter);
+app.use(designVisitsRouter);
 
 // Auth gate for all /api/* routes (whitelist endpoints reachable while
 // signed-out: login, account requests, the public set-password flow).
@@ -119,6 +125,7 @@ const AUTH_WHITELIST = new Set([
   '/login', '/auth/user', '/request-access', '/check-email',
   '/set-password', '/set-password/validate',
   '/forgot-password', '/turnstile-config',
+  // Public design-visit sign-off (token-gated, not session-gated)
 ]);
 // Endpoints a logged-in user can still reach while in `more_info_required`
 // (so they can read their session, complete onboarding, or sign back out).
@@ -127,6 +134,8 @@ const ONBOARDING_ALLOWED = new Set([
 ]);
 app.use('/api', (req, res, next) => {
   if (AUTH_WHITELIST.has(req.path)) return next();
+  // Public design-visit sign-off routes (/api/design-visits/sign-off/:token)
+  if (/^\/design-visits\/sign-off\/[^/]+$/.test(req.path)) return next();
   return isAuthenticated(req, res, next);
 });
 app.use('/api', (req, res, next) => {
@@ -3548,6 +3557,7 @@ const CARD_ACTION_HANDLER_TYPES = new Set([
   'add_design_visit_to_calendar',
   'summarise_phone_call',
   'show_message',
+  'start_design_visit',
 ]);
 
 function _validateHandlerConfig(type, configRaw) {
@@ -3597,6 +3607,30 @@ function _validateHandlerConfig(type, configRaw) {
     const out = { message };
     if (cfg.title !== undefined) {
       out.title = String(cfg.title || '').slice(0, 120);
+    }
+    return { value: out };
+  }
+  if (type === 'start_design_visit') {
+    const out = {};
+    if (cfg.defaultDurationMin !== undefined) {
+      const n = parseInt(cfg.defaultDurationMin, 10);
+      if (!Number.isInteger(n) || n < 5 || n > 1440) {
+        return { error: 'defaultDurationMin must be 5–1440.' };
+      }
+      out.defaultDurationMin = n;
+    }
+    if (cfg.submittedLeadStatus !== undefined) {
+      const v = String(cfg.submittedLeadStatus || '').trim();
+      if (v.length > 60) return { error: 'submittedLeadStatus must be 60 characters or fewer.' };
+      out.submittedLeadStatus = v;
+    }
+    if (cfg.addToGoogleCalendar !== undefined) {
+      out.addToGoogleCalendar = !!cfg.addToGoogleCalendar;
+    }
+    if (cfg.termsAndConditions !== undefined) {
+      const v = String(cfg.termsAndConditions || '');
+      if (v.length > 4000) return { error: 'termsAndConditions must be 4000 characters or fewer.' };
+      out.termsAndConditions = v;
     }
     return { value: out };
   }
@@ -4370,5 +4404,7 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Workshop settings table setup failed:', e.message); }
     try { await ensureWhatsAppMessagesTable(); console.log('  WhatsApp messages table ready'); }
     catch (e) { console.error('  WhatsApp messages table setup failed:', e.message); }
+    try { await ensureDesignVisitTables(); console.log('  Design visit tables ready'); }
+    catch (e) { console.error('  Design visit tables setup failed:', e.message); }
   });
 })();
