@@ -151,9 +151,20 @@ const ROUTES = [
   // (which runs before multer ever sees the empty body).
   { method: 'POST',   path: '/api/admin/dv-handles/0/image',                    level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/card-action-handlers',                 level: 'admin' },
+  { method: 'GET',    path: '/api/admin/card-action-handlers/conflicts',       level: 'admin' },
   { method: 'POST',   path: '/api/admin/card-action-handlers',                 level: 'admin', body: { name: '__noop__', type: 'summarise_phone_call' } },
   { method: 'PATCH',  path: '/api/admin/card-action-handlers/0',               level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/card-action-handlers/0',               level: 'admin' },
+  // Admin-only read endpoints elsewhere in server.js. These rows exist so the
+  // matrix records a member→403 (and viewer→403) cell for each — closing the
+  // PRIV-00-style gap that surfaced on /api/admin/card-action-handlers.
+  { method: 'GET',    path: '/api/admin/lead-statuses',                        level: 'admin' },
+  { method: 'GET',    path: '/api/admin/stage-action-labels',                  level: 'admin' },
+  { method: 'GET',    path: '/api/admin/hubspot/dev-mode',                     level: 'admin' },
+  { method: 'GET',    path: '/api/admin/hubspot/dev-filter',                   level: 'admin' },
+  { method: 'GET',    path: '/api/admin/lead-substatuses',                     level: 'admin' },
+  { method: 'GET',    path: '/api/admin/workshop-settings',                    level: 'admin' },
+  { method: 'GET',    path: '/api/admin/search-settings',                      level: 'admin' },
 
   // ── Logout MUST be last per actor (it destroys the session). The run.js
   // matrix loop is route-outer/actor-inner, so this row fires once per actor

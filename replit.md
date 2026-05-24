@@ -41,7 +41,7 @@ Run `DATABASE_URL_TEST=<disposable connection string> npm run test:privileges`
 to boot a dedicated test server (port 5050 by default, override with
 `PRIV_TEST_PORT`) against that isolated DB, seed four disposable users
 (`privtest-<role>-<runId>@privtest.local`) at each privilege level, exercise
-sign-in, the admin page, a 106-route capability matrix (every registered
+sign-in, the admin page, a 121-route capability matrix (every registered
 `/api/*` route — including `/api/login`, `/api/logout`, `/api/request-access`,
 `/api/forgot-password`, `/api/set-password`, `/api/change-password` —
 × five actors), the full adversarial probe checklist, and a headless Puppeteer
