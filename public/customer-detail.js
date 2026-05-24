@@ -804,27 +804,34 @@ function _renderWorkflowHeaderImpl() {
       'UNQUALIFIED':          'lsb-unqualified',
       'BAD_TIMING':           'lsb-bad-timing',
     };
-    const cid = contact?.id || '';
+    const cid = state.selectedContactId || contact?.id || '';
     const editable = canEditPipeline();
-    const subAffordance = (typeof renderSubstatusAffordance === 'function')
-      ? renderSubstatusAffordance(contact) : '';
     let pillHtml;
     if (!raw) {
       const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
       pillHtml = editable
-        ? `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(nullLabel)}</span>`
+        ? `<span class="lead-status-badge lsb-empty" title="Set lead status" onclick="openLeadStatusPicker(event,'${cid}',{showSubstatuses:true})">${escHtml(nullLabel)}</span>`
         : `<span class="lead-status-badge lsb-empty">${escHtml(nullLabel)}</span>`;
     } else {
-      const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
-      const label = opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
       const cls = CSS_CLASS_MAP[raw] || '';
+      const currentSub = (typeof _currentSubstatusFor === 'function') ? _currentSubstatusFor(contact) : null;
+      let displayLabel;
+      let titleText;
+      if (currentSub) {
+        const parentOpt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
+        const parentLabel = parentOpt ? parentOpt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        displayLabel = `${escHtml(currentSub.label)}<span class="ls-pill-parent">${escHtml(parentLabel)}</span>`;
+        titleText = 'Change lead status / sub-status';
+      } else {
+        const opt = LEAD_STATUS_OPTIONS.find(o => o.value === raw);
+        displayLabel = escHtml(opt ? opt.label : raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()));
+        titleText = 'Change lead status';
+      }
       pillHtml = editable
-        ? `<span class="lead-status-badge ${cls} lsb-clickable" title="Change lead status" onclick="openLeadStatusPicker(event,'${cid}')">${escHtml(label)}</span>`
-        : `<span class="lead-status-badge ${cls}">${escHtml(label)}</span>`;
+        ? `<span class="lead-status-badge ${cls} lsb-clickable" title="${titleText}" onclick="openLeadStatusPicker(event,'${cid}',{showSubstatuses:true})">${displayLabel}</span>`
+        : `<span class="lead-status-badge ${cls}">${displayLabel}</span>`;
     }
-    return subAffordance
-      ? `<span class="lead-status-group">${pillHtml}${subAffordance}</span>`
-      : pillHtml;
+    return pillHtml;
   })();
 
   el.innerHTML = `

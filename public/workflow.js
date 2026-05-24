@@ -780,7 +780,7 @@ function closeCardPicker() {
 
 // ── Lead Status Picker ────────────────────────────────────────────────────────
 
-async function openLeadStatusPicker(event, contactId) {
+async function openLeadStatusPicker(event, contactId, { showSubstatuses = false } = {}) {
   event.stopPropagation();
   if (!canEditPipeline()) return;
   closeCardPicker();
@@ -844,14 +844,41 @@ async function openLeadStatusPicker(event, contactId) {
   }
   popup.appendChild(clearBtn);
 
+  // Resolve the current sub-status so we can mark the right row active
+  // (only needed when rendering the unified grouped picker).
+  let _pickerContact = null;
+  let currentSub = null;
+  if (showSubstatuses) {
+    _pickerContact = state.contacts.find(c => c.id === contactId);
+    if (!_pickerContact && state.selectedContact?.id === contactId) _pickerContact = state.selectedContact;
+    currentSub = _currentSubstatusFor(_pickerContact);
+  }
+
   LEAD_STATUS_OPTIONS.forEach(({ value, label }) => {
+    // In the unified (detail) picker, parent is active only when status matches
+    // AND no sub-status is active; in the standard picker active means status matches.
+    const parentIsActive = showSubstatuses
+      ? (value === currentLeadStatus && !currentSub)
+      : (value === currentLeadStatus);
     const btn = document.createElement('button');
-    const isActive = value === currentLeadStatus;
-    btn.className = 'card-picker-opt' + (isActive ? ' card-picker-opt--active' : '');
+    btn.className = 'card-picker-opt' + (parentIsActive ? ' card-picker-opt--active' : '');
     btn.dataset.leadStatus = value;
     btn.textContent = label;
     btn.addEventListener('click', () => quickSetLeadStatus(contactId, value));
     popup.appendChild(btn);
+
+    // Render indented sub-status rows beneath the parent (detail page only).
+    if (showSubstatuses) {
+      const subs = _substatusesForStatus(value);
+      subs.forEach(sub => {
+        const subBtn = document.createElement('button');
+        const subIsActive = value === currentLeadStatus && currentSub && currentSub.key === sub.substatus_key;
+        subBtn.className = 'card-picker-opt card-picker-opt--sub' + (subIsActive ? ' card-picker-opt--active' : '');
+        subBtn.textContent = sub.label || sub.substatus_key;
+        subBtn.addEventListener('click', () => _quickSetLeadStatusWithSub(contactId, value, sub.substatus_key));
+        popup.appendChild(subBtn);
+      });
+    }
   });
   setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
 
@@ -1283,17 +1310,21 @@ async function quickSetLeadStatus(contactId, newStatus) {
   }
   const prevStatus    = contact?.properties?.hs_lead_status || null;
   const prevSubstatus = contact?.properties?.hw_lead_substatus || '';
-  if (prevStatus === newStatus) return;
 
-  // If the contact's current sub-status belongs to the old lead status, it
-  // is meaningless under the new lead status — clear it (locally + on save)
-  // so we don't leave stale cross-status values in HubSpot.
+  // If the contact's current sub-status belongs to the current lead status,
+  // clicking the parent row in the unified picker should clear it even when
+  // the top-level status itself hasn't changed.
   const subBelongsToPrev = (() => {
     if (!prevSubstatus || !prevStatus) return false;
     return String(prevSubstatus).toUpperCase()
       .startsWith(`${String(prevStatus).toUpperCase()}__`);
   })();
   const clearSub = subBelongsToPrev;
+
+  // No-op only when both the status value and the sub-status state are already
+  // in the desired final state.  When status is unchanged but a sub-status
+  // exists that belongs to it, we must proceed so it gets cleared.
+  if (prevStatus === newStatus && !clearSub) return;
 
   function _applyLeadStatus(status, substatus) {
     // Mutate the underlying contact (whichever source we found above) so
@@ -1370,6 +1401,81 @@ async function quickSetLeadStatus(contactId, newStatus) {
     // we know the PATCH round-trip is done (no second request needed since we
     // never sent a successful change).
     _applyLeadStatus(prevStatus || '', clearSub ? prevSubstatus : undefined);
+    if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
+    if (e.code === 'HUBSPOT_AUTH') {
+      showToast('Could not update lead status — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
+    } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
+      showToast('Could not update lead status — HubSpot rate limit reached. Please try again in a moment.', true);
+    } else if (e.code === 'HUBSPOT_VERIFY_FAILED') {
+      showToast("Lead status didn't save in HubSpot — please try again.", true);
+    } else {
+      showToast('Failed to update lead status', true);
+    }
+  }
+}
+
+// Sets both hs_lead_status and hw_lead_substatus in a single PATCH (used by
+// the unified picker when the user clicks a sub-status row).
+async function _quickSetLeadStatusWithSub(contactId, statusKey, substatusKey) {
+  closeCardPicker();
+  let contact = state.contacts.find(c => c.id === contactId);
+  if (!contact && state.selectedContact?.id === contactId) contact = state.selectedContact;
+
+  const prevStatus    = contact?.properties?.hs_lead_status    || '';
+  const prevSubstatus = contact?.properties?.hw_lead_substatus || '';
+  const newHw = `${String(statusKey).toUpperCase()}__${String(substatusKey).toUpperCase()}`;
+  if (prevStatus === statusKey && prevSubstatus === newHw) return;
+
+  function _apply(status, hw) {
+    if (contact) {
+      contact.properties = { ...(contact.properties || {}), hs_lead_status: status, hw_lead_substatus: hw };
+    }
+    if (state.selectedContact && state.selectedContact.id === contactId &&
+        state.selectedContact !== contact) {
+      state.selectedContact.properties = {
+        ...(state.selectedContact.properties || {}),
+        hs_lead_status: status,
+        hw_lead_substatus: hw,
+      };
+    }
+    if (state.selectedContactId) {
+      const fresh = state.contacts.find(c => c.id === state.selectedContactId);
+      if (fresh) state.selectedContact = fresh;
+    }
+    state.pendingLeadStatus = state.pendingLeadStatus || {};
+    state.pendingLeadStatus[contactId] = status;
+    populateLeadStatusFilter();
+    renderCustomerList();
+    if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+    if (typeof renderWorkflowStages === 'function') renderWorkflowStages();
+  }
+
+  _apply(statusKey, newHw);
+
+  try {
+    await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: statusKey, hw_lead_substatus: newHw });
+    if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
+    if (typeof loadLeadStatusCounts === 'function') {
+      loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
+    }
+    const subs = _substatusesForStatus(statusKey);
+    const subLabel = subs.find(s =>
+      String(s.substatus_key).toUpperCase() === String(substatusKey).toUpperCase()
+    )?.label || substatusKey;
+    showBottomUndo(`Sub-status set to ${subLabel}`, async () => {
+      _apply(prevStatus, prevSubstatus);
+      await PATCH_REQ(`/api/contacts/${contactId}`, {
+        hs_lead_status: prevStatus || '',
+        hw_lead_substatus: prevSubstatus || '',
+      }).catch(() => {}).finally(() => {
+        if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
+        if (typeof loadLeadStatusCounts === 'function') {
+          loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
+        }
+      });
+    });
+  } catch (e) {
+    _apply(prevStatus, prevSubstatus);
     if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
     if (e.code === 'HUBSPOT_AUTH') {
       showToast('Could not update lead status — HubSpot token is invalid or expired. Ask an admin to update the token.', true);

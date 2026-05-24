@@ -828,6 +828,10 @@ body.showing-workflow .workflow-panel { display: flex; }
 .card-picker-opt--disabled:hover { background: transparent; color: var(--ink-3); }
 .card-picker-opt--active { font-weight: 600; background: var(--paper-deep); cursor: default; pointer-events: none; }
 .card-picker-opt--active:hover { background: var(--paper-deep); }
+.card-picker-opt--sub { padding-left: 26px; font-size: 0.74rem; font-weight: 400; color: var(--ink-3); }
+.card-picker-opt--sub:hover { color: var(--ink-2); }
+.card-picker-opt--sub.card-picker-opt--active { color: var(--ink-2); font-weight: 600; }
+.ls-pill-parent { font-size: 0.7em; opacity: 0.65; font-weight: 400; margin-left: 3px; }
 .card-picker-status-active   { color: #065f46; }
 .card-picker-status-declined { color: #991b1b; }
 .card-picker-status-complete { color: var(--orchid-deep); }
