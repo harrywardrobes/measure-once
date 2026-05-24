@@ -9,8 +9,9 @@
 // Covers (per task #630):
 //   (API) Pre-checks — catalogue endpoints respond for admin; 401 when unauth.
 //   (A)   Wizard submit — POST /api/design-visits with a seeded contact; DB
-//         rows confirmed in design_visits and design_visit_rooms; status flips
-//         to "submitted"; HubSpot/QB/email are skipped (tokens stripped) without
+//         rows confirmed in design_visits, design_visit_rooms, and
+//         design_visit_room_images (storage_key + mime_type); status flips to
+//         "submitted"; HubSpot/QB/email are skipped (tokens stripped) without
 //         crashing.
 //   (B)   Sign-off: approve — GET sign-off summary; POST approve flips status to
 //         "signed_off" and nulls token; second POST returns 404.
@@ -232,6 +233,7 @@ async function main() {
     waitForTable('design_visit_door_styles'),
     waitForTable('design_visits'),
     waitForTable('design_visit_rooms'),
+    waitForTable('design_visit_room_images'),
   ]);
   console.log('  All design_visit_* tables ready');
 
@@ -394,6 +396,9 @@ async function main() {
         unitCount:      8,
         unitPricePence: 15000,
         notes:          'E2E room note',
+        images: [
+          { storageKey: `sdv-test-photo-${runId}.jpg`, mimeType: 'image/jpeg' },
+        ],
       },
     ],
     handlerConfig: {},
@@ -449,6 +454,27 @@ async function main() {
     '1 room row with room_name="Kitchen"',
     `found ${roomRows.length} room(s), first=${roomRows[0]?.room_name}`,
     roomRows.length === 1 && roomRows[0]?.room_name === 'Kitchen',
+  );
+
+  // Confirm image row in design_visit_room_images
+  let imageRows = [];
+  const expectedStorageKey = `sdv-test-photo-${runId}.jpg`;
+  if (roomRows.length > 0) {
+    const imgQ = await pool.query(
+      `SELECT room_id, storage_key, mime_type
+       FROM design_visit_room_images WHERE room_id = $1`,
+      [roomRows[0].id]
+    );
+    imageRows = imgQ.rows;
+  }
+
+  record(
+    '(A) design_visit_room_images row exists in DB after submit',
+    `1 image row with storage_key="${expectedStorageKey}" and mime_type="image/jpeg"`,
+    `found ${imageRows.length} image(s), storage_key=${imageRows[0]?.storage_key}, mime_type=${imageRows[0]?.mime_type}`,
+    imageRows.length === 1
+      && imageRows[0]?.storage_key === expectedStorageKey
+      && imageRows[0]?.mime_type === 'image/jpeg',
   );
 
   // Verify side-effect chain observables — token set, QB skipped, HubSpot/email skipped
@@ -1388,8 +1414,10 @@ async function writeReport(runId, findings) {
     '  returns 401/403. Non-admin DELETE `/api/design-visits/:id` returns 403.',
     '  Non-admin POST to admin catalogue returns 403.',
     '- **(A) Wizard submit flow**: POST `/api/design-visits` with a seeded contact,',
-    '  one room, seeded handle and furniture range. Asserts 201 + `{ ok, designVisitId }`,',
-    '  confirms DB rows in `design_visits` (status=submitted) and `design_visit_rooms`.',
+    '  one room (including one image with `storageKey` + `mimeType`), seeded handle',
+    '  and furniture range. Asserts 201 + `{ ok, designVisitId }`, confirms DB rows in',
+    '  `design_visits` (status=submitted), `design_visit_rooms`, and',
+    '  `design_visit_room_images` (storage_key and mime_type verified).',
     '  Side-effect chain verified: `signoff_token_hash` set (non-null), `signoff_expires_at`',
     '  set and > now(), `qb_estimate_id` is NULL (QB skip with stripped credentials).',
     '  HubSpot and email calls are skipped gracefully (tokens/SMTP stripped).',
