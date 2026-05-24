@@ -1945,11 +1945,17 @@ async function setupAuth(app) {
   });
 
   // ── Profile photo ────────────────────────────────────────────────────────────
+  const ALLOWED_PHOTO_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
   app.post('/api/users/me/photo', isAuthenticated, photoUploadLimiter, async (req, res) => {
     const userId = req.user?.claims?.sub;
     const { data } = req.body || {};
     if (!data || typeof data !== 'string' || !data.startsWith('data:image/')) {
       return res.status(400).json({ error: 'Invalid image data.' });
+    }
+    const detectedMime = (data.match(/^data:([^;,]+)/) || [])[1] || '';
+    if (!ALLOWED_PHOTO_MIME_TYPES.has(detectedMime)) {
+      return res.status(400).json({ error: 'Unsupported image type. Please upload a JPEG, PNG, WebP, or GIF.' });
     }
     if (data.length > 4 * 1024 * 1024) {
       return res.status(400).json({ error: 'Image is too large. Max ~3 MB after compression.' });
@@ -1973,8 +1979,11 @@ async function setupAuth(app) {
       const photo = r.rows[0]?.custom_photo;
       if (!photo) return res.status(404).end();
       const [header, b64] = photo.split(',');
-      const mime = (header.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
-      res.set('Content-Type', mime);
+      const storedMime = (header.match(/^data:([^;,]+)/) || [])[1] || '';
+      const safeMime = ALLOWED_PHOTO_MIME_TYPES.has(storedMime) ? storedMime : 'image/jpeg';
+      res.set('Content-Type', safeMime);
+      res.set('Content-Disposition', 'attachment');
+      res.set('X-Content-Type-Options', 'nosniff');
       res.set('Cache-Control', 'private, max-age=3600');
       res.send(Buffer.from(b64, 'base64'));
     } catch (e) {
@@ -2001,6 +2010,19 @@ async function setupAuth(app) {
 
   app.post('/api/admin/photo-requests/:id/approve', isAuthenticated, requireAdmin, async (req, res) => {
     try {
+      const check = await pool.query(
+        `SELECT pending_photo FROM users WHERE id = $1 AND pending_photo IS NOT NULL`,
+        [req.params.id]
+      );
+      if (check.rowCount === 0) return res.status(404).json({ error: 'No pending photo found.' });
+      const pendingMime = (check.rows[0].pending_photo.match(/^data:([^;,]+)/) || [])[1] || '';
+      if (!ALLOWED_PHOTO_MIME_TYPES.has(pendingMime)) {
+        await pool.query(
+          `UPDATE users SET pending_photo = NULL, updated_at = NOW() WHERE id = $1`,
+          [req.params.id]
+        );
+        return res.status(400).json({ error: 'Pending photo has an unsupported type and has been cleared.' });
+      }
       const r = await pool.query(
         `UPDATE users
            SET custom_photo = pending_photo, pending_photo = NULL,
