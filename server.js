@@ -376,7 +376,8 @@ let _allContactsInflight = null;  // Promise while a scan is running
 const ALL_CONTACTS_PROPERTIES = [
   'firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'hw_lead_substatus',
   'address', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate',
-  'measure_once_rooms'
+  'measure_once_rooms',
+  ...(process.env.NODE_ENV !== 'production' ? ['hw_test_user'] : []),
 ];
 
 async function fetchAllContactsShared() {
@@ -746,6 +747,15 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
 
     let contacts = await getSharedContactsCache();
 
+    // Dev-only filter: hide contacts without hw_test_user = true in non-production.
+    // Admins may pass ?all=1 to bypass (e.g. for the test-user management UI).
+    if (process.env.NODE_ENV !== 'production') {
+      const bypassForAdmin = req.query.all === '1' && req.user?.privilege === 'admin';
+      if (!bypassForAdmin) {
+        contacts = contacts.filter(c => c.properties?.hw_test_user === 'true');
+      }
+    }
+
     if (leadStatus) {
       if (leadStatus === '__no_status__') {
         contacts = contacts.filter(c => !c.properties?.hs_lead_status);
@@ -801,16 +811,22 @@ app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken
     );
     const keys = statusRows.map(r => r.key);
 
+    // In dev mode, counts are scoped to hw_test_user contacts only so the
+    // filter-dropdown numbers stay consistent with what the contacts list shows.
+    const devCountFilter = process.env.NODE_ENV !== 'production'
+      ? [{ propertyName: 'hw_test_user', operator: 'EQ', value: 'true' }]
+      : [];
+
     const searches = [
       axios.post(
         `${HS}/crm/v3/objects/contacts/search`,
-        { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'NOT_HAS_PROPERTY' }] }], limit: 1 },
+        { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'NOT_HAS_PROPERTY' }, ...devCountFilter] }], limit: 1 },
         { headers: hsHeaders() }
       ).then(r => ['__no_status__', r.data.total ?? 0]),
       ...keys.map(key =>
         axios.post(
           `${HS}/crm/v3/objects/contacts/search`,
-          { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: key }] }], limit: 1 },
+          { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: key }, ...devCountFilter] }], limit: 1 },
           { headers: hsHeaders() }
         ).then(r => [key, r.data.total ?? 0])
       ),
@@ -837,10 +853,17 @@ app.get('/api/open-leads', async (req, res) => {
   try {
     const allResults = [];
     let after = undefined;
+    // In dev mode every listing endpoint is narrowed to hw_test_user contacts.
+    const devFilters = process.env.NODE_ENV !== 'production'
+      ? [{ propertyName: 'hw_test_user', operator: 'EQ', value: 'true' }]
+      : [];
     do {
       const body = {
         filterGroups: [{
-          filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' }]
+          filters: [
+            { propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' },
+            ...devFilters,
+          ]
         }],
         properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
         sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
@@ -3341,10 +3364,94 @@ async function ensureLeadSubstatusesTable() {
   `);
 }
 
-// Create the `hw_lead_substatus` HubSpot property if it doesn't already exist.
-// HubSpot rejects enumeration property creation with an empty options array,
-// so seed with a hidden placeholder; real options arrive via
-// syncLeadSubstatusesToHubSpot() immediately after.
+// ── hw_test_user HubSpot property ─────────────────────────────────────────────
+// Registers a boolean contact property used to mark dev/test contacts.
+// Only created in non-production environments and only when HUBSPOT_ACCESS_TOKEN
+// is present. A 409 (already exists) is treated as success.
+async function ensureHwTestUserProperty() {
+  if (process.env.NODE_ENV === 'production') return;
+  if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
+  try {
+    await axios.get(
+      `${HS}/crm/v3/properties/contacts/hw_test_user`,
+      { headers: hsHeaders() }
+    );
+    return; // already exists
+  } catch (e) {
+    if (e.response?.status !== 404) {
+      console.warn('  hw_test_user probe failed:', e.response?.data?.message || e.message);
+      return;
+    }
+  }
+  try {
+    await axios.post(
+      `${HS}/crm/v3/properties/contacts`,
+      {
+        name:        'hw_test_user',
+        label:       'HW Test User',
+        groupName:   'contactinformation',
+        type:        'bool',
+        fieldType:   'booleancheckbox',
+        description: 'Marks a contact as a dev/test contact in Measure Once. In non-production environments only contacts with this flag are shown.',
+        options: [
+          { label: 'Yes', value: 'true',  displayOrder: 0, hidden: false },
+          { label: 'No',  value: 'false', displayOrder: 1, hidden: false },
+        ],
+      },
+      { headers: hsHeaders() }
+    );
+    console.log('  Created HubSpot property: hw_test_user');
+  } catch (e) {
+    if (e.response?.status !== 409) {
+      console.warn('  Could not create hw_test_user:', e.response?.data?.message || e.message);
+    }
+  }
+}
+
+// ── Admin: dev-mode flag ──────────────────────────────────────────────────────
+// Returns whether the server is running in dev (non-production) mode.
+// The admin UI reads this to decide whether to render the test-users section.
+app.get('/api/admin/hubspot/dev-mode', isAuthenticated, requireAdmin, (req, res) => {
+  res.json({ devMode: process.env.NODE_ENV !== 'production' });
+});
+
+// ── Admin: toggle HW_test_user on a contact ───────────────────────────────────
+app.patch('/api/admin/hubspot/test-users/:contactId', isAuthenticated, requireAdmin, requireHubspotToken, async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  const contactId = String(req.params.contactId || '');
+  if (!/^\d+$/.test(contactId)) {
+    return res.status(400).json({ error: 'Invalid contact id.' });
+  }
+
+  const { enabled } = req.body;
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: '`enabled` must be a boolean.' });
+  }
+
+  try {
+    await axios.patch(
+      `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+      { properties: { hw_test_user: enabled } },
+      { headers: hsHeaders() }
+    );
+    bustSharedCache();
+    res.json({ ok: true });
+  } catch (e) {
+    const status = e.response?.status;
+    if (status === 404) return res.status(404).json({ error: 'Contact not found in HubSpot.' });
+    if (status === 401 || status === 403) {
+      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    }
+    if (status === 429) {
+      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    }
+    res.status(502).json({ error: e.response?.data?.message || e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+  }
+});
+
 async function ensureHwLeadSubstatusProperty() {
   if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
   try {
@@ -4390,6 +4497,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Stage action labels seed failed:', e.message); }
     try { await ensureLeadSubstatusesTable(); console.log('  Lead sub-statuses table ready'); }
     catch (e) { console.error('  Lead sub-statuses table setup failed:', e.message); }
+    try { await ensureHwTestUserProperty(); console.log('  hw_test_user HubSpot property ready (dev)'); }
+    catch (e) { console.error('  hw_test_user property setup failed:', e.message); }
     try { await ensureHwLeadSubstatusProperty(); console.log('  hw_lead_substatus HubSpot property ready'); }
     catch (e) { console.error('  hw_lead_substatus property setup failed:', e.message); }
     try { await syncLeadSubstatusesToHubSpot(); console.log('  hw_lead_substatus options synced'); }

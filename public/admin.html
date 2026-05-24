@@ -1582,6 +1582,91 @@
     renderTradeSubmissions();
   }
 
+  // ── Dev test users ──────────────────────────────────────────────────────────
+  let _devModeChecked = false;
+  let _devMode = false;
+  let _devTestUsersLoaded = false;
+  let _devTestUsersContacts = [];
+
+  async function loadDevTestUsers() {
+    if (!_devModeChecked) {
+      try {
+        const d = await api('GET', '/api/admin/hubspot/dev-mode');
+        _devMode = d?.devMode === true;
+      } catch { _devMode = false; }
+      _devModeChecked = true;
+    }
+    const section = document.getElementById('dev-test-users-section');
+    if (!section) return;
+    if (!_devMode) { section.style.display = 'none'; return; }
+    section.style.display = '';
+    if (_devTestUsersLoaded) return;
+    const listEl = document.getElementById('dev-test-users-list');
+    if (!listEl) return;
+    listEl.innerHTML = '<p style="font-size:.82rem;color:var(--ink-4);">Loading contacts…</p>';
+    try {
+      let contacts = [];
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const data = await api('GET', `/api/contacts-all?all=1&limit=100&page=${page}`);
+        if (!data) break;
+        contacts = contacts.concat(data.results || []);
+        totalPages = data.totalPages || 1;
+        page++;
+      } while (page <= totalPages);
+      _devTestUsersContacts = contacts;
+      _devTestUsersLoaded = true;
+      renderDevTestUsers(contacts);
+    } catch (e) {
+      listEl.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Failed to load contacts: ${esc(e.message)}</p>`;
+    }
+  }
+
+  function renderDevTestUsers(contacts) {
+    const listEl = document.getElementById('dev-test-users-list');
+    if (!listEl) return;
+    if (!contacts.length) {
+      listEl.innerHTML = '<p style="font-size:.82rem;color:var(--ink-4);">No contacts found in HubSpot.</p>';
+      return;
+    }
+    listEl.innerHTML = contacts.map(c => {
+      const id = esc(c.id);
+      const first = esc(c.properties?.firstname || '');
+      const last  = esc(c.properties?.lastname  || '');
+      const name  = [first, last].filter(Boolean).join(' ') || `Contact ${id}`;
+      const email = esc(c.properties?.email || '');
+      const enabled = c.properties?.hw_test_user === 'true';
+      return `<div class="dtu-row" id="dtu-row-${id}" style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);">
+        <div style="min-width:0;">
+          <div style="font-size:.875rem;font-weight:500;color:var(--ink-1);">${name}</div>
+          ${email ? `<div style="font-size:.78rem;color:var(--ink-4);margin-top:1px;">${email}</div>` : ''}
+        </div>
+        <label class="ss-toggle" title="Include in dev test data" style="flex-shrink:0;margin-left:16px;">
+          <input type="checkbox" ${enabled ? 'checked' : ''} data-contact-id="${id}" onchange="toggleTestUser('${id}', this)">
+          <span class="ss-toggle-track"></span>
+        </label>
+      </div>`;
+    }).join('');
+  }
+
+  async function toggleTestUser(contactId, checkbox) {
+    const enabled = checkbox.checked;
+    checkbox.disabled = true;
+    try {
+      await api('PATCH', `/api/admin/hubspot/test-users/${encodeURIComponent(contactId)}`, { enabled });
+      showToast(enabled ? 'Marked as test user.' : 'Removed from test users.');
+      // Update local cache so re-render is accurate without a full reload
+      const c = _devTestUsersContacts.find(x => x.id === contactId);
+      if (c) c.properties.hw_test_user = enabled ? 'true' : 'false';
+    } catch (e) {
+      checkbox.checked = !enabled;
+      showToast('Failed: ' + e.message, true);
+    } finally {
+      checkbox.disabled = false;
+    }
+  }
+
   let _hubspotStatusLoaded = false;
   async function loadHubspotStatus() {
     if (_hubspotStatusLoaded) return;
@@ -3202,7 +3287,7 @@
         <button class="tab-btn"        data-tab="permissions" onclick="switchTab('permissions')">Permissions &amp; roles</button>
         <button class="tab-btn"        data-tab="requests"    onclick="switchTab('requests')">Pending Requests <span id="req-tab-badge">${reqBadge}</span></button>
         <button class="tab-btn"        data-tab="auditlog"    onclick="switchTab('auditlog')">Audit log</button>
-        <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings');loadHubspotStatus();loadLeadStatusesAdmin()">Settings</button>
+        <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings');loadHubspotStatus();loadLeadStatusesAdmin();loadDevTestUsers()">Settings</button>
         <button class="tab-btn"        data-tab="cardactions" onclick="switchTab('cardactions');loadCardActionsAdmin();loadCardActionHandlersAdmin();loadDvCatalogue()">Card actions</button>
         <button class="tab-btn"        data-tab="search"      onclick="switchTab('search');loadSearchSettings()">Search</button>
         <button class="tab-btn"        data-tab="workshop"    onclick="switchTab('workshop');loadWorkshopSettings()">Workshop</button>
@@ -3430,6 +3515,19 @@
             <div id="ls-add-error" style="display:none;font-size:.78rem;color:#991b1b;margin-top:6px;"></div>
           </div>
         </div>
+
+        <!-- Dev test users (hidden in production) -->
+        <div class="card" id="dev-test-users-section" style="display:none;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;">
+            <div>
+              <div class="card-title" style="margin:0 0 4px;">Dev test users</div>
+              <p class="card-desc" style="margin:0;">In development mode the customer list is filtered to contacts marked below. Toggle a contact to include or exclude it from the dev view.</p>
+            </div>
+          </div>
+          <div id="dev-test-users-list" style="max-height:480px;overflow-y:auto;">
+            <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
+          </div>
+        </div>
       </div>
 
       <!-- CARD ACTIONS -->
@@ -3554,7 +3652,7 @@
     let savedTab;
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) {
-      if (savedTab === 'settings') { switchTab('settings'); loadHubspotStatus(); loadLeadStatusesAdmin(); }
+      if (savedTab === 'settings') { switchTab('settings'); loadHubspotStatus(); loadLeadStatusesAdmin(); loadDevTestUsers(); }
       else if (savedTab === 'cardactions') { switchTab('cardactions'); loadCardActionsAdmin(); loadCardActionHandlersAdmin(); loadDvCatalogue(); }
       else if (savedTab === 'search') { switchTab('search'); loadSearchSettings(); }
       else if (savedTab === 'workshop') { switchTab('workshop'); loadWorkshopSettings(); }
