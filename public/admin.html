@@ -2526,6 +2526,7 @@
         <p style="margin:0 0 14px;font-size:.78rem;color:var(--ink-4);">for <strong>${esc(slot.label)}</strong> <span style="color:var(--ink-4);font-weight:normal;">(${esc(slot.rowLabel || '')})</span></p>
         <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Action name <span style="font-weight:400;color:var(--ink-4);">(optional)</span></label>
         <input id="cah-action-name" type="text" class="field" maxlength="80" placeholder="e.g. send_quote" style="font-size:.85rem;" value="${esc(config.action_name || '')}">
+        <div id="cah-action-name-err" style="display:none;color:#b91c1c;font-size:.78rem;margin-top:3px;">Only lowercase letters, digits, and underscores are allowed (e.g. <code>send_quote</code>).</div>
         <div style="margin-top:4px;padding:6px 10px;border-radius:6px;background:#fef3c7;border:1px solid #fcd34d;font-size:.75rem;color:#92400e;line-height:1.5;">⚙️ Backend automation coming soon — this name will be used to trigger workflows automatically once wired up. When set, it also displays as the label on the card action strip.</div>
         <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Action type</label>
         <select id="cah-type" class="field">
@@ -2590,10 +2591,22 @@
     wrap.querySelector('#cah-cancel').addEventListener('click', () => wrap.remove());
     wrap.querySelector('#cah-conflict-cancel').addEventListener('click', () => { conflictBox.style.display = 'none'; });
 
+    const actionNameInput = wrap.querySelector('#cah-action-name');
+    const actionNameErr   = wrap.querySelector('#cah-action-name-err');
+    const SNAKE_RE = /^[a-z0-9_]*$/;
+    const validateActionName = () => {
+      const v = actionNameInput.value.trim();
+      const invalid = v.length > 0 && !SNAKE_RE.test(v);
+      actionNameErr.style.display = invalid ? '' : 'none';
+      return !invalid;
+    };
+    actionNameInput.addEventListener('blur', validateActionName);
+
     const buildPayload = () => {
       const tp = typeSel.value;
       const errEl = wrap.querySelector('#cah-edit-err');
       errEl.textContent = '';
+      if (!validateActionName()) { errEl.textContent = 'Action name may only contain lowercase letters, digits, and underscores.'; return null; }
       let cfg;
       if (tp === 'show_message') {
         const message = msgBody.value.trim();
@@ -2606,7 +2619,7 @@
         try { cfg = JSON.parse(cfgTxt); }
         catch { errEl.textContent = 'Configuration is not valid JSON.'; return null; }
       }
-      const actionNameV = wrap.querySelector('#cah-action-name').value.trim();
+      const actionNameV = actionNameInput.value.trim();
       if (actionNameV) cfg.action_name = actionNameV;
       else delete cfg.action_name;
       return { name: '', type: tp, config: cfg, bindings: [binding] };
