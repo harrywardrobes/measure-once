@@ -1753,6 +1753,9 @@
 
   let _leadStatusesData = [];
   let _leadStatusesLoaded = false;
+  let _dvHandlesData    = [];
+  let _dvFurnitureData  = [];
+  let _dvDoorStylesData = [];
   const _lsBroadcast = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('lead_statuses_changed') : null;
   function _notifyLeadStatusChanged() {
     _lsBroadcast?.postMessage('changed');
@@ -3927,20 +3930,75 @@
   }
   window.loadDvCatalogue = loadDvCatalogue;
 
+  // ── Catalogue move helper ─────────────────────────────────────────────────
+  async function moveDvItem(type, id, direction) {
+    const cacheMap = {
+      handle:       _dvHandlesData,
+      furniture:    _dvFurnitureData,
+      'door-style': _dvDoorStylesData,
+    };
+    const endpointMap = {
+      handle:       '/api/admin/design-visit-handles',
+      furniture:    '/api/admin/design-visit-furniture-ranges',
+      'door-style': '/api/admin/design-visit-door-styles',
+    };
+    const wrapIdMap = {
+      handle:       'dv-handles-wrap',
+      furniture:    'dv-furniture-wrap',
+      'door-style': 'dv-door-styles-wrap',
+    };
+    const cache = cacheMap[type];
+    if (!cache) return;
+    const sorted = [...cache].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
+    const idx = sorted.findIndex(s => s.id === id);
+    if (idx === -1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+    const a = sorted[idx];
+    const b = sorted[swapIdx];
+    if ((a.sort_order || 0) === (b.sort_order || 0)) {
+      sorted.forEach((s, i) => { s.sort_order = i; });
+    }
+    const aOrder = a.sort_order;
+    const bOrder = b.sort_order;
+    try {
+      await Promise.all([
+        api('PATCH', `${endpointMap[type]}/${a.id}`, { sort_order: bOrder }),
+        api('PATCH', `${endpointMap[type]}/${b.id}`, { sort_order: aOrder }),
+      ]);
+      a.sort_order = bOrder;
+      b.sort_order = aOrder;
+      const wrap = document.getElementById(wrapIdMap[type]);
+      if (type === 'handle') {
+        renderDvHandleList(wrap, _dvHandlesData);
+      } else if (type === 'furniture') {
+        renderDvList(wrap, _dvFurnitureData, 'furniture', { fields: ['name','description'], labels: ['Name','Description'] });
+      } else {
+        renderDvList(wrap, _dvDoorStylesData, 'door-style', { fields: ['name','image_url'], labels: ['Name','Image URL'] });
+      }
+    } catch (e) {
+      toast(`Failed to reorder: ${e.message}`, true);
+    }
+  }
+  window.moveDvItem = moveDvItem;
+
   // ── Handles ───────────────────────────────────────────────────────────────
   async function loadDvHandles() {
     const wrap = document.getElementById('dv-handles-wrap');
     if (!wrap) return;
     try {
       const items = await api('GET', '/api/admin/design-visit-handles');
-      renderDvHandleList(wrap, items);
+      _dvHandlesData = Array.isArray(items) ? items : [];
+      renderDvHandleList(wrap, _dvHandlesData);
     } catch (e) {
       wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load handles: ${esc(e.message)}</p>`;
     }
   }
 
   function renderDvHandleList(wrap, items) {
-    if (!items.length) {
+    if (!wrap) return;
+    const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
+    if (!sorted.length) {
       wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">None added yet.</p>`;
       return;
     }
@@ -3951,12 +4009,12 @@
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Image</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Name</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Style</th>
-            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Order</th>
+            <th style="width:52px;"></th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          ${items.map((item, i) => `
+          ${sorted.map((item, i) => `
             <tr style="border-bottom:1px solid var(--border);${i % 2 ? 'background:var(--stone-soft);' : ''}">
               <td style="padding:7px 8px;">
                 ${item.image_url
@@ -3965,7 +4023,14 @@
               </td>
               <td style="padding:7px 8px;">${esc(item.name || '—')}</td>
               <td style="padding:7px 8px;">${esc(item.style || '—')}</td>
-              <td style="padding:7px 8px;color:var(--ink-4);">${item.sort_order}</td>
+              <td style="padding:4px 4px;white-space:nowrap;">
+                <button class="btn btn-ghost" style="padding:2px 5px;font-size:.75rem;line-height:1;" title="Move up"
+                  ${i === 0 ? 'disabled' : ''}
+                  onclick="moveDvItem('handle', ${item.id}, 'up')">▲</button>
+                <button class="btn btn-ghost" style="padding:2px 5px;font-size:.75rem;line-height:1;" title="Move down"
+                  ${i === sorted.length - 1 ? 'disabled' : ''}
+                  onclick="moveDvItem('handle', ${item.id}, 'down')">▼</button>
+              </td>
               <td style="padding:7px 8px;text-align:right;white-space:nowrap;">
                 <button class="btn btn-ghost" style="padding:3px 8px;font-size:.75rem;"
                   onclick="openDvItemEditor('handle', ${item.id})">Edit</button>
@@ -3983,7 +4048,8 @@
     if (!wrap) return;
     try {
       const items = await api('GET', '/api/admin/design-visit-furniture-ranges');
-      renderDvList(wrap, items, 'furniture', {
+      _dvFurnitureData = Array.isArray(items) ? items : [];
+      renderDvList(wrap, _dvFurnitureData, 'furniture', {
         fields: ['name','description'],
         labels: ['Name','Description'],
       });
@@ -3998,7 +4064,8 @@
     if (!wrap) return;
     try {
       const items = await api('GET', '/api/admin/design-visit-door-styles');
-      renderDvList(wrap, items, 'door-style', {
+      _dvDoorStylesData = Array.isArray(items) ? items : [];
+      renderDvList(wrap, _dvDoorStylesData, 'door-style', {
         fields: ['name','image_url'],
         labels: ['Name','Image URL'],
       });
@@ -4009,7 +4076,9 @@
 
   // Generic list renderer for catalogue sections
   function renderDvList(wrap, items, type, { fields, labels }) {
-    if (!items.length) {
+    if (!wrap) return;
+    const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
+    if (!sorted.length) {
       wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">None added yet.</p>`;
       return;
     }
@@ -4018,20 +4087,27 @@
         <thead>
           <tr style="border-bottom:1px solid var(--border);">
             ${labels.map(l => `<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">${esc(l)}</th>`).join('')}
-            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Order</th>
+            <th style="width:52px;"></th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          ${items.map((item, i) => `
+          ${sorted.map((item, i) => `
             <tr style="border-bottom:1px solid var(--border);${i % 2 ? 'background:var(--stone-soft);' : ''}">
               ${fields.map(f => `<td style="padding:7px 8px;">${esc(item[f] || '—')}</td>`).join('')}
-              <td style="padding:7px 8px;color:var(--ink-4);">${item.sort_order}</td>
+              <td style="padding:4px 4px;white-space:nowrap;">
+                <button class="btn btn-ghost" style="padding:2px 5px;font-size:.75rem;line-height:1;" title="Move up"
+                  ${i === 0 ? 'disabled' : ''}
+                  onclick="moveDvItem('${type}', ${item.id}, 'up')">▲</button>
+                <button class="btn btn-ghost" style="padding:2px 5px;font-size:.75rem;line-height:1;" title="Move down"
+                  ${i === sorted.length - 1 ? 'disabled' : ''}
+                  onclick="moveDvItem('${type}', ${item.id}, 'down')">▼</button>
+              </td>
               <td style="padding:7px 8px;text-align:right;white-space:nowrap;">
                 <button class="btn btn-ghost" style="padding:3px 8px;font-size:.75rem;"
-                  onclick="openDvItemEditor('${esc(type)}', ${item.id})">Edit</button>
+                  onclick="openDvItemEditor('${type}', ${item.id})">Edit</button>
                 <button class="btn btn-ghost" style="padding:3px 8px;font-size:.75rem;color:#991b1b;"
-                  onclick="deleteDvItem('${esc(type)}', ${item.id})">Delete</button>
+                  onclick="deleteDvItem('${type}', ${item.id})">Delete</button>
               </td>
             </tr>`).join('')}
         </tbody>
@@ -4127,8 +4203,6 @@
             <input id="dvie-img" type="url" class="field" maxlength="500" value="${esc(item?.image_url || '')}" placeholder="https://…" style="font-size:.85rem;">
           `}
         ` : ''}
-        <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Sort order</label>
-        <input id="dvie-sort" type="number" class="field" min="0" value="${item?.sort_order ?? 0}" style="font-size:.85rem;width:100px;">
         <div id="dvie-err" style="color:#b91c1c;font-size:.82rem;margin-top:8px;min-height:16px;"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
           <button class="btn btn-ghost" id="dvie-cancel">Cancel</button>
@@ -4167,7 +4241,7 @@
       saveBtn.disabled = true;
       saveBtn.textContent = 'Saving…';
 
-      const payload = { name, sort_order: parseInt(wrap.querySelector('#dvie-sort').value, 10) || 0 };
+      const payload = { name };
       if (hasStyleSelect) payload.style = wrap.querySelector('#dvie-style').value || null;
       if (hasDescription) payload.description = wrap.querySelector('#dvie-desc').value;
 
