@@ -261,7 +261,14 @@
           // T&C
           if (data.terms) {
             document.getElementById('terms-text').textContent = data.terms;
-            document.getElementById('terms-card').style.display = '';
+            const termsCard = document.getElementById('terms-card');
+            if (data.termsVersionNumber != null) {
+              const vBadge = document.createElement('span');
+              vBadge.style.cssText = 'display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:#e5e7eb;color:#374151;font-size:.68rem;font-weight:700;vertical-align:middle;';
+              vBadge.textContent = 'v' + data.termsVersionNumber;
+              termsCard.querySelector('.card-title').appendChild(vBadge);
+            }
+            termsCard.style.display = '';
           }
 
           show('main-content');

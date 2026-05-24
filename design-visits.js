@@ -88,6 +88,17 @@ function checkDvRateLimit(userId) {
 // ── DB schema ─────────────────────────────────────────────────────────────────
 async function ensureDesignVisitTables() {
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS terms_conditions_versions (
+      id             SERIAL PRIMARY KEY,
+      version_number INT NOT NULL,
+      terms_text     TEXT NOT NULL,
+      created_by     TEXT,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS tcv_version_number_idx ON terms_conditions_versions (version_number)`);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS design_visit_handles (
       id          SERIAL PRIMARY KEY,
       name        TEXT NOT NULL,
@@ -172,6 +183,32 @@ async function ensureDesignVisitTables() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS dvri_room_id_idx ON design_visit_room_images (room_id)`);
+
+  // Add terms_condition_version_id FK column if not present (idempotent migration)
+  await pool.query(`
+    ALTER TABLE design_visits
+      ADD COLUMN IF NOT EXISTS terms_condition_version_id INT
+        REFERENCES terms_conditions_versions(id) ON DELETE SET NULL
+  `);
+
+  // Seed: if versions table is empty but admin_settings has terms text, insert version 1
+  try {
+    const countR = await pool.query(`SELECT COUNT(*) FROM terms_conditions_versions`);
+    if (parseInt(countR.rows[0].count, 10) === 0) {
+      const settingsR = await pool.query(`SELECT value FROM admin_settings WHERE key='design_visit_terms'`);
+      const existingText = settingsR.rows[0]?.value?.text || '';
+      if (existingText.trim()) {
+        await pool.query(
+          `INSERT INTO terms_conditions_versions (version_number, terms_text, created_by)
+           VALUES (1, $1, 'system')`,
+          [existingText]
+        );
+        console.log('[design-visits] Seeded terms version 1 from existing admin_settings.');
+      }
+    }
+  } catch (seedErr) {
+    console.warn('[design-visits] Terms version seed failed (non-fatal):', seedErr.message);
+  }
 }
 
 // ── BroadcastChannel event helper ─────────────────────────────────────────────
@@ -195,11 +232,13 @@ async function ensureAdminSettings() {
 async function loadVisitWithRooms(id) {
   const vr = await pool.query(`
     SELECT dv.*,
-           dvh.name  AS handle_name,
-           dvfr.name AS furniture_range_name
+           dvh.name   AS handle_name,
+           dvfr.name  AS furniture_range_name,
+           tcv.version_number AS terms_version_number
     FROM design_visits dv
-    LEFT JOIN design_visit_handles         dvh  ON dvh.id  = dv.handle_id
+    LEFT JOIN design_visit_handles          dvh  ON dvh.id  = dv.handle_id
     LEFT JOIN design_visit_furniture_ranges dvfr ON dvfr.id = dv.furniture_range_id
+    LEFT JOIN terms_conditions_versions     tcv  ON tcv.id  = dv.terms_condition_version_id
     WHERE dv.id = $1`, [id]);
   if (!vr.rows.length) return null;
   const visit = vr.rows[0];
@@ -705,6 +744,13 @@ router.delete('/api/admin/design-visit-door-styles/:id', isAuthenticated, requir
 // ── Non-admin read of T&C text (any authenticated user — used by wizard) ─────
 router.get('/api/design-visit-terms', isAuthenticated, async (req, res) => {
   try {
+    // Return the latest published version (falls back to admin_settings for legacy installs)
+    const vr = await pool.query(
+      `SELECT id, version_number, terms_text FROM terms_conditions_versions ORDER BY version_number DESC LIMIT 1`
+    );
+    if (vr.rows.length) {
+      return res.json({ terms: vr.rows[0].terms_text, versionNumber: vr.rows[0].version_number, versionId: vr.rows[0].id });
+    }
     const r = await pool.query(`SELECT value FROM admin_settings WHERE key='design_visit_terms'`);
     res.json({ terms: r.rows[0]?.value?.text || '' });
   } catch (e) {
@@ -712,7 +758,7 @@ router.get('/api/design-visit-terms', isAuthenticated, async (req, res) => {
   }
 });
 
-// ── Admin: T&C settings ───────────────────────────────────────────────────────
+// ── Admin: T&C settings (legacy kept for backward compat) ────────────────────
 router.get('/api/admin/settings/design-visit-terms', isAuthenticated, requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`SELECT value FROM admin_settings WHERE key='design_visit_terms'`);
@@ -732,6 +778,46 @@ router.put('/api/admin/settings/design-visit-terms', isAuthenticated, requireAdm
       [JSON.stringify({ text: terms })]
     );
     res.json({ success: true, terms });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Admin: Terms & Conditions version history ─────────────────────────────────
+router.get('/api/admin/terms-conditions/versions', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, version_number, terms_text, created_by, created_at
+       FROM terms_conditions_versions
+       ORDER BY version_number DESC`
+    );
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/api/admin/terms-conditions/versions', isAuthenticated, requireAdmin, async (req, res) => {
+  const termsText = String(req.body?.terms_text || '').trim().slice(0, 4000);
+  if (!termsText) return res.status(400).json({ error: 'terms_text is required' });
+  const createdBy = req.user?.claims?.email || req.user?.email || req.user?.claims?.sub || 'admin';
+  try {
+    // Determine next version number
+    const maxR = await pool.query(`SELECT COALESCE(MAX(version_number), 0) AS max_ver FROM terms_conditions_versions`);
+    const nextVer = parseInt(maxR.rows[0].max_ver, 10) + 1;
+    const r = await pool.query(
+      `INSERT INTO terms_conditions_versions (version_number, terms_text, created_by)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [nextVer, termsText, createdBy]
+    );
+    // Also update admin_settings so the legacy path stays in sync
+    await pool.query(`
+      INSERT INTO admin_settings (key, value, updated_at)
+      VALUES ('design_visit_terms', $1::jsonb, NOW())
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [JSON.stringify({ text: termsText })]
+    );
+    res.status(201).json(r.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -769,10 +855,12 @@ router.get('/api/design-visit-door-styles', isAuthenticated, async (req, res) =>
 router.get('/api/design-visits', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   try {
     const r = await pool.query(`
-      SELECT dv.*, dvh.name AS handle_name, dvfr.name AS furniture_range_name
+      SELECT dv.*, dvh.name AS handle_name, dvfr.name AS furniture_range_name,
+             tcv.version_number AS terms_version_number
       FROM design_visits dv
       LEFT JOIN design_visit_handles          dvh  ON dvh.id  = dv.handle_id
       LEFT JOIN design_visit_furniture_ranges dvfr ON dvfr.id = dv.furniture_range_id
+      LEFT JOIN terms_conditions_versions     tcv  ON tcv.id  = dv.terms_condition_version_id
       ORDER BY dv.created_at DESC LIMIT 500`);
     res.json(r.rows);
   } catch (e) {
@@ -814,12 +902,21 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
   try {
     await client.query('BEGIN');
 
+    // Look up the latest terms version to stamp on the visit
+    let termsVersionId = null;
+    try {
+      const tvr = await pool.query(
+        `SELECT id FROM terms_conditions_versions ORDER BY version_number DESC LIMIT 1`
+      );
+      termsVersionId = tvr.rows[0]?.id || null;
+    } catch {}
+
     // Insert master visit record (status: draft)
     const vr = await client.query(`
       INSERT INTO design_visits
         (contact_id, contact_name, contact_email, created_by, handle_id, furniture_range_id,
-         visit_date, duration_min, location, notes, terms_accepted, status)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'draft')
+         visit_date, duration_min, location, notes, terms_accepted, terms_condition_version_id, status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draft')
       RETURNING id`,
       [
         String(contactId),
@@ -833,6 +930,7 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
         location ? String(location).slice(0, 500) : null,
         notes    ? String(notes).slice(0, 4000)   : null,
         !!termsAccepted,
+        termsVersionId,
       ]
     );
     const visitId = vr.rows[0].id;
@@ -1009,23 +1107,53 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
       LEFT JOIN design_visit_door_styles dvds ON dvds.id = dvr.door_style_id
       WHERE dvr.design_visit_id = $1
       ORDER BY dvr.sort_order ASC, dvr.id ASC`, [visit.id]);
-    // Load T&C from admin_settings
+    // Load T&C: prefer pinned version from visit row, fall back to latest, then admin_settings
     let terms = '';
+    let termsVersionNumber = null;
     try {
-      const ts = await pool.query(`SELECT value FROM admin_settings WHERE key='design_visit_terms'`);
-      terms = ts.rows[0]?.value?.text || '';
+      // Re-fetch visit with terms version FK
+      const visitFull = await pool.query(
+        `SELECT terms_condition_version_id FROM design_visits WHERE id = $1`, [visit.id]
+      );
+      const pinnedVersionId = visitFull.rows[0]?.terms_condition_version_id;
+      if (pinnedVersionId) {
+        const tv = await pool.query(
+          `SELECT version_number, terms_text FROM terms_conditions_versions WHERE id = $1`,
+          [pinnedVersionId]
+        );
+        if (tv.rows.length) {
+          terms = tv.rows[0].terms_text;
+          termsVersionNumber = tv.rows[0].version_number;
+        }
+      }
+      if (!terms) {
+        // Fall back to latest version
+        const lv = await pool.query(
+          `SELECT version_number, terms_text FROM terms_conditions_versions ORDER BY version_number DESC LIMIT 1`
+        );
+        if (lv.rows.length) {
+          terms = lv.rows[0].terms_text;
+          termsVersionNumber = lv.rows[0].version_number;
+        }
+      }
+      if (!terms) {
+        // Last resort: admin_settings (legacy)
+        const ts = await pool.query(`SELECT value FROM admin_settings WHERE key='design_visit_terms'`);
+        terms = ts.rows[0]?.value?.text || '';
+      }
     } catch {}
     res.json({
-      id:              visit.id,
-      contactName:     visit.contact_name,
-      status:          visit.status,
-      visitDate:       visit.visit_date,
-      location:        visit.location,
-      notes:           visit.notes,
-      handleName:      visit.handle_name,
-      furnitureRange:  visit.furniture_range_name,
-      expiresAt:       visit.signoff_expires_at,
-      rooms:           rooms.rows.map(r => ({
+      id:                 visit.id,
+      contactName:        visit.contact_name,
+      status:             visit.status,
+      visitDate:          visit.visit_date,
+      location:           visit.location,
+      notes:              visit.notes,
+      handleName:         visit.handle_name,
+      furnitureRange:     visit.furniture_range_name,
+      expiresAt:          visit.signoff_expires_at,
+      termsVersionNumber,
+      rooms:              rooms.rows.map(r => ({
         roomName:       r.room_name,
         doorStyleName:  r.door_style_name,
         widthMm:        r.width_mm,

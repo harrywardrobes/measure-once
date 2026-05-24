@@ -394,7 +394,7 @@
     }
 
     // Pre-load catalogue + T&C in parallel
-    let handles = [], furnitureRanges = [], doorStyles = [], termsText = '';
+    let handles = [], furnitureRanges = [], doorStyles = [], termsText = '', termsVersionNumber = null;
     try {
       [handles, furnitureRanges, doorStyles] = await Promise.all([
         fetch('/api/design-visit-handles').then(r => r.ok ? r.json() : []),
@@ -405,7 +405,7 @@
     // Load T&C text from the member-accessible route (no admin required)
     try {
       const tr = await fetch('/api/design-visit-terms');
-      if (tr.ok) { const td = await tr.json(); termsText = td.terms || ''; }
+      if (tr.ok) { const td = await tr.json(); termsText = td.terms || ''; termsVersionNumber = td.versionNumber || null; }
     } catch {}
 
     // Wizard state
@@ -774,6 +774,10 @@
           ${roomRows}
           <div class="dv-review-total">Estimate total: £${(grandTotal / 100).toFixed(2)}</div>
         </div>
+        ${termsText ? `<div class="dv-review-section">
+          <div class="dv-review-label">Terms &amp; Conditions</div>
+          <div class="dv-review-row"><strong>Accepted</strong><span style="color:#059669;">✓${termsVersionNumber != null ? ` &nbsp;<span style="display:inline-block;padding:1px 7px;border-radius:999px;background:#e5e7eb;color:#374151;font-size:.7rem;font-weight:700;">v${termsVersionNumber}</span>` : ''}</span></div>
+        </div>` : ''}
         <div class="dv-err" id="dv-s3-err"></div>`;
 
       _renderFooter(null, [

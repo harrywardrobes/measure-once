@@ -3643,15 +3643,33 @@
           <div id="dv-door-styles-wrap"><p style="font-size:.82rem;color:var(--ink-4);">Loading…</p></div>
         </div>
 
-        <div class="card">
+        <div class="card" id="dv-terms-card">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
             <div>
               <div class="card-title" style="margin:0;">Design Visit — Terms &amp; Conditions</div>
-              <p class="card-desc" style="margin:2px 0 0;">Default T&amp;C shown to the customer on the sign-off page and included in the email. Can be overridden per handler in the handler editor above.</p>
+              <p class="card-desc" style="margin:2px 0 0;">Each published revision is versioned and stamped on the visit at submission time. Customers always see the version that was active when their visit was submitted.</p>
             </div>
-            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="saveDvTerms()">Save</button>
+            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openPublishTermsEditor()">Publish new version</button>
           </div>
-          <textarea id="dv-terms-text" class="field" rows="6" maxlength="4000" placeholder="Enter your terms and conditions here…" style="font-size:.85rem;width:100%;"></textarea>
+
+          <!-- Current version display -->
+          <div id="dv-terms-current" style="margin-bottom:14px;">
+            <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
+          </div>
+
+          <!-- Inline publish editor (hidden by default) -->
+          <div id="dv-terms-editor" style="display:none;margin-top:4px;padding:14px;border:1px solid var(--stone);border-radius:var(--radius-md);background:var(--stone-soft);">
+            <div style="font-size:.78rem;font-weight:700;color:var(--ink-2);margin-bottom:8px;">New terms text (will become the active version)</div>
+            <textarea id="dv-terms-new-text" class="field" rows="8" maxlength="4000" placeholder="Enter the full terms and conditions text…" style="font-size:.84rem;width:100%;"></textarea>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+              <button class="btn btn-ghost" onclick="closeDvTermsEditor()">Cancel</button>
+              <button class="btn btn-primary" onclick="publishDvTermsVersion()">Publish</button>
+            </div>
+            <div id="dv-terms-publish-err" style="display:none;color:#b91c1c;font-size:.8rem;margin-top:6px;"></div>
+          </div>
+
+          <!-- Version history -->
+          <div id="dv-terms-history" style="margin-top:8px;"></div>
         </div>
       </div>
 
@@ -3933,27 +3951,88 @@
   }
   window.openDvItemEditor = openDvItemEditor;
 
-  // ── T&C ───────────────────────────────────────────────────────────────────
+  // ── T&C version history ───────────────────────────────────────────────────
   async function loadDvTerms() {
-    const el = document.getElementById('dv-terms-text');
-    if (!el) return;
+    const currentEl = document.getElementById('dv-terms-current');
+    const historyEl = document.getElementById('dv-terms-history');
+    if (!currentEl) return;
     try {
-      const r = await api('GET', '/api/admin/settings/design-visit-terms');
-      el.value = r.terms || '';
-    } catch {}
-  }
-
-  async function saveDvTerms() {
-    const el = document.getElementById('dv-terms-text');
-    if (!el) return;
-    try {
-      await api('PUT', '/api/admin/settings/design-visit-terms', { terms: el.value });
-      toast('Terms & conditions saved.');
+      const versions = await api('GET', '/api/admin/terms-conditions/versions');
+      if (!versions.length) {
+        currentEl.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);font-style:italic;">No terms published yet. Click "Publish new version" to add the first version.</p>`;
+        if (historyEl) historyEl.innerHTML = '';
+        return;
+      }
+      const latest = versions[0];
+      const fmtDate = d => new Date(d).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+      // Current version display
+      currentEl.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <span style="display:inline-block;padding:2px 10px;border-radius:var(--radius-pill);background:var(--plum);color:#fff;font-size:.72rem;font-weight:700;">v${latest.version_number} (current)</span>
+          <span style="font-size:.78rem;color:var(--ink-4);">Published ${fmtDate(latest.created_at)} by ${esc(latest.created_by || '—')}</span>
+        </div>
+        <div style="background:#fff;border:1px solid var(--stone);border-radius:var(--radius-sm);padding:10px 12px;font-size:.82rem;color:var(--ink-2);white-space:pre-line;max-height:140px;overflow-y:auto;line-height:1.6;">${esc(latest.terms_text) || '<em style="color:var(--ink-4)">Empty</em>'}</div>`;
+      // Version history (all versions except current)
+      if (historyEl) {
+        const older = versions.slice(1);
+        if (!older.length) { historyEl.innerHTML = ''; return; }
+        historyEl.innerHTML = `
+          <details style="margin-top:10px;">
+            <summary style="font-size:.78rem;font-weight:600;color:var(--ink-3);cursor:pointer;">Version history (${older.length} older revision${older.length > 1 ? 's' : ''})</summary>
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px;">
+              ${older.map(v => `
+                <details style="border:1px solid var(--stone);border-radius:var(--radius-sm);padding:8px 12px;">
+                  <summary style="cursor:pointer;display:flex;align-items:center;gap:10px;list-style:none;">
+                    <span style="font-size:.72rem;font-weight:700;padding:1px 8px;border-radius:var(--radius-pill);background:var(--stone);color:var(--ink-2);">v${v.version_number}</span>
+                    <span style="font-size:.78rem;color:var(--ink-4);">${fmtDate(v.created_at)} · ${esc(v.created_by || '—')}</span>
+                  </summary>
+                  <div style="margin-top:8px;font-size:.8rem;color:var(--ink-2);white-space:pre-line;max-height:120px;overflow-y:auto;line-height:1.6;">${esc(v.terms_text)}</div>
+                </details>`).join('')}
+            </div>
+          </details>`;
+      }
     } catch (e) {
-      toast('Save failed: ' + e.message, true);
+      if (currentEl) currentEl.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load terms versions: ${esc(e.message)}</p>`;
     }
   }
-  window.saveDvTerms = saveDvTerms;
+
+  function openPublishTermsEditor() {
+    const editor = document.getElementById('dv-terms-editor');
+    const textarea = document.getElementById('dv-terms-new-text');
+    const errEl = document.getElementById('dv-terms-publish-err');
+    if (!editor) return;
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    if (textarea) textarea.value = '';
+    editor.style.display = '';
+    textarea && textarea.focus();
+  }
+  window.openPublishTermsEditor = openPublishTermsEditor;
+
+  function closeDvTermsEditor() {
+    const editor = document.getElementById('dv-terms-editor');
+    if (editor) editor.style.display = 'none';
+  }
+  window.closeDvTermsEditor = closeDvTermsEditor;
+
+  async function publishDvTermsVersion() {
+    const textarea = document.getElementById('dv-terms-new-text');
+    const errEl = document.getElementById('dv-terms-publish-err');
+    if (!textarea) return;
+    const text = textarea.value.trim();
+    if (!text) {
+      if (errEl) { errEl.textContent = 'Terms text cannot be empty.'; errEl.style.display = ''; }
+      return;
+    }
+    try {
+      await api('POST', '/api/admin/terms-conditions/versions', { terms_text: text });
+      closeDvTermsEditor();
+      toast('New terms version published.');
+      await loadDvTerms();
+    } catch (e) {
+      if (errEl) { errEl.textContent = e.message || 'Publish failed.'; errEl.style.display = ''; }
+    }
+  }
+  window.publishDvTermsVersion = publishDvTermsVersion;
 
   // ── Search Settings tab ──────────────────────────────────────────────────────
   const SEARCH_ACTIONS_META = [
