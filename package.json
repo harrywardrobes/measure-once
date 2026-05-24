@@ -4,6 +4,7 @@
   "description": "Project management dashboard",
   "main": "server.js",
   "scripts": {
+    "postinstall": "npx puppeteer browsers install chrome",
     "start": "node server.js",
     "dev": "nodemon server.js",
     "build:css": "tailwindcss -i ./src/tailwind.css -o ./public/tailwind.css --minify",
