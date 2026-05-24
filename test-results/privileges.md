@@ -1,15 +1,37 @@
 # Privilege Adversarial Test Suite — Report
 
-- Run ID: `q2es2w`
-- Started: 2026-05-20T18:53:43.599Z
-- Finished: 2026-05-20T18:54:13.708Z
+- Run ID: `jhmoan`
+- Started: 2026-05-24T18:29:21.629Z
+- Finished: 2026-05-24T18:30:41.667Z
 - Harness: `npm run test:privileges` (boots a dedicated server on a separate port, seeds four users, runs probes, exits non-zero on findings).
 
 ## Summary
 
-- Capability matrix: 530/530 passed (0 inconclusive — guard fired before authz, see below)
-- Adversarial probes: 127/127 passed
-- **Findings**: 0
+- Capability matrix: 563/570 passed (0 inconclusive — guard fired before authz, see below)
+- Adversarial probes: 133/141 passed
+- **Findings**: 15
+  - medium: 8
+  - info: 7
+
+## Findings
+
+| Severity | Source | Name | Expected | Observed | Detail |
+|---|---|---|---|---|---|
+| medium | probe | xss · admin requests API returns the payload verbatim (must be HTML-escaped client-side) | name === "x');fetch('https://x')//@xss-jhmoan.bc" | found=true name="X');fetch('https://x')//@xss-jhmoan.bc" | Check public/admin.html escaping — this is data confirmation, not a render test. |
+| medium | probe | captcha · turnstile tampering probe (REQUIRED coverage) | captcha tampering matrix executed against 3 endpoints × 5 payloads | captcha pass-through not enabled — probe could NOT be executed | Run with PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 TURNSTILE_SECRET_KEY=… npm run test:privileges to exercise the captcha gate path. |
+| medium | probe | ui-smoke · pagination advances to page 2 on Next click | info text contains "Showing 26" (the 26th item) | text="Showing 1–25 of 26" |  |
+| medium | probe | ui-smoke · returning to /customers restores page 2 from sessionStorage | pagination info still shows "Showing 26" after back-navigation | text="Showing 1–25 of 26" |  |
+| medium | probe | ui-smoke · filter applied on page 2 resets customer list to page 1 | pagination info shows "Showing 1–25 of 26" after filter change from page 2 | onPage2="Showing 1–25 of 26" afterFilter="Showing 1–25 of 26" filterApplied=true |  |
+| medium | probe | ui-smoke · lead-status filter change on page 2 resets customer list to page 1 | pagination info shows "Showing 1–" after lead-status dropdown change from page 2 | onPage2="Showing 1–25 of 26" afterFilter="" filterApplied=false |  |
+| medium | probe | ui-smoke · pagination bar does not overflow at 420 px with 9 pages (narrowest breakpoint) | scrollWidth <= clientWidth on .cl-pagination at 420 px with 201 contacts on page 8 | pagination bar not found |  |
+| medium | probe | ui-smoke · .cl-pagination-info is hidden at 420 px viewport width | display:none or not visible per computed style | pagination bar not found |  |
+| info | matrix | GET /trades (as viewer, requires manager) | 401/403 from privilege gate | status=200 (privilege-escalation) |  |
+| info | matrix | GET /trades (as member, requires manager) | 401/403 from privilege gate | status=200 (privilege-escalation) |  |
+| info | matrix | GET /api/trades (as viewer, requires manager) | 401/403 from privilege gate | status=200 (privilege-escalation) |  |
+| info | matrix | GET /api/trades (as member, requires manager) | 401/403 from privilege gate | status=200 (privilege-escalation) |  |
+| info | matrix | GET /api/quickbooks/invoices (as manager, requires manager) | any non-403 (auth gate passes) | status=403 (unexpected-denial) |  |
+| info | matrix | GET /api/quickbooks/invoice/0 (as manager, requires manager) | any non-403 (auth gate passes) | status=403 (unexpected-denial) |  |
+| info | matrix | GET /api/quickbooks/invoice/0/pdf (as manager, requires manager) | any non-403 (auth gate passes) | status=403 (unexpected-denial) |  |
 
 ## Capability matrix
 
@@ -22,7 +44,7 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | GET /api/check-email?email=foo%40bar.com | public | 200 | 200 | 200 | 200 | 200 |
 | GET /api/set-password/validate?token=zzz | public | 404 | 404 | 404 | 404 | 404 |
 | GET /auth/status | public | 200 | 200 | 200 | 200 | 200 |
-| POST /api/login | public | 400 | 400 | 400 | 400 | 400 |
+| POST /api/login | public | 401 | 401 | 401 | 401 | 401 |
 | POST /api/request-access | public | 429 | 429 | 429 | 429 | 429 |
 | POST /api/forgot-password | public | 429 | 429 | 429 | 429 | 429 |
 | POST /api/set-password | public | 410 | 410 | 410 | 410 | 410 |
@@ -57,12 +79,13 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | GET /api/calendar/upcoming | auth | 401 | 200 | 200 | 200 | 200 |
 | GET /api/localdata/all | auth | 401 | 503 | 503 | 503 | 503 |
 | GET /api/workflow | auth | 401 | 200 | 200 | 200 | 200 |
+| GET /api/card-action-handlers | auth | 401 | 200 | 200 | 200 | 200 |
 | GET /api/workflow-stages | auth | 401 | 503 | 503 | 503 | 503 |
 | GET /api/personal-tasks | auth | 401 | 200 | 200 | 200 | 200 |
 | GET /api/visits | auth | 401 | 400 | 400 | 400 | 400 |
-| GET /api/users/0d2873eb-9cf0-4bf7-b17f-0d67d5dbfd4a/profile | self-or-admin | 401 | 403 | 403 | 403 | 200 |
-| GET /api/users/0d2873eb-9cf0-4bf7-b17f-0d67d5dbfd4a/photo | auth | 401 | 404 | 404 | 404 | 404 |
-| PATCH /api/users/0d2873eb-9cf0-4bf7-b17f-0d67d5dbfd4a/profile | self-or-admin | 401 | 403 | 403 | 403 | 200 |
+| GET /api/users/f44a7b43-2c31-488c-99db-798c10dd7455/profile | self-or-admin | 401 | 403 | 403 | 403 | 200 |
+| GET /api/users/f44a7b43-2c31-488c-99db-798c10dd7455/photo | auth | 401 | 404 | 404 | 404 | 404 |
+| PATCH /api/users/f44a7b43-2c31-488c-99db-798c10dd7455/profile | self-or-admin | 401 | 403 | 403 | 403 | 200 |
 | POST /api/contacts | member | 401 | 403 | 503 | 503 | 503 |
 | POST /api/contacts/0/localdata | member | 401 | 403 | 503 | 503 | 503 |
 | PATCH /api/contacts/0 | member | 401 | 403 | 503 | 503 | 503 |
@@ -79,20 +102,21 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | PATCH /api/personal-tasks/0 | member | 401 | 403 | 404 | 404 | 404 |
 | DELETE /api/personal-tasks/0 | member | 401 | 403 | 404 | 404 | 404 |
 | POST /api/visits | member | 401 | 403 | 400 | 400 | 400 |
+| POST /api/card-actions/phone-call-summary | member | 401 | 403 | 503 | 503 | 503 |
 | PATCH /api/visits/0 | member | 401 | 403 | 400 | 400 | 400 |
 | DELETE /api/visits/0 | member | 401 | 403 | 404 | 404 | 404 |
 | POST /api/workflow | manager | 401 | 403 | 403 | 400 | 400 |
 | PATCH /api/contacts/0/rooms/0/fitter | manager | 401 | 403 | 403 | 503 | 503 |
-| GET /trades | manager | 401 | 403 | 403 | 200 | 200 |
-| GET /api/trades | manager | 401 | 403 | 403 | 200 | 200 |
+| GET /trades | manager | 401 | 200 ⚠ | 200 ⚠ | 200 | 200 |
+| GET /api/trades | manager | 401 | 200 ⚠ | 200 ⚠ | 200 | 200 |
 | POST /api/trades | manager | 401 | 403 | 403 | 400 | 400 |
 | PUT /api/trades/0 | manager | 401 | 403 | 403 | 400 | 400 |
 | GET /api/trades/0/audit | manager | 401 | 403 | 403 | 200 | 200 |
 | DELETE /api/trades/0 | manager | 401 | 403 | 403 | 404 | 404 |
 | POST /api/trades/submissions | manager | 401 | 403 | 403 | 400 | 400 |
-| GET /api/quickbooks/invoices | manager | 401 | 403 | 403 | 503 | 503 |
-| GET /api/quickbooks/invoice/0 | manager | 401 | 403 | 403 | 503 | 503 |
-| GET /api/quickbooks/invoice/0/pdf | manager | 401 | 403 | 403 | 503 | 503 |
+| GET /api/quickbooks/invoices | manager | 401 | 403 | 403 | 403 ⚠ | 503 |
+| GET /api/quickbooks/invoice/0 | manager | 401 | 403 | 403 | 403 ⚠ | 503 |
+| GET /api/quickbooks/invoice/0/pdf | manager | 401 | 403 | 403 | 403 ⚠ | 503 |
 | GET /admin | admin | 302 | 403 | 403 | 403 | 200 |
 | GET /api/admin/requests | admin | 401 | 403 | 403 | 403 | 200 |
 | POST /api/admin/requests/0/approve | admin | 401 | 403 | 403 | 403 | 404 |
@@ -114,6 +138,7 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | POST /api/admin/trades/submissions/0/approve | admin | 401 | 403 | 403 | 403 | 404 |
 | POST /api/admin/trades/submissions/0/reject | admin | 401 | 403 | 403 | 403 | 404 |
 | GET /api/admin/trades-audit | admin | 401 | 403 | 403 | 403 | 200 |
+| GET /api/admin/audit-log-unified | admin | 401 | 403 | 403 | 403 | 200 |
 | POST /api/admin/trades/migrate | admin | 401 | 403 | 403 | 403 | 200 |
 | PATCH /api/trades/0/category | admin | 401 | 403 | 403 | 403 | 400 |
 | POST /api/admin/users/foo@bar.com/resend-set-password | admin | 401 | 403 | 403 | 403 | 404 |
@@ -123,6 +148,11 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | POST /auth/quickbooks/disconnect | admin | 401 | 403 | 403 | 403 | 200 |
 | POST /api/quickbooks/invoice/0 | admin | 401 | 403 | 403 | 403 | 503 |
 | POST /api/quickbooks/invoice/0/send | admin | 401 | 403 | 403 | 403 | 503 |
+| POST /api/admin/dv-handles/0/image | admin | 401 | 403 | 403 | 403 | 400 |
+| GET /api/admin/card-action-handlers | admin | 401 | 403 | 403 | 403 | 200 |
+| POST /api/admin/card-action-handlers | admin | 401 | 403 | 403 | 403 | 201 |
+| PATCH /api/admin/card-action-handlers/0 | admin | 401 | 403 | 403 | 403 | 400 |
+| DELETE /api/admin/card-action-handlers/0 | admin | 401 | 403 | 403 | 403 | 400 |
 | POST /api/logout | auth | 401 | 200 | 200 | 200 | 200 |
 
 ## Adversarial probes (full log)
@@ -131,17 +161,17 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 
 | Result | Severity | Probe | Expected | Observed | Notes |
 |---|---|---|---|---|---|
-| PASS | high | wrong password rejected | 401 unauthorized | status=400 |  |
-| PASS | high | unknown email rejected | 401 unauthorized | status=400 |  |
+| PASS | high | wrong password rejected | 401 unauthorized | status=401 |  |
+| PASS | high | unknown email rejected | 401 unauthorized | status=401 |  |
 | PASS | low | malformed email rejected | 400 bad request | status=400 |  |
-| PASS | high | session cookie hardened | HttpOnly + Secure + SameSite=Lax | captcha-active — verified via server config & UI-smoke session |  |
+| PASS | high | session cookie hardened | HttpOnly + Secure + SameSite=Lax | HttpOnly=true Secure=true SameSite=Lax=true |  |
 | PASS | high | logout invalidates session | /api/auth/user 200 before, 401 after | before=200 after=401 |  |
 
 ### password-flow
 
 | Result | Severity | Probe | Expected | Observed | Notes |
 |---|---|---|---|---|---|
-| PASS | medium | forgot-password always returns 200 (no enumeration) | status=200 (or 400 when captcha active — uniform rejection, no enumeration leak) | status=400 |  |
+| PASS | medium | forgot-password always returns 200 (no enumeration) | status=200 | status=200 |  |
 | PASS | high | forgot-password issued a reset token | one unused token row | rowCount=1 purpose=reset |  |
 | PASS | high | empty token rejected | 410 gone | status=410 |  |
 | PASS | high | random token rejected | 410 gone | status=410 |  |
@@ -154,7 +184,7 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 |---|---|---|---|---|---|
 | PASS | critical | member cannot self-promote via PATCH profile | 403 forbidden | status=403 |  |
 | PASS | critical | member cannot mass-assign other fields via PATCH profile | 403 forbidden | status=403 |  |
-| PASS | critical | member privilege_level + email unchanged after escalation attempts | privilege_level=member email=privtest-member-q2es2w@privtest.local | privilege_level=member email=privtest-member-q2es2w@privtest.local |  |
+| PASS | critical | member privilege_level + email unchanged after escalation attempts | privilege_level=member email=privtest-member-jhmoan@privtest.local | privilege_level=member email=privtest-member-jhmoan@privtest.local |  |
 
 ### idor
 
@@ -255,20 +285,18 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 
 | Result | Severity | Probe | Expected | Observed | Notes |
 |---|---|---|---|---|---|
-| PASS | info | Turnstile is active in the test harness | captcha-active=true (secret key present) | captcha-active=true config-enabled=false | Captcha enforcement confirmed. DB-injection login path is used for probe sessions. |
-| PASS | info | login succeeds when captcha disabled (no-op path) | status=200 | captcha active — no-op path inapplicable; DB-injection path verified |  |
-| PASS | critical | /api/login: no/empty/replayed/10KB/dummy Turnstile token all rejected | every variant returns 4xx | noToken=400 empty=400 replayed=400 oversized10kb=400 literalDummy=400 |  |
-| PASS | critical | /api/request-access: no/empty/replayed/10KB/dummy Turnstile token all rejected | every variant returns 4xx | noToken=400 empty=400 replayed=400 oversized10kb=429 literalDummy=429 |  |
-| PASS | critical | /api/forgot-password: no/empty/replayed/10KB/dummy Turnstile token all rejected | every variant returns 4xx | noToken=429 empty=429 replayed=429 oversized10kb=429 literalDummy=429 |  |
+| PASS | info | Turnstile is disabled in the test harness | enabled=false | enabled=false | Set TURNSTILE_SECRET_KEY in the env to re-run with captcha enforcement. |
+| PASS | info | login succeeds when captcha disabled (no-op path) | status=200 | status=200 |  |
+| FAIL | medium | turnstile tampering probe (REQUIRED coverage) | captcha tampering matrix executed against 3 endpoints × 5 payloads | captcha pass-through not enabled — probe could NOT be executed | Run with PRIVTEST_USE_TURNSTILE_SECRET_KEY=1 TURNSTILE_SECRET_KEY=… npm run test:privileges to exercise the captcha gate path. |
 
 ### xss
 
 | Result | Severity | Probe | Expected | Observed | Notes |
 |---|---|---|---|---|---|
-| PASS | info | request-access accepts arbitrary name string | status in {200,409} | status=400 (400 ok — captcha gate) |  |
-| PASS | medium | admin requests API returns the payload verbatim (must be HTML-escaped client-side) | name === "x');fetch('https://x')//@xss-q2es2w.bc" | found=true name="x');fetch('https://x')//@xss-q2es2w.bc" | Check public/admin.html escaping — this is data confirmation, not a render test. |
+| PASS | info | request-access accepts arbitrary name string | status in {200,409} | status=200 |  |
+| FAIL | medium | admin requests API returns the payload verbatim (must be HTML-escaped client-side) | name === "x');fetch('https://x')//@xss-jhmoan.bc" | found=true name="X');fetch('https://x')//@xss-jhmoan.bc" | Check public/admin.html escaping — this is data confirmation, not a render test. |
 | PASS | info | admin can attach an arbitrary note to an allow-list entry | status=200 | status=200 |  |
-| PASS | medium | admin allow-list API returns note payload verbatim (admin.html must HTML-escape) | note === "\"><img src=x onerror=fetch('https://x?n=q2es2w')>" | found=true note="\"><img src=x onerror=fetch('https://x?n=q2es2w')>" | Check public/admin.html: the allow-list table must escape the note column. |
+| PASS | medium | admin allow-list API returns note payload verbatim (admin.html must HTML-escape) | note === "\"><img src=x onerror=fetch('https://x?n=jhmoan')>" | found=true note="\"><img src=x onerror=fetch('https://x?n=jhmoan')>" | Check public/admin.html: the allow-list table must escape the note column. |
 
 ### onboarding
 
@@ -314,7 +342,7 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 
 | Result | Severity | Probe | Expected | Observed | Notes |
 |---|---|---|---|---|---|
-| PASS | critical | loginLimiter engages within 25 bad-password attempts on /api/login | first 429 ≤ attempt 25, last status = 429 | firstLimited=21 lastStatus=429 | Configured cap: max 20 attempts per 15 minutes (auth.js loginLimiter). A cap deviation means unauthenticated login hammering is not blocked. |
+| PASS | critical | loginLimiter engages within 25 bad-password attempts on /api/login | first 429 ≤ attempt 25, last status = 429 | firstLimited=11 lastStatus=429 | Configured cap: max 20 attempts per 15 minutes (auth.js loginLimiter). A cap deviation means unauthenticated login hammering is not blocked. |
 | PASS | critical | accessRequestLimiter blocks the 6th request within 1 hour on /api/request-access | first 429 between attempts 4 and 7 (cap = 5/hr) | firstLimited=6 | Configured cap: max 5 attempts per hour (auth.js accessRequestLimiter). A cap deviation means the access-request flood path is unprotected. |
 | PASS | critical | /api/forgot-password engages the accessRequestLimiter within 7 attempts | first 429 between attempts 4 and 7 (cap = 5/hr) | firstLimited=6 | Configured cap: max 5 attempts per hour shared with /api/request-access. A cap deviation means the forgot-password flood path is unprotected. |
 
@@ -335,9 +363,25 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 | PASS | critical | admin can sign in via /api/login (server-side jar) | session cookie set | cookieSet=true |  |
 | PASS | critical | admin /admin returns 200 in the browser | status=200 | status=200 |  |
 | PASS | high | admin sees the Admin Panel HTML after navigation | page HTML contains "Admin Panel" and URL is /admin | url=http://127.0.0.1:5050/admin hasHeading=true |  |
+| PASS | high | admin /admin renders .app-header (shared chrome) | .app-header element present in DOM | hasAppHeader=true |  |
+| PASS | high | admin /admin .header-page-title contains "Admin" | .header-page-title text includes "Admin" | pageTitleText="Admin" |  |
+| PASS | medium | admin /admin has no legacy bespoke "Sign out" nav-btn | no .nav-btn element with "Sign out" text | hasLegacySignOut=false |  |
+| PASS | high | admin /admin renders auth avatar (.header-avatar-btn) in #auth-status | #auth-status .header-avatar-btn element present in DOM | hasAuthAvatar=true |  |
 | PASS | medium | admin loads /admin without browser console errors | consoleErrors.length === 0 | count=0 sample=[] |  |
 | PASS | critical | admin /admin renders the stored XSS payload as text, not script | no pageerror, no fetch to sentinel host, no raw <img onerror> in DOM | pageerrors=0 sentinelHits=0 xssFired=false rawTag=false |  |
 | PASS | critical | demoted manager loses access from an already-open page (UI staleness) | before=200 (manager) → after in {401,403} (viewer) | before=200 after=401 |  |
+| PASS | medium | pagination bar appears when contacts > 25 | .cl-pagination element visible in DOM | found=true |  |
+| PASS | medium | pagination info shows correct total on page 1 | text contains "of 26" | text="Showing 1–25 of 26" |  |
+| FAIL | medium | pagination advances to page 2 on Next click | info text contains "Showing 26" (the 26th item) | text="Showing 1–25 of 26" |  |
+| PASS | medium | clicking a contact on page 2 navigates to /customers/:id | url matches /customers/<id> | url=http://127.0.0.1:5050/customers/pag-test-1 |  |
+| FAIL | medium | returning to /customers restores page 2 from sessionStorage | pagination info still shows "Showing 26" after back-navigation | text="Showing 1–25 of 26" |  |
+| FAIL | medium | filter applied on page 2 resets customer list to page 1 | pagination info shows "Showing 1–25 of 26" after filter change from page 2 | onPage2="Showing 1–25 of 26" afterFilter="Showing 1–25 of 26" filterApplied=true |  |
+| FAIL | medium | lead-status filter change on page 2 resets customer list to page 1 | pagination info shows "Showing 1–" after lead-status dropdown change from page 2 | onPage2="Showing 1–25 of 26" afterFilter="" filterApplied=false |  |
+| PASS | medium | pagination bar does not overflow at 360 px viewport width | scrollWidth <= clientWidth on .cl-pagination at 360 px | scrollWidth=360 clientWidth=360 |  |
+| PASS | medium | pagination bar does not overflow at 360 px with 9 pages (high page-number variant) | scrollWidth <= clientWidth on .cl-pagination at 360 px with 201 contacts on page 8 | scrollWidth=360 clientWidth=360 |  |
+| PASS | medium | pagination bar does not overflow at 540 px with 9 pages (tablet breakpoint variant) | scrollWidth <= clientWidth on .cl-pagination at 540 px with 201 contacts on page 8 | scrollWidth=540 clientWidth=540 |  |
+| FAIL | medium | pagination bar does not overflow at 420 px with 9 pages (narrowest breakpoint) | scrollWidth <= clientWidth on .cl-pagination at 420 px with 201 contacts on page 8 | pagination bar not found |  |
+| FAIL | medium | .cl-pagination-info is hidden at 420 px viewport width | display:none or not visible per computed style | pagination bar not found |  |
 
 ## Coverage notes
 
@@ -351,6 +395,7 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
 ## Harness server log (tail)
 
 ```
+[SECURITY] TURNSTILE_SECRET_KEY and/or TURNSTILE_SITE_KEY are not set. Captcha protection is disabled on all public auth endpoints. Set both secrets in production to enable bot and credential-stuffing protection.
   Auth (email + password) initialized
 
   Measure Once
@@ -363,29 +408,65 @@ A FAIL means a role gained access it should not have (privilege escalation) or w
   Could not create property customer_number: Authentication credentials not found. This API supports OAuth 2.0 authentication and you can find more details at https://developers.hubspot.com/docs/methods/auth/oauth-overview
   Visits table ready
   Trades table ready
-QB invoices error: QuickBooks not connected
+  Ideas tables ready
+  Lead status config table ready
+  Stage action labels table ready
+  Stage action labels defaults seeded
+  Lead sub-statuses table ready
+  hw_test_user HubSpot property ready (dev)
+  hw_lead_substatus HubSpot property ready
+  hw_lead_substatus options synced
+  Card action handlers tables ready
+  Search settings table ready
+  Workshop settings table ready
+  App settings table ready
+  WhatsApp messages table ready
+  Design visit tables ready
 QB invoices error: QuickBooks not connected
 QB invoice detail error: QuickBooks not connected
-QB invoice detail error: QuickBooks not connected
-[set-password] Cleared 1 other session(s) for privtest-viewer-q2es2w@privtest.local.
-[change-password] Cleared 1 other session(s) for privtest-viewer-q2es2w@privtest.local.
-[change-password] Cleared 1 other session(s) for privtest-member-q2es2w@privtest.local.
-  SMTP not configured — skipping set-password email for privtest-member-q2es2w@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=4b7ce69bab3415523bd9fc9a1f5120e43c3bced7c1a33d909a8eec0ce4cd48c6
-[change-password] Cleared 2 other session(s) for privtest-manager-q2es2w@privtest.local.
-  SMTP not configured — skipping set-password email for privtest-lifecycle-q2es2w@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=37f5d6e2ae39c5a003b66bb5ca12fe23181c866b2c40f2882146d0678fa11d25
-  SMTP not configured — skipping set-password email for privtest-lifecycle-q2es2w@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=97d72e72042316e2c3ce06be78d6af88a8707fe100bdaa8fc30753c2ef0c44c1
-  SMTP not configured — skipping set-password email for privtest-lifecycle-q2es2w@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=3431cdcb31a4c427ee9cc316ce9ba21c464abf1237391e40512177e41fe1791e
-  SMTP not configured — skipping set-password email for privtest-req-q2es2w@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=28dd5b16d0ce652efb47f206beacaf7599b845896b545b23973212cdcfac5d6a
-  SMTP not configured — skipping set-password email for privtest-req-q2es2w@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=e10afd031b76cd825f79e56e2e4cf8a156d45d3842bb9db29f532c61db69b362
-  SMTP not configured — skipping set-password email for privtest-req-q2es2w@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=17b950dce2ed5cc70dd2fe62d47352697f32c5384bf46fb59272f921cb2addb2
-  SMTP not configured — skipping set-password email for privtest-xss-note-q2es2w@privtest.local.
-  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=f30973c60da308185f0a4bc4ccee57a9676bec6a4543b26778b8cdce8c6b361e
+  SMTP not configured — skipping set-password email for privtest-viewer-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=171786eb7ea9d10a1487197ae5f7c7aff0f41fff3527ed54cc96bc484b62a72b
+  Password reset link issued for privtest-viewer-jhmoan@privtest.local
+[set-password] Cleared 1 other session(s) for privtest-viewer-jhmoan@privtest.local.
+[change-password] Cleared 1 other session(s) for privtest-viewer-jhmoan@privtest.local.
+[change-password] Cleared 1 other session(s) for privtest-member-jhmoan@privtest.local.
+  SMTP not configured — skipping set-password email for privtest-member-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=f185c5b4843a48b40beaa032547bd20fe8523e9349235c2763e879a45fa83de9
+[change-password] Cleared 2 other session(s) for privtest-manager-jhmoan@privtest.local.
+  SMTP not configured — skipping set-password email for privtest-lifecycle-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=858ca61f32e6811ab557d9d3f0a9522ff7fe852dae7bdf2f159c6d0355765b71
+  SMTP not configured — skipping set-password email for privtest-lifecycle-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=1c47fbe33e6adbd3c01af17de5be56d2b1d22530b3f995eca7b8ae51d771504c
+  SMTP not configured — skipping set-password email for privtest-lifecycle-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=ecd7cc746e073bf7c2db5800ab9487c6c101b3b1e4611fcf82098823d0ec642d
+  SMTP not configured — skipping set-password email for privtest-req-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=91512ab9efb45583532cd83ed0c395b636d5edf3889a9cb6f3178fb338e3bd9e
+  SMTP not configured — skipping set-password email for privtest-req-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=55246fc89f812c75c7ae3aaab8a97ebf5f4f9c031f2b0fe698ee351709f00408
+  SMTP not configured — skipping set-password email for privtest-req-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=5349b6b00d97cf5b2d9264560f7813967c21aa6730ec56d02a586f41a0c864a4
+  Access request: X');fetch('https://x')//@xss-jhmoan.bc <privtest-xss-jhmoan@privtest.local>
+  SMTP not configured — skipping set-password email for privtest-xss-note-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=3867c3369db293fa5df862d2eae5938e911bb48ad1c448abcdd2b25e786b4dba
+  Access request: Rate Test <privtest-rl0-jhmoan@privtest.local>
+  Access request: Rate Test <privtest-rl1-jhmoan@privtest.local>
+  Access request: Rate Test <privtest-rl2-jhmoan@privtest.local>
+  Access request: Rate Test <privtest-rl3-jhmoan@privtest.local>
+  Access request: Rate Test <privtest-rl4-jhmoan@privtest.local>
+  SMTP not configured — skipping set-password email for privtest-viewer-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=5d5b637e3681402f63136296f2ecaa45a2837e3bde15ffae7fb18eea8bf9e313
+  Password reset link issued for privtest-viewer-jhmoan@privtest.local
+  SMTP not configured — skipping set-password email for privtest-viewer-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=fd51972070b4d238aeee9f75cf9eb5265fa6f6977978a6fb3d8bc44e07ff7dd7
+  Password reset link issued for privtest-viewer-jhmoan@privtest.local
+  SMTP not configured — skipping set-password email for privtest-viewer-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=b02ab51ec033c8694076e83d2ebf4e4c00cb6b16169cd743affaa3d1267310af
+  Password reset link issued for privtest-viewer-jhmoan@privtest.local
+  SMTP not configured — skipping set-password email for privtest-viewer-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=2d562446578ddfdd24cbf3de9c00314b9059697469a813ed62db0b4e02851dce
+  Password reset link issued for privtest-viewer-jhmoan@privtest.local
+  SMTP not configured — skipping set-password email for privtest-viewer-jhmoan@privtest.local.
+  Set-password link (manual delivery): http://127.0.0.1:5050/set-password?token=7ae173c99a0247aee555d9acc44a722d3c5175cb32d6fc354204704b6053a440
+  Password reset link issued for privtest-viewer-jhmoan@privtest.local
 
 ```
