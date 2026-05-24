@@ -477,6 +477,71 @@ async function main() {
       && imageRows[0]?.mime_type === 'image/jpeg',
   );
 
+  // ── (A2) Missing storageKey image entry is silently dropped ────────────────
+  console.log('\n  [A2] Missing storageKey image entry silently dropped');
+
+  const submitResA2 = await memberClient.post('/api/design-visits', {
+    contactId:        FAKE_CONTACT_ID,
+    contactName:      'SDV Test Customer',
+    contactEmail:     'sdv-customer@privtest.local',
+    handleId:         handleId,
+    furnitureRangeId: furnitureId,
+    visitDate:        new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString(),
+    durationMin:      60,
+    location:         '456 Test Avenue',
+    notes:            'A2 missing-key test',
+    termsAccepted:    true,
+    rooms: [
+      {
+        roomName:       'Lounge',
+        doorStyleId:    doorStyleId,
+        widthMm:        4000,
+        heightMm:       2500,
+        depthMm:        700,
+        unitCount:      4,
+        unitPricePence: 10000,
+        notes:          'A2 room note',
+        images: [
+          { storageKey: `sdv-test-photo-a2-${runId}.jpg`, mimeType: 'image/jpeg' },
+          { mimeType: 'image/jpeg' },
+        ],
+      },
+    ],
+    handlerConfig: {},
+  });
+
+  record(
+    '(A2) POST /api/design-visits with mixed images returns { ok: true }',
+    'status=201, ok=true',
+    `status=${submitResA2.status} ok=${submitResA2.json?.ok}`,
+    submitResA2.status === 201 && submitResA2.json?.ok === true,
+  );
+
+  const designVisitIdA2 = submitResA2.json?.designVisitId ?? null;
+  let imageRowsA2 = [];
+  if (designVisitIdA2) {
+    const roomQA2 = await pool.query(
+      `SELECT id FROM design_visit_rooms WHERE design_visit_id = $1`,
+      [designVisitIdA2]
+    );
+    const roomIdA2 = roomQA2.rows[0]?.id ?? null;
+    if (roomIdA2) {
+      const imgQA2 = await pool.query(
+        `SELECT storage_key FROM design_visit_room_images WHERE room_id = $1`,
+        [roomIdA2]
+      );
+      imageRowsA2 = imgQA2.rows;
+    }
+  }
+
+  record(
+    '(A2) only the valid image is inserted — missing storageKey entry silently dropped',
+    `1 image row with storage_key="sdv-test-photo-a2-${runId}.jpg"`,
+    `found ${imageRowsA2.length} image(s), storage_key=${imageRowsA2[0]?.storage_key}`,
+    imageRowsA2.length === 1
+      && imageRowsA2[0]?.storage_key === `sdv-test-photo-a2-${runId}.jpg`,
+  );
+
   // Verify side-effect chain observables — token set, QB skipped, HubSpot/email skipped
   if (dvRow) {
     record(
