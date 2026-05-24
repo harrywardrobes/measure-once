@@ -22,6 +22,14 @@
 //       'send_quote' shows the badge in the admin table (E.1), causes
 //       cardActionHandlerAttrs() to emit data-card-action-name="send_quote"
 //       (E.2), and the title-case label expansion yields "Send Quote" (E.3).
+//   (F) action_name snake_case enforcement in the admin editor modal:
+//       (F.1) Entering an invalid value ("Send Quote") into #cah-action-name
+//             and blurring shows the #cah-action-name-err message, and
+//             clicking Save leaves the modal open with a #cah-edit-err
+//             message and does not POST a handler.
+//       (F.2) Entering a valid snake_case value clears the inline error and
+//             clicking Save closes the modal and creates the handler via
+//             POST /api/admin/card-action-handlers.
 //
 // API pre-checks run before any browser tab opens so failures in the API
 // surface clearly.
@@ -65,6 +73,8 @@ const LBL_KEY_CONFLICT    = 'privtest_cah_conflict'; // status_key for conflicti
 const LBL_KEY_CONFLICT_LS = 'PRIVTEST_CAH_CONFLICT'; // key in lead_status_config (uppercase, stage=SALES)
 // (E) action_name display fixtures
 const LBL_KEY_ANAME       = 'privtest_cah_aname';    // status_key for the action_name probe
+// (F) action_name snake_case enforcement fixtures
+const LBL_KEY_NAMING      = 'privtest_cah_naming';   // status_key for the editor-modal naming probe
 
 const HANDLER_NAME_DV         = 'PrivTest design visit handler';
 const HANDLER_NAME_PC         = 'PrivTest phone summary handler';
@@ -73,6 +83,7 @@ const HANDLER_NAME_SUB        = 'PrivTest substatus-binding handler';
 const HANDLER_NAME_CONFLICT_A = 'PrivTest conflict handler A';
 const HANDLER_NAME_CONFLICT_B = 'PrivTest conflict handler B';
 const HANDLER_NAME_ANAME      = 'PrivTest action-name handler';
+const HANDLER_NAME_NAMING     = 'PrivTest naming handler';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function parseCookieKV(jar) {
@@ -97,9 +108,10 @@ async function purgeFixtures(pool) {
   // cascades to any binding pointing at it.
   await pool.query(
     `DELETE FROM card_action_handlers
-       WHERE name IN ($1, $2, $3, $4, $5, $6, $7)`,
+       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [HANDLER_NAME_DV, HANDLER_NAME_PC, HANDLER_NAME_LBL, HANDLER_NAME_SUB,
-     HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B, HANDLER_NAME_ANAME]
+     HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B, HANDLER_NAME_ANAME,
+     HANDLER_NAME_NAMING]
   );
   await pool.query(
     `DELETE FROM lead_substatuses
@@ -1465,6 +1477,208 @@ async function main() {
     );
 
     await salesTab.close();
+
+    // ── (F) action_name snake_case enforcement in the editor modal ────────────
+    //
+    // Drives the admin "Add action" modal via openHandlerEditor() and asserts
+    // both client-side validation paths added in task #623:
+    //   (F.1) Invalid value ("Send Quote") + blur → #cah-action-name-err
+    //         becomes visible; clicking #cah-save leaves the modal open with
+    //         a non-empty #cah-edit-err message and does not create a handler
+    //         (POST /api/admin/card-action-handlers count is unchanged).
+    //   (F.2) Valid snake_case value + blur → inline error hidden; clicking
+    //         #cah-save closes the modal (wrapper removed) and the new
+    //         handler appears in GET /api/admin/card-action-handlers with the
+    //         expected config.action_name.
+    console.log('\n  [F] action_name snake_case enforcement in the editor modal');
+
+    // Count existing fixtures before opening the modal so we can assert that
+    // the invalid-save attempt did not create a handler.
+    const beforeListRes = await adminClient.get('/api/admin/card-action-handlers');
+    const beforeCount = Array.isArray(beforeListRes.json)
+      ? beforeListRes.json.filter(h => h.name === HANDLER_NAME_NAMING).length
+      : 0;
+
+    const namingAdminTab = await browser.newPage();
+    await namingAdminTab.setCacheEnabled(false);
+    await injectSession(namingAdminTab, adminClient.cookie);
+    await namingAdminTab.goto(`${BASE}/admin`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+    await namingAdminTab.evaluate(() => {
+      if (typeof switchTab === 'function') switchTab('cardactions');
+      const p1 = typeof loadCardActionsAdmin === 'function'
+        ? loadCardActionsAdmin() : Promise.resolve();
+      const p2 = typeof loadCardActionHandlersAdmin === 'function'
+        ? loadCardActionHandlersAdmin() : Promise.resolve();
+      return Promise.all([p1, p2]);
+    });
+
+    // Track POST requests to /api/admin/card-action-handlers so we can prove
+    // the invalid-save attempt did not hit the network.
+    const namingPosts = [];
+    namingAdminTab.on('request', req => {
+      const u = req.url();
+      if (/\/api\/admin\/card-action-handlers(?:$|\?)/.test(u) && req.method() === 'POST') {
+        namingPosts.push({ url: u });
+      }
+    });
+
+    // Open the editor modal in "Add" mode for a fresh (sales, LBL_KEY_NAMING)
+    // slot.  openHandlerEditor() does not require the slot to exist in the
+    // card-actions table — it only uses stage_key/status_key for the binding.
+    const opened = await namingAdminTab.evaluate((statusKey) => {
+      if (typeof window.openHandlerEditor !== 'function') return 'fn-missing';
+      window.openHandlerEditor(
+        { kind: 'label', stage_key: 'sales', status_key: statusKey },
+        null,
+      );
+      return document.querySelector('#cah-action-name') ? 'opened' : 'no-input';
+    }, LBL_KEY_NAMING);
+    record(
+      '(F) editor modal opens via openHandlerEditor() with #cah-action-name input',
+      'opened',
+      `result=${opened}`,
+      opened === 'opened',
+    );
+
+    // Switch the type to summarise_phone_call so no required config fields
+    // block the save path; we only want to exercise the action_name guard.
+    await namingAdminTab.evaluate(() => {
+      const sel = document.querySelector('#cah-type');
+      if (!sel) return;
+      sel.value = 'summarise_phone_call';
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // ── (F.1) invalid value path ──────────────────────────────────────────────
+    await namingAdminTab.evaluate(() => {
+      const input = document.querySelector('#cah-action-name');
+      input.value = 'Send Quote';
+      input.dispatchEvent(new Event('input',  { bubbles: true }));
+      input.dispatchEvent(new Event('blur',   { bubbles: true }));
+    });
+
+    const invalidErrShown = await namingAdminTab.evaluate(() => {
+      const err = document.querySelector('#cah-action-name-err');
+      if (!err) return 'err-missing';
+      const style = window.getComputedStyle(err);
+      return style.display !== 'none' ? 'visible' : 'hidden';
+    });
+    record(
+      '(F.1) #cah-action-name-err becomes visible after blurring an invalid value',
+      'computed style.display !== "none"',
+      `result=${invalidErrShown}`,
+      invalidErrShown === 'visible',
+    );
+
+    // Click Save — buildPayload() should return null, so the modal stays open,
+    // #cah-edit-err shows an explanatory message, and no POST is sent.
+    const beforeClickPosts = namingPosts.length;
+    await namingAdminTab.evaluate(() => {
+      const btn = document.querySelector('#cah-save');
+      if (btn) btn.click();
+    });
+    // Give doSave() a chance to fire if validation accidentally let through.
+    await new Promise(r => setTimeout(r, 400));
+
+    const invalidSaveState = await namingAdminTab.evaluate(() => {
+      const modal   = document.querySelector('#cah-action-name');
+      const editErr = document.querySelector('#cah-edit-err');
+      return {
+        modalOpen: !!modal,
+        editErrText: editErr ? editErr.textContent.trim() : null,
+      };
+    });
+    record(
+      '(F.1) clicking Save with an invalid action_name leaves the modal open with a #cah-edit-err message',
+      'modalOpen=true, editErrText non-empty, no POST sent',
+      `modalOpen=${invalidSaveState.modalOpen} editErrText=${JSON.stringify(invalidSaveState.editErrText)} postsDelta=${namingPosts.length - beforeClickPosts}`,
+      invalidSaveState.modalOpen
+        && typeof invalidSaveState.editErrText === 'string'
+        && invalidSaveState.editErrText.length > 0
+        && namingPosts.length === beforeClickPosts,
+    );
+
+    // Confirm no handler was created by the invalid-save attempt.
+    const afterInvalidListRes = await adminClient.get('/api/admin/card-action-handlers');
+    const afterInvalidCount = Array.isArray(afterInvalidListRes.json)
+      ? afterInvalidListRes.json.filter(h => h.name === HANDLER_NAME_NAMING).length
+      : 0;
+    record(
+      '(F.1) no handler is created by the invalid-save attempt',
+      `count of HANDLER_NAME_NAMING unchanged (${beforeCount})`,
+      `before=${beforeCount} after=${afterInvalidCount}`,
+      afterInvalidCount === beforeCount,
+    );
+
+    // ── (F.2) valid value path ────────────────────────────────────────────────
+    await namingAdminTab.evaluate(() => {
+      const input = document.querySelector('#cah-action-name');
+      input.value = 'send_quote_ok';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('blur',  { bubbles: true }));
+    });
+
+    const validErrHidden = await namingAdminTab.evaluate(() => {
+      const err = document.querySelector('#cah-action-name-err');
+      if (!err) return 'err-missing';
+      const style = window.getComputedStyle(err);
+      return style.display === 'none' ? 'hidden' : 'visible';
+    });
+    record(
+      '(F.2) #cah-action-name-err is hidden after blurring a valid snake_case value',
+      'computed style.display === "none"',
+      `result=${validErrHidden}`,
+      validErrHidden === 'hidden',
+    );
+
+    await namingAdminTab.evaluate(() => {
+      const btn = document.querySelector('#cah-save');
+      if (btn) btn.click();
+    });
+
+    const modalClosedNaming = await pollPage(
+      namingAdminTab,
+      () => document.querySelector('#cah-action-name') ? null : 'closed',
+      null,
+      5000,
+    );
+    record(
+      '(F.2) clicking Save with a valid action_name closes the modal',
+      'modal wrapper removed (no #cah-action-name in DOM)',
+      `result=${modalClosedNaming}`,
+      modalClosedNaming === 'closed',
+    );
+
+    // Verify the handler was created with the expected config.action_name.
+    // The modal posts name:'' so we look it up by binding + action_name.
+    const afterValidListRes = await adminClient.get('/api/admin/card-action-handlers');
+    const created = Array.isArray(afterValidListRes.json)
+      ? afterValidListRes.json.find(h =>
+          h.type === 'summarise_phone_call'
+          && h?.config?.action_name === 'send_quote_ok'
+          && (h.bindings || []).some(b =>
+            String(b.stage_key) === 'sales' && String(b.status_key) === LBL_KEY_NAMING))
+      : null;
+    record(
+      '(F.2) POST /api/admin/card-action-handlers created the handler with config.action_name="send_quote_ok"',
+      'handler appears in GET /api/admin/card-action-handlers with matching binding and action_name',
+      `created=${created ? `id=${created.id} action_name=${created?.config?.action_name}` : 'null'} posts=${namingPosts.length - beforeClickPosts}`,
+      !!created && namingPosts.length - beforeClickPosts === 1,
+    );
+
+    // Rename the just-created handler so purgeFixtures() cleans it up.
+    if (created && created.id) {
+      try {
+        await adminClient.patch(`/api/admin/card-action-handlers/${created.id}`, {
+          name: HANDLER_NAME_NAMING,
+        });
+      } catch (_) {}
+    }
+
+    await namingAdminTab.close();
   } finally {
     await browser.close().catch(() => {});
   }
