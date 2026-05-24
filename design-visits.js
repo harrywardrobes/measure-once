@@ -6,7 +6,30 @@ const crypto    = require('crypto');
 const axios     = require('axios').create({ timeout: 12000 });
 const { Pool }  = require('pg');
 const nodemailer = require('nodemailer');
+const path      = require('path');
+const fs        = require('fs');
+const multer    = require('multer');
 const { isAuthenticated, requireAdmin, requirePrivilege } = require('./auth');
+
+const HANDLES_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'handles');
+if (!fs.existsSync(HANDLES_UPLOAD_DIR)) fs.mkdirSync(HANDLES_UPLOAD_DIR, { recursive: true });
+
+const _handlesStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, HANDLES_UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const id  = parseInt(req.params.id, 10);
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
+    cb(null, `${id}-${Date.now()}${ext}`);
+  },
+});
+const _handlesUpload = multer({
+  storage: _handlesStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\//i.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Only image files are allowed'));
+  },
+});
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
@@ -614,6 +637,33 @@ router.delete('/api/admin/design-visit-handles/:id', isAuthenticated, requireAdm
     res.status(500).json({ error: e.message });
   }
 });
+
+router.post('/api/admin/dv-handles/:id/image', isAuthenticated, requireAdmin,
+  (req, res, next) => _handlesUpload.single('image')(req, res, err => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  }),
+  async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+    const image_url = `/uploads/handles/${req.file.filename}`;
+    try {
+      const r = await pool.query(
+        `UPDATE design_visit_handles SET image_url=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
+        [image_url, id]
+      );
+      if (!r.rows.length) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(404).json({ error: 'Handle not found' });
+      }
+      res.json({ image_url });
+    } catch (e) {
+      fs.unlink(req.file.path, () => {});
+      res.status(500).json({ error: e.message });
+    }
+  }
+);
 
 // ── Admin: Furniture Ranges CRUD ──────────────────────────────────────────────
 router.get('/api/admin/design-visit-furniture-ranges', isAuthenticated, requireAdmin, async (req, res) => {

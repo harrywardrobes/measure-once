@@ -3339,8 +3339,10 @@
         <button class="tab-btn"        data-tab="requests"    onclick="switchTab('requests')">Pending Requests <span id="req-tab-badge">${reqBadge}</span></button>
         <button class="tab-btn"        data-tab="auditlog"    onclick="switchTab('auditlog')">Audit log</button>
         <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings');loadHubspotStatus();loadLeadStatusesAdmin();loadDevTestUsers()">Settings</button>
-        <button class="tab-btn"        data-tab="cardactions" onclick="switchTab('cardactions');loadCardActionsAdmin();loadCardActionHandlersAdmin();loadDvCatalogue()">Card actions</button>
-        <button class="tab-btn"        data-tab="search"      onclick="switchTab('search');loadSearchSettings()">Search</button>
+        <button class="tab-btn"        data-tab="cardactions"   onclick="switchTab('cardactions');loadCardActionsAdmin()">Card actions</button>
+        <button class="tab-btn"        data-tab="actionhandlers" onclick="switchTab('actionhandlers');loadCardActionHandlersAdmin()">Action handlers</button>
+        <button class="tab-btn"        data-tab="designvisit"   onclick="switchTab('designvisit');loadDvCatalogue()">Design visit</button>
+        <button class="tab-btn"        data-tab="search"        onclick="switchTab('search');loadSearchSettings()">Search</button>
         <button class="tab-btn"        data-tab="workshop"    onclick="switchTab('workshop');loadWorkshopSettings()">Workshop</button>
       </div>
 
@@ -3596,19 +3598,25 @@
             <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
           </div>
         </div>
+      </div>
 
+      <!-- ACTION HANDLERS -->
+      <div class="tab-panel" id="tab-actionhandlers">
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
             <div>
               <div class="card-title" style="margin:0;">Action handlers</div>
-              <p class="card-desc" style="margin:2px 0 0;">Every action label from the table above is listed here. Use <em>+ Add action</em> on a row to make that label clickable on Sales / Survey cards; the attached action's exact behaviour (which APIs are called, which calendars or emails are affected) is described inline once added.</p>
+              <p class="card-desc" style="margin:2px 0 0;">Every action label from the Card actions table is listed here. Use <em>+ Add action</em> on a row to make that label clickable on Sales / Survey cards; the attached action's exact behaviour (which APIs are called, which calendars or emails are affected) is described inline once added.</p>
             </div>
           </div>
           <div id="card-action-handlers-wrap">
             <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
           </div>
         </div>
+      </div>
 
+      <!-- DESIGN VISIT -->
+      <div class="tab-panel" id="tab-designvisit">
         <!-- ── Design Visit Catalogue ──────────────────────────────────── -->
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
@@ -3717,12 +3725,14 @@
     renderTradeSubmissions();
     await initAuditLog();
 
-    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'search', 'workshop'];
+    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'workshop'];
     let savedTab;
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) {
       if (savedTab === 'settings') { switchTab('settings'); loadHubspotStatus(); loadLeadStatusesAdmin(); loadDevTestUsers(); }
-      else if (savedTab === 'cardactions') { switchTab('cardactions'); loadCardActionsAdmin(); loadCardActionHandlersAdmin(); loadDvCatalogue(); }
+      else if (savedTab === 'cardactions') { switchTab('cardactions'); loadCardActionsAdmin(); }
+      else if (savedTab === 'actionhandlers') { switchTab('actionhandlers'); loadCardActionHandlersAdmin(); }
+      else if (savedTab === 'designvisit') { switchTab('designvisit'); loadDvCatalogue(); }
       else if (savedTab === 'search') { switchTab('search'); loadSearchSettings(); }
       else if (savedTab === 'workshop') { switchTab('workshop'); loadWorkshopSettings(); }
       else { switchTab(savedTab); }
@@ -3767,13 +3777,48 @@
     if (!wrap) return;
     try {
       const items = await api('GET', '/api/admin/design-visit-handles');
-      renderDvList(wrap, items, 'handle', {
-        fields: ['name','description','image_url'],
-        labels: ['Name','Description','Image URL'],
-      });
+      renderDvHandleList(wrap, items);
     } catch (e) {
       wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load handles: ${esc(e.message)}</p>`;
     }
+  }
+
+  function renderDvHandleList(wrap, items) {
+    if (!items.length) {
+      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">None added yet.</p>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Image</th>
+            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Name</th>
+            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Description</th>
+            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Order</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((item, i) => `
+            <tr style="border-bottom:1px solid var(--border);${i % 2 ? 'background:var(--stone-soft);' : ''}">
+              <td style="padding:7px 8px;">
+                ${item.image_url
+                  ? `<img src="${esc(item.image_url)}" alt="${esc(item.name)}" style="width:32px;height:32px;object-fit:contain;border-radius:4px;border:1px solid var(--border);" onerror="this.style.display='none';">`
+                  : '<span style="color:var(--ink-4);">—</span>'}
+              </td>
+              <td style="padding:7px 8px;">${esc(item.name || '—')}</td>
+              <td style="padding:7px 8px;">${esc(item.description || '—')}</td>
+              <td style="padding:7px 8px;color:var(--ink-4);">${item.sort_order}</td>
+              <td style="padding:7px 8px;text-align:right;white-space:nowrap;">
+                <button class="btn btn-ghost" style="padding:3px 8px;font-size:.75rem;"
+                  onclick="openDvItemEditor('handle', ${item.id})">Edit</button>
+                <button class="btn btn-ghost" style="padding:3px 8px;font-size:.75rem;color:#991b1b;"
+                  onclick="deleteDvItem('handle', ${item.id})">Delete</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
   }
 
   // ── Furniture Ranges ──────────────────────────────────────────────────────
@@ -3905,8 +3950,16 @@
           <textarea id="dvie-desc" class="field" rows="2" maxlength="500" style="font-size:.85rem;resize:vertical;">${esc(item?.description || '')}</textarea>
         ` : ''}
         ${hasImageUrl ? `
-          <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Image URL</label>
-          <input id="dvie-img" type="url" class="field" maxlength="500" value="${esc(item?.image_url || '')}" placeholder="https://…" style="font-size:.85rem;">
+          <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Image${type === 'handle' ? '' : ' URL'}</label>
+          ${type === 'handle' ? `
+            <div id="dvie-img-preview-wrap" style="margin-bottom:6px;${item?.image_url ? '' : 'display:none;'}">
+              <img id="dvie-img-preview" src="${esc(item?.image_url || '')}" alt="Current image"
+                style="max-height:80px;max-width:160px;border-radius:6px;border:1px solid var(--border);object-fit:contain;">
+            </div>
+            <input id="dvie-img-file" type="file" accept="image/*" class="field" style="font-size:.85rem;padding:4px;">
+          ` : `
+            <input id="dvie-img" type="url" class="field" maxlength="500" value="${esc(item?.image_url || '')}" placeholder="https://…" style="font-size:.85rem;">
+          `}
         ` : ''}
         <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Sort order</label>
         <input id="dvie-sort" type="number" class="field" min="0" value="${item?.sort_order ?? 0}" style="font-size:.85rem;width:100px;">
@@ -3919,26 +3972,67 @@
     document.body.appendChild(wrap);
     wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
     wrap.querySelector('#dvie-cancel').addEventListener('click', () => wrap.remove());
+
+    // Live preview for handle file upload
+    if (type === 'handle') {
+      const fileInput = wrap.querySelector('#dvie-img-file');
+      if (fileInput) {
+        fileInput.addEventListener('change', () => {
+          const f = fileInput.files[0];
+          if (!f) return;
+          const previewWrap = wrap.querySelector('#dvie-img-preview-wrap');
+          const previewImg  = wrap.querySelector('#dvie-img-preview');
+          const url = URL.createObjectURL(f);
+          previewImg.src = url;
+          previewWrap.style.display = '';
+        });
+      }
+    }
+
     wrap.querySelector('#dvie-save').addEventListener('click', async () => {
       const errEl = wrap.querySelector('#dvie-err');
       const name = wrap.querySelector('#dvie-name').value.trim();
       if (!name) { errEl.textContent = 'Name is required.'; return; }
       const payload = { name, sort_order: parseInt(wrap.querySelector('#dvie-sort').value, 10) || 0 };
       if (hasDescription) payload.description = wrap.querySelector('#dvie-desc').value;
-      if (hasImageUrl)    payload.image_url    = wrap.querySelector('#dvie-img')?.value || '';
+
       const postUrl = {
         handle:      '/api/admin/design-visit-handles',
         furniture:   '/api/admin/design-visit-furniture-ranges',
         'door-style': '/api/admin/design-visit-door-styles',
       }[type];
+
       try {
+        let savedId = item?.id;
         if (item) {
+          if (type !== 'handle') payload.image_url = wrap.querySelector('#dvie-img')?.value || '';
           await api('PATCH', `${postUrl}/${item.id}`, payload);
           toast('Saved.');
         } else {
-          await api('POST', postUrl, payload);
+          if (type !== 'handle') payload.image_url = wrap.querySelector('#dvie-img')?.value || '';
+          const created = await api('POST', postUrl, payload);
+          savedId = created.id;
           toast('Added.');
         }
+
+        // Upload image file for handles
+        if (type === 'handle' && savedId) {
+          const fileInput = wrap.querySelector('#dvie-img-file');
+          if (fileInput && fileInput.files[0]) {
+            const fd = new FormData();
+            fd.append('image', fileInput.files[0]);
+            const uploadRes = await fetch(`/api/admin/dv-handles/${savedId}/image`, {
+              method: 'POST',
+              body: fd,
+            });
+            if (!uploadRes.ok) {
+              const err = await uploadRes.json().catch(() => ({}));
+              errEl.textContent = 'Image upload failed: ' + (err.error || uploadRes.status);
+              return;
+            }
+          }
+        }
+
         _broadcastDvCatalogueChange(type);
         wrap.remove();
         if (type === 'handle')      return loadDvHandles();
