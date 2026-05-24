@@ -630,6 +630,292 @@ async function main() {
       !staleBc,
     );
 
+    // ── (C) Unified picker: sub-status rows appear indented beneath parent ────
+    console.log('\n  [C] Unified picker: sub-status rows appear indented beneath parent');
+
+    // Re-seed state with KEY_A active and no sub-status so the picker test
+    // starts from a clean baseline regardless of the renames above.
+    await bootstrapTracker(detailTab, KEY_A, '');
+
+    // Also ensure state.contacts includes the contact so openLeadStatusPicker
+    // can find stalePrevStatus before the async GET returns.
+    await detailTab.evaluate((cid, key) => {
+      if (!Array.isArray(state.contacts)) state.contacts = [];
+      const existing = state.contacts.find(c => c.id === cid);
+      if (existing) {
+        existing.properties = { ...existing.properties, hs_lead_status: key, hw_lead_substatus: '' };
+      } else {
+        state.contacts.push({
+          id: cid,
+          properties: {
+            hs_lead_status: key, hw_lead_substatus: '',
+            firstname: 'Priv', lastname: 'Test', email: 'privtest@privtest.local',
+          },
+        });
+      }
+    }, CONTACT_ID, KEY_A);
+
+    // Render the lead-status pill into #workflow-header (already in the DOM).
+    await detailTab.evaluate(() => {
+      if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+    });
+    await new Promise(r => setTimeout(r, 300));
+
+    // Enable request interception so:
+    //   GET  /api/contacts/:id → returns mocked contact (avoids 503 noise)
+    //   PATCH /api/contacts/:id → returns 200 so _quickSetLeadStatusWithSub
+    //                              doesn't roll back the optimistic update.
+    // All other requests pass through untouched.
+    await detailTab.setRequestInterception(true);
+    const patchedBodies = [];
+    const _reqHandler = req => {
+      const url    = req.url();
+      const method = req.method();
+      if (method === 'PATCH' && url.includes(`/api/contacts/${CONTACT_ID}`)) {
+        try { patchedBodies.push(JSON.parse(req.postData() || '{}')); } catch {}
+        req.respond({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: CONTACT_ID, properties: {} }),
+        });
+      } else if (method === 'GET' && url.includes(`/api/contacts/${CONTACT_ID}`) &&
+                 !url.includes('/localdata') && !url.includes('/notes') &&
+                 !url.includes('/tasks')) {
+        req.respond({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: CONTACT_ID,
+            properties: {
+              hs_lead_status: KEY_A, hw_lead_substatus: '',
+              firstname: 'Priv', lastname: 'Test', email: 'privtest@privtest.local',
+            },
+          }),
+        });
+      } else {
+        req.continue();
+      }
+    };
+    detailTab.on('request', _reqHandler);
+
+    const pillExists = await detailTab.evaluate(() =>
+      !!document.querySelector('#workflow-header .lead-status-badge.lsb-clickable'));
+    record(
+      'lead-status pill is rendered in #workflow-header',
+      'pill with class lsb-clickable is present',
+      `found=${pillExists}`,
+      pillExists,
+    );
+
+    if (pillExists) {
+      await detailTab.click('#workflow-header .lead-status-badge.lsb-clickable');
+
+      // Wait for the picker popup.
+      await detailTab.waitForSelector('#card-picker-popup', { timeout: 6000 }).catch(() => {});
+      const pickerOpen = await detailTab.evaluate(() => !!document.getElementById('card-picker-popup'));
+      record(
+        'clicking pill opens the unified picker popup (#card-picker-popup)',
+        '#card-picker-popup appears in DOM',
+        `found=${pickerOpen}`,
+        pickerOpen,
+      );
+
+      if (pickerOpen) {
+        // Assert sub-status rows are present and appear after their parent row.
+        const subRows = await detailTab.evaluate((key) => {
+          const popup = document.getElementById('card-picker-popup');
+          if (!popup) return { subCount: 0, parentIdx: -1, firstSubIdx: -1, subLabels: [] };
+          const opts       = Array.from(popup.querySelectorAll('.card-picker-opt'));
+          const parentIdx  = opts.findIndex(o => o.dataset.leadStatus === key);
+          const subOpts    = opts.filter(o => o.classList.contains('card-picker-opt--sub'));
+          const firstSubIdx = opts.findIndex(o => o.classList.contains('card-picker-opt--sub'));
+          return {
+            subCount:     subOpts.length,
+            parentIdx,
+            firstSubIdx,
+            subLabels:    subOpts.map(o => o.textContent.trim()),
+          };
+        }, KEY_A);
+
+        record(
+          'picker shows sub-status rows (card-picker-opt--sub) for the active parent',
+          `at least 2 sub-status rows present`,
+          `subCount=${subRows.subCount} subLabels=${JSON.stringify(subRows.subLabels)}`,
+          subRows.subCount >= 2,
+        );
+
+        record(
+          'sub-status rows appear after their parent row in the picker',
+          `firstSubIdx > parentIdx`,
+          `parentIdx=${subRows.parentIdx} firstSubIdx=${subRows.firstSubIdx}`,
+          subRows.parentIdx !== -1 && subRows.firstSubIdx > subRows.parentIdx,
+        );
+
+        // ── (D) Clicking a sub-status fires exactly one PATCH with both fields ─
+        console.log('\n  [D] Clicking sub-status fires exactly one PATCH with hs_lead_status + hw_lead_substatus');
+
+        patchedBodies.length = 0;
+
+        // Capture the label of the first sub-status row before clicking so
+        // probe E can verify the pill reflects that exact label.
+        const clickedSubLabel = await detailTab.evaluate(() => {
+          const sub = document.querySelector('#card-picker-popup .card-picker-opt--sub');
+          if (!sub) return '';
+          const label = sub.textContent.trim();
+          sub.click();
+          return label;
+        });
+
+        // Allow the async PATCH (intercepted above) to fire.
+        await new Promise(r => setTimeout(r, 1500));
+
+        record(
+          'clicking sub-status row fires exactly one PATCH request',
+          'patchedBodies.length === 1',
+          `count=${patchedBodies.length}`,
+          patchedBodies.length === 1,
+        );
+
+        const pBody = patchedBodies[0] || {};
+        record(
+          'PATCH body contains both hs_lead_status and hw_lead_substatus',
+          `hs_lead_status="${KEY_A}" hw_lead_substatus starts with "${KEY_A}__"`,
+          `hs_lead_status="${pBody.hs_lead_status}" hw_lead_substatus="${pBody.hw_lead_substatus}"`,
+          pBody.hs_lead_status === KEY_A &&
+          String(pBody.hw_lead_substatus || '').toUpperCase().startsWith(`${KEY_A}__`),
+        );
+
+        // ── (E) Pill text starts with the selected sub-status label ───────────
+        console.log('\n  [E] Pill label reflects selected sub-status');
+
+        // Re-render the header so the pill reflects the optimistic state update.
+        await detailTab.evaluate(() => {
+          if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+        });
+        await new Promise(r => setTimeout(r, 400));
+
+        const pillLabel = await detailTab.evaluate(() => {
+          const pill = document.querySelector('#workflow-header .lead-status-badge');
+          if (!pill) return { text: '', hasParent: false, primaryText: '' };
+          const parentSpan = pill.querySelector('.ls-pill-parent');
+          // The primary text is the pill's text without the parent-span content.
+          let primaryText = pill.textContent.trim();
+          if (parentSpan) {
+            primaryText = primaryText.slice(0, primaryText.length - parentSpan.textContent.length).trim();
+          }
+          return {
+            text:        pill.textContent.trim(),
+            hasParent:   !!parentSpan,
+            primaryText,
+          };
+        });
+
+        record(
+          'pill has .ls-pill-parent span and primary text matches the clicked sub-status label',
+          `hasParent=true primaryText="${clickedSubLabel}"`,
+          `hasParent=${pillLabel.hasParent} primaryText="${pillLabel.primaryText}" fullText="${pillLabel.text}"`,
+          pillLabel.hasParent && pillLabel.primaryText === clickedSubLabel,
+        );
+
+        // ── (F) BC + visibilitychange: pill reflects updated sub-status label ─
+        console.log('\n  [F] BC + visibilitychange: pill reflects renamed sub-status label');
+
+        // Rename the active sub-status via admin PATCH and fan-out via BC.
+        const SUB_A_FINAL = 'PrivTest DT Substep One Final';
+        const patchSubFinal = await adminClient.patch(
+          `/api/admin/lead-substatuses/${SUB_A_ID}`,
+          { label: SUB_A_FINAL },
+        );
+        record(
+          'PATCH /api/admin/lead-substatuses/:id renames sub-status for pill BC test',
+          `status=200 label="${SUB_A_FINAL}"`,
+          `status=${patchSubFinal.status} label="${patchSubFinal.json?.label}"`,
+          patchSubFinal.status === 200 && patchSubFinal.json?.label === SUB_A_FINAL,
+        );
+
+        // Open a second tab as BC sender (BC does not deliver to self).
+        const senderTab2 = await browser.newPage();
+        await senderTab2.setCacheEnabled(false);
+        await injectSession(senderTab2, adminClient.cookie);
+        await senderTab2.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        await new Promise(r => setTimeout(r, 300));
+
+        await senderTab2.evaluate(() => {
+          new BroadcastChannel('lead_substatuses_changed').postMessage('changed');
+        });
+
+        const pillBcUpdated = await waitFor(detailTab, (args) => {
+          const pill = document.querySelector('#workflow-header .lead-status-badge');
+          if (!pill) return false;
+          return (pill.textContent || '').includes(args.label);
+        }, { label: SUB_A_FINAL }, 8000);
+
+        const pillBcText = await detailTab.evaluate(() => {
+          const pill = document.querySelector('#workflow-header .lead-status-badge');
+          return pill ? pill.textContent.trim() : '';
+        });
+        record(
+          'BC lead_substatuses_changed updates pill to renamed sub-status (no reload)',
+          `pill contains "${SUB_A_FINAL}" within 8 s`,
+          `found=${pillBcUpdated} pillText="${pillBcText}"`,
+          pillBcUpdated,
+        );
+
+        // Rename again for the visibilitychange probe.
+        const SUB_A_VIS_FINAL = 'PrivTest DT Substep One Vis';
+        const patchSubVisFinal = await adminClient.patch(
+          `/api/admin/lead-substatuses/${SUB_A_ID}`,
+          { label: SUB_A_VIS_FINAL },
+        );
+        record(
+          'second sub-status PATCH for visibilitychange pill test succeeds',
+          `status=200 label="${SUB_A_VIS_FINAL}"`,
+          `status=${patchSubVisFinal.status} label="${patchSubVisFinal.json?.label}"`,
+          patchSubVisFinal.status === 200 && patchSubVisFinal.json?.label === SUB_A_VIS_FINAL,
+        );
+
+        // Synthesise hidden → visible visibilitychange sequence.
+        await detailTab.evaluate(() => {
+          const proto   = Document.prototype;
+          const ownDesc = Object.getOwnPropertyDescriptor(proto, 'visibilityState')
+                       || Object.getOwnPropertyDescriptor(document, 'visibilityState');
+          Object.defineProperty(document, 'visibilityState',
+            { get: () => 'hidden', configurable: true });
+          document.dispatchEvent(new Event('visibilitychange'));
+          if (ownDesc) {
+            Object.defineProperty(document, 'visibilityState', ownDesc);
+          } else {
+            Object.defineProperty(document, 'visibilityState',
+              { get: () => 'visible', configurable: true });
+          }
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+
+        const pillVisUpdated = await waitFor(detailTab, (args) => {
+          const pill = document.querySelector('#workflow-header .lead-status-badge');
+          if (!pill) return false;
+          return (pill.textContent || '').includes(args.label);
+        }, { label: SUB_A_VIS_FINAL }, 8000);
+
+        const pillVisText = await detailTab.evaluate(() => {
+          const pill = document.querySelector('#workflow-header .lead-status-badge');
+          return pill ? pill.textContent.trim() : '';
+        });
+        record(
+          'visibilitychange updates pill to renamed sub-status (no reload)',
+          `pill contains "${SUB_A_VIS_FINAL}" within 8 s`,
+          `found=${pillVisUpdated} pillText="${pillVisText}"`,
+          pillVisUpdated,
+        );
+
+        await senderTab2.close();
+      }
+    }
+
+    // Tear down request interception before closing the tab.
+    detailTab.off('request', _reqHandler);
+    await detailTab.setRequestInterception(false).catch(() => {});
+
     await detailTab.close();
 
   } finally {
@@ -700,8 +986,34 @@ async function writeReport(runId, findings) {
     '  synthesises a hidden→visible `visibilitychange` event sequence, and asserts',
     '  the rail picks up the latest label (exercises `workflow-core.js`',
     '  `document.addEventListener("visibilitychange", ...)` → `renderWorkflowStages`).',
+    '- **(C) Unified picker — sub-status rows indented**: re-bootstraps the contact',
+    '  state with `KEY_A` active and no sub-status, enables Puppeteer request',
+    '  interception to mock `GET /api/contacts/:id` and `PATCH /api/contacts/:id`,',
+    '  clicks the `.lead-status-badge.lsb-clickable` pill in `#workflow-header`,',
+    '  and asserts that `.card-picker-opt--sub` rows are present in the popup and',
+    '  appear after the parent `.card-picker-opt[data-lead-status]` row.',
+    '  Exercises `openLeadStatusPicker` in `workflow.js` with `showSubstatuses:true`.',
+    '- **(D) Sub-status click fires exactly one PATCH with both fields**: captures the',
+    '  first `.card-picker-opt--sub` row text, clicks it, and asserts',
+    '  `patchedBodies.length === 1` (exactly one PATCH — duplicate-PATCH regressions',
+    '  are caught). The intercepted body must contain `hs_lead_status` equal to the',
+    '  parent status key and `hw_lead_substatus` starting with `STATUS__`. Exercises',
+    '  `_quickSetLeadStatusWithSub` in `workflow.js`.',
+    '- **(E) Pill primary text matches the clicked sub-status label**: after clicking,',
+    '  calls `renderWorkflowHeader()` and asserts the pill (a) contains a',
+    '  `.ls-pill-parent` span and (b) its primary text (pill text minus the parent',
+    '  span text) equals the sub-status label captured in probe D. This catches',
+    '  regressions where the pill shows the parent label instead of the sub-status',
+    '  label. Exercises `_renderWorkflowHeaderImpl` lines 820–823 of',
+    '  `customer-detail.js`.',
+    '- **(F) BC + visibilitychange: pill reflects renamed sub-status**: renames the',
+    '  selected sub-status via `PATCH /api/admin/lead-substatuses/:id` and fires',
+    '  a `lead_substatuses_changed` BroadcastChannel message from a second tab;',
+    '  asserts the pill text updates in place to the new label. Then renames again',
+    '  and synthesises a hidden→visible `visibilitychange` sequence; asserts the',
+    '  pill picks up the second rename without a full page reload.',
     '',
-    'Every BC/visibilitychange assertion also checks `window.__renderToken` is',
+    'Every BC/visibilitychange assertion (probes A–B) also checks `window.__renderToken` is',
     'preserved across the re-render, proving the tracker updated in place (no full',
     'page reload).',
     '',
@@ -713,6 +1025,9 @@ async function writeReport(runId, findings) {
     '  lead statuses + sub-statuses (which come from PostgreSQL, not HubSpot), seeds',
     '  `state.selectedContact`, and calls `renderWorkflowStages()` — the same entry',
     '  point the BC/visibilitychange handlers in `workflow-core.js` use.',
+    '- For probes C–F, Puppeteer request interception mocks `GET` and `PATCH` on',
+    '  `/api/contacts/:id` so `openLeadStatusPicker` and `_quickSetLeadStatusWithSub`',
+    '  complete successfully without HubSpot. All other requests are passed through.',
   ];
   const outPath = path.join(dir, 'lead-status-sync-customer-detail.md');
   fs.writeFileSync(outPath, lines.join('\n'));
