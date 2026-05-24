@@ -3894,6 +3894,11 @@ function _validateHandlerConfig(type, configRaw) {
   if (JSON.stringify(cfg).length > 4096) {
     return { error: 'config payload is too large (max 4KB).' };
   }
+  if (cfg.action_name !== undefined && cfg.action_name !== null && cfg.action_name !== '') {
+    if (typeof cfg.action_name !== 'string' || !/^[a-z0-9_]+$/.test(cfg.action_name)) {
+      return { error: 'action_name must contain only lowercase letters, digits, and underscores (snake_case), with no spaces or other characters.' };
+    }
+  }
   const validator = CARD_ACTION_HANDLER_CONFIG_VALIDATORS[type];
   if (!validator) return { error: 'Unknown handler type.' };
   return validator(cfg);
