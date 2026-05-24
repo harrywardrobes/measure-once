@@ -1207,15 +1207,14 @@ async function main() {
         if (!input) return null;
         const row = input.parentElement;
         if (!row) return null;
-        const spans = Array.from(row.querySelectorAll('span'));
-        return spans.some(s => s.textContent.trim() === '\u2713 Resolved') ? 'visible' : null;
+        return row.querySelector('.ca-resolved-pill') ? 'visible' : null;
       },
       LBL_KEY_CONFLICT,
       3000,
     );
     record(
       '(D) "✓ Resolved" flash pill appears on the table row after modal closes',
-      'span with textContent "✓ Resolved" visible in the target row within 3 s',
+      '.ca-resolved-pill visible in the target row within 3 s',
       `result=${pillVisible}`,
       pillVisible === 'visible',
     );
@@ -1230,12 +1229,11 @@ async function main() {
       if (!input) return 'input-missing';
       const row = input.parentElement;
       if (!row) return 'row-missing';
-      const spans = Array.from(row.querySelectorAll('span'));
-      return spans.some(s => s.textContent.trim() === '\u2713 Resolved') ? 'still-present' : 'gone';
+      return row.querySelector('.ca-resolved-pill') ? 'still-present' : 'gone';
     }, LBL_KEY_CONFLICT);
     record(
       '(D) "✓ Resolved" flash pill disappears from DOM after ~2 s',
-      'span removed from DOM ~2 s after appearing',
+      '.ca-resolved-pill removed from DOM ~2 s after appearing',
       `result=${pillGone}`,
       pillGone === 'gone',
     );

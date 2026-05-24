@@ -2683,6 +2683,7 @@
     }
     if (!target) return;
     const pill = document.createElement('span');
+    pill.className = 'ca-resolved-pill';
     pill.textContent = '✓ Resolved';
     pill.style.cssText = 'display:inline-flex;align-items:center;padding:1px 8px;margin-left:6px;' +
       'background:#d1fae5;color:#065f46;border-radius:999px;font-size:.7rem;font-weight:600;' +
