@@ -469,6 +469,7 @@ function renderFullWorkflowView() {
       <div id="invoices-section" class="mb-5"></div>
       <div id="upcoming-visits-section" class="mb-5"></div>
       <div id="past-visits-section" class="mb-5"></div>
+      <div id="design-visits-section" class="mb-5"></div>
       <div id="tasks-section" class="mb-6"></div>
       <div id="google-emails-section" class="mb-5"></div>
       <div id="whatsapp-history-section" class="mb-5"></div>
@@ -504,6 +505,7 @@ function renderFullWorkflowView() {
   renderWorkflowInvoices();
   renderUpcomingVisits();
   renderPastVisits();
+  renderDesignVisits();
   renderTasks();
   renderGoogleEmailSection();
   renderWhatsAppHistory();
@@ -2029,6 +2031,175 @@ async function renderPastVisits() {
       </div>
     `;
   }).join('');
+}
+
+// ── Design Visits ─────────────────────────────────────────────────────────────
+const DESIGN_VISIT_STATUS_LABELS = {
+  draft:               { label: 'Draft',              bg: '#fef3c7', fg: '#92400e' },
+  submitted:           { label: 'Submitted',          bg: '#dbeafe', fg: '#1e40af' },
+  signed_off:          { label: 'Signed off',         bg: '#dcfce7', fg: '#166534' },
+  revision_requested:  { label: 'Revision requested', bg: '#fee2e2', fg: '#991b1b' },
+};
+
+function _fmtDesignVisitWhen(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    });
+  } catch { return '—'; }
+}
+
+async function renderDesignVisits() {
+  const el = document.getElementById('design-visits-section');
+  if (!el) return;
+  const contactId = state.selectedContactId;
+  if (!contactId) { el.innerHTML = ''; return; }
+
+  el.innerHTML = `
+    <div class="notes-header">
+      <span class="notes-header-label">Design visits</span>
+    </div>
+    <div id="design-visits-list" class="text-sm" style="color:var(--stone-deep)">
+      <p style="font-size:0.85rem;padding:4px 0;font-style:italic">Loading…</p>
+    </div>
+  `;
+
+  let visits;
+  try {
+    visits = await GET(`/api/design-visits?contactId=${encodeURIComponent(contactId)}`);
+  } catch {
+    const list = document.getElementById('design-visits-list');
+    if (list) list.innerHTML = `<p style="font-size:0.85rem;color:#b91c1c;padding:4px 0">Could not load design visits.</p>`;
+    return;
+  }
+
+  const list = document.getElementById('design-visits-list');
+  if (!list) return;
+
+  if (!visits || !visits.length) {
+    list.innerHTML = `<p style="font-size:0.85rem;padding:4px 0;font-style:italic">No design visits yet.</p>`;
+    return;
+  }
+
+  const isAdmin = state.user?.privilege_level === 'admin';
+
+  list.innerHTML = visits.map(v => {
+    const st = DESIGN_VISIT_STATUS_LABELS[v.status] || { label: v.status || 'Unknown', bg: '#e5e7eb', fg: '#374151' };
+    const when     = _fmtDesignVisitWhen(v.visit_date || v.created_at);
+    const totalGbp = ((Number(v.estimate_total_pence) || 0) / 100).toFixed(2);
+    const canRevise  = v.status === 'submitted' || v.status === 'signed_off';
+    const expanded = _designVisitsExpanded.has(v.id);
+    return `
+      <div class="comment-item" style="margin-bottom:6px;flex-direction:column;align-items:stretch;gap:6px">
+        <div style="display:flex;align-items:flex-start;gap:8px;justify-content:space-between">
+          <div style="flex:1;min-width:0">
+            <div class="comment-text" style="font-weight:500">${escHtml(when)}</div>
+            <div class="comment-meta" style="margin-top:2px">
+              <span style="font-size:0.7rem;background:${st.bg};color:${st.fg};border-radius:4px;padding:1px 6px;font-weight:600">${escHtml(st.label)}</span>
+              <span class="comment-meta-sep">·</span>
+              <span class="comment-date">Estimate: £${escHtml(totalGbp)}</span>
+              ${v.qb_estimate_doc_num ? `<span class="comment-meta-sep">·</span><span class="comment-date">QB #${escHtml(v.qb_estimate_doc_num)}</span>` : ''}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+            <button class="btn-cancel-note" style="padding:4px 10px;font-size:0.75rem" onclick="toggleDesignVisitReview(${v.id})">${expanded ? 'Hide' : 'Review'}</button>
+            ${isAdmin && canRevise ? `<button class="btn-cancel-note" style="padding:4px 10px;font-size:0.75rem" onclick="markDesignVisitRevision(${v.id})">Request revision</button>` : ''}
+            ${isAdmin ? `<button class="btn-cancel-note" style="padding:4px 10px;font-size:0.75rem;color:#b91c1c" onclick="deleteDesignVisit(${v.id})">Delete</button>` : ''}
+          </div>
+        </div>
+        ${expanded ? `<div id="design-visit-detail-${v.id}" style="font-size:0.8rem;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px">Loading…</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  for (const id of _designVisitsExpanded) {
+    if (visits.find(v => v.id === id)) _loadDesignVisitDetail(id);
+  }
+}
+
+const _designVisitsExpanded = new Set();
+
+async function toggleDesignVisitReview(id) {
+  if (_designVisitsExpanded.has(id)) _designVisitsExpanded.delete(id);
+  else _designVisitsExpanded.add(id);
+  renderDesignVisits();
+}
+
+async function _loadDesignVisitDetail(id) {
+  const el = document.getElementById(`design-visit-detail-${id}`);
+  if (!el) return;
+  let v;
+  try { v = await GET(`/api/design-visits/${id}`); }
+  catch (e) { el.innerHTML = `<span style="color:#b91c1c">Could not load: ${escHtml(e.message || '')}</span>`; return; }
+
+  const rows = (v.rooms || []).map(r => {
+    const total = (Number(r.unit_price_pence) || 0) * (Number(r.unit_count) || 0);
+    const dims = [r.width_mm, r.height_mm, r.depth_mm].filter(Boolean).join(' × ');
+    return `
+      <tr>
+        <td style="padding:4px 8px;border-top:1px solid #e2e8f0">${escHtml(r.room_name || '')}</td>
+        <td style="padding:4px 8px;border-top:1px solid #e2e8f0">${escHtml(r.door_style_name || '—')}</td>
+        <td style="padding:4px 8px;border-top:1px solid #e2e8f0">${dims ? escHtml(dims + ' mm') : '—'}</td>
+        <td style="padding:4px 8px;border-top:1px solid #e2e8f0;text-align:right">${r.unit_count}</td>
+        <td style="padding:4px 8px;border-top:1px solid #e2e8f0;text-align:right">£${(total / 100).toFixed(2)}</td>
+      </tr>
+    `;
+  }).join('');
+  const grand = (v.rooms || []).reduce((s, r) => s + (Number(r.unit_price_pence) || 0) * (Number(r.unit_count) || 0), 0);
+
+  el.innerHTML = `
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:8px;color:#475569">
+      ${v.handle_name         ? `<span><strong>Handle:</strong> ${escHtml(v.handle_name)}</span>` : ''}
+      ${v.furniture_range_name ? `<span><strong>Furniture range:</strong> ${escHtml(v.furniture_range_name)}</span>` : ''}
+      ${v.location            ? `<span><strong>Location:</strong> ${escHtml(v.location)}</span>` : ''}
+    </div>
+    ${(v.rooms || []).length ? `
+      <table style="width:100%;border-collapse:collapse;font-size:0.78rem">
+        <thead>
+          <tr style="background:#f1f5f9;color:#475569">
+            <th style="text-align:left;padding:4px 8px">Room</th>
+            <th style="text-align:left;padding:4px 8px">Style</th>
+            <th style="text-align:left;padding:4px 8px">Dimensions</th>
+            <th style="text-align:right;padding:4px 8px">Qty</th>
+            <th style="text-align:right;padding:4px 8px">Total</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr><td colspan="4" style="padding:6px 8px;font-weight:600;border-top:2px solid #cbd5e1">Estimate total</td>
+              <td style="padding:6px 8px;font-weight:600;text-align:right;border-top:2px solid #cbd5e1">£${(grand / 100).toFixed(2)}</td></tr>
+        </tfoot>
+      </table>
+    ` : `<p style="font-style:italic;color:#64748b">No rooms recorded.</p>`}
+    ${v.notes          ? `<div style="margin-top:8px;white-space:pre-wrap"><strong>Notes:</strong> ${escHtml(v.notes)}</div>` : ''}
+    ${v.revision_note  ? `<div style="margin-top:8px;white-space:pre-wrap;color:#991b1b"><strong>Revision note:</strong> ${escHtml(v.revision_note)}</div>` : ''}
+  `;
+}
+
+async function markDesignVisitRevision(id) {
+  if (state.user?.privilege_level !== 'admin') return;
+  const note = prompt('Revision note (optional):', '');
+  if (note === null) return;
+  try {
+    await POST(`/api/design-visits/${id}/revision`, { revisionNote: note });
+    showToast('Visit marked for revision');
+    renderDesignVisits();
+  } catch (e) {
+    showToast(`Could not mark for revision: ${e.message || 'error'}`, true);
+  }
+}
+
+async function deleteDesignVisit(id) {
+  if (state.user?.privilege_level !== 'admin') return;
+  if (!confirm('Delete this design visit? This cannot be undone.')) return;
+  try {
+    await DELETE_REQ(`/api/design-visits/${id}`);
+    showToast('Design visit deleted');
+    renderDesignVisits();
+  } catch (e) {
+    showToast(`Could not delete: ${e.message || 'error'}`, true);
+  }
 }
 
 function _toLocalDtInput(d) {

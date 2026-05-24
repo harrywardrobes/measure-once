@@ -954,14 +954,27 @@ router.get('/api/design-visit-door-styles', isAuthenticated, async (req, res) =>
 // ── Design Visits: CRUD ───────────────────────────────────────────────────────
 router.get('/api/design-visits', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   try {
+    const contactId = req.query.contactId;
+    const params = [];
+    let where = '';
+    if (contactId !== undefined && contactId !== null && String(contactId).length) {
+      params.push(String(contactId));
+      where = `WHERE dv.contact_id = $1`;
+    }
     const r = await pool.query(`
       SELECT dv.*, dvh.name AS handle_name, dvfr.name AS furniture_range_name,
-             tcv.version_number AS terms_version_number
+             tcv.version_number AS terms_version_number,
+             COALESCE((
+               SELECT SUM(dvr.unit_count * dvr.unit_price_pence)
+               FROM design_visit_rooms dvr
+               WHERE dvr.design_visit_id = dv.id
+             ), 0) AS estimate_total_pence
       FROM design_visits dv
       LEFT JOIN design_visit_handles          dvh  ON dvh.id  = dv.handle_id
       LEFT JOIN design_visit_furniture_ranges dvfr ON dvfr.id = dv.furniture_range_id
       LEFT JOIN terms_conditions_versions     tcv  ON tcv.id  = dv.terms_condition_version_id
-      ORDER BY dv.created_at DESC LIMIT 500`);
+      ${where}
+      ORDER BY dv.created_at DESC LIMIT 500`, params);
     res.json(r.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
