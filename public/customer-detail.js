@@ -1538,7 +1538,7 @@ async function deleteTask(taskId) {
   renderCustomerList();
   renderTasks();
   try {
-    await DELETE_REQ(`/api/tasks/${taskId}`);
+    await api('DELETE', `/api/tasks/${taskId}`, { contactId: state.selectedContactId });
   } catch (e) {
     state.tasks.splice(idx, 0, removed);
     state.contactUrgencyCache[state.selectedContactId] = getTaskUrgency(state.tasks);

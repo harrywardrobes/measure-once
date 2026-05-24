@@ -1546,6 +1546,17 @@ app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), requir
       return res.status(400).json({ error: 'Invalid task id' });
     }
 
+    // Require the caller to identify the parent contact so we can verify the
+    // task actually belongs to it before deleting it (object-binding check).
+    const contactId = req.body.contactId != null ? String(req.body.contactId) : '';
+    if (!contactId || !/^\d+$/.test(contactId)) {
+      return res.status(400).json({ error: 'contactId is required.' });
+    }
+    const taskLinked = await verifyTaskAssociation(taskId, 'contacts', contactId);
+    if (!taskLinked) {
+      return res.status(403).json({ error: 'Task is not associated with this contact.' });
+    }
+
     await axios.delete(
       `${HS}/crm/v3/objects/tasks/${taskId}`,
       { headers: hsHeaders() }
