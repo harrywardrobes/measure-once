@@ -741,6 +741,73 @@ async function main() {
     !multiImagesRoom1.some(i => i.storage_key === r0img1Key || i.storage_key === r0img2Key),
   );
 
+  // ── (A3) Sign-off summary includes photos for multi-room visit ────────────
+  console.log('\n  [A3] Sign-off summary includes photos for multi-room visit');
+
+  if (multiVisitId) {
+    const rawTokenA3 = `sdv-signoff-a3-${runId}`;
+    const hashA3 = tokenHash(rawTokenA3);
+    await pool.query(
+      `UPDATE design_visits
+       SET signoff_token_hash = $1, signoff_expires_at = $2, status = 'submitted', updated_at = NOW()
+       WHERE id = $3`,
+      [hashA3, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), multiVisitId]
+    );
+
+    const { makeClient } = require('../privileges/harness');
+    const anonClient = makeClient(null);
+    const r = await anonClient.get(`/api/design-visits/sign-off/${rawTokenA3}`);
+
+    const body = r.json || {};
+    const rms = Array.isArray(body.rooms) ? body.rooms : [];
+    const room0 = rms[0] || {};
+    const room1 = rms[1] || {};
+    const r0Keys = Array.isArray(room0.images) ? room0.images.map(i => i.storageKey).sort() : [];
+    const r1Keys = Array.isArray(room1.images) ? room1.images.map(i => i.storageKey).sort() : [];
+    const expectedR0 = [r0img1Key, r0img2Key].sort();
+    const expectedR1 = [r1img1Key, r1img2Key].sort();
+
+    record(
+      '(A3) GET sign-off returns 200 with 2 rooms in sort order',
+      'status=200, rooms.length=2, rooms[0].roomName="Living Room", rooms[1].roomName="Bedroom"',
+      `status=${r.status} rooms=${rms.length} names=${rms.map(x => x.roomName).join(',')}`,
+      r.status === 200
+        && rms.length === 2
+        && room0.roomName === 'Living Room'
+        && room1.roomName === 'Bedroom',
+    );
+
+    record(
+      '(A3) Living Room images grouped under rooms[0] with correct storage_keys',
+      `rooms[0].images contains ${expectedR0.join(', ')}`,
+      `found: ${r0Keys.join(', ')}`,
+      r0Keys.length === 2 && JSON.stringify(r0Keys) === JSON.stringify(expectedR0),
+    );
+
+    record(
+      '(A3) Bedroom images grouped under rooms[1] with correct storage_keys',
+      `rooms[1].images contains ${expectedR1.join(', ')}`,
+      `found: ${r1Keys.join(', ')}`,
+      r1Keys.length === 2 && JSON.stringify(r1Keys) === JSON.stringify(expectedR1),
+    );
+
+    record(
+      '(A3) All 4 images appear exactly once across the sign-off payload',
+      '4 unique storage_keys total, no cross-room leakage',
+      `r0=[${r0Keys.join(',')}] r1=[${r1Keys.join(',')}]`,
+      r0Keys.length === 2 && r1Keys.length === 2
+        && !r0Keys.some(k => r1Keys.includes(k))
+        && !r1Keys.some(k => r0Keys.includes(k)),
+    );
+  } else {
+    record(
+      '(A3) Sign-off summary multi-room photo probe',
+      'multiVisitId available from A2',
+      'multiVisitId missing — A2 submit failed',
+      false,
+    );
+  }
+
   // ── (B) Public sign-off: approve ──────────────────────────────────────────
   console.log('\n  [B] Sign-off: approve');
 

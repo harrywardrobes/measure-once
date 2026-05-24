@@ -1200,13 +1200,25 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
     }
     // Load rooms
     const rooms = await pool.query(`
-      SELECT dvr.room_name, dvr.width_mm, dvr.height_mm, dvr.depth_mm,
+      SELECT dvr.id, dvr.room_name, dvr.width_mm, dvr.height_mm, dvr.depth_mm,
              dvr.unit_count, dvr.unit_price_pence, dvr.notes,
              dvds.name AS door_style_name
       FROM design_visit_rooms dvr
       LEFT JOIN design_visit_door_styles dvds ON dvds.id = dvr.door_style_id
       WHERE dvr.design_visit_id = $1
       ORDER BY dvr.sort_order ASC, dvr.id ASC`, [visit.id]);
+    // Load images per room
+    const imagesRes = await pool.query(`
+      SELECT dvri.room_id, dvri.storage_key, dvri.mime_type
+      FROM design_visit_room_images dvri
+      JOIN design_visit_rooms dvr ON dvr.id = dvri.room_id
+      WHERE dvr.design_visit_id = $1
+      ORDER BY dvri.id ASC`, [visit.id]);
+    const imagesByRoom = {};
+    for (const img of imagesRes.rows) {
+      if (!imagesByRoom[img.room_id]) imagesByRoom[img.room_id] = [];
+      imagesByRoom[img.room_id].push({ storageKey: img.storage_key, mimeType: img.mime_type });
+    }
     // Load T&C: prefer pinned version from visit row, fall back to latest, then admin_settings
     let terms = '';
     let termsVersionNumber = null;
@@ -1263,6 +1275,7 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
         unitPricePence: r.unit_price_pence,
         totalPence:     r.unit_count * r.unit_price_pence,
         notes:          r.notes,
+        images:         imagesByRoom[r.id] || [],
       })),
       terms,
     });
