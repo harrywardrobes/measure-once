@@ -301,10 +301,6 @@
     show(document.getElementById('login-ok'), 'Password set successfully — you can now sign in.', true);
   } else if (params.get('signed_out') === '1') {
     show(document.getElementById('login-ok'), "You've been signed out.", true);
-  } else if (params.get('access_approved') === '1') {
-    show(document.getElementById('login-ok'), 'Your account is already approved — check your email for a set-password link, or ask an admin to resend it.', true);
-  } else if (params.get('access_pending') === '1') {
-    show(document.getElementById('login-ok'), "You've already requested access — an admin will review it shortly.", true);
   }
 
   document.getElementById('login-form').addEventListener('submit', async (e) => {

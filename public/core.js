@@ -403,8 +403,6 @@ function showAccessGate(params) {
   if (gate) gate.style.display = 'flex';
 
   const isEmailConflict  = params.get('email_conflict')  === '1';
-  const isPending        = params.get('access_pending')   === '1';
-  const isAlreadyApproved = params.get('access_approved') === '1';
   const isConfirmed      = params.get('access_requested') === '1'
     || params.get('denied') === '1'
     || params.has('error');
@@ -412,15 +410,11 @@ function showAccessGate(params) {
   const signInEl            = document.getElementById('access-sign-in-state');
   const confirmedEl         = document.getElementById('access-confirmed-state');
   const emailConflictEl     = document.getElementById('access-email-conflict-state');
-  const pendingEl           = document.getElementById('access-pending-state');
-  const alreadyApprovedEl   = document.getElementById('access-already-approved-state');
 
-  const anySpecial = isConfirmed || isEmailConflict || isPending || isAlreadyApproved;
+  const anySpecial = isConfirmed || isEmailConflict;
   if (signInEl)          signInEl.style.display          = !anySpecial ? '' : 'none';
-  if (confirmedEl)       confirmedEl.style.display       = (isConfirmed && !isEmailConflict && !isPending && !isAlreadyApproved) ? '' : 'none';
+  if (confirmedEl)       confirmedEl.style.display       = (isConfirmed && !isEmailConflict) ? '' : 'none';
   if (emailConflictEl)   emailConflictEl.style.display   = isEmailConflict ? '' : 'none';
-  if (pendingEl)         pendingEl.style.display         = isPending ? '' : 'none';
-  if (alreadyApprovedEl) alreadyApprovedEl.style.display = isAlreadyApproved ? '' : 'none';
 }
 
 async function checkAuthStatus() {

@@ -790,32 +790,37 @@ async function setupAuth(app) {
       }
       const normalOk = dbUser.password_hash && await bcrypt.compare(password, dbUser.password_hash);
       if (!normalOk) {
-        // Bootstrap admin path: only accepted when ALL of the following hold:
-        //   1. The account has no password set yet (password_hash IS NULL).
-        //   2. There is no active force-password-reset token for this account —
-        //      such a token signals that an admin explicitly forced a reset, so
-        //      the account owner must use the emailed link rather than the
-        //      bootstrap secret.
-        //   3. The submitted email is in ADMIN_EMAILS.
-        //   4. BOOTSTRAP_ADMIN_PASSWORD is configured and the submitted password
-        //      matches it.
-        // Once an admin has ever set their own password the bootstrap secret is
-        // silently rejected for that account (condition 1 is false).
+        // Bootstrap admin path: emergency-only, strictly scoped to the very
+        // first login of an admin account that has never had a password set.
+        // Accepted only when ALL of the following hold:
+        //   1. The account currently has no password hash (password_hash IS NULL).
+        //   2. The account has NEVER previously completed a set-password flow —
+        //      the absence of any consumed token proves the account is genuinely
+        //      first-time. Once a password has ever been set (and later cleared
+        //      by force-reset) the bootstrap path is permanently blocked for that
+        //      account; the admin must use the emailed set-password link.
+        //   3. No unconsumed reset token (used or not, expired or not) exists —
+        //      a pending reset means an admin explicitly revoked access and the
+        //      bootstrap secret must not substitute for that reset flow.
+        //   4. The submitted email is in ADMIN_EMAILS.
+        //   5. BOOTSTRAP_ADMIN_PASSWORD is configured and matches.
         let bootstrapOk = false;
         if (!dbUser.password_hash && isAdminEmail(email)) {
-          // Check for a pending force-reset token; if one exists the admin must
-          // use the emailed link — bootstrap is blocked for this window.
-          const resetTokenRow = await pool.query(
-            `SELECT 1 FROM password_set_tokens
-              WHERE LOWER(email) = LOWER($1)
-                AND purpose = 'reset'
-                AND used_at IS NULL
-                AND expires_at > NOW()
-              LIMIT 1`,
+          const tokenCheckRow = await pool.query(
+            `SELECT
+               MAX(CASE WHEN used_at IS NOT NULL THEN 1 ELSE 0 END) AS ever_consumed,
+               MAX(CASE WHEN used_at IS NULL     THEN 1 ELSE 0 END) AS has_unused
+             FROM password_set_tokens
+             WHERE LOWER(email) = LOWER($1)`,
             [email]
           );
-          const hasPendingReset = resetTokenRow.rowCount > 0;
-          if (!hasPendingReset) {
+          const everConsumed = tokenCheckRow.rows[0]?.ever_consumed === 1;
+          const hasUnused    = tokenCheckRow.rows[0]?.has_unused    === 1;
+          // Permanently blocked once any token has been consumed (account has
+          // had a real password before). Also blocked while any unused token
+          // exists (covers unexpired set-password invites and all reset tokens,
+          // regardless of expiry — the reset intent must be honoured first).
+          if (!everConsumed && !hasUnused) {
             const bootstrapHash = await getBootstrapAdminHash();
             if (bootstrapHash && await bcrypt.compare(password, bootstrapHash)) {
               bootstrapOk = true;
@@ -824,12 +829,10 @@ async function setupAuth(app) {
           }
         }
         if (!bootstrapOk) {
-          if (!dbUser.password_hash) {
-            return res.status(401).json({
-              error: "This account hasn't set a password yet. Ask an admin to send you the set-password link.",
-              code: 'NO_PASSWORD',
-            });
-          }
+          // Return a uniform response for all auth failures — no distinction
+          // between unknown email, unapproved email, no-password-set, or wrong
+          // password — so the public login endpoint cannot be used to enumerate
+          // account existence or approval state.
           return res.status(401).json({ error: 'Invalid email or password.' });
         }
       }
@@ -874,18 +877,17 @@ async function setupAuth(app) {
   });
 
   // ── Public: email helpers / access requests (unchanged behaviour) ──────────
+  // /api/check-email is retained for API compatibility but intentionally returns
+  // a constant response to prevent unauthenticated email-address enumeration.
+  // The access-request form relies on the 409 from POST /api/request-access for
+  // its authoritative already-approved signal; this endpoint no longer leaks
+  // approval status to unauthenticated callers.
   app.get('/api/check-email', accessRequestLimiter, async (req, res) => {
-    try {
-      const email = (req.query.email || '').trim().toLowerCase();
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return res.status(400).json({ error: 'Invalid email address.' });
-      }
-      const approved = await isEmailApproved(email);
-      res.json({ approved });
-    } catch (e) {
-      console.error('check-email failed:', e.message);
-      res.status(500).json({ error: 'Could not check email. Please try again later.' });
+    const email = (req.query.email || '').trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Invalid email address.' });
     }
+    res.json({ approved: false });
   });
 
   app.post('/api/request-access', accessRequestLimiter, async (req, res) => {
@@ -903,24 +905,28 @@ async function setupAuth(app) {
       }
       const captcha = await verifyTurnstile(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
       if (!captcha.ok) return turnstileError(res);
-      if (await isEmailApproved(email)) {
-        return wantsJson
-          ? res.status(409).json({ status: 'approved' })
-          : res.redirect('/login?access_approved=1');
+      // Intentionally return the same success shape whether the email is already
+      // approved, already has a pending request, or is genuinely new. Returning
+      // distinguishable 409 responses for each state leaks account existence and
+      // approval status to unauthenticated callers. Approved users who land here
+      // will receive the same confirmation and can proceed to /login.
+      const alreadyApproved = await isEmailApproved(email);
+      if (!alreadyApproved) {
+        const insertResult = await pool.query(
+          `INSERT INTO account_requests (name, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING created_at`,
+          [name, email]
+        );
+        if (insertResult.rowCount > 0) {
+          console.log(`  Access request: ${name} <${email}>`);
+          const createdAt = insertResult.rows[0].created_at;
+          notifyAdminsOfAccessRequest(name, email, createdAt).catch(() => {});
+        }
       }
-      const insertResult = await pool.query(
-        `INSERT INTO account_requests (name, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING created_at`,
-        [name, email]
-      );
-      if (insertResult.rowCount === 0) {
-        return wantsJson
-          ? res.status(409).json({ status: 'pending' })
-          : res.redirect('/login?access_pending=1');
+      if (wantsJson) {
+        res.json({ ok: true });
+      } else {
+        res.redirect('/login?access_requested=1');
       }
-      console.log(`  Access request: ${name} <${email}>`);
-      const createdAt = insertResult.rows[0].created_at;
-      notifyAdminsOfAccessRequest(name, email, createdAt).catch(() => {});
-      res.json({ ok: true });
     } catch (e) {
       console.error('request-access failed:', e.message);
       res.status(500).json({ error: 'Could not submit request. Please try again later.' });
@@ -970,6 +976,8 @@ async function setupAuth(app) {
   app.post('/api/set-password', async (req, res) => {
     const token = (req.body?.token || '').toString();
     const password = req.body?.password;
+    // Pre-flight check (outside transaction) — fast rejection for obviously
+    // invalid or already-used tokens before we acquire a connection.
     const row = await lookupPasswordSetToken(token);
     if (!row || row.invalid) {
       return res.status(410).json({ error: 'This password link is no longer valid. Ask an admin to send a new one.' });
@@ -984,6 +992,24 @@ async function setupAuth(app) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // Re-check the token inside the transaction with a row-level lock so that
+      // two concurrent requests using the same link cannot both succeed.  The
+      // FOR UPDATE lock serialises them; the second request will see used_at
+      // already set and bail out before touching the password hash.
+      const lockedToken = await client.query(
+        `SELECT used_at, expires_at FROM password_set_tokens
+           WHERE token_hash = $1
+           FOR UPDATE`,
+        [hashToken(token)]
+      );
+      if (
+        lockedToken.rowCount === 0 ||
+        lockedToken.rows[0].used_at !== null ||
+        new Date(lockedToken.rows[0].expires_at).getTime() < Date.now()
+      ) {
+        await client.query('ROLLBACK');
+        return res.status(410).json({ error: 'This password link is no longer valid. Ask an admin to send a new one.' });
+      }
       const hash = await bcrypt.hash(password, 10);
       // Ensure user row exists (it should — created at approval time).
       const u = await client.query(
@@ -1006,10 +1032,19 @@ async function setupAuth(app) {
           [hash, u.rows[0].id]
         );
       }
-      await client.query(
-        `UPDATE password_set_tokens SET used_at = NOW() WHERE token_hash = $1`,
+      // Mark token consumed. The AND used_at IS NULL guard provides a final
+      // safety net; rowCount = 0 here would indicate a logic error.
+      const consumed = await client.query(
+        `UPDATE password_set_tokens SET used_at = NOW()
+          WHERE token_hash = $1 AND used_at IS NULL`,
         [hashToken(token)]
       );
+      if (consumed.rowCount === 0) {
+        // Should be unreachable given the FOR UPDATE check above, but treat it
+        // as a concurrent replay and abort rather than silently proceeding.
+        await client.query('ROLLBACK');
+        return res.status(410).json({ error: 'This password link is no longer valid. Ask an admin to send a new one.' });
+      }
       const userIdRow = u.rowCount === 0
         ? await client.query(`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`, [lower])
         : u;
