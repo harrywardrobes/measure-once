@@ -881,6 +881,137 @@ async function main() {
     );
   }
 
+  // ── (A4) Delete cascade: visit DELETE removes rooms + room_images ──────────
+  console.log('\n  [A4] Delete cascade — room_images rows disappear');
+
+  // Create a dedicated visit so we don't interfere with later sign-off probes.
+  const delImg1Key = `sdv-del-r1-img1-${runId}.jpg`;
+  const delImg2Key = `sdv-del-r1-img2-${runId}.png`;
+  const delImg3Key = `sdv-del-r2-img1-${runId}.jpg`;
+  const delRes = await memberClient.post('/api/design-visits', {
+    contactId:        FAKE_CONTACT_ID,
+    contactName:      'SDV Delete-Cascade Customer',
+    contactEmail:     'sdv-delete@privtest.local',
+    handleId:         handleId,
+    furnitureRangeId: furnitureId,
+    visitDate:        new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString(),
+    durationMin:      60,
+    location:         '789 Delete Drive',
+    notes:            'Delete cascade E2E test',
+    termsAccepted:    true,
+    rooms: [
+      {
+        roomName:    'Kitchen',
+        doorStyleId: doorStyleId,
+        unitCount:   3,
+        unitPricePence: 15000,
+        images: [
+          { storageKey: delImg1Key, mimeType: 'image/jpeg' },
+          { storageKey: delImg2Key, mimeType: 'image/png'  },
+        ],
+      },
+      {
+        roomName:    'Utility',
+        doorStyleId: doorStyleId,
+        unitCount:   2,
+        unitPricePence: 12000,
+        images: [
+          { storageKey: delImg3Key, mimeType: 'image/jpeg' },
+        ],
+      },
+    ],
+    handlerConfig: {},
+  });
+  const deleteVisitId = delRes.json?.designVisitId ?? null;
+  record(
+    '(A4) POST /api/design-visits seeds a visit with 2 rooms + 3 images for delete probe',
+    'status=201, designVisitId is integer',
+    `status=${delRes.status} id=${deleteVisitId}`,
+    delRes.status === 201 && Number.isInteger(deleteVisitId),
+  );
+
+  // Sanity: rows exist before delete
+  let preDelImageCount = -1;
+  let preDelRoomCount  = -1;
+  if (deleteVisitId) {
+    const pre = await pool.query(
+      `SELECT COUNT(*)::int AS n
+       FROM design_visit_room_images dvri
+       JOIN design_visit_rooms dvr ON dvr.id = dvri.room_id
+       WHERE dvr.design_visit_id = $1`,
+      [deleteVisitId],
+    );
+    preDelImageCount = pre.rows[0]?.n ?? -1;
+    const preRooms = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM design_visit_rooms WHERE design_visit_id = $1`,
+      [deleteVisitId],
+    );
+    preDelRoomCount = preRooms.rows[0]?.n ?? -1;
+  }
+  record(
+    '(A4) Before DELETE: 3 image rows and 2 room rows exist for the visit',
+    'preDelImageCount=3, preDelRoomCount=2',
+    `preDelImageCount=${preDelImageCount}, preDelRoomCount=${preDelRoomCount}`,
+    preDelImageCount === 3 && preDelRoomCount === 2,
+  );
+
+  // DELETE /api/design-visits/:id (admin only) — should cascade via FK
+  let deleteStatus = null;
+  if (deleteVisitId) {
+    const r = await adminClient.delete(`/api/design-visits/${deleteVisitId}`);
+    deleteStatus = r.status;
+  }
+  record(
+    '(A4) DELETE /api/design-visits/:id by admin returns 200',
+    'status=200',
+    `status=${deleteStatus}`,
+    deleteStatus === 200,
+  );
+
+  // Visit row gone
+  let postDelVisitCount = -1;
+  let postDelRoomCount  = -1;
+  let postDelImageCount = -1;
+  let orphanedImageRows = [];
+  if (deleteVisitId) {
+    const v = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM design_visits WHERE id = $1`,
+      [deleteVisitId],
+    );
+    postDelVisitCount = v.rows[0]?.n ?? -1;
+    const rms = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM design_visit_rooms WHERE design_visit_id = $1`,
+      [deleteVisitId],
+    );
+    postDelRoomCount = rms.rows[0]?.n ?? -1;
+    // Look up by the storage_keys we inserted — these are unique per run.
+    const orph = await pool.query(
+      `SELECT id, room_id, storage_key FROM design_visit_room_images
+       WHERE storage_key = ANY($1::text[])`,
+      [[delImg1Key, delImg2Key, delImg3Key]],
+    );
+    orphanedImageRows = orph.rows;
+    postDelImageCount = orph.rows.length;
+  }
+  record(
+    '(A4) design_visits row is gone after DELETE',
+    'postDelVisitCount=0',
+    `postDelVisitCount=${postDelVisitCount}`,
+    postDelVisitCount === 0,
+  );
+  record(
+    '(A4) design_visit_rooms rows for the visit are gone after DELETE',
+    'postDelRoomCount=0',
+    `postDelRoomCount=${postDelRoomCount}`,
+    postDelRoomCount === 0,
+  );
+  record(
+    '(A4) design_visit_room_images rows for the visit are gone after DELETE (ON DELETE CASCADE)',
+    '0 orphaned image rows matching the seeded storage_keys',
+    `orphanedImageRows=${postDelImageCount} (${orphanedImageRows.map(r => r.storage_key).join(', ') || 'none'})`,
+    postDelImageCount === 0,
+  );
+
   // ── (B) Public sign-off: approve ──────────────────────────────────────────
   console.log('\n  [B] Sign-off: approve');
 
@@ -1920,6 +2051,10 @@ async function writeReport(runId, findings) {
     '  Side-effect chain verified: `signoff_token_hash` set (non-null), `signoff_expires_at`',
     '  set and > now(), `qb_estimate_id` is NULL (QB skip with stripped credentials).',
     '  HubSpot and email calls are skipped gracefully (tokens/SMTP stripped).',
+    '- **(A4) Delete cascade**: Seeds a dedicated visit with 2 rooms + 3 images,',
+    '  verifies the rows are present, then calls admin DELETE `/api/design-visits/:id`.',
+    '  Asserts the `design_visits`, `design_visit_rooms`, and `design_visit_room_images`',
+    '  rows for the visit are all gone (`ON DELETE CASCADE` on the room/image FKs).',
     '- **(B) Sign-off: approve**: GET retrieves visit summary JSON without a session.',
     '  POST approve flips status to `signed_off` and nulls `signoff_token_hash` in DB.',
     '  Second POST with same token returns 404 (token consumed).',
