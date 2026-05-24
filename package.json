@@ -16,7 +16,8 @@
     "test:hw-test-user": "node test/hw-test-user/run.js",
     "test:start-design-visit": "node test/start-design-visit/run.js",
     "test:keyboard-shortcuts": "node test/keyboard-shortcuts/run.js",
-    "test:ci": "npm run test:privileges && npm run test:lead-status-sync && npm run test:lead-status-sync-customer-detail && npm run test:card-action-handlers && npm run test:hw-test-user && npm run test:start-design-visit",
+    "test:dv-catalogue-admin": "node test/dv-catalogue-admin/run.js",
+    "test:ci": "npm run test:privileges && npm run test:lead-status-sync && npm run test:lead-status-sync-customer-detail && npm run test:card-action-handlers && npm run test:hw-test-user && npm run test:start-design-visit && npm run test:dv-catalogue-admin",
     "backfill:ec-name-casing": "node scripts/backfill-ec-name-casing.js"
   },
   "dependencies": {
