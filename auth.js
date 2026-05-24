@@ -1810,7 +1810,7 @@ async function setupAuth(app) {
   const CAPABILITIES = [
     { group: 'General access' },
     { feat: 'View customers & projects',  desc: 'Browse CRM contacts and project rooms',    levels: ['viewer','member','manager','admin'] },
-    { feat: 'View invoices',              desc: 'See QuickBooks invoice list and details',   levels: ['manager','admin'] },
+    { feat: 'View invoices',              desc: 'See QuickBooks invoice list and details',   levels: ['admin'] },
     { feat: 'View calendar & visits',     desc: 'See the site-visit calendar',               levels: ['viewer','member','manager','admin'] },
     { group: 'Member actions' },
     { feat: 'Add notes & comments',       desc: 'Create notes on customer workflow records', levels: ['member','manager','admin'] },

@@ -183,7 +183,7 @@ router.get('/api/quickbooks/status', isAuthenticated, async (req, res) => {
 });
 
 // ── API: all outstanding invoices ──────────────────────────────────────────────
-router.get('/api/quickbooks/invoices', isAuthenticated, requirePrivilege('manager'), quickbooksReadWriteLimiter, async (req, res) => {
+router.get('/api/quickbooks/invoices', isAuthenticated, requireAdmin, quickbooksReadWriteLimiter, async (req, res) => {
   try {
     const data = await qbGet('/query', {
       query: "SELECT * FROM Invoice WHERE Balance > '0.0' MAXRESULTS 1000"
@@ -208,7 +208,7 @@ router.get('/api/quickbooks/invoices', isAuthenticated, requirePrivilege('manage
 });
 
 // ── API: single invoice detail ─────────────────────────────────────────────────
-router.get('/api/quickbooks/invoice/:id', isAuthenticated, requirePrivilege('manager'), quickbooksReadWriteLimiter, async (req, res) => {
+router.get('/api/quickbooks/invoice/:id', isAuthenticated, requireAdmin, quickbooksReadWriteLimiter, async (req, res) => {
   try {
     const data = await qbGet(`/invoice/${req.params.id}`);
     const inv  = data.Invoice;
@@ -279,7 +279,7 @@ router.post('/api/quickbooks/invoice/:id', isAuthenticated, requireAdmin, quickb
 });
 
 // ── API: download invoice PDF ──────────────────────────────────────────────────
-router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, requirePrivilege('manager'), quickbooksReadWriteLimiter, async (req, res) => {
+router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, requireAdmin, quickbooksReadWriteLimiter, async (req, res) => {
   try {
     const t = await getValidTokens();
     if (!t) return res.status(503).json({ error: 'QuickBooks not connected' });
