@@ -1122,6 +1122,53 @@ async function main() {
       Number.isInteger(conflictAId) && Number.isInteger(conflictBId),
     );
 
+    // (D.api-1) GET /api/admin/card-action-handlers/conflicts (admin) returns
+    // the seeded duplicate slot.
+    {
+      const r = await adminClient.get('/api/admin/card-action-handlers/conflicts');
+      const total = Number(r.json?.total);
+      const arr   = Array.isArray(r.json?.conflicts) ? r.json.conflicts : [];
+      const slot  = arr.find(c =>
+        c && c.type === 'label'
+          && c.stage_key === 'sales'
+          && c.status_key === LBL_KEY_CONFLICT,
+      );
+      const handlerIds = Array.isArray(slot?.handler_ids) ? slot.handler_ids : [];
+      const idsOk = handlerIds.includes(conflictAId) && handlerIds.includes(conflictBId);
+      record(
+        '(D) GET /api/admin/card-action-handlers/conflicts returns the seeded duplicate',
+        `status=200, total>=1, conflict for (sales, ${LBL_KEY_CONFLICT}) listing handlers ${conflictAId} & ${conflictBId}`,
+        `status=${r.status} total=${total} slot=${JSON.stringify(slot)}`,
+        r.status === 200 && total >= 1 && !!slot && Number(slot.count) >= 2 && idsOk,
+      );
+    }
+
+    // (D.api-2) Non-admin (member) is blocked from the conflicts endpoint.
+    {
+      const r = await memberClient.get('/api/admin/card-action-handlers/conflicts');
+      const blocked = r.status === 401 || r.status === 403 || r.status === 302;
+      record(
+        '(D) GET /api/admin/card-action-handlers/conflicts blocks non-admin members',
+        'status=403 (or 401/302)',
+        `status=${r.status}`,
+        blocked,
+      );
+    }
+
+    // (D.api-3) Unauthenticated requests are rejected (no session cookie).
+    {
+      const res = await fetch(`${BASE}/api/admin/card-action-handlers/conflicts`, {
+        redirect: 'manual',
+      });
+      const blocked = res.status === 401 || res.status === 403 || res.status === 302;
+      record(
+        '(D) GET /api/admin/card-action-handlers/conflicts blocks unauthenticated requests',
+        'status=401/403/302',
+        `status=${res.status}`,
+        blocked,
+      );
+    }
+
     // Open a fresh admin page tab.
     const conflictAdminTab = await browser.newPage();
     await conflictAdminTab.setCacheEnabled(false);
