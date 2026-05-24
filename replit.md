@@ -167,6 +167,21 @@ Sessions and users are stored in PostgreSQL (`sessions`, `users`,
 `password_set_tokens` — all auto-created on boot). Protect routes by importing
 `isAuthenticated` from `./auth`.
 
+## Dev-only admin features
+
+The admin panel has a **Dev environment** tab (`#tab-devenv` in
+`public/admin.html`) that lists every feature suppressed when
+`NODE_ENV=production`. This list is the single source of truth shown to admins
+for "what is dev-only in here", so it must stay in sync with the code.
+
+**Convention:** whenever you add a new dev-only section, control, or endpoint
+to the admin panel (anything gated on `NODE_ENV !== 'production'` or otherwise
+hidden from the published app), you **must** add a matching entry to
+`#tab-devenv` in `public/admin.html`. Each entry should include the feature
+name, the tab/location it lives in, and a short description of what it does
+and why it is excluded from production. A maintainer comment above the panel
+in `public/admin.html` repeats this rule and links back here.
+
 ## Required Secrets
 - `DATABASE_URL`, `SESSION_SECRET` — required
 - `ADMIN_EMAILS` — comma-separated bootstrap admins

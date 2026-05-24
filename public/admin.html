@@ -3796,6 +3796,29 @@
       </div>
 
       <!-- DEV ENVIRONMENT (hidden in production) -->
+      <!--
+        ============================================================
+        MAINTAINER NOTE — KEEP THIS PANEL UP TO DATE
+        ============================================================
+        Whenever you add a new dev-only feature to the admin panel
+        (anything gated on NODE_ENV !== 'production', or otherwise
+        hidden from the published app), you MUST add a corresponding
+        entry to the list inside this #tab-devenv panel below.
+
+        Each entry should include:
+          1. The feature name (bold title)
+          2. The tab / location it lives in (pill badge)
+          3. A short description of what it does AND why it is
+             excluded from production.
+
+        Copy one of the existing <div style="padding:14px 0;…">
+        blocks below as a template. This list is the single source
+        of truth shown to admins for "what is dev-only in here".
+
+        Convention is also documented in replit.md under
+        "Dev-only admin features".
+        ============================================================
+      -->
       <div class="tab-panel" id="tab-devenv" style="display:none;">
         <div style="background:#fef9c3;border:1px solid #fde047;border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:20px;display:flex;align-items:flex-start;gap:12px;">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;margin-top:1px;">
