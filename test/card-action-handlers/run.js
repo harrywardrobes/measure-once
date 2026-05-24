@@ -561,6 +561,18 @@ async function main() {
     privScaffoldId = r.json?.id ?? null;
   }
 
+  // PRIV-00: member GET
+  {
+    const r = await memberClient.get('/api/admin/card-action-handlers');
+    const blocked = r.status === 403 || r.status === 401 || r.status === 302;
+    record(
+      'PRIV-00: member GET /api/admin/card-action-handlers blocked',
+      'status=403 (or 401/302)',
+      `status=${r.status}`,
+      blocked,
+    );
+  }
+
   // PRIV-01: member POST
   {
     const r = await memberClient.post('/api/admin/card-action-handlers', {
