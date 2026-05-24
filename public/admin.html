@@ -2439,24 +2439,27 @@
       'drive and tick the next step manually.").',
     start_design_visit:
       'Clicking the action on a Sales/Survey card opens a full multi-step design visit wizard.\n' +
+      '• Two-phase HubSpot status update: when the wizard opens the contact\'s lead status is set to the "In-progress" status (if configured); when the wizard is submitted it is set to the "Submitted" status (if configured).\n' +
       '• Step 1 — Visit details: date/time, designer name, handle selection, furniture range, T&C acceptance.\n' +
       '• Step 2 — Rooms: add/remove rooms with name, door style, dimensions (mm), unit count, unit price, notes, and optional photo upload.\n' +
       '• Step 3 — Review: read-only summary before submission.\n' +
-      '• On submit: creates a design_visits DB record, updates HubSpot lead status to the configured submittedLeadStatus, creates a HubSpot note, attempts a QuickBooks Estimate (non-fatal), generates a single-use sign-off token, emails the customer a "See Your Design & Sign Off" link, and notifies the admin team.',
+      '• On submit: creates a design_visits DB record, updates HubSpot lead status to the configured submitted status, creates a HubSpot note, attempts a QuickBooks Estimate (non-fatal), generates a single-use sign-off token, emails the customer a "See Your Design & Sign Off" link, and notifies the admin team.',
   };
 
   async function loadCardActionHandlersAdmin() {
     const wrap = document.getElementById('card-action-handlers-wrap');
     if (!wrap) return;
     try {
-      const [handlers, labels, subs] = await Promise.all([
+      const [handlers, labels, subs, statuses] = await Promise.all([
         api('GET', '/api/admin/card-action-handlers'),
         _cardActionsData.length ? Promise.resolve(_cardActionsData) : api('GET', '/api/admin/stage-action-labels'),
         _cardSubstatusesData.length ? Promise.resolve(_cardSubstatusesData) : api('GET', '/api/admin/lead-substatuses'),
+        _leadStatusesData.length ? Promise.resolve(_leadStatusesData) : api('GET', '/api/admin/lead-statuses'),
       ]);
       _handlersData = Array.isArray(handlers) ? handlers : [];
-      if (Array.isArray(labels)) _cardActionsData = labels;
-      if (Array.isArray(subs))   _cardSubstatusesData = subs;
+      if (Array.isArray(labels))   _cardActionsData    = labels;
+      if (Array.isArray(subs))     _cardSubstatusesData = subs;
+      if (Array.isArray(statuses)) _leadStatusesData    = statuses;
       _handlersLoaded = true;
       renderHandlersTable();
       // The labels table above shows a per-row badge for any attached
@@ -2601,6 +2604,48 @@
     });
   }
 
+  // Build <option> HTML for the lead-status selects in the start_design_visit
+  // config block. Uses the already-cached _leadStatusesData and _cardSubstatusesData.
+  //
+  // _buildLeadStatusOnlyOptions — lead statuses only (for intermediateLeadStatus,
+  //   which maps to hs_lead_status and must be a top-level lead status key).
+  // _buildLeadStatusWithSubsOptions — lead statuses + sub-statuses in optgroups
+  //   (for submittedLeadStatus, which may be a sub-status key via the existing path).
+  function _buildLeadStatusOnlyOptions(selectedKey) {
+    const real = (_leadStatusesData || []).filter(s => !s.is_null_row);
+    let html = `<option value="">— none —</option>`;
+    for (const ls of real) {
+      const sel = ls.key === selectedKey ? ' selected' : '';
+      html += `<option value="${esc(ls.key)}"${sel}>${esc(ls.label || ls.key)}</option>`;
+    }
+    return html;
+  }
+
+  function _buildLeadStatusWithSubsOptions(selectedKey) {
+    const real = (_leadStatusesData || []).filter(s => !s.is_null_row);
+    const subs  = _cardSubstatusesData || [];
+    let html = `<option value="">— none —</option>`;
+    if (real.length) {
+      html += `<optgroup label="Lead statuses">`;
+      for (const ls of real) {
+        const sel = ls.key === selectedKey ? ' selected' : '';
+        html += `<option value="${esc(ls.key)}"${sel}>${esc(ls.label || ls.key)}</option>`;
+      }
+      html += `</optgroup>`;
+    }
+    if (subs.length) {
+      html += `<optgroup label="Lead sub-statuses">`;
+      for (const s of subs) {
+        const val = s.substatus_key;
+        const sel = val === selectedKey ? ' selected' : '';
+        const lbl = s.label ? `${esc(s.label)} (${esc(s.status_key)})` : `${esc(val)} (${esc(s.status_key)})`;
+        html += `<option value="${esc(val)}"${sel}>${lbl}</option>`;
+      }
+      html += `</optgroup>`;
+    }
+    return html;
+  }
+
   // Per-slot editor: pick the handler type and (optional) JSON config. The
   // binding is fixed to the row the admin clicked from.
   function openHandlerEditor(slot, existing) {
@@ -2638,15 +2683,20 @@
 
         <!-- start_design_visit: dedicated config fields. -->
         <div id="cah-sdv-block" style="display:none;margin-top:12px;">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div>
-              <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Default duration (min)</label>
-              <input id="cah-sdv-duration" type="number" class="field" min="5" max="1440" step="5" value="${esc(String(config.defaultDurationMin || 90))}" style="font-size:.85rem;">
-            </div>
-            <div>
-              <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Submitted lead status key</label>
-              <input id="cah-sdv-lead-status" type="text" class="field" maxlength="60" placeholder="e.g. DESIGN_VISIT_SENT" value="${esc(config.submittedLeadStatus || '')}" style="font-size:.85rem;text-transform:uppercase;">
-            </div>
+          <div>
+            <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Default duration (min)</label>
+            <input id="cah-sdv-duration" type="number" class="field" min="5" max="1440" step="5" value="${esc(String(config.defaultDurationMin || 90))}" style="font-size:.85rem;">
+          </div>
+          <div style="margin-top:10px;">
+            <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">In-progress lead status <span style="font-weight:400;color:var(--ink-4);">(optional — set when wizard opens)</span></label>
+            <select id="cah-sdv-lead-status-intermediate" class="field" style="font-size:.85rem;">${_buildLeadStatusOnlyOptions(config.intermediateLeadStatus || '')}</select>
+          </div>
+          <div style="margin-top:8px;padding:7px 10px;border-radius:6px;background:#eff6ff;border:1px solid #bfdbfe;font-size:.75rem;color:#1e40af;line-height:1.5;">
+            <strong>Two-phase status flow:</strong> Opening the wizard sets the in-progress status. Submitting the form sets the submitted status.
+          </div>
+          <div style="margin-top:8px;">
+            <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Submitted lead status <span style="font-weight:400;color:var(--ink-4);">(optional — set on submit)</span></label>
+            <select id="cah-sdv-lead-status-submitted" class="field" style="font-size:.85rem;">${_buildLeadStatusWithSubsOptions(config.submittedLeadStatus || '')}</select>
           </div>
           <div style="margin-top:10px;">
             <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Terms &amp; Conditions <span style="font-weight:400;color:var(--ink-4);">(optional, ≤4000 chars — also editable in the T&C section below)</span></label>
@@ -2734,17 +2784,18 @@
         const titleV = msgTitle.value.trim();
         if (titleV) cfg.title = titleV;
       } else if (tp === 'start_design_visit') {
-        const durVal  = parseInt(wrap.querySelector('#cah-sdv-duration').value, 10);
-        const lsKey   = wrap.querySelector('#cah-sdv-lead-status').value.trim().toUpperCase();
-        const terms   = wrap.querySelector('#cah-sdv-terms').value;
-        const gcal    = wrap.querySelector('#cah-sdv-google').checked;
+        const durVal       = parseInt(wrap.querySelector('#cah-sdv-duration').value, 10);
+        const lsIntermediate = wrap.querySelector('#cah-sdv-lead-status-intermediate').value;
+        const lsSubmitted    = wrap.querySelector('#cah-sdv-lead-status-submitted').value;
+        const terms        = wrap.querySelector('#cah-sdv-terms').value;
+        const gcal         = wrap.querySelector('#cah-sdv-google').checked;
         if (durVal && (isNaN(durVal) || durVal < 5 || durVal > 1440)) {
           errEl.textContent = 'Default duration must be between 5 and 1440 minutes.'; return null;
         }
-        if (lsKey.length > 60) { errEl.textContent = 'Submitted lead status key must be ≤ 60 characters.'; return null; }
         cfg = {};
         if (durVal) cfg.defaultDurationMin = durVal;
-        if (lsKey)  cfg.submittedLeadStatus = lsKey;
+        if (lsIntermediate) cfg.intermediateLeadStatus = lsIntermediate;
+        if (lsSubmitted)    cfg.submittedLeadStatus = lsSubmitted;
         if (terms)  cfg.termsAndConditions = terms;
         cfg.addToGoogleCalendar = gcal;
       } else {

@@ -382,6 +382,17 @@
     const contactName     = ctx?.contactName  || ctx?.contact_name  || '';
     const contactEmail    = ctx?.contactEmail || ctx?.contact_email || '';
 
+    // Apply in-progress lead status as soon as the wizard opens (non-fatal).
+    if (cfg.intermediateLeadStatus && contactId) {
+      fetch(`/api/contacts/${encodeURIComponent(contactId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hs_lead_status: cfg.intermediateLeadStatus }),
+      }).then(res => {
+        if (!res.ok) console.warn('[design-visit] intermediate lead status update failed: HTTP', res.status);
+      }).catch(e => console.warn('[design-visit] intermediate lead status update failed:', e.message));
+    }
+
     // Pre-load catalogue + T&C in parallel
     let handles = [], furnitureRanges = [], doorStyles = [], termsText = '';
     try {

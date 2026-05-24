@@ -3751,6 +3751,11 @@ function _validateHandlerConfig(type, configRaw) {
       }
       out.defaultDurationMin = n;
     }
+    if (cfg.intermediateLeadStatus !== undefined) {
+      const v = String(cfg.intermediateLeadStatus || '').trim();
+      if (v.length > 60) return { error: 'intermediateLeadStatus must be 60 characters or fewer.' };
+      out.intermediateLeadStatus = v;
+    }
     if (cfg.submittedLeadStatus !== undefined) {
       const v = String(cfg.submittedLeadStatus || '').trim();
       if (v.length > 60) return { error: 'submittedLeadStatus must be 60 characters or fewer.' };
