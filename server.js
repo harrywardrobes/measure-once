@@ -3649,6 +3649,35 @@ async function ensureCardActionHandlersTables() {
   `);
 }
 
+async function checkDuplicateHandlerBindings() {
+  const labelDups = await pool.query(`
+    SELECT stage_key, status_key, COUNT(*) AS cnt,
+           array_agg(DISTINCT handler_id ORDER BY handler_id) AS handler_ids
+    FROM card_action_handler_bindings
+    WHERE substatus_id IS NULL
+    GROUP BY stage_key, status_key
+    HAVING COUNT(*) > 1
+  `);
+  const substatusDups = await pool.query(`
+    SELECT substatus_id, COUNT(*) AS cnt,
+           array_agg(DISTINCT handler_id ORDER BY handler_id) AS handler_ids
+    FROM card_action_handler_bindings
+    WHERE substatus_id IS NOT NULL
+    GROUP BY substatus_id
+    HAVING COUNT(*) > 1
+  `);
+  const total = labelDups.rows.length + substatusDups.rows.length;
+  if (total === 0) return;
+  console.warn(`[WARN] card_action_handler_bindings: ${total} duplicate slot(s) detected.`);
+  for (const r of labelDups.rows) {
+    console.warn(`  [DUPLICATE] label slot stage_key=${r.stage_key} status_key=${r.status_key} bound to handlers: ${r.handler_ids.join(', ')} (${r.cnt} entries)`);
+  }
+  for (const r of substatusDups.rows) {
+    console.warn(`  [DUPLICATE] substatus slot substatus_id=${r.substatus_id} bound to handlers: ${r.handler_ids.join(', ')} (${r.cnt} entries)`);
+  }
+  console.warn('  Use GET /api/admin/card-action-handlers/conflicts (admin) or the conflict resolver in admin.html to clean these up.');
+}
+
 async function _loadHandlerWithBindings(id) {
   const h = await pool.query(
     `SELECT id, name, type, config, created_at, updated_at
@@ -3726,6 +3755,57 @@ app.get('/api/admin/card-action-handlers', isAuthenticated, requireAdmin, async 
   } catch (e) {
     console.error('GET /api/admin/card-action-handlers error:', e.message);
     res.status(500).json({ error: 'Could not load card action handlers.' });
+  }
+});
+
+app.get('/api/admin/card-action-handlers/conflicts', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const labelDups = await pool.query(`
+      SELECT b.stage_key, b.status_key, NULL::int AS substatus_id,
+             COUNT(*) AS cnt,
+             array_agg(DISTINCT b.handler_id ORDER BY b.handler_id) AS handler_ids,
+             array_agg(DISTINCT h.name ORDER BY h.name) AS handler_names
+      FROM card_action_handler_bindings b
+      JOIN card_action_handlers h ON h.id = b.handler_id
+      WHERE b.substatus_id IS NULL
+      GROUP BY b.stage_key, b.status_key
+      HAVING COUNT(*) > 1
+    `);
+    const substatusDups = await pool.query(`
+      SELECT NULL AS stage_key, NULL AS status_key, b.substatus_id,
+             COUNT(*) AS cnt,
+             array_agg(DISTINCT b.handler_id ORDER BY b.handler_id) AS handler_ids,
+             array_agg(DISTINCT h.name ORDER BY h.name) AS handler_names
+      FROM card_action_handler_bindings b
+      JOIN card_action_handlers h ON h.id = b.handler_id
+      WHERE b.substatus_id IS NOT NULL
+      GROUP BY b.substatus_id
+      HAVING COUNT(*) > 1
+    `);
+    const conflicts = [
+      ...labelDups.rows.map(r => ({
+        type: 'label',
+        stage_key: r.stage_key,
+        status_key: r.status_key,
+        substatus_id: null,
+        count: parseInt(r.cnt, 10),
+        handler_ids: r.handler_ids,
+        handler_names: r.handler_names,
+      })),
+      ...substatusDups.rows.map(r => ({
+        type: 'substatus',
+        stage_key: null,
+        status_key: null,
+        substatus_id: r.substatus_id,
+        count: parseInt(r.cnt, 10),
+        handler_ids: r.handler_ids,
+        handler_names: r.handler_names,
+      })),
+    ];
+    res.json({ conflicts, total: conflicts.length });
+  } catch (e) {
+    console.error('GET /api/admin/card-action-handlers/conflicts error:', e.message);
+    res.status(500).json({ error: 'Could not load handler binding conflicts.' });
   }
 });
 
@@ -4271,6 +4351,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.warn('  hw_lead_substatus sync skipped:', e.response?.data?.message || e.message); }
     try { await ensureCardActionHandlersTables(); console.log('  Card action handlers tables ready'); }
     catch (e) { console.error('  Card action handlers tables setup failed:', e.message); }
+    try { await checkDuplicateHandlerBindings(); }
+    catch (e) { console.error('  Card action handler duplicate-binding check failed:', e.message); }
     try { await ensureSearchSettingsTable(); console.log('  Search settings table ready'); }
     catch (e) { console.error('  Search settings table setup failed:', e.message); }
     try { await ensureWorkshopSettingsTable(); console.log('  Workshop settings table ready'); }
