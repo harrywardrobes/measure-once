@@ -14,6 +14,22 @@ const { isAuthenticated, requireAdmin, requirePrivilege } = require('./auth');
 const HANDLES_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'handles');
 if (!fs.existsSync(HANDLES_UPLOAD_DIR)) fs.mkdirSync(HANDLES_UPLOAD_DIR, { recursive: true });
 
+function _deleteLocalHandleImage(imageUrl) {
+  if (!imageUrl || typeof imageUrl !== 'string') return;
+  const m = imageUrl.match(/^\/uploads\/handles\/([^/\\]+)$/);
+  if (!m) return;
+  const filename = m[1];
+  if (filename === '.' || filename === '..') return;
+  const filePath = path.join(HANDLES_UPLOAD_DIR, filename);
+  const resolved = path.resolve(filePath);
+  if (path.dirname(resolved) !== path.resolve(HANDLES_UPLOAD_DIR)) return;
+  fs.unlink(resolved, err => {
+    if (err && err.code !== 'ENOENT') {
+      console.warn('[design-visits] Failed to delete handle image', resolved, err.message);
+    }
+  });
+}
+
 const _handlesStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, HANDLES_UPLOAD_DIR),
   filename: (req, file, cb) => {
@@ -651,8 +667,9 @@ router.delete('/api/admin/design-visit-handles/:id', isAuthenticated, requireAdm
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   try {
-    const r = await pool.query(`DELETE FROM design_visit_handles WHERE id=$1 RETURNING id`, [id]);
+    const r = await pool.query(`DELETE FROM design_visit_handles WHERE id=$1 RETURNING id, image_url`, [id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    _deleteLocalHandleImage(r.rows[0].image_url);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -670,6 +687,15 @@ router.post('/api/admin/dv-handles/:id/image', isAuthenticated, requireAdmin,
     if (!req.file) return res.status(400).json({ error: 'No image file provided' });
     const image_url = `/uploads/handles/${req.file.filename}`;
     try {
+      const existing = await pool.query(
+        `SELECT image_url FROM design_visit_handles WHERE id=$1`,
+        [id]
+      );
+      if (!existing.rows.length) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(404).json({ error: 'Handle not found' });
+      }
+      const oldImageUrl = existing.rows[0].image_url;
       const r = await pool.query(
         `UPDATE design_visit_handles SET image_url=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
         [image_url, id]
@@ -677,6 +703,9 @@ router.post('/api/admin/dv-handles/:id/image', isAuthenticated, requireAdmin,
       if (!r.rows.length) {
         fs.unlink(req.file.path, () => {});
         return res.status(404).json({ error: 'Handle not found' });
+      }
+      if (oldImageUrl && oldImageUrl !== image_url) {
+        _deleteLocalHandleImage(oldImageUrl);
       }
       res.json({ image_url });
     } catch (e) {
