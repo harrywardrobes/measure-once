@@ -3817,7 +3817,7 @@ app.post('/api/admin/card-action-handlers', isAuthenticated, requireAdmin, async
   const type = String(req.body?.type || '').trim();
   if (name.length > 80) return res.status(400).json({ error: 'name must be 80 characters or fewer.' });
   if (!CARD_ACTION_HANDLER_TYPES.has(type)) {
-    return res.status(400).json({ error: 'type must be add_design_visit_to_calendar, summarise_phone_call, or show_message.' });
+    return res.status(400).json({ error: `type must be ${[...CARD_ACTION_HANDLER_TYPES].join(', ')}.` });
   }
   const cfgValidation = _validateHandlerConfig(type, req.body?.config);
   if (cfgValidation.error) return res.status(400).json({ error: cfgValidation.error });
@@ -3865,7 +3865,7 @@ app.patch('/api/admin/card-action-handlers/:id', isAuthenticated, requireAdmin, 
   if (req.body?.type !== undefined) {
     const t = String(req.body.type || '').trim();
     if (!CARD_ACTION_HANDLER_TYPES.has(t)) {
-      return res.status(400).json({ error: 'type must be add_design_visit_to_calendar, summarise_phone_call, or show_message.' });
+      return res.status(400).json({ error: `type must be ${[...CARD_ACTION_HANDLER_TYPES].join(', ')}.` });
     }
     effectiveType = t;
     params.push(t); updates.push(`type = $${params.length}`);
