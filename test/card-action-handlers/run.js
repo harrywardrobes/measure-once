@@ -16,6 +16,12 @@
 //       expected backend route.
 //   (C) Substatus binding wins over a label binding when both exist for the
 //       same (stage_key, status_key) the substatus belongs to.
+//   (D) Conflict-fix flow: the ⚠ Fix button appears for a duplicate-bound
+//       slot and the resolver modal removes the conflict end-to-end.
+//   (E) action_name field: a handler seeded with config.action_name =
+//       'send_quote' shows the badge in the admin table (E.1), causes
+//       cardActionHandlerAttrs() to emit data-card-action-name="send_quote"
+//       (E.2), and the title-case label expansion yields "Send Quote" (E.3).
 //
 // API pre-checks run before any browser tab opens so failures in the API
 // surface clearly.
@@ -57,6 +63,8 @@ const SUB_SUB_K        = 'PRIVTEST_SUB';
 // (D) conflict-fix fixtures
 const LBL_KEY_CONFLICT    = 'privtest_cah_conflict'; // status_key for conflicting bindings (lowercase)
 const LBL_KEY_CONFLICT_LS = 'PRIVTEST_CAH_CONFLICT'; // key in lead_status_config (uppercase, stage=SALES)
+// (E) action_name display fixtures
+const LBL_KEY_ANAME       = 'privtest_cah_aname';    // status_key for the action_name probe
 
 const HANDLER_NAME_DV         = 'PrivTest design visit handler';
 const HANDLER_NAME_PC         = 'PrivTest phone summary handler';
@@ -64,6 +72,7 @@ const HANDLER_NAME_LBL        = 'PrivTest label-binding handler';
 const HANDLER_NAME_SUB        = 'PrivTest substatus-binding handler';
 const HANDLER_NAME_CONFLICT_A = 'PrivTest conflict handler A';
 const HANDLER_NAME_CONFLICT_B = 'PrivTest conflict handler B';
+const HANDLER_NAME_ANAME      = 'PrivTest action-name handler';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function parseCookieKV(jar) {
@@ -88,9 +97,9 @@ async function purgeFixtures(pool) {
   // cascades to any binding pointing at it.
   await pool.query(
     `DELETE FROM card_action_handlers
-       WHERE name IN ($1, $2, $3, $4, $5, $6)`,
+       WHERE name IN ($1, $2, $3, $4, $5, $6, $7)`,
     [HANDLER_NAME_DV, HANDLER_NAME_PC, HANDLER_NAME_LBL, HANDLER_NAME_SUB,
-     HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B]
+     HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B, HANDLER_NAME_ANAME]
   );
   await pool.query(
     `DELETE FROM lead_substatuses
@@ -1272,6 +1281,154 @@ async function main() {
 
     await conflictAdminTab.close();
 
+    // ── (E) action_name field: badge · data-attr · card-strip label ───────────
+    //
+    // Seeds a handler with config.action_name = 'send_quote' (type
+    // summarise_phone_call, bound to (sales, LBL_KEY_ANAME)) and verifies three
+    // things without requiring a real HubSpot token:
+    //
+    //   E.1  The admin card-actions table renders a badge span whose text
+    //        content is exactly "send_quote".
+    //   E.2  cardActionHandlerAttrs() returns a string that contains
+    //        data-card-action-name="send_quote".
+    //   E.3  The title-case expansion used by the Sales card strip label
+    //        produces "Send Quote" from the data-card-action-name value.
+    console.log('\n  [E] action_name display (badge · data-attr · card-strip label)');
+
+    const createAnameRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name:     HANDLER_NAME_ANAME,
+      type:     'summarise_phone_call',
+      config:   { action_name: 'send_quote' },
+      bindings: [{ stage_key: 'sales', status_key: LBL_KEY_ANAME }],
+    });
+    record(
+      '(E) POST handler with action_name="send_quote" returns 201',
+      'status=201 with numeric id and one binding',
+      `status=${createAnameRes.status} id=${createAnameRes.json?.id} bindings=${createAnameRes.json?.bindings?.length}`,
+      createAnameRes.status === 201
+        && Number.isInteger(createAnameRes.json?.id)
+        && createAnameRes.json?.bindings?.length === 1,
+    );
+
+    // E.1 — admin table shows the badge.
+    // Open a fresh admin tab, switch to Card actions, poll for a <span> whose
+    // text is exactly "send_quote" inside the card-action-handlers panel.
+    const anameAdminTab = await browser.newPage();
+    await anameAdminTab.setCacheEnabled(false);
+    await injectSession(anameAdminTab, adminClient.cookie);
+    await anameAdminTab.goto(`${BASE}/admin`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+    await anameAdminTab.evaluate(() => {
+      if (typeof switchTab === 'function') switchTab('cardactions');
+      const p1 = typeof loadCardActionsAdmin === 'function'
+        ? loadCardActionsAdmin() : Promise.resolve();
+      const p2 = typeof loadCardActionHandlersAdmin === 'function'
+        ? loadCardActionHandlersAdmin() : Promise.resolve();
+      return Promise.all([p1, p2]);
+    });
+
+    const anameBadge = await pollPage(
+      anameAdminTab,
+      (name) => {
+        const panel = document.getElementById('card-action-handlers-wrap') || document.body;
+        const spans = panel.querySelectorAll('span');
+        for (const s of spans) {
+          if (s.textContent.trim() === name) return 'found';
+        }
+        return null;
+      },
+      'send_quote',
+      10000,
+    );
+    record(
+      '(E.1) admin card-actions table renders the send_quote badge',
+      'a <span> with text "send_quote" is visible in the card-action-handlers panel',
+      `result=${anameBadge}`,
+      anameBadge === 'found',
+    );
+
+    await anameAdminTab.close();
+
+    // E.2 — cardActionHandlerAttrs() emits data-card-action-name="send_quote".
+    // Re-fetch handlers in salesTab so the new binding is indexed, then call
+    // cardActionHandlerAttrs() for the (sales, LBL_KEY_ANAME) slot.
+    await salesTab.evaluate(() => {
+      if (typeof window.loadCardActionHandlers === 'function') {
+        return window.loadCardActionHandlers();
+      }
+    });
+
+    const attrStr = await salesTab.evaluate((lsKey) => {
+      if (typeof window.cardActionHandlerAttrs !== 'function') return null;
+      return window.cardActionHandlerAttrs('sales', lsKey, null, {
+        contactId:    'test-aname-001',
+        contactName:  'PrivTest ActionName',
+        contactEmail: 'aname@privtest.local',
+      });
+    }, LBL_KEY_ANAME);
+    record(
+      '(E.2) cardActionHandlerAttrs emits data-card-action-name="send_quote"',
+      'returned string contains data-card-action-name="send_quote"',
+      `attrStr=${JSON.stringify(attrStr)}`,
+      typeof attrStr === 'string' && attrStr.includes('data-card-action-name="send_quote"'),
+    );
+
+    // E.3 — Sales card strip renders "Send Quote" as the .eq-card-action-label.
+    // Call enquiryRowHtml() in-page (the actual sales.js rendering function)
+    // with a fake contact whose hs_lead_status matches LBL_KEY_ANAME.
+    // enquiryRowHtml() calls cardActionHandlerAttrs() internally, extracts
+    // data-card-action-name, title-cases it, and writes it into
+    // .eq-card-action-label.  Reading the text from the injected HTML proves
+    // the real rendering path produces "Send Quote" and not the
+    // nextActionLabel fallback (which is empty for this synthetic status key).
+    const stripLabel = await salesTab.evaluate((lsKey) => {
+      if (typeof enquiryRowHtml !== 'function') return { err: 'enquiryRowHtml not found' };
+      const fakeContact = {
+        id: 'privtest-cah-e3-contact',
+        properties: {
+          hs_lead_status:     lsKey,
+          hw_lead_substatus:  null,
+          email:              'e3@privtest.local',
+          firstname:          'PrivTest',
+          lastname:           'E3',
+          customer_number:    '',
+          zip:                '',
+          lastmodifieddate:   String(Date.now()),
+        },
+      };
+      const fakeEntry = {
+        contact:    fakeContact,
+        stageKey:   'sales',
+        substageId: null,
+        sourceId:   null,
+        stageTime:  Date.now(),
+        priority:   2,
+        badgeLabel: null,
+        roomIdx:    undefined,
+      };
+      try {
+        const html = enquiryRowHtml(fakeEntry);
+        const wrap = document.createElement('div');
+        wrap.id = '__cah-e3-card-wrap';
+        wrap.innerHTML = html;
+        document.body.appendChild(wrap);
+        const labelEl = wrap.querySelector('.eq-card-action-label');
+        const text = labelEl ? labelEl.textContent.trim() : null;
+        wrap.remove();
+        return { label: text };
+      } catch (ex) {
+        return { err: String(ex) };
+      }
+    }, LBL_KEY_ANAME);
+    record(
+      '(E.3) Sales card strip .eq-card-action-label reads "Send Quote" via enquiryRowHtml()',
+      '"Send Quote" (title-cased action_name overrides nextActionLabel fallback)',
+      `got=${JSON.stringify(stripLabel)}`,
+      stripLabel?.label === 'Send Quote',
+    );
+
     await salesTab.close();
   } finally {
     await browser.close().catch(() => {});
@@ -1371,6 +1528,23 @@ async function writeReport(runId, findings) {
     '  gone from the DOM within ~2 s after appearing), and remove the ⚠ Fix',
     '  button from the badge area.  `purgeFixtures()` re-creates the unique',
     '  index after deleting the conflicting rows.',
+    '- **(E) action_name display**: a handler is seeded with',
+    '  `config.action_name = "send_quote"` bound to `(sales, LBL_KEY_ANAME)`.',
+    '  Three assertions confirm the field flows end-to-end:',
+    '  - **E.1** A fresh admin tab switches to the Card actions panel and',
+    '    polls until a `<span>` whose text is exactly `"send_quote"` is',
+    '    visible inside `#card-action-handlers-wrap` (the badge rendered by',
+    '    `_handlerSummaryHtml` in `admin.html`).',
+    '  - **E.2** After re-fetching handlers in the Sales tab,',
+    '    `cardActionHandlerAttrs(\'sales\', LBL_KEY_ANAME, null, ctx)` returns',
+    '    a string containing `data-card-action-name="send_quote"`.',
+    '  - **E.3** `enquiryRowHtml()` is called in-page (the real `sales.js`',
+    '    rendering function) with a fake contact whose `hs_lead_status`',
+    '    matches `LBL_KEY_ANAME`.  The resulting HTML is injected into the',
+    '    DOM and the text of `.eq-card-action-label` is read directly,',
+    '    asserting it equals `"Send Quote"`.  Because `LBL_KEY_ANAME` is a',
+    '    synthetic key absent from the workflow config, `nextActionLabel()`',
+    '    returns empty — proving `_cahName` wins over the fallback.',
     '',
     '## Notes',
     '',
