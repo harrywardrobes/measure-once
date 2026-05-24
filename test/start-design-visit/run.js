@@ -552,6 +552,79 @@ async function main() {
       && imageRowsA2[0]?.storage_key === `sdv-test-photo-a2-${runId}.jpg`,
   );
 
+  // ── (A3) All-missing-key images: zero rows inserted, no crash ─────────────
+  console.log('\n  [A3] All-missing-key images insert zero rows');
+
+  const submitResA3 = await memberClient.post('/api/design-visits', {
+    contactId:        FAKE_CONTACT_ID,
+    contactName:      'SDV Test Customer',
+    contactEmail:     'sdv-customer@privtest.local',
+    handleId:         handleId,
+    furnitureRangeId: furnitureId,
+    visitDate:        new Date(Date.now() + 9 * 24 * 60 * 60 * 1000).toISOString(),
+    durationMin:      60,
+    location:         '789 Test Boulevard',
+    notes:            'A3 all-missing-key test',
+    termsAccepted:    true,
+    rooms: [
+      {
+        roomName:       'Study',
+        doorStyleId:    doorStyleId,
+        widthMm:        3000,
+        heightMm:       2400,
+        depthMm:        600,
+        unitCount:      2,
+        unitPricePence: 8000,
+        notes:          'A3 room note',
+        images: [
+          { mimeType: 'image/jpeg' },
+          { mimeType: 'image/png' },
+        ],
+      },
+    ],
+    handlerConfig: {},
+  });
+
+  record(
+    '(A3) POST /api/design-visits with all-missing-key images returns { ok: true }',
+    'status=201, ok=true',
+    `status=${submitResA3.status} ok=${submitResA3.json?.ok}`,
+    submitResA3.status === 201 && submitResA3.json?.ok === true,
+  );
+
+  const designVisitIdA3 = submitResA3.json?.designVisitId ?? null;
+  let roomRowsA3 = [];
+  let imageRowsA3 = [];
+  if (designVisitIdA3) {
+    const roomQA3 = await pool.query(
+      `SELECT id FROM design_visit_rooms WHERE design_visit_id = $1`,
+      [designVisitIdA3]
+    );
+    roomRowsA3 = roomQA3.rows;
+    const roomIdA3 = roomRowsA3[0]?.id ?? null;
+    if (roomIdA3) {
+      const imgQA3 = await pool.query(
+        `SELECT storage_key FROM design_visit_room_images WHERE room_id = $1`,
+        [roomIdA3]
+      );
+      imageRowsA3 = imgQA3.rows;
+    }
+  }
+
+  record(
+    '(A3) design_visit + room rows still commit when all images are missing storageKey',
+    '1 room row committed for the new design_visit',
+    `found ${roomRowsA3.length} room(s) for design_visit_id=${designVisitIdA3}`,
+    roomRowsA3.length === 1,
+  );
+
+  record(
+    '(A3) zero image rows inserted when every image entry is missing storageKey',
+    '0 image rows in design_visit_room_images for that room',
+    `found ${imageRowsA3.length} image(s)`,
+    imageRowsA3.length === 0,
+  );
+
   // Verify side-effect chain observables — token set, QB skipped, HubSpot/email skipped
   if (dvRow) {
     record(
