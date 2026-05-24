@@ -1060,12 +1060,21 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
       const roomId = rr.rows[0].id;
       // Insert images (base64 data URIs or URLs)
       const images = Array.isArray(rm.images) ? rm.images : [];
+      const MAX_IMG_BYTES = 10 * 1024 * 1024; // 10MB per image
       for (const img of images) {
-        const storageKey = String(img.storageKey || img.storage_key || img.url || '').slice(0, 2000);
-        if (!storageKey) continue;
+        const raw = String(img.storageKey || img.storage_key || img.url || '');
+        if (!raw) continue;
+        // Only accept safe sources: data:image/* base64, http(s) URLs, or
+        // server-relative paths. Reject e.g. javascript: URIs that a malicious
+        // designer could otherwise smuggle into the public sign-off page.
+        const isDataImage = /^data:image\/(png|jpe?g|gif|webp|bmp);base64,/i.test(raw);
+        const isHttpUrl   = /^https?:\/\//i.test(raw);
+        const isAppPath   = raw.startsWith('/');
+        if (!isDataImage && !isHttpUrl && !isAppPath) continue;
+        if (raw.length > MAX_IMG_BYTES) continue;
         await client.query(
           `INSERT INTO design_visit_room_images (room_id, storage_key, mime_type) VALUES ($1,$2,$3)`,
-          [roomId, storageKey, img.mimeType || img.mime_type || null]
+          [roomId, raw, img.mimeType || img.mime_type || null]
         );
       }
     }

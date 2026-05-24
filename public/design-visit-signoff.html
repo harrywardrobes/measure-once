@@ -109,6 +109,21 @@
     summary { cursor: pointer; font-weight: 600; font-size: .85rem; color: #6b7280; }
     details > div { margin-top: 10px; font-size: .82rem; color: #6b7280; white-space: pre-line; line-height: 1.6; }
     .loading { text-align: center; padding: 60px 20px; color: #9ca3af; font-size: .9rem; }
+    .room-photos { margin-bottom: 18px; }
+    .room-photos h3 {
+      font-size: .82rem; font-weight: 700; margin: 0 0 8px;
+      color: #374151;
+    }
+    .room-photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 8px;
+    }
+    .room-photo-grid img {
+      width: 100%; aspect-ratio: 1 / 1; object-fit: cover;
+      border-radius: 8px; border: 1px solid #e5e7eb;
+      background: #f3f4f6; cursor: zoom-in;
+    }
     #main-content { display: none; }
     #loading-state { display: block; }
   </style>
@@ -165,6 +180,11 @@
         </table>
       </div>
 
+      <div class="card" id="photos-card" style="display:none;">
+        <div class="card-title">Room Photos</div>
+        <div id="photos-list"></div>
+      </div>
+
       <div class="card" id="terms-card" style="display:none;">
         <div class="card-title">Terms &amp; Conditions</div>
         <details>
@@ -215,6 +235,15 @@
         return '£' + (pence / 100).toFixed(2);
       }
 
+      function safeImageSrc(s) {
+        if (typeof s !== 'string') return '';
+        const v = s.trim();
+        if (/^data:image\/(png|jpe?g|gif|webp|bmp);base64,/i.test(v)) return v;
+        if (/^https?:\/\//i.test(v)) return v;
+        if (v.startsWith('/')) return v;
+        return '';
+      }
+
       if (!token) {
         show('error-state');
         document.getElementById('error-title').textContent = 'No sign-off token';
@@ -257,6 +286,31 @@
             </tr>`;
           }).join('');
           document.getElementById('grand-total').textContent = fmt(grandTotal);
+
+          // Room photos
+          const photoRooms = (data.rooms || [])
+            .map(r => ({
+              roomName: r.roomName,
+              images: (Array.isArray(r.images) ? r.images : [])
+                .map(img => safeImageSrc(img && img.storageKey))
+                .filter(Boolean),
+            }))
+            .filter(r => r.images.length);
+          if (photoRooms.length) {
+            document.getElementById('photos-list').innerHTML = photoRooms.map(r => `
+              <div class="room-photos">
+                <h3>${esc(r.roomName)}</h3>
+                <div class="room-photo-grid">
+                  ${r.images.map(src => `
+                    <a href="${esc(src)}" target="_blank" rel="noopener noreferrer">
+                      <img src="${esc(src)}" alt="${esc(r.roomName)} photo" loading="lazy">
+                    </a>
+                  `).join('')}
+                </div>
+              </div>
+            `).join('');
+            document.getElementById('photos-card').style.display = '';
+          }
 
           // T&C
           if (data.terms) {

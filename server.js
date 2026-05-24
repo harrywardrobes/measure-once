@@ -54,7 +54,7 @@ app.use('/__mockup', (req, res) => {
 });
 
 // ── Middleware ────────────────────────────────────────────────────────────────
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
 
 // Clean URLs for each page (no .html extension). Must precede express.static so the
 // extensionless paths win over any default static-index handling.
