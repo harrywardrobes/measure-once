@@ -99,7 +99,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 installSession(app);
 
 // ── HubSpot ───────────────────────────────────────────────────────────────────
-const HS = 'https://api.hubapi.com';
+const HS = process.env.HUBSPOT_API_URL || 'https://api.hubapi.com';
 const hsHeaders = () => ({
   Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
   'Content-Type': 'application/json'
@@ -750,7 +750,7 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     // Dev-only filter: hide contacts without hw_test_user = true in non-production.
     // Admins may pass ?all=1 to bypass (e.g. for the test-user management UI).
     if (process.env.NODE_ENV !== 'production') {
-      const bypassForAdmin = req.query.all === '1' && req.user?.privilege === 'admin';
+      const bypassForAdmin = req.query.all === '1' && req.user?.privilege_level === 'admin';
       if (!bypassForAdmin) {
         contacts = contacts.filter(c => c.properties?.hw_test_user === 'true');
       }
@@ -3415,11 +3415,36 @@ app.get('/api/admin/hubspot/dev-mode', isAuthenticated, requireAdmin, (req, res)
   res.json({ devMode: process.env.NODE_ENV !== 'production' });
 });
 
-// ── Admin: toggle HW_test_user on a contact ───────────────────────────────────
-app.patch('/api/admin/hubspot/test-users/:contactId', isAuthenticated, requireAdmin, requireHubspotToken, async (req, res) => {
+// ── Dev-only: seed the shared contacts cache for automated tests ──────────────
+// Accepts a JSON array of synthetic contact objects and injects them directly
+// into _allContactsCache so filter-behaviour tests can run without a real
+// HubSpot token.  Only available when NODE_ENV !== 'production'.
+app.post('/api/admin/test/seed-contacts-cache', isAuthenticated, requireAdmin, (req, res) => {
   if (process.env.NODE_ENV === 'production') {
     return res.status(404).json({ error: 'Not found' });
   }
+  const { contacts } = req.body || {};
+  if (!Array.isArray(contacts)) {
+    return res.status(400).json({ error: '`contacts` must be an array.' });
+  }
+  _allContactsCache = { contacts, expiresAt: Date.now() + ALL_CONTACTS_CACHE_TTL_MS };
+  res.json({ ok: true, count: contacts.length });
+});
+
+// ── Admin: toggle HW_test_user on a contact ───────────────────────────────────
+// The production guard runs as a middleware *before* requireHubspotToken so
+// the 404 is returned even when HUBSPOT_TOKEN is absent.
+app.patch('/api/admin/hubspot/test-users/:contactId',
+  isAuthenticated,
+  requireAdmin,
+  (req, res, next) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    next();
+  },
+  requireHubspotToken,
+  async (req, res) => {
 
   const contactId = String(req.params.contactId || '');
   if (!/^\d+$/.test(contactId)) {
