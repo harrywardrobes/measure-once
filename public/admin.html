@@ -2524,11 +2524,121 @@
       if (document.getElementById('card-actions-table-wrap')) {
         renderCardActionsTable();
       }
+      refreshHandlerConflictsBanner();
     } catch (e) {
       wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load handlers: ${esc(e.message)}</p>`;
     }
   }
   window.loadCardActionHandlersAdmin = loadCardActionHandlersAdmin;
+
+  // Surface server-side duplicate-handler-binding detection in the admin UI.
+  // The server logs a warning on boot and exposes
+  // GET /api/admin/card-action-handlers/conflicts; without this banner an
+  // admin would only notice if they checked the server log or knew about the
+  // endpoint. The banner re-renders after every save/delete (both call
+  // loadCardActionHandlersAdmin), so it disappears as soon as the last
+  // conflict is resolved. Admins can also dismiss it for the current page
+  // load; a fresh conflict count re-shows it.
+  let _conflictsBannerDismissedKey = '';
+  async function refreshHandlerConflictsBanner() {
+    const banner = document.getElementById('card-action-handlers-conflict-banner');
+    if (!banner) return;
+    let data;
+    try {
+      data = await api('GET', '/api/admin/card-action-handlers/conflicts');
+    } catch (_) {
+      // Non-fatal: if the endpoint fails we just hide the banner.
+      banner.style.display = 'none';
+      banner.innerHTML = '';
+      return;
+    }
+    const conflicts = Array.isArray(data?.conflicts) ? data.conflicts : [];
+    const total = Number(data?.total) || conflicts.length;
+    if (!total) {
+      banner.style.display = 'none';
+      banner.innerHTML = '';
+      _conflictsBannerDismissedKey = '';
+      return;
+    }
+    // Build a stable key from the conflict set so a new conflict re-shows
+    // the banner even if a previous one was dismissed.
+    const key = conflicts.map(c =>
+      c.substatus_id != null ? `s:${c.substatus_id}` : `l:${c.stage_key}/${c.status_key}`
+    ).sort().join('|');
+    if (_conflictsBannerDismissedKey === key) {
+      banner.style.display = 'none';
+      return;
+    }
+    const itemsHtml = conflicts.map((c, idx) => {
+      let slotDesc;
+      let args;
+      if (c.substatus_id != null) {
+        const sub = (_cardSubstatusesData || []).find(s => Number(s.id) === Number(c.substatus_id));
+        slotDesc = sub
+          ? `Sub-status “${esc(sub.label || sub.substatus_key)}”`
+          : `Sub-status #${c.substatus_id}`;
+        args = `null, null, ${Number(c.substatus_id)}`;
+      } else {
+        const ls = (_leadStatusesData || []).find(s => s.key === c.status_key);
+        const lsLbl = ls ? (ls.label || ls.key) : c.status_key;
+        slotDesc = `${esc(c.stage_key)} / ${esc(lsLbl)}`;
+        args = `${JSON.stringify(String(c.stage_key || ''))}, ${JSON.stringify(String(c.status_key || ''))}, null`;
+      }
+      const names = Array.isArray(c.handler_names) ? c.handler_names.filter(Boolean) : [];
+      const namesHtml = names.length
+        ? ` — bound to <strong>${names.map(n => esc(n)).join('</strong>, <strong>')}</strong>`
+        : '';
+      return `
+        <li style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:${idx === 0 ? '0' : '1px solid #fde68a'};">
+          <div style="flex:1;min-width:0;font-size:.8rem;color:#78350f;line-height:1.45;">
+            <strong>${slotDesc}</strong> has <strong>${Number(c.count) || names.length || 2} handlers</strong>${namesHtml}.
+          </div>
+          <button type="button" class="btn" data-cah-fix
+            data-args="${esc(args)}"
+            style="flex:0 0 auto;font-size:.78rem;padding:4px 12px;background:#d97706;color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;">
+            Fix
+          </button>
+        </li>`;
+    }).join('');
+    banner.innerHTML = `
+      <div style="border:1px solid #fbbf24;border-radius:10px;background:#fffbeb;padding:12px 14px;">
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <div style="font-size:1.1rem;line-height:1.2;" aria-hidden="true">⚠️</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:.88rem;color:#92400e;">
+              ${total === 1 ? '1 slot has' : `${total} slots have`} duplicate handler bindings
+            </div>
+            <div style="font-size:.78rem;color:#92400e;margin-top:2px;line-height:1.5;">
+              Only one of the bound handlers will run when the action is clicked. Resolve each conflict by removing the extras.
+            </div>
+          </div>
+          <button type="button" id="cah-conflict-banner-dismiss"
+            aria-label="Dismiss"
+            style="flex:0 0 auto;background:transparent;border:none;color:#92400e;font-size:1rem;line-height:1;cursor:pointer;padding:2px 6px;">
+            ✕
+          </button>
+        </div>
+        <ul style="list-style:none;margin:8px 0 0;padding:0;">${itemsHtml}</ul>
+      </div>`;
+    banner.style.display = '';
+    banner.querySelectorAll('[data-cah-fix]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        // data-args is a tiny, self-authored JSON-arg fragment. Build the
+        // call from parsed values rather than eval-ing the string.
+        const raw = btn.getAttribute('data-args') || '';
+        // Format: '"stage", "status", null' OR 'null, null, 42'
+        try {
+          const parsed = JSON.parse('[' + raw + ']');
+          openConflictResolver(parsed[0], parsed[1], parsed[2]);
+        } catch (_) { /* ignore */ }
+      });
+    });
+    banner.querySelector('#cah-conflict-banner-dismiss').addEventListener('click', () => {
+      _conflictsBannerDismissedKey = key;
+      banner.style.display = 'none';
+    });
+  }
+  window.refreshHandlerConflictsBanner = refreshHandlerConflictsBanner;
 
   // Walk the same model the labels table renders, in the same order, and
   // emit one "action slot" per place that has a visible action label. Each
@@ -3687,6 +3797,7 @@
               <p class="card-desc" style="margin:2px 0 0;">Every action label from the Card actions table is listed here. Use <em>+ Add action</em> on a row to make that label clickable on Sales / Survey cards; the attached action's exact behaviour (which APIs are called, which calendars or emails are affected) is described inline once added.</p>
             </div>
           </div>
+          <div id="card-action-handlers-conflict-banner" style="display:none;margin-bottom:12px;"></div>
           <div id="card-action-handlers-wrap">
             <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
           </div>
