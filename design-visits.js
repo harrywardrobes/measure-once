@@ -132,6 +132,7 @@ async function ensureDesignVisitTables() {
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE design_visit_handles ADD COLUMN IF NOT EXISTS style TEXT`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS design_visit_furniture_ranges (
       id          SERIAL PRIMARY KEY,
@@ -582,17 +583,24 @@ router.get('/api/admin/design-visit-handles', isAuthenticated, requireAdmin, asy
   }
 });
 
+const HANDLE_STYLE_VALUES = ['Cup', 'Bar', 'Knob', 'Pull', 'Finger Pull', 'Other'];
+
 router.post('/api/admin/design-visit-handles', isAuthenticated, requireAdmin, async (req, res) => {
   const name = String(req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'name is required' });
   const description = req.body?.description ? String(req.body.description).slice(0, 500) : null;
   const image_url   = req.body?.image_url   ? String(req.body.image_url).slice(0, 500)  : null;
   const sort_order  = parseInt(req.body?.sort_order, 10) || 0;
+  const styleRaw    = req.body?.style !== undefined ? String(req.body.style).trim() : null;
+  const style       = styleRaw && HANDLE_STYLE_VALUES.includes(styleRaw) ? styleRaw : null;
+  if (styleRaw && !HANDLE_STYLE_VALUES.includes(styleRaw)) {
+    return res.status(400).json({ error: `style must be one of: ${HANDLE_STYLE_VALUES.join(', ')}` });
+  }
   try {
     const r = await pool.query(
-      `INSERT INTO design_visit_handles (name, description, image_url, sort_order)
-       VALUES ($1,$2,$3,$4) RETURNING *`,
-      [name, description, image_url, sort_order]
+      `INSERT INTO design_visit_handles (name, description, image_url, sort_order, style)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [name, description, image_url, sort_order, style]
     );
     res.status(201).json(r.rows[0]);
   } catch (e) {
@@ -603,11 +611,20 @@ router.post('/api/admin/design-visit-handles', isAuthenticated, requireAdmin, as
 router.patch('/api/admin/design-visit-handles/:id', isAuthenticated, requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const name        = req.body?.name        !== undefined ? String(req.body.name).trim()                   : undefined;
-  const description = req.body?.description !== undefined ? String(req.body.description).slice(0, 500)     : undefined;
-  const image_url   = req.body?.image_url   !== undefined ? String(req.body.image_url).slice(0, 500)       : undefined;
-  const sort_order  = req.body?.sort_order  !== undefined ? parseInt(req.body.sort_order, 10) || 0         : undefined;
+  const name        = req.body?.name        !== undefined ? String(req.body.name).trim()               : undefined;
+  const description = req.body?.description !== undefined ? String(req.body.description).slice(0, 500) : undefined;
+  const image_url   = req.body?.image_url   !== undefined ? String(req.body.image_url).slice(0, 500)   : undefined;
+  const sort_order  = req.body?.sort_order  !== undefined ? parseInt(req.body.sort_order, 10) || 0     : undefined;
   if (name !== undefined && !name) return res.status(400).json({ error: 'name cannot be empty' });
+  let style = undefined;
+  if (req.body?.style !== undefined) {
+    const styleRaw = req.body.style === null || req.body.style === '' ? null : String(req.body.style).trim();
+    if (styleRaw !== null && !HANDLE_STYLE_VALUES.includes(styleRaw)) {
+      return res.status(400).json({ error: `style must be one of: ${HANDLE_STYLE_VALUES.join(', ')}` });
+    }
+    style = styleRaw;
+  }
+  const styleIsSet = style !== undefined;
   try {
     const r = await pool.query(
       `UPDATE design_visit_handles SET
@@ -615,9 +632,10 @@ router.patch('/api/admin/design-visit-handles/:id', isAuthenticated, requireAdmi
         description = COALESCE($2, description),
         image_url   = COALESCE($3, image_url),
         sort_order  = COALESCE($4, sort_order),
+        style       = CASE WHEN $6 THEN $5 ELSE style END,
         updated_at  = NOW()
-       WHERE id = $5 RETURNING *`,
-      [name ?? null, description ?? null, image_url ?? null, sort_order ?? null, id]
+       WHERE id = $7 RETURNING *`,
+      [name ?? null, description ?? null, image_url ?? null, sort_order ?? null, style ?? null, styleIsSet, id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(r.rows[0]);
