@@ -127,6 +127,15 @@ async function purgeFixtures(pool) {
      WHERE name IN ($1, $2)`,
     [DOOR_STYLE_NAME, DOOR_STYLE_CRUD_NAME]
   );
+  // Delete any terms_conditions_versions seeded by this harness — identified
+  // by the literal 'privtest-tcv-' prefix in terms_text. The
+  // design_visits.terms_condition_version_id FK is ON DELETE SET NULL, so any
+  // visits already deleted above don't matter; this is safe to run blind.
+  try {
+    await pool.query(
+      `DELETE FROM terms_conditions_versions WHERE terms_text LIKE 'privtest-tcv-%'`
+    );
+  } catch (_) {}
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -273,6 +282,17 @@ async function main() {
     const r = await adminClient.get(path);
     record(
       `${label} responds for admin`,
+      'status=200, JSON array',
+      `status=${r.status} type=${Array.isArray(r.json) ? 'array' : typeof r.json}`,
+      r.status === 200 && Array.isArray(r.json),
+    );
+  }
+
+  // Admin terms-conditions versions endpoint — backs the (T) probes below.
+  {
+    const r = await adminClient.get('/api/admin/terms-conditions/versions');
+    record(
+      'GET /api/admin/terms-conditions/versions responds for admin',
       'status=200, JSON array',
       `status=${r.status} type=${Array.isArray(r.json) ? 'array' : typeof r.json}`,
       r.status === 200 && Array.isArray(r.json),
@@ -1568,6 +1588,154 @@ async function main() {
     }
   }
 
+  // ── (T) Terms-conditions version stamping & sign-off pinning ──────────────
+  //
+  // Covers the terms-versioning lifecycle end-to-end:
+  //   T1  POST /api/admin/terms-conditions/versions publishes v1 → 201 row.
+  //   T2  A subsequent design-visit submit stamps design_visits
+  //       .terms_condition_version_id with the v1 id.
+  //   T3  Publishing v2 auto-increments version_number.
+  //   T4  A second design-visit submit (after v2) stamps with v2 id, not v1.
+  //   T5  GET /api/design-visits/sign-off/:token for the v1 visit returns the
+  //       PINNED v1 terms text and v1 version number — not v2 — proving the
+  //       sign-off response is pinned to the version the visit was submitted
+  //       under, not the latest published version.
+  //
+  // All terms_text payloads are prefixed with the literal 'privtest-tcv-' so
+  // purgeFixtures can delete them cleanly without affecting any pre-existing
+  // version rows (e.g. the v1 seeded on first server boot).
+  console.log('\n  [T] Terms-conditions version stamping & sign-off pinning');
+
+  const tcvV1Text = `privtest-tcv-${runId}-v1 — v1 T&C text for terms-versioning E2E probe.`;
+  const tcvV2Text = `privtest-tcv-${runId}-v2 — v2 T&C text for terms-versioning E2E probe.`;
+
+  // T1: publish v1
+  const v1Res = await adminClient.post('/api/admin/terms-conditions/versions', { terms_text: tcvV1Text });
+  const v1Row = v1Res.json || {};
+  record(
+    '(T) POST /api/admin/terms-conditions/versions publishes v1',
+    'status=201, JSON row with numeric id and version_number',
+    `status=${v1Res.status} id=${v1Row.id} version_number=${v1Row.version_number}`,
+    v1Res.status === 201 && Number.isInteger(v1Row.id) && Number.isInteger(v1Row.version_number),
+  );
+  const v1Id  = v1Row.id;
+  const v1Ver = v1Row.version_number;
+
+  // T2: submit a design visit, verify stamping with v1 id
+  const submitT1 = await memberClient.post('/api/design-visits', {
+    contactId:        FAKE_CONTACT_ID,
+    contactName:      'TCV v1 customer',
+    contactEmail:     'tcv-v1@privtest.local',
+    handleId:         handleId,
+    furnitureRangeId: furnitureId,
+    visitDate:        new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString(),
+    durationMin:      90,
+    location:         'TCV v1 location',
+    notes:            'TCV v1 visit',
+    termsAccepted:    true,
+    rooms: [{ roomName: 'Kitchen', doorStyleId: doorStyleId, unitCount: 1, unitPricePence: 1000 }],
+    handlerConfig:    {},
+  });
+  const visitV1Id = submitT1.json?.designVisitId ?? null;
+  record(
+    '(T) POST /api/design-visits returns { ok, designVisitId } after v1 publish',
+    'status=201, ok=true, integer designVisitId',
+    `status=${submitT1.status} ok=${submitT1.json?.ok} id=${visitV1Id}`,
+    submitT1.status === 201 && submitT1.json?.ok === true && Number.isInteger(visitV1Id),
+  );
+
+  let stampedV1 = null;
+  if (visitV1Id) {
+    const q = await pool.query(
+      `SELECT terms_condition_version_id FROM design_visits WHERE id = $1`,
+      [visitV1Id]
+    );
+    stampedV1 = q.rows[0]?.terms_condition_version_id ?? null;
+  }
+  record(
+    '(T) design_visits.terms_condition_version_id is stamped with v1 id at submit time',
+    `terms_condition_version_id = ${v1Id} (the v1 row)`,
+    `terms_condition_version_id = ${stampedV1}`,
+    stampedV1 === v1Id,
+  );
+
+  // T3: publish v2
+  const v2Res = await adminClient.post('/api/admin/terms-conditions/versions', { terms_text: tcvV2Text });
+  const v2Row = v2Res.json || {};
+  record(
+    '(T) POST /api/admin/terms-conditions/versions publishes v2 (auto-increment)',
+    `status=201, version_number = ${v1Ver != null ? v1Ver + 1 : 'v1+1'}`,
+    `status=${v2Res.status} id=${v2Row.id} version_number=${v2Row.version_number}`,
+    v2Res.status === 201 && Number.isInteger(v2Row.id) && v2Row.version_number === v1Ver + 1,
+  );
+  const v2Id = v2Row.id;
+
+  // T4: submit another visit, verify it stamps with v2 (not v1)
+  const submitT2 = await memberClient.post('/api/design-visits', {
+    contactId:        FAKE_CONTACT_ID,
+    contactName:      'TCV v2 customer',
+    contactEmail:     'tcv-v2@privtest.local',
+    handleId:         handleId,
+    furnitureRangeId: furnitureId,
+    visitDate:        new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString(),
+    durationMin:      90,
+    location:         'TCV v2 location',
+    notes:            'TCV v2 visit',
+    termsAccepted:    true,
+    rooms: [{ roomName: 'Kitchen', doorStyleId: doorStyleId, unitCount: 1, unitPricePence: 1000 }],
+    handlerConfig:    {},
+  });
+  const visitV2Id = submitT2.json?.designVisitId ?? null;
+  let stampedV2 = null;
+  if (visitV2Id) {
+    const q = await pool.query(
+      `SELECT terms_condition_version_id FROM design_visits WHERE id = $1`,
+      [visitV2Id]
+    );
+    stampedV2 = q.rows[0]?.terms_condition_version_id ?? null;
+  }
+  record(
+    '(T) New design visit submitted after v2 publish is stamped with v2 id (not v1)',
+    `terms_condition_version_id = ${v2Id} (the v2 row)`,
+    `terms_condition_version_id = ${stampedV2} (v1 was ${v1Id})`,
+    stampedV2 === v2Id && stampedV2 !== v1Id,
+  );
+
+  // T5: sign-off pinning — GET sign-off for the v1 visit must serve v1 terms,
+  // not the latest (v2). The submit side-effect chain already populated a
+  // signoff_token_hash on the row, but the raw token is not returned to the
+  // client. Plant a known raw token directly so we can hit the public route.
+  if (visitV1Id) {
+    const rawTokenT = `tcv-signoff-v1-${runId}`;
+    const hashT     = tokenHash(rawTokenT);
+    const expires   = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    await pool.query(
+      `UPDATE design_visits
+         SET signoff_token_hash = $1, signoff_expires_at = $2,
+             status = 'submitted', updated_at = NOW()
+       WHERE id = $3`,
+      [hashT, expires, visitV1Id]
+    );
+    const { makeClient } = require('../privileges/harness');
+    const anonClient = makeClient(null);
+    const r = await anonClient.get(`/api/design-visits/sign-off/${rawTokenT}`);
+    const pinnedTerms        = r.json?.terms ?? null;
+    const pinnedVersionNumber = r.json?.termsVersionNumber ?? null;
+    const v1Marker = `privtest-tcv-${runId}-v1`;
+    const v2Marker = `privtest-tcv-${runId}-v2`;
+    const okPinned = r.status === 200
+      && typeof pinnedTerms === 'string'
+      && pinnedTerms.includes(v1Marker)
+      && !pinnedTerms.includes(v2Marker)
+      && pinnedVersionNumber === v1Ver;
+    record(
+      '(T) GET /api/design-visits/sign-off/:token returns the PINNED v1 terms text (not v2)',
+      `terms contains "${v1Marker}" and NOT "${v2Marker}"; termsVersionNumber = ${v1Ver}`,
+      `status=${r.status} termsVersionNumber=${pinnedVersionNumber} terms="${pinnedTerms ? pinnedTerms.slice(0, 80) : 'null'}"`,
+      okPinned,
+    );
+  }
+
   // ── Summary & report ───────────────────────────────────────────────────────
   const pass = findings.filter(f => f.ok === true).length;
   const fail = findings.filter(f => f.ok === false).length;
@@ -1638,6 +1806,16 @@ async function writeReport(runId, findings) {
     '  `openDvHandleEditor()`, `openDvFurnitureEditor()`, `openDvDoorStyleEditor()`',
     '  through the real admin.html JavaScript. After each save, `_broadcastDvCatalogueChange()`',
     '  fires naturally; a listener page asserts the event is received for all three types.',
+    '- **(T) Terms-conditions version stamping & sign-off pinning**: Publishes',
+    '  a v1 row via POST `/api/admin/terms-conditions/versions`; submits a',
+    '  design visit and asserts `design_visits.terms_condition_version_id`',
+    '  equals the v1 id. Publishes v2 (asserting auto-increment of',
+    '  `version_number`); submits a second visit and asserts it is stamped',
+    '  with v2, not v1. Plants a known raw sign-off token on the v1 visit and',
+    '  hits GET `/api/design-visits/sign-off/:token` unauthenticated; asserts',
+    '  the response `terms` contains the v1 marker (not v2) and',
+    '  `termsVersionNumber` equals v1 — proving sign-off serves the pinned',
+    '  terms version the visit was submitted under.',
     '- **(F) BroadcastChannel refresh in wizard**: Opens the wizard on `/sales` via',
     '  `dispatchCardActionHandler`. Verifies `#dv-handle` shows the seeded handle.',
     '  Creates a new handle via REST API, fires BC from sender tab, and asserts the',
