@@ -108,18 +108,8 @@ const CASES = [
 
 // ── helpers ────────────────────────────────────────────────────────────────
 function findChromium() {
-  const candidates = [
-    process.env.PUPPETEER_EXECUTABLE_PATH,
-    '/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium',
-  ].filter(Boolean);
-  for (const p of candidates) {
-    try { fs.accessSync(p); return p; } catch {}
-  }
-  try {
-    const { execSync } = require('child_process');
-    return execSync('which chromium', { encoding: 'utf8' }).trim() || undefined;
-  } catch {}
-  return undefined;
+  const { findChromium: shared } = require('../shared/find-chromium');
+  return shared() || undefined;
 }
 
 // ── main ───────────────────────────────────────────────────────────────────

@@ -183,18 +183,8 @@ async function main() {
       if (detail) console.log(`     detail   : ${detail}`);
     }
   }
-  // Known Nix-store Chromium paths — used by both (E/BC) and (F) sections.
-  const NIX_CHROMIUM_CANDIDATES = [
-    '/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium',
-  ];
-  function findSystemChromium() {
-    const { execSync } = require('child_process');
-    for (const p of NIX_CHROMIUM_CANDIDATES) {
-      try { require('fs').accessSync(p, require('fs').constants.X_OK); return p; } catch {}
-    }
-    try { return execSync('which chromium chromium-browser google-chrome 2>/dev/null', { encoding: 'utf8' }).split('\n')[0].trim() || null; } catch {}
-    return null;
-  }
+  // Locate the system Chromium via the shared helper (auto-discovers Nix paths).
+  const { findChromium: findSystemChromium } = require('../shared/find-chromium');
 
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {

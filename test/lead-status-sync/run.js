@@ -228,21 +228,9 @@ async function main() {
     return;
   }
 
-  // Locate the system Chromium (mirrors the approach in test/privileges/uiSmoke.js).
-  let executablePath;
-  const chromiumCandidates = [
-    process.env.PUPPETEER_EXECUTABLE_PATH,
-    '/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium',
-  ].filter(Boolean);
-  for (const p of chromiumCandidates) {
-    try { fs.accessSync(p); executablePath = p; break; } catch {}
-  }
-  if (!executablePath) {
-    try {
-      const { execSync } = require('child_process');
-      executablePath = execSync('which chromium', { encoding: 'utf8' }).trim() || undefined;
-    } catch {}
-  }
+  // Locate the system Chromium via the shared helper (auto-discovers Nix paths).
+  const { findChromium } = require('../shared/find-chromium');
+  const executablePath = findChromium() || undefined;
 
   let browser;
   try {
