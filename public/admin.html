@@ -3398,6 +3398,7 @@
         <button class="tab-btn"        data-tab="designvisit"   onclick="switchTab('designvisit');loadDvCatalogue()">Design visit</button>
         <button class="tab-btn"        data-tab="search"        onclick="switchTab('search');loadSearchSettings()">Search</button>
         <button class="tab-btn"        data-tab="workshop"    onclick="switchTab('workshop');loadWorkshopSettings()">Workshop</button>
+        <button class="tab-btn"        data-tab="devenv"      onclick="switchTab('devenv')" id="tab-btn-devenv" style="display:none;">Dev environment</button>
       </div>
 
       <!-- TEAM -->
@@ -3790,6 +3791,61 @@
           </div>
         </div>
       </div>
+
+      <!-- DEV ENVIRONMENT (hidden in production) -->
+      <div class="tab-panel" id="tab-devenv" style="display:none;">
+        <div style="background:#fef9c3;border:1px solid #fde047;border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:20px;display:flex;align-items:flex-start;gap:12px;">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;margin-top:1px;">
+            <circle cx="10" cy="10" r="9" fill="#facc15"/>
+            <text x="10" y="15" text-anchor="middle" font-size="12" font-weight="800" fill="#713f12" font-family="sans-serif">!</text>
+          </svg>
+          <div>
+            <div style="font-weight:700;font-size:.875rem;color:#713f12;margin-bottom:3px;">You are in development mode</div>
+            <div style="font-size:.82rem;color:#854d0e;line-height:1.5;">The items listed below are <strong>not visible in the published app</strong>. They are suppressed when <code style="background:#fef08a;padding:1px 4px;border-radius:3px;">NODE_ENV=production</code>.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Dev-only features in this panel</div>
+          <p class="card-desc" style="margin-bottom:16px;">Each entry below names the feature, the tab it lives in, and why it is excluded from production.</p>
+
+          <div style="display:flex;flex-direction:column;gap:0;">
+
+            <div style="padding:14px 0;border-bottom:1px solid var(--stone-soft);">
+              <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
+                <span style="font-weight:700;font-size:.875rem;color:var(--ink-1);">Dev test users</span>
+                <span style="font-size:.72rem;font-weight:600;background:var(--stone);color:var(--ink-4);padding:2px 8px;border-radius:var(--radius-pill);">Settings tab</span>
+              </div>
+              <p style="margin:0;font-size:.82rem;color:var(--ink-3);line-height:1.5;">A contact-by-contact toggle that marks individual HubSpot contacts as test data by setting the <code style="background:var(--stone-soft);padding:1px 4px;border-radius:3px;">hw_test_user</code> property. Excluded from production because test-data labelling is only relevant during development and automated testing — it should never be surfaced to a production admin.</p>
+            </div>
+
+            <div style="padding:14px 0;border-bottom:1px solid var(--stone-soft);">
+              <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
+                <span style="font-weight:700;font-size:.875rem;color:var(--ink-1);">Dev filter toggle</span>
+                <span style="font-size:.72rem;font-weight:600;background:var(--stone);color:var(--ink-4);padding:2px 8px;border-radius:var(--radius-pill);">Settings tab</span>
+              </div>
+              <p style="margin:0;font-size:.82rem;color:var(--ink-3);line-height:1.5;">A global on/off switch that limits all contact views to test users only (those with <code style="background:var(--stone-soft);padding:1px 4px;border-radius:3px;">hw_test_user = true</code>). Excluded from production because real contact lists must never be filtered to test data only — enabling it in production would hide all real customers from every view.</p>
+            </div>
+
+            <div style="padding:14px 0;border-bottom:1px solid var(--stone-soft);">
+              <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
+                <span style="font-weight:700;font-size:.875rem;color:var(--ink-1);">Seed contacts cache</span>
+                <span style="font-size:.72rem;font-weight:600;background:var(--stone);color:var(--ink-4);padding:2px 8px;border-radius:var(--radius-pill);">Internal API only</span>
+              </div>
+              <p style="margin:0;font-size:.82rem;color:var(--ink-3);line-height:1.5;">Internal API endpoint (<code style="background:var(--stone-soft);padding:1px 4px;border-radius:3px;">POST /api/admin/test/seed-contacts-cache</code>) used by automated tests to inject synthetic contacts into the server-side cache without a real HubSpot token. Excluded from production because injecting fake contacts into a live cache would corrupt real customer data.</p>
+            </div>
+
+            <div style="padding:14px 0;">
+              <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
+                <span style="font-weight:700;font-size:.875rem;color:var(--ink-1);">Backfill hw_test_user defaults</span>
+                <span style="font-size:.72rem;font-weight:600;background:var(--stone);color:var(--ink-4);padding:2px 8px;border-radius:var(--radius-pill);">Settings tab</span>
+              </div>
+              <p style="margin:0;font-size:.82rem;color:var(--ink-3);line-height:1.5;">A one-time API action that sets <code style="background:var(--stone-soft);padding:1px 4px;border-radius:3px;">hw_test_user = false</code> on all HubSpot contacts that have no value for the property. Excluded from production because this mass-write operation is only needed during initial development setup and would be a destructive no-op against a live contact database.</p>
+            </div>
+
+          </div>
+        </div>
+      </div>
     `;
 
     renderTeam();
@@ -3799,7 +3855,7 @@
     renderTradeSubmissions();
     await initAuditLog();
 
-    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'workshop'];
+    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'workshop', 'devenv'];
     let savedTab;
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) {
@@ -3810,6 +3866,32 @@
       else if (savedTab === 'search') { switchTab('search'); loadSearchSettings(); }
       else if (savedTab === 'workshop') { switchTab('workshop'); loadWorkshopSettings(); }
       else { switchTab(savedTab); }
+    }
+
+    // Apply _devMode guard: hide Dev environment tab unless devMode is confirmed
+    _applyDevEnvTabVisibility();
+  }
+
+  async function _applyDevEnvTabVisibility() {
+    if (!_devModeChecked) {
+      try {
+        const d = await api('GET', '/api/admin/hubspot/dev-mode');
+        _devMode = d?.devMode === true;
+      } catch { _devMode = false; }
+      _devModeChecked = true;
+    }
+    const btn   = document.getElementById('tab-btn-devenv');
+    const panel = document.getElementById('tab-devenv');
+    if (_devMode) {
+      if (btn)   btn.style.display   = '';
+      if (panel) panel.style.display = '';
+    } else {
+      if (btn)   btn.style.display   = 'none';
+      if (panel) panel.style.display = 'none';
+      // If devenv was the active tab (e.g. saved from a prior dev session), fall back to team
+      if (panel && panel.classList.contains('active')) {
+        switchTab('team');
+      }
     }
   }
 
