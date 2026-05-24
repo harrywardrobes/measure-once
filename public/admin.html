@@ -622,7 +622,9 @@
 
 <script src="/chrome.js"></script>
 <script src="/command-palette.js"></script>
+<script src="/components.js"></script>
 <script src="/core.js"></script>
+<script src="/design-system.js"></script>
 <script>
   const $ = s => document.querySelector(s);
   const esc = s => (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2852,9 +2854,9 @@
       : { stage_key: slot.stage_key, status_key: slot.status_key };
 
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+    wrap.className = 'js-modal-scrim';
     wrap.innerHTML = `
-      <div style="background:#fff;border-radius:12px;padding:20px;width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,0.25);max-height:90vh;overflow:auto;">
+      <div style="background:var(--surface-card);border-radius:var(--radius-2xl);padding:20px;width:100%;max-width:560px;box-shadow:var(--shadow-modal);max-height:90vh;overflow:auto;">
         <h3 style="margin:0 0 4px;font-size:1.05rem;font-weight:700;">${existing ? 'Change action' : 'Add action'}</h3>
         <p style="margin:0 0 14px;font-size:.78rem;color:var(--ink-4);">for <strong>${esc(slot.label)}</strong> <span style="color:var(--ink-4);font-weight:normal;">(${esc(slot.rowLabel || '')})</span></p>
         <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Action name <span style="font-weight:400;color:var(--ink-4);">(optional)</span></label>
@@ -3117,7 +3119,7 @@
     }
 
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+    wrap.className = 'js-modal-scrim';
 
     const rowsHtml = handlers.map(h => {
       const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
@@ -3540,6 +3542,7 @@
         <button class="tab-btn"        data-tab="designvisit"   onclick="switchTab('designvisit');loadDvCatalogue()">Design visit</button>
         <button class="tab-btn"        data-tab="search"        onclick="switchTab('search');loadSearchSettings()">Search</button>
         <button class="tab-btn"        data-tab="workshop"    onclick="switchTab('workshop');loadWorkshopSettings()">Workshop</button>
+        <button class="tab-btn"        data-tab="designsystem" onclick="switchTab('designsystem');renderDesignSystemTab()">Design system</button>
         <button class="tab-btn"        data-tab="devenv"      onclick="switchTab('devenv')" id="tab-btn-devenv" style="display:none;">Dev environment</button>
       </div>
 
@@ -3935,6 +3938,9 @@
         </div>
       </div>
 
+      <!-- DESIGN SYSTEM -->
+      <div class="tab-panel" id="tab-designsystem"></div>
+
       <!-- DEV ENVIRONMENT (hidden in production) -->
       <!--
         ============================================================
@@ -4021,7 +4027,7 @@
     renderTradeSubmissions();
     await initAuditLog();
 
-    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'workshop', 'devenv'];
+    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'workshop', 'designsystem', 'devenv'];
     let savedTab;
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) {
@@ -4031,6 +4037,7 @@
       else if (savedTab === 'designvisit') { switchTab('designvisit'); loadDvCatalogue(); }
       else if (savedTab === 'search') { switchTab('search'); loadSearchSettings(); }
       else if (savedTab === 'workshop') { switchTab('workshop'); loadWorkshopSettings(); }
+      else if (savedTab === 'designsystem') { switchTab('designsystem'); renderDesignSystemTab(); }
       else { switchTab(savedTab); }
     }
 
@@ -4338,7 +4345,7 @@
     const hasStyleSelect = (type === 'handle');
     const hasImageUrl    = (type !== 'furniture');
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9998;padding:16px;';
+    wrap.className = 'js-modal-scrim js-modal-scrim--below';
     wrap.innerHTML = `
       <div style="background:#fff;border-radius:12px;padding:22px 24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25);">
         <h3 style="margin:0 0 16px;font-size:1rem;font-weight:700;">${item ? 'Edit' : 'Add'} ${esc(typeLabels[type])}</h3>

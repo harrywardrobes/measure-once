@@ -4,213 +4,91 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Design Visit Sign-Off · Measure Once</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      color: #1f2937;
-      background: #f9fafb;
-      min-height: 100vh;
-    }
-    .page {
-      max-width: 660px;
-      margin: 0 auto;
-      padding: 32px 20px 60px;
-    }
-    .logo {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: #8B2BFF;
-      margin: 0 0 28px;
-      letter-spacing: -.01em;
-    }
-    h1 { font-size: 1.5rem; font-weight: 700; margin: 0 0 6px; }
-    .subtitle { color: #6b7280; font-size: .9rem; margin: 0 0 24px; }
-    .card {
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      padding: 20px 22px;
-      margin-bottom: 18px;
-      box-shadow: 0 1px 3px rgba(0,0,0,.05);
-    }
-    .card-title {
-      font-size: .72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      color: #9ca3af;
-      margin: 0 0 12px;
-    }
-    .meta-grid {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 6px 16px;
-      font-size: .88rem;
-    }
-    .meta-label { font-weight: 600; color: #4b5563; white-space: nowrap; }
-    .meta-val   { color: #1f2937; }
-    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
-    th {
-      text-align: left;
-      padding: 8px 10px;
-      font-size: .72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      color: #9ca3af;
-      border-bottom: 1px solid #e5e7eb;
-    }
-    td { padding: 10px 10px; border-bottom: 1px solid #f3f4f6; }
-    tr:last-child td { border-bottom: none; }
-    tfoot td { font-weight: 700; border-top: 2px solid #e5e7eb; padding-top: 12px; }
-    .text-right { text-align: right; }
-    .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
-    .btn-approve, .btn-revision {
-      width: 100%; padding: 14px 20px;
-      border: none; border-radius: 10px;
-      font-size: 1rem; font-weight: 600;
-      cursor: pointer; font-family: inherit;
-      transition: opacity .15s, background .15s;
-    }
-    .btn-approve  { background: #8B2BFF; color: #fff; }
-    .btn-approve:hover  { background: #6d1fd4; }
-    .btn-revision { background: #fff; color: #374151; border: 1.5px solid #d1d5db; }
-    .btn-revision:hover { background: #f9fafb; }
-    .btn-approve:disabled, .btn-revision:disabled { opacity: .55; cursor: not-allowed; }
-    .revision-form { display: none; margin-top: 12px; }
-    .revision-form.open { display: block; }
-    .revision-form textarea {
-      width: 100%; padding: 10px 12px;
-      border: 1.5px solid #d1d5db; border-radius: 8px;
-      font-size: .92rem; font-family: inherit;
-      resize: vertical; min-height: 100px;
-      color: #1f2937;
-    }
-    .revision-form textarea:focus { outline: none; border-color: #8B2BFF; }
-    .revision-form .submit-revision {
-      margin-top: 8px;
-      background: #374151; color: #fff;
-      padding: 10px 20px; border: none; border-radius: 8px;
-      font-size: .9rem; font-weight: 600; cursor: pointer;
-      font-family: inherit;
-    }
-    .revision-form .submit-revision:hover { background: #1f2937; }
-    .error-msg { color: #dc2626; font-size: .85rem; margin-top: 8px; }
-    .state-block {
-      text-align: center;
-      padding: 48px 20px;
-    }
-    .state-icon { font-size: 3rem; margin-bottom: 12px; }
-    .state-title { font-size: 1.3rem; font-weight: 700; margin: 0 0 8px; }
-    .state-sub { color: #6b7280; font-size: .9rem; line-height: 1.5; }
-    details { margin-top: 6px; }
-    summary { cursor: pointer; font-weight: 600; font-size: .85rem; color: #6b7280; }
-    details > div { margin-top: 10px; font-size: .82rem; color: #6b7280; white-space: pre-line; line-height: 1.6; }
-    .loading { text-align: center; padding: 60px 20px; color: #9ca3af; font-size: .9rem; }
-    .room-photos { margin-bottom: 18px; }
-    .room-photos h3 {
-      font-size: .82rem; font-weight: 700; margin: 0 0 8px;
-      color: #374151;
-    }
-    .room-photo-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-      gap: 8px;
-    }
-    .room-photo-grid img {
-      width: 100%; aspect-ratio: 1 / 1; object-fit: cover;
-      border-radius: 8px; border: 1px solid #e5e7eb;
-      background: #f3f4f6; cursor: zoom-in;
-    }
-    #main-content { display: none; }
-    #loading-state { display: block; }
-  </style>
+  <link rel="stylesheet" href="/style.css">
 </head>
-<body>
-  <div class="page">
-    <div class="logo">Measure Once</div>
+<body class="dv-signoff-page">
+  <div class="dv-page">
+    <div class="dv-logo">Measure Once</div>
 
-    <div id="loading-state" class="loading">Loading your design visit…</div>
+    <div id="loading-state" class="dv-loading">Loading your design visit…</div>
 
     <div id="error-state" style="display:none;">
-      <div class="state-block">
-        <div class="state-icon">❌</div>
-        <div class="state-title" id="error-title">Link not valid</div>
-        <div class="state-sub" id="error-sub">This link may have expired or already been used. Please contact us if you need a new one.</div>
+      <div class="dv-state-block">
+        <div class="dv-state-icon">❌</div>
+        <div class="dv-state-title" id="error-title">Link not valid</div>
+        <div class="dv-state-sub" id="error-sub">This link may have expired or already been used. Please contact us if you need a new one.</div>
       </div>
     </div>
 
     <div id="success-state" style="display:none;">
-      <div class="state-block">
-        <div class="state-icon">✅</div>
-        <div class="state-title" id="success-title">Thank you!</div>
-        <div class="state-sub" id="success-sub"></div>
+      <div class="dv-state-block">
+        <div class="dv-state-icon">✅</div>
+        <div class="dv-state-title" id="success-title">Thank you!</div>
+        <div class="dv-state-sub" id="success-sub"></div>
       </div>
     </div>
 
-    <div id="main-content">
+    <div id="main-content" style="display:none;">
       <h1>Your Design Visit Summary</h1>
-      <p class="subtitle" id="visit-subtitle"></p>
+      <p class="dv-subtitle" id="visit-subtitle"></p>
 
-      <div class="card" id="visit-meta-card">
-        <div class="card-title">Visit Details</div>
-        <div class="meta-grid" id="visit-meta"></div>
+      <div class="dv-card" id="visit-meta-card">
+        <div class="dv-card-title">Visit Details</div>
+        <div class="dv-meta-grid" id="visit-meta"></div>
       </div>
 
-      <div class="card">
-        <div class="card-title">Room Breakdown</div>
+      <div class="dv-card">
+        <div class="dv-card-title">Room Breakdown</div>
         <table>
           <thead>
             <tr>
               <th>Room</th>
               <th>Style</th>
               <th>Units</th>
-              <th class="text-right">Total</th>
+              <th class="dv-text-right">Total</th>
             </tr>
           </thead>
           <tbody id="rooms-tbody"></tbody>
           <tfoot>
             <tr>
               <td colspan="3">Estimate total</td>
-              <td class="text-right" id="grand-total"></td>
+              <td class="dv-text-right" id="grand-total"></td>
             </tr>
           </tfoot>
         </table>
       </div>
 
-      <div class="card" id="photos-card" style="display:none;">
-        <div class="card-title">Room Photos</div>
+      <div class="dv-card" id="photos-card" style="display:none;">
+        <div class="dv-card-title">Room Photos</div>
         <div id="photos-list"></div>
       </div>
 
-      <div class="card" id="terms-card" style="display:none;">
-        <div class="card-title">Terms &amp; Conditions</div>
+      <div class="dv-card" id="terms-card" style="display:none;">
+        <div class="dv-card-title">Terms &amp; Conditions</div>
         <details>
           <summary>Read the terms and conditions</summary>
           <div id="terms-text"></div>
         </details>
       </div>
 
-      <div class="card" id="action-card">
-        <div class="card-title">Your decision</div>
-        <p style="font-size:.9rem;color:#4b5563;margin:0 0 14px;">
+      <div class="dv-card" id="action-card">
+        <div class="dv-card-title">Your decision</div>
+        <p class="dv-action-blurb">
           Please review the summary above and let us know if everything looks correct.
         </p>
-        <div class="actions">
-          <button class="btn-approve" id="btn-approve">Looks great — sign off</button>
-          <button class="btn-revision" id="btn-revision">Request changes</button>
+        <div class="dv-actions">
+          <button class="dv-btn-approve" id="btn-approve">Looks great — sign off</button>
+          <button class="dv-btn-revision" id="btn-revision">Request changes</button>
         </div>
-        <div class="revision-form" id="revision-form">
-          <label style="font-size:.82rem;font-weight:600;color:#374151;display:block;margin-bottom:6px;">
+        <div class="dv-revision-form" id="revision-form">
+          <label class="dv-revision-label">
             Please describe the changes you'd like:
           </label>
           <textarea id="revision-note" placeholder="E.g. I'd prefer the kitchen in grey rather than white…" maxlength="2000"></textarea>
-          <div class="error-msg" id="revision-err" style="display:none;"></div>
-          <button class="submit-revision" id="btn-submit-revision">Send request</button>
+          <div class="dv-error-msg" id="revision-err" style="display:none;"></div>
+          <button class="dv-submit-revision" id="btn-submit-revision">Send request</button>
         </div>
-        <div class="error-msg" id="action-err" style="display:none;"></div>
+        <div class="dv-error-msg" id="action-err" style="display:none;"></div>
       </div>
     </div>
   </div>
@@ -258,12 +136,10 @@
           return r.json();
         })
         .then(data => {
-          // Subtitle
           if (data.contactName) {
             document.getElementById('visit-subtitle').textContent = `Hi ${data.contactName.split(' ')[0]}, here's a summary of the design options we discussed.`;
           }
 
-          // Meta
           const metaPairs = [];
           if (data.visitDate)     metaPairs.push(['Visit date', new Date(data.visitDate).toLocaleDateString('en-GB', { dateStyle: 'long' })]);
           if (data.location)      metaPairs.push(['Location', data.location]);
@@ -271,10 +147,9 @@
           if (data.furnitureRange) metaPairs.push(['Furniture range', data.furnitureRange]);
           if (!metaPairs.length) document.getElementById('visit-meta-card').style.display = 'none';
           document.getElementById('visit-meta').innerHTML = metaPairs.map(([l,v]) =>
-            `<span class="meta-label">${esc(l)}</span><span class="meta-val">${esc(v)}</span>`
+            `<span class="dv-meta-label">${esc(l)}</span><span class="dv-meta-val">${esc(v)}</span>`
           ).join('');
 
-          // Rooms
           let grandTotal = 0;
           document.getElementById('rooms-tbody').innerHTML = (data.rooms || []).map(r => {
             grandTotal += r.totalPence || 0;
@@ -282,7 +157,7 @@
               <td>${esc(r.roomName)}</td>
               <td>${esc(r.doorStyleName || '—')}</td>
               <td>${esc(r.unitCount)}</td>
-              <td class="text-right">${fmt(r.totalPence || 0)}</td>
+              <td class="dv-text-right">${fmt(r.totalPence || 0)}</td>
             </tr>`;
           }).join('');
           document.getElementById('grand-total').textContent = fmt(grandTotal);
@@ -298,9 +173,9 @@
             .filter(r => r.images.length);
           if (photoRooms.length) {
             document.getElementById('photos-list').innerHTML = photoRooms.map(r => `
-              <div class="room-photos">
+              <div class="dv-room-photos">
                 <h3>${esc(r.roomName)}</h3>
-                <div class="room-photo-grid">
+                <div class="dv-room-photo-grid">
                   ${r.images.map(src => `
                     <a href="${esc(src)}" target="_blank" rel="noopener noreferrer">
                       <img src="${esc(src)}" alt="${esc(r.roomName)} photo" loading="lazy">
@@ -312,22 +187,20 @@
             document.getElementById('photos-card').style.display = '';
           }
 
-          // T&C
           if (data.terms) {
             document.getElementById('terms-text').textContent = data.terms;
             const termsCard = document.getElementById('terms-card');
             if (data.termsVersionNumber != null) {
               const vBadge = document.createElement('span');
-              vBadge.style.cssText = 'display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:#e5e7eb;color:#374151;font-size:.68rem;font-weight:700;vertical-align:middle;';
+              vBadge.className = 'dv-terms-version-badge';
               vBadge.textContent = 'v' + data.termsVersionNumber;
-              termsCard.querySelector('.card-title').appendChild(vBadge);
+              termsCard.querySelector('.dv-card-title').appendChild(vBadge);
             }
             termsCard.style.display = '';
           }
 
           show('main-content');
 
-          // Action buttons
           const btnApprove  = document.getElementById('btn-approve');
           const btnRevision = document.getElementById('btn-revision');
           const revForm     = document.getElementById('revision-form');

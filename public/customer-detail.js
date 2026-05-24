@@ -2237,7 +2237,7 @@ async function editUpcomingVisit(id) {
   }).join('');
 
   const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px';
+  overlay.className = 'js-modal-scrim';
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:12px;padding:20px 22px;width:100%;max-width:460px;box-shadow:0 20px 60px rgba(0,0,0,0.25);font-family:inherit">
       <h3 style="margin:0 0 14px;font-size:1.05rem;font-weight:700;color:#1f2937">Edit ${escHtml(label)}</h3>

@@ -128,8 +128,8 @@
 
   // ── Shared modal scaffolding ───────────────────────────────────────────────
   const MODAL_CSS = `
-    .cah-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex;
-      align-items:center; justify-content:center; z-index:9999; padding:16px; }
+    .cah-backdrop { position:fixed; inset:0; background:var(--overlay-scrim); display:flex;
+      align-items:center; justify-content:center; z-index:var(--z-tooltip); padding:16px; }
     .cah-modal { background:#fff; border-radius:12px; padding:20px 22px; width:100%;
       max-width:460px; box-shadow:0 20px 60px rgba(0,0,0,0.25); font-family:inherit; }
     .cah-modal h3 { margin:0 0 14px; font-size:1.05rem; font-weight:700; color:#1f2937; }
@@ -414,7 +414,7 @@
     const wizardStyle = `
       .dv-wizard-backdrop {
         position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;
-        align-items:stretch;justify-content:flex-end;z-index:10000; }
+        align-items:stretch;justify-content:flex-end;z-index:calc(var(--z-tooltip) + 1); }
       .dv-wizard {
         background:#fff;width:min(680px,100%);height:100%;display:flex;flex-direction:column;
         box-shadow:-6px 0 40px rgba(0,0,0,.2);font-family:inherit; }

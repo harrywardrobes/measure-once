@@ -1,6 +1,13 @@
 // Shared chrome: skip link, toast-live, access gate, header, bottom nav, invoice panel.
 // Runs synchronously so chrome is in the DOM before bootstrap() looks for it.
 
+// Inject the shared UI helpers (window.UI from components.js) on every page
+// that includes chrome.js. document.write keeps the load synchronous so any
+// later inline script can rely on window.UI being defined.
+if (typeof window.UI === 'undefined' && document.readyState === 'loading') {
+  document.write('<script src="/components.js"><\/script>');
+}
+
 /**
  * Returns a platform-aware keyboard shortcut string.
  * getShortcut('K') → '⌘K' on Mac / iOS, 'Ctrl K' everywhere else.

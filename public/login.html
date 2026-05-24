@@ -5,81 +5,6 @@
   <title>Sign in · Measure Once</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="/style.css">
-  <style>
-    body {
-      background: #f5f4f1; color: #1c1917; margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
-    }
-    .card {
-      background: #fff; border: 2px solid #d6d3d1; border-radius: 12px;
-      max-width: 440px; width: 100%; padding: 36px;
-      box-shadow: 0 2px 6px rgba(0,0,0,.06);
-    }
-    .logo-wrap { text-align: center; margin-bottom: 28px; }
-    .logo-wrap img { max-width: 180px; width: 100%; height: auto; display: inline-block; }
-    h1 { font-size: 1.4rem; font-weight: 700; margin: 0 0 6px; color: #0f0f0e; letter-spacing: -.01em; }
-    .sub { color: #44403c; font-size: .95rem; margin: 0 0 28px; line-height: 1.5; }
-
-    /* Labels — flex row with right-side Required badge */
-    .field-label {
-      display: flex; justify-content: space-between; align-items: baseline;
-      font-size: .9rem; font-weight: 600; color: #1c1917; margin-bottom: 6px;
-    }
-    .field-required { font-size: .75rem; color: #78716c; font-weight: 400; }
-
-    label { display: block; font-size: .9rem; font-weight: 600; color: #1c1917; margin-bottom: 6px; }
-    input {
-      width: 100%; box-sizing: border-box; padding: 12px 14px;
-      border: 2px solid #a8a29e; border-radius: 8px;
-      font-size: 1rem; background: #fff; color: #1c1917;
-    }
-    input:focus { outline: none; border-color: #3d0f7a; box-shadow: 0 0 0 3px rgba(61,15,122,.12); }
-    .field { margin-bottom: 18px; }
-
-    button {
-      width: 100%; background: #3d0f7a; color: #fff; border: none;
-      padding: 14px 18px; border-radius: 8px; font-weight: 700;
-      font-size: 1rem; cursor: pointer; min-height: 48px;
-      letter-spacing: .02em; transition: background .15s ease;
-    }
-    button:hover { background: #5a1fad; }
-    button:disabled { opacity: .5; cursor: not-allowed; background: #3d0f7a; }
-
-    /* Alert banners — icon + text */
-    .err, .ok {
-      display: none; padding: 10px 12px; border-radius: 8px;
-      font-size: .9rem; margin-bottom: 18px;
-      align-items: flex-start; gap: 10px; line-height: 1.4;
-    }
-    .err { background: #fef2f2; border: 1.5px solid #fca5a5; color: #7f1d1d; }
-    .ok  { background: #f0fdf4; border: 1.5px solid #86efac; color: #14532d; }
-    .err svg, .ok svg { flex-shrink: 0; margin-top: 1px; }
-
-    .forgot-link {
-      display: inline-block; margin-top: 6px; margin-bottom: 22px;
-      font-size: .875rem; color: #3d0f7a; font-weight: 600;
-      text-decoration: underline; background: none; border: none;
-      cursor: pointer; padding: 0; font-family: inherit;
-    }
-    .forgot-link:hover { color: #5a1fad; }
-
-    .footer {
-      margin-top: 22px; padding-top: 18px; border-top: 2px solid #f3f1ec;
-      font-size: .9rem; color: #44403c; text-align: center; line-height: 1.6;
-    }
-    .footer a, .footer button.toggle {
-      color: #3d0f7a; text-decoration: underline; font-weight: 700;
-    }
-    .footer a:hover, .footer button.toggle:hover { color: #5a1fad; }
-
-    .toggle {
-      background: none; border: none; cursor: pointer;
-      font: inherit; font-weight: 700; padding: 0;
-    }
-    .hidden { display: none !important; }
-    .turnstile-widget { margin: 4px 0 14px; min-height: 65px; }
-  </style>
   <script>
     window.addEventListener('unhandledrejection', function (event) {
       if (!(event.reason instanceof Error)) event.preventDefault();
@@ -99,115 +24,115 @@
     };
   </script>
 </head>
-<body>
-  <div class="card">
-    <div class="logo-wrap">
+<body class="auth-page">
+  <div class="auth-card auth-card--login">
+    <div class="auth-logo-wrap">
       <img src="/harry-wardrobes-logo.png" alt="Harry Wardrobes">
     </div>
 
     <!-- Sign in view -->
     <div id="view-login">
       <h1>Sign in</h1>
-      <p class="sub">Use your email and password to sign in to your Measure Once account.</p>
-      <div id="login-ok"  class="ok"  role="status"></div>
-      <div id="login-err" class="err" role="alert"></div>
+      <p class="auth-sub">Use your email and password to sign in to your Measure Once account.</p>
+      <div id="login-ok"  class="auth-alert auth-alert--ok"  role="status"></div>
+      <div id="login-err" class="auth-alert auth-alert--err" role="alert"></div>
       <form id="login-form" autocomplete="on">
-        <div class="field">
-          <div class="field-label">
+        <div class="auth-field">
+          <div class="auth-field-label">
             <label for="login-email">Email address</label>
-            <span class="field-required">Required</span>
+            <span class="auth-field-required">Required</span>
           </div>
           <input id="login-email" type="email" autocomplete="username" aria-required="true"
             placeholder="your@email.com" required>
         </div>
-        <div class="field">
-          <div class="field-label">
+        <div class="auth-field">
+          <div class="auth-field-label">
             <label for="login-password">Password</label>
-            <span class="field-required">Required</span>
+            <span class="auth-field-required">Required</span>
           </div>
           <input id="login-password" type="password" autocomplete="current-password" aria-required="true" required>
         </div>
-        <button type="button" class="forgot-link" onclick="showView('forgot')">Forgot your password?</button>
+        <button type="button" class="auth-link" onclick="showView('forgot')">Forgot your password?</button>
         <div id="turnstile-login" class="turnstile-widget"></div>
-        <button id="login-submit" type="submit">Sign in to Measure Once</button>
+        <button id="login-submit" type="submit" class="auth-submit">Sign in to Measure Once</button>
       </form>
-      <div class="footer">
+      <div class="auth-footer">
         Don't have an account?
-        <button class="toggle" type="button" onclick="showView('request')">Request access</button>
+        <button class="auth-toggle" type="button" onclick="showView('request')">Request access</button>
       </div>
     </div>
 
     <!-- Forgot password view -->
-    <div id="view-forgot" class="hidden">
+    <div id="view-forgot" class="auth-hidden">
       <h1>Reset your password</h1>
-      <p class="sub">Enter your email and we'll send you a link to set a new password.</p>
-      <div id="forgot-ok"  class="ok"  role="status"></div>
-      <div id="forgot-err" class="err" role="alert"></div>
+      <p class="auth-sub">Enter your email and we'll send you a link to set a new password.</p>
+      <div id="forgot-ok"  class="auth-alert auth-alert--ok"  role="status"></div>
+      <div id="forgot-err" class="auth-alert auth-alert--err" role="alert"></div>
       <form id="forgot-form">
-        <div class="field">
-          <div class="field-label">
+        <div class="auth-field">
+          <div class="auth-field-label">
             <label for="forgot-email">Email address</label>
-            <span class="field-required">Required</span>
+            <span class="auth-field-required">Required</span>
           </div>
           <input id="forgot-email" type="email" autocomplete="username" maxlength="254" aria-required="true"
             placeholder="your@email.com" required>
         </div>
         <div id="turnstile-forgot" class="turnstile-widget"></div>
-        <button id="forgot-submit" type="submit">Send reset link</button>
+        <button id="forgot-submit" type="submit" class="auth-submit">Send reset link</button>
       </form>
-      <div id="forgot-confirm" class="hidden">
-        <div class="ok" style="display:flex">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5">
+      <div id="forgot-confirm" class="auth-hidden">
+        <div class="auth-alert auth-alert--ok" style="display:flex">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <polyline points="20 6 9 17 4 12"/>
           </svg>
           <span>An email has been sent to <strong id="forgot-confirm-email"></strong>. Please check your inbox and follow the link to reset your password.</span>
         </div>
-        <button id="forgot-retry" type="button" style="margin-top:14px;">Try a different email</button>
+        <button id="forgot-retry" type="button" class="auth-submit auth-submit--compact" style="margin-top:14px;">Try a different email</button>
       </div>
-      <div class="footer">
-        <button class="toggle" type="button" onclick="showView('login')">Back to sign in</button>
+      <div class="auth-footer">
+        <button class="auth-toggle" type="button" onclick="showView('login')">Back to sign in</button>
       </div>
     </div>
 
     <!-- Request access view -->
-    <div id="view-request" class="hidden">
+    <div id="view-request" class="auth-hidden">
       <h1>Request access</h1>
-      <p class="sub">An admin will review your request and email you a link to set your password.</p>
-      <div id="req-ok"  class="ok"  role="status"></div>
-      <div id="req-err" class="err" role="alert"></div>
+      <p class="auth-sub">An admin will review your request and email you a link to set your password.</p>
+      <div id="req-ok"  class="auth-alert auth-alert--ok"  role="status"></div>
+      <div id="req-err" class="auth-alert auth-alert--err" role="alert"></div>
       <form id="req-form">
-        <div class="field">
-          <div class="field-label">
+        <div class="auth-field">
+          <div class="auth-field-label">
             <label for="req-name">Full name</label>
-            <span class="field-required">Required</span>
+            <span class="auth-field-required">Required</span>
           </div>
           <input id="req-name" type="text" maxlength="100" aria-required="true" required>
         </div>
-        <div class="field">
-          <div class="field-label">
+        <div class="auth-field">
+          <div class="auth-field-label">
             <label for="req-email">Work email</label>
-            <span class="field-required">Required</span>
+            <span class="auth-field-required">Required</span>
           </div>
           <input id="req-email" type="email" maxlength="254" aria-required="true" required>
         </div>
         <div id="turnstile-request" class="turnstile-widget"></div>
-        <button id="req-submit" type="submit">Submit request</button>
+        <button id="req-submit" type="submit" class="auth-submit">Submit request</button>
       </form>
-      <div class="footer">
+      <div class="auth-footer">
         Already approved?
-        <button class="toggle" type="button" onclick="showView('login')">Back to sign in</button>
+        <button class="auth-toggle" type="button" onclick="showView('login')">Back to sign in</button>
       </div>
     </div>
   </div>
 
 <script>
-  const _okIcon  = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" style="flex-shrink:0;margin-top:1px"><polyline points="20 6 9 17 4 12"/></svg>`;
-  const _errIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+  const _okIcon  = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0;margin-top:1px"><polyline points="20 6 9 17 4 12"/></svg>`;
+  const _errIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
 
   function showView(name) {
-    document.getElementById('view-login').classList.toggle('hidden', name !== 'login');
-    document.getElementById('view-request').classList.toggle('hidden', name !== 'request');
-    document.getElementById('view-forgot').classList.toggle('hidden', name !== 'forgot');
+    document.getElementById('view-login').classList.toggle('auth-hidden', name !== 'login');
+    document.getElementById('view-request').classList.toggle('auth-hidden', name !== 'request');
+    document.getElementById('view-forgot').classList.toggle('auth-hidden', name !== 'forgot');
     const loginEmail   = document.getElementById('login-email');
     const forgotEmail  = document.getElementById('forgot-email');
     const requestEmail = document.getElementById('req-email');
@@ -226,8 +151,8 @@
   function resetForgotView() {
     const confirmEl = document.getElementById('forgot-confirm');
     const formEl    = document.getElementById('forgot-form');
-    if (confirmEl) confirmEl.classList.add('hidden');
-    if (formEl)    formEl.classList.remove('hidden');
+    if (confirmEl) confirmEl.classList.add('auth-hidden');
+    if (formEl)    formEl.classList.remove('auth-hidden');
     hide(document.getElementById('forgot-ok'));
     hide(document.getElementById('forgot-err'));
     const emailInput    = document.getElementById('forgot-email');
@@ -358,8 +283,8 @@
       const data = await r.json().catch(() => ({}));
       if (r.ok) {
         document.getElementById('forgot-confirm-email').textContent = email;
-        document.getElementById('forgot-form').classList.add('hidden');
-        document.getElementById('forgot-confirm').classList.remove('hidden');
+        document.getElementById('forgot-form').classList.add('auth-hidden');
+        document.getElementById('forgot-confirm').classList.remove('auth-hidden');
         hide(okEl);
       } else if (r.status === 429) {
         show(errEl, 'Too many requests — please try again later.');
