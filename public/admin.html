@@ -4181,7 +4181,7 @@
         <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Name <span style="color:#991b1b;">*</span></label>
         <input id="dvie-name" type="text" class="field" maxlength="200" value="${esc(item?.name || '')}" style="font-size:.88rem;">
         ${hasStyleSelect ? `
-          <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Style</label>
+          <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Style${item ? '' : ' <span style="color:#991b1b;">*</span>'}</label>
           <select id="dvie-style" class="field" style="font-size:.85rem;">
             <option value="">— select —</option>
             ${DV_HANDLE_STYLES.map(s => `<option value="${esc(s)}"${item?.style === s ? ' selected' : ''}>${esc(s)}</option>`).join('')}
@@ -4238,11 +4238,17 @@
       const name = wrap.querySelector('#dvie-name').value.trim();
       if (!name) { errEl.textContent = 'Name is required.'; return; }
 
+      const styleValue = hasStyleSelect ? (wrap.querySelector('#dvie-style').value || '') : '';
+      if (hasStyleSelect && !item && !styleValue) {
+        errEl.textContent = 'Style is required.';
+        return;
+      }
+
       saveBtn.disabled = true;
       saveBtn.textContent = 'Saving…';
 
       const payload = { name };
-      if (hasStyleSelect) payload.style = wrap.querySelector('#dvie-style').value || null;
+      if (hasStyleSelect) payload.style = styleValue || null;
       if (hasDescription) payload.description = wrap.querySelector('#dvie-desc').value;
 
       const postUrl = {

@@ -591,11 +591,14 @@ router.post('/api/admin/design-visit-handles', isAuthenticated, requireAdmin, as
   const description = req.body?.description ? String(req.body.description).slice(0, 500) : null;
   const image_url   = req.body?.image_url   ? String(req.body.image_url).slice(0, 500)  : null;
   const sort_order  = parseInt(req.body?.sort_order, 10) || 0;
-  const styleRaw    = req.body?.style !== undefined ? String(req.body.style).trim() : null;
-  const style       = styleRaw && HANDLE_STYLE_VALUES.includes(styleRaw) ? styleRaw : null;
-  if (styleRaw && !HANDLE_STYLE_VALUES.includes(styleRaw)) {
+  const styleRaw    = req.body?.style !== undefined && req.body?.style !== null ? String(req.body.style).trim() : '';
+  if (!styleRaw) {
+    return res.status(400).json({ error: 'style is required' });
+  }
+  if (!HANDLE_STYLE_VALUES.includes(styleRaw)) {
     return res.status(400).json({ error: `style must be one of: ${HANDLE_STYLE_VALUES.join(', ')}` });
   }
+  const style = styleRaw;
   try {
     const r = await pool.query(
       `INSERT INTO design_visit_handles (name, description, image_url, sort_order, style)
