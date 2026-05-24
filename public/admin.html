@@ -1588,6 +1588,55 @@
   let _devTestUsersLoaded = false;
   let _devTestUsersContacts = [];
 
+  function _applyDevFilterLabel(enabled) {
+    const lbl = document.getElementById('dev-filter-toggle-label');
+    const chk = document.getElementById('dev-filter-global-toggle');
+    if (lbl) {
+      lbl.textContent = enabled ? 'Dev filter: ON' : 'Dev filter: OFF';
+      lbl.style.background = enabled ? '#dcfce7' : '#fee2e2';
+      lbl.style.color      = enabled ? '#166534' : '#991b1b';
+    }
+    if (chk) chk.checked = enabled;
+  }
+
+  async function setDevFilter(enabled) {
+    const chk = document.getElementById('dev-filter-global-toggle');
+    if (chk) chk.disabled = true;
+    try {
+      await api('PATCH', '/api/admin/hubspot/dev-filter', { enabled });
+      _applyDevFilterLabel(enabled);
+      showToast(enabled ? 'Dev filter turned ON.' : 'Dev filter turned OFF — all contacts will be visible.');
+    } catch (e) {
+      _applyDevFilterLabel(!enabled); // revert
+      showToast('Failed to update dev filter: ' + e.message, true);
+    } finally {
+      if (chk) chk.disabled = false;
+    }
+  }
+
+  async function backfillTestUserDefaults() {
+    const btn = document.getElementById('dev-backfill-btn');
+    const result = document.getElementById('dev-backfill-result');
+    if (btn) btn.disabled = true;
+    if (result) result.textContent = 'Running backfill…';
+    try {
+      const d = await api('POST', '/api/admin/hubspot/backfill-test-user-defaults');
+      if (result) result.textContent = `Done — ${d?.patched ?? 0} contact(s) updated.`;
+      showToast(`Backfill complete: ${d?.patched ?? 0} contact(s) set to false.`);
+      // Reload contact list so per-contact toggles reflect the new values.
+      _devTestUsersLoaded = false;
+      _devTestUsersContacts = [];
+      const listEl = document.getElementById('dev-test-users-list');
+      if (listEl) listEl.innerHTML = '<p style="font-size:.82rem;color:var(--ink-4);">Reloading contacts…</p>';
+      await loadDevTestUsers();
+    } catch (e) {
+      if (result) result.textContent = '';
+      showToast('Backfill failed: ' + e.message, true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   async function loadDevTestUsers() {
     if (!_devModeChecked) {
       try {
@@ -1600,6 +1649,11 @@
     if (!section) return;
     if (!_devMode) { section.style.display = 'none'; return; }
     section.style.display = '';
+    // Load current global filter state
+    try {
+      const fd = await api('GET', '/api/admin/hubspot/dev-filter');
+      _applyDevFilterLabel(fd?.enabled !== false);
+    } catch { _applyDevFilterLabel(true); }
     if (_devTestUsersLoaded) return;
     const listEl = document.getElementById('dev-test-users-list');
     if (!listEl) return;
@@ -3577,6 +3631,26 @@
               <p class="card-desc" style="margin:0;">In development mode the customer list is filtered to contacts marked below. Toggle a contact to include or exclude it from the dev view.</p>
             </div>
           </div>
+
+          <!-- Global dev filter toggle -->
+          <div id="dev-filter-toggle-row" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;margin-bottom:14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border);border-radius:8px;gap:12px;">
+            <div>
+              <div style="font-size:.875rem;font-weight:600;color:var(--ink-1);">Dev filter</div>
+              <div style="font-size:.78rem;color:var(--ink-4);margin-top:2px;">When ON, only contacts marked below appear in the Customers list and lead-status counts. Turn OFF to see all HubSpot contacts as in production.</div>
+            </div>
+            <label class="ss-toggle" title="Toggle dev filter" style="flex-shrink:0;">
+              <input type="checkbox" id="dev-filter-global-toggle" checked onchange="setDevFilter(this.checked)">
+              <span class="ss-toggle-track"></span>
+            </label>
+          </div>
+          <div id="dev-filter-toggle-label" style="font-size:.78rem;font-weight:600;margin-bottom:14px;padding:2px 8px;display:inline-block;border-radius:4px;background:#dcfce7;color:#166534;">Dev filter: ON</div>
+
+          <!-- Backfill action -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+            <button class="btn" id="dev-backfill-btn" onclick="backfillTestUserDefaults()" style="font-size:.8rem;padding:5px 14px;">Set unset contacts to false</button>
+            <span id="dev-backfill-result" style="font-size:.78rem;color:var(--ink-4);"></span>
+          </div>
+
           <div id="dev-test-users-list" style="max-height:480px;overflow-y:auto;">
             <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
           </div>
