@@ -530,6 +530,142 @@ async function main() {
     );
   }
 
+  // ── (A2) Multi-room submit: images survive across all rooms ───────────────
+  console.log('\n  [A2] Multi-room photo upload');
+
+  const multiRoomRes = await memberClient.post('/api/design-visits', {
+    contactId:        FAKE_CONTACT_ID,
+    contactName:      'SDV Multi-Room Customer',
+    contactEmail:     'sdv-multiroom@privtest.local',
+    handleId:         handleId,
+    furnitureRangeId: furnitureId,
+    visitDate:        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    durationMin:      120,
+    location:         '456 Multi-Room Lane',
+    notes:            'Multi-room E2E test',
+    termsAccepted:    true,
+    rooms: [
+      {
+        roomName:       'Living Room',
+        doorStyleId:    doorStyleId,
+        widthMm:        4000,
+        heightMm:       2500,
+        depthMm:        700,
+        unitCount:      6,
+        unitPricePence: 20000,
+        notes:          'Room one note',
+        images: [
+          { storageKey: `sdv-multi-r1-img1-${runId}.jpg`, mimeType: 'image/jpeg' },
+          { storageKey: `sdv-multi-r1-img2-${runId}.png`, mimeType: 'image/png' },
+        ],
+      },
+      {
+        roomName:       'Bedroom',
+        doorStyleId:    doorStyleId,
+        widthMm:        3500,
+        heightMm:       2400,
+        depthMm:        650,
+        unitCount:      4,
+        unitPricePence: 18000,
+        notes:          'Room two note',
+        images: [
+          { storageKey: `sdv-multi-r2-img1-${runId}.jpg`, mimeType: 'image/jpeg' },
+          { storageKey: `sdv-multi-r2-img2-${runId}.jpg`, mimeType: 'image/jpeg' },
+        ],
+      },
+    ],
+    handlerConfig: {},
+  });
+
+  record(
+    '(A2) POST /api/design-visits (multi-room) returns { ok: true, designVisitId }',
+    'status=201, ok=true, designVisitId is integer',
+    `status=${multiRoomRes.status} ok=${multiRoomRes.json?.ok} id=${multiRoomRes.json?.designVisitId}`,
+    multiRoomRes.status === 201 && multiRoomRes.json?.ok === true && Number.isInteger(multiRoomRes.json?.designVisitId),
+  );
+
+  const multiVisitId = multiRoomRes.json?.designVisitId ?? null;
+
+  // Confirm design_visit_rooms: exactly 2 rows, correct names and sort_order
+  let multiRoomRows = [];
+  if (multiVisitId) {
+    const mrQ = await pool.query(
+      `SELECT id, room_name, sort_order
+       FROM design_visit_rooms
+       WHERE design_visit_id = $1
+       ORDER BY sort_order`,
+      [multiVisitId]
+    );
+    multiRoomRows = mrQ.rows;
+  }
+
+  record(
+    '(A2) design_visit_rooms has exactly 2 rows in sort_order',
+    '2 room rows with room_name="Living Room" (sort_order=0) and "Bedroom" (sort_order=1)',
+    `found ${multiRoomRows.length} room(s): ${multiRoomRows.map(r => `${r.room_name}(sort=${r.sort_order})`).join(', ')}`,
+    multiRoomRows.length === 2
+      && multiRoomRows[0]?.room_name === 'Living Room' && multiRoomRows[0]?.sort_order === 0
+      && multiRoomRows[1]?.room_name === 'Bedroom'     && multiRoomRows[1]?.sort_order === 1,
+  );
+
+  // Confirm images for room 0 (Living Room): 2 rows, correct room_id + storage_keys
+  let multiImagesRoom0 = [];
+  if (multiRoomRows[0]) {
+    const imgQ0 = await pool.query(
+      `SELECT room_id, storage_key, mime_type
+       FROM design_visit_room_images WHERE room_id = $1
+       ORDER BY storage_key`,
+      [multiRoomRows[0].id]
+    );
+    multiImagesRoom0 = imgQ0.rows;
+  }
+
+  const r0img1Key = `sdv-multi-r1-img1-${runId}.jpg`;
+  const r0img2Key = `sdv-multi-r1-img2-${runId}.png`;
+  record(
+    '(A2) Living Room has 2 image rows with correct room_id and storage_keys',
+    `2 images: ${r0img1Key} (image/jpeg) and ${r0img2Key} (image/png)`,
+    `found ${multiImagesRoom0.length} image(s): ${multiImagesRoom0.map(i => `${i.storage_key}/${i.mime_type}`).join(', ')}`,
+    multiImagesRoom0.length === 2
+      && multiImagesRoom0.every(i => i.room_id === multiRoomRows[0]?.id)
+      && multiImagesRoom0.some(i => i.storage_key === r0img1Key && i.mime_type === 'image/jpeg')
+      && multiImagesRoom0.some(i => i.storage_key === r0img2Key && i.mime_type === 'image/png'),
+  );
+
+  // Confirm images for room 1 (Bedroom): 2 rows, correct room_id + storage_keys
+  let multiImagesRoom1 = [];
+  if (multiRoomRows[1]) {
+    const imgQ1 = await pool.query(
+      `SELECT room_id, storage_key, mime_type
+       FROM design_visit_room_images WHERE room_id = $1
+       ORDER BY storage_key`,
+      [multiRoomRows[1].id]
+    );
+    multiImagesRoom1 = imgQ1.rows;
+  }
+
+  const r1img1Key = `sdv-multi-r2-img1-${runId}.jpg`;
+  const r1img2Key = `sdv-multi-r2-img2-${runId}.jpg`;
+  record(
+    '(A2) Bedroom has 2 image rows with correct room_id and storage_keys',
+    `2 images: ${r1img1Key} and ${r1img2Key} (both image/jpeg), bound to Bedroom room_id`,
+    `found ${multiImagesRoom1.length} image(s): ${multiImagesRoom1.map(i => `${i.storage_key}/${i.mime_type}`).join(', ')}`,
+    multiImagesRoom1.length === 2
+      && multiImagesRoom1.every(i => i.room_id === multiRoomRows[1]?.id)
+      && multiImagesRoom1.some(i => i.storage_key === r1img1Key && i.mime_type === 'image/jpeg')
+      && multiImagesRoom1.some(i => i.storage_key === r1img2Key && i.mime_type === 'image/jpeg'),
+  );
+
+  // Cross-check: room 0 images must not appear under room 1 and vice-versa
+  record(
+    '(A2) Images are correctly partitioned — room 0 keys absent from room 1 result',
+    `no ${r0img1Key} or ${r0img2Key} in Bedroom image rows`,
+    multiImagesRoom1.some(i => i.storage_key === r0img1Key || i.storage_key === r0img2Key)
+      ? 'FAIL: room-0 key found in room-1 rows'
+      : 'room-0 keys absent from room-1 rows',
+    !multiImagesRoom1.some(i => i.storage_key === r0img1Key || i.storage_key === r0img2Key),
+  );
+
   // ── (B) Public sign-off: approve ──────────────────────────────────────────
   console.log('\n  [B] Sign-off: approve');
 
