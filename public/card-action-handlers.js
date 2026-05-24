@@ -68,6 +68,7 @@
       .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     return ` data-card-action-handler-id="${h.id}"` +
            ` data-card-action-handler-type="${safe(h.type)}"` +
+           (h.config?.action_name ? ` data-card-action-name="${safe(h.config.action_name)}"` : '') +
            (ctx?.contactId    ? ` data-card-action-contact-id="${safe(ctx.contactId)}"`       : '') +
            (ctx?.contactName  ? ` data-card-action-contact-name="${safe(ctx.contactName)}"`   : '') +
            (ctx?.contactEmail ? ` data-card-action-contact-email="${safe(ctx.contactEmail)}"` : '');

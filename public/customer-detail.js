@@ -1036,12 +1036,15 @@ function _renderWorkflowStagesImpl() {
             contactEmail: props.email || '',
           })
         : '';
+      const _cahNameMatch = handlerAttrs && handlerAttrs.match(/data-card-action-name="([^"]*)"/);
+      const _cahName = _cahNameMatch ? _cahNameMatch[1].replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '';
+      const _stripLabel = _cahName || label;
       const interactiveAttrs = handlerAttrs
         ? `${handlerAttrs} role="button" tabindex="0" title="Run action" style="background:${actionTint};cursor:pointer"`
         : `style="background:${actionTint}"`;
       actionHtml = `
         <div class="eq-card-action" ${interactiveAttrs}>
-          <span class="eq-card-action-label" style="color:${actionText}">${escHtml(label)}</span>
+          <span class="eq-card-action-label" style="color:${actionText}">${escHtml(_stripLabel)}</span>
         </div>`;
     }
   }

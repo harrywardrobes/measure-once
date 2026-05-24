@@ -2431,10 +2431,11 @@
   function _handlerSummaryHtml(h) {
     const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
     const desc    = HANDLER_TYPE_DESCRIPTIONS[h.type] || 'No description available for this handler type.';
+    const actionName = h.config?.action_name ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;background:#ede9fe;color:#5b21b6;border-radius:999px;font-size:.72rem;font-weight:600;letter-spacing:.01em;">${esc(h.config.action_name)}</span>` : '';
     return `
       <div style="border:1px solid #d8c7f5;border-radius:8px;padding:8px 10px;background:#f7f2ff;">
         <div style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:.82rem;color:#3d0f7a;">
-          <span aria-hidden="true">⚡</span><span>${esc(typeLbl)}</span>
+          <span aria-hidden="true">⚡</span><span>${esc(typeLbl)}</span>${actionName}
         </div>
         <div style="margin-top:5px;font-size:.78rem;color:var(--ink-2);line-height:1.5;white-space:pre-line;">${esc(desc)}</div>
       </div>`;
@@ -2523,6 +2524,9 @@
       <div style="background:#fff;border-radius:12px;padding:20px;width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,0.25);max-height:90vh;overflow:auto;">
         <h3 style="margin:0 0 4px;font-size:1.05rem;font-weight:700;">${existing ? 'Change action' : 'Add action'}</h3>
         <p style="margin:0 0 14px;font-size:.78rem;color:var(--ink-4);">for <strong>${esc(slot.label)}</strong> <span style="color:var(--ink-4);font-weight:normal;">(${esc(slot.rowLabel || '')})</span></p>
+        <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Action name <span style="font-weight:400;color:var(--ink-4);">(optional)</span></label>
+        <input id="cah-action-name" type="text" class="field" maxlength="80" placeholder="e.g. send_quote" style="font-size:.85rem;" value="${esc(config.action_name || '')}">
+        <div style="margin-top:4px;padding:6px 10px;border-radius:6px;background:#fef3c7;border:1px solid #fcd34d;font-size:.75rem;color:#92400e;line-height:1.5;">⚙️ Backend automation coming soon — this name will be used to trigger workflows automatically once wired up. When set, it also displays as the label on the card action strip.</div>
         <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Action type</label>
         <select id="cah-type" class="field">
           ${Object.entries(HANDLER_TYPE_LABELS).map(([k, v]) =>
@@ -2602,6 +2606,9 @@
         try { cfg = JSON.parse(cfgTxt); }
         catch { errEl.textContent = 'Configuration is not valid JSON.'; return null; }
       }
+      const actionNameV = wrap.querySelector('#cah-action-name').value.trim();
+      if (actionNameV) cfg.action_name = actionNameV;
+      else delete cfg.action_name;
       return { name: '', type: tp, config: cfg, bindings: [binding] };
     };
 

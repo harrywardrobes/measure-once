@@ -212,14 +212,17 @@ function _svCardHtml(entry) {
       })
     : '';
   const hasHandler = !!handlerAttrs;
+  const _cahNameMatch = hasHandler && handlerAttrs.match(/data-card-action-name="([^"]*)"/);
+  const _cahName = _cahNameMatch ? _cahNameMatch[1].replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '';
+  const _stripLabel = _cahName || actionLabel;
   const actionEditAttrs = hasHandler
     ? `${handlerAttrs} role="button" tabindex="-1" title="Run action" style="background:${SURVEY_ACTION_TINT};cursor:pointer"`
     : (_editable
         ? `data-card-edit="leadstatus" data-contact-id="${escHtml(contact.id)}" role="button" tabindex="-1" title="Change lead status" style="background:${SURVEY_ACTION_TINT};cursor:pointer"`
         : `style="background:${SURVEY_ACTION_TINT}"`);
-  const actionHtml = (isTerminal || !actionLabel) ? '' : `
+  const actionHtml = (isTerminal || !_stripLabel) ? '' : `
     <div class="eq-card-action" ${actionEditAttrs}>
-      <span class="eq-card-action-label" style="color:${SURVEY_ACTION_TEXT}">${escHtml(actionLabel)}</span>
+      <span class="eq-card-action-label" style="color:${SURVEY_ACTION_TEXT}">${escHtml(_stripLabel)}</span>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${SURVEY_ACTION_TEXT}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
     </div>`;
 
