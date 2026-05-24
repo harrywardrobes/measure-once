@@ -1195,6 +1195,51 @@ async function main() {
       modalClosed === 'closed',
     );
 
+    // Assert the "✓ Resolved" green pill appears on the target table row
+    // immediately after the modal auto-closes (_flashResolvedBadge is called
+    // synchronously right after wrap.remove()).
+    const pillVisible = await pollPage(
+      conflictAdminTab,
+      (statusKey) => {
+        const input = document.querySelector(
+          `.ca-default-input[data-stage="sales"][data-status="${statusKey}"]`,
+        );
+        if (!input) return null;
+        const row = input.parentElement;
+        if (!row) return null;
+        const spans = Array.from(row.querySelectorAll('span'));
+        return spans.some(s => s.textContent.trim() === '\u2713 Resolved') ? 'visible' : null;
+      },
+      LBL_KEY_CONFLICT,
+      3000,
+    );
+    record(
+      '(D) "✓ Resolved" flash pill appears on the table row after modal closes',
+      'span with textContent "✓ Resolved" visible in the target row within 3 s',
+      `result=${pillVisible}`,
+      pillVisible === 'visible',
+    );
+
+    // The pill fades out after 1500 ms and is removed from the DOM after a
+    // further 400 ms (total ~1900 ms).  Wait 2200 ms then assert it is gone.
+    await new Promise(r => setTimeout(r, 2200));
+    const pillGone = await conflictAdminTab.evaluate((statusKey) => {
+      const input = document.querySelector(
+        `.ca-default-input[data-stage="sales"][data-status="${statusKey}"]`,
+      );
+      if (!input) return 'input-missing';
+      const row = input.parentElement;
+      if (!row) return 'row-missing';
+      const spans = Array.from(row.querySelectorAll('span'));
+      return spans.some(s => s.textContent.trim() === '\u2713 Resolved') ? 'still-present' : 'gone';
+    }, LBL_KEY_CONFLICT);
+    record(
+      '(D) "✓ Resolved" flash pill disappears from DOM after ~2 s',
+      'span removed from DOM ~2 s after appearing',
+      `result=${pillGone}`,
+      pillGone === 'gone',
+    );
+
     // Assert the ⚠ Fix button is no longer shown for the slot.
     // loadCardActionHandlersAdmin() is called inside the Remove handler
     // before the modal is closed, so the badge area is already re-rendered.
@@ -1311,7 +1356,9 @@ async function writeReport(runId, findings) {
     '  opens a fresh admin tab, switches to the Card actions panel, and waits',
     '  for the ⚠ Fix button to appear beside the conflicted slot.  Clicking Fix',
     '  must open the conflict-resolver modal with exactly 2 handler rows;',
-    '  clicking Remove on one row must close the modal and remove the ⚠ Fix',
+    '  clicking Remove on one row must close the modal, flash a "✓ Resolved"',
+    '  green pill on the target table row (visible within 3 s of modal close,',
+    '  gone from the DOM within ~2 s after appearing), and remove the ⚠ Fix',
     '  button from the badge area.  `purgeFixtures()` re-creates the unique',
     '  index after deleting the conflicting rows.',
     '',
