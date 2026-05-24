@@ -312,6 +312,10 @@ async function main() {
   // PATCH config probes:
   //   NEG-17  PATCH sends defaultDurationMin < 5 → 400
   //   NEG-18  PATCH sends invalid binding stage_key → 400
+  //
+  // action_name format probes (POST):
+  //   NEG-19  config.action_name with spaces + punctuation (not snake_case) → 400
+  //   NEG-20  config.action_name with valid snake_case → 201 (happy path)
 
   console.log('\n  [NEG] Negative-path validation probes');
 
@@ -553,6 +557,45 @@ async function main() {
         false,
       );
     }
+  }
+
+  // NEG-19: POST handler with config.action_name containing spaces + punctuation
+  // (not snake_case).  Once the dedicated snake_case validator lands (see the
+  // "Block invalid action names from being saved via the API" project task),
+  // the server must reject this with 400 before it reaches the database.
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'privtest-neg19',
+      type: 'summarise_phone_call',
+      config: { action_name: 'Send Quote!' },
+      bindings: [],
+    });
+    assertBadRequest(
+      'NEG-19: POST with non-snake_case config.action_name rejected',
+      r,
+      'action_name',
+    );
+    // Best-effort cleanup in case validation regressed and the row was created.
+    if (r.json?.id) await adminClient.delete(`/api/admin/card-action-handlers/${r.json.id}`);
+  }
+
+  // NEG-20: happy-path companion to NEG-19 — a valid snake_case action_name
+  // must still be accepted (201), confirming the validator does not over-reach.
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'privtest-neg20',
+      type: 'summarise_phone_call',
+      config: { action_name: 'send_quote' },
+      bindings: [],
+    });
+    const ok = r.status === 201 && Number.isInteger(r.json?.id);
+    record(
+      'NEG-20: POST with valid snake_case config.action_name accepted',
+      'status=201 with integer id',
+      `status=${r.status} id=${JSON.stringify(r.json?.id)}`,
+      ok,
+    );
+    if (r.json?.id) await adminClient.delete(`/api/admin/card-action-handlers/${r.json.id}`);
   }
 
   // ── (PRIV) Member-privilege probes ────────────────────────────────────────
@@ -1743,6 +1786,8 @@ async function writeReport(runId, findings) {
     '  - NEG-15/16: `substatus_id` = 0 or a non-numeric string.',
     '  - NEG-17: PATCH with `defaultDurationMin` < 5.',
     '  - NEG-18: PATCH with an invalid binding `stage_key`.',
+    '  - NEG-19: POST with non-snake_case `config.action_name` (spaces + punctuation).',
+    '  - NEG-20: happy-path companion — valid snake_case `config.action_name` accepted (201).',
     '  Both handler types (`add_design_visit_to_calendar`, `summarise_phone_call`)',
     '  and both binding shapes (label and substatus) are exercised.',
     '- **(A) BroadcastChannel cross-tab refresh**: a second same-browser tab',
