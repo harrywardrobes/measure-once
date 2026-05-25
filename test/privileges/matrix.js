@@ -70,6 +70,23 @@ const ROUTES = [
   { method: 'GET',    path: '/api/workflow-stages',           level: 'auth' },
   { method: 'GET',    path: '/api/personal-tasks',            level: 'auth' },
   { method: 'GET',    path: '/api/visits',                    level: 'auth' },
+  { method: 'GET',    path: '/api/contacts-lead-status-counts', level: 'auth',  needsHubspot: true },
+  { method: 'GET',    path: '/api/lead-statuses',              level: 'auth' },
+  { method: 'GET',    path: '/api/stage-action-labels',        level: 'auth' },
+  { method: 'GET',    path: '/api/lead-substatuses',           level: 'auth' },
+  { method: 'GET',    path: '/api/search-settings',            level: 'auth' },
+  { method: 'GET',    path: '/api/whatsapp/config',            level: 'auth' },
+  // Ideas board (no per-route gate; relies on the global isAuthenticated mount).
+  { method: 'GET',    path: '/api/ideas',                      level: 'auth' },
+  { method: 'POST',   path: '/api/ideas',                      level: 'auth',  body: { body: '__privtest_noop__' } },
+  { method: 'GET',    path: '/api/ideas/0/comments',           level: 'auth' },
+  { method: 'POST',   path: '/api/ideas/0/comments',           level: 'auth',  body: { body: '__privtest_noop__' } },
+  // Design-visit catalogue reads (any authenticated user can browse the
+  // shared catalogue; admin writes live in the admin block below).
+  { method: 'GET',    path: '/api/design-visit-terms',         level: 'auth' },
+  { method: 'GET',    path: '/api/design-visit-handles',       level: 'auth' },
+  { method: 'GET',    path: '/api/design-visit-furniture-ranges', level: 'auth' },
+  { method: 'GET',    path: '/api/design-visit-door-styles',   level: 'auth' },
 
   // ── self-or-admin (foreign id picked at runtime) ──────────────────────────
   { method: 'GET',    path: '/api/users/__FOREIGN__/profile', level: 'self-or-admin' },
@@ -99,6 +116,13 @@ const ROUTES = [
   { method: 'POST',   path: '/api/card-actions/phone-call-summary', level: 'member', body: { contactId: '0', summary: 'noop' }, needsHubspot: true },
   { method: 'PATCH',  path: '/api/visits/0',                  level: 'member',  body: {} },
   { method: 'DELETE', path: '/api/visits/0',                  level: 'member' },
+  // Design-visit member-level surface (design-visits.js).
+  { method: 'GET',    path: '/api/design-visits',             level: 'member' },
+  { method: 'GET',    path: '/api/design-visits/0',           level: 'member' },
+  { method: 'POST',   path: '/api/design-visits',             level: 'member',  body: {} },
+  { method: 'PATCH',  path: '/api/design-visits/0',           level: 'member',  body: {} },
+  { method: 'POST',   path: '/api/design-visits/0/submit',    level: 'member',  body: {} },
+  { method: 'POST',   path: '/api/design-visits/0/revision',  level: 'member',  body: {} },
 
   // ── manager-level surface ─────────────────────────────────────────────────
   { method: 'POST',   path: '/api/workflow',                  level: 'manager', body: {} },
@@ -188,6 +212,29 @@ const ROUTES = [
   { method: 'POST',   path: '/api/admin/lead-substatuses',                     level: 'admin', body: {} },
   { method: 'PATCH',  path: '/api/admin/lead-substatuses/0',                   level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/pending-count',                        level: 'admin' },
+
+  // WhatsApp routes — admin-only but live outside the /api/admin/* prefix,
+  // so the audit needs explicit rows. WhatsApp config is usually absent in
+  // the test environment, which causes requireWhatsAppConfig to return 503
+  // after the requireAdmin gate passes; the classifier treats that as
+  // "authorized-as-expected" (only 401/403 from the gate would fail here).
+  { method: 'GET',    path: '/api/whatsapp/templates',                         level: 'admin' },
+  { method: 'POST',   path: '/api/whatsapp/send',                              level: 'admin', body: {} },
+  { method: 'GET',    path: '/api/whatsapp/history/0',                         level: 'admin' },
+
+  // Admin-only design-visit deletion (design-visits.js).
+  { method: 'DELETE', path: '/api/design-visits/0',                            level: 'admin' },
+
+  // Admin database editor (db-editor.js). All routes are admin-only; the
+  // :table slot is validated against the allow-list, so a bogus value like
+  // `__nope__` reaches the handler and 400s — the gate decision (which is
+  // what the matrix measures) still fires first.
+  { method: 'GET',    path: '/api/admin/db/tables',                            level: 'admin' },
+  { method: 'GET',    path: '/api/admin/db/__nope__/rows',                     level: 'admin' },
+  { method: 'POST',   path: '/api/admin/db/__nope__/rows',                     level: 'admin', body: {} },
+  { method: 'PATCH',  path: '/api/admin/db/__nope__/rows/0',                   level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/db/__nope__/rows/0',                   level: 'admin' },
+  { method: 'GET',    path: '/api/admin/db/audit',                             level: 'admin' },
 
   // Design-visit catalogue admin endpoints (design-visits.js).
   { method: 'GET',    path: '/api/admin/design-visit-handles',                 level: 'admin' },

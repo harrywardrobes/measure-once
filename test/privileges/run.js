@@ -27,17 +27,18 @@ async function main() {
       + `    stale fixtures in the shared DB).`);
     process.exit(2);
   }
-  // ── Admin-route audit (fail fast before booting the server) ─────────────
+  // ── API-route audit (fail fast before booting the server) ──────────────
   // Drifts in the hand-maintained capability matrix used to silently leave
-  // member→403 / viewer→403 cells uncovered on freshly-added /api/admin/*
-  // routes. The audit parses the source files and asserts every admin route
-  // has a matching matrix row.
+  // member→403 / viewer→403 cells uncovered on freshly-added routes. The
+  // audit parses the source files and asserts every `/api/*` route has a
+  // matching matrix row (admin and non-admin), so member-/manager-gated
+  // routes also fail the run when they drift.
   const audit = auditAdminRoutes(ROUTES);
   if (audit.missing.length > 0) {
     console.error(`\n  ✘ ${formatMissingMessage(audit.missing)}\n`);
     process.exit(1);
   }
-  console.log(`  Admin-route audit: ${audit.sourceRoutes.length} /api/admin/* route(s) all covered by the matrix.`);
+  console.log(`  API-route audit: ${audit.sourceRoutes.length} /api/* route(s) all covered by the matrix.`);
 
   const runId = Math.random().toString(36).slice(2, 8);
   const startedAt = new Date().toISOString();
