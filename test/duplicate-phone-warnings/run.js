@@ -758,6 +758,32 @@ async function main() {
         editOk,
       );
 
+      // Clear the duplicate number — use a unique value so there is no conflict.
+      await setNativeInputValue(page, '#tf-company-phone', '555-000-9999');
+
+      // Notice must hide and submit button must re-enable.
+      const noticeCleared = await pollPage(page, () => {
+        const n = document.getElementById('tf-company-phone-notice');
+        return n ? n.classList.contains('hidden') : true;
+      }, false, 3000);
+      record(
+        'TRADES EDIT CO-PHONE: #tf-company-phone-notice hides after duplicate number is cleared',
+        '#tf-company-phone-notice has class "hidden"',
+        noticeCleared ? 'notice hidden' : 'notice still visible',
+        noticeCleared === true,
+      );
+
+      const submitReenabled = await page.evaluate(() => {
+        const btn = document.getElementById('trades-submit-btn');
+        return btn ? !btn.disabled : null;
+      });
+      record(
+        'TRADES EDIT CO-PHONE: #trades-submit-btn re-enables after duplicate number is cleared',
+        'submit-btn not disabled',
+        submitReenabled === null ? 'no button' : `disabled=${!submitReenabled}`,
+        submitReenabled === true,
+      );
+
       await page.close();
     }
   } catch (e) {
