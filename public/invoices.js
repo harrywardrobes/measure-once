@@ -5,20 +5,18 @@ function renderInvoicesTab() {
   if (!state.qb.loadError && (!state.qb.statusKnown || state.qb.loading || (state.qb.connected && !state.qb.loaded))) {
     const skRow = (w1 = '42%', w2 = '58px', w3 = '44px') => `
       <div class="qb-row skeleton-qb-row">
-        <div class="qb-row-customer">
-          <div class="skeleton-line" style="height:13px;width:${w1}"></div>
-        </div>
+        <div class="qb-row-customer">${UI.skeletonLine(w1, 13)}</div>
         <div class="qb-row-meta">
-          <div class="skeleton-line" style="height:10px;width:${w2}"></div>
-          <div class="skeleton-line" style="height:9px;width:${w3};margin-top:3px"></div>
+          ${UI.skeletonLine(w2, 10)}
+          <div style="margin-top:3px">${UI.skeletonLine(w3, 9)}</div>
         </div>
-        <div class="skeleton-line" style="height:15px;width:54px;flex-shrink:0"></div>
+        <div style="flex-shrink:0">${UI.skeletonLine(54, 15)}</div>
       </div>`;
     el.innerHTML = `
       <div class="qb-tab-header">
         <div>
-          <div class="skeleton-line" style="height:18px;width:165px;margin-bottom:8px"></div>
-          <div class="skeleton-line" style="height:11px;width:110px"></div>
+          <div style="margin-bottom:8px">${UI.skeletonLine(165, 18)}</div>
+          ${UI.skeletonLine(110, 11)}
         </div>
       </div>
       <div class="qb-list">
@@ -154,8 +152,8 @@ function renderInvoicesTab() {
   const rows = visible.map(({ inv, matched }) => {
     const isPaid      = inv.balance != null && Number(inv.balance) === 0;
     const overdue     = !isPaid && inv.dueDate && new Date(inv.dueDate) < new Date();
-    const statusKey   = isPaid ? 'paid' : overdue ? 'overdue' : 'open';
-    const statusLabel = isPaid ? 'Paid' : overdue ? 'Overdue' : 'Open';
+    const statusVariant = isPaid ? 'success' : overdue ? 'danger' : 'neutral';
+    const statusLabel   = isPaid ? 'Paid' : overdue ? 'Overdue' : 'Open';
     return `
       <div class="qb-row" onclick="openInvoicePanel('${escHtml(inv.id)}')" title="Open invoice">
         <div class="qb-row-customer">
@@ -172,7 +170,7 @@ function renderInvoicesTab() {
           ${inv.dueDate ? `<span class="qb-row-date">Due ${fmtQBDate(inv.dueDate)}</span>` : ''}
         </div>
         <div class="flex items-center gap-2">
-          <span class="inv-status-badge inv-status-${statusKey}">${statusLabel}</span>
+          ${UI.renderPill(statusLabel, statusVariant)}
           <span class="qb-row-amount">${fmtGBP(inv.balance)}</span>
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:var(--stone-deep);flex-shrink:0">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>

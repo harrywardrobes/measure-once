@@ -286,7 +286,7 @@ async function renderEnquiryList() {
     const isActive = filter === sk;
     const cardsHtml = entries.length
       ? entries.map(e => enquiryRowHtml(e)).join('')
-      : `<p class="projects-empty-msg">Nothing here yet.</p>`;
+      : UI.renderEmptyState('Nothing here yet.', true);
     const badge = count
       ? `<span class="eq-col-header-count" style="background:rgba(${rgb},0.1);color:${hex}">${count}</span>` : '';
     return `

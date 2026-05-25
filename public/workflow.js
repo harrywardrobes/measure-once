@@ -390,7 +390,7 @@ function _renderCustomerListImpl() {
   // ── Cards ───────────────────────────────────────────────────────────────────
   let bodyHtml;
   if (!items.length) {
-    bodyHtml = `<p class="projects-empty-msg">No customers match</p>`;
+    bodyHtml = UI.renderEmptyState('No customers match', true);
   } else {
     bodyHtml = items.map(({ contact, rooms }) => {
       const name        = contactName(contact);
