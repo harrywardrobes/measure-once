@@ -165,15 +165,28 @@ interface SwatchCardProps {
   cssVar: string;
 }
 
+function resolveCssVar(cssVar: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
+}
+
 function SwatchCard({ name, hex, themePath, cssVar }: SwatchCardProps) {
+  const [resolvedColor, setResolvedColor] = React.useState<string>(hex);
+
+  React.useEffect(() => {
+    const live = resolveCssVar(cssVar);
+    setResolvedColor(live || hex);
+  }, [cssVar, hex]);
+
+  const displayHex = resolvedColor || hex;
+
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ height: 72, bgcolor: hex, borderBottom: '1px solid', borderColor: 'divider' }} />
+      <Box sx={{ height: 72, bgcolor: displayHex, borderBottom: '1px solid', borderColor: 'divider' }} />
       <Box sx={{ p: 1.25, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{name}</Typography>
           <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace', color: 'text.secondary' }}>
-            {hex.toUpperCase()}
+            {displayHex.toUpperCase()}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -261,34 +274,41 @@ function TokensTab() {
           {' '}or <CodeRef>var(--stage-&lt;key&gt;-&lt;bg|light|text&gt;)</CodeRef>.
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {Object.entries(STAGE_COLORS).map(([key, c]) => (
-            <Paper key={key} variant="outlined" sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-              <Box sx={{ minWidth: 140 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, textTransform: 'capitalize' }}>{key}</Typography>
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'ui-monospace, monospace' }}>
-                  palette.stage.{key}
-                </Typography>
-              </Box>
-              <Chip
-                size="small"
-                label="Sample pill"
-                sx={{ bgcolor: c.light, color: c.text, fontWeight: 600 }}
-              />
-              {(['bg','light','text'] as const).map((slot) => (
-                <Box key={slot} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                  <Box sx={{ width: 22, height: 22, bgcolor: c[slot], border: '1px solid', borderColor: 'divider', borderRadius: 0.5 }} />
-                  <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                    <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace' }}>
-                      .{slot} · {c[slot].toUpperCase()}
-                    </Typography>
-                    <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace', color: 'text.secondary' }}>
-                      var(--stage-{key}-{slot})
-                    </Typography>
-                  </Box>
+          {Object.entries(STAGE_COLORS).map(([key, c]) => {
+            const liveColors = (['bg','light','text'] as const).reduce((acc, slot) => {
+              const live = resolveCssVar(`--stage-${key}-${slot}`);
+              acc[slot] = live || c[slot];
+              return acc;
+            }, {} as Record<'bg'|'light'|'text', string>);
+            return (
+              <Paper key={key} variant="outlined" sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                <Box sx={{ minWidth: 140 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, textTransform: 'capitalize' }}>{key}</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'ui-monospace, monospace' }}>
+                    palette.stage.{key}
+                  </Typography>
                 </Box>
-              ))}
-            </Paper>
-          ))}
+                <Chip
+                  size="small"
+                  label="Sample pill"
+                  sx={{ bgcolor: liveColors.light, color: liveColors.text, fontWeight: 600 }}
+                />
+                {(['bg','light','text'] as const).map((slot) => (
+                  <Box key={slot} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Box sx={{ width: 22, height: 22, bgcolor: liveColors[slot], border: '1px solid', borderColor: 'divider', borderRadius: 0.5 }} />
+                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                      <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace' }}>
+                        .{slot} · {liveColors[slot].toUpperCase()}
+                      </Typography>
+                      <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace', color: 'text.secondary' }}>
+                        var(--stage-{key}-{slot})
+                      </Typography>
+                    </Box>
+                  </Box>
+                ))}
+              </Paper>
+            );
+          })}
         </Box>
       </TokenCard>
 
