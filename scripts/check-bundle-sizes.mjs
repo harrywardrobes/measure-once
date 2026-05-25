@@ -18,8 +18,10 @@
  *   Chunk pattern          Threshold   Measured at introduction
  *   ─────────────────────  ─────────   ────────────────────────
  *   main.js                  20 kB     7.6 kB
- *   vendor-* (combined)     200 kB     155.6 kB  (react + emotion + mui)
- *   vendor-mui-icons-*       15 kB     4.4 kB
+ *   vendor-react-*           58 kB     44.5 kB  (react + react-dom + scheduler)
+ *   vendor-emotion-*         14 kB     10.5 kB  (@emotion/*)
+ *   vendor-mui-*            136 kB    104.4 kB  (@mui/material + @mui/system + …)
+ *   vendor-mui-icons-*       15 kB     4.4 kB   (icons used by GlobalHeader/BottomNav)
  *
  * Lazy chunks (vendor-zxcvbn) are printed in the table but never fail the
  * build — only a warning is emitted if they grow beyond their soft limit.
@@ -48,10 +50,8 @@ const THRESHOLDS = [
     alwaysLoaded: true,
     threshold: 20 * 1024,       // 20 kB — mount runtime + shell UI
   },
+  // More-specific vendor-* prefixes must come before any shorter prefix.
   {
-    // Combined vendor bundle: react + react-dom + scheduler + @emotion/* + @mui/*
-    // (manualChunks currently folds these into one file; adjust prefix if they
-    //  are ever split back into separate chunks)
     prefix: 'vendor-mui-icons',
     label: 'vendor-mui-icons',
     alwaysLoaded: true,
@@ -64,11 +64,22 @@ const THRESHOLDS = [
     warnAt: 450 * 1024,         // 450 kB — warn if zxcvbn swells unexpectedly
   },
   {
-    // Catch-all for any other vendor-* chunk (the current combined bundle)
-    prefix: 'vendor-',
-    label: 'vendor (combined)',
+    prefix: 'vendor-react',
+    label: 'vendor-react',
     alwaysLoaded: true,
-    threshold: 200 * 1024,      // 200 kB — react + emotion + mui combined
+    threshold: 58 * 1024,       // 58 kB — react + react-dom + scheduler
+  },
+  {
+    prefix: 'vendor-emotion',
+    label: 'vendor-emotion',
+    alwaysLoaded: true,
+    threshold: 14 * 1024,       // 14 kB — @emotion/*
+  },
+  {
+    prefix: 'vendor-mui',
+    label: 'vendor-mui',
+    alwaysLoaded: true,
+    threshold: 136 * 1024,      // 136 kB — @mui/material + @mui/system + …
   },
 ];
 

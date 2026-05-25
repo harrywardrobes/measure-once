@@ -22,8 +22,9 @@ import { resolve } from 'path';
  *
  * Always-loaded chunks (every page):
  *   main.js            mount detection + shell UI
- *   vendor-*           react + react-dom + scheduler + @emotion/* + @mui/*
- *                      (Rollup currently folds these into one combined chunk)
+ *   vendor-react-*     react + react-dom + scheduler
+ *   vendor-emotion-*   @emotion/*
+ *   vendor-mui-*       @mui/material + @mui/system + … (excluding icons)
  *   vendor-mui-icons-* icons used by GlobalHeader and BottomNav
  *
  * Real gzip sizes are measured automatically after every build by
@@ -31,11 +32,11 @@ import { resolve } from 'path';
  * and exits non-zero on regressions. Run `npm run bundle-sizes` to see the
  * latest table without rebuilding.
  *
- * Splitting vendor code into named chunks (vendor-* / vendor-mui-icons /
- * vendor-zxcvbn) gives tighter cache boundaries so a MUI patch release only
- * busts the vendor blob rather than main.js or page chunks. Dependency order
- * (react → emotion → mui) is acyclic so Rollup does not emit circular-chunk
- * warnings.
+ * Splitting vendor code into named chunks (vendor-react / vendor-emotion /
+ * vendor-mui / vendor-mui-icons / vendor-zxcvbn) gives tighter cache
+ * boundaries so a MUI patch release only busts vendor-mui rather than the
+ * entire vendor blob. Dependency order (react → emotion → mui) is acyclic
+ * so Rollup does not emit circular-chunk warnings.
  *
  * Lazy chunks (downloaded only when needed):
  *   vendor-zxcvbn     zxcvbn password-strength library. Kept in its own
