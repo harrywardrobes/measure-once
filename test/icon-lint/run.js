@@ -6,14 +6,20 @@
 //  Pass 1 — used-but-not-imported:
 //    Every identifier ending with `Icon` that is used as a JSX element
 //    (<FooIcon …/>) or as a bare value (e.g. in an object literal or passed
-//    as a prop value) in any React component under `src/react/` must be
-//    actually imported from `@mui/icons-material` in that same file.
+//    as a prop value) in any React component or TypeScript registry file under
+//    `src/react/` must be actually imported from `@mui/icons-material` in that
+//    same file.
 //
 //  Pass 2 — imported-but-never-used:
 //    Every identifier imported from `@mui/icons-material` must appear at
 //    least once as a JSX element or bare value reference in the file body
 //    (outside the import declaration itself). Dead imports are flagged as
 //    dead code / copy-paste leftovers.
+//
+// Both `.tsx` and `.ts` files are scanned (`.d.ts` declaration files and
+// Storybook files are excluded). In plain `.ts` files JSX tags will never
+// appear, but bare-value usages (icon constructors passed in config/registry
+// objects) are still detected and validated.
 //
 // A misspelled or missing import only surfaces during the TypeScript build;
 // this check makes the rule explicit and machine-enforced in CI so the
@@ -259,13 +265,18 @@ function extractIconUsages(src) {
 
 // ── scan ─────────────────────────────────────────────────────────────────────
 
+// Include both .tsx and .ts files; exclude .d.ts declaration files and
+// Storybook story files (.stories.tsx / .stories.ts).
 const files = walkSync(
   SRC_ROOT,
-  (name) => name.endsWith('.tsx') && !name.endsWith('.stories.tsx'),
+  (name) =>
+    (name.endsWith('.tsx') || (name.endsWith('.ts') && !name.endsWith('.d.ts'))) &&
+    !name.endsWith('.stories.tsx') &&
+    !name.endsWith('.stories.ts'),
 );
 
 if (files.length === 0) {
-  console.error('[icon-lint] No .tsx files found under src/react/');
+  console.error('[icon-lint] No .tsx/.ts files found under src/react/');
   process.exit(1);
 }
 
@@ -317,7 +328,7 @@ const totalUnused        = unusedImportFiles.reduce((n, r) => n + r.unusedImport
 const lines = [
   '# icon-lint',
   '',
-  `Scanned ${totalFiles} React component file${totalFiles === 1 ? '' : 's'}.`,
+  `Scanned ${totalFiles} source file${totalFiles === 1 ? '' : 's'} (.tsx and .ts).`,
   `Found ${totalUsages} icon usage${totalUsages === 1 ? '' : 's'} across all files.`,
   '',
 ];
