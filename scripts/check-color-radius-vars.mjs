@@ -2,9 +2,9 @@
 /**
  * check-color-radius-vars.mjs
  *
- * Verifies that every brand-colour and radius CSS custom property in
- * public/style.css matches the corresponding value exported from
- * src/react/theme.ts (BRAND_COLORS and RADIUS).
+ * Verifies that every brand-colour, stage-colour, and radius CSS custom
+ * property in public/style.css matches the corresponding value exported from
+ * src/react/theme.ts (BRAND_COLORS, STAGE_COLORS, and RADIUS).
  *
  * Usage:
  *   node scripts/check-color-radius-vars.mjs    # exits 1 on any mismatch
@@ -78,6 +78,51 @@ function parseBrandColors(ts) {
   return colors;
 }
 
+// ── Parse STAGE_COLORS object from theme.ts ──────────────────────────────────
+//
+// Looks for the block:
+//   export const STAGE_COLORS: Record<string, StageColor> = {
+//     sales: { bg: '#8B2BFF', light: '#F3EAFF', text: '#6A12D9' },
+//     ...
+//   };
+//
+// Each entry produces three CSS vars:
+//   --stage-<key>-bg, --stage-<key>-light, --stage-<key>-text
+
+function parseStageColors(ts) {
+  // Locate the STAGE_COLORS declaration, then extract everything between its
+  // outer braces by counting nesting depth (needed because each value is
+  // itself a {}-delimited object and a simple [^}]+ would stop too early).
+  const declMatch = ts.match(/export\s+const\s+STAGE_COLORS[^=]*=\s*\{/);
+  if (!declMatch) return {};
+
+  const start = declMatch.index + declMatch[0].length;
+  let depth = 1;
+  let i = start;
+  while (i < ts.length && depth > 0) {
+    if (ts[i] === '{') depth++;
+    else if (ts[i] === '}') depth--;
+    i++;
+  }
+  const block = ts.slice(start, i - 1);
+
+  const stages = {};
+  // Match entries like: sales: { bg: '#8B2BFF', light: '#F3EAFF', text: '#6A12D9' },
+  const entryRe = /(\w+)\s*:\s*\{([^}]+)\}/g;
+  let entry;
+  while ((entry = entryRe.exec(block)) !== null) {
+    const key   = entry[1];
+    const props = entry[2];
+    const bgMatch    = props.match(/bg\s*:\s*'(#[0-9a-fA-F]{3,8})'/);
+    const lightMatch = props.match(/light\s*:\s*'(#[0-9a-fA-F]{3,8})'/);
+    const textMatch  = props.match(/text\s*:\s*'(#[0-9a-fA-F]{3,8})'/);
+    if (bgMatch && lightMatch && textMatch) {
+      stages[key] = { bg: bgMatch[1], light: lightMatch[1], text: textMatch[1] };
+    }
+  }
+  return stages;
+}
+
 // ── Parse RADIUS object from theme.ts ────────────────────────────────────────
 //
 // Looks for the block:
@@ -109,6 +154,7 @@ const ts  = readFileSync(THEME_PATH, 'utf8');
 
 const cssVars     = parseCssRootVars(css);
 const brandColors = parseBrandColors(ts);
+const stageColors = parseStageColors(ts);
 const radius      = parseRadius(ts);
 
 const mismatches = [];
@@ -139,6 +185,35 @@ for (const [tsKey, tsValue] of Object.entries(brandColors)) {
     );
   } else {
     checked++;
+  }
+}
+
+// ── Check STAGE_COLORS ───────────────────────────────────────────────────────
+
+console.log('Checking STAGE_COLORS…');
+
+for (const [stageName, tsColor] of Object.entries(stageColors)) {
+  for (const prop of ['bg', 'light', 'text']) {
+    const cssVarName = `stage-${stageName}-${prop}`;   // e.g. "stage-sales-bg"
+    const tsValue    = tsColor[prop];
+    const cssValue   = cssVars[cssVarName];
+
+    if (cssValue === undefined) {
+      mismatches.push(
+        `  --${cssVarName}: MISSING in style.css  (theme.ts STAGE_COLORS.${stageName}.${prop} = ${tsValue})`
+      );
+      continue;
+    }
+
+    if (cssValue.toLowerCase() !== tsValue.toLowerCase()) {
+      mismatches.push(
+        `  --${cssVarName} (STAGE_COLORS.${stageName}.${prop}):\n` +
+        `      style.css  = ${cssValue}\n` +
+        `      theme.ts   = ${tsValue}`
+      );
+    } else {
+      checked++;
+    }
   }
 }
 
