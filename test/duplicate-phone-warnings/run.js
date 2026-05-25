@@ -532,6 +532,39 @@ async function main() {
         !!(submitState && submitState.disabled === true && /phone/i.test(submitState.title)),
       );
 
+      // Clear the duplicate number — use a unique value so there is no conflict.
+      await setNativeInputValue(page, '#tf-cphone-0', '555-000-7777');
+
+      // Notice must hide and submit button must re-enable.
+      const noticeClearedAdd = await pollPage(page, () => {
+        const n = document.getElementById('tf-cphone-notice-0');
+        return n ? n.classList.contains('hidden') : true;
+      }, false, 3000);
+      record(
+        'TRADES: #tf-cphone-notice-0 hides after duplicate contact-phone number is cleared',
+        '#tf-cphone-notice-0 has class "hidden"',
+        noticeClearedAdd ? 'notice hidden' : 'notice still visible',
+        noticeClearedAdd === true,
+      );
+
+      const submitReenabledAdd = await page.evaluate(() => {
+        const btn = document.getElementById('trades-submit-btn');
+        return btn ? !btn.disabled : null;
+      });
+      record(
+        'TRADES: #trades-submit-btn re-enables after duplicate contact-phone number is cleared',
+        'submit-btn not disabled',
+        submitReenabledAdd === null ? 'no button' : `disabled=${!submitReenabledAdd}`,
+        submitReenabledAdd === true,
+      );
+
+      // Restore the duplicate so the click-link test below still works.
+      await setNativeInputValue(page, '#tf-cphone-0', TRADES_DUP_PHONE);
+      await pollPage(page, () => {
+        const n = document.getElementById('tf-cphone-notice-0');
+        return n && !n.classList.contains('hidden');
+      }, false, 3000);
+
       // Click the link → modal should re-open in Edit mode for company A.
       await page.evaluate(() => {
         const link = document.querySelector('#tf-cphone-notice-0 .trades-phone-notice-link');
