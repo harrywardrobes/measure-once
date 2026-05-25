@@ -338,12 +338,6 @@ async function bootstrap() {
 
   const priv = user.privilege_level || 'member';
 
-  // The client-side route guard for restricted paths is handled by React's
-  // usePrivilegeSync() hook (src/react/hooks/usePrivilegeSync.ts), called
-  // from GlobalHeader which mounts on every page via chrome.js.
-  // The server already enforces restricted-page access via
-  // requireManagerOrAdminPage, so this is belt-and-suspenders only.
-
   if (priv === 'viewer') {
     showViewerBanner();
   }
