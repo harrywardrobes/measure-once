@@ -105,6 +105,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/contacts/0/workflow',       level: 'member',  body: {}, needsHubspot: true },
   { method: 'POST',   path: '/api/deals/0/workflow',          level: 'member',  body: {}, needsHubspot: true },
   { method: 'POST',   path: '/api/contacts/0/tasks',          level: 'member',  body: {}, needsHubspot: true },
+  { method: 'POST',   path: '/api/contacts/urgency',          level: 'auth',    body: {}, needsHubspot: true },
   { method: 'PATCH',  path: '/api/tasks/0',                   level: 'member',  body: {}, needsHubspot: true },
   { method: 'DELETE', path: '/api/tasks/0',                   level: 'member',  needsHubspot: true },
   { method: 'POST',   path: '/api/emails/send',               level: 'member',  body: {}, needsGoogle: true },
