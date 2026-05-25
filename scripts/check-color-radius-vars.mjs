@@ -3,7 +3,7 @@
  * check-color-radius-vars.mjs
  *
  * Verifies that every brand-colour, stage-colour, and radius CSS custom
- * property in public/style.css matches the corresponding value exported from
+ * property in public/app-styles.css matches the corresponding value exported from
  * src/react/theme.ts (BRAND_COLORS, STAGE_COLORS, and RADIUS).
  *
  * Usage:
@@ -22,7 +22,7 @@ const ROOT = resolve(__dirname, '..');
 
 // ── File paths ────────────────────────────────────────────────────────────────
 
-const CSS_PATH   = resolve(ROOT, 'public/style.css');
+const CSS_PATH   = resolve(ROOT, 'public/app-styles.css');
 const THEME_PATH = resolve(ROOT, 'src/react/theme.ts');
 
 // ── camelCase → CSS var name conversion ──────────────────────────────────────
@@ -160,7 +160,7 @@ const radius      = parseRadius(ts);
 const mismatches = [];
 let checked = 0;
 
-console.log('check-color-radius-vars: comparing public/style.css ↔ src/react/theme.ts\n');
+console.log('check-color-radius-vars: comparing public/app-styles.css ↔ src/react/theme.ts\n');
 
 // ── Check BRAND_COLORS ───────────────────────────────────────────────────────
 
@@ -172,7 +172,7 @@ for (const [tsKey, tsValue] of Object.entries(brandColors)) {
 
   if (cssValue === undefined) {
     mismatches.push(
-      `  --${cssVarName}: MISSING in style.css  (theme.ts BRAND_COLORS.${tsKey} = ${tsValue})`
+      `  --${cssVarName}: MISSING in app-styles.css  (theme.ts BRAND_COLORS.${tsKey} = ${tsValue})`
     );
     continue;
   }
@@ -180,8 +180,8 @@ for (const [tsKey, tsValue] of Object.entries(brandColors)) {
   if (cssValue.toLowerCase() !== tsValue.toLowerCase()) {
     mismatches.push(
       `  --${cssVarName} (BRAND_COLORS.${tsKey}):\n` +
-      `      style.css  = ${cssValue}\n` +
-      `      theme.ts   = ${tsValue}`
+      `      app-styles.css  = ${cssValue}\n` +
+      `      theme.ts        = ${tsValue}`
     );
   } else {
     checked++;
@@ -200,7 +200,7 @@ for (const [stageName, tsColor] of Object.entries(stageColors)) {
 
     if (cssValue === undefined) {
       mismatches.push(
-        `  --${cssVarName}: MISSING in style.css  (theme.ts STAGE_COLORS.${stageName}.${prop} = ${tsValue})`
+        `  --${cssVarName}: MISSING in app-styles.css  (theme.ts STAGE_COLORS.${stageName}.${prop} = ${tsValue})`
       );
       continue;
     }
@@ -208,12 +208,33 @@ for (const [stageName, tsColor] of Object.entries(stageColors)) {
     if (cssValue.toLowerCase() !== tsValue.toLowerCase()) {
       mismatches.push(
         `  --${cssVarName} (STAGE_COLORS.${stageName}.${prop}):\n` +
-        `      style.css  = ${cssValue}\n` +
-        `      theme.ts   = ${tsValue}`
+        `      app-styles.css  = ${cssValue}\n` +
+        `      theme.ts        = ${tsValue}`
       );
     } else {
       checked++;
     }
+  }
+}
+
+// ── Reverse check: CSS stage vars not in STAGE_COLORS ────────────────────────
+//
+// Catches the case where someone adds a --stage-<name>-bg/light/text block to
+// app-styles.css without updating STAGE_COLORS in theme.ts.
+
+console.log('Checking for stage CSS vars orphaned from STAGE_COLORS…');
+
+const stageVarRe = /^stage-([a-z]+)-(bg|light|text)$/;
+
+for (const cssVarName of Object.keys(cssVars)) {
+  const m = stageVarRe.exec(cssVarName);
+  if (!m) continue;
+
+  const stageName = m[1];
+  if (!stageColors[stageName]) {
+    mismatches.push(
+      `  --${cssVarName}: found in app-styles.css but stage "${stageName}" has no entry in STAGE_COLORS (theme.ts)`
+    );
   }
 }
 
@@ -228,7 +249,7 @@ for (const [tsKey, tsValue] of Object.entries(radius)) {
 
   if (cssValue === undefined) {
     mismatches.push(
-      `  --${cssVarName}: MISSING in style.css  (theme.ts RADIUS.${tsKey} = ${tsValue})`
+      `  --${cssVarName}: MISSING in app-styles.css  (theme.ts RADIUS.${tsKey} = ${tsValue})`
     );
     continue;
   }
@@ -236,8 +257,8 @@ for (const [tsKey, tsValue] of Object.entries(radius)) {
   if (cssValue !== expectedCss) {
     mismatches.push(
       `  --${cssVarName} (RADIUS.${tsKey}):\n` +
-      `      style.css  = ${cssValue}\n` +
-      `      theme.ts   = ${expectedCss}`
+      `      app-styles.css  = ${cssValue}\n` +
+      `      theme.ts        = ${expectedCss}`
     );
   } else {
     checked++;
@@ -255,7 +276,7 @@ if (mismatches.length === 0) {
   console.error(`✗ ${mismatches.length} mismatch(es) found:\n`);
   mismatches.forEach(m => console.error(m));
   console.error(
-    '\nFix: update public/style.css :root to match src/react/theme.ts (or vice-versa).'
+    '\nFix: update public/app-styles.css :root to match src/react/theme.ts (or vice-versa).'
   );
   process.exit(1);
 }
