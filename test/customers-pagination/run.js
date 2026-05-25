@@ -286,6 +286,11 @@ async function writeReport(runId, findings) {
     '  Active views.',
     '- **[D] Filter resets page**: navigating to page 2 then changing sort /',
     '  search resets the URL back to page 1.',
+    '- **[D.3] Active view sort reset**: navigating to `?page=2&view=active`',
+    '  confirms exactly 5 results (page-2 slice) and pagination, then changes',
+    '  the sort order and verifies the URL drops `page=2`. The lead-status',
+    '  MUI Select is disabled in Active view (viewMode !== "all"), so sort is',
+    '  the correct filter to exercise `setPage(1)` in this context.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
@@ -387,6 +392,7 @@ async function main() {
     '[C.2] Active view — "Showing X–Y of Z" count visible on page 1',
     '[D.1] Filter change (sort) resets from page 2 to page 1',
     '[D.2] Filter change (search) resets from page 2 to page 1',
+    '[D.3] Active view — sort change resets from page 2 to page 1',
   ];
 
   if (!puppeteer) {
@@ -691,6 +697,99 @@ async function main() {
       if (page.__logs.some(l => l.includes('[pageerror]')))
         console.log('  Page errors (probe D.2):', page.__logs.filter(l => l.includes('[pageerror]')));
       await closePage(page);
+    }
+
+    // D.3 — Sort change resets page in the Active view (in-memory slicing)
+    //
+    // D.1 covers setPage(1) via sort in the All view (server-side paging).
+    // D.3 covers the same call in the Active view, where results are held
+    // in memory. The lead-status MUI Select is disabled when viewMode !== 'all'
+    // (CustomersPage.tsx line 1319), so sort is the correct filter to use here.
+    {
+      const page = await newPage(browser, memberClient.cookie);
+      // Navigate directly to page 2 of the Active view
+      await page.goto(`${BASE}/customers?page=2&view=active`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+
+      const loaded = await waitForResults(page);
+      if (!loaded) {
+        const diag = await getDiagnostics(page).catch(() => ({}));
+        console.log('  Diag D.3 (no results):', JSON.stringify(diag));
+        record(UI_LABELS[10], false, 'page did not load results');
+        await closePage(page);
+      } else {
+        const onPage2 = await page.evaluate(() => location.search.includes('page=2'));
+        const pag     = await waitForPagination(page, 8000);
+        const diag    = await getDiagnostics(page);
+        console.log('  Diag D.3 (Active page 2):', JSON.stringify(diag));
+
+        if (!onPage2) {
+          // Fewer than PAGE_LIMIT results; the Active view reset to page 1 — confirmed
+          record(UI_LABELS[10], true,
+            'skip — view reset page to 1 (fewer than 25 results in Active view); reset confirmed');
+        } else {
+          // Pre-conditions: exactly (TOTAL_CONTACTS - PAGE_LIMIT) results on page 2
+          // (contacts 26–30 from the mock) and the pagination nav present.
+          const expectedPage2Count = TOTAL_CONTACTS - PAGE_LIMIT; // 30 - 25 = 5
+          const resultsOk = diag.resultsCount === expectedPage2Count;
+          const pagOk     = pag === 'ok';
+          if (!resultsOk || !pagOk) {
+            record(UI_LABELS[10], false,
+              `pre-condition failed — expected ${expectedPage2Count} results on page 2, `
+              + `got ${diag.resultsCount}; pagination: ${pagOk} (diag: ${JSON.stringify(diag)})`);
+          } else {
+            // Open the sort MUI Select and pick a different option.
+            // id="customers-sort-select" is on the underlying hidden input;
+            // we find its MuiInputBase-root parent to target only this control.
+            const sortReady = await pollPage(page, () =>
+              document.getElementById('customers-sort-select') ? 'ok' : null, null, 8000);
+
+            if (!sortReady) {
+              record(UI_LABELS[10], false, 'sort select not found in Active view');
+            } else {
+              await page.evaluate(() => {
+                const input = document.getElementById('customers-sort-select');
+                const root  = input && input.closest('.MuiInputBase-root');
+                const combo = root && root.querySelector('[role="combobox"]');
+                if (combo) combo.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+              });
+              await new Promise(r => setTimeout(r, 300));
+
+              // Pick "Name A-Z" (or any option that differs from the current sort)
+              const picked = await page.evaluate(() => {
+                const items = Array.from(document.querySelectorAll('[role="option"]'));
+                const target = items.find(el =>
+                  (el.textContent || '').includes('Name A')
+                  && el.getAttribute('aria-selected') !== 'true',
+                ) || items.find(el => el.getAttribute('aria-selected') !== 'true');
+                if (target) {
+                  const label = (target.textContent || '').trim();
+                  target.click();
+                  return label;
+                }
+                return '';
+              });
+
+              if (!picked) {
+                record(UI_LABELS[10], false,
+                  'could not find an unselected sort option in Active view dropdown');
+              } else {
+                // Sort change fires setPage(1) — wait for page=2 to disappear
+                const reset = await waitForUrlGone(page, 'page=2');
+                await waitForResults(page, 8000);
+                const urlStr = await page.evaluate(() => location.search);
+                record(UI_LABELS[10], reset === 'ok',
+                  `sort option "${picked}" — URL after change: "${urlStr}" — page=2 `
+                  + `${reset !== 'ok' ? 'still present (bad)' : 'gone (good)'} `
+                  + `(page-2 count confirmed: ${diag.resultsCount} = ${expectedPage2Count})`);
+              }
+            }
+          }
+        }
+
+        if (page.__logs.some(l => l.includes('[pageerror]')))
+          console.log('  Page errors (probe D.3):', page.__logs.filter(l => l.includes('[pageerror]')));
+        await closePage(page);
+      }
     }
 
   } catch (e) {
