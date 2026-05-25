@@ -104,7 +104,19 @@ function extractIconImports(src) {
 function stripCommentsAndStrings(src) {
   return src.replace(
     /`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
-    (match) => match.replace(/[^\n]/g, ' '),
+    (match) => {
+      if (match[0] === '`') {
+        // Template literal: blank out the static string parts but preserve
+        // ${...} interpolation expressions so that icon identifiers used
+        // inside them (e.g. `${FooIcon}`) are still found by the usage scan.
+        // Single-level brace matching is sufficient for icon references.
+        return match.replace(
+          /(\$\{[^}]*\})|[^\n]/g,
+          (ch, interp) => (interp !== undefined ? interp : ' '),
+        );
+      }
+      return match.replace(/[^\n]/g, ' ');
+    },
   );
 }
 
@@ -292,6 +304,65 @@ function extractIconUsages(src) {
     assert(
       usages.every((u) => u.identifier !== 'WarningIcon'),
       'WarningIcon in a /** JSDoc block comment */ must not be counted as a real usage',
+    );
+  }
+
+  // 8. Identifier used inside a template-literal interpolation ${...} must be detected.
+  {
+    const src = [
+      "import FolderIcon from '@mui/icons-material/Folder';",
+      'const key = `prefix-${FolderIcon}-suffix`;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.some((u) => u.identifier === 'FolderIcon'),
+      'FolderIcon inside a template literal ${...} interpolation must be detected as a usage',
+    );
+  }
+
+  // 9. Identifier in the static (non-interpolation) part of a template literal must NOT be detected.
+  {
+    const src = [
+      "import StarIcon from '@mui/icons-material/Star';",
+      'const label = `StarIcon`;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.every((u) => u.identifier !== 'StarIcon'),
+      'StarIcon in a template literal static string part must not be counted as a real usage',
+    );
+  }
+
+  // 10. Identifier in a TypeScript `typeof` type annotation must be detected.
+  //     e.g. `type MyIcon = typeof HomeIcon;`
+  //     The space before the identifier is matched by the \s branch of valueRe.
+  {
+    const src = [
+      "import HomeIcon from '@mui/icons-material/Home';",
+      'type MyIcon = typeof HomeIcon;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.some((u) => u.identifier === 'HomeIcon'),
+      'HomeIcon in a `typeof HomeIcon` type annotation must be detected as a usage',
+    );
+  }
+
+  // 11. Identifier as a generic type argument must be detected.
+  //     e.g. `React.ComponentType<CheckIcon>` — caught by the jsxRe (<CheckIcon).
+  {
+    const src = [
+      "import CheckIcon from '@mui/icons-material/Check';",
+      'function render(icon: React.ComponentType<CheckIcon>) { return null; }',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.some((u) => u.identifier === 'CheckIcon'),
+      'CheckIcon as a generic type argument (<CheckIcon>) must be detected as a usage',
     );
   }
 })();
