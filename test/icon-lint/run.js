@@ -631,6 +631,25 @@ function extractIconUsages(src) {
     );
   }
 
+  // 15. An identifier appearing ONLY in the static (non-interpolated) portion of
+  //     a template literal nested inside a ${} interpolation must NOT be detected.
+  //     e.g. `outer ${ `static ZoomIcon` } more`
+  //     The inner template `static ZoomIcon` has no ${} of its own, so ZoomIcon
+  //     lives entirely in blanked-out static content and must be invisible to the
+  //     usage scanner.
+  {
+    const src = [
+      "import ZoomIcon from '@mui/icons-material/Zoom';",
+      'const x = `outer ${ `static ZoomIcon` } more`;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.every((u) => u.identifier !== 'ZoomIcon'),
+      'ZoomIcon in the static part of a nested template literal inside ${} must not be counted as a real usage',
+    );
+  }
+
   // 16. An apostrophe in JSX text content (e.g. "You're", "MUI's") must NOT
   //     cause an icon identifier on the SAME LINE to be swallowed into the
   //     "string body" and thus missed.  This guards against the bug where the
