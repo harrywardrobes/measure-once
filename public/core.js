@@ -178,20 +178,24 @@ const POST       = (path, b) => api('POST',   path, b);
 const PATCH_REQ  = (path, b) => api('PATCH',  path, b);
 const DELETE_REQ = path      => api('DELETE', path);
 
+// Privilege helpers — read from state.user.privilege_level (set by bootstrap /
+// checkAuthStatus) so privilege is derived from a single authoritative source
+// rather than body-class stamps.  Falls back to 'member' before bootstrap
+// completes, which is safe because all callers run after await bootstrap().
 function isViewerOnly() {
-  return document.body.classList.contains('viewer-mode');
+  return (state.user?.privilege_level ?? 'member') === 'viewer';
 }
 
 function isAdminMode() {
-  return document.body.classList.contains('admin-mode');
+  return (state.user?.privilege_level ?? 'member') === 'admin';
 }
 
 // True only for manager+ users — controls who may change pipeline state
 // (customer stage, substage / completed tasks, and HubSpot lead status).
 // Members and viewers are treated identically for pipeline editing.
 function canEditPipeline() {
-  return document.body.classList.contains('manager-mode')
-      || document.body.classList.contains('admin-mode');
+  const priv = state.user?.privilege_level ?? 'member';
+  return priv === 'manager' || priv === 'admin';
 }
 
 function showViewerBanner() {
