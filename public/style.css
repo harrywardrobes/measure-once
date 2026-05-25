@@ -3367,6 +3367,46 @@ body.showing-workflow .sales-layout #workflow-panel {
 
 /* ── Sales board: 3-column layout ────────────────────────────────────────── */
 
+.eq-ls-filter-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 10px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--stone);
+  flex-shrink: 0;
+}
+
+/* Warning banner shown on the room-assignments view when stale data is served */
+.room-stale-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  font-size: 0.8rem;
+  color: #78350f;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+}
+.room-stale-banner span {
+  flex: 1;
+}
+.room-stale-banner-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  color: #92400e;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.room-stale-banner-dismiss:hover {
+  color: #78350f;
+}
+
+
 /* Subtle stale-counts dot shown when X-Cache-Status: stale is received */
 .ls-stale-hint {
   display: inline-flex;

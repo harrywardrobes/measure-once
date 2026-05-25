@@ -255,7 +255,17 @@ function setContactsViewMode(mode) {
 }
 
 async function _loadWorkflowStagesImpl() {
-  const data = await GET('/api/localdata/all').catch(() => ({}));
+  const r = await fetch('/api/localdata/all', { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+  if (r.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err = new Error(data?.error || `HTTP ${r.status}`);
+    if (data?.code) err.code = data.code;
+    throw err;
+  }
+  const cacheStatus = r.headers.get('X-Cache-Status');
+  if (cacheStatus === 'fresh') state.roomAssignmentsStale = false;
+  else if (cacheStatus === 'stale') state.roomAssignmentsStale = true;
   for (const [contactId, rooms] of Object.entries(data || {})) {
     state.contactStageCache[contactId] = rooms;
   }

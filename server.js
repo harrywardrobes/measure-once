@@ -643,6 +643,7 @@ app.get('/api/localdata/all', isAuthenticated, async (req, res) => {
 
   try {
     const { contacts } = await getSharedContactsCache();
+    res.set('X-Cache-Status', 'fresh');
     res.json(buildRoomMap(contacts));
   } catch {
     // getSharedContactsCache threw because either (a) no snapshot exists yet,
@@ -664,6 +665,7 @@ app.get('/api/localdata/all', isAuthenticated, async (req, res) => {
     //   first fetch failed) we return an empty object so the UI renders
     //   cleanly rather than 502-ing.
     if (_allContactsLastGood) {
+      res.set('X-Cache-Status', 'stale');
       return res.json(buildRoomMap(_allContactsLastGood.contacts));
     }
     res.json({});

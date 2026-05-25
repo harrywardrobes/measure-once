@@ -177,7 +177,16 @@ async function _renderProjectsViewImpl() {
     bodyHtml = rows.map(({ contact, rooms }) => customerCardHtml(contact, rooms, canAssign)).join('');
   }
 
+  const staleBanner = state.roomAssignmentsStale
+    ? `<div class="room-stale-banner" role="alert" id="room-stale-banner">
+        <span>Room data may be out of date \u2014 showing last cached assignments</span>
+        <button class="room-stale-banner-dismiss" aria-label="Dismiss"
+          onclick="document.getElementById('room-stale-banner')?.remove()">&#215;</button>
+      </div>`
+    : '';
+
   view.innerHTML = `
+    ${staleBanner}
     <div class="project-stage-tabs-bar">
       ${stageTabs}
     </div>
