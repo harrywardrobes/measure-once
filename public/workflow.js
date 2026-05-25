@@ -64,7 +64,7 @@ function _ensureNewCustomerPanel() {
 }
 
 function openNewCustomerModal() {
-  if (window.__moHeaderUser?.privilege_level === 'viewer') return;
+  if (isViewerPrivilege()) return;
   const panel   = _ensureNewCustomerPanel();
   const overlay = document.getElementById('new-customer-overlay');
   const form    = document.getElementById('new-customer-form');
@@ -440,7 +440,7 @@ function _renderCustomerListImpl() {
           'OPEN': 'lsb-new', 'CONNECTED': 'lsb-connected',
           'ATTEMPTED_TO_CONTACT': '', 'UNQUALIFIED': 'lsb-unqualified', 'BAD_TIMING': 'lsb-bad-timing',
         };
-        const editable = (() => { const p = window.__moHeaderUser?.privilege_level ?? 'member'; return p === 'manager' || p === 'admin'; })();
+        const editable = canEditPrivilege();
         const subAffordance = renderSubstatusAffordance(contact);
         let pillHtml;
         if (!raw) {
@@ -797,7 +797,7 @@ function closeCardPicker() {
 
 async function openLeadStatusPicker(event, contactId, { showSubstatuses = false } = {}) {
   event.stopPropagation();
-  { const _p = window.__moHeaderUser?.privilege_level ?? 'member'; if (_p !== 'manager' && _p !== 'admin') return; }
+  { if (!canEditPrivilege()) return; }
   closeCardPicker();
   const rect = event.currentTarget.getBoundingClientRect();
   const popup = document.createElement('div');
@@ -970,7 +970,7 @@ async function openCardStagePicker(_event, _contactId, _roomIdx) {
 
 async function openCardSubstagePicker(event, contactId, roomIdx) {
   event.stopPropagation();
-  { const _p = window.__moHeaderUser?.privilege_level ?? 'member'; if (_p !== 'manager' && _p !== 'admin') return; }
+  { if (!canEditPrivilege()) return; }
   closeCardPicker();
 
   const cached = state.contactStageCache?.[contactId] || [];
@@ -1146,7 +1146,7 @@ function _contactEditInlineHtml() {
 }
 
 async function openContactEdit() {
-  if (window.__moHeaderUser?.privilege_level === 'viewer') return;
+  if (isViewerPrivilege()) return;
   const contactId = state.selectedContactId;
   if (!contactId) return;
 
@@ -1535,7 +1535,7 @@ function renderSubstatusAffordance(contact) {
   const subs = _substatusesForStatus(statusKey);
   if (!subs.length) return '';
   const cid = contact?.id || '';
-  const editable = (() => { const p = window.__moHeaderUser?.privilege_level ?? 'member'; return p === 'manager' || p === 'admin'; })();
+  const editable = canEditPrivilege();
   const current = _currentSubstatusFor(contact);
   if (current) {
     const label = escHtml(current.label);
@@ -1548,7 +1548,7 @@ function renderSubstatusAffordance(contact) {
 
 async function openLeadSubstatusPicker(event, contactId) {
   event.stopPropagation();
-  { const _p = window.__moHeaderUser?.privilege_level ?? 'member'; if (_p !== 'manager' && _p !== 'admin') return; }
+  { if (!canEditPrivilege()) return; }
   closeCardPicker();
 
   let contact = state.contacts.find(c => c.id === contactId);

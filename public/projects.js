@@ -46,7 +46,7 @@ async function _renderProjectsViewImpl() {
   const myRooms   = filter === '__mine__';
   const stageKey  = myRooms ? '' : filter;
   const currentId = state.user?.id;
-  const privLevel = state.user?.privilege_level || 'member';
+  const privLevel = getPrivilegeLevel();
   // Fitter assignment is manager/admin only. `state.user.isAdmin` is no longer
   // OR'd in because it now mirrors privilege_level === 'admin' anyway and
   // mixing it back in would resurrect the old bypass for ADMIN_EMAILS.

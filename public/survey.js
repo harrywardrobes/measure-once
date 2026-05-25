@@ -157,7 +157,7 @@ function _svCardHtml(entry) {
     ? `<span class="eq-card-postcode">${postcode}</span>` : '';
 
   // Filled stage pill (clickable for managers when there's a real room)
-  const _editable = (() => { const p = window.__moHeaderUser?.privilege_level ?? 'member'; return p === 'manager' || p === 'admin'; })();
+  const _editable = canEditPrivilege();
   const hasRoom   = Number.isInteger(entry.roomIdx);
   // Stage pill is non-interactive — stage is derived from lead status /
   // sub-status, never set manually.

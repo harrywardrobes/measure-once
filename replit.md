@@ -26,6 +26,15 @@ Project management dashboard (HubSpot CRM integration).
   source of design tokens; `public/style.css` will eventually be retired.
 - Icons: named imports from `@mui/icons-material`, no inline `<svg>` in React.
 
+## Privilege checks
+- **React components:** use `usePrivilege()` from `src/react/hooks/usePrivilege.ts`.
+  Returns `{ privilegeLevel, isAdmin, isManager, isViewer }`.
+- **Vanilla-JS files:** call `getPrivilegeLevel()` (defined in `public/core.js`).
+  It reads `window.__moHeaderUser || state.user` and defaults to `'member'`.
+- **Deprecated:** reading `window.__moHeaderUser?.privilege_level` or
+  `state.user?.privilege_level` directly is deprecated. Route all privilege
+  checks through one of the two helpers above.
+
 ## Authentication
 Email + password via `auth.js` (bcrypt + Passport session in PostgreSQL — no
 Replit OIDC). Public pages: `/login`, `/set-password`, `/onboarding`. Key API:

@@ -419,7 +419,7 @@ function renderInvoicePanelBody() {
       </table>
     </div>
 
-    ${(state.user?.privilege_level ?? 'member') === 'admin' ? `<div class="inv-section">
+    ${getPrivilegeLevel() === 'admin' ? `<div class="inv-section">
       <h3 class="inv-section-title">Edit invoice</h3>
       <div class="inv-edit-grid">
         <label class="inv-edit-label">
@@ -452,7 +452,7 @@ function renderInvoicePanelBody() {
             </svg>
             Download PDF
           </a>
-          ${(state.user?.privilege_level ?? 'member') === 'admin' ? `<button class="inv-btn inv-btn-secondary" id="inv-send-btn" onclick="sendInvoice()">
+          ${getPrivilegeLevel() === 'admin' ? `<button class="inv-btn inv-btn-secondary" id="inv-send-btn" onclick="sendInvoice()">
             <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>

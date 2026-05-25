@@ -119,6 +119,19 @@ const state = {
   whatsappEnabled: false,
 };
 
+// ── Privilege helper (non-React) ──────────────────────────────────────────────
+// Single source of truth for vanilla-JS privilege reads. Mirrors the logic in
+// src/react/hooks/usePrivilege.ts so all callers stay consistent.
+// Prefer usePrivilege() inside React components.
+// NOTE: window.__moHeaderUser is deprecated — use getPrivilegeLevel() instead.
+function getPrivilegeLevel() {
+  const user = window.__moHeaderUser || state.user || null;
+  return (user && user.privilege_level) ? user.privilege_level : 'member';
+}
+function isViewerPrivilege()  { return getPrivilegeLevel() === 'viewer'; }
+function isAdminPrivilege()   { return getPrivilegeLevel() === 'admin'; }
+function canEditPrivilege()   { const p = getPrivilegeLevel(); return p === 'manager' || p === 'admin'; }
+
 // ── User prefs helpers ────────────────────────────────────────────────────────
 // Fetched once per session; cached in state.prefs. Individual keys are updated
 // with patchPref() which keeps the local cache in sync and fire-and-forgets the
@@ -126,7 +139,7 @@ const state = {
 
 async function ensurePrefs() {
   if (state._prefsLoaded) return state.prefs;
-  if ((state.user?.privilege_level ?? 'member') === 'viewer') {
+  if (getPrivilegeLevel() === 'viewer') {
     state.prefs = {};
     state._prefsLoaded = true;
     return state.prefs;
@@ -297,7 +310,7 @@ async function bootstrap() {
   // checkAuthStatus() already fires this on re-checks; bootstrap was the missing path.
   renderAuthStatus();
 
-  const priv = user.privilege_level || 'member';
+  const priv = getPrivilegeLevel();
 
   if (priv === 'viewer') {
     showViewerBanner();

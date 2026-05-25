@@ -525,7 +525,7 @@ async function renderWhatsAppHistory() {
   const el = document.getElementById('whatsapp-history-section');
   if (!el) return;
 
-  if (!state.whatsappEnabled || window.__moHeaderUser?.privilege_level === 'viewer') { el.innerHTML = ''; return; }
+  if (!state.whatsappEnabled || isViewerPrivilege()) { el.innerHTML = ''; return; }
 
   const contactId = state.selectedContactId;
   if (!contactId) { el.innerHTML = ''; return; }
@@ -610,7 +610,7 @@ async function renderGoogleEmailSection() {
   el.innerHTML = `
     <div class="notes-header">
       <span class="notes-header-label">Gmail</span>
-      ${window.__moHeaderUser?.privilege_level === 'viewer' ? '' : '<button class="btn-new-note" onclick="openEmailCompose()">+ Compose</button>'}
+      ${isViewerPrivilege() ? '' : '<button class="btn-new-note" onclick="openEmailCompose()">+ Compose</button>'}
     </div>
     <div id="gmail-list" class="text-sm" style="color:var(--stone-deep)"></div>
     <div id="gmail-compose" class="hidden" style="margin-top:10px"></div>
@@ -651,7 +651,7 @@ async function renderGoogleEmailSection() {
 }
 
 function openEmailCompose() {
-  if (window.__moHeaderUser?.privilege_level === 'viewer') return;
+  if (isViewerPrivilege()) return;
   const compose = document.getElementById('gmail-compose');
   if (!compose) return;
   const to = state.selectedContact?.properties?.email || '';
@@ -729,7 +729,7 @@ function _renderRoomTabsImpl() {
         class="room-tab ${idx === state.selectedRoomIdx ? 'room-tab-active' : ''}">
         ${escHtml(r.room || `Room ${idx + 1}`)}
       </button>
-      ${canDelete && window.__moHeaderUser?.privilege_level !== 'viewer' ? `<button class="room-tab-del" title="Delete room"
+      ${canDelete && !isViewerPrivilege() ? `<button class="room-tab-del" title="Delete room"
         onclick="event.stopPropagation();deleteRoom(${idx})">×</button>` : ''}
     </span>
   `).join('');
@@ -751,7 +751,7 @@ function _renderRoomTabsImpl() {
   el.innerHTML = `
     <div class="flex items-center gap-1.5 flex-wrap">
       ${tabs}
-      ${window.__moHeaderUser?.privilege_level === 'viewer' ? '' : '<button onclick="showAddRoomForm()" class="room-tab-add">+ Room</button>'}
+      ${isViewerPrivilege() ? '' : '<button onclick="showAddRoomForm()" class="room-tab-add">+ Room</button>'}
     </div>
     ${addForm}
     <div class="install-dates-row">
@@ -811,7 +811,7 @@ function _renderWorkflowHeaderImpl() {
       'BAD_TIMING':           'lsb-bad-timing',
     };
     const cid = state.selectedContactId || contact?.id || '';
-    const editable = (() => { const _p = window.__moHeaderUser?.privilege_level ?? 'member'; return _p === 'manager' || _p === 'admin'; })();
+    const editable = canEditPrivilege();
     let pillHtml;
     if (!raw) {
       const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
@@ -847,7 +847,7 @@ function _renderWorkflowHeaderImpl() {
           <div class="flex items-center gap-2.5 min-w-0">
             <h1 class="text-xl font-bold text-slate-900 truncate">${escHtml(name)}</h1>
             ${customerNum ? `<span class="customer-num-badge">${escHtml(customerNum)}</span>` : ''}
-            ${window.__moHeaderUser?.privilege_level === 'viewer' ? '' : `<button class="contact-edit-btn" onclick="openContactEdit()" title="Edit contact details">
+            ${isViewerPrivilege() ? '' : `<button class="contact-edit-btn" onclick="openContactEdit()" title="Edit contact details">
               <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
               </svg>
@@ -861,7 +861,7 @@ function _renderWorkflowHeaderImpl() {
             ${email ? `<div><a href="mailto:${escHtml(email)}" class="text-sm text-blue-600 hover:underline">${escHtml(email)}</a></div>` : ''}
             ${phone ? `<div class="text-sm text-slate-500 flex items-center gap-1.5">
               <span>${escHtml(phone)}</span>
-              ${state.whatsappEnabled && window.__moHeaderUser?.privilege_level !== 'viewer' ? `<button onclick="openWhatsAppModal()" title="Send WhatsApp message"
+              ${state.whatsappEnabled && !isViewerPrivilege() ? `<button onclick="openWhatsAppModal()" title="Send WhatsApp message"
                 style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#25D366;border:none;cursor:pointer;flex-shrink:0;padding:0;vertical-align:middle">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
                   <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
@@ -939,7 +939,7 @@ function _renderWorkflowStagesImpl() {
   const isFocusedPast    = currentIdx !== -1 && focusedIdx < currentIdx;
   const isFocusedFuture  = currentIdx === -1 || focusedIdx > currentIdx;
 
-  const canEdit = (() => { const _p = window.__moHeaderUser?.privilege_level ?? 'member'; return _p === 'manager' || _p === 'admin'; })();
+  const canEdit = canEditPrivilege();
 
   // Sub-statuses for the focused entry, in admin order.
   const allSubs = (typeof LEAD_SUBSTATUSES !== 'undefined' ? LEAD_SUBSTATUSES : []);
@@ -1100,7 +1100,7 @@ function _renderWorkflowStagesImpl() {
 // a different lead status than the contact's current one, hs_lead_status is
 // updated in the same PATCH so the rail's "current" marker follows along.
 function setLeadSubstatusChecked(statusValue, substatusKey, checked) {
-  { const _p = window.__moHeaderUser?.privilege_level ?? 'member'; if (_p !== 'manager' && _p !== 'admin') return; }
+  { if (!canEditPrivilege()) return; }
   const contact   = state.selectedContact;
   const contactId = contact?.id;
   if (!contactId) return;
@@ -1162,7 +1162,7 @@ function setLeadSubstatusChecked(statusValue, substatusKey, checked) {
 // ── Save Workflow Data ────────────────────────────────────────────────────────
 // Implementation registered with core.js via registerWorkflowDataSaver below.
 async function _saveWorkflowDataImpl() {
-  if (window.__moHeaderUser?.privilege_level === 'viewer') return;
+  if (isViewerPrivilege()) return;
   // Compute primary room's current stage + most recently completed substage
   const primary = state.allRooms[0];
   const stageKey = primary?.stageKey || 'sales';
@@ -1244,7 +1244,7 @@ function renderComments() {
     <div class="notes-header">
       <span class="notes-header-label">Notes</span>
       <span id="note-autosave-status" class="note-autosave-status"></span>
-      ${window.__moHeaderUser?.privilege_level === 'viewer' ? '' : '<button class="btn-new-note" onclick="showAddComment()">+ New note</button>'}
+      ${isViewerPrivilege() ? '' : '<button class="btn-new-note" onclick="showAddComment()">+ New note</button>'}
     </div>
     <div id="comment-input-area" class="comment-input-area hidden">
       <div id="draft-resume-banner" class="draft-resume-banner hidden">
@@ -1442,7 +1442,7 @@ function renderTasks() {
   el.innerHTML = `
     <div class="flex items-center justify-between mb-3">
       <h3 class="text-sm font-semibold text-slate-700">Tasks</h3>
-      ${window.__moHeaderUser?.privilege_level === 'viewer' ? '' : `<button onclick="toggleAddTask()" id="add-task-btn"
+      ${isViewerPrivilege() ? '' : `<button onclick="toggleAddTask()" id="add-task-btn"
         class="text-xs font-semibold text-blue-600 hover:text-blue-700 px-2.5 py-1 rounded-lg hover:bg-blue-50 transition">
         ${state.showAddTask ? 'Cancel' : '+ Add task'}
       </button>`}
@@ -1932,7 +1932,7 @@ async function renderUpcomingVisits() {
     return;
   }
 
-  const viewer = window.__moHeaderUser?.privilege_level === 'viewer';
+  const viewer = isViewerPrivilege();
   list.innerHTML = mine.map(v => {
     const label = VISIT_TYPE_LABELS[v.type] || 'Visit';
     const when  = _fmtVisitWhen(v.startAt, v.endAt);
@@ -2082,7 +2082,7 @@ async function renderDesignVisits() {
     return;
   }
 
-  const isAdmin = state.user?.privilege_level === 'admin';
+  const isAdmin = isAdminPrivilege();
 
   list.innerHTML = visits.map(v => {
     const st = DESIGN_VISIT_STATUS_LABELS[v.status] || { label: v.status || 'Unknown', bg: '#e5e7eb', fg: '#374151' };
@@ -2206,7 +2206,7 @@ async function editDesignVisit(id) {
 }
 
 async function markDesignVisitRevision(id) {
-  if (state.user?.privilege_level !== 'admin') return;
+  if (!isAdminPrivilege()) return;
   const note = prompt('Revision note (optional):', '');
   if (note === null) return;
   try {
@@ -2219,7 +2219,7 @@ async function markDesignVisitRevision(id) {
 }
 
 async function deleteDesignVisit(id) {
-  if (state.user?.privilege_level !== 'admin') return;
+  if (!isAdminPrivilege()) return;
   if (!confirm('Delete this design visit? This cannot be undone.')) return;
   try {
     await DELETE_REQ(`/api/design-visits/${id}`);
@@ -2236,7 +2236,7 @@ function _toLocalDtInput(d) {
 }
 
 async function editUpcomingVisit(id) {
-  if (window.__moHeaderUser?.privilege_level === 'viewer') return;
+  if (isViewerPrivilege()) return;
   let visits;
   const from = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const to   = new Date(Date.now() + 366 * 24 * 60 * 60 * 1000);
@@ -2352,7 +2352,7 @@ async function editUpcomingVisit(id) {
 }
 
 async function cancelUpcomingVisit(id) {
-  if (window.__moHeaderUser?.privilege_level === 'viewer') return;
+  if (isViewerPrivilege()) return;
   if (!confirm('Cancel this visit?')) return;
   try {
     await DELETE_REQ(`/api/visits/${id}`);
