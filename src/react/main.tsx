@@ -47,23 +47,11 @@ function mount() {
     return;
   }
 
-  // Mount points may not exist yet — admin.html renders #tab-search /
-  // #tab-designsystem into #page asynchronously after its data fetches
-  // resolve, which happens *after* this deferred module script executes.
-  // Observe the DOM and try again whenever new nodes appear, stopping as
-  // soon as we've mounted every entry in MOUNTS. admin.html also calls
-  // window.__reactIslandMount() synchronously right after it sets
-  // #page.innerHTML so the React panels render in the same tick — the
-  // observer is a belt-and-braces fallback for other future mount sites.
-  const observer = new MutationObserver(() => {
-    const mounted = MOUNTS.every(m => {
-      const el = document.getElementById(m.id);
-      return el && el.dataset.dsRendered === '1';
-    });
-    mountKnown();
-    if (mounted) observer.disconnect();
-  });
-  observer.observe(document.body, { childList: true, subtree: true });
+  // No mount points exist yet — admin.html renders #tab-search /
+  // #tab-designsystem / #tab-workshop into #page asynchronously after its
+  // data fetches resolve, then calls window.__reactIslandMount()
+  // synchronously right after setting #page.innerHTML so the React panels
+  // render in the same tick. Nothing else to do here.
 }
 
 (window as unknown as { __reactIslandMount?: () => void }).__reactIslandMount = () => {

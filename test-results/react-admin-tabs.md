@@ -1,7 +1,7 @@
 # React Admin Tabs — Smoke Test
 
-- Run ID: `p0ly89`
-- Date: 2026-05-25T08:53:53.713Z
+- Run ID: `noqc5a`
+- Date: 2026-05-25T09:01:56.304Z
 - Command: `npm run test:react-admin-tabs`
 
 ## Summary
@@ -13,7 +13,7 @@
 
 | Result | Probe | Expected | Observed |
 |---|---|---|---|
-| PASS | GET /react/main.js serves the built bundle | status=200 with non-empty body | status=200 length=169360 |
+| PASS | GET /react/main.js serves the built bundle | status=200 with non-empty body | status=200 length=169153 |
 | PASS | #tab-search mount point exists in admin.html | element with id="tab-search" present | present=true |
 | PASS | React island flags #tab-search as mounted (data-ds-rendered="1") | data-ds-rendered="1" on #tab-search | flagged=true |
 | PASS | #tab-search renders SearchSettingsPage rows (.ss-action-row) | at least one .ss-action-row inside #tab-search | appeared=true rowCount=15 |
