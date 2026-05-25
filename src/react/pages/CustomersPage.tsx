@@ -895,6 +895,49 @@ export function CustomersPage(): React.ReactElement {
     };
   }, [page, leadStatus, sortBy, search, viewMode, refreshNonce]);
 
+  // Background re-fetch: when open-leads was served from stale cache, wait
+  // until the server's 60 s TTL has elapsed then silently swap in fresh data.
+  // No loading spinner is shown; the "Data may be up to 1 min old" hint
+  // disappears once fresh results arrive.
+  React.useEffect(() => {
+    if (openLeadsCacheAge === null || viewMode !== 'active') return;
+
+    // Delay = time left until server TTL expires + 5 s for the HubSpot fetch.
+    const OPEN_LEADS_TTL_S = 60;
+    const delay = Math.max(5_000, (OPEN_LEADS_TTL_S - openLeadsCacheAge) * 1_000 + 5_000);
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const r = await fetch('/api/open-leads', { headers: { Accept: 'application/json' } });
+        if (cancelled) return;
+        if (r.status === 401) { location.href = '/login'; return; }
+        if (!r.ok) return;
+        const data = await r.json().catch(() => null) as ContactsResponse | null;
+        if (cancelled || !data) return;
+        const cacheStatus = r.headers.get('X-Cache-Status');
+        const ageHeader = r.headers.get('X-Cache-Age');
+        const newAge = ageHeader !== null ? Number(ageHeader) : NaN;
+        const NEAR_TTL_THRESHOLD_S = 45;
+        const isStillCached =
+          cacheStatus === 'fresh' &&
+          Number.isFinite(newAge) &&
+          newAge >= NEAR_TTL_THRESHOLD_S;
+        const list = data.results || [];
+        setContacts(list);
+        setTotal(data.total != null ? data.total : list.length);
+        setOpenLeadsCacheAge(isStillCached ? newAge : null);
+      } catch {
+        // Best-effort: silently ignore background-fetch errors.
+      }
+    }, delay);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [openLeadsCacheAge, viewMode]);
+
   // Resolve rooms for a contact, applying the stage + archived filters from
   // the legacy `buildListItems` (public/workflow.js lines 140-202).
   const resolveRooms = React.useCallback(
