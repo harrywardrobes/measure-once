@@ -123,6 +123,7 @@ below except `test:hw-test-user:live`.
 | `test:lead-status-counts-rate-limit` | Single-flight + stale-cache + retry behaviour of `/api/contacts-lead-status-counts` against a mock HubSpot HTTP server. |
 | `test:phone-directory` | Auth gating (member 403 / manager+admin 200) and payload coverage for the staff and trades sections of `GET /api/admin/phone-directory`: `allowed_emails`-only vs users-joined team rows, `kind:'company'` vs `kind:'contact'` trades entries, correct field/label/phone/email/userId/companyName/contactName values, and customers always an array. |
 | `test:phone-directory-customers` | Mock-HubSpot coverage for the customers section of `GET /api/admin/phone-directory`: phone/mobilephone field mapping, two-entry split for contacts with both fields, name-fallback to email, and zero-entry guarantee for contacts with no phone data. |
+| `test:chunk-cache-headers` | HTTP HEAD probes against a running Express server: asserts that `/react/chunks/<hashed>.js` is served with `Cache-Control: … immutable` and that `/react/main.js` is NOT. Guards the task-#956 static-middleware configuration against accidental revert. |
 | `test:hw-test-user:live` | **Opt-in live HubSpot smoke** for `/api/open-leads` and `/api/contacts-lead-status-counts`. Pre-flights the token; briefly toggles `app_settings.dev_filter_enabled` (restored on exit, may stay OFF on crash). Not in `test:ci`. Requires a HubSpot **private-app token** scoped for CRM contact reads, stored as the `HUBSPOT_TOKEN` secret. |
 
 **Privileges harness behaviour:** strips `TURNSTILE_SECRET_KEY`,
