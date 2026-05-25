@@ -9,6 +9,31 @@
  * Run automatically via `npm run build:react` (wired as a postbuild step).
  * Run in isolation:  node scripts/check-bundle-sizes.mjs
  *
+ * History file: test-results/bundle-sizes-history.jsonl
+ * ──────────────────────────────────────────────────────
+ * This file is excluded from git via the `test-results/` rule in .gitignore
+ * so it never accumulates in the repository. To preserve trend data across
+ * runs in a CI pipeline, upload/restore it as a build artefact. Examples:
+ *
+ *   GitHub Actions — add these steps around your build job:
+ *
+ *     # Before the build: restore history from the previous run
+ *     - uses: actions/cache@v4
+ *       with:
+ *         path: test-results/bundle-sizes-history.jsonl
+ *         key: bundle-size-history-${{ github.ref }}
+ *         restore-keys: bundle-size-history-
+ *
+ *     # After the build: upload the updated file as a downloadable artefact
+ *     - uses: actions/upload-artifact@v4
+ *       if: always()
+ *       with:
+ *         name: bundle-size-history
+ *         path: test-results/bundle-sizes-history.jsonl
+ *
+ *   Other CI systems: cache or archive test-results/bundle-sizes-history.jsonl
+ *   between pipeline runs using whatever artefact/cache mechanism is available.
+ *
  * Thresholds (kB gzip)
  * ────────────────────
  * Always-loaded chunks are downloaded on every page. Thresholds are set with
