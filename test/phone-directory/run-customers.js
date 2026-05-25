@@ -68,12 +68,17 @@ function writeReport(runId) {
 
 // ── Mock HubSpot contacts fixture ─────────────────────────────────────────────
 //
-// Four contacts covering distinct mapping paths in the phone-directory handler:
+// Seven contacts covering distinct mapping paths in the phone-directory handler:
 //
 //   HS_A — firstname + lastname + phone only       → 1 customers entry (phone)
 //   HS_B — firstname only + phone + mobilephone    → 2 customers entries
 //   HS_C — no name, email only + phone             → 1 entry, label = email
 //   HS_D — firstname only, no phone fields at all  → 0 entries (should not appear)
+//
+// Malformed / defensive cases (C7–C9):
+//   HS_E — properties: null                        → 0 entries (null props skipped)
+//   HS_F — phone: null, mobilephone: null          → 0 entries (null phone skipped)
+//   HS_G — id: null, valid phone                   → 0 entries (no-id skipped)
 
 const HS_A = {
   id: 'privtest-phonedir-hs-a',
@@ -116,8 +121,34 @@ const HS_D = {
   },
 };
 
+// Malformed contacts — the server must skip these without crashing.
+const HS_E = {
+  id: 'privtest-phonedir-hs-e',
+  properties: null,                     // null properties object
+};
+const HS_F = {
+  id: 'privtest-phonedir-hs-f',
+  properties: {
+    firstname:   'Null',
+    lastname:    'Phones',
+    email:       'nullphones@privtest.invalid',
+    phone:       null,                  // null phone value (not an empty string)
+    mobilephone: null,
+  },
+};
+const HS_G = {
+  id: null,                             // missing/null id
+  properties: {
+    firstname:   'NoId',
+    lastname:    '',
+    email:       'noid@privtest.invalid',
+    phone:       '555-0200',
+    mobilephone: '',
+  },
+};
+
 const CONTACTS_SEARCH_SUCCESS = {
-  results: [HS_A, HS_B, HS_C, HS_D],
+  results: [HS_A, HS_B, HS_C, HS_D, HS_E, HS_F, HS_G],
   paging: null,
 };
 
@@ -148,14 +179,25 @@ function startMockHubspot() {
         // An empty requestedProps list means the server requested nothing, so
         // nothing is returned — which causes the field-presence assertions to
         // fail and surfaces the gap immediately.
-        const filteredResults = CONTACTS_SEARCH_SUCCESS.results.map(c => ({
-          id: c.id,
-          properties: requestedProps.length > 0
-            ? Object.fromEntries(
-                requestedProps.map(p => [p, c.properties[p] ?? '']),
-              )
-            : {},
-        }));
+        //
+        // Malformed contacts (null properties, null id) are passed through as-is
+        // so the server's defensive guards are exercised for real.
+        const filteredResults = CONTACTS_SEARCH_SUCCESS.results.map(c => {
+          if (c.properties === null) {
+            // Pass null properties through unchanged — tests the server's
+            // `c.properties || {}` guard.
+            return { id: c.id, properties: null };
+          }
+          const props = c.properties || {};
+          return {
+            id: c.id,
+            properties: requestedProps.length > 0
+              ? Object.fromEntries(
+                  requestedProps.map(p => [p, props[p] ?? '']),
+                )
+              : {},
+          };
+        });
 
         calls.push({ method: req.method, url, requestedProperties: requestedProps, at: Date.now() });
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -416,6 +458,57 @@ async function main() {
     '0 entries',
     `${dEntries.length} entries`,
     dEntries.length === 0,
+  );
+
+  // ── (C7) HS_E — null properties → no entry, no crash ─────────────────────
+  // The mock sends `properties: null` for this contact.  The server guard
+  // `const p = c.properties || {}` must absorb it without throwing, and the
+  // loop must continue so the valid contacts above still appear.
+
+  const eEntries = customers.filter(e => e.contactId === HS_E.id);
+  record(
+    'C7: HS_E (null properties) produces zero entries',
+    '0 entries',
+    `${eEntries.length} entries`,
+    eEntries.length === 0,
+  );
+
+  // ── (C8) HS_F — null phone values → no entry ─────────────────────────────
+  // The mock transmits null phone/mobilephone values.  The server's falsy
+  // check (`if (p.phone)`) must skip them without throwing.
+
+  const fEntries = customers.filter(e => e.contactId === HS_F.id);
+  record(
+    'C8: HS_F (null phone values) produces zero entries',
+    '0 entries',
+    `${fEntries.length} entries`,
+    fEntries.length === 0,
+  );
+
+  // ── (C9) HS_G — null id → no entry ───────────────────────────────────────
+  // The mock sends `id: null`.  The server guard `if (!c || !c.id) continue`
+  // must skip this contact entirely, so no entry with contactId=null appears.
+
+  const nullIdEntries = customers.filter(e => e.contactId === null || e.contactId === undefined);
+  record(
+    'C9: HS_G (null id) produces zero entries (no contactId=null in output)',
+    '0 entries',
+    `${nullIdEntries.length} entries`,
+    nullIdEntries.length === 0,
+  );
+
+  // ── (C10) Valid contacts still present despite malformed contacts in fixture ──
+  // The malformed contacts (HS_E, HS_F, HS_G) must not corrupt the loop so
+  // that contacts processed after them are silently dropped.
+
+  const validIds = [HS_A.id, HS_B.id, HS_C.id];
+  const validCount = customers.filter(e => validIds.includes(e.contactId)).length;
+  const expectedValidCount = 4; // HS_A(1) + HS_B(2) + HS_C(1)
+  record(
+    'C10: valid contacts (HS_A/B/C) still present despite malformed contacts in fixture',
+    `${expectedValidCount} valid entries`,
+    `${validCount} valid entries`,
+    validCount === expectedValidCount,
   );
 
   // ── Shape check: each entry has all required fields ───────────────────────

@@ -2728,6 +2728,7 @@ app.get('/api/admin/phone-directory', isAuthenticated, requireManagerOrAdmin, as
       try {
         const { contacts } = await getSharedContactsCache();
         for (const c of contacts) {
+          if (!c || !c.id) continue;
           const p = c.properties || {};
           const label = [p.firstname, p.lastname].filter(Boolean).join(' ').trim()
             || p.email || `Contact ${c.id}`;
