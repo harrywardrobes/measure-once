@@ -498,7 +498,8 @@ function attachPhoneNoticeLink(notice) {
   if (!link) return;
   link.addEventListener('click', (e) => {
     e.preventDefault();
-    const id = link.getAttribute('data-trade-id');
+    const raw = link.getAttribute('data-trade-id');
+    const id = /^\d+$/.test(raw || '') ? parseInt(raw, 10) : raw;
     closeTradesModal();
     openTradesModal(id);
   });
