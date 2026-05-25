@@ -16,7 +16,20 @@
       <div class="dv-state-block">
         <div class="dv-state-icon">❌</div>
         <div class="dv-state-title" id="error-title">Link not valid</div>
-        <div class="dv-state-sub" id="error-sub">This link may have expired or already been used. Please contact us if you need a new one.</div>
+        <div class="dv-state-sub" id="error-sub">This link may have already been used. Please contact us if you need a new one.</div>
+      </div>
+    </div>
+
+    <div id="expired-state" style="display:none;">
+      <div class="dv-state-block">
+        <div class="dv-state-icon">⌛</div>
+        <div class="dv-state-title">This sign-off link has expired</div>
+        <div class="dv-state-sub">
+          Sign-off links are only valid for a short time after we send them.
+          Please reply to the original email — or get in touch with your
+          designer — and we'll send you a fresh link to review and approve
+          your design visit.
+        </div>
       </div>
     </div>
 
@@ -107,7 +120,7 @@
       const token = new URLSearchParams(location.search).get('token');
 
       function show(id) {
-        ['loading-state','error-state','success-state','main-content'].forEach(i => {
+        ['loading-state','error-state','expired-state','success-state','main-content'].forEach(i => {
           document.getElementById(i).style.display = (i === id) ? '' : 'none';
         });
       }
@@ -140,7 +153,12 @@
 
       fetch('/api/design-visits/sign-off/' + encodeURIComponent(token))
         .then(r => {
-          if (r.status === 410) return r.json().then(d => { throw Object.assign(new Error(d.message || 'expired'), { _410: true }); });
+          if (r.status === 410) return r.json().then(d => {
+            const err = new Error(d.message || d.error || 'expired');
+            err._410 = true;
+            err._status = d.status || '';
+            throw err;
+          });
           if (!r.ok)           return r.json().then(d => { throw new Error(d.message || d.error || 'Failed to load'); });
           return r.json();
         })
@@ -276,6 +294,10 @@
           });
         })
         .catch(err => {
+          if (err._410 && err._status === 'expired') {
+            show('expired-state');
+            return;
+          }
           show('error-state');
           if (err._410) {
             document.getElementById('error-title').textContent = err.message.includes('expired') ? 'Link expired' : 'Already signed off';

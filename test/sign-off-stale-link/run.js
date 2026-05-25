@@ -401,6 +401,52 @@ async function main() {
   }
 
   // ════════════════════════════════════════════════════════════════════════════
+  // [EXP-*] Expired-but-recognised tokens return a friendly 410 status="expired"
+  // ════════════════════════════════════════════════════════════════════════════
+  console.log('\n  [EXP] Expired sign-off tokens get a friendly 410 status="expired"');
+
+  const expRawToken = `${RUN_PREFIX}exp-tok-${runId}`;
+  const expVisit = await seedSubmittedVisit(pool, {
+    contactId: `${FAKE_CONTACT_ID}-exp-${runId}`,
+    createdBy: users.admin.email,
+    rawToken:  expRawToken,
+    handleId, furnitureRangeId, doorStyleId, termsVersionId,
+  });
+  // Force the seeded visit's signoff window into the past.
+  await pool.query(
+    `UPDATE design_visits SET signoff_expires_at = NOW() - INTERVAL '1 hour'
+     WHERE id = $1`, [expVisit.id]);
+  console.log(`  Seeded EXP visit id=${expVisit.id} rawToken=${expRawToken.slice(0, 24)}… (expired 1h ago)`);
+
+  {
+    const r = await anonClient.get(`/api/design-visits/sign-off/${expRawToken}`);
+    record('[EXP-A] GET /sign-off/:expiredToken returns 410 status="expired"',
+      'status=410, body.status="expired", body.error mentions expired',
+      `status=${r.status} bodyStatus=${r.json?.status} error=${r.json?.error || ''}`,
+      r.status === 410
+        && r.json?.status === 'expired'
+        && /expired/i.test(String(r.json?.error || '')));
+  }
+
+  {
+    const r = await anonClient.post(`/api/design-visits/sign-off/${expRawToken}`,
+      { action: 'approve' });
+    record('[EXP-B] POST /sign-off/:expiredToken {action:"approve"} returns 410 status="expired"',
+      'status=410, body.status="expired"',
+      `status=${r.status} bodyStatus=${r.json?.status}`,
+      r.status === 410 && r.json?.status === 'expired');
+  }
+
+  {
+    const r = await anonClient.post(`/api/design-visits/sign-off/${expRawToken}`,
+      { action: 'revision', note: 'attempting revision via expired link' });
+    record('[EXP-C] POST /sign-off/:expiredToken {action:"revision"} returns 410 status="expired"',
+      'status=410, body.status="expired"',
+      `status=${r.status} bodyStatus=${r.json?.status}`,
+      r.status === 410 && r.json?.status === 'expired');
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
   // [UNK-*] Genuinely unknown tokens still return 404 (not superseded)
   // ════════════════════════════════════════════════════════════════════════════
   console.log('\n  [UNK] Unknown tokens still 404');

@@ -1584,10 +1584,17 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
     const visit = vr.rows[0];
     if (!superseded) {
       // Always 404 for any token state that is not the expected sign-off window
-      // (submitted + not expired). Avoids oracle leakage on consumed/expired tokens.
+      // (submitted + not expired). Avoids oracle leakage on consumed tokens.
       if (visit.status !== 'submitted') return res.status(404).json({ error: 'Not found' });
+      // Expired-but-recognised: surface a friendly "this link has expired"
+      // state instead of a generic 404 so customers clicking an old email
+      // know to ask for a fresh link.
       if (visit.signoff_expires_at && new Date() > new Date(visit.signoff_expires_at)) {
-        return res.status(404).json({ error: 'Not found' });
+        return res.status(410).json({
+          status: 'expired',
+          error: 'This sign-off link has expired. Please contact us to receive a fresh link.',
+          expiresAt: visit.signoff_expires_at,
+        });
       }
     }
     // Load rooms
@@ -1720,7 +1727,13 @@ router.post('/api/design-visits/sign-off/:token', async (req, res) => {
     // Token is only actionable while the visit is in submitted state + not expired.
     if (visit.status !== 'submitted') return res.status(404).json({ error: 'Not found' });
     if (visit.signoff_expires_at && new Date() > new Date(visit.signoff_expires_at)) {
-      return res.status(404).json({ error: 'Not found' });
+      // Match the GET handler: a recognised-but-expired token gets a friendly
+      // 410 payload so the page can show a "link expired" state with a contact
+      // prompt instead of a generic error.
+      return res.status(410).json({
+        status: 'expired',
+        error: 'This sign-off link has expired. Please contact us to receive a fresh link.',
+      });
     }
     if (action === 'approve') {
       await pool.query(`
