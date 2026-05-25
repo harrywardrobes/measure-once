@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { usePrivilege } from '../hooks/usePrivilege';
 import Box from '@mui/material/Box';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
+import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
@@ -26,6 +27,8 @@ import HandymanOutlinedIcon from '@mui/icons-material/HandymanOutlined';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
+import TuneIcon from '@mui/icons-material/Tune';
+import { NavCustomiseDialog } from './NavCustomiseDialog';
 
 /**
  * Bottom navigation bar rendered as a React/MUI island into
@@ -53,8 +56,11 @@ import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
  *   Invoices, Trades, Ideas
  * - Tapping "More" opens a bottom Drawer listing overflow tabs.
  * - "More" shows as selected when the active page is in the overflow set.
+ * - Managers can customise which 3 tabs appear in the bar via the
+ *   "Customise" button in the More drawer. The preference is persisted via
+ *   PATCH /api/users/me/prefs as `nav_primary_keys`.
  */
-type NavItem = {
+export type NavItem = {
   key: string;
   href: string;
   label: string;
@@ -75,8 +81,10 @@ export const NAV: NavItem[] = [
   { key: 'ideas',    href: '/ideas',    label: 'Ideas',    Icon: LightbulbIcon,     IconOutlined: LightbulbOutlinedIcon },
 ];
 
-const MEMBER_PRIMARY_KEYS = ['home', 'calendar', 'trades'];
-const MANAGER_PRIMARY_KEYS = ['home', 'sales', 'projects'];
+export const MEMBER_PRIMARY_KEYS = ['home', 'calendar', 'trades'];
+export const MANAGER_PRIMARY_KEYS = ['home', 'sales', 'projects'];
+
+const BAR_SIZE = 3;
 
 function accentFor(key: string, theme: Theme): string {
   if (key === 'sales')    return theme.palette.stage.sales.bg;
@@ -90,6 +98,39 @@ function matchPath(pathname: string): string | false {
   return m ? m.key : false;
 }
 
+const VALID_NAV_KEYS = new Set(NAV.map((n) => n.key));
+
+async function loadNavPref(): Promise<string[] | null> {
+  try {
+    const r = await fetch('/api/users/me/prefs', { headers: { Accept: 'application/json' } });
+    if (!r.ok) return null;
+    const prefs = await r.json() as { nav_primary_keys?: unknown };
+    const keys = prefs.nav_primary_keys;
+    if (
+      Array.isArray(keys) &&
+      keys.length === BAR_SIZE &&
+      keys.every((k) => typeof k === 'string' && VALID_NAV_KEYS.has(k)) &&
+      new Set(keys).size === BAR_SIZE
+    ) {
+      return keys as string[];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveNavPref(keys: string[]): Promise<void> {
+  const r = await fetch('/api/users/me/prefs', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ nav_primary_keys: keys }),
+  });
+  if (!r.ok) {
+    throw new Error(`Failed to save nav preference: HTTP ${r.status}`);
+  }
+}
+
 export function BottomNav() {
   const theme = useTheme();
   const { isManager } = usePrivilege();
@@ -97,6 +138,11 @@ export function BottomNav() {
     typeof window === 'undefined' ? false : matchPath(window.location.pathname),
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [customiseOpen, setCustomiseOpen] = useState(false);
+
+  const defaultPrimaryKeys = isManager ? MANAGER_PRIMARY_KEYS : MEMBER_PRIMARY_KEYS;
+  const [primaryKeys, setPrimaryKeys] = useState<string[]>(defaultPrimaryKeys);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
 
   useEffect(() => {
     const sync = () => setValue(matchPath(window.location.pathname));
@@ -110,7 +156,15 @@ export function BottomNav() {
     };
   }, []);
 
-  const primaryKeys = isManager ? MANAGER_PRIMARY_KEYS : MEMBER_PRIMARY_KEYS;
+  useEffect(() => {
+    let cancelled = false;
+    loadNavPref().then((saved) => {
+      if (cancelled) return;
+      if (saved) setPrimaryKeys(saved);
+      setPrefsLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const visibleNav = NAV.filter((n) => {
     if (n.adminOnly) return false;
@@ -118,13 +172,43 @@ export function BottomNav() {
     return true;
   });
 
-  const barItems = visibleNav.filter((n) => primaryKeys.includes(n.key));
-  const overflowItems = visibleNav.filter((n) => !primaryKeys.includes(n.key));
+  const resolvedPrimaryKeys = prefsLoaded
+    ? primaryKeys.filter((k) => visibleNav.some((n) => n.key === k))
+    : defaultPrimaryKeys;
+
+  const barItems = visibleNav.filter((n) => resolvedPrimaryKeys.includes(n.key));
+  const overflowItems = visibleNav.filter((n) => !resolvedPrimaryKeys.includes(n.key));
 
   const activeInOverflow = value !== false && overflowItems.some((n) => n.key === value);
   const moreSelected = activeInOverflow || drawerOpen;
 
   const barValue = activeInOverflow ? '__more__' : (value || false);
+
+  const handleSavePref = useCallback(
+    async (keys: string[]) => {
+      setPrimaryKeys(keys);
+      try {
+        await saveNavPref(keys);
+      } catch {
+        // non-critical; preference will re-apply on next load
+      }
+    },
+    [],
+  );
+
+  const actionSx = {
+    color: 'text.secondary',
+    px: { xs: 1.25, sm: 0.5 },
+    '& .MuiBottomNavigationAction-label': {
+      fontWeight: 600,
+      letterSpacing: '0.02em',
+      textTransform: 'uppercase',
+      fontSize: { xs: '0.65rem', sm: '0.7rem' },
+    },
+    '& .MuiBottomNavigationAction-label.Mui-selected': {
+      fontSize: { xs: '0.65rem', sm: '0.7rem' },
+    },
+  } as const;
 
   return (
     <>
@@ -172,22 +256,12 @@ export function BottomNav() {
                 label={n.label}
                 icon={<IconComponent />}
                 sx={{
-                  color: 'text.secondary',
-                  px: { xs: 1.25, sm: 0.5 },
+                  ...actionSx,
                   '&.Mui-selected': {
                     color: accent,
                     borderTop: '2px solid',
                     borderTopColor: accent,
                     paddingTop: 'calc(6px - 2px)',
-                  },
-                  '& .MuiBottomNavigationAction-label': {
-                    fontWeight: 600,
-                    letterSpacing: '0.02em',
-                    textTransform: 'uppercase',
-                    fontSize: { xs: '0.65rem', sm: '0.7rem' },
-                  },
-                  '& .MuiBottomNavigationAction-label.Mui-selected': {
-                    fontSize: { xs: '0.65rem', sm: '0.7rem' },
                   },
                 }}
               />
@@ -205,22 +279,12 @@ export function BottomNav() {
               setDrawerOpen((prev) => !prev);
             }}
             sx={{
-              color: 'text.secondary',
-              px: { xs: 1.25, sm: 0.5 },
+              ...actionSx,
               '&.Mui-selected': {
                 color: theme.palette.primary.main,
                 borderTop: '2px solid',
                 borderTopColor: theme.palette.primary.main,
                 paddingTop: 'calc(6px - 2px)',
-              },
-              '& .MuiBottomNavigationAction-label': {
-                fontWeight: 600,
-                letterSpacing: '0.02em',
-                textTransform: 'uppercase',
-                fontSize: { xs: '0.65rem', sm: '0.7rem' },
-              },
-              '& .MuiBottomNavigationAction-label.Mui-selected': {
-                fontSize: { xs: '0.65rem', sm: '0.7rem' },
               },
             }}
           />
@@ -312,8 +376,49 @@ export function BottomNav() {
               </ListItemButton>
             );
           })}
+
+          {isManager && (
+            <>
+              <Divider sx={{ mx: 2.5, my: 0.5 }} />
+              <ListItemButton
+                onClick={() => {
+                  setDrawerOpen(false);
+                  setCustomiseOpen(true);
+                }}
+                sx={{ py: 1.5, px: 2.5 }}
+              >
+                <ListItemIcon sx={{ minWidth: 40, color: 'text.secondary' }}>
+                  <TuneIcon />
+                </ListItemIcon>
+                <ListItemText
+                  primary="Customise navigation"
+                  slotProps={{
+                    primary: {
+                      style: {
+                        fontWeight: 600,
+                        fontSize: '0.95rem',
+                        letterSpacing: '0.02em',
+                        textTransform: 'uppercase',
+                        color: theme.palette.text.secondary,
+                      },
+                    },
+                  }}
+                />
+              </ListItemButton>
+            </>
+          )}
         </List>
       </Drawer>
+
+      {isManager && (
+        <NavCustomiseDialog
+          open={customiseOpen}
+          onClose={() => setCustomiseOpen(false)}
+          availableItems={visibleNav}
+          currentKeys={resolvedPrimaryKeys}
+          onSave={handleSavePref}
+        />
+      )}
 
       {moreSelected && (
         <Box sx={{ display: 'none' }} aria-hidden="true" data-more-selected />
