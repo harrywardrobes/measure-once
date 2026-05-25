@@ -3,10 +3,14 @@
 //
 // Static lint check: every entry in the NAV array exported from
 // src/react/components/BottomNav.tsx must have both an `Icon` and an
-// `IconOutlined` field.  The NavItem type enforces this at compile time, but
-// this test makes the rule explicit and machine-enforced in CI so a developer
-// who copies an entry and forgets the outlined variant gets an immediate
-// non-zero exit rather than a silent runtime fallback.
+// `IconOutlined` field, AND each field value must be a name that is actually
+// imported from `@mui/icons-material` at the top of the file.
+//
+// The NavItem type enforces field presence at compile time, but this test
+// makes both rules explicit and machine-enforced in CI so a developer who
+// copies an entry and forgets to add the import (or misspells the import
+// identifier) gets an immediate non-zero exit rather than a silent runtime
+// fallback or a TypeScript error that only surfaces during the build.
 //
 // No server, no database, no Puppeteer — reads the source file directly.
 //
@@ -20,6 +24,30 @@ const SRC  = path.resolve(__dirname, '../../src/react/components/BottomNav.tsx')
 const OUT  = path.resolve(__dirname, '../../test-results/bottom-nav-lint.md');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
+function extractIconImports(src) {
+  const imported = new Set();
+
+  // Default imports: import FooIcon from '@mui/icons-material/...'
+  const defaultRe = /import\s+(\w+)\s+from\s+['"]@mui\/icons-material[^'"]*['"]/g;
+  let m;
+  while ((m = defaultRe.exec(src)) !== null) {
+    imported.add(m[1]);
+  }
+
+  // Named imports: import { FooIcon, BarIcon } from '@mui/icons-material'
+  const namedRe = /import\s+\{([^}]+)\}\s+from\s+['"]@mui\/icons-material[^'"]*['"]/g;
+  while ((m = namedRe.exec(src)) !== null) {
+    for (const raw of m[1].split(',')) {
+      // Handle aliasing: `OriginalName as LocalName`
+      const parts = raw.trim().split(/\s+as\s+/);
+      const localName = (parts[1] || parts[0]).trim();
+      if (localName) imported.add(localName);
+    }
+  }
+
+  return imported;
+}
 
 function extractNavEntries(src) {
   // Grab the content of the NAV array literal.
@@ -57,6 +85,13 @@ function hasField(entry, fieldName) {
   return re.test(entry);
 }
 
+function extractFieldValue(entry, fieldName) {
+  // Extract the identifier assigned to a field: `fieldName: SomeIdentifier`
+  const re = new RegExp(`(?<![\\w])${fieldName}\\s*:\\s*(\\w+)`);
+  const m = entry.match(re);
+  return m ? m[1] : null;
+}
+
 // ── run ───────────────────────────────────────────────────────────────────────
 
 let src;
@@ -66,6 +101,8 @@ try {
   console.error(`[bottom-nav-lint] Cannot read ${SRC}: ${err.message}`);
   process.exit(1);
 }
+
+const iconImports = extractIconImports(src);
 
 let entries;
 try {
@@ -84,8 +121,25 @@ const results = entries.map((entry) => {
   const key           = extractKey(entry);
   const hasIcon         = hasField(entry, 'Icon');
   const hasIconOutlined = hasField(entry, 'IconOutlined');
-  const pass          = hasIcon && hasIconOutlined;
-  return { key, hasIcon, hasIconOutlined, pass };
+
+  const iconValue         = extractFieldValue(entry, 'Icon');
+  const iconOutlinedValue = extractFieldValue(entry, 'IconOutlined');
+
+  const iconImported         = iconValue         ? iconImports.has(iconValue)         : false;
+  const iconOutlinedImported = iconOutlinedValue ? iconImports.has(iconOutlinedValue) : false;
+
+  const pass = hasIcon && hasIconOutlined && iconImported && iconOutlinedImported;
+
+  return {
+    key,
+    hasIcon,
+    hasIconOutlined,
+    iconValue,
+    iconOutlinedValue,
+    iconImported,
+    iconOutlinedImported,
+    pass,
+  };
 });
 
 const failures = results.filter((r) => !r.pass);
@@ -97,14 +151,15 @@ const lines = [
   '# bottom-nav-lint',
   '',
   `Checked ${results.length} NAV entr${results.length === 1 ? 'y' : 'ies'} in \`BottomNav.tsx\`.`,
+  `Found ${iconImports.size} \`@mui/icons-material\` import${iconImports.size === 1 ? '' : 's'}.`,
   '',
-  '| key | Icon | IconOutlined | result |',
-  '| --- | ---- | ------------ | ------ |',
+  '| key | Icon | Icon imported | IconOutlined | IconOutlined imported | result |',
+  '| --- | ---- | ------------- | ------------ | --------------------- | ------ |',
 ];
 
 for (const r of results) {
   lines.push(
-    `| \`${r.key}\` | ${r.hasIcon ? '✓' : '✗'} | ${r.hasIconOutlined ? '✓' : '✗'} | ${r.pass ? 'PASS' : '**FAIL**'} |`,
+    `| \`${r.key}\` | ${r.hasIcon ? '✓' : '✗'} | ${r.iconImported ? '✓' : '✗'} | ${r.hasIconOutlined ? '✓' : '✗'} | ${r.iconOutlinedImported ? '✓' : '✗'} | ${r.pass ? 'PASS' : '**FAIL**'} |`,
   );
 }
 
@@ -114,11 +169,14 @@ if (failures.length === 0) {
 } else {
   lines.push(`**${failures.length} entr${failures.length === 1 ? 'y' : 'ies'} failed:**`);
   for (const f of failures) {
-    const missing = [
-      !f.hasIcon         && '`Icon`',
-      !f.hasIconOutlined && '`IconOutlined`',
-    ].filter(Boolean).join(', ');
-    lines.push(`- \`${f.key}\`: missing ${missing}`);
+    const missing = [];
+    if (!f.hasIcon)                missing.push('`Icon` field missing');
+    if (f.hasIcon && !f.iconImported)
+      missing.push(`\`Icon\` value \`${f.iconValue}\` not imported from \`@mui/icons-material\``);
+    if (!f.hasIconOutlined)        missing.push('`IconOutlined` field missing');
+    if (f.hasIconOutlined && !f.iconOutlinedImported)
+      missing.push(`\`IconOutlined\` value \`${f.iconOutlinedValue}\` not imported from \`@mui/icons-material\``);
+    lines.push(`- \`${f.key}\`: ${missing.join('; ')}`);
   }
 }
 
@@ -128,15 +186,18 @@ fs.writeFileSync(OUT, lines.join('\n') + '\n');
 // ── console summary ───────────────────────────────────────────────────────────
 
 if (failures.length === 0) {
-  console.log(`[bottom-nav-lint] All ${passed} NAV entries have Icon + IconOutlined. ✓`);
+  console.log(`[bottom-nav-lint] All ${passed} NAV entries have Icon + IconOutlined, both imported. ✓`);
 } else {
-  console.error(`[bottom-nav-lint] ${failures.length} NAV entr${failures.length === 1 ? 'y' : 'ies'} missing icon field(s):`);
+  console.error(`[bottom-nav-lint] ${failures.length} NAV entr${failures.length === 1 ? 'y' : 'ies'} failed icon checks:`);
   for (const f of failures) {
-    const missing = [
-      !f.hasIcon         && 'Icon',
-      !f.hasIconOutlined && 'IconOutlined',
-    ].filter(Boolean).join(', ');
-    console.error(`  • ${f.key}: missing ${missing}`);
+    const missing = [];
+    if (!f.hasIcon)                missing.push('Icon field missing');
+    if (f.hasIcon && !f.iconImported)
+      missing.push(`Icon value "${f.iconValue}" not imported from @mui/icons-material`);
+    if (!f.hasIconOutlined)        missing.push('IconOutlined field missing');
+    if (f.hasIconOutlined && !f.iconOutlinedImported)
+      missing.push(`IconOutlined value "${f.iconOutlinedValue}" not imported from @mui/icons-material`);
+    console.error(`  • ${f.key}: ${missing.join('; ')}`);
   }
   process.exit(1);
 }
