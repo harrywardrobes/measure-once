@@ -3659,6 +3659,113 @@
   }
   window.moveDvItem = moveDvItem;
 
+  // ── Catalogue drag-and-drop reorder ───────────────────────────────────────
+  const _DV_ENDPOINT_MAP = {
+    handle:       '/api/admin/design-visit-handles',
+    furniture:    '/api/admin/design-visit-furniture-ranges',
+    'door-style': '/api/admin/design-visit-door-styles',
+  };
+  const _DV_WRAP_ID_MAP = {
+    handle:       'dv-handles-wrap',
+    furniture:    'dv-furniture-wrap',
+    'door-style': 'dv-door-styles-wrap',
+  };
+  function _dvCacheFor(type) {
+    if (type === 'handle')      return _dvHandlesData;
+    if (type === 'furniture')   return _dvFurnitureData;
+    if (type === 'door-style')  return _dvDoorStylesData;
+    return null;
+  }
+  function _rerenderDvType(type) {
+    const wrap = document.getElementById(_DV_WRAP_ID_MAP[type]);
+    if (!wrap) return;
+    if (type === 'handle') {
+      renderDvHandleList(wrap, _dvHandlesData);
+    } else if (type === 'furniture') {
+      renderDvList(wrap, _dvFurnitureData, 'furniture', { fields: ['name','description'], labels: ['Name','Description'] });
+    } else {
+      renderDvList(wrap, _dvDoorStylesData, 'door-style', { fields: ['name','image_url'], labels: ['Name','Image URL'] });
+    }
+  }
+  async function _reorderDvItems(type, newOrderIds) {
+    const cache = _dvCacheFor(type);
+    const endpoint = _DV_ENDPOINT_MAP[type];
+    if (!cache || !endpoint) return;
+    const byId = new Map(cache.map(x => [x.id, x]));
+    const patches = [];
+    newOrderIds.forEach((id, i) => {
+      const item = byId.get(id);
+      if (!item) return;
+      if ((item.sort_order || 0) !== i) patches.push({ id, newOrder: i, item });
+    });
+    if (!patches.length) return;
+    try {
+      await Promise.all(patches.map(p =>
+        api('PATCH', `${endpoint}/${p.id}`, { sort_order: p.newOrder })
+      ));
+      patches.forEach(p => { p.item.sort_order = p.newOrder; });
+      _rerenderDvType(type);
+      _broadcastDvCatalogueChange(type);
+    } catch (e) {
+      toast(`Failed to reorder: ${e.message}`, true);
+      if (type === 'handle')      loadDvHandles();
+      else if (type === 'furniture')  loadDvFurniture();
+      else if (type === 'door-style') loadDvDoorStyles();
+    }
+  }
+  function _attachDvDragHandlers(wrap, type) {
+    const tbody = wrap && wrap.querySelector('tbody');
+    if (!tbody) return;
+    let draggedRow = null;
+    const clearMarkers = () => {
+      tbody.querySelectorAll('tr').forEach(r => {
+        r.style.borderTop = '';
+        r.style.borderBottom = '';
+      });
+    };
+    tbody.querySelectorAll('tr[draggable="true"]').forEach(tr => {
+      tr.addEventListener('dragstart', (e) => {
+        draggedRow = tr;
+        tr.style.opacity = '0.4';
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', tr.dataset.id || ''); } catch {}
+        }
+      });
+      tr.addEventListener('dragend', () => {
+        tr.style.opacity = '';
+        clearMarkers();
+        draggedRow = null;
+      });
+      tr.addEventListener('dragover', (e) => {
+        if (!draggedRow || draggedRow === tr) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        const rect = tr.getBoundingClientRect();
+        const before = (e.clientY - rect.top) < rect.height / 2;
+        clearMarkers();
+        tr.style[before ? 'borderTop' : 'borderBottom'] = '2px solid #2563eb';
+      });
+      tr.addEventListener('drop', (e) => {
+        if (!draggedRow || draggedRow === tr) return;
+        e.preventDefault();
+        const rect = tr.getBoundingClientRect();
+        const before = (e.clientY - rect.top) < rect.height / 2;
+        if (before) tbody.insertBefore(draggedRow, tr);
+        else        tbody.insertBefore(draggedRow, tr.nextSibling);
+        clearMarkers();
+        const newOrderIds = Array.from(tbody.querySelectorAll('tr[data-id]'))
+          .map(r => Number(r.dataset.id))
+          .filter(n => Number.isFinite(n));
+        _reorderDvItems(type, newOrderIds);
+      });
+    });
+  }
+  const _DV_DRAG_HANDLE_CELL =
+    `<td style="padding:4px 4px;cursor:grab;color:var(--ink-4);text-align:center;user-select:none;" title="Drag to reorder" aria-hidden="true">⋮⋮</td>`;
+  const _DV_DRAG_HANDLE_TH =
+    `<th style="width:24px;"></th>`;
+
   // ── Handles ───────────────────────────────────────────────────────────────
   async function loadDvHandles() {
     const wrap = document.getElementById('dv-handles-wrap');
@@ -3683,6 +3790,7 @@
       <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
         <thead>
           <tr style="border-bottom:1px solid var(--border);">
+            ${_DV_DRAG_HANDLE_TH}
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Image</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Name</th>
             <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Style</th>
@@ -3692,7 +3800,8 @@
         </thead>
         <tbody>
           ${sorted.map((item, i) => `
-            <tr style="border-bottom:1px solid var(--border);${i % 2 ? 'background:var(--stone-soft);' : ''}">
+            <tr draggable="true" data-id="${item.id}" style="border-bottom:1px solid var(--border);${i % 2 ? 'background:var(--stone-soft);' : ''}">
+              ${_DV_DRAG_HANDLE_CELL}
               <td style="padding:7px 8px;">
                 ${item.image_url
                   ? `<img src="${esc(item.image_url)}" alt="${esc(item.name)}" style="width:32px;height:32px;object-fit:contain;border-radius:4px;border:1px solid var(--border);" onerror="this.style.display='none';">`
@@ -3717,6 +3826,7 @@
             </tr>`).join('')}
         </tbody>
       </table>`;
+    _attachDvDragHandlers(wrap, 'handle');
   }
 
   // ── Furniture Ranges ──────────────────────────────────────────────────────
@@ -3763,6 +3873,7 @@
       <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
         <thead>
           <tr style="border-bottom:1px solid var(--border);">
+            ${_DV_DRAG_HANDLE_TH}
             ${labels.map(l => `<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">${esc(l)}</th>`).join('')}
             <th style="width:52px;"></th>
             <th></th>
@@ -3770,7 +3881,8 @@
         </thead>
         <tbody>
           ${sorted.map((item, i) => `
-            <tr style="border-bottom:1px solid var(--border);${i % 2 ? 'background:var(--stone-soft);' : ''}">
+            <tr draggable="true" data-id="${item.id}" style="border-bottom:1px solid var(--border);${i % 2 ? 'background:var(--stone-soft);' : ''}">
+              ${_DV_DRAG_HANDLE_CELL}
               ${fields.map(f => `<td style="padding:7px 8px;">${esc(item[f] || '—')}</td>`).join('')}
               <td style="padding:4px 4px;white-space:nowrap;">
                 <button class="btn btn-ghost" style="padding:2px 5px;font-size:.75rem;line-height:1;" title="Move up"
@@ -3789,6 +3901,7 @@
             </tr>`).join('')}
         </tbody>
       </table>`;
+    _attachDvDragHandlers(wrap, type);
   }
 
   function _broadcastDvCatalogueChange(type) {
