@@ -1,37 +1,56 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppThemeProvider } from './AppThemeProvider';
 import { IslandErrorBoundary } from './components/IslandErrorBoundary';
-import { DesignSystemPage } from './pages/DesignSystemPage';
-import { SearchSettingsPage } from './pages/SearchSettingsPage';
-import { WorkshopSettingsPage } from './pages/WorkshopSettingsPage';
-import { CustomersPage } from './pages/CustomersPage';
-import { HomePage } from './pages/HomePage';
-import { CalendarPage } from './pages/CalendarPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { SettingsPage } from './pages/admin/SettingsPage';
-import { CardActionsPage } from './pages/admin/CardActionsPage';
-import { ActionHandlersPage } from './pages/admin/ActionHandlersPage';
-import { DesignVisitPage } from './pages/admin/DesignVisitPage';
-import { DevEnvironmentPage } from './pages/admin/DevEnvironmentPage';
-import { AdminTabsBar } from './components/AdminTabsBar';
-import { AdminTeamPage } from './pages/admin/AdminTeamPage';
-import { AdminPermissionsPage } from './pages/admin/AdminPermissionsPage';
-import { AdminRequestsPage } from './pages/admin/AdminRequestsPage';
-import { AdminAuditLogPage } from './pages/admin/AdminAuditLogPage';
+
+/*
+ * Shell components that are always present on every page are imported
+ * statically — they're small and needed immediately on mount.
+ */
 import { GlobalHeader } from './components/GlobalHeader';
 import { PageHeadingPanel } from './components/PageHeadingPanel';
 import { BottomNav } from './components/BottomNav';
+import { AdminTabsBar } from './components/AdminTabsBar';
+
+/*
+ * Page-level components are lazy-imported so Vite emits a separate chunk
+ * for each one. The browser only downloads a chunk when its mount point
+ * (`#tab-…` / `#*-view`) is actually present in the DOM, which means each
+ * page loads only the code it needs.
+ *
+ * New pages: add a React.lazy() entry here and a matching row in MOUNTS.
+ */
+const DesignSystemPage   = React.lazy(() => import('./pages/DesignSystemPage').then(m => ({ default: m.DesignSystemPage })));
+const SearchSettingsPage = React.lazy(() => import('./pages/SearchSettingsPage').then(m => ({ default: m.SearchSettingsPage })));
+const WorkshopSettingsPage = React.lazy(() => import('./pages/WorkshopSettingsPage').then(m => ({ default: m.WorkshopSettingsPage })));
+const CustomersPage      = React.lazy(() => import('./pages/CustomersPage').then(m => ({ default: m.CustomersPage })));
+const HomePage           = React.lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
+const CalendarPage       = React.lazy(() => import('./pages/CalendarPage').then(m => ({ default: m.CalendarPage })));
+const ProfilePage        = React.lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
+const SettingsPage       = React.lazy(() => import('./pages/admin/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const CardActionsPage    = React.lazy(() => import('./pages/admin/CardActionsPage').then(m => ({ default: m.CardActionsPage })));
+const ActionHandlersPage = React.lazy(() => import('./pages/admin/ActionHandlersPage').then(m => ({ default: m.ActionHandlersPage })));
+const DesignVisitPage    = React.lazy(() => import('./pages/admin/DesignVisitPage').then(m => ({ default: m.DesignVisitPage })));
+const DevEnvironmentPage = React.lazy(() => import('./pages/admin/DevEnvironmentPage').then(m => ({ default: m.DevEnvironmentPage })));
+const AdminTeamPage      = React.lazy(() => import('./pages/admin/AdminTeamPage').then(m => ({ default: m.AdminTeamPage })));
+const AdminPermissionsPage = React.lazy(() => import('./pages/admin/AdminPermissionsPage').then(m => ({ default: m.AdminPermissionsPage })));
+const AdminRequestsPage  = React.lazy(() => import('./pages/admin/AdminRequestsPage').then(m => ({ default: m.AdminRequestsPage })));
+const AdminAuditLogPage  = React.lazy(() => import('./pages/admin/AdminAuditLogPage').then(m => ({ default: m.AdminAuditLogPage })));
 
 /**
  * Every React mount goes through `AppThemeProvider` so the shared MUI
  * theme + `ScopedCssBaseline` apply everywhere. New mount points only
  * need to add an entry to `MOUNTS` below — the wrapper is automatic.
+ *
+ * Lazy page components are wrapped in `Suspense` (fallback: nothing) so
+ * the rest of the page is never blocked while a chunk downloads.
  */
 function withTheme(node: React.ReactElement, islandId: string): React.ReactElement {
   return (
     <AppThemeProvider>
-      <IslandErrorBoundary islandId={islandId}>{node}</IslandErrorBoundary>
+      <IslandErrorBoundary islandId={islandId}>
+        <Suspense fallback={null}>{node}</Suspense>
+      </IslandErrorBoundary>
     </AppThemeProvider>
   );
 }
@@ -77,6 +96,13 @@ function mountKnown(): number {
   for (const m of MOUNTS) {
     const el = document.getElementById(m.id);
     if (!el) continue;
+    // Tab panels that are not currently active should not be mounted yet —
+    // their chunk will be fetched only when the user first opens that tab
+    // (switchTab in admin.html calls __reactIslandMount after activating
+    // the panel, which comes back here and mounts it then).
+    if (el.classList.contains('tab-panel') && !el.classList.contains('active')) {
+      continue;
+    }
     if (el.dataset.dsRendered === '1') { count++; continue; }
     el.dataset.dsRendered = '1';
     try {

@@ -69,8 +69,12 @@
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + id));
     try { localStorage.setItem('adminActiveTab', id); } catch (_) {}
+    // Mount any React island in the newly-active panel on first use.
+    // mountKnown() skips tab-panel elements that lack the `active` class,
+    // so this call is a no-op for already-mounted or shell-only tabs.
     // (Audit log is a React island now; it self-loads on mount and refreshes
     //  via the `admin_data_changed` BroadcastChannel — no auto-init here.)
+    try { window.__reactIslandMount && window.__reactIslandMount(); } catch (_) {}
   }
 
 
