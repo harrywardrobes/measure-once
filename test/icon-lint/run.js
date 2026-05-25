@@ -108,12 +108,41 @@ function stripCommentsAndStrings(src) {
       if (match[0] === '`') {
         // Template literal: blank out the static string parts but preserve
         // ${...} interpolation expressions so that icon identifiers used
-        // inside them (e.g. `${FooIcon}`) are still found by the usage scan.
-        // Single-level brace matching is sufficient for icon references.
-        return match.replace(
-          /(\$\{[^}]*\})|[^\n]/g,
-          (ch, interp) => (interp !== undefined ? interp : ' '),
-        );
+        // inside them (e.g. `${FooIcon}` or `${fn({ icon: FooIcon })}`) are
+        // still found by the usage scan.
+        //
+        // Uses a character-by-character approach with a brace-depth counter so
+        // that arbitrarily nested `{}` inside an interpolation are handled
+        // correctly (the previous `[^}]*` regex only handled one level).
+        let result = '';
+        let i = 0;
+        while (i < match.length) {
+          const ch = match[i];
+          if (ch === '\\') {
+            result += match[i + 1] === '\n' ? ' \n' : '  ';
+            i += 2;
+            continue;
+          }
+          if (ch === '$' && i + 1 < match.length && match[i + 1] === '{') {
+            // Walk forward tracking brace depth to find the matching '}'.
+            let depth = 1;
+            let j = i + 2;
+            while (j < match.length && depth > 0) {
+              if (match[j] === '{') depth++;
+              else if (match[j] === '}') depth--;
+              j++;
+            }
+            // Preserve the entire interpolation (${...}) verbatim so that
+            // any icon identifiers inside it are visible to the usage scan.
+            result += match.slice(i, j);
+            i = j;
+            continue;
+          }
+          // Static template content — preserve newlines, blank everything else.
+          result += ch === '\n' ? '\n' : ' ';
+          i++;
+        }
+        return result;
       }
       return match.replace(/[^\n]/g, ' ');
     },
@@ -363,6 +392,23 @@ function extractIconUsages(src) {
     assert(
       usages.some((u) => u.identifier === 'CheckIcon'),
       'CheckIcon as a generic type argument (<CheckIcon>) must be detected as a usage',
+    );
+  }
+
+  // 12. Identifier inside a template-literal interpolation that itself contains
+  //     nested braces (e.g. `${fn({ icon: FooIcon })}`) must still be detected.
+  //     This guards against the prior `[^}]*` regex that mis-parsed the first
+  //     inner `}` as closing the interpolation.
+  {
+    const src = [
+      "import BrushIcon from '@mui/icons-material/Brush';",
+      'const x = `result: ${fn({ icon: BrushIcon, label: "hi" })}`;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.some((u) => u.identifier === 'BrushIcon'),
+      'BrushIcon inside a nested-brace template interpolation ${fn({ icon: BrushIcon })} must be detected',
     );
   }
 })();
