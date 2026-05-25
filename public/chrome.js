@@ -114,6 +114,28 @@ window.getShortcut = function (key) {
   // placeholder synchronously so the layout reserves space immediately.
   const header = `<div id="app-header-mount"></div>`;
 
+  // Per-page heading panel: shows the resolved page title on the left and an
+  // empty action slot (#page-heading-action) on the right. Pages that need a
+  // header button (e.g. Customers' "+ New customer") append a node into the
+  // slot; if no node is added, the action area collapses and only the title
+  // shows. The panel hides itself entirely if no title is resolvable so
+  // public/auth pages aren't affected.
+  // Pages that render their own top-level heading (admin.html ships an
+  // "Admin Panel" h1) or use a fixed-layout `.app-body` (customer-detail)
+  // would either duplicate or be overlapped by the shared panel, so they
+  // opt out. Only top-level normal-flow pages that have a PAGE_TITLES
+  // entry get the shared heading.
+  const headingSuppressed =
+    path === '/admin' || path.startsWith('/admin/') ||
+    /^\/customers\/[^/]+/.test(path);
+  const pageTitle = (window.PAGE_TITLES || {})[path] || '';
+  const pageHeading = (pageTitle && !headingSuppressed)
+    ? `<div class="page-heading-panel" id="page-heading-panel" role="region" aria-label="${pageTitle}">
+         <h1 class="page-heading-title" id="page-heading-title">${pageTitle}</h1>
+         <div class="page-heading-action" id="page-heading-action"></div>
+       </div>`
+    : '';
+
   const bottomNav = `
     <nav class="bottom-nav" id="main-content">
       <div class="bottom-nav-inner">
@@ -160,7 +182,7 @@ window.getShortcut = function (key) {
     </div>`;
 
   const isAdminPage = path === '/admin' || path.startsWith('/admin/');
-  document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner);
+  document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner + pageHeading);
   document.body.insertAdjacentHTML('beforeend', invoicePanel + (isAdminPage ? '' : bottomNav));
 
   function scrollActiveNavIntoView(behavior) {

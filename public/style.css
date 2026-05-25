@@ -162,10 +162,45 @@ body {
 body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
 
 /* ── App Shell ───────────────────────────────────────────────────────────────── */
-/* The top app bar (logo, page title, search, customers/admin/avatar icons) is
-   now a React MUI island — see src/react/components/GlobalHeader.tsx mounted
-   into #app-header-mount by chrome.js. The body's --header-h padding-top above
-   reserves space for the fixed MUI AppBar. */
+/* The top app bar (logo, search, customers/admin/avatar icons) is now a React
+   MUI island — see src/react/components/GlobalHeader.tsx mounted into
+   #app-header-mount by chrome.js. The body's --header-h padding-top above
+   reserves space for the fixed MUI AppBar. The per-page title used to live
+   inside the AppBar; it is now rendered in a dedicated heading panel
+   (.page-heading-panel) injected by chrome.js immediately below the AppBar,
+   with an optional action slot (#page-heading-action) on the right. */
+
+.page-heading-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 16px 16px 8px;
+  box-sizing: border-box;
+}
+.page-heading-title {
+  margin: 0;
+  font-family: 'Anton', system-ui, sans-serif;
+  font-size: 1.6rem;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: var(--ink-1);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-heading-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.page-heading-action:empty { display: none; }
 
 /* ── Command Palette Hint Bar ────────────────────────────────────────────────── */
 .cp-hint-bar {

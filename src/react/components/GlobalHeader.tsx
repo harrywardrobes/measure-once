@@ -6,7 +6,6 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Avatar from '@mui/material/Avatar';
 import Badge from '@mui/material/Badge';
-import Typography from '@mui/material/Typography';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
@@ -29,13 +28,6 @@ declare global {
     PAGE_TITLES?: Record<string, string>;
     __moHeaderUser?: HeaderUser | null;
   }
-}
-
-function resolvePageTitle(path: string): string {
-  const map = window.PAGE_TITLES || {};
-  if (map[path]) return map[path];
-  if (path.startsWith('/customers/')) return 'Customer';
-  return 'Measure Once';
 }
 
 function resolvePhotoSrc(user: HeaderUser): string | null {
@@ -126,7 +118,6 @@ export function GlobalHeader() {
   }, [isAdmin]);
 
   const showBack = path !== '/';
-  const pageTitle = resolvePageTitle(path);
   const kbdHint = window.getShortcut ? window.getShortcut('K') : 'Ctrl K';
   const customersActive = path === '/customers' || path.startsWith('/customers/');
   const adminActive = path === '/admin' || path.startsWith('/admin/');
@@ -188,21 +179,6 @@ export function GlobalHeader() {
               sx={{ height: 26, width: 'auto', display: 'block' }}
             />
           </Box>
-          <Typography
-            component="span"
-            sx={{
-              fontSize: '0.95rem',
-              fontWeight: 700,
-              color: '#fff',
-              letterSpacing: '0.01em',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              minWidth: 0,
-            }}
-          >
-            {pageTitle}
-          </Typography>
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>

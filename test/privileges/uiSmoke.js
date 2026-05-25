@@ -157,13 +157,18 @@ async function runUiSmoke({ users, runId, clients }) {
         const chromeInfo = await page.evaluate(() => {
           const mount = document.querySelector('#app-header-mount');
           const muiHeader = mount?.querySelector('header.MuiAppBar-root');
-          const titleEl = muiHeader?.querySelector('.MuiToolbar-root .MuiTypography-root');
+          // Per-page title now lives in #page-heading-title (chrome.js) on
+          // normal-flow pages, or in the page's own <h1 class="page-title">
+          // on opt-out pages like /admin.
+          const headingEl =
+            document.querySelector('#page-heading-title') ||
+            document.querySelector('h1.page-title');
           const legacySignOut = Array.from(document.querySelectorAll('.nav-btn'))
             .find(el => /sign\s*out/i.test(el.textContent));
           const avatarLink = muiHeader?.querySelector('a[href="/profile"]');
           return {
             hasAppHeader: !!muiHeader,
-            pageTitleText: titleEl ? titleEl.textContent.trim() : '',
+            pageTitleText: headingEl ? headingEl.textContent.trim() : '',
             hasLegacySignOut: !!legacySignOut,
             hasAuthAvatar: !!avatarLink,
           };
@@ -174,8 +179,8 @@ async function runUiSmoke({ users, runId, clients }) {
           `hasAppHeader=${chromeInfo.hasAppHeader}`,
           'high', chromeInfo.hasAppHeader);
 
-        record('admin /admin GlobalHeader page title contains "Admin"',
-          'header title text includes "Admin"',
+        record('admin /admin page heading contains "Admin"',
+          'page heading (#page-heading-title or h1.page-title) includes "Admin"',
           `pageTitleText="${chromeInfo.pageTitleText}"`,
           'high', /Admin/i.test(chromeInfo.pageTitleText));
 

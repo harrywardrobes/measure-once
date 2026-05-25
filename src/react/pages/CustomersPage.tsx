@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import {
   Alert,
   Box,
@@ -950,18 +951,11 @@ export function CustomersPage(): React.ReactElement {
   };
 
   return (
-    <Container maxWidth="md" sx={{ py: 3 }}>
+    <Container maxWidth="md" sx={{ py: 2 }}>
       <Stack spacing={2}>
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={2}
-          alignItems={{ xs: 'stretch', sm: 'center' }}
-          justifyContent="space-between"
-        >
-          <Typography variant="h5" component="h1" fontWeight={700}>
-            Customers
-          </Typography>
-          {isViewer ? null : (
+        {!isViewer && typeof document !== 'undefined' &&
+          document.getElementById('page-heading-action') &&
+          createPortal(
             <Button
               id="new-customer-btn"
               variant="contained"
@@ -970,9 +964,9 @@ export function CustomersPage(): React.ReactElement {
               onClick={() => setNewOpen(true)}
             >
               New customer
-            </Button>
+            </Button>,
+            document.getElementById('page-heading-action') as HTMLElement,
           )}
-        </Stack>
 
         <Box sx={{ overflowX: 'auto' }}>
           <ToggleButtonGroup
