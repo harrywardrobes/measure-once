@@ -25,6 +25,8 @@ import HandymanIcon from '@mui/icons-material/Handyman';
 import HandymanOutlinedIcon from '@mui/icons-material/HandymanOutlined';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
+import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 
 /**
@@ -68,8 +70,9 @@ export type NavItem = {
 };
 
 export const NAV: NavItem[] = [
-  { key: 'home',     href: '/',         label: 'Home',     Icon: HomeIcon,          IconOutlined: HomeOutlinedIcon },
-  { key: 'sales',    href: '/sales',    label: 'Sales',    Icon: SellIcon,          IconOutlined: SellOutlinedIcon,          managerOnly: true },
+  { key: 'home',      href: '/',          label: 'Home',      Icon: HomeIcon,             IconOutlined: HomeOutlinedIcon },
+  { key: 'customers', href: '/customers', label: 'Customers', Icon: PeopleAltIcon,        IconOutlined: PeopleAltOutlinedIcon },
+  { key: 'sales',     href: '/sales',     label: 'Sales',     Icon: SellIcon,             IconOutlined: SellOutlinedIcon,          managerOnly: true },
   { key: 'survey',   href: '/survey',   label: 'Survey',   Icon: AssignmentIcon,    IconOutlined: AssignmentOutlinedIcon,    managerOnly: true },
   { key: 'projects', href: '/projects', label: 'Projects', Icon: SquareFootIcon,    IconOutlined: SquareFootOutlinedIcon,    managerOnly: true },
   { key: 'calendar', href: '/calendar', label: 'Calendar', Icon: CalendarMonthIcon, IconOutlined: CalendarMonthOutlinedIcon },
@@ -78,7 +81,7 @@ export const NAV: NavItem[] = [
   { key: 'ideas',    href: '/ideas',    label: 'Ideas',    Icon: LightbulbIcon,     IconOutlined: LightbulbOutlinedIcon },
 ];
 
-const DEFAULT_PRIMARY_KEYS = ['home', 'calendar', 'trades'];
+const DEFAULT_PRIMARY_KEYS = ['home', 'customers', 'trades'];
 const BAR_SIZE = 3;
 
 function accentFor(key: string, theme: Theme): string {
@@ -89,8 +92,10 @@ function accentFor(key: string, theme: Theme): string {
 }
 
 function matchPath(pathname: string): string | false {
-  const m = NAV.find((n) => n.href === pathname);
-  return m ? m.key : false;
+  const exact = NAV.find((n) => n.href === pathname);
+  if (exact) return exact.key;
+  const prefix = NAV.find((n) => n.href !== '/' && pathname.startsWith(n.href + '/'));
+  return prefix ? prefix.key : false;
 }
 
 const VALID_NAV_KEYS = new Set(NAV.map((n) => n.key));
@@ -132,7 +137,7 @@ export function BottomNav() {
   // loadRoleNavConfig callback always reads the latest isManager value even
   // when isManager resolved after the effect started.
   const defaultPrimaryKeys = isManager
-    ? (['home', 'sales', 'calendar'] as string[])
+    ? (['home', 'customers', 'sales'] as string[])
     : DEFAULT_PRIMARY_KEYS;
   const defaultPrimaryKeysRef = useRef(defaultPrimaryKeys);
   defaultPrimaryKeysRef.current = defaultPrimaryKeys;
