@@ -645,6 +645,35 @@ async function main() {
         !!(submitStateEdit && submitStateEdit.disabled === true && /phone/i.test(submitStateEdit.title)),
       );
 
+      // Click the link → modal should re-open in Edit mode for company A.
+      await page.evaluate(() => {
+        const link = document.querySelector('#tf-cphone-notice-0 .trades-phone-notice-link');
+        if (link) link.click();
+      });
+
+      const editingAFromEdit = await pollPage(page, (id) => {
+        const editId = document.getElementById('trades-edit-id');
+        const title  = document.getElementById('trades-modal-title');
+        const co     = document.getElementById('tf-company');
+        return editId && String(editId.value) === String(id)
+          ? {
+              title: (title && title.textContent) || '',
+              company: (co && co.value) || '',
+            }
+          : null;
+      }, tradeA.id, 3000);
+      const editAFromEditOk = !!editingAFromEdit
+        && editingAFromEdit.title === 'Edit Company'
+        && editingAFromEdit.company === TRADES_COMPANY_A;
+      record(
+        'TRADES EDIT: clicking the contact-phone notice link re-opens company A in Edit mode',
+        `#trades-edit-id=${tradeA.id}, title="Edit Company", company input="${TRADES_COMPANY_A}"`,
+        editingAFromEdit
+          ? `title=${JSON.stringify(editingAFromEdit.title)} company=${JSON.stringify(editingAFromEdit.company)}`
+          : 'not editing A',
+        editAFromEditOk,
+      );
+
       await page.close();
     }
 
