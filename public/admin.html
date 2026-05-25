@@ -77,7 +77,23 @@
     try { window.__reactIslandMount && window.__reactIslandMount(); } catch (_) {}
   }
 
-
+  /* ── waitForElement ──────────────────────────────────────────────────────────
+   * Returns a Promise that resolves to the element once it appears in the DOM,
+   * using a MutationObserver so there is no busy-polling. Resolves to null if
+   * the element does not appear within `timeout` ms (default 10 s).
+   */
+  function waitForElement(id, timeout) {
+    const existing = document.getElementById(id);
+    if (existing) return Promise.resolve(existing);
+    return new Promise(function(resolve) {
+      var timer = setTimeout(function() { observer.disconnect(); resolve(null); }, timeout || 10000);
+      var observer = new MutationObserver(function() {
+        var el = document.getElementById(id);
+        if (el) { clearTimeout(timer); observer.disconnect(); resolve(el); }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+  }
 
   // ── Dev test users ──────────────────────────────────────────────────────────
   let _devModeChecked = false;
@@ -142,7 +158,7 @@
       } catch { _devMode = false; }
       _devModeChecked = true;
     }
-    const section = document.getElementById('dev-test-users-section');
+    const section = await waitForElement('dev-test-users-section');
     if (!section) return;
     if (!_devMode) { section.style.display = 'none'; return; }
     section.style.display = '';
@@ -221,7 +237,7 @@
   let _hubspotStatusLoaded = false;
   async function loadHubspotStatus() {
     if (_hubspotStatusLoaded) return;
-    const badge = document.getElementById('hubspot-status-badge');
+    const badge = await waitForElement('hubspot-status-badge');
     if (!badge) return;
     try {
       const data = await api('GET', '/api/hubspot/status');
@@ -1689,7 +1705,7 @@
 
   async function loadLeadStatusesAdmin() {
     if (_leadStatusesLoaded) return;
-    const wrap = document.getElementById('lead-statuses-table-wrap');
+    const wrap = await waitForElement('lead-statuses-table-wrap');
     if (!wrap) return;
     try {
       _leadStatusesData = await api('GET', '/api/admin/lead-statuses');
