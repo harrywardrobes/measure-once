@@ -264,7 +264,7 @@ function fmtInstallDate(isoStr) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-function customerCardHtml(contact, rooms, isAdmin) {
+function customerCardHtml(contact, rooms, canAssign) {
   const name      = escHtml(contactName(contact));
   const contactId = escHtml(contact.id || '');
 
@@ -278,7 +278,7 @@ function customerCardHtml(contact, rooms, isAdmin) {
     const colour     = stageColour(r.stageKey);
     const stageLabel = escHtml(state.workflow?.stages?.[r.stageKey]?.label || r.stageKey);
     const roomLabel  = escHtml(r.room || 'Main');
-    const chip       = fitterChipHtml(r, contact.id, isAdmin);
+    const chip       = fitterChipHtml(r, contact.id, canAssign);
     return `
       <div class="project-room-row" data-contact-id="${escHtml(contact.id)}" data-room-idx="${r.roomIdx}">
         <span class="project-room-row-name">${roomLabel}</span>

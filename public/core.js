@@ -124,9 +124,15 @@ const state = {
 // src/react/hooks/usePrivilege.ts so all callers stay consistent.
 // Prefer usePrivilege() inside React components.
 // NOTE: window.__moHeaderUser is deprecated — use getPrivilegeLevel() instead.
+//
+// Audit (all public/*.js privilege reads verified):
+//   - All callers use getPrivilegeLevel() or its named wrappers below.
+//   - No raw state.user?.privilege_level reads exist outside this function.
+//   - `??` (null-coalescing) is used so only null/undefined falls back to
+//     'member'; a valid non-empty string (e.g. 'viewer') is never discarded.
 function getPrivilegeLevel() {
   const user = window.__moHeaderUser || state.user || null;
-  return (user && user.privilege_level) ? user.privilege_level : 'member';
+  return user?.privilege_level ?? 'member';
 }
 function isViewerPrivilege()  { return getPrivilegeLevel() === 'viewer'; }
 function isAdminPrivilege()   { return getPrivilegeLevel() === 'admin'; }
