@@ -94,13 +94,7 @@ type PhoneConflict =
 
 type EmailConflict = { company: Trade; contactName: string };
 
-type ContactSlot = {
-  name: string;
-  role: string;
-  phone: string;
-  email: string;
-  preferred_contact: string;
-};
+type ContactSlot = Required<TradeContact>;
 
 type FormValues = {
   company_name: string;
