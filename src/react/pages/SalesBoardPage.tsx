@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Card, Snackbar, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, Snackbar, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
 
@@ -811,9 +812,23 @@ export function SalesBoardPage() {
     return () => document.removeEventListener('sales-board-bg-refresh-failed', onFail);
   }, []);
 
+  // Bootstrap-failure error state — fires when core.js bootstrap() throws and
+  // dispatches 'sales-board-bootstrap-failed' instead of writing to #sales-view
+  // innerHTML (which would orphan this React tree).
+  const [bootstrapFailed, setBootstrapFailed] = useState(false);
   useEffect(() => {
-    document.addEventListener(DATA_READY_EVENT, forceUpdate);
-    return () => document.removeEventListener(DATA_READY_EVENT, forceUpdate);
+    const onBootstrapFail = () => setBootstrapFailed(true);
+    document.addEventListener('sales-board-bootstrap-failed', onBootstrapFail);
+    return () => document.removeEventListener('sales-board-bootstrap-failed', onBootstrapFail);
+  }, []);
+
+  useEffect(() => {
+    const onReady = () => {
+      setBootstrapFailed(false);
+      forceUpdate();
+    };
+    document.addEventListener(DATA_READY_EVENT, onReady);
+    return () => document.removeEventListener(DATA_READY_EVENT, onReady);
   }, [forceUpdate]);
 
   useEffect(() => {
@@ -860,6 +875,48 @@ export function SalesBoardPage() {
       /* ignore */
     }
   };
+
+  if (bootstrapFailed) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: 4,
+          bgcolor: 'background.default',
+        }}
+      >
+        <Box
+          sx={{
+            maxWidth: 420,
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          <WarningAmberIcon sx={{ fontSize: 48, color: 'warning.main', opacity: 0.8 }} />
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            HubSpot is currently unavailable
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            The sales board couldn&apos;t load because HubSpot couldn&apos;t be reached.
+            This is usually a temporary issue.
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => window.location.reload()}
+            sx={{ mt: 1 }}
+          >
+            Reload page
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <>

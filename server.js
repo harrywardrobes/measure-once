@@ -565,8 +565,11 @@ async function getSharedContactsCache() {
     return { contacts: outcome.contacts, stale: false };
   }
 
-  // Refresh failed — serve last-good snapshot if within the staleness cap.
-  if (_allContactsLastGood && Date.now() - _allContactsLastGood.fetchedAt < ALL_CONTACTS_STALE_MAX_MS) {
+  // Refresh failed — serve last-good snapshot regardless of age so callers
+  // always get data (or an empty list) rather than a thrown error.
+  // The staleness cap is intentionally not enforced here: stale-but-present
+  // data is always better than a hard 502 reaching the client.
+  if (_allContactsLastGood) {
     if (process.env.DEBUG_HUBSPOT) {
       const status = outcome.err?.response?.status;
       console.warn('[contacts-all] HubSpot fetch failed (status=%s); serving stale contacts age=%dms',
@@ -575,8 +578,17 @@ async function getSharedContactsCache() {
     return { contacts: _allContactsLastGood.contacts, stale: true };
   }
 
-  // No usable snapshot — propagate the error so the route can 502.
-  throw outcome.err;
+  // No snapshot at all (cold start with HubSpot unavailable).  Return an
+  // empty list with unavailable=true so the route can respond with 502 and
+  // the bootstrap error path dispatches sales-board-bootstrap-failed.
+  // This is preferable to throwing from this function because the outer
+  // route already handles the 502 path cleanly.
+  if (process.env.DEBUG_HUBSPOT) {
+    const status = outcome.err?.response?.status;
+    console.warn('[contacts-all] HubSpot fetch failed (status=%s) and no stale snapshot available',
+      status || 'network');
+  }
+  return { contacts: [], stale: true, unavailable: true, _err: outcome.err };
 }
 
 // Invalidate the shared contacts cache so the next request triggers a fresh
@@ -947,8 +959,25 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     };
     const comparator = sortComparators[sort] || sortComparators['newest'];
 
-    const { contacts: rawContacts, stale } = await getSharedContactsCache();
+    const cacheResult = await getSharedContactsCache();
+    const { contacts: rawContacts, stale } = cacheResult;
     if (stale) res.setHeader('X-Cache-Status', 'stale');
+
+    // Cold cache + HubSpot unavailable: no snapshot exists and HubSpot could
+    // not be reached.  Return 502 so bootstrap()'s catch block fires and the
+    // React board can display a proper in-board error state.
+    if (cacheResult.unavailable) {
+      const err = cacheResult._err;
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      return res.status(502).json({ error: 'HubSpot is currently unavailable. Please try again shortly.', code: 'HUBSPOT_UNAVAILABLE' });
+    }
+
     let contacts = rawContacts;
 
     // Dev-only filter: hide contacts without hw_test_user = true in non-production,
