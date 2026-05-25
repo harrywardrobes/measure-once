@@ -169,6 +169,57 @@ function resolveCssVar(cssVar: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
 }
 
+interface StageColorRowProps {
+  stageKey: string;
+  fallback: Record<'bg' | 'light' | 'text', string>;
+}
+
+function StageColorRow({ stageKey, fallback }: StageColorRowProps) {
+  const [liveColors, setLiveColors] = React.useState<Record<'bg' | 'light' | 'text', string>>(fallback);
+
+  React.useEffect(() => {
+    const resolved = (['bg', 'light', 'text'] as const).reduce((acc, slot) => {
+      const live = resolveCssVar(`--stage-${stageKey}-${slot}`);
+      acc[slot] = live || fallback[slot];
+      return acc;
+    }, {} as Record<'bg' | 'light' | 'text', string>);
+    setLiveColors((prev) =>
+      prev.bg === resolved.bg && prev.light === resolved.light && prev.text === resolved.text
+        ? prev
+        : resolved
+    );
+  });
+
+  return (
+    <Paper variant="outlined" sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+      <Box sx={{ minWidth: 140 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, textTransform: 'capitalize' }}>{stageKey}</Typography>
+        <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'ui-monospace, monospace' }}>
+          palette.stage.{stageKey}
+        </Typography>
+      </Box>
+      <Chip
+        size="small"
+        label="Sample pill"
+        sx={{ bgcolor: liveColors.light, color: liveColors.text, fontWeight: 600 }}
+      />
+      {(['bg', 'light', 'text'] as const).map((slot) => (
+        <Box key={slot} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Box sx={{ width: 22, height: 22, bgcolor: liveColors[slot], border: '1px solid', borderColor: 'divider', borderRadius: 0.5 }} />
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace' }}>
+              .{slot} · {liveColors[slot].toUpperCase()}
+            </Typography>
+            <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace', color: 'text.secondary' }}>
+              var(--stage-{stageKey}-{slot})
+            </Typography>
+          </Box>
+        </Box>
+      ))}
+    </Paper>
+  );
+}
+
 function SwatchCard({ name, hex, themePath, cssVar }: SwatchCardProps) {
   const [resolvedColor, setResolvedColor] = React.useState<string>(hex);
 
@@ -274,41 +325,9 @@ function TokensTab() {
           {' '}or <CodeRef>var(--stage-&lt;key&gt;-&lt;bg|light|text&gt;)</CodeRef>.
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {Object.entries(STAGE_COLORS).map(([key, c]) => {
-            const liveColors = (['bg','light','text'] as const).reduce((acc, slot) => {
-              const live = resolveCssVar(`--stage-${key}-${slot}`);
-              acc[slot] = live || c[slot];
-              return acc;
-            }, {} as Record<'bg'|'light'|'text', string>);
-            return (
-              <Paper key={key} variant="outlined" sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                <Box sx={{ minWidth: 140 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, textTransform: 'capitalize' }}>{key}</Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'ui-monospace, monospace' }}>
-                    palette.stage.{key}
-                  </Typography>
-                </Box>
-                <Chip
-                  size="small"
-                  label="Sample pill"
-                  sx={{ bgcolor: liveColors.light, color: liveColors.text, fontWeight: 600 }}
-                />
-                {(['bg','light','text'] as const).map((slot) => (
-                  <Box key={slot} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <Box sx={{ width: 22, height: 22, bgcolor: liveColors[slot], border: '1px solid', borderColor: 'divider', borderRadius: 0.5 }} />
-                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace' }}>
-                        .{slot} · {liveColors[slot].toUpperCase()}
-                      </Typography>
-                      <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace', color: 'text.secondary' }}>
-                        var(--stage-{key}-{slot})
-                      </Typography>
-                    </Box>
-                  </Box>
-                ))}
-              </Paper>
-            );
-          })}
+          {Object.entries(STAGE_COLORS).map(([key, c]) => (
+            <StageColorRow key={key} stageKey={key} fallback={c} />
+          ))}
         </Box>
       </TokenCard>
 
