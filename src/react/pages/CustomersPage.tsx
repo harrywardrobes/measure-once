@@ -259,12 +259,8 @@ async function loadLeadStatuses(): Promise<void> {
 }
 
 async function loadLeadStatusCounts(): Promise<void> {
-  try {
-    const counts = await apiGet<Record<string, number>>('/api/contacts-lead-status-counts');
-    if (counts && typeof counts === 'object') store.counts = counts;
-  } catch (e) {
-    console.warn('loadLeadStatusCounts failed:', (e as Error).message);
-  }
+  const counts = await apiGet<Record<string, number>>('/api/contacts-lead-status-counts');
+  if (counts && typeof counts === 'object') store.counts = counts;
 }
 
 async function loadLeadSubstatuses(): Promise<void> {
@@ -337,7 +333,7 @@ window.loadLeadStatusCounts = loadLeadStatusCounts;
 function useLeadStatusSync(onChange: () => void) {
   React.useEffect(() => {
     const refresh = () => {
-      Promise.all([loadLeadStatuses(), loadLeadStatusCounts(), loadLeadSubstatuses()])
+      Promise.all([loadLeadStatuses(), loadLeadStatusCounts().catch(() => {}), loadLeadSubstatuses()])
         .then(() => {
           populateLeadStatusFilter();
           onChange();
@@ -691,7 +687,7 @@ export function CustomersPage(): React.ReactElement {
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
-      await Promise.all([loadLeadStatuses(), loadLeadStatusCounts(), loadLeadSubstatuses()]);
+      await Promise.all([loadLeadStatuses(), loadLeadStatusCounts().catch(() => {}), loadLeadSubstatuses()]);
       if (cancelled) return;
       populateLeadStatusFilter();
       forceRender();
@@ -806,6 +802,7 @@ export function CustomersPage(): React.ReactElement {
   // Fetch the current page of contacts whenever the relevant filters change.
   React.useEffect(() => {
     let cancelled = false;
+    const countsRetryTimers: ReturnType<typeof setTimeout>[] = [];
     setLoading(true);
     setError(null);
 
@@ -863,7 +860,30 @@ export function CustomersPage(): React.ReactElement {
           setTotal(data.total != null ? data.total : list.length);
           setTotalPages(data.totalPages || 1);
           setLoading(false);
-          loadLeadStatusCounts().then(populateLeadStatusFilter).catch(() => {});
+          // Background counts refresh with retry: up to MAX_RETRIES retries at
+          // RETRY_DELAY_MS apart. On final failure surface the same Snackbar
+          // used by the open-leads background refresh.
+          const MAX_COUNTS_RETRIES = 2;
+          const COUNTS_RETRY_DELAY_MS = 30_000;
+          function scheduleCountsAttempt(retryCount: number, waitMs: number) {
+            const t = setTimeout(async () => {
+              if (cancelled) return;
+              try {
+                await loadLeadStatusCounts();
+                if (cancelled) return;
+                populateLeadStatusFilter();
+              } catch {
+                if (cancelled) return;
+                if (retryCount < MAX_COUNTS_RETRIES) {
+                  scheduleCountsAttempt(retryCount + 1, COUNTS_RETRY_DELAY_MS);
+                } else {
+                  setBgRefreshFailed(true);
+                }
+              }
+            }, waitMs);
+            countsRetryTimers.push(t);
+          }
+          scheduleCountsAttempt(0, 0);
         })
         .catch((e: Error & { code?: string }) => {
           if (cancelled) return;
@@ -877,6 +897,7 @@ export function CustomersPage(): React.ReactElement {
 
     return () => {
       cancelled = true;
+      countsRetryTimers.forEach(clearTimeout);
     };
   }, [page, leadStatus, sortBy, search, viewMode, refreshNonce]);
 
