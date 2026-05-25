@@ -612,6 +612,14 @@ export function CustomersPage(): React.ReactElement {
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
   const [openLeadsCacheAge, setOpenLeadsCacheAge] = React.useState<number | null>(null);
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
+  const fullOpenLeadsListRef = React.useRef<Contact[]>([]);
+  // Tracks the refreshNonce that was in effect when the last full open-leads
+  // fetch completed. When page changes but this nonce still matches, we can
+  // re-slice the cached list instead of making another network request.
+  const openLeadsNonceRef = React.useRef<number>(-1);
+  // Always-current page ref so async timer callbacks (e.g. background refresh)
+  // can slice to the correct page without capturing a stale closure value.
+  const pageRef = React.useRef<number>(initial.page);
   // autoHideDuration is set to null while the document is hidden so the MUI
   // Snackbar timer is paused (Page Visibility API).  Restored to 8 s when the
   // tab returns to the foreground.
@@ -714,6 +722,21 @@ export function CustomersPage(): React.ReactElement {
   }, []);
 
   useLeadStatusSync(refreshDropdown);
+
+  // Keep pageRef in sync so async callbacks can read the current page without
+  // capturing a stale closure value.
+  React.useEffect(() => { pageRef.current = page; }, [page]);
+
+  // Scroll to the top of the page when the user navigates to a new page.
+  // Skip on the initial mount to avoid disrupting the scroll-position restore.
+  const pageScrollInitialRef = React.useRef(true);
+  React.useEffect(() => {
+    if (pageScrollInitialRef.current) {
+      pageScrollInitialRef.current = false;
+      return;
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [page]);
 
   // Debounce the search input.
   React.useEffect(() => {
@@ -864,6 +887,20 @@ export function CustomersPage(): React.ReactElement {
     setContactsStale(false);
 
     if (viewMode === 'active') {
+      // If the full list was already loaded for this refreshNonce, re-slice it
+      // for the new page without making another network request.
+      if (openLeadsNonceRef.current === refreshNonce && fullOpenLeadsListRef.current.length > 0) {
+        const fullList = fullOpenLeadsListRef.current;
+        const fullTotal = fullList.length;
+        const calcTotalPages = Math.max(1, Math.ceil(fullTotal / PAGE_LIMIT));
+        const sliced = fullList.slice((page - 1) * PAGE_LIMIT, page * PAGE_LIMIT);
+        setContacts(sliced);
+        setTotal(fullTotal);
+        setTotalPages(calcTotalPages);
+        setLoading(false);
+        return;
+      }
+
       // Use raw fetch for open-leads so we can read response headers (X-Cache-Age).
       (async () => {
         try {
@@ -888,15 +925,22 @@ export function CustomersPage(): React.ReactElement {
             Number.isFinite(cacheAge) &&
             cacheAge >= NEAR_TTL_THRESHOLD_S;
           setOpenLeadsCacheAge(isCached ? cacheAge : null);
-          const list = data.results || [];
-          setContacts(list);
-          setTotal(data.total != null ? data.total : list.length);
-          setTotalPages(data.totalPages || 1);
+          const fullList = data.results || [];
+          fullOpenLeadsListRef.current = fullList;
+          openLeadsNonceRef.current = refreshNonce;
+          const fullTotal = data.total != null ? data.total : fullList.length;
+          const calcTotalPages = Math.max(1, Math.ceil(fullTotal / PAGE_LIMIT));
+          const sliced = fullList.slice((page - 1) * PAGE_LIMIT, page * PAGE_LIMIT);
+          setContacts(sliced);
+          setTotal(fullTotal);
+          setTotalPages(calcTotalPages);
           setLoading(false);
         } catch (e) {
           if (cancelled) return;
           setOpenLeadsCacheAge(null);
           setError(humaniseError(e as Error & { code?: string }));
+          fullOpenLeadsListRef.current = [];
+          openLeadsNonceRef.current = -1;
           setContacts([]);
           setTotal(0);
           setTotalPages(1);
@@ -1017,9 +1061,14 @@ export function CustomersPage(): React.ReactElement {
             cacheStatus === 'fresh' &&
             Number.isFinite(newAge) &&
             newAge >= NEAR_TTL_THRESHOLD_S;
-          const list = data.results || [];
-          setContacts(list);
-          setTotal(data.total != null ? data.total : list.length);
+          const fullList = data.results || [];
+          fullOpenLeadsListRef.current = fullList;
+          const fullTotal = data.total != null ? data.total : fullList.length;
+          const calcTotalPages = Math.max(1, Math.ceil(fullTotal / PAGE_LIMIT));
+          const currentPage = pageRef.current;
+          setContacts(fullList.slice((currentPage - 1) * PAGE_LIMIT, currentPage * PAGE_LIMIT));
+          setTotal(fullTotal);
+          setTotalPages(calcTotalPages);
           setOpenLeadsCacheAge(isStillCached ? newAge : null);
         } catch {
           if (cancelled) return;
@@ -1327,7 +1376,7 @@ export function CustomersPage(): React.ReactElement {
               label="All sub-statuses"
               variant={substatus === '' ? 'filled' : 'outlined'}
               color={substatus === '' ? 'primary' : 'default'}
-              onClick={() => setSubstatus('')}
+              onClick={() => { setSubstatus(''); setPage(1); }}
               size="small"
             />
             {availableSubstatuses.map((s) => {
@@ -1339,7 +1388,7 @@ export function CustomersPage(): React.ReactElement {
                   label={s.label || s.substatus_key}
                   variant={active ? 'filled' : 'outlined'}
                   color={active ? 'primary' : 'default'}
-                  onClick={() => setSubstatus(active ? '' : full)}
+                  onClick={() => { setSubstatus(active ? '' : full); setPage(1); }}
                   size="small"
                 />
               );
@@ -1393,19 +1442,21 @@ export function CustomersPage(): React.ReactElement {
           </Stack>
         )}
 
-        {totalPages > 1 ? (
-          <Stack direction="row" sx={{   pt: 1, alignItems: 'center', justifyContent: 'space-between' }}>
+        {total > 0 ? (
+          <Stack direction="row" sx={{ pt: 1, alignItems: 'center', justifyContent: 'space-between' }}>
             <Typography variant="body2" color="text.secondary">
               Showing {Math.min(total, (page - 1) * PAGE_LIMIT + 1)}–
               {Math.min(total, (page - 1) * PAGE_LIMIT + visibleContacts.length)} of {total}
             </Typography>
-            <Pagination
-              count={totalPages}
-              page={page}
-              onChange={(_, p) => setPage(p)}
-              size="small"
-              color="primary"
-            />
+            {totalPages > 1 ? (
+              <Pagination
+                count={totalPages}
+                page={page}
+                onChange={(_, p) => setPage(p)}
+                size="small"
+                color="primary"
+              />
+            ) : null}
           </Stack>
         ) : null}
 
