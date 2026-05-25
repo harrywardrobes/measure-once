@@ -350,11 +350,11 @@ function CalendarHeader(props: {
         <IconButton aria-label="Previous week" size="small" onClick={props.onPrev}><ChevronLeftIcon /></IconButton>
         <Button size="small" variant="outlined" onClick={props.onToday}>Today</Button>
         <IconButton aria-label="Next week" size="small" onClick={props.onNext}><ChevronRightIcon /></IconButton>
-        <Typography variant="subtitle1" sx={{ ml: 1, fontWeight: 600 }}>{headerTitle(props.cursor)}</Typography>
+        <Typography data-testid="cal-header-title" variant="subtitle1" sx={{ ml: 1, fontWeight: 600 }}>{headerTitle(props.cursor)}</Typography>
       </Stack>
       <Stack direction="row" alignItems="center" spacing={1.5}>
         <FormControlLabel
-          control={<Switch checked={props.showWorkshop} onChange={(e) => props.onWorkshopChange(e.target.checked)} size="small" />}
+          control={<Box component="span" data-testid="cal-workshop-wrap"><Switch checked={props.showWorkshop} onChange={(e) => props.onWorkshopChange(e.target.checked)} size="small" /></Box>}
           label={<Typography variant="body2">Workshop time</Typography>}
           sx={{ m: 0 }}
         />
@@ -593,6 +593,9 @@ function AgendaView(props: {
           <Card
             key={isoDay}
             variant="outlined"
+            data-testid="cal-day-card"
+            data-iso={isoDay}
+            data-visit-count={dayVisits.length}
             onClick={() => onDayClick(isoDay)}
             sx={{
               cursor: 'pointer',
@@ -677,7 +680,7 @@ function AgendaView(props: {
                 </Stack>
                 <Stack sx={{ px: 1, py: 1 }} spacing={0.5}>
                   {dayVisits.map((v) => (
-                    <AgendaRow key={v.id} visit={v} platformUsers={platformUsers} onClick={() => onVisitClick(v)} />
+                    <AgendaRow key={v.id} visit={v} platformUsers={platformUsers} onClick={() => onVisitClick(v)} testId={`cal-visit-row-${v.id}`} />
                   ))}
                 </Stack>
               </>
@@ -689,7 +692,7 @@ function AgendaView(props: {
   );
 }
 
-function AgendaRow({ visit, platformUsers, onClick }: { visit: Visit; platformUsers: PlatformUser[]; onClick: () => void }) {
+function AgendaRow({ visit, platformUsers, onClick, testId }: { visit: Visit; platformUsers: PlatformUser[]; onClick: () => void; testId?: string }) {
   const meta = VISIT_TYPE_META[visit.type] || VISIT_TYPE_META.other;
   const s = new Date(visit.startAt), e = new Date(visit.endAt);
   const customer = visit.customerName || visit.title || '—';
@@ -707,6 +710,8 @@ function AgendaRow({ visit, platformUsers, onClick }: { visit: Visit; platformUs
       direction="row"
       alignItems="center"
       spacing={1.25}
+      data-testid={testId}
+      data-visit-id={visit.id}
       onClick={(ev) => { ev.stopPropagation(); onClick(); }}
       sx={{
         p: 1, borderRadius: 1, cursor: 'pointer',
@@ -774,9 +779,10 @@ function PersonalTasksSection(props: {
 
   return (
     <Box sx={{ mt: 3, px: { xs: 1, sm: 1.5 } }}>
-      <Box component="details">
+      <Box component="details" data-testid="cal-tasks">
         <Box
           component="summary"
+          data-testid="cal-tasks-summary"
           sx={{ cursor: 'pointer', fontWeight: 600, fontSize: 14, py: 0.5, color: 'text.primary' }}
         >
           Personal tasks{pending.length ? ` (${pending.length})` : ''}
@@ -811,17 +817,18 @@ function PersonalTasksSection(props: {
               variant="outlined"
               startIcon={<AddIcon />}
               onClick={() => onShowAdd(true)}
+              data-testid="cal-task-add-btn"
               sx={{ borderStyle: 'dashed', justifyContent: 'flex-start', mb: 1.5 }}
             >
               Add task
             </Button>
           )}
           {tasks.length === 0 ? (
-            <Typography variant="body2" sx={{ color: 'text.secondary', py: 1 }}>
+            <Typography variant="body2" data-testid="cal-tasks-empty" sx={{ color: 'text.secondary', py: 1 }}>
               No personal tasks.
             </Typography>
           ) : (
-            <Stack spacing={0.75}>
+            <Stack spacing={0.75} data-testid="cal-tasks-list">
               {tasks.map((t) => (
                 <PersonalTaskRow key={t.id} task={t} onToggle={() => toggle(t.id)} onDelete={() => del(t.id)} />
               ))}
@@ -834,6 +841,7 @@ function PersonalTasksSection(props: {
 }
 
 function PersonalTaskRow({ task, onToggle, onDelete }: { task: PersonalTask; onToggle: () => void; onDelete: () => void }) {
+  const testId = `cal-task-row-${task.id}`;
   const overdue = !task.done && task.dueDate && task.dueDate < new Date().toISOString().slice(0, 10);
   const dueFmt = task.dueDate
     ? new Date(task.dueDate + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -841,6 +849,9 @@ function PersonalTaskRow({ task, onToggle, onDelete }: { task: PersonalTask; onT
   return (
     <Card
       variant="outlined"
+      data-testid={testId}
+      data-task-id={task.id}
+      data-task-done={task.done ? '1' : '0'}
       sx={{
         p: 1, display: 'flex', alignItems: 'flex-start', gap: 1.25,
         opacity: task.done ? 0.55 : 1,
@@ -850,6 +861,7 @@ function PersonalTaskRow({ task, onToggle, onDelete }: { task: PersonalTask; onT
         size="small"
         checked={!!task.done}
         onChange={onToggle}
+        className={`cal-task-checkbox-${task.id}`}
         icon={<Box sx={{ width: 18, height: 18, borderRadius: '50%', border: '1.5px solid', borderColor: 'text.secondary' }} />}
         checkedIcon={<Box sx={{ width: 18, height: 18, borderRadius: '50%', bgcolor: 'success.main', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckIcon sx={{ fontSize: 14 }} /></Box>}
         sx={{ p: 0.25 }}
@@ -864,7 +876,7 @@ function PersonalTaskRow({ task, onToggle, onDelete }: { task: PersonalTask; onT
           </Typography>
         )}
       </Box>
-      <IconButton size="small" aria-label="Delete task" onClick={onDelete}>
+      <IconButton size="small" aria-label="Delete task" data-testid={`${testId}-delete`} onClick={onDelete}>
         <DeleteOutlineIcon fontSize="small" />
       </IconButton>
     </Card>
@@ -977,7 +989,7 @@ function VisitModal(props: {
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <DialogTitle data-testid="cal-visit-modal" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         {existing ? 'Edit visit' : 'New visit'}
         <IconButton aria-label="Close" onClick={onClose} size="small"><CloseIcon /></IconButton>
       </DialogTitle>
@@ -1070,7 +1082,8 @@ function VisitModal(props: {
 
           {!existing && googleConnected && (
             <FormControlLabel
-              control={<Checkbox checked={addToGcal} onChange={(e) => onGcalToggle(e.target.checked)} />}
+              data-testid="cal-visit-gcal-row"
+              control={<Box component="span" data-testid="cal-visit-gcal-wrap"><Checkbox checked={addToGcal} onChange={(e) => onGcalToggle(e.target.checked)} /></Box>}
               label="Also add to Google Calendar"
             />
           )}
@@ -1084,7 +1097,7 @@ function VisitModal(props: {
         </Box>
         <Stack direction="row" spacing={1}>
           <Button onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button variant="contained" onClick={save} disabled={saving}>Save</Button>
+          <Button variant="contained" onClick={save} disabled={saving} data-testid="cal-visit-save">Save</Button>
         </Stack>
       </DialogActions>
     </Dialog>
