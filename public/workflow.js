@@ -335,7 +335,10 @@ function _renderCustomerListImpl() {
       }),
   ].join('');
   const exclToggle = `<button id="ls-show-excluded" class="project-stage-tab${showLsExcl ? ' project-stage-tab-active' : ''}" style="${showLsExcl ? 'background:var(--ink-2);color:#fff;border-color:var(--ink-2);' : ''}margin-left:auto" aria-pressed="${showLsExcl}" title="Show statuses marked Excl. from Sales">${showLsExcl ? 'Hide excl.' : 'Show excl.'}</button>`;
-  const lsPillBar = `<div class="project-stage-tabs-bar lead-status-pill-bar">${lsPills}${exclToggle}</div>`;
+  const staleCountsHint = state.leadStatusCountsStale
+    ? `<span class="ls-stale-hint" title="Counts may be slightly out of date" aria-label="Using cached data">•</span>`
+    : '';
+  const lsPillBar = `<div class="project-stage-tabs-bar lead-status-pill-bar">${lsPills}${exclToggle}${staleCountsHint}</div>`;
 
   // ── Sub-status pill row (only when a lead status is selected) ──────────────
   let subPillBar = '';

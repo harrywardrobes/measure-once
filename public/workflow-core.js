@@ -292,9 +292,19 @@ async function loadLeadStatusCounts() {
 
   _llscInFlight = (async () => {
     try {
-      const counts = await GET('/api/contacts-lead-status-counts');
-      if (counts && typeof counts === 'object') {
-        state.leadStatusCounts = counts;
+      const r = await fetch('/api/contacts-lead-status-counts', { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+      if (r.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const err = new Error(data.error || `HTTP ${r.status}`);
+        if (data.code) err.code = data.code;
+        throw err;
+      }
+      if (data && typeof data === 'object') {
+        state.leadStatusCounts = data;
+        // Track whether the server is serving cached (stale) counts so the UI
+        // can show a subtle hint without alarming the user.
+        state.leadStatusCountsStale = r.headers.get('X-Cache-Status') === 'stale';
       }
     } catch (e) {
       // Surface only hard failures; the server falls back to stale counts
@@ -518,6 +528,23 @@ function populateLeadStatusFilter() {
     }).join('');
 
   if (prevValue) sel.value = prevValue;
+
+  // Stale-counts hint: show a subtle dot next to the select when the server
+  // is serving cached counts (X-Cache-Status: stale). Clears on a fresh response.
+  const existingHint = document.getElementById('ls-counts-stale-hint');
+  if (state.leadStatusCountsStale) {
+    if (!existingHint) {
+      const hint = document.createElement('span');
+      hint.id = 'ls-counts-stale-hint';
+      hint.className = 'ls-stale-hint';
+      hint.title = 'Counts may be slightly out of date';
+      hint.setAttribute('aria-label', 'Using cached data');
+      hint.textContent = '•';
+      sel.insertAdjacentElement('afterend', hint);
+    }
+  } else if (existingHint) {
+    existingHint.remove();
+  }
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────

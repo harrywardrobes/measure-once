@@ -3300,6 +3300,20 @@ body.showing-workflow .sales-layout #workflow-panel {
   border-bottom: 1px solid var(--stone);
   flex-shrink: 0;
 }
+
+/* Subtle stale-counts dot shown when X-Cache-Status: stale is received */
+.ls-stale-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.55rem;
+  line-height: 1;
+  color: var(--ink-3, #94a3b8);
+  cursor: default;
+  flex-shrink: 0;
+  margin-left: 4px;
+  vertical-align: middle;
+}
 .eq-ls-pills {
   display: flex;
   flex-wrap: wrap;
