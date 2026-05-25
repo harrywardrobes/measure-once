@@ -126,7 +126,7 @@ const state = {
 
 async function ensurePrefs() {
   if (state._prefsLoaded) return state.prefs;
-  if (isViewerOnly()) {
+  if ((state.user?.privilege_level ?? 'member') === 'viewer') {
     state.prefs = {};
     state._prefsLoaded = true;
     return state.prefs;
@@ -178,33 +178,6 @@ const POST       = (path, b) => api('POST',   path, b);
 const PATCH_REQ  = (path, b) => api('PATCH',  path, b);
 const DELETE_REQ = path      => api('DELETE', path);
 
-// ── Privilege helpers (vanilla-JS legacy) ─────────────────────────────────────
-// These are an *accepted legacy pattern* for vanilla-JS page renderers that
-// cannot use React's usePrivilege() hook.  They read privilege_level from
-// state.user (set by bootstrap / checkAuthStatus), which is the single
-// authoritative source in core.js.  All callers run after await bootstrap()
-// so the 'member' fallback fires only during early initialisation.
-//
-// Remaining vanilla-JS consumers (accepted legacy):
-//   • core.js            isViewerOnly()               — ensurePrefs() early-exit
-// sales.js, survey.js, workflow.js, customer-detail.js, and invoices-core.js
-// now read window.__moHeaderUser?.privilege_level directly and no longer use these helpers.
-//
-// React components MUST use usePrivilege() (src/react/hooks/usePrivilege.ts)
-// and MUST NOT call these helpers directly.
-//
-// TODO: Remove these helpers once all remaining consumers above have been
-// ported to React components that use usePrivilege().
-
-/** @deprecated Use usePrivilege() in React components. Vanilla-JS pages: accepted legacy. */
-function isViewerOnly() {
-  return (state.user?.privilege_level ?? 'member') === 'viewer';
-}
-
-/** @deprecated Use usePrivilege() in React components. Vanilla-JS pages: accepted legacy. */
-function isAdminMode() {
-  return (state.user?.privilege_level ?? 'member') === 'admin';
-}
 
 function showViewerBanner() {
   if (sessionStorage.getItem('viewerBannerDismissed') === '1') return;
