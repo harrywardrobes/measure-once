@@ -18,7 +18,9 @@
 
   <div id="tab-customers" class="app-body">
     <aside id="list-panel" class="list-panel sales-list-panel">
-      <div id="sales-view"></div>
+      <div id="sales-view">
+        <div id="sales-board-mount" style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden"></div>
+      </div>
     </aside>
   </div>
 
@@ -26,11 +28,11 @@
   <script src="/components.js"></script>
   <script type="module" src="/react/main.js"></script>
   <script>
-    // Paint a lightweight loading skeleton via the shared UI.skeletonLine
-    // helper so the column isn't blank during the initial bootstrap()/data fetch.
+    // Paint a lightweight loading skeleton into the mount point so the board
+    // isn't blank during the initial bootstrap()/data fetch.
     (function paintSalesBoardSkeleton() {
-      const view = document.getElementById('sales-view');
-      if (!view || !window.UI || typeof UI.skeletonLine !== 'function') return;
+      const mount = document.getElementById('sales-board-mount');
+      if (!mount || !window.UI || typeof UI.skeletonLine !== 'function') return;
       const line = UI.skeletonLine;
       const cards = [
         { name: '60%', cnt: '38px', pills: [76, 52], action: '58%' },
@@ -55,7 +57,7 @@
           ${action}
         </div>`;
       }).join('');
-      view.innerHTML =
+      mount.innerHTML =
         `<div class="sales-board">
           <div class="eq-col eq-col-active">
             <div class="eq-col-header" style="border-top:3px solid #e2e8f0">
