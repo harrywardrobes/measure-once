@@ -1,16 +1,25 @@
 'use strict';
 // test/window-ui-smoke/run.js
 //
-// Smoke test: window.UI must be defined on every dashboard page.
+// Smoke test: shared chrome includes must be present on every dashboard page.
 //
 // public/components.js attaches `window.UI = { skeletonLine, renderPill,
 // renderEmptyState, renderTabBar, … }` and is included via an explicit
 // `<script src="/components.js">` tag after `/chrome.js` on every dashboard
-// HTML page. If a new page is added in the future and the maintainer forgets
-// the tag, anything that calls `UI.renderPill` / `UI.renderEmptyState` /
-// `UI.skeletonLine` / `UI.renderTabBar` will silently throw `ReferenceError`.
-// This test visits each dashboard route with an admin session and asserts
-// that `typeof window.UI === 'object'` and all four helpers are present.
+// HTML page. public/chrome.js attaches `window.getShortcut` and
+// `window.handleAccessRequestSubmit`, and synchronously injects the top-nav
+// header (`header.app-header`) plus — on non-admin pages — the bottom-nav
+// mount (`nav.bottom-nav#main-content`). If a new page is added in the
+// future and the maintainer forgets either `<script src="/chrome.js">` or
+// `<script src="/components.js">`, anything that calls those helpers /
+// touches the chrome DOM will silently throw `ReferenceError` or render
+// without the shared chrome. This test visits each dashboard route with an
+// admin session and asserts that:
+//   - `typeof window.UI === 'object'` with all four helpers
+//   - `typeof window.getShortcut === 'function'`
+//   - `typeof window.handleAccessRequestSubmit === 'function'`
+//   - `header.app-header` exists in the DOM
+//   - `nav.bottom-nav#main-content` exists on every non-admin route
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:window-ui-smoke
@@ -79,8 +88,12 @@ function findChromium() {
   return shared() || undefined;
 }
 
+function isAdminRoute(route) {
+  return route === '/admin' || route.startsWith('/admin/');
+}
+
 async function main() {
-  console.log('\n  window.UI smoke test\n');
+  console.log('\n  shared chrome includes — smoke test\n');
 
   const findings = [];
   function record(name, expected, observed, ok, detail) {
@@ -162,46 +175,97 @@ async function main() {
         // It's a tiny IIFE included right after chrome.js so should be ready
         // by DOMContentLoaded, but poll for up to 5s to be safe across pages
         // with heavy inline init code.
-        const result = await page.waitForFunction(
-          (helpers) => {
+        const adminPage = isAdminRoute(route);
+        const ready = await page.waitForFunction(
+          (helpers, adminPage) => {
             if (typeof window.UI !== 'object' || window.UI === null) return false;
             for (const h of helpers) {
               if (typeof window.UI[h] !== 'function') return false;
             }
-            return { ok: true };
+            if (typeof window.getShortcut !== 'function') return false;
+            if (typeof window.handleAccessRequestSubmit !== 'function') return false;
+            if (!document.querySelector('header.app-header')) return false;
+            if (!adminPage && !document.querySelector('nav.bottom-nav#main-content')) return false;
+            return true;
           },
           { timeout: 5000 },
           REQUIRED_HELPERS,
+          adminPage,
         ).then(() => true).catch(() => false);
 
-        if (result) {
+        // Always re-evaluate to record per-symbol pass/fail for the report.
+        const observed = await page.evaluate((helpers) => {
+          const out = {
+            typeofUI: typeof window.UI,
+            uiMissing: [],
+            getShortcut: typeof window.getShortcut,
+            handleAccessRequestSubmit: typeof window.handleAccessRequestSubmit,
+            hasHeader: !!document.querySelector('header.app-header'),
+            hasBottomNav: !!document.querySelector('nav.bottom-nav#main-content'),
+          };
+          if (out.typeofUI === 'object' && window.UI) {
+            out.uiMissing = helpers.filter(h => typeof window.UI[h] !== 'function');
+          } else {
+            out.uiMissing = helpers.slice();
+          }
+          return out;
+        }, REQUIRED_HELPERS).catch(e => ({ error: String(e) }));
+
+        const uiOk = observed && observed.typeofUI === 'object'
+          && Array.isArray(observed.uiMissing) && observed.uiMissing.length === 0;
+        record(
+          `${route} — window.UI defined with required helpers`,
+          `object with ${REQUIRED_HELPERS.join(', ')}`,
+          uiOk ? 'present' : JSON.stringify({ typeofUI: observed?.typeofUI, missing: observed?.uiMissing }),
+          !!uiOk,
+          uiOk ? '' : 'Likely missing <script src="/components.js"> after chrome.js in the page HTML.',
+        );
+
+        const getShortcutOk = observed && observed.getShortcut === 'function';
+        record(
+          `${route} — window.getShortcut defined`,
+          'function',
+          observed?.getShortcut || 'missing',
+          !!getShortcutOk,
+          getShortcutOk ? '' : 'Likely missing <script src="/chrome.js"> in the page HTML.',
+        );
+
+        const handlerOk = observed && observed.handleAccessRequestSubmit === 'function';
+        record(
+          `${route} — window.handleAccessRequestSubmit defined`,
+          'function',
+          observed?.handleAccessRequestSubmit || 'missing',
+          !!handlerOk,
+          handlerOk ? '' : 'Likely missing <script src="/chrome.js"> in the page HTML.',
+        );
+
+        const headerOk = observed && observed.hasHeader;
+        record(
+          `${route} — header.app-header mounted`,
+          'present',
+          headerOk ? 'present' : 'missing',
+          !!headerOk,
+          headerOk ? '' : 'chrome.js did not inject the top-nav header — likely missing <script src="/chrome.js">.',
+        );
+
+        if (!adminPage) {
+          const navOk = observed && observed.hasBottomNav;
           record(
-            `${route} — window.UI defined with required helpers`,
-            `object with ${REQUIRED_HELPERS.join(', ')}`,
+            `${route} — nav.bottom-nav#main-content mounted`,
             'present',
-            true,
-          );
-        } else {
-          // Capture what we actually see for the failure report.
-          const observed = await page.evaluate((helpers) => {
-            const t = typeof window.UI;
-            if (t !== 'object' || window.UI === null) {
-              return { typeofUI: t };
-            }
-            const missing = helpers.filter(h => typeof window.UI[h] !== 'function');
-            return { typeofUI: t, missing };
-          }, REQUIRED_HELPERS).catch(e => ({ error: String(e) }));
-          record(
-            `${route} — window.UI defined with required helpers`,
-            `object with ${REQUIRED_HELPERS.join(', ')}`,
-            JSON.stringify(observed),
-            false,
-            'Likely missing <script src="/components.js"> after chrome.js in the page HTML.',
+            navOk ? 'present' : 'missing',
+            !!navOk,
+            navOk ? '' : 'chrome.js did not inject the bottom-nav — likely missing <script src="/chrome.js">.',
           );
         }
+
+        if (!ready) {
+          // waitForFunction timed out but per-symbol records already captured
+          // the specific failure(s); nothing else to do here.
+        }
       } catch (e) {
-        record(`${route} — window.UI defined with required helpers`,
-          'page loads and window.UI is set',
+        record(`${route} — shared chrome includes present`,
+          'page loads and chrome globals are set',
           `error: ${e.message}`, false);
       } finally {
         await page.close().catch(() => {});
@@ -230,7 +294,7 @@ async function writeReport(findings) {
   fs.mkdirSync(dir, { recursive: true });
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const lines = [
-    '# window.UI — Smoke Test',
+    '# Shared chrome includes — Smoke Test',
     '',
     `- Date: ${new Date().toISOString()}`,
     `- Command: \`npm run test:window-ui-smoke\``,
@@ -250,16 +314,25 @@ async function writeReport(findings) {
     '',
     '## Coverage',
     '',
-    'Visits each dashboard route below with an admin session and asserts that',
-    '`window.UI` is an object and that `skeletonLine`, `renderPill`,',
-    '`renderEmptyState`, and `renderTabBar` are all functions:',
+    'Visits each dashboard route below with an admin session and asserts:',
+    '',
+    '- `window.UI` is an object with `skeletonLine`, `renderPill`,',
+    '  `renderEmptyState`, `renderTabBar` (from `public/components.js`)',
+    '- `window.getShortcut` is a function (from `public/chrome.js`)',
+    '- `window.handleAccessRequestSubmit` is a function (from `public/chrome.js`)',
+    '- `header.app-header` is mounted (injected by `public/chrome.js`)',
+    '- `nav.bottom-nav#main-content` is mounted on every non-admin route',
+    '  (also injected by `public/chrome.js`)',
+    '',
+    'Routes covered:',
     '',
     ...ROUTES.map(r => `- \`${r}\``),
     '',
     '## Relevant files',
     '',
+    '- `public/chrome.js` — top-nav header, bottom-nav, `window.getShortcut`,',
+    '  `window.handleAccessRequestSubmit`',
     '- `public/components.js` — defines `window.UI`',
-    '- `public/chrome.js` — shared chrome included before `components.js`',
     '- Each dashboard HTML page in `public/` includes both via explicit',
     '  `<script>` tags; this smoke catches a missing tag on any of them.',
   ];
