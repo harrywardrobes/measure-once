@@ -1966,17 +1966,10 @@
       window.location.href = '/';
       return;
     }
-    // Populate shared chrome (auth avatar, bottom-nav visibility).
+    // Populate shared chrome (auth avatar).
     if (typeof state !== 'undefined') {
       state.user = me;
       renderAuthStatus();
-      highlightActiveNav();
-      // Unhide all nav items — admin users have full access.
-      ['bnav-trades', 'bnav-ideas', 'bnav-sales', 'bnav-survey',
-       'bnav-projects', 'bnav-invoices'].forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) btn.style.display = '';
-      });
     }
 
     // Team / Permissions / Requests / Audit log are React islands now and

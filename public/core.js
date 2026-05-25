@@ -269,29 +269,10 @@ function showToast(msg, isError) {
 }
 
 // ── Bootstrap (called by each page) ───────────────────────────────────────────
-// Map URL paths to the bottom-nav button id that should be marked active.
-const NAV_PATH_MAP = {
-  '/': 'home',
-  '/sales': 'sales',
-  '/survey': 'survey',
-  '/projects': 'projects',
-  '/calendar': 'calendar',
-  '/invoices': 'invoices',
-  '/ideas': 'ideas',
-  '/trades': 'trades',
-};
-
-function highlightActiveNav() {
-  const key = NAV_PATH_MAP[location.pathname];
-  if (!key) return;
-  document.getElementById(`bnav-${key}`)?.classList.add('bottom-nav-active');
-}
-
 // Common per-page bootstrap. Returns true if user is signed in & data loaded.
 // Workflow and QuickBooks data are loaded only when those modules are present
 // (real implementations live in workflow-core.js / invoices-core.js).
 async function bootstrap() {
-  highlightActiveNav();
   const params = new URLSearchParams(window.location.search);
 
   const user = await fetch('/api/auth/user')
