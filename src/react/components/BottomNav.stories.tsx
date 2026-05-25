@@ -9,7 +9,7 @@ const meta: Meta<typeof BottomNav> = {
     docs: {
       description: {
         component:
-          'Fixed bottom navigation bar. The **selected** tab renders its filled icon variant; all others use the outlined variant. Each `NavItem` must supply both `Icon` and `IconOutlined` so this contract holds for every tab.',
+          'Fixed bottom navigation bar. Shows exactly 4 items: 3 role-relevant primary tabs + a "More" button. Tapping "More" opens a bottom Drawer with the remaining tabs. The active tab is highlighted whether it is in the bar or the drawer; when the active page is in the drawer, "More" shows as selected.',
       },
     },
   },
@@ -18,48 +18,103 @@ export default meta;
 
 type Story = StoryObj<typeof BottomNav>;
 
-export const NoneSelected: Story = {
-  name: 'None selected (outlined icons)',
-  render: () => {
-    history.replaceState(null, '', '/unknown');
-    return <BottomNav />;
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'No tab matches the current path — every icon uses its outlined variant.',
-      },
-    },
-  },
-};
-
-export const FirstTabSelected: Story = {
-  name: 'First tab selected (Home — filled icon)',
+export const MemberHomeSelected: Story = {
+  name: 'Member — Home selected (bar tab)',
   render: () => {
     history.replaceState(null, '', NAV[0].href);
+    (window as { __moHeaderUser?: { privilege_level: string } }).__moHeaderUser = { privilege_level: 'viewer' };
     return <BottomNav />;
   },
   parameters: {
     docs: {
       description: {
         story:
-          'The first tab (Home) is active: its icon switches to the filled variant and the accent border appears. All other tabs remain outlined.',
+          'Member view: bar shows Home, Calendar, Trades + More. Home is active (filled icon, accent border).',
       },
     },
   },
 };
 
-export const LastTabSelected: Story = {
-  name: 'Last tab selected (Ideas — filled icon)',
+export const MemberIdeasSelected: Story = {
+  name: 'Member — Ideas selected (overflow → More highlighted)',
   render: () => {
-    history.replaceState(null, '', NAV[NAV.length - 1].href);
+    history.replaceState(null, '', '/ideas');
+    (window as { __moHeaderUser?: { privilege_level: string } }).__moHeaderUser = { privilege_level: 'viewer' };
     return <BottomNav />;
   },
   parameters: {
     docs: {
       description: {
         story:
-          'The last tab (Ideas) is active: its icon switches to the filled variant and the accent border appears. All other tabs remain outlined.',
+          'Member view with the active page (Ideas) in the overflow set. The "More" button shows as selected in the bar.',
+      },
+    },
+  },
+};
+
+export const MemberNoneSelected: Story = {
+  name: 'Member — None selected (outlined icons)',
+  render: () => {
+    history.replaceState(null, '', '/unknown');
+    (window as { __moHeaderUser?: { privilege_level: string } }).__moHeaderUser = { privilege_level: 'viewer' };
+    return <BottomNav />;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'No tab matches the current path — every icon uses its outlined variant, More button is not highlighted.',
+      },
+    },
+  },
+};
+
+export const ManagerHomeSelected: Story = {
+  name: 'Manager — Home selected (bar tab)',
+  render: () => {
+    history.replaceState(null, '', NAV[0].href);
+    (window as { __moHeaderUser?: { privilege_level: string } }).__moHeaderUser = { privilege_level: 'manager' };
+    return <BottomNav />;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Manager view: bar shows Home, Sales, Projects + More. Home is active.',
+      },
+    },
+  },
+};
+
+export const ManagerSalesSelected: Story = {
+  name: 'Manager — Sales selected (bar tab, accent colour)',
+  render: () => {
+    history.replaceState(null, '', '/sales');
+    (window as { __moHeaderUser?: { privilege_level: string } }).__moHeaderUser = { privilege_level: 'manager' };
+    return <BottomNav />;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Manager view with Sales active — uses the Sales stage accent colour for the icon and border.',
+      },
+    },
+  },
+};
+
+export const ManagerCalendarSelected: Story = {
+  name: 'Manager — Calendar selected (overflow → More highlighted)',
+  render: () => {
+    history.replaceState(null, '', '/calendar');
+    (window as { __moHeaderUser?: { privilege_level: string } }).__moHeaderUser = { privilege_level: 'manager' };
+    return <BottomNav />;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Manager view with the active page (Calendar) in the overflow set. The "More" button shows as selected.',
       },
     },
   },
