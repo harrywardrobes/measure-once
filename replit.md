@@ -165,6 +165,39 @@ Probes covered:
 API pre-checks run before any browser tab opens so failures in the API surface
 clearly. `npm run test:ci` includes this suite.
 
+## Live HubSpot smoke run
+
+The hw_test_user suite has an opt-in `[REAL-HS]` phase that exercises
+`/api/open-leads` and `/api/contacts-lead-status-counts` against a real
+HubSpot account. Run it with:
+
+```
+HUBSPOT_TOKEN=<private-app token> \
+  DATABASE_URL_TEST=<disposable> \
+  npm run test:hw-test-user:live
+```
+
+(Or `PRIVTEST_ALLOW_SHARED_DB=1` instead of `DATABASE_URL_TEST` to use the
+shared DB — synthetic rows are still namespaced and cleaned up on exit.)
+
+The wrapper script (`scripts/test-hw-test-user-live.js`) sets
+`PRIVTEST_USE_HUBSPOT_TOKEN=1` for you and pre-flights the token against
+`https://api.hubapi.com/account-info/v3/details`, so an invalid or
+under-scoped token fails fast with a clear message instead of midway through
+the probes.
+
+**Token source:** use a HubSpot **private-app token** (Settings → Integrations
+→ Private Apps) scoped for CRM contact reads. Store it as a Replit secret
+named `HUBSPOT_TOKEN`; never commit it.
+
+**Side effect to be aware of:** the `[REAL-HS]` phase briefly toggles
+`app_settings.dev_filter_enabled` OFF and back ON to compare filtered vs.
+unfiltered counts. It restores the flag to ON on exit, but a crash mid-run
+can leave it OFF — re-running the test (or flipping the toggle in the admin
+panel) restores the expected state. The standard `npm run test:ci` does
+**not** include this live phase; schedule `npm run test:hw-test-user:live`
+separately (e.g. as a periodic job) when you want a real-HubSpot smoke run.
+
 ### Migration note
 Users that existed before this change are backfilled to `active` (no onboarding
 prompt) but have **no password set**. An admin must click **Resend

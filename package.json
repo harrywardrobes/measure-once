@@ -18,6 +18,7 @@
     "test:lead-status-sync-customer-detail": "node test/lead-status-sync/customer-detail.js",
     "test:card-action-handlers": "node test/card-action-handlers/run.js",
     "test:hw-test-user": "node test/hw-test-user/run.js",
+    "test:hw-test-user:live": "node scripts/test-hw-test-user-live.js",
     "test:start-design-visit": "node test/start-design-visit/run.js",
     "test:design-visit": "node test/design-visit/run.js",
     "test:keyboard-shortcuts": "node test/keyboard-shortcuts/run.js",
