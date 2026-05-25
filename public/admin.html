@@ -3041,7 +3041,7 @@
         These four panels are now React + MUI islands, mounted from
         src/react/pages/admin/*. The tab-panel divs below are the mount
         points; the React components own all data fetching and rendering.
-        Cross-tab refresh is driven by the `admin_data_changed`
+        Cross-tab refresh is driven by the 'admin_data_changed'
         BroadcastChannel emitted from src/react/pages/admin/adminApi.ts.
       -->
       <div class="tab-panel active" id="tab-team"></div>
@@ -3120,7 +3120,7 @@
         array inside that component is the single source of truth for the
         "Dev-only features in this panel" list — update it when you add a
         new dev-only admin feature (see replit.md → "Dev-only admin
-        features"). `_applyDevEnvTabVisibility()` still toggles the `hidden`
+        features"). _applyDevEnvTabVisibility() still toggles the 'hidden'
         attribute on this mount div based on /api/admin/hubspot/dev-mode.
       -->
       <div class="tab-panel" id="tab-devenv" hidden></div>
