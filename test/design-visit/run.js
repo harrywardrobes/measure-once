@@ -728,12 +728,7 @@ async function main() {
               `cards=${a2.cards}, remBtns=${a2.remBtns}`,
               after2adds === 'ok' && a2.cards === 3 && a2.remBtns === 3);
 
-            // (6) Click Remove → card count must DECREASE.  We assert a strict
-            // "less than the pre-click count" (rather than exactly -1) because
-            // the renderStep2 click handler is re-bound on every re-render and
-            // the implementation currently re-fires; the test verifies the
-            // observable user-visible outcome (removal works) without locking
-            // in the exact arithmetic.
+            // (6) Click Remove → card count must decrease by exactly 1.
             const beforeRem = await salesTab.evaluate(() =>
               document.querySelectorAll('.dv-room-card').length);
             await salesTab.evaluate(() => {
@@ -744,9 +739,9 @@ async function main() {
             const afterRem = await salesTab.evaluate(() =>
               document.querySelectorAll('.dv-room-card').length);
             record(WIZ_LABELS[6],
-              `cards count after Remove < ${beforeRem}`,
+              `cards count after Remove === ${beforeRem - 1}`,
               `cards before=${beforeRem}, after=${afterRem}`,
-              afterRem < beforeRem);
+              afterRem === beforeRem - 1);
 
             // (7) "Every room needs a name" guard — open a FRESH wizard so the
             // click-handler stack is clean.  Leave the default room name

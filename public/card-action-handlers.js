@@ -685,27 +685,31 @@
       inner.querySelector('#dv-add-room').addEventListener('click', async () => {
         await _saveRoomsFromDom(); rooms.push(_makeRoom()); renderStep2();
       });
-      inner.addEventListener('click', async e => {
-        const rmBtn = e.target.closest('.dv-rm-room');
-        if (rmBtn) {
-          const idx = parseInt(rmBtn.dataset.ridx, 10);
-          await _saveRoomsFromDom(); rooms.splice(idx, 1); renderStep2(); return;
-        }
-        const upBtn = e.target.closest('.dv-mv-up');
-        if (upBtn) {
-          const idx = parseInt(upBtn.dataset.ridx, 10);
-          if (idx === 0) return;
-          await _saveRoomsFromDom();
-          [rooms[idx-1], rooms[idx]] = [rooms[idx], rooms[idx-1]]; renderStep2(); return;
-        }
-        const dnBtn = e.target.closest('.dv-mv-dn');
-        if (dnBtn) {
-          const idx = parseInt(dnBtn.dataset.ridx, 10);
-          if (idx >= rooms.length - 1) return;
-          await _saveRoomsFromDom();
-          [rooms[idx], rooms[idx+1]] = [rooms[idx+1], rooms[idx]]; renderStep2(); return;
-        }
-      });
+      if (!inner.__step2ClickBound) {
+        inner.__step2ClickBound = true;
+        inner.addEventListener('click', async e => {
+          if (step !== 2) return;
+          const rmBtn = e.target.closest('.dv-rm-room');
+          if (rmBtn) {
+            const idx = parseInt(rmBtn.dataset.ridx, 10);
+            await _saveRoomsFromDom(); rooms.splice(idx, 1); renderStep2(); return;
+          }
+          const upBtn = e.target.closest('.dv-mv-up');
+          if (upBtn) {
+            const idx = parseInt(upBtn.dataset.ridx, 10);
+            if (idx === 0) return;
+            await _saveRoomsFromDom();
+            [rooms[idx-1], rooms[idx]] = [rooms[idx], rooms[idx-1]]; renderStep2(); return;
+          }
+          const dnBtn = e.target.closest('.dv-mv-dn');
+          if (dnBtn) {
+            const idx = parseInt(dnBtn.dataset.ridx, 10);
+            if (idx >= rooms.length - 1) return;
+            await _saveRoomsFromDom();
+            [rooms[idx], rooms[idx+1]] = [rooms[idx+1], rooms[idx]]; renderStep2(); return;
+          }
+        });
+      }
     }
 
     async function _saveRoomsFromDom() {
