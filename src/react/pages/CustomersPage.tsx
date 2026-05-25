@@ -31,7 +31,6 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import AddIcon from '@mui/icons-material/Add';
-import { useCurrentUser } from '../hooks/useCurrentUser';
 
 type LeadStatus = {
   key: string;

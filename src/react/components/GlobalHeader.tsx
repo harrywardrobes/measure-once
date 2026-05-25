@@ -11,6 +11,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ShieldIcon from '@mui/icons-material/Shield';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usePrivilegeSync } from '../hooks/usePrivilegeSync';
 
 export type { CurrentUser as HeaderUser } from '../hooks/useCurrentUser';
 
@@ -62,6 +63,8 @@ export function GlobalHeader() {
   const [path, setPath] = useState<string>(() => window.location.pathname);
   const { user } = useCurrentUser();
   const [pendingCount, setPendingCount] = useState<number>(0);
+
+  usePrivilegeSync();
 
   useEffect(() => {
     const onNav = () => setPath(window.location.pathname);

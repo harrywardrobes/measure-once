@@ -323,21 +323,14 @@ async function bootstrap() {
 
   const priv = user.privilege_level || 'member';
 
-  // Viewers and members may not access these pages directly.
-  const RESTRICTED_PATHS = new Set([
-    '/sales', '/sales.html',
-    '/survey', '/survey.html',
-    '/projects', '/projects.html',
-    '/invoices', '/invoices.html',
-  ]);
-  if (RESTRICTED_PATHS.has(location.pathname) &&
-      priv !== 'manager' && priv !== 'admin') {
-    window.location.href = '/';
-    return false;
-  }
+  // Privilege body classes (viewer-mode / manager-mode / admin-mode) and the
+  // client-side route guard for restricted paths are now owned by React's
+  // usePrivilegeSync() hook (src/react/hooks/usePrivilegeSync.ts), called
+  // from GlobalHeader which mounts on every page via chrome.js.
+  // The server already enforces restricted-page access via
+  // requireManagerOrAdminPage, so this is belt-and-suspenders only.
 
   if (priv === 'viewer') {
-    document.body.classList.add('viewer-mode');
     showViewerBanner();
   }
 
@@ -348,15 +341,10 @@ async function bootstrap() {
   if (bnavIdeas) bnavIdeas.style.display = '';
 
   if (priv === 'manager' || priv === 'admin') {
-    document.body.classList.add('manager-mode');
     ['bnav-sales', 'bnav-survey', 'bnav-projects', 'bnav-invoices'].forEach(id => {
       const btn = document.getElementById(id);
       if (btn) btn.style.display = '';
     });
-  }
-
-  if (priv === 'admin') {
-    document.body.classList.add('admin-mode');
   }
 
   try {
