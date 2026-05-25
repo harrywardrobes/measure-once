@@ -138,6 +138,9 @@ function readUrlState() {
     substatus: p.get('substatus') || '',
     sort: p.get('sort') || 'newest',
     q: p.get('q') || '',
+    stage: p.get('stage') || '',
+    view: p.get('view') === 'active' ? 'active' : 'all',
+    archived: p.get('archived') === '1',
   };
 }
 
@@ -147,6 +150,9 @@ function writeUrlState(s: {
   substatus: string;
   sort: string;
   q: string;
+  stage: string;
+  view: 'all' | 'active';
+  archived: boolean;
 }) {
   const qs = new URLSearchParams();
   if (s.page > 1) qs.set('page', String(s.page));
@@ -154,6 +160,9 @@ function writeUrlState(s: {
   if (s.substatus && s.leadStatus) qs.set('substatus', s.substatus);
   if (s.sort && s.sort !== 'newest') qs.set('sort', s.sort);
   if (s.q) qs.set('q', s.q);
+  if (s.stage) qs.set('stage', s.stage);
+  if (s.view === 'active') qs.set('view', 'active');
+  if (s.archived) qs.set('archived', '1');
   const str = qs.toString();
   history.replaceState(null, '', str ? '?' + str : location.pathname);
 }
@@ -594,7 +603,14 @@ export function CustomersPage(): React.ReactElement {
   const [sortBy, setSortBy] = React.useState<string>(initial.sort);
   const [searchInput, setSearchInput] = React.useState<string>(initial.q);
   const [search, setSearch] = React.useState<string>(initial.q);
-  const [viewMode, setViewMode] = React.useState<'all' | 'active'>('all');
+  const [viewMode, setViewMode] = React.useState<'all' | 'active'>(initial.view);
+  const [stageFilter, setStageFilter] = React.useState<string>(initial.stage);
+  const [showArchived, setShowArchived] = React.useState<boolean>(initial.archived);
+
+  const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
+  const [roomsByContact, setRoomsByContact] = React.useState<Record<string, Room[]>>({});
+  const [qbInvoices, setQbInvoices] = React.useState<QBInvoice[]>([]);
+  const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
 
   const [contacts, setContacts] = React.useState<Contact[]>([]);
   const [total, setTotal] = React.useState<number>(0);
@@ -653,8 +669,17 @@ export function CustomersPage(): React.ReactElement {
 
   // Reflect filter changes in the URL.
   React.useEffect(() => {
-    writeUrlState({ page, leadStatus, substatus, sort: sortBy, q: search });
-  }, [page, leadStatus, substatus, sortBy, search]);
+    writeUrlState({
+      page,
+      leadStatus,
+      substatus,
+      sort: sortBy,
+      q: search,
+      stage: stageFilter,
+      view: viewMode,
+      archived: showArchived,
+    });
+  }, [page, leadStatus, substatus, sortBy, search, stageFilter, viewMode, showArchived]);
 
   // Load lead statuses + counts + substatuses on mount, then re-populate
   // the native select once the DOM element has been mounted.
@@ -671,13 +696,11 @@ export function CustomersPage(): React.ReactElement {
     };
   }, []);
 
-  // Per-contact room/stage data (legacy `state.contactStageCache` equivalent).
-  const [roomsMap, setRoomsMap] = React.useState<Record<string, Room[]>>({});
-  const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
-  const [qbInvoices, setQbInvoices] = React.useState<QBInvoice[]>([]);
-  const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
-
-  // Load workflow definition (for stage labels) and rooms-per-contact.
+  // Load workflow definition (for the stage tab bar + per-card stage labels)
+  // and the per-contact rooms cache (for the client-side stage + archived
+  // filters). Also load QuickBooks invoices (for the per-card QB badge) when
+  // connected. All are best-effort; failures just leave the corresponding UI
+  // inert.
   React.useEffect(() => {
     let cancelled = false;
     apiGet<WorkflowDef>('/api/workflow')
@@ -688,7 +711,7 @@ export function CustomersPage(): React.ReactElement {
     apiGet<Record<string, Room[]>>('/api/localdata/all')
       .then((data) => {
         if (cancelled) return;
-        setRoomsMap(data || {});
+        setRoomsByContact(data || {});
         // Mirror into the legacy global cache so any shared helper that
         // reads `state.contactStageCache` (e.g. urgency calculation in
         // workflow-core.js) sees the same data.
@@ -766,6 +789,7 @@ export function CustomersPage(): React.ReactElement {
     };
   }, [contacts]);
 
+
   // Fetch the current page of contacts whenever the relevant filters change.
   React.useEffect(() => {
     let cancelled = false;
@@ -805,14 +829,50 @@ export function CustomersPage(): React.ReactElement {
     };
   }, [page, leadStatus, sortBy, search, viewMode, refreshNonce]);
 
-  // Local client-side sub-status filter on top of the fetched page.
+  // Resolve rooms for a contact, applying the stage + archived filters from
+  // the legacy `buildListItems` (public/workflow.js lines 140-202).
+  const resolveRooms = React.useCallback(
+    (contactId: string): Room[] | null => {
+      const cached = roomsByContact[contactId];
+      if (cached && cached.length > 0) {
+        const filtered: Room[] = [];
+        for (const r of cached) {
+          const roomStatus = r.roomStatus || 'active';
+          if (roomStatus !== 'active' && !showArchived) continue;
+          if (stageFilter && r.stageKey !== stageFilter) continue;
+          filtered.push({
+            room: r.room || 'Main',
+            stageKey: r.stageKey || 'sales',
+            roomStatus,
+          });
+        }
+        if (filtered.length === 0) return null;
+        return filtered;
+      }
+      // No local data yet — default to Sales.
+      if (!stageFilter || stageFilter === 'sales') {
+        return [{ room: 'Main', stageKey: 'sales', roomStatus: 'active' }];
+      }
+      return null;
+    },
+    [roomsByContact, stageFilter, showArchived],
+  );
+
+  // Local client-side sub-status + stage + archived filtering on top of the
+  // fetched page.
   const visibleContacts = React.useMemo(() => {
-    if (!substatus) return contacts;
-    return contacts.filter(
-      (c) =>
-        String(c.properties?.hw_lead_substatus || '').toUpperCase() === substatus.toUpperCase(),
-    );
-  }, [contacts, substatus]);
+    const out: Array<{ contact: Contact; rooms: Room[] }> = [];
+    for (const c of contacts) {
+      if (substatus) {
+        const v = String(c.properties?.hw_lead_substatus || '').toUpperCase();
+        if (v !== substatus.toUpperCase()) continue;
+      }
+      const rooms = resolveRooms(c.id);
+      if (!rooms) continue;
+      out.push({ contact: c, rooms });
+    }
+    return out;
+  }, [contacts, substatus, resolveRooms]);
 
   const statusMap = React.useMemo(() => {
     const m = new Map<string, LeadStatus>();
@@ -828,6 +888,42 @@ export function CustomersPage(): React.ReactElement {
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   }, [leadStatus]);
 
+  // Build the stage tab list: Active, All, then one button per workflow stage.
+  const stageTabs = React.useMemo(() => {
+    const tabs: Array<{ key: string; label: string }> = [
+      { key: '__active__', label: 'Active' },
+      { key: '__all__', label: 'All' },
+    ];
+    const stages = workflow?.stages || {};
+    for (const [k, s] of Object.entries(stages)) {
+      tabs.push({ key: k, label: s?.label || k });
+    }
+    return tabs;
+  }, [workflow]);
+
+  const currentTab: string = stageFilter
+    ? stageFilter
+    : viewMode === 'active'
+      ? '__active__'
+      : '__all__';
+
+  const onTabChange = (key: string) => {
+    setPage(1);
+    setSubstatus('');
+    if (key === '__active__') {
+      setViewMode('active');
+      setStageFilter('');
+      setLeadStatus('');
+      setShowArchived(false);
+    } else if (key === '__all__') {
+      setViewMode('all');
+      setStageFilter('');
+    } else {
+      setViewMode('all');
+      setStageFilter(key);
+    }
+  };
+
   return (
     <Container maxWidth="md" sx={{ py: 3 }}>
       <Stack spacing={2}>
@@ -840,43 +936,61 @@ export function CustomersPage(): React.ReactElement {
           <Typography variant="h5" component="h1" fontWeight={700}>
             Customers
           </Typography>
-          <Stack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            justifyContent={{ xs: 'flex-start', sm: 'flex-end' }}
-            flexWrap="wrap"
-            useFlexGap
-          >
-            {isViewer ? null : (
-              <Button
-                id="new-customer-btn"
-                variant="contained"
-                size="small"
-                startIcon={<AddIcon />}
-                onClick={() => setNewOpen(true)}
-              >
-                New customer
-              </Button>
-            )}
-            <ToggleButtonGroup
+          {isViewer ? null : (
+            <Button
+              id="new-customer-btn"
+              variant="contained"
               size="small"
-              exclusive
-              value={viewMode}
-              onChange={(_, v: 'all' | 'active' | null) => {
-                if (!v) return;
-                setViewMode(v);
-                setPage(1);
-                setLeadStatus('');
-                setSubstatus('');
-              }}
-              aria-label="Contacts view mode"
+              startIcon={<AddIcon />}
+              onClick={() => setNewOpen(true)}
             >
-              <ToggleButton value="all">All contacts</ToggleButton>
-              <ToggleButton value="active">Active leads</ToggleButton>
-            </ToggleButtonGroup>
-          </Stack>
+              New customer
+            </Button>
+          )}
         </Stack>
+
+        <Box sx={{ overflowX: 'auto' }}>
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={currentTab}
+            onChange={(_, v: string | null) => {
+              if (!v) return;
+              onTabChange(v);
+            }}
+            aria-label="Stage filter"
+            sx={{ flexWrap: 'wrap' }}
+          >
+            {stageTabs.map((t) => {
+              const isStage = t.key !== '__active__' && t.key !== '__all__';
+              const colour = isStage ? stageColour(t.key) : null;
+              const selected = currentTab === t.key;
+              return (
+                <ToggleButton
+                  key={t.key}
+                  value={t.key}
+                  sx={
+                    selected && colour
+                      ? {
+                          bgcolor: colour.bg,
+                          color: '#fff',
+                          borderColor: colour.bg,
+                          '&:hover': { bgcolor: colour.bg, opacity: 0.9 },
+                          '&.Mui-selected': {
+                            bgcolor: colour.bg,
+                            color: '#fff',
+                            '&:hover': { bgcolor: colour.bg, opacity: 0.9 },
+                          },
+                        }
+                      : undefined
+                  }
+                >
+                  {t.label}
+                </ToggleButton>
+              );
+            })}
+          </ToggleButtonGroup>
+        </Box>
 
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
           <TextField
@@ -951,6 +1065,34 @@ export function CustomersPage(): React.ReactElement {
               ))}
             </Select>
           </FormControl>
+
+          <Button
+            id="archived-toggle"
+            size="small"
+            variant={showArchived ? 'contained' : 'outlined'}
+            color={showArchived ? 'secondary' : 'inherit'}
+            aria-pressed={showArchived}
+            onClick={() => {
+              const next = !showArchived;
+              setShowArchived(next);
+              setPage(1);
+              // Match legacy: switching archived ON forces "All" mode so the
+              // full HubSpot list is loaded; switching it OFF returns to the
+              // open-leads "Active" view.
+              if (next) {
+                setViewMode('all');
+                setStageFilter('');
+              } else {
+                setViewMode('active');
+                setStageFilter('');
+                setLeadStatus('');
+                setSubstatus('');
+              }
+            }}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
+            {showArchived ? 'Hide archived' : 'Show archived'}
+          </Button>
         </Stack>
 
         {availableSubstatuses.length > 0 ? (
@@ -979,6 +1121,12 @@ export function CustomersPage(): React.ReactElement {
           </Stack>
         ) : null}
 
+        {stageFilter ? (
+          <Typography variant="caption" color="text.secondary">
+            Stage filter applies to this page only. Switch pages to find more matches.
+          </Typography>
+        ) : null}
+
         {error ? <Alert severity="error">{error}</Alert> : null}
 
         {loading ? (
@@ -993,15 +1141,15 @@ export function CustomersPage(): React.ReactElement {
           </Box>
         ) : (
           <Stack spacing={1.5} id="customers-results">
-            {visibleContacts.map((c) => (
+            {visibleContacts.map(({ contact, rooms }) => (
               <CustomerCard
-                key={c.id}
-                contact={c}
+                key={contact.id}
+                contact={contact}
                 statusMap={statusMap}
-                rooms={roomsMap[c.id] || []}
+                rooms={rooms}
                 workflow={workflow}
-                invoices={matchInvoicesForContact(c, qbInvoices)}
-                urgency={urgencyMap[c.id] || null}
+                invoices={matchInvoicesForContact(contact, qbInvoices)}
+                urgency={urgencyMap[contact.id] || null}
               />
             ))}
           </Stack>
