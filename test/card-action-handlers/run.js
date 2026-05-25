@@ -140,11 +140,14 @@ async function purgeFixtures(pool) {
   await pool.query(
     `DELETE FROM visits WHERE customer_id LIKE 'privtest-cah-%'`
   );
-  // Remove the conflict-test lead status if it was seeded.
+  // Remove the conflict-test lead status if it was seeded, plus the parent
+  // lead_status_config row required by the lead_substatuses FK
+  // (`lead_substatuses_status_key_fk`). Must run AFTER the lead_substatuses
+  // delete above so the FK doesn't block this DELETE.
   try {
     await pool.query(
-      `DELETE FROM lead_status_config WHERE key = $1`,
-      [LBL_KEY_CONFLICT_LS]
+      `DELETE FROM lead_status_config WHERE key IN ($1, $2)`,
+      [LBL_KEY_CONFLICT_LS, SUB_STATUS_K]
     );
   } catch (_) {}
   // Recreate the unique label-binding index if it was temporarily dropped
@@ -268,6 +271,19 @@ async function main() {
   await waitForTable('visits');
 
   await purgeFixtures(pool);
+  // Parent row required by lead_substatuses.status_key FK
+  // (`lead_substatuses_status_key_fk`). Without this the seed insert below
+  // crashes with a 23503 on a fresh DB.
+  await pool.query(
+    `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+     VALUES ($1, 'PrivTest CAH OVR Status', 9997, false, 'SALES')
+     ON CONFLICT (key) DO UPDATE
+       SET label               = EXCLUDED.label,
+           sort_order          = EXCLUDED.sort_order,
+           excluded_from_sales = EXCLUDED.excluded_from_sales,
+           stage               = EXCLUDED.stage`,
+    [SUB_STATUS_K]
+  );
   const subRes = await pool.query(
     `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order)
      VALUES ($1, $2, 'PrivTest sub label', '', 9999)

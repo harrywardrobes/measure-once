@@ -58,7 +58,10 @@ const FORBIDDEN_TABLES = ['users', 'sessions', 'password_set_tokens', 'db_editor
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 async function purgeFixtures(pool) {
-  // Order: editor-audit purge first (free-text match), then the fixture row.
+  // Order: editor-audit purge first (free-text match), then the fixture row,
+  // then the parent lead_status_config row (FK
+  // `lead_substatuses_status_key_fk` blocks the parent delete until the
+  // child row is gone).
   try {
     await pool.query(
       `DELETE FROM db_editor_audit
@@ -72,6 +75,12 @@ async function purgeFixtures(pool) {
       `DELETE FROM lead_substatuses
          WHERE status_key = $1 AND substatus_key = $2`,
       [SUB_STATUS_KEY, SUB_KEY]
+    );
+  } catch (_) { /* table may not exist yet */ }
+  try {
+    await pool.query(
+      `DELETE FROM lead_status_config WHERE key = $1`,
+      [SUB_STATUS_KEY]
     );
   } catch (_) { /* table may not exist yet */ }
 }
@@ -168,6 +177,21 @@ async function main() {
   await waitForTable(pool, 'db_editor_audit');
 
   await purgeFixtures(pool);
+
+  // Parent row required by lead_substatuses.status_key FK
+  // (`lead_substatuses_status_key_fk`). The admin POST below inserts a
+  // lead_substatuses row with status_key=SUB_STATUS_KEY; without this seed
+  // the insert fails with a 23503 on a fresh DB.
+  await pool.query(
+    `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+     VALUES ($1, 'PrivTest DBE Status', 9996, false, 'SALES')
+     ON CONFLICT (key) DO UPDATE
+       SET label               = EXCLUDED.label,
+           sort_order          = EXCLUDED.sort_order,
+           excluded_from_sales = EXCLUDED.excluded_from_sales,
+           stage               = EXCLUDED.stage`,
+    [SUB_STATUS_KEY]
+  );
 
   // ── log in as admin + member ───────────────────────────────────────────────
   const adminClient  = await login(users.admin.email,  PASSWORD);
@@ -586,10 +610,21 @@ async function main() {
       update: { column: 'label', value: 'privtest lsc updated' },
     },
     lead_substatuses: {
-      // status_key is a free-text reference here (no DB-level FK), so we can
-      // use a synthetic key without seeding lead_status_config first.
+      // status_key has a real FK to lead_status_config(key)
+      // (`lead_substatuses_status_key_fk`), so seed a parent row first.
+      parents: [
+        {
+          table: 'lead_status_config',
+          captureAs: 'parentStatus',
+          fixture: c => ({
+            key:        `PRIVTEST_LSC_${c.runId}_E`,
+            label:      'privtest lsc (parent for substatus matrix)',
+            sort_order: 9998,
+          }),
+        },
+      ],
       fixture: c => ({
-        status_key:    `PRIVTEST_LSC_${c.runId}_E`,
+        status_key:    c.parents.parentStatus.key,
         substatus_key: `PRIVTEST_SUB_${c.runId}`,
         label:         'privtest sub',
         sort_order:    9999,
