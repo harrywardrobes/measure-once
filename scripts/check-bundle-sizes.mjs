@@ -38,6 +38,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REACT_DIR = resolve(__dirname, '..', 'public', 'react');
 const CHUNKS_DIR = join(REACT_DIR, 'chunks');
 
+// ── Trend-regression configuration ───────────────────────────────────────────
+// TREND_WINDOW   – how many of the most-recent history entries to consider.
+// TREND_DRIFT_PCT – warn (non-fatal) when the always-loaded total has grown by
+//                  more than this percentage relative to the oldest entry in the
+//                  window.  E.g. 10 means "warn if newest > oldest × 1.10".
+const TREND_WINDOW    = 10;
+const TREND_DRIFT_PCT = 10;   // percent
+
 // ── Threshold definitions ────────────────────────────────────────────────────
 // Each entry matches chunks whose basename starts with `prefix`.
 // `threshold` is the maximum allowed gzip size in bytes (fail if exceeded).
@@ -286,12 +294,34 @@ appendFileSync(historyPath, JSON.stringify(historyEntry) + '\n');
 // ── Trend section in the markdown report ─────────────────────────────────────
 // Read the last N entries from the history file and append a trend table.
 
-const TREND_ENTRIES = 10;
 const historyLines = readFileSync(historyPath, 'utf8')
   .split('\n')
   .filter(l => l.trim().length > 0);
-const recentLines = historyLines.slice(-TREND_ENTRIES);
+const recentLines = historyLines.slice(-TREND_WINDOW);
 const recentEntries = recentLines.map(l => JSON.parse(l));
+
+// ── Trend-regression check ────────────────────────────────────────────────────
+// Warn (non-fatal) when the always-loaded total in the current run has grown
+// by more than TREND_DRIFT_PCT % relative to the oldest entry in the window.
+let trendWarning = null;
+if (recentEntries.length >= 2) {
+  const oldest = recentEntries[0];
+  const newest = recentEntries[recentEntries.length - 1];
+  if (oldest.totalAlwaysGzBytes > 0) {
+    const growthPct = ((newest.totalAlwaysGzBytes - oldest.totalAlwaysGzBytes) / oldest.totalAlwaysGzBytes) * 100;
+    if (growthPct > TREND_DRIFT_PCT) {
+      trendWarning =
+        `Always-loaded total grew ${growthPct.toFixed(1)}% ` +
+        `over the last ${recentEntries.length} run${recentEntries.length === 1 ? '' : 's'} ` +
+        `(${kbStr(oldest.totalAlwaysGzBytes)} → ${kbStr(newest.totalAlwaysGzBytes)}, ` +
+        `threshold: >${TREND_DRIFT_PCT}%).`;
+    }
+  }
+}
+
+if (trendWarning) {
+  console.log(`\n⚠  Trend warning: ${trendWarning}`);
+}
 
 const trendRows = recentEntries.map(e => {
   const total = kbStr(e.totalAlwaysGzBytes);
@@ -305,7 +335,12 @@ const trendRows = recentEntries.map(e => {
 const alwaysHeaders = alwaysRows.map(r => r.name).join(' | ');
 const alwaysSeps = alwaysRows.map(() => '---').join('|');
 
-const trendSection = `\n## Trend (last ${recentEntries.length} run${recentEntries.length === 1 ? '' : 's'})\n\n` +
+const trendWarnMd = trendWarning
+  ? `\n> ⚠ **Trend warning:** ${trendWarning}\n`
+  : '';
+
+const trendSection = `\n## Trend (last ${recentEntries.length} run${recentEntries.length === 1 ? '' : 's'})` +
+  trendWarnMd + '\n' +
   `| Date (UTC) | SHA | Total always-loaded | ${alwaysHeaders} | Result |\n` +
   `|---|---|---|${alwaysSeps}|---|\n` +
   trendRows + '\n';
