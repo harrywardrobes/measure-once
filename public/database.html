@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Database · Measure Once</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .header-icon-btn, .cp-hint-bar { display: none !important; }
+    body { min-height: 100vh; }
+    .db-page { max-width: 1400px; margin: 0 auto; padding: 24px 20px 60px; }
+    .db-header {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 12px; margin-bottom: 18px; flex-wrap: wrap;
+    }
+    .db-title { font-size: 1.25rem; font-weight: 700; margin: 0; }
+    .db-sub { color: var(--ink-3); font-size: .88rem; margin: 0; }
+    .db-tabs {
+      display: flex; gap: 2px; border-bottom: 2px solid var(--stone);
+      margin-bottom: 18px;
+    }
+    .db-tab-btn {
+      padding: 9px 16px; font-size: .82rem; font-weight: 600;
+      color: var(--ink-3); background: none; border: none; cursor: pointer;
+      font-family: inherit; border-bottom: 2px solid transparent;
+      margin-bottom: -2px; border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+      transition: color .15s, background .15s;
+    }
+    .db-tab-btn:hover { color: var(--ink-1); background: var(--stone-soft); }
+    .db-tab-btn.active { color: var(--plum); border-bottom-color: var(--plum); }
+    .db-tab-panel { display: none; }
+    .db-tab-panel.active { display: block; }
+
+    .db-layout {
+      display: grid; grid-template-columns: 260px 1fr; gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .db-layout { grid-template-columns: 1fr; }
+    }
+    .db-sidebar {
+      background: var(--chalk); border: 1px solid var(--stone);
+      border-radius: var(--radius-lg); padding: 14px;
+      max-height: 80vh; overflow-y: auto; position: sticky; top: 16px;
+    }
+    .db-search {
+      width: 100%; box-sizing: border-box;
+      border: 1px solid var(--stone); border-radius: var(--radius-sm);
+      padding: 7px 10px; font-size: .82rem; font-family: inherit;
+      outline: none; margin-bottom: 10px;
+    }
+    .db-search:focus { border-color: var(--orchid); }
+    .db-group-title {
+      font-size: .68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--ink-4);
+      margin: 12px 0 4px;
+    }
+    .db-tlist { list-style: none; padding: 0; margin: 0; }
+    .db-tlist li button {
+      width: 100%; text-align: left;
+      background: none; border: none; padding: 6px 8px;
+      border-radius: var(--radius-sm); cursor: pointer;
+      font-size: .82rem; font-family: inherit; color: var(--ink-2);
+    }
+    .db-tlist li button:hover { background: var(--stone-soft); }
+    .db-tlist li button.active { background: var(--plum); color: #fff; font-weight: 600; }
+
+    .db-main {
+      background: var(--chalk); border: 1px solid var(--stone);
+      border-radius: var(--radius-lg); padding: 18px;
+      min-height: 300px;
+    }
+    .db-main-header {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .db-main-title { font-size: 1rem; font-weight: 700; margin: 0; }
+    .db-main-meta { color: var(--ink-4); font-size: .78rem; }
+    .db-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .db-btn {
+      border: 1px solid transparent; border-radius: var(--radius-sm);
+      padding: 7px 14px; font-size: .82rem; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+    }
+    .db-btn-primary { background: var(--plum); color: #fff; }
+    .db-btn-primary:hover { background: #2e0f5a; }
+    .db-btn-ghost { background: var(--chalk); border-color: var(--stone); color: var(--ink-2); }
+    .db-btn-ghost:hover { background: var(--stone-soft); }
+    .db-btn-danger { background: #fff; color: #991b1b; border-color: #fecaca; }
+    .db-btn-danger:hover { background: #fee2e2; }
+    .db-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+    .db-table-wrap { overflow-x: auto; border: 1px solid var(--stone); border-radius: var(--radius-md); }
+    table.db-grid { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    .db-grid th, .db-grid td {
+      padding: 7px 10px; border-bottom: 1px solid var(--stone-soft);
+      text-align: left; white-space: nowrap; vertical-align: top;
+    }
+    .db-grid th {
+      background: var(--stone-soft); font-size: .68rem;
+      text-transform: uppercase; letter-spacing: .05em;
+      color: var(--ink-4); cursor: pointer; user-select: none;
+    }
+    .db-grid th .col-type {
+      font-weight: 400; color: var(--ink-4); text-transform: none;
+      letter-spacing: 0; font-size: .68rem; margin-left: 4px;
+    }
+    .db-grid th .col-pk { color: var(--orchid); margin-left: 4px; font-size: .65rem; }
+    .db-grid td.col-actions { white-space: nowrap; }
+    .db-grid td .v-null { color: var(--ink-4); font-style: italic; }
+    .db-grid td .v-bool { display: inline-block; padding: 1px 7px; border-radius: var(--radius-pill); font-size: .68rem; font-weight: 700; }
+    .db-grid td .v-bool.true  { background: #dcfce7; color: #166534; }
+    .db-grid td .v-bool.false { background: #f3f4f6; color: #6b7280; }
+    .db-grid td .v-json {
+      display: inline-block; max-width: 280px; overflow: hidden;
+      text-overflow: ellipsis; vertical-align: bottom;
+      font-family: monospace; font-size: .72rem;
+      color: var(--ink-3);
+    }
+    .db-grid td .v-text { max-width: 320px; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: bottom; }
+    .db-grid tr:hover td { background: var(--stone-soft); }
+
+    .db-pager { display: flex; gap: 8px; align-items: center; padding: 10px 4px 0; font-size: .8rem; color: var(--ink-3); }
+
+    /* Drawer */
+    .db-drawer-bg {
+      position: fixed; inset: 0; background: rgba(20,20,19,.42);
+      display: none; align-items: stretch; justify-content: flex-end;
+      z-index: 500;
+    }
+    .db-drawer-bg.show { display: flex; }
+    .db-drawer {
+      width: 480px; max-width: 100%; background: var(--chalk);
+      box-shadow: var(--shadow-lg); padding: 22px;
+      overflow-y: auto; display: flex; flex-direction: column;
+    }
+    .db-drawer h2 { margin: 0 0 4px; font-size: 1rem; }
+    .db-drawer .db-drawer-sub { font-size: .78rem; color: var(--ink-4); margin: 0 0 16px; }
+    .db-form-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+    .db-form-field label { font-size: .72rem; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .03em; }
+    .db-form-field label .opt { font-weight: 400; color: var(--ink-4); text-transform: none; letter-spacing: 0; margin-left: 4px; }
+    .db-form-field input.field, .db-form-field textarea.field, .db-form-field select.field {
+      border: 1px solid var(--stone); border-radius: var(--radius-sm);
+      padding: 7px 10px; font-size: .85rem; font-family: inherit; outline: none;
+    }
+    .db-form-field input.field:focus, .db-form-field textarea.field:focus, .db-form-field select.field:focus {
+      border-color: var(--orchid);
+    }
+    .db-form-field textarea.field { min-height: 110px; font-family: monospace; font-size: .8rem; }
+    .db-form-field .err { color: #991b1b; font-size: .75rem; margin-top: 2px; display: none; }
+    .db-form-field .err.show { display: block; }
+    .db-drawer-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--stone); }
+    .db-diff {
+      background: var(--stone-soft); border-radius: var(--radius-sm);
+      padding: 10px; font-family: monospace; font-size: .75rem;
+      max-height: 200px; overflow-y: auto; margin-bottom: 12px;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .db-diff .diff-add { color: #166534; }
+    .db-diff .diff-del { color: #991b1b; text-decoration: line-through; }
+
+    .db-state { padding: 28px; text-align: center; color: var(--ink-4); }
+    .db-state.err { color: #991b1b; }
+    .db-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--plum); color: #fff; padding: 10px 18px;
+      border-radius: var(--radius-md); font-size: .875rem;
+      opacity: 0; pointer-events: none; transition: opacity .2s;
+      z-index: 1000; white-space: nowrap;
+    }
+    .db-toast.show { opacity: 1; }
+    .db-toast.err { background: #991b1b; }
+
+    .db-audit-row {
+      display: grid; grid-template-columns: 160px 110px 1fr; gap: 10px;
+      padding: 9px 0; border-bottom: 1px solid var(--stone-soft);
+      font-size: .82rem;
+    }
+    .db-audit-row .a-time { color: var(--ink-4); font-size: .75rem; }
+    .db-audit-row .a-op { font-weight: 700; text-transform: uppercase; font-size: .68rem; letter-spacing: .05em; }
+    .db-audit-row .a-op.insert { color: #166534; }
+    .db-audit-row .a-op.update { color: #1e40af; }
+    .db-audit-row .a-op.delete { color: #991b1b; }
+    .db-audit-row .a-meta { font-size: .75rem; color: var(--ink-3); margin-top: 2px; }
+    .db-audit-row .a-diff {
+      background: var(--stone-soft); border-radius: var(--radius-sm);
+      padding: 8px; font-family: monospace; font-size: .72rem;
+      margin-top: 6px; max-height: 160px; overflow-y: auto;
+      white-space: pre-wrap; word-break: break-word; display: none;
+    }
+    .db-audit-row.expanded .a-diff { display: block; }
+    .db-audit-row .a-expand {
+      background: none; border: none; color: var(--orchid); cursor: pointer;
+      font-size: .72rem; font-family: inherit; padding: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="tab-database" class="app-body">
+    <div id="main-content" class="db-page">
+      <div class="db-header">
+        <div>
+          <h1 class="db-title">Database</h1>
+          <p class="db-sub">Browse and edit the local PostgreSQL database. Sensitive auth tables are excluded.</p>
+        </div>
+        <div>
+          <a href="/admin" class="db-btn db-btn-ghost" style="text-decoration:none;display:inline-block;">← Back to admin</a>
+        </div>
+      </div>
+
+      <div class="db-tabs">
+        <button class="db-tab-btn active" data-db-tab="data">Tables</button>
+        <button class="db-tab-btn" data-db-tab="audit">Audit log</button>
+      </div>
+
+      <div class="db-tab-panel active" id="db-tab-data">
+        <div class="db-layout">
+          <aside class="db-sidebar">
+            <input type="text" class="db-search" id="db-table-search" placeholder="Search tables…">
+            <div id="db-table-list"></div>
+          </aside>
+          <main class="db-main" id="db-main">
+            <div class="db-state">Select a table from the sidebar.</div>
+          </main>
+        </div>
+      </div>
+
+      <div class="db-tab-panel" id="db-tab-audit">
+        <div class="db-main">
+          <div class="db-main-header">
+            <h2 class="db-main-title">Audit log</h2>
+            <div class="db-toolbar">
+              <select class="field" id="audit-table-filter">
+                <option value="">All tables</option>
+              </select>
+              <input type="text" class="field" id="audit-admin-filter" placeholder="Filter by admin email…">
+              <button class="db-btn db-btn-ghost" id="audit-refresh">Refresh</button>
+            </div>
+          </div>
+          <div id="audit-list"><div class="db-state">Loading…</div></div>
+          <div class="db-pager" id="audit-pager"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="db-drawer-bg" id="db-drawer-bg">
+    <aside class="db-drawer" id="db-drawer" role="dialog" aria-modal="true"></aside>
+  </div>
+
+  <div class="db-toast" id="db-toast"></div>
+
+  <script src="/chrome.js"></script>
+  <script src="/command-palette.js"></script>
+  <script src="/core.js"></script>
+  <script src="/database.js"></script>
+</body>
+</html>

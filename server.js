@@ -17,6 +17,7 @@ const {
 const qbRoutes = require('./quickbooks');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
+const { installDbEditorRoutes, ensureDbEditorAuditTable } = require('./db-editor');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -2060,6 +2061,34 @@ app.get('/admin', async (req, res) => {
   }
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
+
+// Admin database editor. Non-admins (including unauthenticated users) get a
+// 404 so the page is indistinguishable from a non-existent route — we do not
+// reveal that an admin-only editor lives at this path.
+app.get('/admin/database', async (req, res) => {
+  const notFound = () => res.status(404).type('html').send(
+    '<!doctype html><meta charset="utf-8"><title>Not found</title>' +
+    '<div style="font-family:system-ui;padding:40px;max-width:480px;margin:auto;">' +
+    '<h1 style="margin:0 0 8px;font-size:1.4rem;">404 · Not found</h1>' +
+    '<p style="color:#555;">The page you requested does not exist.</p></div>'
+  );
+  const isAuthed = req.isAuthenticated && req.isAuthenticated();
+  if (!isAuthed || !req.user?.claims) return notFound();
+  const userId = req.user.claims.sub;
+  let admin = false;
+  if (userId) {
+    try {
+      const r = await pool.query('SELECT privilege_level FROM users WHERE id = $1', [userId]);
+      admin = r.rows[0]?.privilege_level === 'admin';
+    } catch (e) {
+      console.error('GET /admin/database admin check failed:', e);
+    }
+  }
+  if (!admin) return notFound();
+  res.sendFile(path.join(__dirname, 'public', 'database.html'));
+});
+
+installDbEditorRoutes(app, { isAuthenticated, requireAdmin });
 
 app.get('/trades', isAuthenticated, (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'trades.html'));
@@ -4677,5 +4706,7 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  WhatsApp messages table setup failed:', e.message); }
     try { await ensureDesignVisitTables(); console.log('  Design visit tables ready'); }
     catch (e) { console.error('  Design visit tables setup failed:', e.message); }
+    try { await ensureDbEditorAuditTable(); console.log('  DB editor audit table ready'); }
+    catch (e) { console.error('  DB editor audit table setup failed:', e.message); }
   });
 })();

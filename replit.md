@@ -167,6 +167,29 @@ Sessions and users are stored in PostgreSQL (`sessions`, `users`,
 `password_set_tokens` — all auto-created on boot). Protect routes by importing
 `isAuthenticated` from `./auth`.
 
+## Admin database editor
+
+Admins have a generic table editor at `/admin/database` (linked from the
+**Database** tab in the admin nav). It lets admins browse and edit rows in
+the local PostgreSQL database without leaving the app — useful as a safe
+fallback for inspecting and fixing data that has no dedicated admin UI.
+
+- The allow-list lives in `db-editor.js` (`TABLES`). Any new editable table
+  **must** be added there explicitly — discovery is not automatic. Sensitive
+  auth/session/token tables (`sessions`, `users`, `allowed_emails`,
+  `account_requests`, `password_set_tokens`, `admin_settings`,
+  `role_permissions`, `admin_audit_log`, `qb_tokens`, `qb_send_log`) are
+  intentionally excluded and cannot be accessed by the editor.
+- All API endpoints live under `/api/admin/db/*` and are gated by
+  `isAuthenticated` + `requireAdmin`. The server validates `:table` against
+  the allow-list before any SQL runs.
+- Every successful insert / update / delete writes a row to the
+  `db_editor_audit` table (auto-created on boot) inside the same DB
+  transaction as the write, capturing `admin_email`, `table`, `pk`, `op`,
+  and the `before` / `after` JSON snapshot. Audit rows are append-only and
+  visible via the **Audit log** tab on the same page (filterable by table
+  and admin).
+
 ## Dev-only admin features
 
 The admin panel has a **Dev environment** tab (`#tab-devenv` in
