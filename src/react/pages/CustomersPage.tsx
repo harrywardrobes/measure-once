@@ -609,6 +609,7 @@ export function CustomersPage(): React.ReactElement {
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
+  const [openLeadsCacheAge, setOpenLeadsCacheAge] = React.useState<number | null>(null);
 
   const isViewer = useIsViewer();
   const [newOpen, setNewOpen] = React.useState<boolean>(() => {
@@ -822,35 +823,73 @@ export function CustomersPage(): React.ReactElement {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    const qs = new URLSearchParams({ page: String(page), limit: String(PAGE_LIMIT) });
-    if (viewMode === 'all') {
+
+    if (viewMode === 'active') {
+      // Use raw fetch for open-leads so we can read response headers (X-Cache-Age).
+      (async () => {
+        try {
+          const r = await fetch('/api/open-leads', { headers: { Accept: 'application/json' } });
+          if (r.status === 401) { location.href = '/login'; return; }
+          const data = await r.json().catch(() => ({})) as ContactsResponse;
+          if (!r.ok) {
+            const err = new Error((data as { error?: string }).error || `HTTP ${r.status}`);
+            (err as { code?: string }).code = (data as { code?: string }).code;
+            throw err;
+          }
+          const cacheStatus = r.headers.get('X-Cache-Status');
+          const ageHeader = r.headers.get('X-Cache-Age');
+          const cacheAge = ageHeader !== null ? Number(ageHeader) : NaN;
+          if (cancelled) return;
+          // Show hint only when the response was served from cache (X-Cache-Status
+          // is 'fresh' AND X-Cache-Age is present) and the age is close to the
+          // server TTL (≥ 45 s out of a 60 s window).
+          const NEAR_TTL_THRESHOLD_S = 45;
+          const isCached =
+            cacheStatus === 'fresh' &&
+            Number.isFinite(cacheAge) &&
+            cacheAge >= NEAR_TTL_THRESHOLD_S;
+          setOpenLeadsCacheAge(isCached ? cacheAge : null);
+          const list = data.results || [];
+          setContacts(list);
+          setTotal(data.total != null ? data.total : list.length);
+          setTotalPages(data.totalPages || 1);
+          setLoading(false);
+        } catch (e) {
+          if (cancelled) return;
+          setOpenLeadsCacheAge(null);
+          setError(humaniseError(e as Error & { code?: string }));
+          setContacts([]);
+          setTotal(0);
+          setTotalPages(1);
+          setLoading(false);
+        }
+      })();
+    } else {
+      setOpenLeadsCacheAge(null);
+      const qs = new URLSearchParams({ page: String(page), limit: String(PAGE_LIMIT) });
       if (leadStatus) qs.set('leadStatus', leadStatus);
       if (sortBy && sortBy !== 'newest') qs.set('sort', sortBy);
       if (search) qs.set('q', search);
-    }
-    const endpoint =
-      viewMode === 'all' ? `/api/contacts-all?${qs}` : `/api/open-leads`;
-    apiGet<ContactsResponse>(endpoint)
-      .then((data) => {
-        if (cancelled) return;
-        const list = data.results || [];
-        setContacts(list);
-        setTotal(data.total != null ? data.total : list.length);
-        setTotalPages(data.totalPages || 1);
-        setLoading(false);
-        // Refresh counts after a status change so the dropdown stays accurate.
-        if (viewMode === 'all') {
+      apiGet<ContactsResponse>(`/api/contacts-all?${qs}`)
+        .then((data) => {
+          if (cancelled) return;
+          const list = data.results || [];
+          setContacts(list);
+          setTotal(data.total != null ? data.total : list.length);
+          setTotalPages(data.totalPages || 1);
+          setLoading(false);
           loadLeadStatusCounts().then(populateLeadStatusFilter).catch(() => {});
-        }
-      })
-      .catch((e: Error & { code?: string }) => {
-        if (cancelled) return;
-        setError(humaniseError(e));
-        setContacts([]);
-        setTotal(0);
-        setTotalPages(1);
-        setLoading(false);
-      });
+        })
+        .catch((e: Error & { code?: string }) => {
+          if (cancelled) return;
+          setError(humaniseError(e));
+          setContacts([]);
+          setTotal(0);
+          setTotalPages(1);
+          setLoading(false);
+        });
+    }
+
     return () => {
       cancelled = true;
     };
@@ -1147,6 +1186,12 @@ export function CustomersPage(): React.ReactElement {
         ) : null}
 
         {error ? <Alert severity="error">{error}</Alert> : null}
+
+        {!loading && viewMode === 'active' && openLeadsCacheAge !== null ? (
+          <Alert severity="info" sx={{ py: 0 }}>
+            Data may be up to 1 min old.
+          </Alert>
+        ) : null}
 
         {loading ? (
           <Stack spacing={1}>

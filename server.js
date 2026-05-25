@@ -965,6 +965,7 @@ app.get('/api/open-leads', async (req, res) => {
   // Fresh cache hit — return immediately.
   if (_openLeadsCache && Date.now() - _openLeadsCache.fetchedAt < OPEN_LEADS_TTL_MS) {
     res.setHeader('X-Cache-Status', 'fresh');
+    res.setHeader('X-Cache-Age', String(Math.round((Date.now() - _openLeadsCache.fetchedAt) / 1000)));
     return res.json({ results: _openLeadsCache.results, total: _openLeadsCache.total });
   }
 
