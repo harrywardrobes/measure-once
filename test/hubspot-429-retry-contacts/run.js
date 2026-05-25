@@ -24,6 +24,10 @@
 //          called, X-Cache-Status is not stale). A follow-up request is served
 //          from the newly populated in-memory cache with no new HubSpot call.
 //
+//   (OL-F) open-leads exhausted — all retry attempts return 429 with no
+//          prior _openLeadsCache → endpoint returns 502 with code HUBSPOT_RATE_LIMIT.
+//          Uses Server 2 (cold for open-leads) to keep the scenario isolated.
+//
 //   (CA-F) contacts-all exhausted — all retry attempts return 429 with no
 //          prior good cache → endpoint returns 502 with code HUBSPOT_RATE_LIMIT.
 //
@@ -498,6 +502,36 @@ async function main() {
       olrCachedSearchCalls.length === 0,
       `search calls=${olrCachedSearchCalls.length}`);
 
+    // ── (OL-F) open-leads: all retries exhausted, no prior cache → 502 ─────────
+    // Server 2 starts cold for open-leads (_openLeadsCache is null — none of the
+    // preceding tests called /api/open-leads on Server 2). Mock is set to
+    // alwaysFail so every attempt returns 429. With no _openLeadsCache to fall
+    // back on the endpoint must return 502 with code HUBSPOT_RATE_LIMIT.
+    console.log('\n  [OL-F] open-leads: all retries exhausted, no cache → 502');
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint(
+      '/crm/v3/objects/contacts/search',
+      'alwaysFail',
+      null,
+    );
+
+    const olf = await httpGet(BASE2, '/api/open-leads', cookie);
+
+    const olfSearchCalls = mock.calls.filter(c =>
+      c.url.startsWith('/crm/v3/objects/contacts/search'),
+    );
+
+    record('OL-F.1 endpoint returns 502',
+      olf.status === 502,
+      `status=${olf.status}`);
+    record('OL-F.2 error code is HUBSPOT_RATE_LIMIT',
+      olf.json?.code === 'HUBSPOT_RATE_LIMIT',
+      `code=${olf.json?.code} body=${olf.body.slice(0, 160)}`);
+    record('OL-F.3 all search attempts were 429s (4 attempts)',
+      olfSearchCalls.length === 4 && olfSearchCalls.every(c => c.status === 429),
+      `search calls=${olfSearchCalls.length} statuses=${olfSearchCalls.map(c => c.status).join(',')}`);
+
     // ── (CA-F) contacts-all: all retries exhausted, no prior cache → 502 ──────
     // Server 2 starts cold (no caches). Mock is set to alwaysFail so every
     // attempt returns 429. With no _allContactsLastGood to fall back on the
@@ -751,6 +785,11 @@ async function writeReport(runId) {
     '  a fresh fetch — `X-Cache-Status` is not `stale` and at least one successful',
     '  search call is recorded. A follow-up request is served from the newly',
     '  populated `_openLeadsCache` with no new HubSpot call (`search calls = 0`).',
+    '- **(OL-F) open-leads exhausted, no cache**: `GET /api/open-leads` with',
+    '  `/crm/v3/objects/contacts/search` returning 429 on every attempt',
+    '  (all 4 retries exhausted) and no prior `_openLeadsCache` → returns 502 with',
+    '  `code: HUBSPOT_RATE_LIMIT`. Tested on Server 2 which has a cold open-leads',
+    '  cache throughout (none of the preceding tests call `/api/open-leads` on S2).',
     '- **(CA-F) contacts-all exhausted, no cache**: `GET /api/contacts-all` with',
     '  `/crm/v3/objects/contacts/search` returning 429 on every attempt',
     '  (all 4 retries exhausted) and no prior good cache → returns 502 with',
