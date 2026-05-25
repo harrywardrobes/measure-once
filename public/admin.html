@@ -30,8 +30,8 @@
     <div class="modal-sub"   id="approve-modal-sub"></div>
     <div class="form-section-label form-section-label--tight">Job role <span class="opt">(optional)</span></div>
     <div class="form-field-wrap">
-      <label style="font-size:.72rem;font-weight:600;color:var(--ink-3);">Assign a role now — you can change it later via the Team tab.</label>
-      <select class="field field-full" id="approve-modal-jobrole" style="margin-top:6px;">
+      <label class="adm-help-label">Assign a role now — you can change it later via the Team tab.</label>
+      <select class="field field-full adm-mt-6" id="approve-modal-jobrole">
         <option value="">— No role (member access) —</option>
       </select>
     </div>
@@ -68,8 +68,8 @@
       </div>
       <div class="form-field-wrap">
         <label>National Insurance number</label>
-        <input class="field" id="modal-ni" type="text" maxlength="20" autocomplete="off"
-          style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+        <input class="field adm-input-upper" id="modal-ni" type="text" maxlength="20" autocomplete="off"
+          oninput="this.value=this.value.toUpperCase()">
       </div>
       <div class="form-field-wrap">
         <label>Mobile number</label>
@@ -478,7 +478,7 @@
       </div>
       <div class="perm-save-row">
         <button class="btn btn-primary" id="perm-save-btn" onclick="savePerms()">Save permissions</button>
-        <span class="perm-unsaved" id="perm-unsaved-note" style="display:none;">Unsaved changes</span>
+        <span class="perm-unsaved" id="perm-unsaved-note" hidden>Unsaved changes</span>
       </div>
       <p class="card-note">
         * Toggles update the documented permission policy stored in the database.
@@ -496,7 +496,7 @@
     btn.textContent  = nowOn ? '✓' : '✗';
     btn.title        = (nowOn ? 'Remove' : 'Grant') + ' ' + level + ' access';
     const note = $('#perm-unsaved-note');
-    if (note) note.style.display = '';
+    if (note) note.hidden = false;
   }
 
   async function savePerms() {
@@ -506,7 +506,7 @@
       await api('PATCH', '/api/admin/capabilities', { overrides: _permEdits });
       _capabilities = await api('GET', '/api/admin/capabilities');
       const note = $('#perm-unsaved-note');
-      if (note) note.style.display = 'none';
+      if (note) note.hidden = true;
       toast('Permissions saved');
       _auditLogInitialized = false;
     } catch (e) {
@@ -712,7 +712,7 @@
         s.payment_terms  ? `Payment: ${esc(s.payment_terms)}`  : '',
       ].filter(Boolean);
       return `
-        <div class="card" id="tsub-${s.id}" style="margin-bottom:16px;">
+        <div class="card adm-card-mb-16" id="tsub-${s.id}">
           <div class="adm-tsub-row">
             <div class="adm-tsub-body">
               <div class="adm-tsub-name">${esc(s.company_name)}</div>
@@ -745,7 +745,7 @@
           <div class="card-title">Trade submissions</div>
           <div class="table-empty table-empty--padded">No pending submissions.</div>
         </div>`
-      : `<div class="card" style="margin-bottom:4px;">
+      : `<div class="card adm-card-mb-4">
           <div class="card-title">Trade submissions <span class="card-count">(${_tradeSubmissions.length})</span></div>
           <p class="card-desc admin-msg">Review and approve or reject trade company submissions from managers.</p>
         </div>
@@ -872,10 +872,10 @@
     if (!emailInp) return;
 
     const email = emailInp.value.trim();
-    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    if (errEl) { errEl.hidden = true; errEl.textContent = ''; }
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      if (errEl) { errEl.textContent = 'Please enter a valid email address.'; errEl.style.display = ''; }
+      if (errEl) { errEl.textContent = 'Please enter a valid email address.'; errEl.hidden = false; }
       emailInp.focus();
       return;
     }
@@ -906,7 +906,7 @@
       await reload();
       _auditLogInitialized = false;
     } catch (e) {
-      if (errEl) { errEl.textContent = e.message; errEl.style.display = ''; }
+      if (errEl) { errEl.textContent = e.message; errEl.hidden = false; }
       else toast(e.message, true);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Add team member'; }
@@ -1205,12 +1205,12 @@
       const name  = [first, last].filter(Boolean).join(' ') || `Contact ${id}`;
       const email = esc(c.properties?.email || '');
       const enabled = c.properties?.hw_test_user === 'true';
-      return `<div class="dtu-row" id="dtu-row-${id}" style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);">
-        <div style="min-width:0;">
-          <div style="font-size:.875rem;font-weight:500;color:var(--ink-1);">${name}</div>
-          ${email ? `<div style="font-size:.78rem;color:var(--ink-4);margin-top:1px;">${email}</div>` : ''}
+      return `<div class="dtu-row adm-dtu-row" id="dtu-row-${id}">
+        <div class="adm-dtu-row-body">
+          <div class="adm-dtu-row-name">${name}</div>
+          ${email ? `<div class="adm-dtu-row-email">${email}</div>` : ''}
         </div>
-        <label class="ss-toggle" title="Include in dev test data" style="flex-shrink:0;margin-left:16px;">
+        <label class="ss-toggle adm-dtu-row-toggle" title="Include in dev test data">
           <input type="checkbox" ${enabled ? 'checked' : ''} data-contact-id="${id}" onchange="toggleTestUser('${id}', this)">
           <span class="ss-toggle-track"></span>
         </label>
@@ -2086,36 +2086,35 @@
         ? ` — bound to <strong>${names.map(n => esc(n)).join('</strong>, <strong>')}</strong>`
         : '';
       return `
-        <li style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:${idx === 0 ? '0' : '1px solid #fde68a'};">
-          <div style="flex:1;min-width:0;font-size:.8rem;color:#78350f;line-height:1.45;">
+        <li class="adm-cab-item">
+          <div class="adm-cab-item-body">
             <strong>${slotDesc}</strong> has <strong>${Number(c.count) || names.length || 2} handlers</strong>${namesHtml}.
           </div>
-          <button type="button" class="btn" data-cah-fix
-            data-args="${esc(args)}"
-            style="flex:0 0 auto;font-size:.78rem;padding:4px 12px;background:#d97706;color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;">
+          <button type="button" class="btn adm-cab-fix-btn" data-cah-fix
+            data-args="${esc(args)}">
             Fix
           </button>
         </li>`;
     }).join('');
     banner.innerHTML = `
-      <div style="border:1px solid #fbbf24;border-radius:10px;background:#fffbeb;padding:12px 14px;">
-        <div style="display:flex;align-items:flex-start;gap:10px;">
-          <div style="font-size:1.1rem;line-height:1.2;" aria-hidden="true">⚠️</div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-weight:700;font-size:.88rem;color:#92400e;">
+      <div class="adm-cab-wrap">
+        <div class="adm-cab-head">
+          <div class="adm-cab-icon" aria-hidden="true">⚠️</div>
+          <div class="adm-cab-body">
+            <div class="adm-cab-title">
               ${total === 1 ? '1 slot has' : `${total} slots have`} duplicate handler bindings
             </div>
-            <div style="font-size:.78rem;color:#92400e;margin-top:2px;line-height:1.5;">
+            <div class="adm-cab-desc">
               Only one of the bound handlers will run when the action is clicked. Resolve each conflict by removing the extras.
             </div>
           </div>
           <button type="button" id="cah-conflict-banner-dismiss"
             aria-label="Dismiss"
-            style="flex:0 0 auto;background:transparent;border:none;color:#92400e;font-size:1rem;line-height:1;cursor:pointer;padding:2px 6px;">
+            class="adm-cab-dismiss">
             ✕
           </button>
         </div>
-        <ul style="list-style:none;margin:8px 0 0;padding:0;">${itemsHtml}</ul>
+        <ul class="adm-cab-list">${itemsHtml}</ul>
       </div>`;
     banner.style.display = '';
     banner.querySelectorAll('[data-cah-fix]').forEach(btn => {
@@ -2355,7 +2354,7 @@
         <h3 class="adm-modal-title">${existing ? 'Change action' : 'Add action'}</h3>
         <p class="adm-modal-sub">for <strong>${esc(slot.label)}</strong> <span class="adm-optional">(${esc(slot.rowLabel || '')})</span></p>
         <label class="adm-modal-label">Action name <span class="adm-optional">(optional)</span></label>
-        <input id="cah-action-name" type="text" class="field" maxlength="80" placeholder="e.g. send_quote" style="font-size:.85rem;" value="${esc(config.action_name || '')}">
+        <input id="cah-action-name" type="text" class="field adm-field-sm" maxlength="80" placeholder="e.g. send_quote" value="${esc(config.action_name || '')}">
         <div id="cah-action-name-err" class="adm-err-line--sm hidden">Only lowercase letters, digits, and underscores are allowed (e.g. <code>send_quote</code>).</div>
         <div class="adm-info-amber">⚙️ Backend automation coming soon — this name will be used to trigger workflows automatically once wired up. When set, it also displays as the label on the card action strip.</div>
         <label class="adm-modal-label">Action type</label>
@@ -2368,9 +2367,9 @@
         <!-- show_message: dedicated message field. Hidden for other types. -->
         <div id="cah-msg-block" class="hidden adm-block-mt12">
           <label class="adm-modal-label adm-modal-label--first">Popup title (optional)</label>
-          <input id="cah-msg-title" type="text" class="field" maxlength="120" style="font-size:.85rem;">
+          <input id="cah-msg-title" type="text" class="field adm-field-sm" maxlength="120">
           <label class="adm-modal-label adm-modal-label--sm">Message to display <span class="adm-req">*</span></label>
-          <textarea id="cah-msg-body" class="field" rows="4" maxlength="2000" placeholder="What should the operator do when they click this label?" style="font-size:.85rem;"></textarea>
+          <textarea id="cah-msg-body" class="field adm-field-sm" rows="4" maxlength="2000" placeholder="What should the operator do when they click this label?"></textarea>
           <div class="adm-hint">Shown verbatim in a popup. Plain text only; line breaks are preserved.</div>
         </div>
 
@@ -2378,24 +2377,24 @@
         <div id="cah-sdv-block" class="hidden adm-block-mt12">
           <div>
             <label class="adm-modal-label adm-modal-label--first">Default duration (min)</label>
-            <input id="cah-sdv-duration" type="number" class="field" min="5" max="1440" step="5" value="${esc(String(config.defaultDurationMin || 90))}" style="font-size:.85rem;">
+            <input id="cah-sdv-duration" type="number" class="field adm-field-sm" min="5" max="1440" step="5" value="${esc(String(config.defaultDurationMin || 90))}">
           </div>
-          <div style="margin-top:10px;">
+          <div class="adm-mt-10">
             <label class="adm-modal-label adm-modal-label--first">In-progress lead status <span class="adm-optional">(optional — set when wizard opens)</span></label>
-            <select id="cah-sdv-lead-status-intermediate" class="field" style="font-size:.85rem;">${_buildLeadStatusOnlyOptions(config.intermediateLeadStatus || '')}</select>
+            <select id="cah-sdv-lead-status-intermediate" class="field adm-field-sm">${_buildLeadStatusOnlyOptions(config.intermediateLeadStatus || '')}</select>
           </div>
           <div class="adm-info-blue">
             <strong>Two-phase status flow:</strong> Opening the wizard sets the in-progress status. Submitting the form sets the submitted status.
           </div>
-          <div style="margin-top:8px;">
+          <div class="adm-mt-8">
             <label class="adm-modal-label adm-modal-label--first">Submitted lead status <span class="adm-optional">(optional — set on submit)</span></label>
-            <select id="cah-sdv-lead-status-submitted" class="field" style="font-size:.85rem;">${_buildLeadStatusWithSubsOptions(config.submittedLeadStatus || '')}</select>
+            <select id="cah-sdv-lead-status-submitted" class="field adm-field-sm">${_buildLeadStatusWithSubsOptions(config.submittedLeadStatus || '')}</select>
           </div>
-          <div style="margin-top:10px;">
+          <div class="adm-mt-10">
             <label class="adm-modal-label adm-modal-label--first">Terms &amp; Conditions <span class="adm-optional">(optional, ≤4000 chars — also editable in the T&C section below)</span></label>
-            <textarea id="cah-sdv-terms" class="field" rows="4" maxlength="4000" placeholder="Your terms and conditions text…" style="font-size:.82rem;">${esc(config.termsAndConditions || '')}</textarea>
+            <textarea id="cah-sdv-terms" class="field adm-field-xs" rows="4" maxlength="4000" placeholder="Your terms and conditions text…">${esc(config.termsAndConditions || '')}</textarea>
           </div>
-          <div style="margin-top:8px;">
+          <div class="adm-mt-8">
             <label class="adm-checkbox-row">
               <input type="checkbox" id="cah-sdv-google" ${config.addToGoogleCalendar !== false ? 'checked' : ''}>
               Also add to Google Calendar
@@ -2406,7 +2405,7 @@
         <!-- Advanced JSON config: hidden for show_message and start_design_visit since they have dedicated fields. -->
         <div id="cah-cfg-block" class="adm-block-mt12">
           <label class="adm-modal-label adm-modal-label--first">Advanced configuration (JSON, optional)</label>
-          <textarea id="cah-config" class="field" rows="4" style="font-family:monospace;font-size:.82rem;">${esc(JSON.stringify(config, null, 2))}</textarea>
+          <textarea id="cah-config" class="field adm-field-mono-xs" rows="4">${esc(JSON.stringify(config, null, 2))}</textarea>
         </div>
 
         <div id="cah-conflict" class="hidden adm-conflict-box">
@@ -3005,7 +3004,7 @@
           </div>`;
         return;
       }
-      $('#page').innerHTML = `<div class="loading-state" style="color:#991b1b;">${esc(e.message)}</div>`;
+      $('#page').innerHTML = `<div class="loading-state adm-loading-err">${esc(e.message)}</div>`;
       return;
     }
 
@@ -3029,13 +3028,13 @@
         <button class="tab-btn"        data-tab="search"        onclick="switchTab('search')">Search</button>
         <button class="tab-btn"        data-tab="workshop"    onclick="switchTab('workshop')">Workshop</button>
         <button class="tab-btn"        data-tab="designsystem" onclick="switchTab('designsystem')">Design system</button>
-        <a class="tab-btn" href="/admin/database" style="text-decoration:none;">Database</a>
-        <button class="tab-btn"        data-tab="devenv"      onclick="switchTab('devenv')" id="tab-btn-devenv" style="display:none;">Dev environment</button>
+        <a class="tab-btn adm-tab-link" href="/admin/database">Database</a>
+        <button class="tab-btn"        data-tab="devenv"      onclick="switchTab('devenv')" id="tab-btn-devenv" hidden>Dev environment</button>
       </div>
 
       <!-- TEAM -->
       <div class="tab-panel active" id="tab-team">
-        <div class="card" style="padding:0;overflow:hidden;">
+        <div class="card adm-card-flush">
           <table>
             <thead><tr><th>Member</th><th>Job role</th><th>Privilege</th><th>Status</th><th>Joined</th><th></th></tr></thead>
             <tbody id="team-body"></tbody>
@@ -3044,7 +3043,7 @@
 
         <div class="card">
           <div class="card-title">Add team member</div>
-          <p class="card-desc" style="margin-bottom:4px;">
+          <p class="card-desc adm-mb-4">
             Approve an email address so this person can sign in straight away, and capture their key details at the same time.
           </p>
 
@@ -3068,8 +3067,8 @@
             </div>
             <div class="form-field-wrap">
               <label>National Insurance number</label>
-              <input class="field" id="invite-ni" type="text" placeholder="AB 12 34 56 C" maxlength="20" autocomplete="off"
-                style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()">
+              <input class="field adm-input-upper" id="invite-ni" type="text" placeholder="AB 12 34 56 C" maxlength="20" autocomplete="off"
+                oninput="this.value=this.value.toUpperCase()">
             </div>
             <div class="form-field-wrap">
               <label>Mobile number</label>
@@ -3095,18 +3094,18 @@
 
           <div class="form-section-label">Role <span class="opt">(optional)</span></div>
           <div class="form-field-wrap">
-            <label style="font-size:.72rem;font-weight:600;color:var(--ink-3);">Job role — sets the privilege level for this team member.</label>
-            <select class="field field-full" id="invite-jobrole" style="margin-top:6px;">
+            <label class="adm-help-label">Job role — sets the privilege level for this team member.</label>
+            <select class="field field-full adm-mt-6" id="invite-jobrole">
               <option value="">— No role (member access) —</option>
             </select>
           </div>
 
-          <div class="form-section-label" style="margin-top:18px;">Note <span class="opt">(optional)</span></div>
+          <div class="form-section-label adm-mt-18">Note <span class="opt">(optional)</span></div>
           <input class="field field-full" id="invite-note" type="text" placeholder="e.g. New hire · Site manager" maxlength="200">
 
           <div class="form-actions">
             <button class="btn btn-primary" id="invite-btn" onclick="addAllowed()">Add team member</button>
-            <div id="invite-err" class="invite-err" style="display:none;"></div>
+            <div id="invite-err" class="invite-err" hidden></div>
           </div>
 
           <div class="checklist-box">
@@ -3421,7 +3420,7 @@
           3. A short description of what it does AND why it is
              excluded from production.
 
-        Copy one of the existing <div style="padding:14px 0;…">
+        Copy one of the existing .adm-devenv-item blocks
         blocks below as a template. This list is the single source
         of truth shown to admins for "what is dev-only in here".
 
@@ -3429,21 +3428,21 @@
         "Dev-only admin features".
         ============================================================
       -->
-      <div class="tab-panel" id="tab-devenv" style="display:none;">
-        <div style="background:#fef9c3;border:1px solid #fde047;border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:20px;display:flex;align-items:flex-start;gap:12px;">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;margin-top:1px;">
+      <div class="tab-panel" id="tab-devenv" hidden>
+        <div class="adm-devenv-banner">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="adm-devenv-banner-icon">
             <circle cx="10" cy="10" r="9" fill="#facc15"/>
             <text x="10" y="15" text-anchor="middle" font-size="12" font-weight="800" fill="#713f12" font-family="sans-serif">!</text>
           </svg>
           <div>
-            <div style="font-weight:700;font-size:.875rem;color:#713f12;margin-bottom:3px;">You are in development mode</div>
-            <div style="font-size:.82rem;color:#854d0e;line-height:1.5;">The items listed below are <strong>not visible in the published app</strong>. They are suppressed when <code style="background:#fef08a;padding:1px 4px;border-radius:3px;">NODE_ENV=production</code>.</div>
+            <div class="adm-devenv-banner-title">You are in development mode</div>
+            <div class="adm-devenv-banner-text">The items listed below are <strong>not visible in the published app</strong>. They are suppressed when <code class="adm-devenv-banner-code">NODE_ENV=production</code>.</div>
           </div>
         </div>
 
         <div class="card">
           <div class="card-title">Dev-only features in this panel</div>
-          <p class="card-desc" style="margin-bottom:16px;">Each entry below names the feature, the tab it lives in, and why it is excluded from production.</p>
+          <p class="card-desc adm-mb-16">Each entry below names the feature, the tab it lives in, and why it is excluded from production.</p>
 
           <div class="adm-devenv-list">
 
@@ -3520,11 +3519,11 @@
     const btn   = document.getElementById('tab-btn-devenv');
     const panel = document.getElementById('tab-devenv');
     if (_devMode) {
-      if (btn)   btn.style.display   = '';
-      if (panel) panel.style.display = '';
+      if (btn)   btn.hidden   = false;
+      if (panel) panel.hidden = false;
     } else {
-      if (btn)   btn.style.display   = 'none';
-      if (panel) panel.style.display = 'none';
+      if (btn)   btn.hidden   = true;
+      if (panel) panel.hidden = true;
       // If devenv was the active tab (e.g. saved from a prior dev session), fall back to team
       if (panel && panel.classList.contains('active')) {
         switchTab('team');
@@ -3720,9 +3719,9 @@
     });
   }
   const _DV_DRAG_HANDLE_CELL =
-    `<td style="padding:4px 4px;cursor:grab;color:var(--ink-4);text-align:center;user-select:none;" title="Drag to reorder" aria-hidden="true">⋮⋮</td>`;
+    `<td class="adm-dv-drag-cell" title="Drag to reorder" aria-hidden="true">⋮⋮</td>`;
   const _DV_DRAG_HANDLE_TH =
-    `<th style="width:24px;"></th>`;
+    `<th class="adm-dv-drag-th"></th>`;
 
   // ── Handles ───────────────────────────────────────────────────────────────
   async function loadDvHandles() {
@@ -3752,7 +3751,7 @@
             <th class="adm-th">Image</th>
             <th class="adm-th">Name</th>
             <th class="adm-th">Style</th>
-            <th style="width:52px;"></th>
+            <th class="adm-dv-actions-th"></th>
             <th></th>
           </tr>
         </thead>
@@ -3762,8 +3761,8 @@
               ${_DV_DRAG_HANDLE_CELL}
               <td class="adm-td">
                 ${item.image_url
-                  ? `<img src="${esc(item.image_url)}" alt="${esc(item.name)}" style="width:32px;height:32px;object-fit:contain;border-radius:4px;border:1px solid var(--border);" onerror="this.style.display='none';">`
-                  : '<span style="color:var(--ink-4);">—</span>'}
+                  ? `<img src="${esc(item.image_url)}" alt="${esc(item.name)}" class="adm-dv-thumb" onerror="this.style.display='none';">`
+                  : '<span class="adm-dv-thumb-empty">—</span>'}
               </td>
               <td class="adm-td">${esc(item.name || '—')}</td>
               <td class="adm-td">${esc(item.style || '—')}</td>
@@ -3833,7 +3832,7 @@
           <tr class="adm-tr">
             ${_DV_DRAG_HANDLE_TH}
             ${labels.map(l => `<th class="adm-th">${esc(l)}</th>`).join('')}
-            <th style="width:52px;"></th>
+            <th class="adm-dv-actions-th"></th>
             <th></th>
           </tr>
         </thead>
@@ -3927,28 +3926,27 @@
       <div class="adm-modal-card adm-modal-card--narrow">
         <h3 class="adm-modal-title">${item ? 'Edit' : 'Add'} ${esc(typeLabels[type])}</h3>
         <label class="adm-modal-label adm-modal-label--first">Name <span class="adm-req">*</span></label>
-        <input id="dvie-name" type="text" class="field" maxlength="200" value="${esc(item?.name || '')}" style="font-size:.88rem;">
+        <input id="dvie-name" type="text" class="field adm-field-name" maxlength="200" value="${esc(item?.name || '')}">
         ${hasStyleSelect ? `
           <label class="adm-modal-label">Style${item ? '' : ' <span class="adm-req">*</span>'}</label>
-          <select id="dvie-style" class="field" style="font-size:.85rem;">
+          <select id="dvie-style" class="field adm-field-sm">
             <option value="">— select —</option>
             ${DV_HANDLE_STYLES.map(s => `<option value="${esc(s)}"${item?.style === s ? ' selected' : ''}>${esc(s)}</option>`).join('')}
           </select>
         ` : ''}
         ${hasDescription ? `
           <label class="adm-modal-label">Description</label>
-          <textarea id="dvie-desc" class="field" rows="2" maxlength="500" style="font-size:.85rem;resize:vertical;">${esc(item?.description || '')}</textarea>
+          <textarea id="dvie-desc" class="field adm-field-resize" rows="2" maxlength="500">${esc(item?.description || '')}</textarea>
         ` : ''}
         ${hasImageUrl ? `
           <label class="adm-modal-label">Image${type === 'handle' ? '' : ' URL'}</label>
           ${type === 'handle' ? `
-            <div id="dvie-img-preview-wrap" style="margin-bottom:6px;${item?.image_url ? '' : 'display:none;'}">
-              <img id="dvie-img-preview" src="${esc(item?.image_url || '')}" alt="Current image"
-                style="max-height:80px;max-width:160px;border-radius:6px;border:1px solid var(--border);object-fit:contain;">
+            <div id="dvie-img-preview-wrap" class="adm-dv-preview-wrap"${item?.image_url ? '' : ' hidden'}>
+              <img id="dvie-img-preview" src="${esc(item?.image_url || '')}" alt="Current image" class="adm-dv-preview">
             </div>
-            <input id="dvie-img-file" type="file" accept="image/*" class="field" style="font-size:.85rem;padding:4px;">
+            <input id="dvie-img-file" type="file" accept="image/*" class="field adm-field-file">
           ` : `
-            <input id="dvie-img" type="url" class="field" maxlength="500" value="${esc(item?.image_url || '')}" placeholder="https://…" style="font-size:.85rem;">
+            <input id="dvie-img" type="url" class="field adm-field-sm" maxlength="500" value="${esc(item?.image_url || '')}" placeholder="https://…">
           `}
         ` : ''}
         <div id="dvie-err" class="adm-err-line"></div>
@@ -3972,7 +3970,7 @@
           const previewImg  = wrap.querySelector('#dvie-img-preview');
           const url = URL.createObjectURL(f);
           previewImg.src = url;
-          previewWrap.style.display = '';
+          previewWrap.hidden = false;
         });
       }
     }

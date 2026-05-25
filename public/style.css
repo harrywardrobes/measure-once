@@ -7312,3 +7312,113 @@ body.dv-signoff-page {
   white-space: pre-line; max-height: 120px; overflow-y: auto;
   line-height: 1.6;
 }
+
+/* ── Final inline-style sweep helpers ──────────────────────────────────────
+   Generic admin spacing / text utilities and section-specific helpers used
+   only after the bulk extraction. Add new admin-only inline-style
+   replacements here so they stay grouped. */
+.admin-page .adm-mt-6  { margin-top: 6px; }
+.admin-page .adm-mt-10 { margin-top: 10px; }
+.admin-page .adm-mt-18 { margin-top: 18px; }
+.admin-page .adm-mb-4  { margin-bottom: 4px; }
+.admin-page .adm-card-flush  { padding: 0; overflow: hidden; }
+.admin-page .adm-card-mb-16  { margin-bottom: 16px; }
+.admin-page .adm-card-mb-4   { margin-bottom: 4px; }
+.admin-page .adm-input-upper { text-transform: uppercase; }
+.admin-page .adm-loading-err { color: #991b1b; }
+.admin-page .adm-tab-link    { text-decoration: none; }
+.admin-page .adm-help-label  {
+  font-size: .72rem; font-weight: 600; color: var(--ink-3);
+}
+
+/* Card-action-handler modal inputs (small, mono variants) */
+.admin-page .adm-field-sm      { font-size: .85rem; }
+.admin-page .adm-field-xs      { font-size: .82rem; }
+.admin-page .adm-field-mono-xs { font-family: monospace; font-size: .82rem; }
+
+/* Dev test users — per-contact row */
+.admin-page .adm-dtu-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 0; border-bottom: 1px solid var(--border);
+}
+.admin-page .adm-dtu-row-body  { min-width: 0; }
+.admin-page .adm-dtu-row-name  {
+  font-size: .875rem; font-weight: 500; color: var(--ink-1);
+}
+.admin-page .adm-dtu-row-email {
+  font-size: .78rem; color: var(--ink-4); margin-top: 1px;
+}
+.admin-page .adm-dtu-row-toggle { flex-shrink: 0; margin-left: 16px; }
+
+/* Card-action handlers — conflicts banner */
+.admin-page .adm-cab-wrap {
+  border: 1px solid #fbbf24; border-radius: 10px;
+  background: #fffbeb; padding: 12px 14px;
+}
+.admin-page .adm-cab-head { display: flex; align-items: flex-start; gap: 10px; }
+.admin-page .adm-cab-icon { font-size: 1.1rem; line-height: 1.2; }
+.admin-page .adm-cab-body { flex: 1; min-width: 0; }
+.admin-page .adm-cab-title {
+  font-weight: 700; font-size: .88rem; color: #92400e;
+}
+.admin-page .adm-cab-desc {
+  font-size: .78rem; color: #92400e; margin-top: 2px; line-height: 1.5;
+}
+.admin-page .adm-cab-dismiss {
+  flex: 0 0 auto; background: transparent; border: none;
+  color: #92400e; font-size: 1rem; line-height: 1;
+  cursor: pointer; padding: 2px 6px;
+}
+.admin-page .adm-cab-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.admin-page .adm-cab-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; border-top: 1px solid #fde68a;
+}
+.admin-page .adm-cab-item:first-child { border-top: 0; }
+.admin-page .adm-cab-item-body {
+  flex: 1; min-width: 0; font-size: .8rem; color: #78350f; line-height: 1.45;
+}
+.admin-page .adm-cab-fix-btn {
+  flex: 0 0 auto; font-size: .78rem; padding: 4px 12px;
+  background: #d97706; color: #fff;
+  border: none; border-radius: 6px; cursor: pointer; white-space: nowrap;
+}
+
+/* Dev-environment tab banner */
+.admin-page .adm-devenv-banner {
+  background: #fef9c3; border: 1px solid #fde047;
+  border-radius: var(--radius-lg); padding: 16px 20px;
+  margin-bottom: 20px;
+  display: flex; align-items: flex-start; gap: 12px;
+}
+.admin-page .adm-devenv-banner-icon { flex-shrink: 0; margin-top: 1px; }
+.admin-page .adm-devenv-banner-title {
+  font-weight: 700; font-size: .875rem; color: #713f12; margin-bottom: 3px;
+}
+.admin-page .adm-devenv-banner-text {
+  font-size: .82rem; color: #854d0e; line-height: 1.5;
+}
+.admin-page .adm-devenv-banner-code {
+  background: #fef08a; padding: 1px 4px; border-radius: 3px;
+}
+
+/* DV catalogue — drag handles, thumbnails, previews */
+.admin-page .adm-dv-drag-cell {
+  padding: 4px 4px; cursor: grab; color: var(--ink-4);
+  text-align: center; user-select: none;
+}
+.admin-page .adm-dv-drag-th    { width: 24px; }
+.admin-page .adm-dv-actions-th { width: 52px; }
+.admin-page .adm-dv-thumb {
+  width: 32px; height: 32px; object-fit: contain;
+  border-radius: 4px; border: 1px solid var(--border);
+}
+.admin-page .adm-dv-thumb-empty { color: var(--ink-4); }
+.admin-page .adm-dv-preview-wrap { margin-bottom: 6px; }
+.admin-page .adm-dv-preview {
+  max-height: 80px; max-width: 160px;
+  border-radius: 6px; border: 1px solid var(--border); object-fit: contain;
+}
+.admin-page .adm-field-file   { font-size: .85rem; padding: 4px; }
+.admin-page .adm-field-resize { font-size: .85rem; resize: vertical; }
+.admin-page .adm-field-name   { font-size: .88rem; }
