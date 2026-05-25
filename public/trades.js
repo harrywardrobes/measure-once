@@ -25,6 +25,8 @@ const TRADE_AREAS = [
 let _tradeContacts = [];
 window._cpGetTradeContacts = function () { return _tradeContacts; };
 let _tradeDeleteId = null;
+const _tradeEmailDebounce = {};
+const _tradeEmailConflicts = {};
 let _tradeTypeFilter = (() => { try { return localStorage.getItem('tradesTypeFilter') || ''; } catch (_) { return ''; } })();
 let _tradeAreaFilter = '';
 let _tradeSearch = '';
@@ -320,7 +322,8 @@ function contactSlotHtml(index, data) {
         </div>
         <div class="trades-field">
           <label class="trades-label" for="tf-cemail-${index}">Email address</label>
-          <input class="trades-input" id="tf-cemail-${index}" type="email" placeholder="e.g. john@example.com" value="${email}">
+          <input class="trades-input" id="tf-cemail-${index}" type="email" placeholder="e.g. john@example.com" value="${email}" oninput="onTradeEmailInput(${index})">
+          <div class="trades-email-notice hidden" id="tf-cemail-notice-${index}" data-slot-notice="${index}" style="margin-top:6px;padding:8px 10px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:12px;line-height:1.4;"></div>
         </div>
       </div>
       <div class="trades-form-row">
@@ -340,6 +343,90 @@ function getSlotCount() {
   return document.querySelectorAll('#trades-contacts-list .trades-contact-slot').length;
 }
 
+// ── Duplicate-email check for contact rows ────────────────────────────────────
+function normalizeTradeEmail(s) {
+  return (s || '').trim().toLowerCase();
+}
+
+function findTradeEmailConflict(email) {
+  const needle = normalizeTradeEmail(email);
+  if (!needle) return null;
+  const editingId = (document.getElementById('trades-edit-id') || {}).value || '';
+  for (const co of (_tradeContacts || [])) {
+    if (String(co.id) === String(editingId)) continue;
+    const contacts = Array.isArray(co.contacts) ? co.contacts : [];
+    for (const c of contacts) {
+      if (normalizeTradeEmail(c?.email) === needle) {
+        return { company: co, contactName: c?.name || '' };
+      }
+    }
+  }
+  return null;
+}
+
+function renderTradeEmailNotice(index) {
+  const notice = document.getElementById(`tf-cemail-notice-${index}`);
+  if (!notice) return;
+  const conflict = _tradeEmailConflicts[index];
+  if (!conflict) {
+    notice.classList.add('hidden');
+    notice.innerHTML = '';
+    return;
+  }
+  const co = conflict.company;
+  const who = conflict.contactName ? `${escHtml(conflict.contactName)} at ` : '';
+  const linkLabel = escHtml(co.company_name || 'this company');
+  notice.classList.remove('hidden');
+  notice.innerHTML = `
+    <strong>This email is already in use</strong> by ${who}<a href="#" class="trades-email-notice-link" data-trade-id="${escHtml(String(co.id))}" style="color:inherit;text-decoration:underline;font-weight:600">${linkLabel}</a>. Pick a different address or open the existing record.`;
+  const link = notice.querySelector('.trades-email-notice-link');
+  if (link) {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeTradesModal();
+      openTradesModal(co.id);
+    });
+  }
+}
+
+function updateTradesSubmitDisabled() {
+  const btn = document.getElementById('trades-submit-btn');
+  if (!btn) return;
+  const hasConflict = Object.values(_tradeEmailConflicts).some(Boolean);
+  if (hasConflict) {
+    btn.disabled = true;
+    btn.title = 'One or more contact emails are already in use';
+  } else {
+    btn.disabled = false;
+    btn.removeAttribute('title');
+  }
+}
+
+function onTradeEmailInput(index) {
+  if (_tradeEmailDebounce[index]) clearTimeout(_tradeEmailDebounce[index]);
+  _tradeEmailDebounce[index] = setTimeout(() => {
+    const input = document.getElementById(`tf-cemail-${index}`);
+    if (!input) return;
+    _tradeEmailConflicts[index] = findTradeEmailConflict(input.value);
+    renderTradeEmailNotice(index);
+    updateTradesSubmitDisabled();
+  }, 300);
+}
+
+function recheckAllTradeEmails() {
+  // Re-evaluate every visible slot (used after rebuild / open).
+  Object.keys(_tradeEmailConflicts).forEach(k => delete _tradeEmailConflicts[k]);
+  const slots = document.querySelectorAll('#trades-contacts-list .trades-contact-slot');
+  slots.forEach((_, i) => {
+    const input = document.getElementById(`tf-cemail-${i}`);
+    if (!input) return;
+    _tradeEmailConflicts[i] = findTradeEmailConflict(input.value);
+    renderTradeEmailNotice(i);
+  });
+  updateTradesSubmitDisabled();
+}
+window.onTradeEmailInput = onTradeEmailInput;
+
 function addContactSlot(data) {
   const list = document.getElementById('trades-contacts-list');
   const btn  = document.getElementById('trades-add-contact-btn');
@@ -348,6 +435,7 @@ function addContactSlot(data) {
   if (index >= MAX_CONTACTS) return;
   list.insertAdjacentHTML('beforeend', contactSlotHtml(index, data || {}));
   if (getSlotCount() >= MAX_CONTACTS) btn.style.display = 'none';
+  recheckAllTradeEmails();
 }
 
 function removeContactSlot(index) {
@@ -365,6 +453,7 @@ function rebuildContactSlots(dataArr) {
   list.innerHTML = '';
   dataArr.slice(0, MAX_CONTACTS).forEach((d, i) => list.insertAdjacentHTML('beforeend', contactSlotHtml(i, d)));
   btn.style.display = getSlotCount() >= MAX_CONTACTS ? 'none' : '';
+  recheckAllTradeEmails();
 }
 
 function collectContactSlots() {
@@ -466,10 +555,12 @@ function closeTradesModal() {
 function resetTradesForm() {
   document.getElementById('trades-form').reset();
   document.getElementById('trades-edit-id').value = '';
+  Object.keys(_tradeEmailConflicts).forEach(k => delete _tradeEmailConflicts[k]);
   const submitBtn = document.getElementById('trades-submit-btn');
   if (submitBtn) {
     const isAdmin = (window.state?.user?.privilege_level === 'admin');
     submitBtn.disabled = false;
+    submitBtn.removeAttribute('title');
     submitBtn.textContent = isAdmin ? 'Add Company' : 'Submit for Approval';
   }
   const list = document.getElementById('trades-contacts-list');
@@ -523,6 +614,11 @@ async function saveTradeContact(e) {
   const contacts = collectContactSlots().filter(c => c.name.trim());
   if (!contacts.length) {
     showToast('At least one contact with a name is required', true);
+    return;
+  }
+
+  if (Object.values(_tradeEmailConflicts).some(Boolean)) {
+    showToast('One or more contact emails are already in use — please update them before saving', true);
     return;
   }
 

@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
-  DialogContent, DialogTitle, FormControl, InputLabel, MenuItem, Select,
+  Alert, AlertTitle, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
+  DialogContent, DialogTitle, FormControl, InputLabel, Link, MenuItem, Select,
   Skeleton, Stack, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, Typography,
 } from '@mui/material';
@@ -10,6 +10,20 @@ import PhoneIcon from '@mui/icons-material/Phone';
 import { api, toast, fmtDate, emitAdminChange, onAdminChange, setRequestsBadge } from './adminApi';
 
 type Req = { id: number; name: string; email: string; status: string; created_at?: string };
+type User = {
+  id: string; email?: string; first_name?: string; last_name?: string;
+  privilege_level?: string;
+};
+type Allowed = {
+  email: string; metadata?: Record<string, string>;
+};
+type ApproveDuplicate =
+  | { kind: 'user'; label: string; email: string }
+  | { kind: 'allowed'; label: string; email: string };
+
+function normalizeEmail(e: string): string {
+  return (e || '').trim().toLowerCase();
+}
 type PhotoReq = { id: string; first_name?: string; last_name?: string; email?: string; pending_photo: string };
 type Contact = { name?: string; role?: string; phone?: string; email?: string; preferred_contact?: string };
 type TradeSub = {
@@ -36,6 +50,8 @@ export function AdminRequestsPage() {
   const [photos, setPhotos] = useState<PhotoReq[]>([]);
   const [trades, setTrades] = useState<TradeSub[]>([]);
   const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [allowed, setAllowed] = useState<Allowed[]>([]);
 
   // Approve modal
   const [approving, setApproving] = useState<Req | null>(null);
@@ -45,11 +61,13 @@ export function AdminRequestsPage() {
 
   async function load() {
     try {
-      const [r, p, t, jr] = await Promise.all([
+      const [r, p, t, jr, u, a] = await Promise.all([
         api<Req[]>('GET', '/api/admin/requests'),
         api<PhotoReq[]>('GET', '/api/admin/photo-requests'),
         api<TradeSub[]>('GET', '/api/admin/trades/submissions'),
         api<JobRole[]>('GET', '/api/admin/job-roles'),
+        api<User[]>('GET', '/api/admin/users'),
+        api<Allowed[]>('GET', '/api/admin/allowed'),
       ]);
       const reqList = Array.isArray(r) ? r : [];
       const photoList = Array.isArray(p) ? p : [];
@@ -58,6 +76,8 @@ export function AdminRequestsPage() {
       setPhotos(photoList);
       setTrades(tradeList);
       setJobRoles(Array.isArray(jr) ? jr : []);
+      setUsers(Array.isArray(u) ? u : []);
+      setAllowed(Array.isArray(a) ? a : []);
       const pending = reqList.filter(x => x.status === 'pending').length;
       setRequestsBadge(pending + photoList.length + tradeList.length);
     } catch (e: unknown) {
@@ -76,9 +96,37 @@ export function AdminRequestsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const approveDuplicate: ApproveDuplicate | null = useMemo(() => {
+    if (!approving) return null;
+    const needle = normalizeEmail(approving.email);
+    if (!needle) return null;
+    const matchedUser = users.find((x) => normalizeEmail(x.email || '') === needle);
+    if (matchedUser) {
+      const name = [matchedUser.first_name, matchedUser.last_name].filter(Boolean).join(' ')
+        || matchedUser.email || needle;
+      return { kind: 'user', label: name, email: matchedUser.email || needle };
+    }
+    const matchedAllowed = allowed.find((x) => normalizeEmail(x.email || '') === needle);
+    if (matchedAllowed) {
+      const m = matchedAllowed.metadata || {};
+      const name = [m.first_name, m.last_name].filter(Boolean).join(' ') || matchedAllowed.email;
+      return { kind: 'allowed', label: name, email: matchedAllowed.email };
+    }
+    return null;
+  }, [approving, users, allowed]);
+
+  function jumpToTeamTab() {
+    const sw = (window as unknown as { switchTab?: (id: string) => void }).switchTab;
+    if (typeof sw === 'function') sw('team');
+  }
+
   function openApprove(r: Req) { setApproving(r); setApproveRole(''); setApproveErr(null); }
   async function confirmApprove() {
     if (!approving) return;
+    if (approveDuplicate) {
+      setApproveErr('This email is already in use — see the notice above.');
+      return;
+    }
     setApproveBusy(true); setApproveErr(null);
     try {
       await api('POST', `/api/admin/requests/${approving.id}/approve`, { job_role: approveRole || null });
@@ -342,6 +390,35 @@ export function AdminRequestsPage() {
           <Typography variant="caption" component="p" color="text.secondary" sx={{ mb: 1 }}>
             Assign a role now — you can change it later via the Team tab.
           </Typography>
+          {approveDuplicate && (
+            <Alert
+              severity="warning"
+              sx={{ mb: 2 }}
+              action={
+                <Button color="inherit" size="small" onClick={jumpToTeamTab}>
+                  {approveDuplicate.kind === 'user' ? 'Open team member' : 'View approved entry'}
+                </Button>
+              }
+            >
+              <AlertTitle>
+                {approveDuplicate.kind === 'user'
+                  ? 'This email already belongs to a team member'
+                  : 'This email is already on the allow-list'}
+              </AlertTitle>
+              {approveDuplicate.kind === 'user'
+                ? `${approveDuplicate.label} (${approveDuplicate.email}) is already on the team.`
+                : `${approveDuplicate.label} (${approveDuplicate.email}) has already been approved.`}{' '}
+              <Link
+                component="button"
+                type="button"
+                variant="body2"
+                onClick={jumpToTeamTab}
+                sx={{ verticalAlign: 'baseline' }}
+              >
+                {approveDuplicate.kind === 'user' ? 'Open team member' : 'View approved entry'}
+              </Link>
+            </Alert>
+          )}
           <FormControl fullWidth>
             <InputLabel>Job role</InputLabel>
             <Select label="Job role" value={approveRole} onChange={(e) => setApproveRole(e.target.value)}>
@@ -353,7 +430,13 @@ export function AdminRequestsPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setApproving(null)} disabled={approveBusy}>Cancel</Button>
-          <Button variant="contained" color="success" onClick={confirmApprove} disabled={approveBusy}>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={confirmApprove}
+            disabled={approveBusy || !!approveDuplicate}
+            title={approveDuplicate ? 'This email is already in use' : undefined}
+          >
             {approveBusy ? 'Approving…' : 'Approve'}
           </Button>
         </DialogActions>
