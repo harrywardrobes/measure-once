@@ -38,6 +38,15 @@ export function useCurrentUser(): { user: CurrentUser | null; loading: boolean }
       if (!cancelled) {
         setUser(u);
         setLoading(false);
+        // Publish to window so usePrivilege (and legacy core.js consumers)
+        // can read the user on pure-React pages where bootstrap() is never
+        // called (e.g. /trades, /ideas). The event is idempotent: pages that
+        // also call bootstrap() will simply receive it a second time with the
+        // same value.
+        window.__moHeaderUser = u;
+        try {
+          window.dispatchEvent(new CustomEvent('mo:user', { detail: u }));
+        } catch {}
       }
     });
 
