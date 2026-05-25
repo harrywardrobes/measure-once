@@ -227,6 +227,23 @@ async function waitForRefreshFailedSnackbar(page, timeoutMs = 10000) {
   }, null, timeoutMs);
 }
 
+// Wait for the Snackbar to disappear after it was visible.
+// Used to confirm autoHideDuration fires and dismisses the alert.
+async function waitForSnackbarGone(page, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const stillVisible = await page.evaluate(() => {
+      const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+      return alerts.some(el =>
+        (el.textContent || '').includes("Couldn't refresh live data")
+      );
+    }).catch(() => true);
+    if (!stillVisible) return 'gone';
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return null; // still visible after timeout — bad
+}
+
 // Assert the Snackbar does NOT appear within a window.
 async function assertNoSnackbar(page, waitMs = 4000) {
   const deadline = Date.now() + waitMs;
@@ -378,6 +395,7 @@ async function main() {
   const UI_LABELS = [
     '[D] all retries fail — Snackbar "Couldn\'t refresh live data…" appears',
     '[E] second attempt succeeds — Snackbar does NOT appear',
+    '[F] Snackbar auto-dismisses after autoHideDuration (8 s)',
   ];
 
   if (!puppeteer) {
@@ -507,6 +525,63 @@ async function main() {
       }
       await closePage(page);
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Probe F — Snackbar auto-dismisses after autoHideDuration (8 s)
+    //
+    // Scenario: all counts calls fail (always-fail), so the Snackbar appears.
+    // The fast-timer override collapses the 8 s autoHideDuration to ~10 ms, so
+    // MUI's internal setTimeout fires almost immediately.  We confirm that the
+    // Snackbar element disappears from the DOM without any user interaction.
+    // ══════════════════════════════════════════════════════════════════════════
+    console.log('\n  [F] Snackbar auto-dismisses after autoHideDuration');
+    {
+      const page = await newPageWithSession(browser, memberClient.cookie);
+
+      // Collapse large setTimeout delays (including MUI's autoHideDuration).
+      await installFastTimers(page);
+
+      const ctrl = await installCountsInterceptor(page);
+      ctrl.mode = 'always-fail';
+
+      await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+      await waitForCustomersMounted(page);
+
+      const btnPresent = await pollPage(page,
+        () => document.getElementById('new-customer-btn') ? 'ok' : null, null, 8000);
+
+      if (!btnPresent) {
+        record(UI_LABELS[2],
+          'Snackbar appears then auto-dismisses',
+          '#new-customer-btn not found — page may not have mounted correctly',
+          false);
+      } else {
+        await submitNewCustomerDialog(page, runId, 'f');
+
+        // Step 1: Snackbar must appear (all 3 attempts fail).
+        const appeared = await waitForRefreshFailedSnackbar(page, 10000);
+
+        if (appeared !== 'visible') {
+          record(UI_LABELS[2],
+            'Snackbar appears then auto-dismisses',
+            'Snackbar never appeared — cannot test auto-dismiss',
+            false);
+        } else {
+          // Step 2: With fast timers the 8 s autoHideDuration fires in ~10 ms.
+          // Wait up to 5 s for the Snackbar to disappear from the DOM.
+          const gone = await waitForSnackbarGone(page, 5000);
+          record(UI_LABELS[2],
+            'Snackbar appears then auto-dismisses',
+            `snackbar=${gone === 'gone' ? 'appeared then dismissed (good)' : 'still visible after timeout (bad)'}`,
+            gone === 'gone');
+        }
+      }
+
+      if (page.__logs.some(l => l.includes('[pageerror]'))) {
+        console.log('  Page errors (probe F):', page.__logs.filter(l => l.includes('[pageerror]')));
+      }
+      await closePage(page);
+    }
   } finally {
     await browser.close().catch(() => {});
   }
@@ -553,6 +628,11 @@ async function writeReport(runId, findings) {
     '  intercepted at the Puppeteer layer and always returns 502.',
     '- **[E] Second attempt succeeds**: first `onCreated` counts call returns',
     '  502, the retry (second call) returns 200.  The Snackbar must NOT appear.',
+    '- **[F] Snackbar auto-dismisses**: same always-fail scenario as [D];',
+    '  after the Snackbar appears the test waits for it to disappear.  The',
+    '  `autoHideDuration={8000}` on the MUI Snackbar uses `setTimeout`',
+    '  internally, which the fast-timer override collapses to ~10 ms.  The',
+    '  Snackbar must be gone from the DOM within 5 s of appearing.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
