@@ -34,7 +34,7 @@
       if (!view || !window.UI || typeof UI.skeletonLine !== 'function') return;
       const tabW = [42, 38, 62, 76, 56];
       const tabs = tabW.map(w =>
-        `<div class="skeleton-line" style="height:30px;width:${w}px;border-radius:20px"></div>`
+        UI.skeletonLine(w, 30, { style: 'border-radius:20px' })
       ).join('');
       const cards = [
         { name: '60%', pills: [72, 56], footer: [144, 88] },
@@ -45,11 +45,11 @@
         { name: '65%', pills: [68, 52], footer: [148, 92] },
       ].map(c => {
         const pills = c.pills.map(w =>
-          `<div class="skeleton-line skeleton-pill" style="width:${w}px"></div>`
+          UI.skeletonLine(w, null, { className: 'skeleton-pill' })
         ).join('');
         const footer = c.footer
           ? `<div class="cl-card-footer">${c.footer.map(w =>
-              `<div class="skeleton-line skeleton-pill" style="width:${w}px"></div>`
+              UI.skeletonLine(w, null, { className: 'skeleton-pill' })
             ).join('')}</div>`
           : '';
         return `<div class="customer-project-card">
