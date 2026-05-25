@@ -452,6 +452,132 @@ async function main() {
 
     await countTab.close();
 
+    // ── (D) skeleton loading state ────────────────────────────────────────────
+    // Open a fresh customers tab with request interception enabled.  Hold the
+    // GET /api/lead-statuses response in-flight while we assert that:
+    //   1. A MUI Skeleton is visible in the DOM next to the lead-status filter.
+    //   2. The FormControl wrapping #lead-status-filter has visibility:hidden.
+    // Then release the request and assert:
+    //   3. The skeleton element is removed from the DOM within 5 s.
+    //   4. The FormControl becomes visibility:visible.
+    console.log('\n  [D] skeleton loading state');
+
+    const skelTab = await browser.newPage();
+    await skelTab.setCacheEnabled(false);
+    await injectSession(skelTab, adminClient.cookie);
+
+    // A promise that resolves (with the intercepted Request object) the first
+    // time Puppeteer catches a GET /api/lead-statuses request.
+    let resolveLeadStatusReq;
+    const leadStatusReqCaught = new Promise(res => { resolveLeadStatusReq = res; });
+    let pendingLeadStatusReq = null;
+
+    await skelTab.setRequestInterception(true);
+    skelTab.on('request', req => {
+      const url = req.url();
+      // Match /api/lead-statuses exactly (with optional query string), but not
+      // /api/admin/lead-statuses or /api/contacts-lead-status-counts.
+      if (/\/api\/lead-statuses(\?|$)/.test(url) && !pendingLeadStatusReq) {
+        pendingLeadStatusReq = req;
+        resolveLeadStatusReq(req);
+        // Deliberately do NOT call req.continue() here — we hold the request.
+      } else {
+        req.continue();
+      }
+    });
+
+    await skelTab.goto(`${BASE}/customers`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+
+    // Wait until Puppeteer has caught the /api/lead-statuses request (up to 5 s).
+    const reqCatchOk = await Promise.race([
+      leadStatusReqCaught.then(() => true),
+      new Promise(res => setTimeout(() => res(false), 5000)),
+    ]);
+    record(
+      '/api/lead-statuses request is intercepted in-flight',
+      'request intercepted within 5 s',
+      `caught=${reqCatchOk}`,
+      reqCatchOk,
+    );
+
+    // Give React a tick to render the skeleton now that the request is stalled.
+    await new Promise(r => setTimeout(r, 300));
+
+    // ── assert skeleton is visible ──
+    // Look for .MuiSkeleton-root inside the Box that contains #lead-status-filter.
+    const skelVisible = await skelTab.evaluate(() => {
+      const sel = document.getElementById('lead-status-filter');
+      if (!sel) return false;
+      const box = sel.closest('.MuiFormControl-root')?.parentElement;
+      if (!box) return false;
+      const skel = box.querySelector('.MuiSkeleton-root');
+      if (!skel) return false;
+      const st = window.getComputedStyle(skel);
+      return st.display !== 'none' && st.visibility !== 'hidden';
+    });
+    record(
+      'lead-status skeleton is present in DOM while /api/lead-statuses is in-flight',
+      '.MuiSkeleton-root visible next to #lead-status-filter',
+      `visible=${skelVisible}`,
+      skelVisible,
+    );
+
+    // ── assert select is hidden while skeleton is shown ──
+    const selectHidden = await skelTab.evaluate(() => {
+      const sel = document.getElementById('lead-status-filter');
+      if (!sel) return false;
+      const fc = sel.closest('.MuiFormControl-root');
+      if (!fc) return false;
+      return window.getComputedStyle(fc).visibility === 'hidden';
+    });
+    record(
+      'lead-status FormControl is visibility:hidden while skeleton is shown',
+      'FormControl visibility === hidden',
+      `hidden=${selectHidden}`,
+      selectHidden,
+    );
+
+    // ── release the held request ──
+    if (pendingLeadStatusReq) {
+      try { pendingLeadStatusReq.continue(); } catch {}
+    }
+
+    // ── assert skeleton disappears ──
+    const skelGone = await skelTab.waitForFunction(
+      () => {
+        const sel = document.getElementById('lead-status-filter');
+        const box = sel?.closest('.MuiFormControl-root')?.parentElement;
+        return !box || !box.querySelector('.MuiSkeleton-root');
+      },
+      { timeout: 5000 },
+    ).then(() => true).catch(() => false);
+    record(
+      'lead-status skeleton disappears after /api/lead-statuses resolves',
+      '.MuiSkeleton-root absent within 5 s',
+      `gone=${skelGone}`,
+      skelGone,
+    );
+
+    // ── assert select is now visible ──
+    const selectVisible = await skelTab.evaluate(() => {
+      const sel = document.getElementById('lead-status-filter');
+      if (!sel) return false;
+      const fc = sel.closest('.MuiFormControl-root');
+      if (!fc) return false;
+      return window.getComputedStyle(fc).visibility === 'visible';
+    });
+    record(
+      'lead-status FormControl is visibility:visible after skeleton disappears',
+      'FormControl visibility === visible',
+      `visible=${selectVisible}`,
+      selectVisible,
+    );
+
+    await skelTab.close();
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -508,6 +634,15 @@ async function writeReport(runId, findings) {
     '- **(C) count format**: verifies every filter option carries a "(N)" count',
     '  suffix after `populateLeadStatusFilter` runs, confirming label+count are',
     '  rendered together correctly.',
+    '- **(D) skeleton loading state**: intercepts `GET /api/lead-statuses` via',
+    '  Puppeteer request interception, holds the response in-flight, and asserts',
+    '  that the MUI `Skeleton` element is present and visible next to',
+    '  `#lead-status-filter` while the `FormControl` is `visibility:hidden`.',
+    '  Releases the request and asserts the skeleton is removed from the DOM',
+    '  within 5 s and the `FormControl` becomes `visibility:visible`.',
+    '  Exercises the `{!store.loaded && <Skeleton …/>}` branch and the',
+    '  `visibility: store.loaded ? "visible" : "hidden"` guard in',
+    '  `src/react/pages/CustomersPage.tsx`.',
     '',
     '## Notes',
     '',
