@@ -49,6 +49,7 @@ externalPort = 3000
 [deployment]
 deploymentTarget = "vm"
 run = ["node", "server.js"]
+build = ["npm", "run", "build:storybook"]
 
 [userenv]
 
