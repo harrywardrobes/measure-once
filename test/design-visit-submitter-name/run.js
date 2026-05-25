@@ -22,6 +22,13 @@
 //           `Design visit submitted by <submitter email>`.
 //   (TEAM-HTML) Team-notification email `html` contains
 //           `Submitted by <strong><submitter email></strong>`.
+//   (CUST-GREET)  Customer email greets the contact's first name.
+//   (CUST-ROOM)   Customer email lists the seeded room name in text + html.
+//   (CUST-LINK)   Customer email contains the sign-off URL (text + html).
+//   (SIGNOFF-APPROVE) Team email after approve contains the "signed off"
+//                     copy referencing the contact name and visit id.
+//   (SIGNOFF-REVISION) Team email after revision contains the "requested
+//                      changes" copy and the customer's revision note.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:design-visit-submitter-name
@@ -146,8 +153,9 @@ async function main() {
 
   const {
     spawnServer, waitForServer, seedUsers, cleanupTestData,
-    resetRateLimitStore, login, setPool,
+    resetRateLimitStore, login, setPool, TEST_PORT,
   } = require('../privileges/harness');
+  const BASE = `http://127.0.0.1:${TEST_PORT}`;
   setPool(pool);
 
   await cleanupTestData(pool);
@@ -230,6 +238,168 @@ async function main() {
         htmlOk
           ? `html contained "${expectedHtml}"`
           : `html did not contain "${expectedHtml}"; got: ${JSON.stringify(teamMail.html || '').slice(0, 300)}`);
+    }
+
+    // ── Customer email captures (section 5 of runSubmitSideEffects) ────────
+    // visit.contact_email is seeded as 'privtest-dvname-cust@privtest.local'.
+    const customerMail = mails.find(m =>
+      typeof m.to === 'string' && m.to.includes('privtest-dvname-cust@privtest.local')
+    );
+
+    if (!customerMail) {
+      const mailSummary = mails.map(m => `to=${m.to} subj=${m.subject}`).join(' | ');
+      record('CUST-GREET.first-name', false,
+        `no customer email captured (mails=${mails.length}: ${mailSummary || 'none'})`);
+      record('CUST-ROOM.room-name', false, 'no customer email captured');
+      record('CUST-LINK.sign-off-url', false, 'no customer email captured');
+    } else {
+      // Contact name "PrivTest DV Name Contact" → firstName = "PrivTest".
+      const expectedGreetText = 'Hi PrivTest,';
+      const expectedGreetHtml = 'Hi PrivTest,'; // _esc('PrivTest') == 'PrivTest'
+      const greetOk = typeof customerMail.text === 'string'
+        && customerMail.text.includes(expectedGreetText)
+        && typeof customerMail.html === 'string'
+        && customerMail.html.includes(expectedGreetHtml);
+      record('CUST-GREET.first-name', greetOk,
+        greetOk
+          ? `customer email greeted "${expectedGreetText}"`
+          : `text/html did not greet "${expectedGreetText}"; text=${JSON.stringify(customerMail.text || '').slice(0, 200)} html=${JSON.stringify(customerMail.html || '').slice(0, 200)}`);
+
+      const roomOk = typeof customerMail.text === 'string'
+        && customerMail.text.includes('Kitchen')
+        && typeof customerMail.html === 'string'
+        && customerMail.html.includes('Kitchen');
+      record('CUST-ROOM.room-name', roomOk,
+        roomOk
+          ? 'customer email listed the seeded "Kitchen" room in text + html'
+          : `seeded room name "Kitchen" missing from text/html; text=${JSON.stringify(customerMail.text || '').slice(0, 200)} html=${JSON.stringify(customerMail.html || '').slice(0, 200)}`);
+
+      const linkOk = typeof customerMail.text === 'string'
+        && /\/design-visit\/sign-off\?token=[a-f0-9]{64}/.test(customerMail.text)
+        && typeof customerMail.html === 'string'
+        && /\/design-visit\/sign-off\?token=[a-f0-9]{64}/.test(customerMail.html);
+      record('CUST-LINK.sign-off-url', linkOk,
+        linkOk
+          ? 'customer email contained the sign-off URL in text + html'
+          : `sign-off URL missing from text/html; text=${JSON.stringify(customerMail.text || '').slice(0, 200)} html=${JSON.stringify(customerMail.html || '').slice(0, 200)}`);
+    }
+
+    // ── Sign-off route emails (approve + revision) ─────────────────────────
+    // Extract the raw sign-off token from the captured customer email (the
+    // server never returns it in the submit response). Then drive the public
+    // sign-off route for the first visit (approve) and a second seeded visit
+    // (revision) to capture the team-notification emails sent from
+    // POST /api/design-visits/sign-off/:token.
+    async function tokenForVisit(id) {
+      const r = await pool.query(
+        `SELECT signoff_token_hash FROM design_visits WHERE id = $1`, [id]
+      );
+      return r.rows[0]?.signoff_token_hash || null;
+    }
+    function extractToken(mail) {
+      const src = (mail?.text || '') + '\n' + (mail?.html || '');
+      const m = src.match(/\/design-visit\/sign-off\?token=([a-f0-9]{64})/);
+      return m ? m[1] : null;
+    }
+
+    const approveToken = customerMail ? extractToken(customerMail) : null;
+    if (!approveToken) {
+      record('SIGNOFF-APPROVE.team-email', false,
+        'could not extract sign-off token from customer email');
+    } else {
+      const approveBefore = mails.length;
+      // Public route — no session needed.
+      const approveRes = await fetch(`${BASE}/api/design-visits/sign-off/${approveToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve' }),
+      });
+      const approveAfterDeadline = Date.now() + 3000;
+      let approveMails = readMailJsonl(mailFile);
+      while (Date.now() < approveAfterDeadline && approveMails.length <= approveBefore) {
+        await new Promise(res => setTimeout(res, 100));
+        approveMails = readMailJsonl(mailFile);
+      }
+      const approveTeamMail = approveMails.slice(approveBefore).find(m =>
+        typeof m.subject === 'string' && m.subject.startsWith('Design visit signed off')
+      );
+      const expectedApprove = `${'PrivTest DV Name Contact'} has approved and signed off their design visit (#${visitId}).`;
+      const approveOk = approveRes.ok
+        && approveTeamMail
+        && typeof approveTeamMail.text === 'string'
+        && approveTeamMail.text.includes(expectedApprove);
+      record('SIGNOFF-APPROVE.team-email', approveOk,
+        approveOk
+          ? `approve team email contained "${expectedApprove}"`
+          : `approve status=${approveRes.status} mail=${JSON.stringify(approveTeamMail || null).slice(0, 300)}`);
+    }
+
+    // Revision: needs a fresh visit (the approve path nulls the token hash).
+    const revisionVisitId = await seedVisit(pool, runId, `privtest-dvname-${runId}@privtest.local`);
+    const submit2 = await client.post(`/api/design-visits/${revisionVisitId}/submit`, {});
+    if (submit2.status !== 200) {
+      record('SIGNOFF-REVISION.team-email', false,
+        `second submit failed status=${submit2.status} body=${submit2.text.slice(0, 200)}`);
+    } else {
+      // Wait briefly for the second customer email to land.
+      const customerDeadline = Date.now() + 3000;
+      let mails2 = readMailJsonl(mailFile);
+      let customerMail2 = mails2.reverse().find(m =>
+        typeof m.to === 'string' && m.to.includes('privtest-dvname-cust@privtest.local')
+      );
+      while (Date.now() < customerDeadline && extractToken(customerMail2 || {}) === null) {
+        await new Promise(res => setTimeout(res, 100));
+        mails2 = readMailJsonl(mailFile);
+        customerMail2 = mails2.reverse().find(m =>
+          typeof m.to === 'string' && m.to.includes('privtest-dvname-cust@privtest.local')
+        );
+      }
+      // Filter to the customer mail whose token actually matches the new visit.
+      const newTokenHash = await tokenForVisit(revisionVisitId);
+      const candidates = readMailJsonl(mailFile).filter(m =>
+        typeof m.to === 'string' && m.to.includes('privtest-dvname-cust@privtest.local')
+      );
+      const crypto = require('crypto');
+      const customerMailRevision = candidates.find(m => {
+        const t = extractToken(m);
+        if (!t) return false;
+        const h = crypto.createHash('sha256').update(t).digest('hex');
+        return h === newTokenHash;
+      });
+      const revisionToken = customerMailRevision ? extractToken(customerMailRevision) : null;
+
+      if (!revisionToken) {
+        record('SIGNOFF-REVISION.team-email', false,
+          'could not extract sign-off token for revision visit');
+      } else {
+        const beforeRev = readMailJsonl(mailFile).length;
+        const note = `please change door colour ${runId}`;
+        const revRes = await fetch(`${BASE}/api/design-visits/sign-off/${revisionToken}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'revision', note }),
+        });
+        const revDeadline = Date.now() + 3000;
+        let revMails = readMailJsonl(mailFile);
+        while (Date.now() < revDeadline && revMails.length <= beforeRev) {
+          await new Promise(res => setTimeout(res, 100));
+          revMails = readMailJsonl(mailFile);
+        }
+        const revTeamMail = revMails.slice(beforeRev).find(m =>
+          typeof m.subject === 'string' && m.subject.startsWith('Design visit revision requested')
+        );
+        const expectedRev = `${'PrivTest DV Name Contact'} has requested changes to design visit #${revisionVisitId}.`;
+        const expectedNoteLine = `Note: ${note}`;
+        const revOk = revRes.ok
+          && revTeamMail
+          && typeof revTeamMail.text === 'string'
+          && revTeamMail.text.includes(expectedRev)
+          && revTeamMail.text.includes(expectedNoteLine);
+        record('SIGNOFF-REVISION.team-email', revOk,
+          revOk
+            ? `revision team email contained "${expectedRev}" + "${expectedNoteLine}"`
+            : `revision status=${revRes.status} mail=${JSON.stringify(revTeamMail || null).slice(0, 400)}`);
+      }
     }
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;

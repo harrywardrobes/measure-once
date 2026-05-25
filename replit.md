@@ -263,6 +263,16 @@ The harness seeds a visit with one room as a member user, POSTs
   `Design visit submitted by <submitter email>`.
 - **(TEAM-HTML)** captured team email `html` contains
   `Submitted by <strong><submitter email></strong>`.
+- **(CUST-GREET / CUST-ROOM / CUST-LINK)** captured customer email
+  (section 5) greets the contact's first name, lists the seeded room
+  in text + html, and contains the sign-off URL.
+- **(SIGNOFF-APPROVE / SIGNOFF-REVISION)** the suite extracts the
+  sign-off token from the captured customer email, POSTs to
+  `/api/design-visits/sign-off/:token` for both `approve` (on the first
+  visit) and `revision` on a freshly seeded+submitted second visit, and
+  asserts the team-notification email sent from the public sign-off
+  route contains the expected "signed off" / "requested changes" copy
+  plus the customer's revision note.
 
 `ADMIN_EMAILS` is now an `optionalPassthrough` in `test/privileges/harness.js`
 (opt in with `PRIVTEST_USE_ADMIN_EMAILS=1`) so the team-email branch has a
