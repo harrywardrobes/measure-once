@@ -55,7 +55,8 @@ async function runUiSmoke({ users, runId, clients }) {
       executablePath,
       defaultViewport: { width: 1280, height: 800 },
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-        '--window-size=1280,800'],
+        '--window-size=1280,800',
+        '--disable-features=StoragePartitioning'],
     });
   } catch (e) {
     record('headless chromium launches', 'browser.launch() succeeds',
@@ -66,7 +67,7 @@ async function runUiSmoke({ users, runId, clients }) {
 
   try {
     // Unauth: /admin should bounce to /login
-    {
+    try {
       const page = await browser.newPage();
       await page.setViewport({ width: 1280, height: 800 });
       await page.setCacheEnabled(false);
@@ -77,7 +78,9 @@ async function runUiSmoke({ users, runId, clients }) {
       record('unauth /admin bounces to /login',
         '/login redirect (or 302)', `url=${finalUrl} status=${resp?.status()}`,
         'critical', bouncedToLogin);
-      await page.close();
+      await page.close().catch(() => {});
+    } catch (e) {
+      record('unauth /admin probe ran', 'no error', `error: ${e.message}`, 'high', false);
     }
 
     for (const role of ROLES) {
@@ -205,7 +208,7 @@ async function runUiSmoke({ users, runId, clients }) {
         `count=${consoleErrors.length} sample=${JSON.stringify(consoleErrors.slice(0, 3))}`,
         'medium', consoleErrors.length === 0);
 
-      await page.close();
+      await page.close().catch(() => {});
     }
     // ── XSS render non-execution (admin UI) ────────────────────────────────
     // Seed a stored XSS payload through the public access-request endpoint,

@@ -82,6 +82,8 @@ const ROUTES = [
   { method: 'POST',   path: '/api/ideas',                      level: 'auth',  body: { body: '__privtest_noop__' } },
   { method: 'GET',    path: '/api/ideas/0/comments',           level: 'auth' },
   { method: 'POST',   path: '/api/ideas/0/comments',           level: 'auth',  body: { body: '__privtest_noop__' } },
+  { method: 'DELETE', path: '/api/ideas/0',                    level: 'admin' },
+  { method: 'DELETE', path: '/api/ideas/0/comments/0',         level: 'admin' },
   // Design-visit catalogue reads (any authenticated user can browse the
   // shared catalogue; admin writes live in the admin block below).
   { method: 'GET',    path: '/api/design-visit-terms',         level: 'auth' },
@@ -185,6 +187,8 @@ const ROUTES = [
   { method: 'PATCH',  path: '/api/trades/0/category',                          level: 'admin', body: {} },
   { method: 'POST',   path: '/api/admin/users/foo@bar.com/resend-set-password',   level: 'admin', body: {} },
   { method: 'POST',   path: '/api/admin/users/foo@bar.com/force-password-reset', level: 'admin', body: {} },
+  { method: 'POST',   path: '/api/admin/users/0/resolve-profile-conflicts',      level: 'admin', body: {} },
+  { method: 'POST',   path: '/api/admin/test/bust-open-leads-cache',             level: 'admin', body: {} },
   { method: 'GET',    path: '/auth/quickbooks',                                level: 'admin' },
   { method: 'GET',    path: '/auth/quickbooks/callback?code=x&state=y&realmId=1', level: 'admin' },
   { method: 'POST',   path: '/auth/quickbooks/disconnect',                     level: 'admin', body: {} },

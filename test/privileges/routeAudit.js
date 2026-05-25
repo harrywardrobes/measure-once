@@ -86,6 +86,9 @@ function extractMiddlewareNames(src, startIdx) {
   const found = [];
   if (/\brequireAdmin\b/.test(slice)) found.push('requireAdmin');
   if (/\brequireManagerOrAdmin\b/.test(slice)) found.push('requireManagerOrAdmin');
+  if (/\brequirePrivilege\s*\(\s*['"]admin['"]\s*\)/.test(slice)) {
+    found.push("requirePrivilege('admin')");
+  }
   if (/\brequirePrivilege\s*\(\s*['"]manager['"]\s*\)/.test(slice)) {
     found.push("requirePrivilege('manager')");
   }
@@ -105,6 +108,7 @@ function extractMiddlewareNames(src, startIdx) {
 // not `'public'`.
 function chainToSourceLevel(middleware, pattern) {
   if (middleware.includes('requireAdmin')) return 'admin';
+  if (middleware.includes("requirePrivilege('admin')")) return 'admin';
   if (middleware.includes('requireManagerOrAdmin')) return 'manager';
   if (middleware.includes("requirePrivilege('manager')")) return 'manager';
   if (middleware.includes("requirePrivilege('member')")) return 'member';
