@@ -67,6 +67,23 @@ function buildReplyTo() {
   return (process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
 }
 function createMailTransport() {
+  // Test-only override so the integration suite can capture sendMail payloads
+  // without standing up a real SMTP server. When set, returns a fake transport
+  // that appends each JSON-serialised message to the named file. Never set in
+  // production.
+  if (process.env.MAIL_TRANSPORT_FILE_OVERRIDE) {
+    const fpath = process.env.MAIL_TRANSPORT_FILE_OVERRIDE;
+    return {
+      sendMail(opts) {
+        return new Promise((resolve, reject) => {
+          try {
+            fs.appendFileSync(fpath, JSON.stringify(opts) + '\n');
+            resolve({ messageId: `override-${Date.now()}` });
+          } catch (e) { reject(e); }
+        });
+      },
+    };
+  }
   if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -74,6 +91,11 @@ function createMailTransport() {
     secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
   });
+}
+function hubspotApiBase() {
+  // Test-only override so the integration suite can point HubSpot HTTP traffic
+  // at a local mock server. Never set in production.
+  return process.env.HUBSPOT_API_BASE_OVERRIDE || 'https://api.hubapi.com';
 }
 function adminEmails() {
   return (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -390,7 +412,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
         roomLines ? `Rooms:\n${roomLines}` : null,
       ].filter(Boolean).join('\n');
       await axios.post(
-        'https://api.hubapi.com/crm/v3/objects/notes',
+        `${hubspotApiBase()}/crm/v3/objects/notes`,
         {
           properties: {
             hs_note_body:       noteBody,

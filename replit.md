@@ -239,6 +239,37 @@ the command exits non-zero on failure. `npm run test:ci` includes this suite.
 The `QB_API_BASE_OVERRIDE` env var added to `qbBase()` in `design-visits.js`
 exists purely for this harness — never set it in production.
 
+## Design-visit submitter-name test
+Regression test for the "Designer: unknown" / "Submitted by unknown" fix.
+The standard `test:design-visit` harness strips `HUBSPOT_ACCESS_TOKEN` and
+`SMTP_*`, so sections 3 (HubSpot note) and 6 (team-notification email) of
+`runSubmitSideEffects` are silently skipped — a regression to the prior
+"unknown" shape would not be caught. This suite captures both branches via
+two test-only env overrides in `design-visits.js` (mirroring
+`QB_API_BASE_OVERRIDE`): `HUBSPOT_API_BASE_OVERRIDE` points the notes POST
+at a local mock HTTP server, and `MAIL_TRANSPORT_FILE_OVERRIDE` swaps
+`createMailTransport()` for a fake transport that appends each `sendMail`
+payload as JSONL to the named file. Neither override is ever set in
+production.
+
+Run with `DATABASE_URL_TEST=<disposable> npm run test:design-visit-submitter-name`
+(or `PRIVTEST_ALLOW_SHARED_DB=1 npm run test:design-visit-submitter-name`).
+The harness seeds a visit with one room as a member user, POSTs
+`/api/design-visits/:id/submit`, then asserts:
+
+- **(NOTE)** captured HubSpot note POST body contains
+  `Designer: <submitter email>`.
+- **(TEAM-TEXT)** captured team email `text` contains
+  `Design visit submitted by <submitter email>`.
+- **(TEAM-HTML)** captured team email `html` contains
+  `Submitted by <strong><submitter email></strong>`.
+
+`ADMIN_EMAILS` is now an `optionalPassthrough` in `test/privileges/harness.js`
+(opt in with `PRIVTEST_USE_ADMIN_EMAILS=1`) so the team-email branch has a
+recipient. A markdown report is written to
+`test-results/design-visit-submitter-name.md` and `npm run test:ci` includes
+this suite.
+
 ## Live HubSpot smoke run
 
 The hw_test_user suite has an opt-in `[REAL-HS]` phase that exercises

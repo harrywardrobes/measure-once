@@ -18,6 +18,7 @@
     "test:lead-status-sync-customer-detail": "node test/lead-status-sync/customer-detail.js",
     "test:card-action-handlers": "node test/card-action-handlers/run.js",
     "test:design-visit-qb-resubmit": "node test/design-visit-qb-resubmit/run.js",
+    "test:design-visit-submitter-name": "node test/design-visit-submitter-name/run.js",
     "test:hw-test-user": "node test/hw-test-user/run.js",
     "test:hw-test-user:live": "node scripts/test-hw-test-user-live.js",
     "test:start-design-visit": "node test/start-design-visit/run.js",
@@ -32,7 +33,7 @@
     "test:window-ui-smoke": "node test/window-ui-smoke/run.js",
     "test:sign-off-stale-link": "node test/sign-off-stale-link/run.js",
     "test:react-admin-tabs": "node test/react-admin-tabs/run.js",
-    "test:ci": "npm run build:react && npm run test:privileges && npm run test:lead-status-sync && npm run test:lead-status-sync-customer-detail && npm run test:card-action-handlers && npm run test:design-visit-qb-resubmit && npm run test:hw-test-user && npm run test:start-design-visit && npm run test:design-visit && npm run test:design-visit-list && npm run test:dv-catalogue-admin && npm run test:dv-catalogue-image-upload && npm run test:dv-catalogue-reorder && npm run test:db-editor && npm run test:db-editor-blocking-rows && npm run test:window-ui-smoke && npm run test:sign-off-stale-link && npm run test:react-admin-tabs",
+    "test:ci": "npm run build:react && npm run test:privileges && npm run test:lead-status-sync && npm run test:lead-status-sync-customer-detail && npm run test:card-action-handlers && npm run test:design-visit-qb-resubmit && npm run test:design-visit-submitter-name && npm run test:hw-test-user && npm run test:start-design-visit && npm run test:design-visit && npm run test:design-visit-list && npm run test:dv-catalogue-admin && npm run test:dv-catalogue-image-upload && npm run test:dv-catalogue-reorder && npm run test:db-editor && npm run test:db-editor-blocking-rows && npm run test:window-ui-smoke && npm run test:sign-off-stale-link && npm run test:react-admin-tabs",
     "backfill:ec-name-casing": "node scripts/backfill-ec-name-casing.js"
   },
   "dependencies": {

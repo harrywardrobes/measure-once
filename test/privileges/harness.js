@@ -94,7 +94,7 @@ function spawnServer(opts = {}) {
     QB_CLIENT_ID:         optionalPassthrough('QB_CLIENT_ID'),
     QB_CLIENT_SECRET:     optionalPassthrough('QB_CLIENT_SECRET'),
     APP_URL: BASE,
-    ADMIN_EMAILS: '',
+    ADMIN_EMAILS: optionalPassthrough('ADMIN_EMAILS'),
     ...extraEnv,
   };
   if (nodeOptions) {
