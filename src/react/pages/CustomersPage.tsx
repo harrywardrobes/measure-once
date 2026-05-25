@@ -708,6 +708,17 @@ export function CustomersPage(): React.ReactElement {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
+  // Test hook: lets integration tests set pendingContactsStaleRef.current
+  // directly so F2 (deferred fresh-response clear) can be driven without
+  // relying on a full re-fetch (which would clear contactsStale at effect start).
+  React.useEffect(() => {
+    (window as unknown as Record<string, unknown>).__setTestPendingContactsStale =
+      (v: boolean | null) => { pendingContactsStaleRef.current = v; };
+    return () => {
+      delete (window as unknown as Record<string, unknown>).__setTestPendingContactsStale;
+    };
+  }, []);
+
   // Viewers cannot create contacts; close any auto-opened dialog if the
   // role resolves to viewer after mount.
   React.useEffect(() => {
