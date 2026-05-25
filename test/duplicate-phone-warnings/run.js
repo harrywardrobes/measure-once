@@ -172,8 +172,9 @@ async function main() {
   const runId = Math.random().toString(36).slice(2, 8);
   const TEAM_DUP_PHONE   = '0' + uniqueDigits(runId, 'team');     // 10 digits
   const TRADES_DUP_PHONE = '0' + uniqueDigits(runId, 'trades');   // 10 digits
+  const TRADES_CO_PHONE  = '0' + uniqueDigits(runId, 'trades-co'); // 10 digits — for company-phone conflict
   console.log(`\n  duplicate-phone-warnings E2E  run=${runId}`);
-  console.log(`  Phones  team=${TEAM_DUP_PHONE}  trades=${TRADES_DUP_PHONE}`);
+  console.log(`  Phones  team=${TEAM_DUP_PHONE}  trades=${TRADES_DUP_PHONE}  trades-co=${TRADES_CO_PHONE}`);
   console.log(`  Using ${hasTestDb ? 'DATABASE_URL_TEST (isolated)' : 'shared DATABASE_URL (PRIVTEST_ALLOW_SHARED_DB=1)'}`);
 
   const pool = new Pool({ connectionString: connStr });
@@ -268,6 +269,17 @@ async function main() {
     return r.json;
   };
   const tradeA = await seedTrade(TRADES_COMPANY_A, TRADE_A_CONTACT, TRADES_DUP_PHONE);
+  // Patch Company A's company_phone so the Edit-mode company-phone test has a conflict source.
+  await adminClient.put(`/api/trades/${tradeA.id}`, {
+    company_name: TRADES_COMPANY_A,
+    trade_type: 'Electrical',
+    areas_served: [],
+    timescale: '',
+    notes: '',
+    website: '',
+    company_phone: TRADES_CO_PHONE,
+    contacts: [{ name: TRADE_A_CONTACT, role: '', phone: TRADES_DUP_PHONE, email: '', preferred_contact: 'Phone' }],
+  });
   const tradeB = await seedTrade(TRADES_COMPANY_B, TRADE_B_CONTACT, '');
   console.log(`  Seeded trades  A=${tradeA.id} B=${tradeB.id}`);
 
@@ -635,6 +647,90 @@ async function main() {
 
       await page.close();
     }
+
+    // ── (TRADES EDIT – company-phone) edit existing company → company-phone dup
+    {
+      const page = await browser.newPage();
+      await page.setCacheEnabled(false);
+      page.on('pageerror', (e) => console.log('    [trades-edit-cophone pageerror]', String(e).slice(0, 200)));
+      await injectSession(page, adminClient.cookie);
+      await page.goto(`${BASE}/trades`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+
+      // Wait for the trades list to populate.
+      const loaded = await pollPage(page, () => {
+        const list = window._cpGetTradeContacts && window._cpGetTradeContacts();
+        return Array.isArray(list) && list.length >= 2;
+      }, null, 8000);
+      record(
+        'TRADES EDIT CO-PHONE: /trades page loads at least the seeded companies',
+        '_cpGetTradeContacts() returns >=2 entries',
+        `loaded=${!!loaded}`,
+        !!loaded,
+      );
+
+      // Open Company B in Edit mode.
+      await page.evaluate((id) => { window.openTradesModal(id); }, tradeB.id);
+
+      const editModeReady = await pollPage(page, (id) => {
+        const editId = document.getElementById('trades-edit-id');
+        const input  = document.getElementById('tf-company-phone');
+        const title  = document.getElementById('trades-modal-title');
+        return editId && String(editId.value) === String(id) && input
+          ? { title: (title && title.textContent) || '' }
+          : null;
+      }, tradeB.id, 4000);
+      record(
+        'TRADES EDIT CO-PHONE: openTradesModal(tradeB.id) opens Edit mode with #tf-company-phone',
+        `#trades-edit-id=${tradeB.id}, #tf-company-phone present, title="Edit Company"`,
+        editModeReady
+          ? `title=${JSON.stringify(editModeReady.title)}`
+          : 'modal not ready',
+        !!(editModeReady && editModeReady.title === 'Edit Company'),
+      );
+
+      // Type Company A's company_phone into Company B's company-phone field.
+      // onTradeCompanyPhoneInput fires via the 'input' event dispatched below.
+      await setNativeInputValue(page, '#tf-company-phone', TRADES_CO_PHONE);
+
+      // Allow the 300ms debounce to resolve.
+      const noticeShown = await pollPage(page, () => {
+        const n = document.getElementById('tf-company-phone-notice');
+        if (!n || n.classList.contains('hidden')) return null;
+        const link = n.querySelector('.trades-phone-notice-link');
+        return {
+          text:   (n.textContent || '').trim(),
+          linkId: link ? link.getAttribute('data-trade-id') : null,
+        };
+      }, null, 3000);
+      const noticeOk = !!noticeShown
+        && /phone number is already in use/i.test(noticeShown.text)
+        && new RegExp(TRADES_COMPANY_A.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(noticeShown.text)
+        && String(noticeShown.linkId) === String(tradeA.id);
+      record(
+        'TRADES EDIT CO-PHONE: #tf-company-phone-notice shows the duplicate warning naming Company A',
+        `text mentions "${TRADES_COMPANY_A}" and "phone number is already in use", link data-trade-id=${tradeA.id}`,
+        noticeShown
+          ? `text=${JSON.stringify(noticeShown.text.slice(0, 180))} linkId=${noticeShown.linkId}`
+          : 'no notice',
+        noticeOk,
+      );
+
+      // Submit button must be disabled while the company-phone duplicate stands.
+      const submitState = await page.evaluate(() => {
+        const btn = document.getElementById('trades-submit-btn');
+        return btn ? { disabled: btn.disabled, title: btn.title || '' } : null;
+      });
+      record(
+        'TRADES EDIT CO-PHONE: #trades-submit-btn is disabled while company-phone duplicate stands',
+        'submit-btn disabled with a phone-conflict title',
+        submitState
+          ? `disabled=${submitState.disabled} title=${JSON.stringify(submitState.title)}`
+          : 'no button',
+        !!(submitState && submitState.disabled === true && /phone/i.test(submitState.title)),
+      );
+
+      await page.close();
+    }
   } catch (e) {
     record('uncaught harness error', 'no exception', String(e), false);
   } finally {
@@ -687,10 +783,14 @@ async function writeReport(runId, findings) {
     '  with a link to the existing company, `#trades-submit-btn` disables,',
     '  and clicking the link re-opens the modal in Edit mode for the original',
     '  company.',
-    '- **(TRADES – Edit mode)** Opens Company B in Edit mode, types the same',
+    '- **(TRADES – Edit mode, contact-row)** Opens Company B in Edit mode, types the same',
     '  duplicated phone into its contact-row slot (`#tf-cphone-0`), and',
     '  asserts `#tf-cphone-notice-0` appears naming the existing contact,',
     '  links to Company A, and `#trades-submit-btn` is disabled.',
+    '- **(TRADES – Edit mode, company-phone)** Opens Company B in Edit mode, types',
+    "  Company A's `company_phone` into `#tf-company-phone`, and asserts",
+    '  `#tf-company-phone-notice` appears naming Company A, links to Company A',
+    '  via `data-trade-id`, and `#trades-submit-btn` is disabled.',
     '',
   ];
   const outPath = path.join(dir, 'duplicate-phone-warnings.md');
