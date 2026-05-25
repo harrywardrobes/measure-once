@@ -613,6 +613,10 @@ export function CustomersPage(): React.ReactElement {
   const [openLeadsCacheAge, setOpenLeadsCacheAge] = React.useState<number | null>(null);
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
   const [contactsStale, setContactsStale] = React.useState(false);
+  // Holds a deferred contactsStale value when the fetch completed while the
+  // tab was hidden. Applied on the next visibilitychange → visible event so
+  // the banner is never shown or cleared without the user actually seeing it.
+  const pendingContactsStaleRef = React.useRef<boolean | null>(null);
 
   const isViewer = useIsViewer();
   const [newOpen, setNewOpen] = React.useState<boolean>(() => {
@@ -658,6 +662,22 @@ export function CustomersPage(): React.ReactElement {
       const qs = p.toString();
       history.replaceState(null, '', qs ? '?' + qs : location.pathname);
     }
+  }, []);
+
+  // Apply any deferred contactsStale update when the tab becomes visible.
+  // The fetch effect stores a pending value in pendingContactsStaleRef when
+  // the response arrives while the tab is hidden, so the banner is never
+  // shown or cleared without the user actually seeing the page.
+  React.useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) return;
+      if (pendingContactsStaleRef.current !== null) {
+        setContactsStale(pendingContactsStaleRef.current);
+        pendingContactsStaleRef.current = null;
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
   // Viewers cannot create contacts; close any auto-opened dialog if the
@@ -888,7 +908,13 @@ export function CustomersPage(): React.ReactElement {
             throw err;
           }
           if (cancelled) return;
-          setContactsStale(r.headers.get('X-Cache-Status') === 'stale');
+          const isStale = r.headers.get('X-Cache-Status') === 'stale';
+          if (document.hidden) {
+            pendingContactsStaleRef.current = isStale;
+          } else {
+            pendingContactsStaleRef.current = null;
+            setContactsStale(isStale);
+          }
           const list = data.results || [];
           setContacts(list);
           setTotal(data.total != null ? data.total : list.length);
@@ -920,7 +946,12 @@ export function CustomersPage(): React.ReactElement {
           scheduleCountsAttempt(0, 0);
         } catch (e) {
           if (cancelled) return;
-          setContactsStale(false);
+          if (document.hidden) {
+            pendingContactsStaleRef.current = false;
+          } else {
+            pendingContactsStaleRef.current = null;
+            setContactsStale(false);
+          }
           setError(humaniseError(e as Error & { code?: string }));
           setContacts([]);
           setTotal(0);
