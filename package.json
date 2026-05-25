@@ -21,12 +21,13 @@
     "test:hw-test-user:live": "node scripts/test-hw-test-user-live.js",
     "test:start-design-visit": "node test/start-design-visit/run.js",
     "test:design-visit": "node test/design-visit/run.js",
+    "test:design-visit-list": "node test/design-visit-list/run.js",
     "test:keyboard-shortcuts": "node test/keyboard-shortcuts/run.js",
     "test:dv-catalogue-admin": "node test/dv-catalogue-admin/run.js",
     "test:dv-catalogue-image-upload": "node test/dv-catalogue-admin/image-upload.js",
     "test:db-editor": "node test/db-editor/run.js",
     "test:window-ui-smoke": "node test/window-ui-smoke/run.js",
-    "test:ci": "npm run test:privileges && npm run test:lead-status-sync && npm run test:lead-status-sync-customer-detail && npm run test:card-action-handlers && npm run test:hw-test-user && npm run test:start-design-visit && npm run test:design-visit && npm run test:dv-catalogue-admin && npm run test:dv-catalogue-image-upload && npm run test:db-editor && npm run test:window-ui-smoke",
+    "test:ci": "npm run test:privileges && npm run test:lead-status-sync && npm run test:lead-status-sync-customer-detail && npm run test:card-action-handlers && npm run test:hw-test-user && npm run test:start-design-visit && npm run test:design-visit && npm run test:design-visit-list && npm run test:dv-catalogue-admin && npm run test:dv-catalogue-image-upload && npm run test:db-editor && npm run test:window-ui-smoke",
     "backfill:ec-name-casing": "node scripts/backfill-ec-name-casing.js"
   },
   "dependencies": {

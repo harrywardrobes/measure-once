@@ -148,6 +148,44 @@ always be 0. The `bootstrapFilter()` helper compensates by calling
 `loadLeadStatuses()` + `populateLeadStatusFilter()` directly in the page context,
 so the sync-path handlers are still exercised faithfully.
 
+## Design-visits list (customer-detail) test
+End-to-end live test for the per-contact "Design visits" section on the
+customer-detail page (the rail that fetches `GET /api/design-visits?contactId=…`
+and renders status pills + estimate totals with admin-only Request-revision /
+Delete actions). Run with
+`DATABASE_URL_TEST=<disposable> npm run test:design-visit-list`
+(or `PRIVTEST_ALLOW_SHARED_DB=1 npm run test:design-visit-list` against the
+shared DB). Mirrors the `test:design-visit` harness pattern: boots a disposable
+server, drives the UI with Puppeteer, writes a markdown report to
+`test-results/design-visit-list.md`, and exits non-zero on failure.
+
+Probes covered:
+
+- **(API)** `GET /api/design-visits?contactId=…` returns only that contact's
+  rows (a decoy visit seeded against a different contact id must not appear),
+  and `estimate_total_pence` is summed from the seeded rooms. Anonymous
+  `GET /api/design-visits` is rejected by `isAuthenticated`.
+- **(UI)** Admin `/customers/:id` renders `#design-visits-section` with one
+  `.comment-item` per seeded visit, each showing the correct status-pill
+  label (`Signed off` / `Submitted`), `Estimate: £N.NN` total, and visit
+  date formatted as en-GB `d MMM yyyy`.
+- **(ADM)** Each item shows `Request revision` + `Delete` buttons whose
+  `onclick` references the correct visit id for admin; **neither** button
+  appears for a member. Clicking Delete (confirm() auto-accepted) removes the
+  row from the UI and the DB. Clicking Request revision (prompt()
+  auto-accepted) flips `status` to `revision_requested` in the DB and the
+  pill flips in the UI.
+
+The privileges harness strips `HUBSPOT_TOKEN`, so `GET /api/contacts/:id`
+503s and the customer-detail bootstrap replaces `#workflow-view` with an
+error. The test waits for that error to appear (so the handler is done
+mutating `#workflow-view`), then seeds `state.selectedContactId`, re-injects
+the `#design-visits-section` mount, and calls `renderDesignVisits()` — the
+renderer paths under test run against the live `/api/design-visits` endpoint.
+Each user uses its own Puppeteer browser context so the injected `connect.sid`
+cookies don't clobber each other in the shared default jar.
+`npm run test:ci` includes this suite.
+
 ## Card-action-handlers test
 End-to-end live test for the card-action-handlers feature. Run with
 `DATABASE_URL_TEST=<disposable> npm run test:card-action-handlers`
