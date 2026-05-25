@@ -485,7 +485,11 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
 // refresh can still serve the last-known list (up to 1 h old) instead of
 // returning a hard 502 to callers.
 const ALL_CONTACTS_CACHE_TTL_MS       = 300_000;          // 5 minutes
-const ALL_CONTACTS_STALE_MAX_MS       = 60 * 60 * 1_000;  // 1 h hard cap on staleness
+// Test suites can set ALL_CONTACTS_STALE_MAX_MS_OVERRIDE (milliseconds) to
+// exercise the stale-cap-expired → 502 path without waiting a real hour.
+const ALL_CONTACTS_STALE_MAX_MS       = process.env.ALL_CONTACTS_STALE_MAX_MS_OVERRIDE
+  ? parseInt(process.env.ALL_CONTACTS_STALE_MAX_MS_OVERRIDE, 10)
+  : 60 * 60 * 1_000;  // 1 h hard cap on staleness
 let _allContactsCache    = null;  // { contacts: [...], fetchedAt } — used while fresh
 let _allContactsLastGood = null;  // { contacts: [...], fetchedAt } — survives invalidation
 let _allContactsInflight = null;  // Promise while a scan is running
