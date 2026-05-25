@@ -272,7 +272,7 @@
 
         <h4>Phase 3 — Storybook + React component library</h4>
         <ul>
-          <li>Stand up Storybook against the token layer so every component lives in isolation.</li>
+          <li>Stand up Storybook against the token layer so every component lives in isolation. <span id="ds-storybook-link-slot"></span></li>
           <li>Wrap <code>components.js</code> helpers as React equivalents.</li>
           <li>Port pages one at a time (start with Admin → Design System tab → invoice / sales boards last).</li>
         </ul>
@@ -304,6 +304,26 @@
     </div>`;
   }
 
+  /**
+   * If a Storybook build has been published to `/storybook/` (the output dir
+   * of `npm run build:storybook`), surface a link in the Phase 3 roadmap
+   * bullet. We probe with a HEAD request so missing Storybook builds stay
+   * silent rather than rendering a broken link.
+   */
+  function wireStorybookLink() {
+    const slot = document.getElementById('ds-storybook-link-slot');
+    if (!slot) return;
+    try {
+      fetch('/storybook/index.html', { method: 'HEAD' })
+        .then(function (r) {
+          if (!r || !r.ok) return;
+          slot.innerHTML = ' <a href="/storybook/" target="_blank" rel="noopener" '
+            + 'style="font-weight:600;color:var(--orchid-deep);">Open Storybook →</a>';
+        })
+        .catch(function () { /* swallow — link stays hidden */ });
+    } catch (_) { /* fetch unsupported, leave slot empty */ }
+  }
+
   function render() {
     const mount = document.getElementById('tab-designsystem');
     if (!mount) return;
@@ -322,6 +342,7 @@
       + zindexSection()
       + roadmapSection()
       + '</div>';
+    wireStorybookLink();
   }
 
   // No-op handler used by the demo tab bar so its onclick has something to call.
