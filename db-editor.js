@@ -133,9 +133,14 @@ async function ensureDbEditorAuditTable() {
       before_data   JSONB,
       after_data    JSONB
     );
+    ALTER TABLE db_editor_audit
+      ADD COLUMN IF NOT EXISTS reverts_audit_id INTEGER
+        REFERENCES db_editor_audit(id) ON DELETE SET NULL;
     CREATE INDEX IF NOT EXISTS db_editor_audit_acted_idx ON db_editor_audit (acted_at DESC);
     CREATE INDEX IF NOT EXISTS db_editor_audit_table_idx ON db_editor_audit (table_name);
     CREATE INDEX IF NOT EXISTS db_editor_audit_admin_idx ON db_editor_audit (admin_email);
+    CREATE INDEX IF NOT EXISTS db_editor_audit_reverts_idx
+      ON db_editor_audit (reverts_audit_id) WHERE reverts_audit_id IS NOT NULL;
   `);
 }
 
@@ -624,9 +629,9 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
           pkValues
         );
         await client.query(
-          `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
-           VALUES ($1, $2, $3, 'delete', $4::jsonb, NULL)`,
-          [adminEmail, table, pkOf(table, before), JSON.stringify(before)]
+          `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data, reverts_audit_id)
+           VALUES ($1, $2, $3, 'delete', $4::jsonb, NULL, $5)`,
+          [adminEmail, table, pkOf(table, before), JSON.stringify(before), audit.id]
         );
         await client.query('COMMIT');
         return res.json({ ok: true, revertedOp: 'insert', newOp: 'delete' });
@@ -673,9 +678,9 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
         );
         const after = updR.rows[0];
         await client.query(
-          `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
-           VALUES ($1, $2, $3, 'update', $4::jsonb, $5::jsonb)`,
-          [adminEmail, table, pkOf(table, after), JSON.stringify(cur), JSON.stringify(after)]
+          `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data, reverts_audit_id)
+           VALUES ($1, $2, $3, 'update', $4::jsonb, $5::jsonb, $6)`,
+          [adminEmail, table, pkOf(table, after), JSON.stringify(cur), JSON.stringify(after), audit.id]
         );
         await client.query('COMMIT');
         return res.json({ ok: true, revertedOp: 'update', newOp: 'update' });
@@ -703,9 +708,9 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
         );
         const inserted = r.rows[0];
         await client.query(
-          `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
-           VALUES ($1, $2, $3, 'insert', NULL, $4::jsonb)`,
-          [adminEmail, table, pkOf(table, inserted), JSON.stringify(inserted)]
+          `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data, reverts_audit_id)
+           VALUES ($1, $2, $3, 'insert', NULL, $4::jsonb, $5)`,
+          [adminEmail, table, pkOf(table, inserted), JSON.stringify(inserted), audit.id]
         );
         await client.query('COMMIT');
         return res.json({ ok: true, revertedOp: 'delete', newOp: 'insert', row: inserted });
@@ -748,10 +753,21 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
       );
 
       params.push(pageSize, offset);
+      // Self-join to attach (a) the audit entry this row reverts (reverts_audit_id)
+      // and (b) the audit entry that reverted this row (reverted_by_*), so the UI
+      // can render badges + back-links and disable the Revert button for entries
+      // that have already been undone.
       const r = await pool.query(
-        `SELECT id, acted_at, admin_email, table_name, pk, op, before_data, after_data
-         FROM db_editor_audit ${whereSql}
-         ORDER BY acted_at DESC
+        `SELECT a.id, a.acted_at, a.admin_email, a.table_name, a.pk, a.op,
+                a.before_data, a.after_data, a.reverts_audit_id,
+                rb.id        AS reverted_by_id,
+                rb.acted_at  AS reverted_by_at,
+                rb.admin_email AS reverted_by_email
+         FROM db_editor_audit a
+         LEFT JOIN db_editor_audit rb ON rb.reverts_audit_id = a.id
+         ${whereSql ? whereSql.replace(/\btable_name\b/g, 'a.table_name')
+                              .replace(/\badmin_email\b/g, 'a.admin_email') : ''}
+         ORDER BY a.acted_at DESC
          LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params
       );

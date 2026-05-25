@@ -661,15 +661,27 @@
     $('#audit-list').innerHTML = j.rows.map((row, i) => {
       const diff = diffHtml(row.before_data, row.after_data);
       const meta = tablesByName.get(row.table_name);
-      const canRevert = !!meta && !meta.readOnlyTable;
+      const alreadyReverted = !!row.reverted_by_id;
+      const canRevert = !!meta && !meta.readOnlyTable && !alreadyReverted;
       const revertLabel = row.op === 'delete' ? 'Restore row'
         : row.op === 'insert' ? 'Undo insert'
         : 'Revert change';
-      const revertBtn = canRevert
-        ? `<button class="db-btn db-btn-ghost a-revert" data-audit-id="${row.id}" data-op="${escapeHtml(row.op)}" data-table="${escapeHtml(row.table_name)}" data-pk="${escapeHtml(row.pk || '')}">${revertLabel}</button>`
-        : `<span class="a-revert-na" title="Table is not editable">Revert unavailable</span>`;
+      let revertBtn;
+      if (!meta || meta.readOnlyTable) {
+        revertBtn = `<span class="a-revert-na" title="Table is not editable">Revert unavailable</span>`;
+      } else if (alreadyReverted) {
+        revertBtn = `<span class="a-revert-disabled" title="This entry was already reverted by audit #${row.reverted_by_id}. A second revert would undo the revert, not the original change.">${revertLabel} (already reverted)</span>`;
+      } else {
+        revertBtn = `<button class="db-btn db-btn-ghost a-revert" data-audit-id="${row.id}" data-op="${escapeHtml(row.op)}" data-table="${escapeHtml(row.table_name)}" data-pk="${escapeHtml(row.pk || '')}">${revertLabel}</button>`;
+      }
+      const revertedBadge = alreadyReverted
+        ? `<div><span class="a-reverted-badge">↩ Reverted on ${escapeHtml(fmtDate(row.reverted_by_at))} by ${escapeHtml(row.reverted_by_email || 'unknown')} · <a href="#audit-row-${row.reverted_by_id}" data-jump-audit="${row.reverted_by_id}">View revert #${row.reverted_by_id}</a></span></div>`
+        : '';
+      const revertsLink = row.reverts_audit_id
+        ? `<div class="a-reverts-link">Reverts <a href="#audit-row-${row.reverts_audit_id}" data-jump-audit="${row.reverts_audit_id}">#${row.reverts_audit_id}</a></div>`
+        : '';
       return `
-        <div class="db-audit-row" data-i="${i}" data-audit-id="${row.id}">
+        <div class="db-audit-row" id="audit-row-${row.id}" data-i="${i}" data-audit-id="${row.id}">
           <div>
             <div class="a-time">${escapeHtml(fmtDate(row.acted_at))}</div>
             <div style="font-size:.75rem;color:var(--ink-3);">${escapeHtml(row.admin_email)}</div>
@@ -677,6 +689,8 @@
           <div><span class="a-op ${escapeHtml(row.op)}">${escapeHtml(row.op)}</span></div>
           <div>
             <div><strong>${escapeHtml(row.table_name)}</strong> <span style="color:var(--ink-4);font-size:.75rem;">pk=${escapeHtml(row.pk || '')}</span></div>
+            ${revertsLink}
+            ${revertedBadge}
             <div class="a-actions">
               <button class="a-expand" data-i="${i}">Show diff</button>
               ${revertBtn}
@@ -686,6 +700,19 @@
           </div>
         </div>`;
     }).join('');
+    $('#audit-list').querySelectorAll('a[data-jump-audit]').forEach(a => {
+      a.addEventListener('click', (ev) => {
+        const targetId = a.dataset.jumpAudit;
+        const target = document.getElementById('audit-row-' + targetId);
+        if (!target) return; // not on this page — let default anchor jump
+        ev.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.classList.remove('is-flash');
+        // Force reflow so the animation can replay on repeat clicks.
+        void target.offsetWidth;
+        target.classList.add('is-flash');
+      });
+    });
     $('#audit-list').querySelectorAll('button.a-expand').forEach(b => {
       b.addEventListener('click', () => {
         const row = b.closest('.db-audit-row');

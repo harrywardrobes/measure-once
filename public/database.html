@@ -206,6 +206,33 @@
       border-radius: var(--radius-sm); padding: 6px 9px;
     }
     .db-audit-row .a-err.show { display: block; }
+    .db-audit-row .a-reverted-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #fef3c7; color: #78350f; border: 1px solid #fde68a;
+      border-radius: 999px; padding: 2px 9px; font-size: .68rem;
+      font-weight: 600; margin-top: 6px;
+    }
+    .db-audit-row .a-reverted-badge a {
+      color: #78350f; text-decoration: underline; font-weight: 700;
+    }
+    .db-audit-row .a-reverts-link {
+      display: inline-block; margin-top: 4px;
+      font-size: .72rem; color: var(--ink-3);
+    }
+    .db-audit-row .a-reverts-link a {
+      color: var(--orchid); text-decoration: none; font-weight: 600;
+    }
+    .db-audit-row .a-reverts-link a:hover { text-decoration: underline; }
+    .db-audit-row.is-flash {
+      animation: db-audit-flash 1.6s ease-out;
+    }
+    @keyframes db-audit-flash {
+      0%   { background: #fde68a; }
+      100% { background: transparent; }
+    }
+    .db-audit-row .a-revert-disabled {
+      font-size: .72rem; color: var(--ink-4); font-style: italic; cursor: help;
+    }
   </style>
 </head>
 <body>
