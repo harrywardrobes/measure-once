@@ -15,139 +15,22 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-
-  <a href="#customers-view" class="skip-link">Skip to customer list</a>
-
-  <div id="tab-customers" class="app-body">
-    <div id="list-panel" class="list-panel list-panel-fw">
-      <div id="customers-view"></div>
-    </div>
-  </div>
+  <!--
+    Minimal HTML shell for the Customers page. All page UI (filters, search,
+    list, pagination, lead-status sync) is rendered into #tab-customers by
+    the React island (src/react/pages/CustomersPage.tsx, registered in
+    src/react/main.tsx). chrome.js + components.js are still loaded so the
+    shared app header / bottom nav appears on this page like every other
+    dashboard page.
+  -->
+  <a href="#tab-customers" class="skip-link">Skip to customer list</a>
 
   <script src="/chrome.js"></script>
   <script src="/components.js"></script>
-  <script>
-    // Paint a lightweight loading skeleton via the shared UI.skeletonLine
-    // helper so the page isn't blank during the initial bootstrap()/data fetch.
-    (function paintCustomerListSkeleton() {
-      const view = document.getElementById('customers-view');
-      if (!view || !window.UI || typeof UI.skeletonLine !== 'function') return;
-      const tabW = [42, 38, 62, 76, 56];
-      const tabs = tabW.map(w =>
-        UI.skeletonLine(w, 30, { style: 'border-radius:20px' })
-      ).join('');
-      const cards = [
-        { name: '60%', pills: [72, 56], footer: [144, 88] },
-        { name: '48%', pills: [80] },
-        { name: '70%', pills: [64, 88] },
-        { name: '53%', pills: [76, 60], footer: [132] },
-        { name: '43%', pills: [84] },
-        { name: '65%', pills: [68, 52], footer: [148, 92] },
-      ].map(c => {
-        const pills = c.pills.map(w =>
-          UI.skeletonLine(w, null, { className: 'skeleton-pill' })
-        ).join('');
-        const footer = c.footer
-          ? `<div class="cl-card-footer">${c.footer.map(w =>
-              UI.skeletonLine(w, null, { className: 'skeleton-pill' })
-            ).join('')}</div>`
-          : '';
-        return `<div class="customer-project-card">
-          <div class="cl-card-main">
-            <div class="cl-card-name-row">${UI.skeletonLine(c.name, 16)}</div>
-            <div class="cl-card-pills">${pills}</div>
-          </div>
-          ${footer}
-        </div>`;
-      }).join('');
-      view.innerHTML =
-        `<div class="project-stage-tabs-bar">${tabs}</div>` +
-        `<div class="projects-inner">${cards}</div>`;
-    })();
-  </script>
+
+  <main id="tab-customers"></main>
+
   <script src="/command-palette.js"></script>
-  <script src="/core.js"></script>
-  <script src="/workflow-core.js"></script>
-  <script src="/invoices-core.js"></script>
-  <script src="/workflow.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', async () => {
-      if (!await bootstrap()) return;
-
-      // Default to "All contacts" view on the customers page.
-      state.contactsViewMode = 'all';
-
-      // Restore non-URL filter/sort state (stageFilter, showArchived, contactsViewMode)
-      // saved when the user last navigated to a profile. URL params override for
-      // page, leadStatus, and sort (handled inside restoreCustomerListFilters).
-      restoreCustomerListFilters();
-
-      // If a text search was saved, repopulate the visible search input and clear button.
-      if (state.searchQuery) {
-        const inp = document.getElementById('search');
-        if (inp) { inp.value = state.searchQuery; }
-        const clear = document.getElementById('search-clear');
-        if (clear) clear.classList.remove('hidden');
-      }
-
-      // Read pagination/filter params from the URL.
-      const urlParams  = new URLSearchParams(location.search);
-      const initPage   = Math.max(1, parseInt(urlParams.get('page')       || '1',      10));
-      const initStatus = urlParams.get('leadStatus') || '';
-      const initSub    = initStatus ? (urlParams.get('substatus') || '') : '';
-      const initSort   = urlParams.get('sort')       || state.sortBy || 'newest';
-
-      // Apply URL params to state so the first render uses them.
-      state.currentPage      = initPage;
-      state.leadStatusFilter = initStatus;
-      state.substatusFilter  = initSub;
-      state.sortBy           = initSort;
-
-      try {
-        await Promise.all([
-          loadContactsPage({ page: initPage, leadStatus: initStatus, sort: initSort }),
-          loadLeadStatusCounts(),
-        ]);
-        renderCustomerList();
-        restoreCustomerListScroll();
-      } catch (e) {
-        console.error('Failed to load contacts', e);
-        const view = document.getElementById('customers-view');
-        if (view) {
-          let msg, action;
-          if (e.code === 'HUBSPOT_AUTH') {
-            msg = 'Could not connect to HubSpot — the API token is invalid or expired. An admin needs to update the <strong>HUBSPOT_ACCESS_TOKEN</strong> in the environment settings and restart the app.';
-            action = `<a href="/settings" class="mt-2 inline-block text-blue-600 underline text-xs">Go to Settings</a>`;
-          } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
-            msg = 'HubSpot rate limit reached.';
-            action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Try again</button>`;
-          } else if (e.code === 'HUBSPOT_ERROR' || e.code) {
-            msg = 'Could not load contacts from HubSpot. This may be a temporary issue.';
-            action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button>`;
-          } else {
-            msg = `Failed to load contacts: ${escHtml(e.message)}`;
-            action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button>`;
-          }
-          view.innerHTML = `<div class="p-4 text-sm text-red-500">${msg}<br>${action}</div>`;
-        }
-      }
-
-      const params = new URLSearchParams(location.search);
-      const q = params.get('q');
-      const openModal = params.get('new') === '1';
-
-      if (q) {
-        const inp = document.getElementById('search');
-        if (inp) inp.value = q;
-        const clear = document.getElementById('search-clear');
-        if (clear) clear.classList.remove('hidden');
-        filterDeals(q);
-      }
-
-      if (openModal) {
-        openNewCustomerModal();
-      }
-    });
-  </script>
+  <script type="module" src="/react/main.js"></script>
 </body>
 </html>
