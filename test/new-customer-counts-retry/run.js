@@ -173,12 +173,15 @@ async function closePage(p) {
 }
 
 // Collapse any large setTimeout delays so the 30 s retry gaps run instantly.
-// This is injected before page scripts run via evaluateOnNewDocument.
-async function installFastTimers(page) {
-  await page.evaluateOnNewDocument(() => {
+// thresholdMs (default 1000) controls which delays are collapsed — only delays
+// strictly greater than the threshold are replaced with 10 ms.  Probe G uses
+// thresholdMs=10000 so the 30 s retry gaps collapse while the 8 s autoHideDuration
+// stays at its real value, giving the test time to simulate tab-hide.
+async function installFastTimers(page, thresholdMs = 1000) {
+  await page.evaluateOnNewDocument((threshold) => {
     const _orig = window.setTimeout.bind(window);
-    window.setTimeout = (fn, delay, ...args) => _orig(fn, delay > 1000 ? 10 : delay, ...args);
-  });
+    window.setTimeout = (fn, delay, ...args) => _orig(fn, delay > threshold ? 10 : delay, ...args);
+  }, thresholdMs);
 }
 
 // Enable request interception and install a counts interceptor.
@@ -396,6 +399,7 @@ async function main() {
     '[D] all retries fail — Snackbar "Couldn\'t refresh live data…" appears',
     '[E] second attempt succeeds — Snackbar does NOT appear',
     '[F] Snackbar auto-dismisses after autoHideDuration (8 s)',
+    '[G] Snackbar survives tab-hide — still auto-dismisses when tab returns visible',
   ];
 
   if (!puppeteer) {
@@ -582,6 +586,120 @@ async function main() {
       }
       await closePage(page);
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Probe G — Snackbar survives tab-hide and auto-dismisses when tab returns
+    //
+    // Scenario: all counts calls fail → Snackbar appears.  While the Snackbar is
+    // visible the document is hidden (Page Visibility API: both visibilityState
+    // and document.hidden are overridden; visibilitychange is dispatched).  MUI
+    // Snackbar clears its autoHideDuration timer in response.  The tab stays
+    // hidden for 9.5 s — longer than the 8 s autoHideDuration.  If MUI's pause
+    // logic were absent the timer would have fired and dismissed the Snackbar
+    // during this window, so a Snackbar that is still visible at 9.5 s proves
+    // the pause is working.  The tab is then restored to visible; MUI restarts
+    // the full 8 s autoHideDuration and the Snackbar must dismiss within 12 s.
+    //
+    // Fast-timers use thresholdMs=10000 so the 30 s retry gaps collapse to 10 ms
+    // while the 8 s autoHideDuration stays at its real value — this is what makes
+    // the 9.5 s hidden wait a discriminating assertion.
+    // ══════════════════════════════════════════════════════════════════════════
+    console.log('\n  [G] Snackbar survives tab-hide → auto-dismisses on tab return');
+    {
+      const page = await newPageWithSession(browser, memberClient.cookie);
+
+      // Only collapse delays > 10 s (30 s retries → 10 ms; 8 s autoHide stays).
+      await installFastTimers(page, 10000);
+
+      const ctrl = await installCountsInterceptor(page);
+      ctrl.mode = 'always-fail';
+
+      await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+      await waitForCustomersMounted(page);
+
+      const btnPresent = await pollPage(page,
+        () => document.getElementById('new-customer-btn') ? 'ok' : null, null, 8000);
+
+      if (!btnPresent) {
+        record(UI_LABELS[3],
+          'Snackbar appears, stays visible while hidden (>8 s), then dismisses on tab-show',
+          '#new-customer-btn not found — page may not have mounted correctly',
+          false);
+      } else {
+        await submitNewCustomerDialog(page, runId, 'g');
+
+        // Step 1: Snackbar must appear (all 3 retries fail; gaps collapse to 10 ms).
+        const appeared = await waitForRefreshFailedSnackbar(page, 10000);
+
+        if (appeared !== 'visible') {
+          record(UI_LABELS[3],
+            'Snackbar appears, stays visible while hidden (>8 s), then dismisses on tab-show',
+            'Snackbar never appeared — cannot test visibility-hide behaviour',
+            false);
+        } else {
+          // Step 2: Simulate the tab going hidden.
+          // Override both document.visibilityState and document.hidden, then
+          // dispatch visibilitychange so MUI's event listener clears the timer.
+          await page.evaluate(() => {
+            Object.defineProperty(document, 'visibilityState', {
+              configurable: true,
+              get: () => 'hidden',
+            });
+            Object.defineProperty(document, 'hidden', {
+              configurable: true,
+              get: () => true,
+            });
+            document.dispatchEvent(new Event('visibilitychange'));
+          });
+
+          // Step 3: Wait 9.5 s while the tab is "hidden".
+          // The autoHideDuration (8 s) is NOT collapsed for this probe, so if MUI's
+          // timer-pause logic were broken the timer would fire at ~8 s and dismiss
+          // the Snackbar.  We check AFTER 9.5 s: a Snackbar that is still visible
+          // here confirms the timer was properly paused.
+          await new Promise(r => setTimeout(r, 9500));
+
+          const stillVisibleWhileHidden = await page.evaluate(() => {
+            const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+            return alerts.some(el =>
+              (el.textContent || '').includes("Couldn't refresh live data")
+            );
+          }).catch(() => false);
+
+          // Step 4: Restore the tab to visible.
+          // MUI reacts to visibilitychange by restarting the full autoHideDuration.
+          await page.evaluate(() => {
+            Object.defineProperty(document, 'visibilityState', {
+              configurable: true,
+              get: () => 'visible',
+            });
+            Object.defineProperty(document, 'hidden', {
+              configurable: true,
+              get: () => false,
+            });
+            document.dispatchEvent(new Event('visibilitychange'));
+          });
+
+          // Step 5: Snackbar must now auto-dismiss.
+          // MUI restarts the full 8 s autoHideDuration on visibility restore;
+          // allow up to 12 s (8 s + animation buffer).
+          const gone = await waitForSnackbarGone(page, 12000);
+
+          record(UI_LABELS[3],
+            'Snackbar appears, stays visible while hidden (>8 s), then dismisses on tab-show',
+            [
+              `visible_while_hidden=${stillVisibleWhileHidden ? 'yes — timer paused (good)' : 'prematurely dismissed — timer NOT paused (bad)'}`,
+              `final=${gone === 'gone' ? 'dismissed after tab-show (good)' : 'still visible after timeout (bad)'}`,
+            ].join(', '),
+            stillVisibleWhileHidden && gone === 'gone');
+        }
+      }
+
+      if (page.__logs.some(l => l.includes('[pageerror]'))) {
+        console.log('  Page errors (probe G):', page.__logs.filter(l => l.includes('[pageerror]')));
+      }
+      await closePage(page);
+    }
   } finally {
     await browser.close().catch(() => {});
   }
@@ -633,6 +751,19 @@ async function writeReport(runId, findings) {
     '  `autoHideDuration={8000}` on the MUI Snackbar uses `setTimeout`',
     '  internally, which the fast-timer override collapses to ~10 ms.  The',
     '  Snackbar must be gone from the DOM within 5 s of appearing.',
+    '- **[G] Snackbar survives tab-hide**: all counts calls fail so the Snackbar',
+    '  appears.  Both `document.visibilityState` and `document.hidden` are',
+    '  overridden and a `visibilitychange` event is dispatched — simulating the',
+    '  user switching away from the tab.  MUI Snackbar clears its',
+    '  `autoHideDuration` timer in response.  The test waits **9.5 s** while',
+    '  the document is hidden — longer than the 8 s `autoHideDuration`.  If',
+    '  the pause logic were absent the timer would have fired during this',
+    '  window; a Snackbar that is still visible at 9.5 s proves the timer was',
+    '  paused.  The document is then restored to `\'visible\'`; MUI restarts the',
+    '  full 8 s `autoHideDuration` and the Snackbar must dismiss within 12 s.',
+    '  Fast-timers use `thresholdMs=10000` so the 30 s retry gaps collapse to',
+    '  10 ms while the 8 s `autoHideDuration` stays at its real value —',
+    '  making the 9.5 s hidden-wait a discriminating (not vacuous) assertion.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
