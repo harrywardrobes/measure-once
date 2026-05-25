@@ -55,6 +55,30 @@ import PersonIcon from '@mui/icons-material/Person';
 import SettingsIcon from '@mui/icons-material/Settings';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import MenuIcon from '@mui/icons-material/Menu';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
+import SearchIcon from '@mui/icons-material/Search';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
+import WarningIcon from '@mui/icons-material/Warning';
+import InfoIcon from '@mui/icons-material/Info';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import EmailIcon from '@mui/icons-material/Email';
+import PhoneIcon from '@mui/icons-material/Phone';
+import EventIcon from '@mui/icons-material/Event';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
+import DescriptionIcon from '@mui/icons-material/Description';
+import ImageIcon from '@mui/icons-material/Image';
 
 import { ComponentShowcase } from '../components/mui/ComponentShowcase';
 
@@ -70,7 +94,7 @@ import { ComponentShowcase } from '../components/mui/ComponentShowcase';
  * paste-ready — this page is a recipe book, not exhaustive API docs.
  */
 
-const CATEGORIES = ['Inputs', 'Data Display', 'Feedback', 'Navigation', 'Surfaces', 'Layout'] as const;
+const CATEGORIES = ['Inputs', 'Data Display', 'Feedback', 'Navigation', 'Surfaces', 'Layout', 'Icons'] as const;
 type Category = typeof CATEGORIES[number];
 
 function StorybookLink() {
@@ -159,6 +183,65 @@ function DrawerDemo() {
         </Box>
       </Drawer>
     </>
+  );
+}
+
+// --- Icons showcase helper ---------------------------------------------
+
+interface IconEntry { Icon: React.ComponentType<{ fontSize?: 'small' | 'medium' | 'large' }>; name: string; }
+
+function IconShowcase({ name, description, icons }: { name: string; description: string; icons: IconEntry[] }) {
+  const [open, setOpen] = useState(false);
+  const code = icons
+    .map((i) => `import ${i.name}Icon from '@mui/icons-material/${i.name}';`)
+    .join('\n');
+  return (
+    <Paper variant="outlined" sx={{ p: 2.5, mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 2, mb: 1, flexWrap: 'wrap' }}>
+        <Typography variant="h6" component="h3" sx={{ fontWeight: 700 }}>{name}</Typography>
+        <Button size="small" onClick={() => setOpen((v) => !v)}>{open ? 'Hide imports' : 'Show imports'}</Button>
+      </Box>
+      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1.5 }}>{description}</Typography>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 1.5 }}>
+        {icons.map(({ Icon, name: iconName }) => (
+          <Box
+            key={iconName}
+            sx={{
+              p: 1.5,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 0.75,
+              bgcolor: 'background.paper',
+            }}
+          >
+            <Icon fontSize="large" />
+            <Typography
+              variant="caption"
+              sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: 'text.secondary', textAlign: 'center' }}
+            >
+              {iconName}Icon
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+      {open && (
+        <Box
+          component="pre"
+          sx={{
+            mt: 1.5, m: 0, p: 2, bgcolor: '#0f172a', color: '#e2e8f0',
+            borderRadius: 1, overflow: 'auto',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            fontSize: 12.5, lineHeight: 1.5,
+          }}
+        >
+          <code>{code}</code>
+        </Box>
+      )}
+    </Paper>
   );
 }
 
@@ -553,6 +636,83 @@ export function DesignSystemPage() {
     <Button size="small">Open</Button>
   </CardActions>
 </Card>`}
+          />
+        </>
+      )}
+
+      {tab === 'Icons' && (
+        <>
+          <Paper variant="outlined" sx={{ p: 2.5, mb: 2 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Icons come from <code>@mui/icons-material</code> — one named
+              export per icon. Browse the full set at{' '}
+              <Link href="https://mui.com/material-ui/material-icons/" target="_blank" rel="noopener">
+                mui.com/material-ui/material-icons
+              </Link>{' '}
+              and import directly:{' '}
+              <code>{`import DeleteIcon from '@mui/icons-material/Delete';`}</code>.
+              Do not add new inline <code>&lt;svg&gt;</code> blocks in React code
+              — see <code>src/react/ICONS.md</code> for the full convention.
+            </Typography>
+          </Paper>
+
+          <IconShowcase
+            name="Actions"
+            description="Verbs the user performs — buttons, menu items, row actions."
+            icons={[
+              { Icon: AddIcon, name: 'Add' },
+              { Icon: EditIcon, name: 'Edit' },
+              { Icon: DeleteIcon, name: 'Delete' },
+              { Icon: SaveIcon, name: 'Save' },
+              { Icon: CloseIcon, name: 'Close' },
+              { Icon: SearchIcon, name: 'Search' },
+              { Icon: RefreshIcon, name: 'Refresh' },
+              { Icon: ContentCopyIcon, name: 'ContentCopy' },
+              { Icon: MoreVertIcon, name: 'MoreVert' },
+            ]}
+          />
+
+          <IconShowcase
+            name="Navigation"
+            description="Move between views, expand sections, open in a new tab."
+            icons={[
+              { Icon: MenuIcon, name: 'Menu' },
+              { Icon: HomeIcon, name: 'Home' },
+              { Icon: ArrowBackIcon, name: 'ArrowBack' },
+              { Icon: ArrowForwardIcon, name: 'ArrowForward' },
+              { Icon: ChevronLeftIcon, name: 'ChevronLeft' },
+              { Icon: ChevronRightIcon, name: 'ChevronRight' },
+              { Icon: ExpandMoreIcon, name: 'ExpandMore' },
+              { Icon: OpenInNewIcon, name: 'OpenInNew' },
+            ]}
+          />
+
+          <IconShowcase
+            name="Status"
+            description="Convey state — success, error, warning, pending — usually inline with text or in a Chip."
+            icons={[
+              { Icon: CheckCircleIcon, name: 'CheckCircle' },
+              { Icon: ErrorIcon, name: 'Error' },
+              { Icon: WarningIcon, name: 'Warning' },
+              { Icon: InfoIcon, name: 'Info' },
+              { Icon: HourglassEmptyIcon, name: 'HourglassEmpty' },
+              { Icon: FavoriteIcon, name: 'Favorite' },
+            ]}
+          />
+
+          <IconShowcase
+            name="Content"
+            description="Glyphs for record types — contacts, calendar events, files, communications."
+            icons={[
+              { Icon: PersonIcon, name: 'Person' },
+              { Icon: EmailIcon, name: 'Email' },
+              { Icon: PhoneIcon, name: 'Phone' },
+              { Icon: EventIcon, name: 'Event' },
+              { Icon: AttachFileIcon, name: 'AttachFile' },
+              { Icon: DescriptionIcon, name: 'Description' },
+              { Icon: ImageIcon, name: 'Image' },
+              { Icon: SettingsIcon, name: 'Settings' },
+            ]}
           />
         </>
       )}

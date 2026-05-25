@@ -73,6 +73,13 @@ For repeated styles, reach for `styled()` from `@mui/material/styles`.
 Avoid hand-rolled `#hex` values inside React components — let the theme
 provide them so a later theme refresh propagates automatically.
 
+## Icons
+
+All icons in React come from `@mui/icons-material` — one named export
+per icon. See [`ICONS.md`](./ICONS.md) for the full convention (no new
+inline `<svg>` in React, no other icon libraries, etc.) and the
+Design System page's **Icons** tab for a browsable sample.
+
 ## Dev workflow
 
 - `npm run dev:react` — Vite on :5173 with `/api` proxied to Express.

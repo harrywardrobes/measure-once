@@ -21,7 +21,9 @@ Project management dashboard (HubSpot CRM integration).
     on port 5173 with `/api` proxied to the Express server for standalone
     iteration. Material UI is the standard component framework; every
     mount is wrapped in `AppThemeProvider` (see `src/react/README.md`
-    for the conventions on adding components and page mounts).
+    for the conventions on adding components and page mounts). Icons
+    come from `@mui/icons-material` — one named export per icon, no
+    inline `<svg>` in React; see `src/react/ICONS.md`.
   - `build:storybook` writes the static Storybook bundle to
     `public/storybook/`. The Express server serves it as static assets so
     the "Open Storybook →" link on the Design System tab is live on every
