@@ -178,14 +178,34 @@ const POST       = (path, b) => api('POST',   path, b);
 const PATCH_REQ  = (path, b) => api('PATCH',  path, b);
 const DELETE_REQ = path      => api('DELETE', path);
 
-// Privilege helpers — read from state.user.privilege_level (set by bootstrap /
-// checkAuthStatus) so privilege is derived from a single authoritative source
-// rather than body-class stamps.  Falls back to 'member' before bootstrap
-// completes, which is safe because all callers run after await bootstrap().
+// ── Privilege helpers (vanilla-JS legacy) ─────────────────────────────────────
+// These are an *accepted legacy pattern* for vanilla-JS page renderers that
+// cannot use React's usePrivilege() hook.  They read privilege_level from
+// state.user (set by bootstrap / checkAuthStatus), which is the single
+// authoritative source in core.js.  All callers run after await bootstrap()
+// so the 'member' fallback fires only during early initialisation.
+//
+// AUDIT (task-857) — remaining vanilla-JS consumers (accepted legacy):
+//   • core.js            isViewerOnly()               — ensurePrefs() early-exit
+//   • customer-detail.js isViewerOnly(), canEditPipeline() — many renderers
+//   • invoices-core.js   isAdminMode()                — edit-section + send-btn
+//   • sales.js           canEditPipeline()            — substage pill affordance
+//   • survey.js          canEditPipeline()            — substage pill affordance
+//   • workflow.js        isViewerOnly(), canEditPipeline() — card renderers,
+//                        picker guards, new-customer modal
+//
+// React components MUST use usePrivilege() (src/react/hooks/usePrivilege.ts)
+// and MUST NOT call these helpers directly.
+//
+// TODO: Remove these helpers once all remaining consumers above have been
+// ported to React components that use usePrivilege().
+
+/** @deprecated Use usePrivilege() in React components. Vanilla-JS pages: accepted legacy. */
 function isViewerOnly() {
   return (state.user?.privilege_level ?? 'member') === 'viewer';
 }
 
+/** @deprecated Use usePrivilege() in React components. Vanilla-JS pages: accepted legacy. */
 function isAdminMode() {
   return (state.user?.privilege_level ?? 'member') === 'admin';
 }
@@ -193,6 +213,7 @@ function isAdminMode() {
 // True only for manager+ users — controls who may change pipeline state
 // (customer stage, substage / completed tasks, and HubSpot lead status).
 // Members and viewers are treated identically for pipeline editing.
+/** @deprecated Use usePrivilege() in React components. Vanilla-JS pages: accepted legacy. */
 function canEditPipeline() {
   const priv = state.user?.privilege_level ?? 'member';
   return priv === 'manager' || priv === 'admin';

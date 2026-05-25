@@ -1545,7 +1545,7 @@ function renderSubstatusAffordance(contact) {
   const subs = _substatusesForStatus(statusKey);
   if (!subs.length) return '';
   const cid = contact?.id || '';
-  const editable = (typeof canEditPipeline === 'function') ? canEditPipeline() : false;
+  const editable = canEditPipeline();
   const current = _currentSubstatusFor(contact);
   if (current) {
     const label = escHtml(current.label);
@@ -1558,7 +1558,7 @@ function renderSubstatusAffordance(contact) {
 
 async function openLeadSubstatusPicker(event, contactId) {
   event.stopPropagation();
-  if (typeof canEditPipeline === 'function' && !canEditPipeline()) return;
+  if (!canEditPipeline()) return;
   closeCardPicker();
 
   let contact = state.contacts.find(c => c.id === contactId);

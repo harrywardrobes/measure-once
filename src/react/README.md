@@ -117,12 +117,15 @@ It returns `{ privilegeLevel, isAdmin, isManager, isViewer }` where
 `isManager` is true for both `manager` and `admin` privilege levels.
 
 **Convention:** React components always use `usePrivilege()` and
-conditional rendering. Body-class helpers such as `isViewerOnly()` and
-`isAdminMode()` in `core.js` are reserved for legacy vanilla-JS pages
-in `public/` only — do not use them in React. The `data-admin-only`,
-`data-viewer-hide`, and `data-manager-only` CSS-attribute approach has
-been fully retired; all remaining privilege gating is done via inline
-JS conditionals at render time.
+conditional rendering. The body-class helpers `isViewerOnly()`,
+`isAdminMode()`, and `canEditPipeline()` in `core.js` are reserved for
+legacy vanilla-JS pages in `public/` only — do not use them in React.
+They read from `window.__moHeaderUser.privilege_level` (set synchronously
+by `core.js`) with body classes as a fallback, and are marked deprecated
+pending the migration of their remaining consumers to React. The
+`data-admin-only`, `data-viewer-hide`, and `data-manager-only`
+CSS-attribute approach has been fully retired; all remaining privilege
+gating is done via inline JS conditionals at render time.
 
 ## Icons
 
