@@ -100,10 +100,18 @@ function extractIconImports(src) {
  * inside a string literal is consumed as part of the string and never
  * treated as a line-comment start, and that `/*` inside a string is
  * similarly consumed before the block-comment branch can fire.
+ *
+ * Single-quoted and double-quoted string branches intentionally exclude `\n`
+ * from the matched content ([^'"\\\n]).  JavaScript string literals cannot
+ * legally span a newline without a backslash continuation, and JSX attribute
+ * values never span lines.  Without this guard, a lone `'` or `"` in JSX
+ * text or an MUI `sx` prop value would silently consume all source text up
+ * to the *next* quote character, potentially crossing many lines and
+ * swallowing real icon identifiers.
  */
 function stripCommentsAndStrings(src) {
   return src.replace(
-    /`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+    /`(?:[^`\\]|\\.)*`|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
     (match) => {
       if (match[0] === '`') {
         // Template literal: blank out the static string parts but preserve
@@ -147,6 +155,37 @@ function stripCommentsAndStrings(src) {
       return match.replace(/[^\n]/g, ' ');
     },
   );
+}
+
+/**
+ * Extract the set of local identifier names imported from @mui/material
+ * (including @mui/material/* sub-paths).  These are MUI layout/input
+ * components — some happen to end in "Icon" (e.g. ListItemIcon) but are
+ * NOT icon components from @mui/icons-material.  The Pass-1 check uses
+ * this set to avoid false-positive "used but not imported from icons-material"
+ * errors for those components.
+ */
+function extractMaterialImports(src) {
+  const imported = new Set();
+
+  // Default imports: import ListItemIcon from '@mui/material/ListItemIcon'
+  const defaultRe = /import\s+(\w+)\s+from\s+['"]@mui\/material[^'"]*['"]/g;
+  let m;
+  while ((m = defaultRe.exec(src)) !== null) {
+    imported.add(m[1]);
+  }
+
+  // Named imports: import { ListItemIcon, ... } from '@mui/material'
+  const namedRe = /import\s+\{([^}]+)\}\s+from\s+['"]@mui\/material[^'"]*['"]/g;
+  while ((m = namedRe.exec(src)) !== null) {
+    for (const raw of m[1].split(',')) {
+      const parts = raw.trim().split(/\s+as\s+/);
+      const localName = (parts[1] || parts[0]).trim();
+      if (localName) imported.add(localName);
+    }
+  }
+
+  return imported;
 }
 
 /**
@@ -411,6 +450,43 @@ function extractIconUsages(src) {
       'BrushIcon inside a nested-brace template interpolation ${fn({ icon: BrushIcon })} must be detected',
     );
   }
+
+  // 13. A lone single-quote in JSX text (e.g. sx={{ color: 'text.secondary' }})
+  //     must NOT cause the icon identifier on a SUBSEQUENT line to be swallowed.
+  //     This guards against the multi-line false-match bug where '...' was allowed
+  //     to span newlines, causing { Icon: FooIcon } object entries to disappear.
+  {
+    const src = [
+      "import ArrowBackIcon from '@mui/icons-material/ArrowBack';",
+      "const x = <Box sx={{ color: 'text.secondary' }}></Box>;",
+      "const entries = [{ Icon: ArrowBackIcon, name: 'Back' }];",
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.some((u) => u.identifier === 'ArrowBackIcon'),
+      'ArrowBackIcon used as a value on the line after a JSX sx prop with single quotes must still be detected',
+    );
+  }
+
+  // 14. An identifier ending in "Icon" that is imported from @mui/material (not
+  //     @mui/icons-material) must NOT be flagged as "used but not imported" in
+  //     Pass 1. ListItemIcon is the canonical example.
+  {
+    const src = [
+      "import ListItemIcon from '@mui/material/ListItemIcon';",
+      'export const Nav = () => <ListItemIcon><span /></ListItemIcon>;',
+    ].join('\n');
+    const imports = extractIconImports(src);
+    const materialImports = extractMaterialImports(src);
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    const failures = usages.filter((u) => !imports.has(u.identifier) && !materialImports.has(u.identifier));
+    assert(
+      failures.every((f) => f.identifier !== 'ListItemIcon'),
+      'ListItemIcon imported from @mui/material must not be flagged as unimported from @mui/icons-material',
+    );
+  }
 })();
 
 // ── scan ─────────────────────────────────────────────────────────────────────
@@ -441,7 +517,8 @@ for (const file of files.sort()) {
     process.exit(1);
   }
 
-  const imports = extractIconImports(src);
+  const imports         = extractIconImports(src);
+  const materialImports = extractMaterialImports(src);
 
   // Strip icon import lines before scanning usages so that the imported
   // identifiers themselves don't appear as "used" just from the import line.
@@ -455,8 +532,13 @@ for (const file of files.sort()) {
   // non-icon files to keep the report tidy.
   if (imports.size === 0 && usages.length === 0) continue;
 
-  // Pass 1: used but not imported.
-  const failures = usages.filter((u) => !imports.has(u.identifier));
+  // Pass 1: used but not imported from @mui/icons-material.
+  // Identifiers that are legitimately imported from @mui/material (e.g.
+  // ListItemIcon) are excluded — they are valid MUI components that happen
+  // to end in "Icon" but are not icon-material icon components.
+  const failures = usages.filter(
+    (u) => !imports.has(u.identifier) && !materialImports.has(u.identifier),
+  );
 
   // Pass 2: imported but never used.
   const unusedImports = [...imports].filter((name) => !usedSet.has(name));
