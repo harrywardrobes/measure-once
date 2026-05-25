@@ -612,6 +612,20 @@ export function CustomersPage(): React.ReactElement {
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
   const [openLeadsCacheAge, setOpenLeadsCacheAge] = React.useState<number | null>(null);
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
+  // autoHideDuration is set to null while the document is hidden so the MUI
+  // Snackbar timer is paused (Page Visibility API).  Restored to 8 s when the
+  // tab returns to the foreground.
+  const [snackbarHideDuration, setSnackbarHideDuration] = React.useState<number | null>(8000);
+  const bgRefreshFailedRef = React.useRef(false);
+  React.useEffect(() => { bgRefreshFailedRef.current = bgRefreshFailed; }, [bgRefreshFailed]);
+  React.useEffect(() => {
+    const onVis = () => {
+      if (!bgRefreshFailedRef.current) return;
+      setSnackbarHideDuration(document.hidden ? null : 8000);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
   const [contactsStale, setContactsStale] = React.useState(false);
   // Holds a deferred contactsStale value when the fetch completed while the
   // tab was hidden. Applied on the next visibilitychange → visible event so
@@ -1437,7 +1451,7 @@ export function CustomersPage(): React.ReactElement {
       />
       <Snackbar
         open={bgRefreshFailed}
-        autoHideDuration={8000}
+        autoHideDuration={snackbarHideDuration}
         onClose={() => setBgRefreshFailed(false)}
         message="Couldn't refresh live data — fresh results will load on your next visit"
       />
