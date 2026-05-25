@@ -819,22 +819,21 @@ export function CustomersPage(): React.ReactElement {
         const filtered: Room[] = [];
         for (const r of cached) {
           const roomStatus = r.roomStatus || 'active';
-          if (roomStatus !== 'active' && !showArchived) continue;
-          if (stageFilter && r.stageKey !== stageFilter) continue;
+          if (stageFilter) {
+            if (roomStatus !== 'active' && !showArchived) continue;
+            if (r.stageKey !== stageFilter) continue;
+          }
           filtered.push({
             room: r.room || 'Main',
             stageKey: r.stageKey || 'sales',
             roomStatus,
           });
         }
-        if (filtered.length === 0) return null;
+        if (stageFilter && filtered.length === 0) return null;
         return filtered;
       }
-      // No local data yet — default to Sales.
-      if (!stageFilter || stageFilter === 'sales') {
-        return [{ room: 'Main', stageKey: 'sales', roomStatus: 'active' }];
-      }
-      return null;
+      // No cached rooms — always show contact with a sensible fallback.
+      return [{ room: 'Main', stageKey: 'sales', roomStatus: 'active' }];
     },
     [roomsByContact, stageFilter, showArchived],
   );
@@ -849,7 +848,7 @@ export function CustomersPage(): React.ReactElement {
         if (v !== substatus.toUpperCase()) continue;
       }
       const rooms = resolveRooms(c.id);
-      if (!rooms) continue;
+      if (!rooms || rooms.length === 0) continue;
       out.push({ contact: c, rooms });
     }
     return out;
