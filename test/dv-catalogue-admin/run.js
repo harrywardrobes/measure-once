@@ -6,21 +6,32 @@
 // the privileges harness, drives the UI with Puppeteer, writes a markdown
 // report to test-results/dv-catalogue-admin.md.
 //
-// Covers (per task #668):
-//   (API) Pre-checks — GET /api/admin/design-visit-handles,
-//         /api/admin/design-visit-furniture-ranges and
-//         /api/admin/design-visit-door-styles respond for admin.
-//   (H)   Handle modal — open via "+ Add handle", fill Name + Style, click
-//         Save: the Save button is disabled and shows "Saving…" while the
-//         POST is in flight, the modal closes, the new row appears in
-//         #dv-handles-wrap *without a page reload*, and the Style column
-//         shows the value picked in the dropdown.
-//   (F)   Furniture-range modal — open via "+ Add range", fill Name +
-//         Description, click Save: Save disables + shows "Saving…", modal
-//         closes, new row appears in #dv-furniture-wrap without reload.
-//   (D)   Door-style modal — open via "+ Add style", fill Name + Image URL,
-//         click Save: Save disables + shows "Saving…", modal closes, new
-//         row appears in #dv-door-styles-wrap without reload.
+// Covers (per task #668 + #688):
+//   (API)    Pre-checks — GET /api/admin/design-visit-handles,
+//            /api/admin/design-visit-furniture-ranges and
+//            /api/admin/design-visit-door-styles respond for admin.
+//   (H)      Handle modal — open via "+ Add handle", fill Name + Style, click
+//            Save: the Save button is disabled and shows "Saving…" while the
+//            POST is in flight, the modal closes, the new row appears in
+//            #dv-handles-wrap *without a page reload*, and the Style column
+//            shows the value picked in the dropdown.
+//   (F)      Furniture-range modal — open via "+ Add range", fill Name +
+//            Description, click Save: Save disables + shows "Saving…", modal
+//            closes, new row appears in #dv-furniture-wrap without reload.
+//   (D)      Door-style modal — open via "+ Add style", fill Name + Image URL,
+//            click Save: Save disables + shows "Saving…", modal closes, new
+//            row appears in #dv-door-styles-wrap without reload.
+//   (H/edit) Handle edit — re-open the seeded handle via openDvItemEditor,
+//            assert Save button label reads "Save" (not "Add"), the modal is
+//            pre-filled with the existing name + style (the handle style
+//            dropdown's "preserve existing value" branch), rename + change
+//            style, hold the PATCH in flight to assert the Saving… lock, then
+//            verify the wrap refreshes in place and the DB row reflects the
+//            edit.
+//   (F/edit) Furniture-range edit — same shape against the seeded furniture
+//            row (rename + new description, PATCH .../furniture-ranges/:id).
+//   (D/edit) Door-style edit — same shape against the seeded door-style row
+//            (rename + new image URL, PATCH .../door-styles/:id).
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:dv-catalogue-admin
@@ -56,6 +67,14 @@ const FURNITURE_NAME  = `${RUN_PREFIX} furniture`;
 const FURNITURE_DESC  = `${RUN_PREFIX} furniture description`;
 const DOOR_NAME       = `${RUN_PREFIX} door`;
 const DOOR_IMG_URL    = 'https://example.invalid/privtest-door.png';
+
+// Edit-flow targets — applied to the rows the add flow created above.
+const HANDLE_NAME_EDITED    = `${RUN_PREFIX} handle (edited)`;
+const HANDLE_STYLE_EDITED   = 'Knob';
+const FURNITURE_NAME_EDITED = `${RUN_PREFIX} furniture (edited)`;
+const FURNITURE_DESC_EDITED = `${RUN_PREFIX} furniture description (edited)`;
+const DOOR_NAME_EDITED      = `${RUN_PREFIX} door (edited)`;
+const DOOR_IMG_URL_EDITED   = 'https://example.invalid/privtest-door-edited.png';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function parseCookieKV(jar) {
@@ -412,6 +431,157 @@ async function main() {
       );
     }
 
+    // Helper: drive one Edit-modal flow against a row already in the wrap, and
+    // assert the modal pre-fills, the in-flight UX, the in-place list refresh,
+    // and the DB row reflects the edit.
+    //
+    //   spec.type            — 'handle' | 'furniture' | 'door-style' (used to
+    //                          look up openDvItemEditor(type, id)).
+    //   spec.endpoint        — base URL (no trailing id) for the PATCH route.
+    //   spec.wrapId          — id of the list wrap that should refresh.
+    //   spec.targetId        — id of the seeded row to edit.
+    //   spec.expectedPrefill — { name, ...extras } expected pre-fill values
+    //                          (asserted against the modal inputs before edit).
+    //   spec.fillEdits(page) — async; mutates modal inputs to the new values.
+    //   spec.assertRow(text) — predicate on wrap.textContent after save.
+    //   spec.dbProbe()       — async () returning the post-edit row from DB;
+    //                          used to assert the persisted state.
+    //   spec.dbExpected      — predicate against the dbProbe row.
+    async function runEditFlow(label, spec) {
+      console.log(`\n  [${label}] edit existing row id=${spec.targetId}`);
+
+      // Open the editor for the seeded row directly (avoids fishing the Edit
+      // button out of a row that just re-rendered).
+      const opened = await page.evaluate(({ type, id }) => {
+        if (typeof window.openDvItemEditor !== 'function') return false;
+        window.openDvItemEditor(type, id);
+        return true;
+      }, { type: spec.type, id: spec.targetId });
+      record(
+        `[${label}/edit] openDvItemEditor('${spec.type}', ${spec.targetId}) is callable`,
+        'window.openDvItemEditor exists and was called',
+        `opened=${opened}`,
+        opened,
+      );
+
+      const modalReady = await pollPage(page, () => {
+        const name = document.querySelector('#dvie-name');
+        const save = document.querySelector('#dvie-save');
+        return !!name && !!save;
+      }, null, 6000);
+      record(
+        `[${label}/edit] edit modal renders #dvie-name + #dvie-save`,
+        'modal inputs present',
+        `ready=${!!modalReady}`,
+        !!modalReady,
+      );
+
+      // Save button on edit must read "Save" (not "Add").
+      const saveLabel = await page.evaluate(() => {
+        const btn = document.querySelector('#dvie-save');
+        return btn ? (btn.textContent || '').trim() : null;
+      });
+      record(
+        `[${label}/edit] Save button reads "Save" (not "Add") in edit mode`,
+        'textContent === "Save"',
+        `label=${JSON.stringify(saveLabel)}`,
+        saveLabel === 'Save',
+      );
+
+      // Pre-fill snapshot.
+      const prefill = await page.evaluate(() => {
+        const get = sel => {
+          const el = document.querySelector(sel);
+          return el ? el.value : null;
+        };
+        return {
+          name:  get('#dvie-name'),
+          style: get('#dvie-style'),
+          desc:  get('#dvie-desc'),
+          img:   get('#dvie-img'),
+        };
+      });
+      const prefillOk = Object.entries(spec.expectedPrefill).every(
+        ([k, v]) => prefill[k] === v,
+      );
+      record(
+        `[${label}/edit] modal pre-fills existing values`,
+        `inputs match ${JSON.stringify(spec.expectedPrefill)}`,
+        `got=${JSON.stringify(prefill)}`,
+        prefillOk,
+      );
+
+      // Intercept the PATCH so we can hold it open while we sample the
+      // Save-button state.
+      await page.setRequestInterception(true);
+      const interceptHold = { release: null };
+      const holdPromise = new Promise(res => { interceptHold.release = res; });
+      const patchUrl = `${spec.endpoint}/${spec.targetId}`;
+      const reqListener = async (req) => {
+        const u = req.url();
+        if (req.method() === 'PATCH' && u.endsWith(patchUrl)) {
+          await holdPromise;
+          try { await req.continue(); } catch {}
+        } else {
+          try { await req.continue(); } catch {}
+        }
+      };
+      page.on('request', reqListener);
+
+      // Mutate the inputs with the new values, then click Save.
+      await spec.fillEdits(page);
+      await page.evaluate(() => document.querySelector('#dvie-save').click());
+
+      const inflight = await pollPage(page, () => {
+        const btn = document.querySelector('#dvie-save');
+        if (!btn) return null;
+        return { disabled: btn.disabled, text: (btn.textContent || '').trim() };
+      }, null, 3000);
+      record(
+        `[${label}/edit] Save button is disabled and shows "Saving…" while PATCH is in flight`,
+        '#dvie-save.disabled === true && text === "Saving…"',
+        `state=${JSON.stringify(inflight)}`,
+        !!inflight && inflight.disabled === true && /Saving/i.test(inflight.text),
+      );
+
+      // Release the held request and let the modal close + list refresh.
+      interceptHold.release();
+      await pollPage(page, () => !document.querySelector('#dvie-save'), null, 6000);
+
+      page.off('request', reqListener);
+      await page.setRequestInterception(false);
+
+      const stillSameLoad = await page.evaluate(t => window.__pageLoadToken === t, pageLoadToken);
+      record(
+        `[${label}/edit] no full page reload (window.__pageLoadToken preserved)`,
+        `__pageLoadToken === "${pageLoadToken}"`,
+        `preserved=${stillSameLoad}`,
+        stillSameLoad === true,
+      );
+
+      const wrapState = await pollPage(page, (id) => {
+        const w = document.getElementById(id);
+        if (!w) return null;
+        return { rows: w.querySelectorAll('tbody tr').length, text: w.textContent || '' };
+      }, spec.wrapId, 6000);
+      const rowOk = !!wrapState && spec.assertRow(wrapState.text);
+      record(
+        `[${label}/edit] list at #${spec.wrapId} reflects the edited values in place`,
+        spec.assertExpected,
+        wrapState ? `text-includes=${spec.assertObserved(wrapState.text)}` : 'no wrap state',
+        rowOk,
+      );
+
+      // DB-level assertion that the PATCH persisted.
+      const dbRow = await spec.dbProbe();
+      record(
+        `[${label}/edit] DB row reflects the edit`,
+        spec.dbExpectedText,
+        `row=${JSON.stringify(dbRow)}`,
+        !!dbRow && spec.dbExpected(dbRow),
+      );
+    }
+
     // ── (H) Handle ────────────────────────────────────────────────────────────
     await runAddFlow('H', {
       addBtnLabel:     '+ Add handle',
@@ -445,6 +615,46 @@ async function main() {
       !!createdHandle && createdHandle.style === HANDLE_STYLE,
     );
 
+    // ── (H) Handle — edit existing row ───────────────────────────────────────
+    if (createdHandle) {
+      await runEditFlow('H', {
+        type:           'handle',
+        endpoint:       '/api/admin/design-visit-handles',
+        wrapId:         'dv-handles-wrap',
+        targetId:       createdHandle.id,
+        expectedPrefill: { name: HANDLE_NAME, style: HANDLE_STYLE },
+        assertExpected: `wrap contains "${HANDLE_NAME_EDITED}" and "${HANDLE_STYLE_EDITED}"`,
+        assertObserved: t => `name=${t.includes(HANDLE_NAME_EDITED)} style=${t.includes(HANDLE_STYLE_EDITED)} oldGone=${!t.includes(HANDLE_NAME)}`,
+        assertRow:      t => t.includes(HANDLE_NAME_EDITED) && t.includes(HANDLE_STYLE_EDITED) && !t.includes(HANDLE_NAME + '<'),
+        dbExpectedText: `name === "${HANDLE_NAME_EDITED}" && style === "${HANDLE_STYLE_EDITED}"`,
+        dbExpected:     row => row.name === HANDLE_NAME_EDITED && row.style === HANDLE_STYLE_EDITED,
+        dbProbe:        async () => {
+          const r = await pool.query(
+            `SELECT id, name, style FROM design_visit_handles WHERE id=$1`,
+            [createdHandle.id],
+          );
+          return r.rows[0] || null;
+        },
+        fillEdits: async (p) => {
+          await p.evaluate(({ name, style }) => {
+            const n = document.querySelector('#dvie-name');
+            n.value = name;
+            n.dispatchEvent(new Event('input', { bubbles: true }));
+            const s = document.querySelector('#dvie-style');
+            s.value = style;
+            s.dispatchEvent(new Event('change', { bubbles: true }));
+          }, { name: HANDLE_NAME_EDITED, style: HANDLE_STYLE_EDITED });
+        },
+      });
+    } else {
+      record(
+        '[H/edit] seeded handle row available for edit probe',
+        'createdHandle is non-null after add flow',
+        'add flow did not surface a handle row to edit',
+        false,
+      );
+    }
+
     // ── (F) Furniture range ───────────────────────────────────────────────────
     await runAddFlow('F', {
       addBtnLabel:     '+ Add range',
@@ -466,6 +676,50 @@ async function main() {
       },
     });
 
+    // ── (F) Furniture range — edit existing row ──────────────────────────────
+    const furnitureRow = (await pool.query(
+      `SELECT id, name, description FROM design_visit_furniture_ranges WHERE name=$1`,
+      [FURNITURE_NAME],
+    )).rows[0] || null;
+    if (furnitureRow) {
+      await runEditFlow('F', {
+        type:           'furniture',
+        endpoint:       '/api/admin/design-visit-furniture-ranges',
+        wrapId:         'dv-furniture-wrap',
+        targetId:       furnitureRow.id,
+        expectedPrefill: { name: FURNITURE_NAME, desc: FURNITURE_DESC },
+        assertExpected: `wrap contains "${FURNITURE_NAME_EDITED}" and "${FURNITURE_DESC_EDITED}"`,
+        assertObserved: t => `name=${t.includes(FURNITURE_NAME_EDITED)} desc=${t.includes(FURNITURE_DESC_EDITED)}`,
+        assertRow:      t => t.includes(FURNITURE_NAME_EDITED) && t.includes(FURNITURE_DESC_EDITED),
+        dbExpectedText: `name === "${FURNITURE_NAME_EDITED}" && description === "${FURNITURE_DESC_EDITED}"`,
+        dbExpected:     row => row.name === FURNITURE_NAME_EDITED && row.description === FURNITURE_DESC_EDITED,
+        dbProbe:        async () => {
+          const r = await pool.query(
+            `SELECT id, name, description FROM design_visit_furniture_ranges WHERE id=$1`,
+            [furnitureRow.id],
+          );
+          return r.rows[0] || null;
+        },
+        fillEdits: async (p) => {
+          await p.evaluate(({ name, desc }) => {
+            const n = document.querySelector('#dvie-name');
+            n.value = name;
+            n.dispatchEvent(new Event('input', { bubbles: true }));
+            const d = document.querySelector('#dvie-desc');
+            d.value = desc;
+            d.dispatchEvent(new Event('input', { bubbles: true }));
+          }, { name: FURNITURE_NAME_EDITED, desc: FURNITURE_DESC_EDITED });
+        },
+      });
+    } else {
+      record(
+        '[F/edit] seeded furniture row available for edit probe',
+        'furniture row exists in DB after add flow',
+        'add flow did not produce a furniture row to edit',
+        false,
+      );
+    }
+
     // ── (D) Door style ────────────────────────────────────────────────────────
     await runAddFlow('D', {
       addBtnLabel:     '+ Add style',
@@ -486,6 +740,50 @@ async function main() {
         }, { name: DOOR_NAME, url: DOOR_IMG_URL });
       },
     });
+
+    // ── (D) Door style — edit existing row ───────────────────────────────────
+    const doorRow = (await pool.query(
+      `SELECT id, name, image_url FROM design_visit_door_styles WHERE name=$1`,
+      [DOOR_NAME],
+    )).rows[0] || null;
+    if (doorRow) {
+      await runEditFlow('D', {
+        type:           'door-style',
+        endpoint:       '/api/admin/design-visit-door-styles',
+        wrapId:         'dv-door-styles-wrap',
+        targetId:       doorRow.id,
+        expectedPrefill: { name: DOOR_NAME, img: DOOR_IMG_URL },
+        assertExpected: `wrap contains "${DOOR_NAME_EDITED}" and the new image URL`,
+        assertObserved: t => `name=${t.includes(DOOR_NAME_EDITED)} url=${t.includes(DOOR_IMG_URL_EDITED)}`,
+        assertRow:      t => t.includes(DOOR_NAME_EDITED) && t.includes(DOOR_IMG_URL_EDITED),
+        dbExpectedText: `name === "${DOOR_NAME_EDITED}" && image_url === "${DOOR_IMG_URL_EDITED}"`,
+        dbExpected:     row => row.name === DOOR_NAME_EDITED && row.image_url === DOOR_IMG_URL_EDITED,
+        dbProbe:        async () => {
+          const r = await pool.query(
+            `SELECT id, name, image_url FROM design_visit_door_styles WHERE id=$1`,
+            [doorRow.id],
+          );
+          return r.rows[0] || null;
+        },
+        fillEdits: async (p) => {
+          await p.evaluate(({ name, url }) => {
+            const n = document.querySelector('#dvie-name');
+            n.value = name;
+            n.dispatchEvent(new Event('input', { bubbles: true }));
+            const i = document.querySelector('#dvie-img');
+            i.value = url;
+            i.dispatchEvent(new Event('input', { bubbles: true }));
+          }, { name: DOOR_NAME_EDITED, url: DOOR_IMG_URL_EDITED });
+        },
+      });
+    } else {
+      record(
+        '[D/edit] seeded door-style row available for edit probe',
+        'door-style row exists in DB after add flow',
+        'add flow did not produce a door-style row to edit',
+        false,
+      );
+    }
 
     await page.close();
   } finally {
@@ -543,6 +841,21 @@ async function writeReport(runId, findings) {
     '- **(H) Style dropdown persistence**: after saving the handle, the',
     '  follow-up `GET /api/admin/design-visit-handles` returns the row with',
     '  `style === "Bar"`, proving the dropdown value reached the database.',
+    '- **(H/F/D) Edit via modal**: for the row each add-flow just created:',
+    '  - `openDvItemEditor(type, id)` is called directly so the modal opens',
+    '    in edit mode for a known target id.',
+    '  - The Save button reads "Save" (not "Add") and the modal pre-fills',
+    '    the existing values (`#dvie-name`; plus `#dvie-style` for the',
+    '    handle — exercising the dropdown\'s "preserve existing value"',
+    '    branch — `#dvie-desc` for furniture, and `#dvie-img` for door',
+    '    styles).',
+    '  - With the PATCH held open via Puppeteer request interception,',
+    '    `#dvie-save.disabled === true` and its label flips to "Saving…".',
+    '  - After the response is released, the modal closes, the matching',
+    '    catalogue wrap refreshes with the edited values in place — without',
+    '    a full page reload (`window.__pageLoadToken` preserved) — and the',
+    '    DB row for the same id reflects the edit (`name`, plus `style` /',
+    '    `description` / `image_url`).',
     '',
     '## Notes',
     '',
