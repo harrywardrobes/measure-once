@@ -16,6 +16,11 @@
 //       hard cap (200 ms in this test via override), the endpoint must return
 //       502 instead of serving expired data.
 //
+//   (D) Recovery: once HubSpot comes back online after an outage the endpoint
+//       must fetch fresh data from HubSpot (not continue serving the stale
+//       snapshot) and cache the result so subsequent requests are served from
+//       memory without hitting HubSpot again.
+//
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:contacts-all-stale-fallback
 //   PRIVTEST_ALLOW_SHARED_DB=1 npm run test:contacts-all-stale-fallback
@@ -311,6 +316,44 @@ async function main() {
       bStale.json && Array.isArray(bStale.json.results) && bStale.json.results.length >= 1,
       `count=${bStale.json?.results?.length}`);
 
+    // ── (D) Recovery: HubSpot comes back online after an outage ───────────────
+    // State at this point: _allContactsCache is null (busted in A),
+    // _allContactsLastGood still holds the seeded data, mock was 'dropSocket'.
+    // Switch mock back to 'ok' and confirm the next request fetches fresh data
+    // instead of continuing to serve the stale snapshot.
+    console.log('\n  [D] HubSpot recovers → fresh cache replaces stale fallback');
+    mock.state.mode = 'ok';
+    mock.state.calls = [];
+
+    const dFresh = await httpGet(BASE, '/api/contacts-all', memberCookie);
+    const dSearchCalls = mock.state.calls.filter(c => c.url.startsWith('/crm/v3/objects/contacts/search'));
+
+    record('D.1 endpoint returns 200 after recovery',
+      dFresh.status === 200,
+      `status=${dFresh.status} body=${dFresh.body.slice(0, 120)}`);
+    record('D.2 X-Cache-Status is not stale (fresh response)',
+      dFresh.headers['x-cache-status'] !== 'stale',
+      `x-cache-status=${dFresh.headers['x-cache-status'] ?? '(absent)'}`);
+    record('D.3 contacts present in fresh response',
+      dFresh.json && Array.isArray(dFresh.json.results) && dFresh.json.results.length >= 1,
+      `count=${dFresh.json?.results?.length}`);
+    record('D.4 HubSpot was actually called (not short-circuited to stale)',
+      dSearchCalls.length > 0 && dSearchCalls.every(c => c.status === 200),
+      `calls=${dSearchCalls.length} statuses=${dSearchCalls.map(c => c.status).join(',')}`);
+
+    // Subsequent request should be served from the refreshed in-memory cache
+    // without hitting HubSpot again.
+    mock.state.calls = [];
+    const dCached = await httpGet(BASE, '/api/contacts-all', memberCookie);
+    const dCachedSearchCalls = mock.state.calls.filter(c => c.url.startsWith('/crm/v3/objects/contacts/search'));
+
+    record('D.5 follow-up request returns 200 from in-memory cache',
+      dCached.status === 200,
+      `status=${dCached.status}`);
+    record('D.6 follow-up request does not hit HubSpot (served from fresh cache)',
+      dCachedSearchCalls.length === 0,
+      `search calls=${dCachedSearchCalls.length}`);
+
     // ── (C) Stale cap exceeded → 502 ──────────────────────────────────────────
     // Server 2 uses ALL_CONTACTS_STALE_MAX_MS_OVERRIDE=200 (200 ms stale cap).
     // Seed _allContactsLastGood on server 2 via a successful fetch.
@@ -399,6 +442,11 @@ async function writeReport(runId) {
     '- **(C) Stale cap exceeded → 502**: when the stale snapshot is older than',
     '  the hard cap (exercised via `ALL_CONTACTS_STALE_MAX_MS_OVERRIDE=200`),',
     '  the endpoint must return 502 rather than serving an arbitrarily-old list.',
+    '- **(D) Recovery after outage**: once the mock HubSpot server comes back',
+    '  online after returning socket-drop errors, `GET /api/contacts-all` must',
+    '  fetch fresh data from HubSpot (X-Cache-Status not `stale`), cache the',
+    '  result, and serve subsequent requests from memory without re-calling',
+    '  HubSpot.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
