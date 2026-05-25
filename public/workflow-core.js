@@ -222,16 +222,29 @@ async function loadAllContacts() {
   let page = 1;
   const limit = 100;
   let totalPages = 1;
+  let detectedStale = false;
   do {
     const qs = new URLSearchParams({ page, limit });
-    const data = await GET(`/api/contacts-all?${qs}`);
-    allResults.push(...(data.results || []));
-    totalPages = data.totalPages || 1;
+    const url = `/api/contacts-all?${qs}`;
+    if (page === 1) {
+      const r = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+      if (r.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) { const err = new Error(data.error || `HTTP ${r.status}`); if (data.code) err.code = data.code; throw err; }
+      if ((r.headers.get('X-Cache-Status') || '').toLowerCase() === 'stale') detectedStale = true;
+      allResults.push(...(data.results || []));
+      totalPages = data.totalPages || 1;
+    } else {
+      const data = await GET(url);
+      allResults.push(...(data.results || []));
+      totalPages = data.totalPages || 1;
+    }
     page++;
   } while (page <= totalPages);
   state.contacts = allResults;
   _reapplyPendingLeadStatuses();
   state.filteredContacts = [...state.contacts];
+  document.dispatchEvent(new CustomEvent('sales-board-cache-status', { detail: { stale: detectedStale } }));
 }
 
 async function loadContactsPage({ page = 1, leadStatus = '', sort = 'newest' } = {}) {

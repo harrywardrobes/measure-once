@@ -822,6 +822,19 @@ export function SalesBoardPage() {
     return () => document.removeEventListener('sales-board-bootstrap-failed', onBootstrapFail);
   }, []);
 
+  // Stale-data Snackbar — shown when loadAllContacts detects X-Cache-Status: stale.
+  // Clears automatically when the next load returns fresh data (detail.stale === false).
+  // Auto-dismisses after 10 s and can also be closed manually.
+  const [staleData, setStaleData] = useState(false);
+  useEffect(() => {
+    const onCacheStatus = (e: Event) => {
+      const detail = (e as CustomEvent<{ stale: boolean }>).detail;
+      setStaleData(detail?.stale === true);
+    };
+    document.addEventListener('sales-board-cache-status', onCacheStatus);
+    return () => document.removeEventListener('sales-board-cache-status', onCacheStatus);
+  }, []);
+
   useEffect(() => {
     const onReady = () => {
       setBootstrapFailed(false);
@@ -1077,6 +1090,22 @@ export function SalesBoardPage() {
         sx={{ minWidth: 280 }}
       >
         Couldn&apos;t refresh live data — fresh results will load on your next visit
+      </Alert>
+    </Snackbar>
+
+    <Snackbar
+      open={staleData}
+      autoHideDuration={10000}
+      onClose={() => setStaleData(false)}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+    >
+      <Alert
+        severity="info"
+        onClose={() => setStaleData(false)}
+        variant="filled"
+        sx={{ minWidth: 280 }}
+      >
+        Showing cached data — live results will load when HubSpot recovers
       </Alert>
     </Snackbar>
     </>
