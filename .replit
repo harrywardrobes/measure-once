@@ -76,4 +76,4 @@ APP_URL = "https://handle.harrywardrobes.co.uk"
 
 [postMerge]
 path = "scripts/post-merge.sh"
-timeoutMs = 120000
+timeoutMs = 180000

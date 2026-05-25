@@ -5319,6 +5319,41 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
   });
 
+  // Warn when the React bundle is older than any source file it was built from.
+  // This catches stale bundles in development (e.g. after a git pull without
+  // running build:react).  Skipped in production where the build step always
+  // runs before deployment.
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      const bundleEntry = path.join(__dirname, 'public', 'react', 'main.js');
+      if (fs.existsSync(bundleEntry)) {
+        const bundleMtime = fs.statSync(bundleEntry).mtimeMs;
+        const srcDir = path.join(__dirname, 'src', 'react');
+        let newestSrcMtime = 0;
+        let newestSrcFile = '';
+        (function scanDir(dir) {
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              scanDir(full);
+            } else if (/\.(ts|tsx|css)$/.test(entry.name)) {
+              const mtime = fs.statSync(full).mtimeMs;
+              if (mtime > newestSrcMtime) { newestSrcMtime = mtime; newestSrcFile = full; }
+            }
+          }
+        })(srcDir);
+        if (newestSrcMtime > bundleMtime) {
+          const rel = path.relative(__dirname, newestSrcFile);
+          console.warn(`[STALE BUNDLE] public/react/main.js is older than ${rel} — run npm run build:react`);
+        }
+      } else {
+        console.warn('[STALE BUNDLE] public/react/main.js not found — run npm run build:react');
+      }
+    } catch (e) {
+      // Non-fatal: a warning failure must not prevent startup.
+    }
+  }
+
   app.listen(PORT, HOST, async () => {
     console.log(`\n  Measure Once`);
     console.log(`  Running at: http://localhost:${PORT}\n`);
