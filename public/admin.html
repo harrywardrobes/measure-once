@@ -460,7 +460,7 @@
       ? `null,null,${Number(slot.substatus_id)}`
       : `${JSON.stringify(String(slot.stage_key))},${JSON.stringify(String(slot.status_key))},null`;
     const fixBtn = `<button type="button" class="ca-fix-conflict-btn"
-      onclick="openConflictResolver(${slotArg})"
+      onclick="openConflictResolver(${esc(slotArg)})"
       title="Multiple handlers are bound to this slot — click to resolve"
       style="display:inline-flex;align-items:center;gap:3px;padding:1px 8px;margin-left:4px;
         background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:999px;
@@ -903,6 +903,15 @@
     } catch (_) {}
   }
 
+  // Per-page-load nonce so the card_action_handlers_changed listener below
+  // can ignore messages this tab posted itself. Each mutation site
+  // (openHandlerEditor save, deleteHandler, openConflictResolver Remove)
+  // already calls loadCardActionHandlersAdmin() synchronously before broadcasting,
+  // so a same-tab echo would just trigger a redundant re-render. That redundant
+  // re-render races _flashResolvedBadge() (wiping the "✓ Resolved" pill before
+  // it's visible) and the in-flight refreshHandlerConflictsBanner() update.
+  const _cahBroadcastNonce = Math.random().toString(36).slice(2);
+  window._cahBroadcastNonce = _cahBroadcastNonce;
   // Cross-tab sync: when the Lead Statuses panel is changed in another tab,
   // refresh the card action labels here so the order stays in lock-step.
   if (typeof BroadcastChannel !== 'undefined') {
@@ -915,7 +924,8 @@
     // refresh _handlersData so the per-row badges in the labels table stay
     // in sync. loadCardActionHandlersAdmin() also re-renders the table.
     try {
-      new BroadcastChannel('card_action_handlers_changed').addEventListener('message', () => {
+      new BroadcastChannel('card_action_handlers_changed').addEventListener('message', (ev) => {
+        if (ev && ev.data && ev.data.src === _cahBroadcastNonce) return;
         if (document.getElementById('card-action-handlers-wrap')) {
           loadCardActionHandlersAdmin();
         }
@@ -1055,7 +1065,11 @@
           : `Sub-status #${c.substatus_id}`;
         args = `null, null, ${Number(c.substatus_id)}`;
       } else {
-        const ls = (_leadStatusesData || []).find(s => s.key === c.status_key);
+        // lead_status_config.key is stored uppercase but bindings/conflicts can
+        // surface the status_key in lowercase (matching the binding row).
+        // Compare case-insensitively so the banner still resolves the LSC label.
+        const ck = String(c.status_key || '').toLowerCase();
+        const ls = (_leadStatusesData || []).find(s => String(s.key || '').toLowerCase() === ck);
         const lsLbl = ls ? (ls.label || ls.key) : c.status_key;
         slotDesc = `${esc(c.stage_key)} / ${esc(lsLbl)}`;
         args = `${JSON.stringify(String(c.stage_key || ''))}, ${JSON.stringify(String(c.status_key || ''))}, null`;
@@ -1490,7 +1504,7 @@
         }
         wrap.remove();
         await loadCardActionHandlersAdmin();
-        try { new BroadcastChannel('card_action_handlers_changed').postMessage({ ts: Date.now() }); } catch (_) {}
+        try { new BroadcastChannel('card_action_handlers_changed').postMessage({ ts: Date.now(), src: _cahBroadcastNonce }); } catch (_) {}
         toast(existing ? 'Action updated.' : 'Action added.');
       } catch (e) {
         errEl.textContent = e.message || 'Save failed.';
@@ -1533,7 +1547,7 @@
     try {
       await api('DELETE', `/api/admin/card-action-handlers/${id}`);
       await loadCardActionHandlersAdmin();
-      try { new BroadcastChannel('card_action_handlers_changed').postMessage({ ts: Date.now() }); } catch (_) {}
+      try { new BroadcastChannel('card_action_handlers_changed').postMessage({ ts: Date.now(), src: _cahBroadcastNonce }); } catch (_) {}
       toast('Action removed.');
     } catch (e) {
       toast('Remove failed: ' + e.message, true);
@@ -1643,7 +1657,7 @@
       try {
         await api('DELETE', `/api/admin/card-action-handlers/${id}`);
         await loadCardActionHandlersAdmin();
-        try { new BroadcastChannel('card_action_handlers_changed').postMessage({ ts: Date.now() }); } catch (_) {}
+        try { new BroadcastChannel('card_action_handlers_changed').postMessage({ ts: Date.now(), src: _cahBroadcastNonce }); } catch (_) {}
         toast('Handler removed.');
         // If only one handler remains, close the modal; otherwise re-check.
         const remaining = _handlersForSlot(slot);

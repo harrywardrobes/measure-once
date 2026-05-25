@@ -1480,27 +1480,37 @@ async function main() {
       fixBtnGone === 'gone',
     );
 
-    // (D.banner-3) Once the duplicate is removed,
-    // refreshHandlerConflictsBanner() (called from loadCardActionHandlersAdmin
-    // inside the resolver) must hide the banner: display becomes 'none' and
-    // its innerHTML is cleared.  Poll because the refresh runs async.
-    const bannerHidden = await pollPage(
+    // (D.banner-3) Once the duplicate is removed, the banner must no longer
+    // reference our seeded slot. The banner may still be visible if the shared
+    // DB has unrelated pre-existing conflicts from other (broken) probes, so
+    // we assert per-slot rather than globally: either the banner is hidden
+    // and empty, OR it remains visible but no longer mentions our slot label
+    // or either seeded handler name.
+    const bannerCleared = await pollPage(
       conflictAdminTab,
-      () => {
+      ({ slotLabel, nameA, nameB }) => {
         const banner = document.getElementById('card-action-handlers-conflict-banner');
         if (!banner) return 'missing';
-        if (banner.style.display !== 'none') return null;
-        if (banner.innerHTML.trim() !== '') return null;
-        return 'hidden';
+        const hidden = banner.style.display === 'none' && banner.innerHTML.trim() === '';
+        if (hidden) return 'hidden';
+        const text = banner.textContent || '';
+        if (text.includes(slotLabel) || text.includes(nameA) || text.includes(nameB)) {
+          return null;
+        }
+        return 'cleared';
       },
-      null,
+      {
+        slotLabel: 'PrivTest Conflict Status',
+        nameA: HANDLER_NAME_CONFLICT_A,
+        nameB: HANDLER_NAME_CONFLICT_B,
+      },
       6000,
     );
     record(
-      '(D.banner-3) conflict banner disappears after the duplicate is removed',
-      '#card-action-handlers-conflict-banner has display:none and empty innerHTML',
-      `result=${bannerHidden}`,
-      bannerHidden === 'hidden',
+      '(D.banner-3) conflict banner no longer references the resolved slot',
+      '#card-action-handlers-conflict-banner is hidden, OR visible but free of the seeded slot label + both seeded handler names',
+      `result=${bannerCleared}`,
+      bannerCleared === 'hidden' || bannerCleared === 'cleared',
     );
 
     await conflictAdminTab.close();
