@@ -487,16 +487,15 @@ async function main() {
         const viewerPage = await newPageWithSession(browser, viewerClient.cookie);
         await viewerPage.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 25000 });
         await waitForCustomersMounted(viewerPage);
-        // Give useIsViewer's async /api/auth/user fetch + body class observer
-        // time to settle before sampling.
+        // Give useIsViewer's async /api/auth/user fetch time to settle
+        // before sampling.
         await new Promise(r => setTimeout(r, 800));
         const viewerSnap = await viewerPage.evaluate(() => ({
           hasButton: !!document.getElementById('new-customer-btn'),
-          viewerMode: document.body.classList.contains('viewer-mode'),
         }));
         record(UI_LABELS[6],
           'no #new-customer-btn in the rendered page for viewer',
-          `hasButton=${viewerSnap.hasButton}, viewerMode=${viewerSnap.viewerMode}`,
+          `hasButton=${viewerSnap.hasButton}`,
           viewerSnap.hasButton === false);
         await closePage(viewerPage);
       } finally {

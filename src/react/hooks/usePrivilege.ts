@@ -19,11 +19,9 @@ type UsePrivilegeResult = {
 /**
  * Returns the current user's privilege level and convenience booleans.
  * Reads from the user object published by core.js via `window.__moHeaderUser`
- * and the `mo:user` window event — never from body-class checks.
+ * and the `mo:user` window event.
  *
  * Use this in all React components that need to gate on privilege.
- * Body-class checks (`document.body.classList.contains('viewer-mode')`) and
- * `data-*` attribute selectors are reserved for legacy vanilla-JS pages only.
  */
 export function usePrivilege(): UsePrivilegeResult {
   const [privilegeLevel, setPrivilegeLevel] = useState<string>(() => readPrivilegeLevel());

@@ -1031,18 +1031,8 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
-    // Let bootstrap() in customer-detail.html run so viewer-mode body class
-    // is applied (core.js line 337).
+    // Wait for the page bootstrap to settle before injecting the test mounts.
     await new Promise(r => setTimeout(r, 900));
-
-    const viewerModeApplied = await viewerTab.evaluate(() =>
-      document.body.classList.contains('viewer-mode'));
-    record(
-      'viewer login applies viewer-mode body class on /customers/:id',
-      'document.body.classList contains "viewer-mode"',
-      `viewerMode=${viewerModeApplied}`,
-      viewerModeApplied,
-    );
 
     // Re-establish the workflow-header mount + contact state and render the
     // pill (mirrors what the real page does after selectContact() succeeds).
@@ -1194,9 +1184,8 @@ async function writeReport(runId, findings) {
     '  label. Exercises `_renderWorkflowHeaderImpl` lines 820–823 of',
     '  `customer-detail.js`.',
     '- **(G) Viewer role — read-only pill**: logs in as the seeded viewer-role user',
-    '  in an isolated browser context, navigates to `/customers/:id`, asserts that',
-    '  `bootstrap()` applied the `viewer-mode` body class, re-renders the workflow',
-    '  header, and asserts that the `.lead-status-badge` pill does NOT have class',
+    '  in an isolated browser context, navigates to `/customers/:id`, re-renders the',
+    '  workflow header, and asserts that the `.lead-status-badge` pill does NOT have class',
     '  `lsb-clickable` and has no `onclick` handler. Clicks the pill anyway and',
     '  confirms `#card-picker-popup` never appears. Regression guard for the',
     '  `canEditPipeline()` gate in `_renderWorkflowHeaderImpl`',
