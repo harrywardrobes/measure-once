@@ -20,28 +20,29 @@ import { resolve } from 'path';
  * small shared UI shell (GlobalHeader, BottomNav, PageHeadingPanel,
  * AppThemeProvider, IslandErrorBoundary).
  *
- * Always-loaded chunks (every page, confirmed via bundle analysis):
- *   main.js           mount detection + shell UI      ~9 kB gzip
- *   vendor-react      react + react-dom + scheduler  ~46 kB gzip
- *   vendor-emotion    @emotion/* styling engine       ~11 kB gzip
- *   vendor-mui        @mui/material + system + base ~104 kB gzip
- *   vendor-mui-icons  icons used by GlobalHeader       ~5 kB gzip
- *                     and BottomNav (always present)
- *                     ─────────────────────────────────────────
- *                     TOTAL always-loaded            ~175 kB gzip
+ * Always-loaded chunks (every page):
+ *   main.js            mount detection + shell UI
+ *   vendor-*           react + react-dom + scheduler + @emotion/* + @mui/*
+ *                      (Rollup currently folds these into one combined chunk)
+ *   vendor-mui-icons-* icons used by GlobalHeader and BottomNav
  *
- * Splitting into three vendor chunks (vendor-react / vendor-emotion /
- * vendor-mui) gives tighter cache boundaries: a MUI patch release only
- * busts vendor-mui (~95 kB) rather than the entire ~160 kB vendor blob.
- * Dependency order (react → emotion → mui) is acyclic so Rollup does not
- * emit circular-chunk warnings.
+ * Real gzip sizes are measured automatically after every build by
+ * scripts/check-bundle-sizes.mjs, which also enforces per-chunk thresholds
+ * and exits non-zero on regressions. Run `npm run bundle-sizes` to see the
+ * latest table without rebuilding.
+ *
+ * Splitting vendor code into named chunks (vendor-* / vendor-mui-icons /
+ * vendor-zxcvbn) gives tighter cache boundaries so a MUI patch release only
+ * busts the vendor blob rather than main.js or page chunks. Dependency order
+ * (react → emotion → mui) is acyclic so Rollup does not emit circular-chunk
+ * warnings.
  *
  * Lazy chunks (downloaded only when needed):
- *   vendor-zxcvbn     zxcvbn password-strength library (~819 kB / 398 kB
- *                     gzip). Kept in its own named chunk for cacheability.
- *                     Never preloaded by main.js. Loaded on demand inside
- *                     ProfilePage via loadZxcvbn() — fires only when the
- *                     user types into a password field.
+ *   vendor-zxcvbn     zxcvbn password-strength library. Kept in its own
+ *                     named chunk for cacheability. Never preloaded by
+ *                     main.js. Loaded on demand inside ProfilePage via
+ *                     loadZxcvbn() — fires only when the user types into a
+ *                     password field.
  *   chunks/<page>-*   one chunk per lazily-imported page component
  *                     (Rollup creates these automatically from React.lazy()
  *                     calls in main.tsx; no manual grouping needed)
