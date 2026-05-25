@@ -159,10 +159,19 @@ const CONTACTS_SEARCH_SUCCESS = {
 // makes the test fail for real if `fetchAllContactsShared` omits a property
 // from ALL_CONTACTS_PROPERTIES — the contact entry won't carry that field and
 // the mapping assertions below will catch the gap.
+//
+// The mock exposes a `state.mode` string that controls which fixture body is
+// returned for search requests:
+//
+//   'normal'         — full contacts fixture (default)
+//   'empty-results'  — { results: [] }
+//   'no-results-key' — {}  (results key absent)
+//   'null-results'   — { results: null }
 
 function startMockHubspot() {
   // { method, url, requestedProperties, at } — one entry per search call.
   const calls = [];
+  const state  = { mode: 'normal' };
 
   const server = http.createServer((req, res) => {
     let raw = '';
@@ -175,6 +184,21 @@ function startMockHubspot() {
         try { body = raw ? JSON.parse(raw) : {}; } catch {}
         const requestedProps = Array.isArray(body.properties) ? body.properties : [];
 
+        calls.push({ method: req.method, url, requestedProperties: requestedProps, at: Date.now() });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+
+        // ── Empty-response fixture variants ─────────────────────────────────
+        if (state.mode === 'empty-results') {
+          return res.end(JSON.stringify({ results: [] }));
+        }
+        if (state.mode === 'no-results-key') {
+          return res.end(JSON.stringify({}));
+        }
+        if (state.mode === 'null-results') {
+          return res.end(JSON.stringify({ results: null }));
+        }
+
+        // ── Normal fixture (default) ─────────────────────────────────────────
         // Filter each contact's properties to only the requested fields.
         // An empty requestedProps list means the server requested nothing, so
         // nothing is returned — which causes the field-presence assertions to
@@ -199,8 +223,6 @@ function startMockHubspot() {
           };
         });
 
-        calls.push({ method: req.method, url, requestedProperties: requestedProps, at: Date.now() });
-        res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ results: filteredResults, paging: null }));
       }
 
@@ -214,7 +236,7 @@ function startMockHubspot() {
 
   return new Promise(resolve => {
     server.listen(0, '127.0.0.1', () => {
-      resolve({ server, port: server.address().port, calls });
+      resolve({ server, port: server.address().port, calls, state });
     });
   });
 }
@@ -558,6 +580,67 @@ async function main() {
       firstReqProps.includes('mobilephone'),
     );
   }
+
+  // ── (C11–C13) Empty HubSpot response variants ────────────────────────────
+  //
+  // These three cases verify that `fetchAllContactsShared` does not throw when
+  // HubSpot returns a body with no usable results, and that the phone-directory
+  // endpoint responds 200 with an empty customers array in each case.
+  //
+  // We reuse the same Express server instance; the contacts cache is busted
+  // between each variant so the next request triggers a fresh HubSpot search
+  // against the reconfigured mock.
+  //
+  // Variants:
+  //   C11 — { results: [] }   (empty array — no contacts at all)
+  //   C12 — {}                (results key absent — `r.data.results` is undefined)
+  //   C13 — { results: null } (explicit null — `r.data.results || []` guard)
+
+  const emptyVariants = [
+    { name: 'C11', label: '{ results: [] }',   mode: 'empty-results'  },
+    { name: 'C12', label: '{}',                mode: 'no-results-key' },
+    { name: 'C13', label: '{ results: null }', mode: 'null-results'   },
+  ];
+
+  for (const variant of emptyVariants) {
+    console.log(`\n  [${variant.name}] HubSpot returns ${variant.label}`);
+
+    mock.state.mode = variant.mode;
+
+    const bust = await adminClient.post('/api/admin/test/bust-contacts-cache', {});
+    record(
+      `${variant.name}: bust-contacts-cache succeeds`,
+      '200 ok=true',
+      `status=${bust.status} ok=${bust.json?.ok}`,
+      bust.status === 200 && bust.json?.ok === true,
+    );
+
+    const emptyResp = await adminClient.get('/api/admin/phone-directory');
+    record(
+      `${variant.name}: phone-directory returns 200 when HubSpot returns ${variant.label}`,
+      '200',
+      `${emptyResp.status}`,
+      emptyResp.status === 200,
+    );
+
+    const emptyDir = emptyResp.json;
+    const emptyCustomers = emptyDir?.customers;
+    record(
+      `${variant.name}: customers is an Array`,
+      'Array',
+      Array.isArray(emptyCustomers) ? `Array(${emptyCustomers.length})` : typeof emptyCustomers,
+      Array.isArray(emptyCustomers),
+    );
+    record(
+      `${variant.name}: customers array is empty`,
+      'length=0',
+      `length=${Array.isArray(emptyCustomers) ? emptyCustomers.length : 'n/a'}`,
+      Array.isArray(emptyCustomers) && emptyCustomers.length === 0,
+    );
+  }
+
+  // Restore mock to normal mode so any subsequent teardown calls do not fail.
+  mock.state.mode = 'normal';
 
   // ── Summary ───────────────────────────────────────────────────────────────
   const passed = findings.filter(f => f.ok).length;
