@@ -6,511 +6,16 @@
   <title>Admin · Measure Once</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    .header-icon-btn, .cp-hint-bar { display: none !important; }
-    /* ── Admin-specific layout ── */
-    body { min-height: 100vh; }
-
-    .page { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
-    .page-title { font-size: 1.25rem; font-weight: 700; margin: 0 0 2px; }
-    .page-sub { color: var(--ink-3); font-size: .88rem; margin: 0 0 22px; }
-
-    /* ── Tabs ── */
-    .tabs {
-      display: flex;
-      gap: 2px;
-      border-bottom: 2px solid var(--stone);
-      margin-bottom: 24px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      -webkit-overflow-scrolling: touch;
-    }
-    .tab-btn {
-      padding: 9px 16px;
-      font-size: .82rem;
-      font-weight: 600;
-      color: var(--ink-3);
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-family: inherit;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -2px;
-      border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-      transition: color .15s, background .15s;
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-    .tab-btn:hover { color: var(--ink-1); background: var(--stone-soft); }
-    .tab-btn.active { color: var(--plum); border-bottom-color: var(--plum); }
-
-    .tab-badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 18px;
-      height: 18px;
-      padding: 0 5px;
-      background: var(--orchid);
-      color: #fff;
-      border-radius: var(--radius-pill);
-      font-size: .65rem;
-      font-weight: 700;
-      margin-left: 5px;
-    }
-    .tab-panel { display: none; }
-    .tab-panel.active { display: block; }
-
-    /* ── Card ── */
-    .card {
-      background: var(--chalk);
-      border: 1px solid var(--stone);
-      border-radius: var(--radius-lg);
-      padding: 20px;
-      margin-bottom: 20px;
-      box-shadow: var(--shadow-sm);
-    }
-    .card-title {
-      font-size: .75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      color: var(--ink-3);
-      margin: 0 0 16px;
-    }
-    .card-count { font-weight: 400; color: var(--ink-4); }
-
-    /* ── Table ── */
-    table { width: 100%; border-collapse: collapse; font-size: .875rem; }
-    th {
-      text-align: left;
-      padding: 8px 12px;
-      font-size: .72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      color: var(--ink-4);
-      border-bottom: 1px solid var(--stone);
-    }
-    td {
-      padding: 11px 12px;
-      border-bottom: 1px solid var(--stone-soft);
-      vertical-align: middle;
-    }
-    tr:last-child td { border-bottom: none; }
-    .table-empty {
-      text-align: center;
-      padding: 28px;
-      color: var(--ink-4);
-      font-style: italic;
-      font-size: .875rem;
-    }
-
-    /* ── Privilege level badges ── */
-    .lvl {
-      display: inline-block;
-      padding: 2px 9px;
-      border-radius: var(--radius-pill);
-      font-size: .7rem;
-      font-weight: 700;
-      text-transform: capitalize;
-      letter-spacing: .02em;
-    }
-    .lvl-viewer  { background: #f3f4f6; color: #6b7280; }
-    .lvl-member  { background: #e5e7eb; color: #374151; }
-    .lvl-manager { background: #6b7280; color: #fff; }
-    .lvl-admin   { background: #111827; color: #fff; }
-
-    /* ── Status badges ── */
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: var(--radius-pill);
-      font-size: .7rem;
-      font-weight: 600;
-      text-transform: capitalize;
-    }
-    .badge-pending  { background: #fef3c7; color: #92400e; }
-    .badge-approved { background: #dcfce7; color: #166534; }
-    .badge-rejected { background: #fee2e2; color: #991b1b; }
-
-    /* ── Avatar ── */
-    .avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-    .avatar-placeholder {
-      width: 28px; height: 28px;
-      border-radius: 50%;
-      background: var(--stone);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: .68rem;
-      font-weight: 700;
-      color: var(--ink-3);
-      flex-shrink: 0;
-    }
-    .user-cell { display: flex; align-items: center; gap: 10px; }
-    .user-cell-name { font-weight: 600; font-size: .875rem; }
-    .user-cell-role { font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
-
-    /* ── Buttons ── */
-    .btn {
-      border: 1px solid transparent;
-      border-radius: var(--radius-sm);
-      padding: 8px 16px;
-      font-size: .88rem;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: inherit;
-      transition: background .15s, opacity .15s;
-      white-space: nowrap;
-    }
-    .btn:disabled { opacity: .55; cursor: not-allowed; }
-    .btn-primary { background: var(--plum); color: #fff; }
-    .btn-primary:hover:not(:disabled) { background: #2e0f5a; }
-    .btn-danger  { background: var(--chalk); color: #991b1b; border-color: #fecaca; }
-    .btn-danger:hover:not(:disabled)  { background: #fee2e2; }
-    .btn-ghost   { background: var(--chalk); color: var(--ink-2); border-color: var(--stone); }
-    .btn-ghost:hover:not(:disabled)   { background: var(--stone-soft); }
-    .btn-approve { background: #059669; color: #fff; border: none; }
-    .btn-approve:hover:not(:disabled) { background: #047857; }
-    .btn-reject  { background: var(--chalk); color: #991b1b; border-color: #fecaca; }
-    .btn-reject:hover:not(:disabled)  { background: #fee2e2; }
-
-    /* ── Field inputs ── */
-    .field {
-      border: 1px solid var(--stone);
-      border-radius: var(--radius-sm);
-      padding: 6px 10px;
-      font-size: .82rem;
-      font-family: inherit;
-      color: var(--ink-1);
-      background: #fff;
-      outline: none;
-      transition: border-color .15s;
-    }
-    .field:focus { border-color: var(--orchid); }
-
-    /* ── Inline edit row ── */
-    .edit-row td { background: var(--stone-soft); padding: 10px 12px; }
-    .edit-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .edit-label { font-size: .72rem; font-weight: 700; color: var(--ink-3); white-space: nowrap; }
-
-    /* ── Actions ── */
-    .actions { display: flex; gap: 6px; justify-content: flex-end; }
-
-    /* ── Permissions matrix ── */
-    .matrix-wrap { overflow-x: auto; }
-    .matrix { width: 100%; border-collapse: collapse; font-size: .82rem; }
-    .matrix th {
-      text-align: center;
-      padding: 10px 14px;
-      font-size: .72rem;
-      white-space: nowrap;
-    }
-    .matrix th.feat-col {
-      text-align: left;
-      color: var(--ink-2);
-      font-weight: 600;
-      text-transform: none;
-      letter-spacing: 0;
-      font-size: .875rem;
-      min-width: 220px;
-    }
-    .matrix td {
-      text-align: center;
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--stone-soft);
-    }
-    .matrix td.feat-name { text-align: left; font-weight: 500; color: var(--ink-2); }
-    .matrix td.feat-desc {
-      font-weight: 400;
-      font-size: .78rem;
-      color: var(--ink-4);
-      display: block;
-      margin-top: 1px;
-    }
-    .matrix-head { background: var(--stone-soft); }
-    .matrix tr:last-child td { border-bottom: none; }
-    .tick  { color: #059669; font-size: 1rem; }
-    .cross { color: var(--stone-deep); font-size: 1rem; }
-    .matrix-group td, .matrix-group th {
-      background: var(--stone-soft);
-      font-size: .68rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .07em;
-      color: var(--ink-4);
-      padding: 6px 14px;
-      text-align: left;
-    }
-
-    /* ── Job roles manager ── */
-    .roles-add-form { display: flex; gap: 8px; margin-bottom: 14px; }
-    .roles-add-form .field { flex: 1; }
-    .roles-add-form select.field { flex: 0 0 auto; width: 130px; }
-    .roles-list  { display: flex; flex-direction: column; min-height: 32px; }
-    .roles-empty { color: var(--ink-4); font-style: italic; font-size: .875rem; padding: 6px 0; }
-    .role-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 7px 0;
-      border-bottom: 1px solid var(--stone);
-    }
-    .role-row:last-child { border-bottom: none; }
-    .role-row-name {
-      flex: 1; font-size: .88rem; font-weight: 600; color: var(--ink-1);
-    }
-    .role-row-select { width: 130px; flex-shrink: 0; }
-    .role-del {
-      background: none; border: none; color: var(--ink-4);
-      cursor: pointer; padding: 0; line-height: 1;
-      font-size: .9rem; font-weight: 700;
-      transition: color .1s; font-family: inherit;
-    }
-    .role-del:hover { color: #991b1b; }
-
-    /* ── Toast ── */
-    .toast {
-      position: fixed;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--plum);
-      color: #fff;
-      padding: 10px 18px;
-      border-radius: var(--radius-md);
-      font-size: .875rem;
-      font-weight: 500;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity .2s;
-      z-index: 1000;
-      white-space: nowrap;
-    }
-    .toast.show { opacity: 1; }
-    .toast.err  { background: #991b1b; }
-
-    /* ── States ── */
-    .audit-feed { display: flex; flex-direction: column; gap: 0; }
-    .audit-entry {
-      display: grid;
-      grid-template-columns: 160px 1fr;
-      gap: 0 16px;
-      padding: 11px 0;
-      border-bottom: 1px solid var(--stone-soft);
-      font-size: .82rem;
-      align-items: start;
-    }
-    .audit-entry:last-child { border-bottom: none; }
-    .audit-time {
-      color: var(--ink-4);
-      font-size: .75rem;
-      white-space: nowrap;
-      padding-top: 1px;
-    }
-    .audit-body { display: flex; flex-direction: column; gap: 2px; }
-    .audit-action { font-weight: 600; color: var(--ink-1); }
-    .audit-meta { font-size: .75rem; color: var(--ink-3); }
-    .audit-chip {
-      display: inline-block;
-      padding: 1px 7px;
-      border-radius: var(--radius-pill);
-      font-size: .68rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .04em;
-      margin-right: 4px;
-    }
-    .chip-approve_request   { background: #dcfce7; color: #166534; }
-    .chip-reject_request    { background: #fee2e2; color: #991b1b; }
-    .chip-add_allowed_email { background: #dbeafe; color: #1e40af; }
-    .chip-revoke_allowed_email { background: #fef3c7; color: #92400e; }
-    .chip-edit_user_profile { background: #ede0ff; color: #3d0f7a; }
-    .chip-add_job_role      { background: #f0fdf4; color: #166534; }
-    .chip-delete_job_role   { background: #fff7ed; color: #9a3412; }
-    .chip-edit_permissions  { background: #ede0ff; color: #3d0f7a; }
-
-    /* ── Trades audit badge ── */
-    .trades-audit-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: var(--radius-pill);
-      background: var(--plum-soft, #ede0ff);
-      color: var(--plum, #3d0f7a);
-      font-size: .72rem;
-      font-weight: 600;
-      white-space: nowrap;
-    }
-
-    /* ── Add member form ── */
-    .form-section-label {
-      font-size: .72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      color: var(--ink-4);
-      margin: 18px 0 10px;
-      padding-bottom: 6px;
-      border-bottom: 1px solid var(--stone);
-    }
-    .form-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-      gap: 10px;
-    }
-    .form-field-wrap { display: flex; flex-direction: column; gap: 4px; }
-    .form-field-wrap label { font-size: .72rem; font-weight: 600; color: var(--ink-3); }
-    .opt { font-weight: 400; color: var(--ink-4); text-transform: none; letter-spacing: 0; }
-    .form-actions { margin-top: 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .invite-err { font-size: .8rem; color: #991b1b; }
-    .app-header .nav-btn { font-size: .8rem; }
-
-    /* ── Offline checklist reminder ── */
-    .checklist-box {
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      border-radius: var(--radius-lg);
-      padding: 16px 18px;
-      margin-top: 22px;
-    }
-    .checklist-box-title {
-      font-size: .78rem;
-      font-weight: 700;
-      color: #92400e;
-      margin: 0 0 12px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .checklist-cols {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 12px 20px;
-    }
-    .checklist-group-title {
-      font-size: .72rem;
-      font-weight: 700;
-      color: #78350f;
-      margin: 0 0 5px;
-    }
-    .checklist-items { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 3px; }
-    .checklist-items li {
-      font-size: .78rem;
-      color: #92400e;
-      padding-left: 14px;
-      position: relative;
-      line-height: 1.4;
-    }
-    .checklist-items li::before { content: '•'; position: absolute; left: 0; color: #d97706; }
-    .checklist-items li span { color: #78350f; font-weight: 400; display: block; font-size: .72rem; opacity: .85; }
-
-    /* ── Edit user modal ── */
-    .modal-overlay {
-      position: fixed; inset: 0;
-      background: rgba(20,20,19,.52);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 400; padding: 16px;
-    }
-    .modal-overlay.hidden { display: none; }
-    .modal {
-      background: var(--chalk);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
-      width: 100%; max-width: 640px;
-      padding: 24px;
-      max-height: 90vh; overflow-y: auto;
-    }
-    .modal-title { font-size: 1rem; font-weight: 700; margin: 0 0 2px; color: var(--ink-1); }
-    .modal-sub   { font-size: .78rem; color: var(--ink-4); margin: 0 0 18px; }
-    .modal-err   { font-size: .8rem; color: #991b1b; margin-top: 10px; display: none; }
-    .modal-actions {
-      display: flex; gap: 8px; justify-content: flex-end;
-      margin-top: 20px; padding-top: 16px;
-      border-top: 1px solid var(--stone);
-    }
-
-    /* ── Permissions toggle ── */
-    .perm-toggle {
-      width: 30px; height: 30px;
-      border-radius: var(--radius-md);
-      border: 1.5px solid var(--stone);
-      background: var(--chalk);
-      cursor: pointer;
-      font-size: .85rem;
-      display: inline-flex; align-items: center; justify-content: center;
-      transition: background .12s, border-color .12s, color .12s;
-      font-family: inherit;
-    }
-    .perm-toggle.on  { background: #f0fdf4; border-color: #86efac; color: #166534; }
-    .perm-toggle.off { background: #f3f4f6; border-color: #9ca3af; color: var(--stone-deep); }
-    .perm-toggle:hover { border-color: var(--orchid-soft); }
-    .perm-save-row { display: flex; align-items: center; gap: 10px; padding-top: 12px; }
-    .perm-unsaved  { font-size: .75rem; color: var(--orchid); font-style: italic; }
-
-    /* ── Loading / forbidden ── */
-    .loading-state {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 200px;
-      color: var(--ink-4);
-      font-size: .9rem;
-    }
-    .forbidden-card {
-      background: var(--chalk);
-      border: 1px solid #fecaca;
-      border-radius: var(--radius-lg);
-      padding: 32px;
-      text-align: center;
-      margin-top: 32px;
-    }
-    .forbidden-card h2 { color: #991b1b; margin: 0 0 8px; }
-    .forbidden-card p  { color: var(--ink-3); margin: 0; font-size: .9rem; }
-
-    /* ── Search Settings tab ── */
-    .ss-action-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 9px 10px;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      user-select: none;
-      transition: opacity 0.15s, background 0.1s;
-    }
-    .ss-action-row + .ss-action-row { margin-top: 4px; }
-    .ss-action-row.ss-action-disabled { opacity: 0.45; }
-    .ss-action-row.ss-drag-over { background: #f5f3ff; border-color: var(--plum); }
-    .ss-action-row.ss-dragging { opacity: 0.35; }
-    .ss-drag-handle {
-      cursor: grab; color: var(--ink-4); font-size: 1rem;
-      flex-shrink: 0; padding: 0 2px; line-height: 1;
-    }
-    .ss-toggle { position: relative; display: inline-flex; cursor: pointer; flex-shrink: 0; }
-    .ss-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
-    .ss-toggle-track {
-      width: 32px; height: 18px;
-      background: #9ca3af; border-radius: 9px;
-      transition: background 0.2s; position: relative;
-    }
-    .ss-toggle-track::after {
-      content: ''; position: absolute; top: 2px; left: 2px;
-      width: 14px; height: 14px; background: #fff; border-radius: 50%;
-      transition: transform 0.2s;
-    }
-    .ss-toggle input:checked + .ss-toggle-track { background: var(--plum); }
-    .ss-toggle input:checked + .ss-toggle-track::after { transform: translateX(14px); }
-    .ss-action-label { flex: 1; font-size: .875rem; font-weight: 600; color: var(--ink-1); min-width: 0; }
-    .ss-action-category {
-      font-size: .65rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: .07em; color: var(--ink-3);
-      background: var(--stone-soft); border-radius: 4px; padding: 2px 6px; flex-shrink: 0;
-    }
-    .ss-action-hint {
-      font-size: .78rem; color: var(--ink-4);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;
-    }
-    @media (max-width: 640px) { .ss-action-hint { display: none; } }
+    /* Admin-only layout has moved to public/style.css under the
+       "Admin page" section. Every rule there is scoped under .admin-page
+       (the <body> class below), so admin keeps its plum buttons / stone
+       borders / custom tabs without colliding with shared rules used by
+       other pages. The two former magic z-index values (toast=1000,
+       modal-overlay=400) now consume --z-toast and --z-modal from the
+       ladder defined on :root. Add new admin-only styles there, not here. */
   </style>
 </head>
-<body>
+<body class="admin-page">
 
 <div class="page" id="page">
   <h1 class="page-title">Admin Panel</h1>
@@ -520,10 +25,10 @@
 <div id="toast" class="toast"></div>
 
 <div id="approve-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closeApproveModal()">
-  <div class="modal" style="max-width:440px;">
+  <div class="modal modal--sm">
     <div class="modal-title" id="approve-modal-title">Approve request</div>
     <div class="modal-sub"   id="approve-modal-sub"></div>
-    <div class="form-section-label" style="margin-top:16px;">Job role <span class="opt">(optional)</span></div>
+    <div class="form-section-label form-section-label--tight">Job role <span class="opt">(optional)</span></div>
     <div class="form-field-wrap">
       <label style="font-size:.72rem;font-weight:600;color:var(--ink-3);">Assign a role now — you can change it later via the Team tab.</label>
       <select class="field field-full" id="approve-modal-jobrole" style="margin-top:6px;">
@@ -754,8 +259,8 @@
       const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '—';
       const needsInfo = u.onboarding_status === 'more_info_required';
       const statusBadge = needsInfo
-        ? `<span class="lvl" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">More info required</span>`
-        : `<span class="lvl" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">Active</span>`;
+        ? `<span class="lvl lvl-needs-info">More info required</span>`
+        : `<span class="lvl lvl-active">Active</span>`;
       const resendBtn = u.email
         ? `<button class="btn btn-ghost" data-resend-email="${esc(u.email)}" title="Email this user a new set-password link">Resend set-password</button>`
         : '';
@@ -779,7 +284,7 @@
           <td>${lvlBadge(u.privilege_level)}</td>
           <td>${statusBadge}</td>
           <td class="td-date">${fmtDateShort(u.created_at)}</td>
-          <td class="actions" style="white-space:nowrap;">
+          <td class="actions actions-nowrap">
             ${resendBtn}
             ${forceResetBtn}
             <button class="btn btn-ghost" onclick="openEditModal('${esc(u.id)}')">Edit</button>
@@ -1158,7 +663,7 @@
     const photoHtml = _photoRequests.length === 0
       ? `<div class="card">
           <div class="card-title">Photo approvals</div>
-          <div class="table-empty" style="padding:28px 0;">No pending photo submissions.</div>
+          <div class="table-empty table-empty--padded">No pending photo submissions.</div>
         </div>`
       : `<div class="card">
           <div class="card-title">Photo approvals <span class="card-count">(${_photoRequests.length})</span></div>
@@ -1231,7 +736,7 @@
     const tradeHtml = _tradeSubmissions.length === 0
       ? `<div class="card">
           <div class="card-title">Trade submissions</div>
-          <div class="table-empty" style="padding:28px 0;">No pending submissions.</div>
+          <div class="table-empty table-empty--padded">No pending submissions.</div>
         </div>`
       : `<div class="card" style="margin-bottom:4px;">
           <div class="card-title">Trade submissions <span class="card-count">(${_tradeSubmissions.length})</span></div>
@@ -1454,7 +959,7 @@
     const btn  = $('#audit-load-more');
     if (!feed) return;
     if (_auditEntries.length === 0) {
-      feed.innerHTML = '<div class="table-empty" style="padding:28px 0;">No audit entries recorded yet.</div>';
+      feed.innerHTML = '<div class="table-empty table-empty--padded">No audit entries recorded yet.</div>';
       if (btn) btn.style.display = 'none';
       return;
     }
@@ -1629,7 +1134,7 @@
       _devTestUsersLoaded = false;
       _devTestUsersContacts = [];
       const listEl = document.getElementById('dev-test-users-list');
-      if (listEl) listEl.innerHTML = '<p style="font-size:.82rem;color:var(--ink-4);">Reloading contacts…</p>';
+      if (listEl) listEl.innerHTML = '<p class="admin-msg admin-msg--muted">Reloading contacts…</p>';
       await loadDevTestUsers();
     } catch (e) {
       if (result) result.textContent = '';
@@ -1659,7 +1164,7 @@
     if (_devTestUsersLoaded) return;
     const listEl = document.getElementById('dev-test-users-list');
     if (!listEl) return;
-    listEl.innerHTML = '<p style="font-size:.82rem;color:var(--ink-4);">Loading contacts…</p>';
+    listEl.innerHTML = '<p class="admin-msg admin-msg--muted">Loading contacts…</p>';
     try {
       let contacts = [];
       let page = 1;
@@ -1675,7 +1180,7 @@
       _devTestUsersLoaded = true;
       renderDevTestUsers(contacts);
     } catch (e) {
-      listEl.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Failed to load contacts: ${esc(e.message)}</p>`;
+      listEl.innerHTML = `<p class="admin-msg admin-msg--error">Failed to load contacts: ${esc(e.message)}</p>`;
     }
   }
 
@@ -1683,7 +1188,7 @@
     const listEl = document.getElementById('dev-test-users-list');
     if (!listEl) return;
     if (!contacts.length) {
-      listEl.innerHTML = '<p style="font-size:.82rem;color:var(--ink-4);">No contacts found in HubSpot.</p>';
+      listEl.innerHTML = '<p class="admin-msg admin-msg--muted">No contacts found in HubSpot.</p>';
       return;
     }
     listEl.innerHTML = contacts.map(c => {
@@ -1836,7 +1341,7 @@
       _newSubstatusCounter = 0;
       renderCardActionsTable();
     } catch (e) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load card actions: ${esc(e.message)}</p>`;
+      wrap.innerHTML = `<p class="admin-msg admin-msg--error">Could not load card actions: ${esc(e.message)}</p>`;
     }
   }
 
@@ -2528,7 +2033,7 @@
       }
       refreshHandlerConflictsBanner();
     } catch (e) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load handlers: ${esc(e.message)}</p>`;
+      wrap.innerHTML = `<p class="admin-msg admin-msg--error">Could not load handlers: ${esc(e.message)}</p>`;
     }
   }
   window.loadCardActionHandlersAdmin = loadCardActionHandlersAdmin;
@@ -2739,7 +2244,7 @@
     if (!wrap) return;
     const stages = _buildActionSlotGroups();
     if (!stages.length) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">No action labels defined yet — add labels in the table above first.</p>`;
+      wrap.innerHTML = `<p class="admin-msg admin-msg--muted">No action labels defined yet — add labels in the table above first.</p>`;
       return;
     }
     // Flat index so row buttons can resolve back to the slot they were
@@ -3204,7 +2709,7 @@
       _leadStatusesLoaded = true;
       renderLeadStatusesTable();
     } catch (e) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load lead statuses: ${esc(e.message)}</p>`;
+      wrap.innerHTML = `<p class="admin-msg admin-msg--error">Could not load lead statuses: ${esc(e.message)}</p>`;
     }
   }
 
@@ -3215,7 +2720,7 @@
     const realStatuses = data.filter(s => !s.is_null_row);
     const nullRow      = data.find(s => s.is_null_row);
     if (!nullRow && !realStatuses.length) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">No statuses configured yet.</p>`;
+      wrap.innerHTML = `<p class="admin-msg admin-msg--muted">No statuses configured yet.</p>`;
       return;
     }
 
@@ -3732,7 +3237,7 @@
           </div>
 
           <div id="lead-statuses-table-wrap">
-            <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
+            <p class="admin-msg admin-msg--muted">Loading…</p>
           </div>
 
           <div style="margin-top:12px;padding:10px 12px;background:var(--stone-soft);border-radius:var(--radius);border:1px solid var(--border);">
@@ -3799,7 +3304,7 @@
           </div>
 
           <div id="dev-test-users-list" style="max-height:480px;overflow-y:auto;">
-            <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
+            <p class="admin-msg admin-msg--muted">Loading…</p>
           </div>
         </div>
       </div>
@@ -3816,7 +3321,7 @@
           </div>
 
           <div id="card-actions-table-wrap">
-            <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
+            <p class="admin-msg admin-msg--muted">Loading…</p>
           </div>
         </div>
       </div>
@@ -3832,7 +3337,7 @@
           </div>
           <div id="card-action-handlers-conflict-banner" style="display:none;margin-bottom:12px;"></div>
           <div id="card-action-handlers-wrap">
-            <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
+            <p class="admin-msg admin-msg--muted">Loading…</p>
           </div>
         </div>
       </div>
@@ -3848,7 +3353,7 @@
             </div>
             <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openDvHandleEditor()">+ Add handle</button>
           </div>
-          <div id="dv-handles-wrap"><p style="font-size:.82rem;color:var(--ink-4);">Loading…</p></div>
+          <div id="dv-handles-wrap"><p class="admin-msg admin-msg--muted">Loading…</p></div>
         </div>
 
         <div class="card">
@@ -3859,7 +3364,7 @@
             </div>
             <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openDvFurnitureEditor()">+ Add range</button>
           </div>
-          <div id="dv-furniture-wrap"><p style="font-size:.82rem;color:var(--ink-4);">Loading…</p></div>
+          <div id="dv-furniture-wrap"><p class="admin-msg admin-msg--muted">Loading…</p></div>
         </div>
 
         <div class="card">
@@ -3870,7 +3375,7 @@
             </div>
             <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openDvDoorStyleEditor()">+ Add style</button>
           </div>
-          <div id="dv-door-styles-wrap"><p style="font-size:.82rem;color:var(--ink-4);">Loading…</p></div>
+          <div id="dv-door-styles-wrap"><p class="admin-msg admin-msg--muted">Loading…</p></div>
         </div>
 
         <div class="card" id="dv-terms-card">
@@ -3884,7 +3389,7 @@
 
           <!-- Current version display -->
           <div id="dv-terms-current" style="margin-bottom:14px;">
-            <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
+            <p class="admin-msg admin-msg--muted">Loading…</p>
           </div>
 
           <!-- Inline publish editor (hidden by default) -->
@@ -3934,7 +3439,7 @@
           <div class="card-title">Lead Times</div>
           <p class="card-desc" style="margin-bottom:16px;">Manufacturing lead times used for scheduling. Edit a value and click Save to update it.</p>
           <div id="workshop-settings-wrap">
-            <p style="font-size:.82rem;color:var(--ink-4);">Loading…</p>
+            <p class="admin-msg admin-msg--muted">Loading…</p>
           </div>
         </div>
       </div>
@@ -4163,7 +3668,7 @@
       _dvHandlesData = Array.isArray(items) ? items : [];
       renderDvHandleList(wrap, _dvHandlesData);
     } catch (e) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load handles: ${esc(e.message)}</p>`;
+      wrap.innerHTML = `<p class="admin-msg admin-msg--error">Could not load handles: ${esc(e.message)}</p>`;
     }
   }
 
@@ -4171,7 +3676,7 @@
     if (!wrap) return;
     const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
     if (!sorted.length) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">None added yet.</p>`;
+      wrap.innerHTML = `<p class="admin-msg admin-msg--muted">None added yet.</p>`;
       return;
     }
     wrap.innerHTML = `
@@ -4226,7 +3731,7 @@
         labels: ['Name','Description'],
       });
     } catch (e) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load furniture ranges: ${esc(e.message)}</p>`;
+      wrap.innerHTML = `<p class="admin-msg admin-msg--error">Could not load furniture ranges: ${esc(e.message)}</p>`;
     }
   }
 
@@ -4242,7 +3747,7 @@
         labels: ['Name','Image URL'],
       });
     } catch (e) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load door styles: ${esc(e.message)}</p>`;
+      wrap.innerHTML = `<p class="admin-msg admin-msg--error">Could not load door styles: ${esc(e.message)}</p>`;
     }
   }
 
@@ -4251,7 +3756,7 @@
     if (!wrap) return;
     const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
     if (!sorted.length) {
-      wrap.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);">None added yet.</p>`;
+      wrap.innerHTML = `<p class="admin-msg admin-msg--muted">None added yet.</p>`;
       return;
     }
     wrap.innerHTML = `
@@ -4520,7 +4025,7 @@
           </details>`;
       }
     } catch (e) {
-      if (currentEl) currentEl.innerHTML = `<p style="font-size:.82rem;color:#991b1b;">Could not load terms versions: ${esc(e.message)}</p>`;
+      if (currentEl) currentEl.innerHTML = `<p class="admin-msg admin-msg--error">Could not load terms versions: ${esc(e.message)}</p>`;
     }
   }
 
