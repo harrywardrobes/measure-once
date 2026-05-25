@@ -481,8 +481,13 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
 // Cache: one shared result, refreshed at most every 5 minutes.
 // Concurrency guard: if a scan is already in progress, new requests wait for
 // the same promise rather than each launching an independent HubSpot crawl.
-const ALL_CONTACTS_CACHE_TTL_MS = 300_000; // 5 minutes
-let _allContactsCache = null;     // { contacts: [...], expiresAt }
+// Stale fallback: `_allContactsLastGood` survives TTL expiry so a failed
+// refresh can still serve the last-known list (up to 1 h old) instead of
+// returning a hard 502 to callers.
+const ALL_CONTACTS_CACHE_TTL_MS       = 300_000;          // 5 minutes
+const ALL_CONTACTS_STALE_MAX_MS       = 60 * 60 * 1_000;  // 1 h hard cap on staleness
+let _allContactsCache    = null;  // { contacts: [...], fetchedAt } — used while fresh
+let _allContactsLastGood = null;  // { contacts: [...], fetchedAt } — survives invalidation
 let _allContactsInflight = null;  // Promise while a scan is running
 
 const ALL_CONTACTS_PROPERTIES = [
@@ -509,22 +514,53 @@ async function fetchAllContactsShared() {
   return allResults;
 }
 
+// Returns { contacts, stale } where stale=true means HubSpot was unreachable
+// and the last-good snapshot is being returned instead.
 async function getSharedContactsCache() {
-  if (_allContactsCache && Date.now() < _allContactsCache.expiresAt) {
-    return _allContactsCache.contacts;
+  if (_allContactsCache && Date.now() - _allContactsCache.fetchedAt < ALL_CONTACTS_CACHE_TTL_MS) {
+    return { contacts: _allContactsCache.contacts, stale: false };
   }
+
   if (!_allContactsInflight) {
-    _allContactsInflight = fetchAllContactsShared().finally(() => {
-      _allContactsInflight = null;
-    });
+    _allContactsInflight = (async () => {
+      try {
+        const contacts = await fetchAllContactsShared();
+        const entry = { contacts, fetchedAt: Date.now() };
+        _allContactsCache    = entry;
+        _allContactsLastGood = entry;
+        return { ok: true, contacts };
+      } catch (err) {
+        return { ok: false, err };
+      } finally {
+        setImmediate(() => { _allContactsInflight = null; });
+      }
+    })();
   }
-  const contacts = await _allContactsInflight;
-  _allContactsCache = { contacts, expiresAt: Date.now() + ALL_CONTACTS_CACHE_TTL_MS };
-  return contacts;
+
+  const outcome = await _allContactsInflight;
+
+  if (outcome.ok) {
+    return { contacts: outcome.contacts, stale: false };
+  }
+
+  // Refresh failed — serve last-good snapshot if within the staleness cap.
+  if (_allContactsLastGood && Date.now() - _allContactsLastGood.fetchedAt < ALL_CONTACTS_STALE_MAX_MS) {
+    if (process.env.DEBUG_HUBSPOT) {
+      const status = outcome.err?.response?.status;
+      console.warn('[contacts-all] HubSpot fetch failed (status=%s); serving stale contacts age=%dms',
+        status || 'network', Date.now() - _allContactsLastGood.fetchedAt);
+    }
+    return { contacts: _allContactsLastGood.contacts, stale: true };
+  }
+
+  // No usable snapshot — propagate the error so the route can 502.
+  throw outcome.err;
 }
 
 // Invalidate the shared contacts cache so the next request triggers a fresh
 // HubSpot scan. Call this from every mutation route that changes contact data.
+// `_allContactsLastGood` is intentionally preserved so a failed refetch can
+// still serve the prior snapshot instead of returning a 502.
 function bustSharedCache() {
   _allContactsCache = null;
 }
@@ -586,7 +622,7 @@ app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireMan
 
 app.get('/api/localdata/all', isAuthenticated, async (req, res) => {
   try {
-    const contacts = await getSharedContactsCache();
+    const { contacts } = await getSharedContactsCache();
     const result = {};
     for (const contact of contacts) {
       const roomsJson = contact.properties?.measure_once_rooms;
@@ -857,7 +893,9 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     };
     const comparator = sortComparators[sort] || sortComparators['newest'];
 
-    let contacts = await getSharedContactsCache();
+    const { contacts: rawContacts, stale } = await getSharedContactsCache();
+    if (stale) res.setHeader('X-Cache-Status', 'stale');
+    let contacts = rawContacts;
 
     // Dev-only filter: hide contacts without hw_test_user = true in non-production,
     // unless the global dev-filter toggle has been turned off by an admin.
@@ -2674,7 +2712,7 @@ app.get('/api/admin/phone-directory', isAuthenticated, requireManagerOrAdmin, as
     // configured, return an empty list rather than failing the whole call.
     if (process.env.HUBSPOT_TOKEN) {
       try {
-        const contacts = await getSharedContactsCache();
+        const { contacts } = await getSharedContactsCache();
         for (const c of contacts) {
           const p = c.properties || {};
           const label = [p.firstname, p.lastname].filter(Boolean).join(' ').trim()
