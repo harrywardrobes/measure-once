@@ -50,6 +50,10 @@ const LABEL_ORIG  = 'PrivTest Sync Label';
 const LABEL_BC    = 'PrivTest Renamed BC';
 const LABEL_VIS   = 'PrivTest Renamed Vis';
 
+// Sub-status fixture used by section (E).
+const SS_KEY   = 'PRIVTEST_SS_SYNC';
+const SS_LABEL = 'PrivTest Sub Sync';
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 function parseCookieKV(jar) {
   if (!jar) return null;
@@ -130,6 +134,8 @@ async function main() {
 
   // Pre-clean stale fixtures from a prior crashed run.
   await cleanupTestData(pool);
+  // Delete sub-statuses before lead_status_config (FK ON DELETE NO ACTION).
+  await pool.query(`DELETE FROM lead_substatuses WHERE status_key = $1`, [LS_KEY]);
   await pool.query(`DELETE FROM lead_status_config WHERE key = $1`, [LS_KEY]);
 
   const users = await seedUsers(pool, runId);
@@ -143,7 +149,16 @@ async function main() {
      ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label`,
     [LS_KEY, LABEL_ORIG],
   );
-  console.log(`  Inserted test lead-status  key="${LS_KEY}"  label="${LABEL_ORIG}"\n`);
+  console.log(`  Inserted test lead-status  key="${LS_KEY}"  label="${LABEL_ORIG}"`);
+
+  // Insert a sub-status for the test lead-status (used by section E).
+  await pool.query(
+    `INSERT INTO lead_substatuses (status_key, substatus_key, label, sort_order)
+     VALUES ($1, $2, $3, 1)
+     ON CONFLICT (status_key, substatus_key) DO UPDATE SET label = EXCLUDED.label`,
+    [LS_KEY, SS_KEY, SS_LABEL],
+  );
+  console.log(`  Inserted test sub-status   status_key="${LS_KEY}"  substatus_key="${SS_KEY}"\n`);
 
   const { child, logBuf } = spawnServer();
   let exited = false;
@@ -167,6 +182,8 @@ async function main() {
     teardownInFlight = true;
     try { if (!exited) child.kill('SIGTERM'); } catch {}
     try {
+      // Delete sub-statuses first (FK ON DELETE NO ACTION blocks lead_status_config delete).
+      await pool.query(`DELETE FROM lead_substatuses WHERE status_key = $1`, [LS_KEY]);
       await pool.query(`DELETE FROM lead_status_config WHERE key = $1`, [LS_KEY]);
       await cleanupTestData(pool);
     } catch {}
@@ -578,6 +595,166 @@ async function main() {
 
     await skelTab.close();
 
+    // ── (E) sub-status skeleton loading state ─────────────────────────────────
+    // Open a fresh customers tab and intercept ONLY /api/lead-substatuses,
+    // letting /api/lead-statuses resolve normally so the lead-status filter
+    // renders (store.loaded = true) while sub-statuses remain in-flight
+    // (store.subsLoaded = false).
+    //
+    // Flow:
+    //   1. /api/lead-statuses resolves → store.loaded = true, notify() fires
+    //      an early re-render.  Lead-status skeleton clears.
+    //   2. /api/lead-substatuses is held → store.subsLoaded stays false.
+    //   3. We call populateLeadStatusFilter() so the test lead-status key
+    //      appears as a dropdown option, then programmatically select it.
+    //   4. React re-renders with leadStatus set and store.subsLoaded false
+    //      → the sub-status skeleton ([data-testid="substatus-skeleton"]) shows.
+    //   5. Release /api/lead-substatuses → store.subsLoaded = true, notify().
+    //   6. Skeleton disappears; test lead-status chip appears.
+    console.log('\n  [E] sub-status skeleton loading state');
+
+    const subSkelTab = await browser.newPage();
+    await subSkelTab.setCacheEnabled(false);
+    await injectSession(subSkelTab, adminClient.cookie);
+
+    let resolveSubstatusReq;
+    const substatusReqCaught = new Promise(res => { resolveSubstatusReq = res; });
+    let pendingSubstatusReq = null;
+
+    await subSkelTab.setRequestInterception(true);
+    subSkelTab.on('request', req => {
+      const url = req.url();
+      // Hold only /api/lead-substatuses (with optional query string).
+      if (/\/api\/lead-substatuses(\?|$)/.test(url) && !pendingSubstatusReq) {
+        pendingSubstatusReq = req;
+        resolveSubstatusReq(req);
+        // Deliberately do NOT call req.continue() — we hold the request.
+      } else {
+        req.continue();
+      }
+    });
+
+    await subSkelTab.goto(`${BASE}/customers`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+
+    // Wait until Puppeteer has caught the /api/lead-substatuses request (up to 5 s).
+    const subReqCatchOk = await Promise.race([
+      substatusReqCaught.then(() => true),
+      new Promise(res => setTimeout(() => res(false), 5000)),
+    ]);
+    record(
+      '/api/lead-substatuses request is intercepted in-flight',
+      'request intercepted within 5 s',
+      `caught=${subReqCatchOk}`,
+      subReqCatchOk,
+    );
+
+    // Wait for /api/lead-statuses to resolve and the lead-status FormControl
+    // to become visible (store.loaded = true → notify() → re-render).
+    const leadStatusVisible = await subSkelTab.waitForFunction(
+      () => {
+        const sel = document.getElementById('lead-status-filter');
+        if (!sel) return false;
+        const fc = sel.closest('.MuiFormControl-root');
+        if (!fc) return false;
+        return window.getComputedStyle(fc).visibility === 'visible';
+      },
+      { timeout: 8000 },
+    ).then(() => true).catch(() => false);
+    record(
+      'lead-status FormControl becomes visible while /api/lead-substatuses is held',
+      'FormControl visibility === visible within 8 s',
+      `visible=${leadStatusVisible}`,
+      leadStatusVisible,
+    );
+
+    // Populate the dropdown so the test lead-status option is available.
+    await subSkelTab.evaluate(async () => {
+      if (typeof loadLeadStatuses === 'function') await loadLeadStatuses();
+      if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
+    });
+    await new Promise(r => setTimeout(r, 200));
+
+    // Select the test lead status programmatically.  Use the React-compatible
+    // setter so the synthetic change event triggers setLeadStatus().
+    const selectedOk = await subSkelTab.evaluate((lsKey) => {
+      const sel = document.getElementById('lead-status-filter');
+      if (!sel) return false;
+      const hasOpt = Array.from(sel.options).some(o => o.value === lsKey);
+      if (!hasOpt) return false;
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLSelectElement.prototype, 'value',
+      )?.set;
+      if (nativeSetter) {
+        nativeSetter.call(sel, lsKey);
+      } else {
+        sel.value = lsKey;
+      }
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }, LS_KEY);
+    record(
+      'test lead-status option is selectable in the dropdown',
+      `option value="${LS_KEY}" found and selected`,
+      `selectedOk=${selectedOk}`,
+      selectedOk,
+    );
+
+    // Give React a tick to re-render with the new leadStatus value.
+    await new Promise(r => setTimeout(r, 300));
+
+    // ── assert sub-status skeleton is visible ──
+    const subSkelVisible = await subSkelTab.evaluate(() => {
+      const skel = document.querySelector('[data-testid="substatus-skeleton"]');
+      if (!skel) return false;
+      const st = window.getComputedStyle(skel);
+      return st.display !== 'none' && st.visibility !== 'hidden';
+    });
+    record(
+      'sub-status skeleton is present in DOM while /api/lead-substatuses is in-flight',
+      '[data-testid="substatus-skeleton"] visible after lead-status selected',
+      `visible=${subSkelVisible}`,
+      subSkelVisible,
+    );
+
+    // ── release the held /api/lead-substatuses request ──
+    if (pendingSubstatusReq) {
+      try { pendingSubstatusReq.continue(); } catch {}
+    }
+
+    // ── assert sub-status skeleton disappears ──
+    const subSkelGone = await subSkelTab.waitForFunction(
+      () => !document.querySelector('[data-testid="substatus-skeleton"]'),
+      { timeout: 5000 },
+    ).then(() => true).catch(() => false);
+    record(
+      'sub-status skeleton disappears after /api/lead-substatuses resolves',
+      '[data-testid="substatus-skeleton"] absent within 5 s',
+      `gone=${subSkelGone}`,
+      subSkelGone,
+    );
+
+    // ── assert sub-status chip appears ──
+    // The chip label text should contain SS_LABEL (the test sub-status label).
+    const chipVisible = await subSkelTab.waitForFunction(
+      (label) => {
+        const chips = document.querySelectorAll('.MuiChip-label');
+        return Array.from(chips).some(c => c.textContent.includes(label));
+      },
+      { timeout: 5000 },
+      SS_LABEL,
+    ).then(() => true).catch(() => false);
+    record(
+      'sub-status chip appears after /api/lead-substatuses resolves',
+      `MuiChip with label "${SS_LABEL}" visible within 5 s`,
+      `chipVisible=${chipVisible}`,
+      chipVisible,
+    );
+
+    await subSkelTab.close();
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -643,6 +820,16 @@ async function writeReport(runId, findings) {
     '  Exercises the `{!store.loaded && <Skeleton …/>}` branch and the',
     '  `visibility: store.loaded ? "visible" : "hidden"` guard in',
     '  `src/react/pages/CustomersPage.tsx`.',
+    '- **(E) sub-status skeleton loading state**: intercepts `GET /api/lead-substatuses`',
+    '  while letting `GET /api/lead-statuses` resolve normally so',
+    '  `store.loaded` becomes true (lead-status filter renders) while',
+    '  `store.subsLoaded` stays false. Populates the lead-status filter via',
+    '  `populateLeadStatusFilter()`, programmatically selects the test lead',
+    '  status, and asserts that `[data-testid="substatus-skeleton"]` is visible.',
+    '  Releases the request and asserts the skeleton is removed and the test',
+    '  sub-status chip (`SS_LABEL`) appears within 5 s.',
+    '  Exercises the `{!store.subsLoaded && leadStatus && … <Skeleton …/>}` branch',
+    '  in `src/react/pages/CustomersPage.tsx`.',
     '',
     '## Notes',
     '',

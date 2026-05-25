@@ -229,6 +229,7 @@ type Store = {
   counts: Record<string, number>;
   nullLabel: string;
   loaded: boolean;
+  subsLoaded: boolean;
 };
 
 const store: Store = {
@@ -237,6 +238,7 @@ const store: Store = {
   counts: {},
   nullLabel: 'No status',
   loaded: false,
+  subsLoaded: false,
 };
 
 const subscribers = new Set<() => void>();
@@ -252,6 +254,7 @@ async function loadLeadStatuses(): Promise<void> {
       if (nullRow) store.nullLabel = nullRow.label || 'No status';
       store.statuses = rows.filter((r) => !r.is_null_row);
       store.loaded = true;
+      notify();
     }
   } catch (e) {
     console.warn('loadLeadStatuses failed:', (e as Error).message);
@@ -269,6 +272,9 @@ async function loadLeadSubstatuses(): Promise<void> {
     if (Array.isArray(rows)) store.substatuses = rows;
   } catch (e) {
     console.warn('loadLeadSubstatuses failed:', (e as Error).message);
+  } finally {
+    store.subsLoaded = true;
+    notify();
   }
 }
 
@@ -1146,7 +1152,11 @@ export function CustomersPage(): React.ReactElement {
       .filter((r) => String(r.status_key).toUpperCase() === leadStatus.toUpperCase())
       .slice()
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  }, [leadStatus]);
+    // store.subsLoaded is included so the memo recomputes when substatuses
+    // finish loading — forceRender (triggered by notify()) causes a re-render
+    // where store.subsLoaded has flipped to true, invalidating the cache.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadStatus, store.subsLoaded]);
 
   // Build the stage tab list: Active, All, then one button per workflow stage.
   const stageTabs = React.useMemo(() => {
@@ -1370,7 +1380,14 @@ export function CustomersPage(): React.ReactElement {
           </Button>
         </Stack>
 
-        {availableSubstatuses.length > 0 ? (
+        {!store.subsLoaded && leadStatus && leadStatus !== '__no_status__' ? (
+          <Skeleton
+            data-testid="substatus-skeleton"
+            variant="rounded"
+            width={220}
+            height={32}
+          />
+        ) : availableSubstatuses.length > 0 ? (
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             <Chip
               label="All sub-statuses"
