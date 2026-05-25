@@ -1,14 +1,25 @@
 // Drift-detector for the privilege matrix's `/api/*` route coverage.
 //
-// Parses every Express route registration in the production source files and
-// asserts that every `/api/*` route is represented in `matrix.ROUTES` (or
-// listed in the documented PUBLIC_PATH_ALLOWLIST below). The matrix is
-// hand-maintained, so adding a new endpoint without adding a matching matrix
-// row used to silently leave a member→403 / viewer→403 cell uncovered for
-// `/api/admin/*` routes. The audit originally only covered the admin prefix;
-// it now covers every `/api/*` route so member- and manager-gated endpoints
-// (`requirePrivilege('member')`, `requireManagerOrAdmin`, etc.) also fail the
-// run when they drift.
+// Two related audits run against the same parse of the source files:
+//   1. **Coverage audit** (`auditApiRoutes`) — every `/api/*` route registered
+//      in source must have a matching row in `matrix.ROUTES` (or be listed in
+//      PUBLIC_PATH_ALLOWLIST). This catches the "new route shipped without a
+//      matrix row" drift class.
+//   2. **Level audit** (`auditMatrixLevels`) — for every matrix row that the
+//      coverage audit *can* find in source, the matrix's `level` must agree
+//      with the middleware chain actually applied at the registration site
+//      (`requireAdmin` / `requireManagerOrAdmin` / `requirePrivilege('member'
+//      | 'manager')` / global `isAuthenticated`). This catches the drift
+//      gap called out in task #706: a sensitive admin route registered under
+//      a non-`/api/admin/*` prefix (the WhatsApp routes were the trigger)
+//      whose matrix row accidentally says `level: 'auth'` instead of
+//      `'admin'`. Without this check the matrix run still passes because
+//      the gate decision is never measured against the source of truth.
+//
+// The level audit only covers `/api/*` registrations and skips matrix rows
+// with `level: 'public'` (AUTH_WHITELIST is asserted separately by the
+// coverage audit) and `level: 'self-or-admin'` (custom in-handler semantics
+// that don't map to a single middleware identifier).
 
 const fs = require('fs');
 const path = require('path');
@@ -58,6 +69,48 @@ function isPublicPath(pattern) {
   return false;
 }
 
+// Inspect the source slice immediately after a route-registration match and
+// return the privilege middleware identifiers found before the request
+// handler begins. The slice is bounded to 1KB and trimmed at the first
+// `, (req…` or `, async (req…`, so multi-line registrations (e.g.
+// design-visits.js: `requireAdmin,\n  upload.single(...),`) are still
+// captured but the handler body is excluded from the scan.
+function extractMiddlewareNames(src, startIdx) {
+  const chunk = src.slice(startIdx, startIdx + 1024);
+  const handlerIdx = chunk.search(/,\s*(?:async\s*)?\(\s*(?:_?req|_)\b/);
+  const slice = handlerIdx > -1 ? chunk.slice(0, handlerIdx) : chunk;
+  const found = [];
+  if (/\brequireAdmin\b/.test(slice)) found.push('requireAdmin');
+  if (/\brequireManagerOrAdmin\b/.test(slice)) found.push('requireManagerOrAdmin');
+  if (/\brequirePrivilege\s*\(\s*['"]manager['"]\s*\)/.test(slice)) {
+    found.push("requirePrivilege('manager')");
+  }
+  if (/\brequirePrivilege\s*\(\s*['"]member['"]\s*\)/.test(slice)) {
+    found.push("requirePrivilege('member')");
+  }
+  if (/\bisAuthenticated\b/.test(slice)) found.push('isAuthenticated');
+  return found;
+}
+
+// Map the middleware chain at a registration site to one of the matrix's
+// level buckets. Higher-privilege middleware wins (requireAdmin beats
+// requirePrivilege('member'), etc.). For `/api/*` routes the global gate
+// in server.js (`app.use('/api', isAuthenticated)`) provides at least
+// `'auth'` even when no per-route middleware appears in the chain — so
+// `/api/logout` (no per-route middleware, not in AUTH_WHITELIST) is `'auth'`,
+// not `'public'`.
+function chainToSourceLevel(middleware, pattern) {
+  if (middleware.includes('requireAdmin')) return 'admin';
+  if (middleware.includes('requireManagerOrAdmin')) return 'manager';
+  if (middleware.includes("requirePrivilege('manager')")) return 'manager';
+  if (middleware.includes("requirePrivilege('member')")) return 'member';
+  if (middleware.includes('isAuthenticated')) return 'auth';
+  // Implicit global `/api` gate: any /api/* route not in PUBLIC_PATH_ALLOWLIST
+  // is wrapped by isAuthenticated even without per-route middleware.
+  if (pattern.startsWith('/api/') && !isPublicPath(pattern)) return 'auth';
+  return 'public';
+}
+
 function extractApiRoutesFromSource(repoRoot = path.resolve(__dirname, '..', '..')) {
   const found = [];
   for (const rel of SOURCE_FILES) {
@@ -71,7 +124,9 @@ function extractApiRoutesFromSource(repoRoot = path.resolve(__dirname, '..', '..
       const method = m[1].toUpperCase();
       const pattern = m[3];
       const lineNo = src.slice(0, m.index).split('\n').length;
-      found.push({ method, pattern, file: rel, line: lineNo });
+      const middleware = extractMiddlewareNames(src, m.index);
+      const sourceLevel = chainToSourceLevel(middleware, pattern);
+      found.push({ method, pattern, file: rel, line: lineNo, middleware, sourceLevel });
     }
   }
   return found;
@@ -104,13 +159,13 @@ function literalMatchesPattern(literal, pattern) {
 function getMatrixApiRoutes(matrixRoutes) {
   return matrixRoutes
     .filter(r => r.path.startsWith('/api/'))
-    .map(r => ({ method: r.method.toUpperCase(), path: r.path }));
+    .map(r => ({ method: r.method.toUpperCase(), path: r.path, level: r.level }));
 }
 
 function getMatrixAdminRoutes(matrixRoutes) {
   return matrixRoutes
     .filter(r => r.path.startsWith('/api/admin/'))
-    .map(r => ({ method: r.method.toUpperCase(), path: r.path }));
+    .map(r => ({ method: r.method.toUpperCase(), path: r.path, level: r.level }));
 }
 
 // Returns `{ missing: [{method, pattern, file, line, scope}, …] }` listing
@@ -142,6 +197,39 @@ function auditAdminRoutes(matrixRoutes, opts = {}) {
   return auditApiRoutes(matrixRoutes, opts);
 }
 
+// Compare matrix `level` against the middleware actually applied at every
+// `/api/*` registration site. Returns `{ mismatches: [{method, path, file,
+// line, middleware, sourceLevel, matrixLevel}, …] }`. Matrix rows whose
+// level is `'public'` (asserted by PUBLIC_PATH_ALLOWLIST) or
+// `'self-or-admin'` (custom in-handler semantics) are skipped. Source
+// routes not represented in the matrix are skipped too — those are reported
+// by `auditApiRoutes`.
+function auditMatrixLevels(matrixRoutes, opts = {}) {
+  const sourceRoutes = opts.sourceRoutes || extractApiRoutesFromSource(opts.repoRoot);
+  const matrixRows = getMatrixApiRoutes(matrixRoutes);
+  const mismatches = [];
+  for (const mx of matrixRows) {
+    if (mx.level === 'public' || mx.level === 'self-or-admin') continue;
+    const src = sourceRoutes.find(s =>
+      s.method === mx.method && literalMatchesPattern(mx.path, s.pattern)
+    );
+    if (!src) continue; // coverage audit will already flag this
+    if (src.sourceLevel !== mx.level) {
+      mismatches.push({
+        method: mx.method,
+        path: mx.path,
+        pattern: src.pattern,
+        file: src.file,
+        line: src.line,
+        middleware: src.middleware,
+        sourceLevel: src.sourceLevel,
+        matrixLevel: mx.level,
+      });
+    }
+  }
+  return { mismatches, sourceRoutes, matrixRows };
+}
+
 function formatMissingMessage(missing) {
   const adminMisses = missing.filter(m => m.scope === 'admin');
   const otherMisses = missing.filter(m => m.scope !== 'admin');
@@ -169,16 +257,42 @@ function formatMissingMessage(missing) {
   return lines.join('\n');
 }
 
+function formatLevelMismatchMessage(mismatches) {
+  const lines = [
+    `Privilege matrix level disagrees with source middleware for `
+      + `${mismatches.length} /api/* route(s).`,
+    `Each row below names the route, the middleware chain found at the`,
+    `registration site, and the level recorded in test/privileges/matrix.js.`,
+    `Either correct the matrix \`level\` to match the gate, or update the`,
+    `route's middleware chain to match the intended privilege level.`,
+    '',
+  ];
+  for (const m of mismatches) {
+    const mw = m.middleware.length ? m.middleware.join(' + ') : '(none — global /api gate only)';
+    lines.push(
+      `  - ${m.method.padEnd(6)} ${m.path}`
+      + `\n      source : ${m.sourceLevel.padEnd(8)} (${mw})`
+      + `\n      matrix : ${m.matrixLevel}`
+      + `\n      site   : ${m.file}:${m.line}`
+    );
+  }
+  return lines.join('\n');
+}
+
 module.exports = {
   SOURCE_FILES,
   PUBLIC_PATH_ALLOWLIST,
   isPublicPath,
   extractApiRoutesFromSource,
   extractAdminRoutesFromSource,
+  extractMiddlewareNames,
+  chainToSourceLevel,
   getMatrixApiRoutes,
   getMatrixAdminRoutes,
   literalMatchesPattern,
   auditApiRoutes,
   auditAdminRoutes,
+  auditMatrixLevels,
   formatMissingMessage,
+  formatLevelMismatchMessage,
 };

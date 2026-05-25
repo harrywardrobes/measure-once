@@ -4,7 +4,10 @@ const {
   makeClient, login, setPool, ROLES,
 } = require('./harness');
 const { ROUTES, classifyOutcome } = require('./matrix');
-const { auditAdminRoutes, formatMissingMessage } = require('./routeAudit');
+const {
+  auditAdminRoutes, auditMatrixLevels,
+  formatMissingMessage, formatLevelMismatchMessage,
+} = require('./routeAudit');
 const { runProbes } = require('./probes');
 const { runUiSmoke } = require('./uiSmoke');
 const { buildReport, writeReport } = require('./report');
@@ -39,6 +42,17 @@ async function main() {
     process.exit(1);
   }
   console.log(`  API-route audit: ${audit.sourceRoutes.length} /api/* route(s) all covered by the matrix.`);
+
+  // Level audit: pair each /api/* registration with its middleware chain and
+  // assert the matrix `level` matches the gate actually applied. Catches the
+  // "admin-only route registered outside /api/admin/* but typed as `auth`"
+  // drift class that the coverage audit alone cannot detect.
+  const levelAudit = auditMatrixLevels(ROUTES, { sourceRoutes: audit.sourceRoutes });
+  if (levelAudit.mismatches.length > 0) {
+    console.error(`\n  ✘ ${formatLevelMismatchMessage(levelAudit.mismatches)}\n`);
+    process.exit(1);
+  }
+  console.log(`  Matrix-level audit: every /api/* row agrees with the middleware at its registration site.`);
 
   const runId = Math.random().toString(36).slice(2, 8);
   const startedAt = new Date().toISOString();
