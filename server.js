@@ -2129,12 +2129,28 @@ app.get('/api/users/me/prefs', isAuthenticated, async (req, res) => {
   }
 });
 
+const VALID_NAV_KEYS = new Set(['home', 'sales', 'survey', 'projects', 'calendar', 'invoices', 'trades', 'ideas']);
+const NAV_BAR_SIZE = 3;
+
 app.patch('/api/users/me/prefs', isAuthenticated, prefsWriteLimiter, async (req, res) => {
   try {
     const userId = req.user.claims.sub;
     const patch = req.body;
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
       return res.status(400).json({ error: 'Body must be a JSON object' });
+    }
+    if ('nav_primary_keys' in patch) {
+      const keys = patch.nav_primary_keys;
+      if (
+        !Array.isArray(keys) ||
+        keys.length !== NAV_BAR_SIZE ||
+        !keys.every((k) => typeof k === 'string' && VALID_NAV_KEYS.has(k)) ||
+        new Set(keys).size !== NAV_BAR_SIZE
+      ) {
+        return res.status(400).json({
+          error: `nav_primary_keys must be an array of exactly ${NAV_BAR_SIZE} unique valid nav keys`,
+        });
+      }
     }
     const r = await pool.query(
       `UPDATE users SET prefs = prefs || $1::jsonb, updated_at = NOW()
