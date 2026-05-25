@@ -600,11 +600,14 @@
           credentials: 'include',
         });
         const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        if (!r.ok) {
+          applyServerError('del-', j, 'HTTP ' + r.status);
+          return;
+        }
         toast('Row deleted.');
         closeDrawer();
         loadRows();
-      } catch (e) { toast(e.message, true); }
+      } catch (e) { showFieldError('del-', null, e.message); }
     });
   }
 

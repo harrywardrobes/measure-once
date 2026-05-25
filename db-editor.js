@@ -196,34 +196,67 @@ function formatPgError(e) {
     detail:     e.detail || null,
     table:      e.table || null,
   };
-  // Friendly per-code message and try to pull a column name out of e.detail
-  // (e.g. `Key (status_key)=(foo) is not present in table "lead_status_config".`).
-  const colFromDetail = () => {
-    if (!e.detail) return null;
-    const m = /Key \(([^)]+)\)=/.exec(e.detail);
-    return m ? m[1].split(',')[0].trim() : null;
+  // Pull `(col)=(value)` parts out of e.detail (which Postgres formats like
+  //   `Key (status_key)=(foo) is not present in table "lead_status_config".`
+  //   `Key (key)=(foo) is still referenced from table "lead_substatuses".`
+  //   `Key (key)=(foo) already exists.`)
+  const parseDetail = () => {
+    if (!e.detail) return {};
+    const kv  = /Key \(([^)]+)\)=\(([^)]*)\)/.exec(e.detail);
+    const ref = /referenced from table "([^"]+)"/.exec(e.detail);
+    const np  = /not present in table "([^"]+)"/.exec(e.detail);
+    return {
+      column:    kv ? kv[1].split(',')[0].trim() : null,
+      value:     kv ? kv[2] : null,
+      refTable:  (ref && ref[1]) || (np && np[1]) || null,
+    };
   };
+  const d = parseDetail();
+  const valuePart  = d.value !== null && d.value !== undefined && d.value !== ''
+    ? ` (value “${d.value}”)` : '';
   switch (e.code) {
     case '23502': // not_null_violation
-      out.column  = out.column || colFromDetail();
+      out.column  = out.column || d.column;
       out.message = out.column
         ? `“${out.column}” is required and cannot be left blank.`
         : 'A required field is missing.';
       break;
     case '23505': // unique_violation
-      out.column  = out.column || colFromDetail();
+      out.column  = out.column || d.column;
       out.message = out.column
-        ? `Another row already has this value for “${out.column}”.`
+        ? `Another row already has${valuePart ? ` ${valuePart.trim()} for` : ''} “${out.column}”. Pick a different value.`
         : 'Another row already uses these values (uniqueness conflict).';
       break;
-    case '23503': // foreign_key_violation
-      out.column  = out.column || colFromDetail();
-      out.message = out.column
-        ? `“${out.column}” refers to a row that does not exist (or is still in use elsewhere).`
-        : 'This change conflicts with related rows in another table.';
+    case '23503': { // foreign_key_violation
+      out.column = out.column || d.column;
+      // Distinguish "delete/update blocked because rows still reference this"
+      // from "insert/update points at a missing row".
+      const isReferenced  = /still referenced from table/i.test(e.detail || '');
+      const isNotPresent  = /not present in table/i.test(e.detail || '');
+      if (isReferenced) {
+        out.kind = 'still_referenced';
+        out.message = d.refTable
+          ? `This row is still used by rows in “${d.refTable}”${valuePart}. Remove or reassign those rows first, then try again.`
+          : `This row is still used elsewhere${valuePart}. Remove or reassign the related rows first, then try again.`;
+      } else if (isNotPresent) {
+        out.kind = 'missing_reference';
+        out.message = (out.column && d.refTable)
+          ? `“${out.column}”${valuePart} refers to a row that does not exist in “${d.refTable}”. Pick an existing row.`
+          : (out.column
+              ? `“${out.column}”${valuePart} refers to a row that does not exist. Pick an existing row.`
+              : 'This change refers to a row that does not exist.');
+      } else {
+        out.message = out.column
+          ? `“${out.column}” conflicts with related rows in another table.`
+          : 'This change conflicts with related rows in another table.';
+      }
       break;
+    }
     case '23514': // check_violation
-      out.message = `Value failed the “${out.constraint || 'check'}” constraint.`;
+      out.column  = out.column || d.column;
+      out.message = out.column
+        ? `Value for “${out.column}” failed the “${out.constraint || 'check'}” rule.`
+        : `Value failed the “${out.constraint || 'check'}” rule.`;
       break;
     case '22P02': // invalid_text_representation
       out.message = 'One of the values is the wrong type for its column.';
@@ -529,7 +562,7 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
       }
     } catch (e) {
       console.error(`DELETE /api/admin/db/${table}/rows error:`, e.message);
-      const status = e.status || (e.code && e.code.startsWith('23') ? 400 : 500);
+      const status = e.status || (e.code === '23503' ? 409 : (e.code && e.code.startsWith('23') ? 400 : 500));
       res.status(status).json(formatPgError(e));
     }
   });
