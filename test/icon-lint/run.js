@@ -98,11 +98,12 @@ function extractIconImports(src) {
  *
  * The single combined regex processes left-to-right, ensuring that `//`
  * inside a string literal is consumed as part of the string and never
- * treated as a line-comment start.
+ * treated as a line-comment start, and that `/*` inside a string is
+ * similarly consumed before the block-comment branch can fire.
  */
 function stripCommentsAndStrings(src) {
   return src.replace(
-    /`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/\/[^\n]*/g,
+    /`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
     (match) => match.replace(/[^\n]/g, ' '),
   );
 }
@@ -259,6 +260,38 @@ function extractIconUsages(src) {
     assert(
       usages.some((u) => u.identifier === 'CloseIcon'),
       'CloseIcon after a string containing // must still be detected',
+    );
+  }
+
+  // 6. Identifier appearing ONLY inside a block comment must not be detected.
+  {
+    const src = [
+      "import InfoIcon from '@mui/icons-material/Info';",
+      '/* Use InfoIcon here to display a tooltip */',
+      'export const Hint = () => <div />;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.every((u) => u.identifier !== 'InfoIcon'),
+      'InfoIcon in a /* block comment */ must not be counted as a real usage',
+    );
+  }
+
+  // 7. Identifier appearing ONLY inside a multi-line JSDoc comment must not be detected.
+  {
+    const src = [
+      "import WarningIcon from '@mui/icons-material/Warning';",
+      '/**',
+      ' * @param icon - pass WarningIcon for alerts',
+      ' */',
+      'export function render() { return null; }',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.every((u) => u.identifier !== 'WarningIcon'),
+      'WarningIcon in a /** JSDoc block comment */ must not be counted as a real usage',
     );
   }
 })();
