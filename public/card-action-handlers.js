@@ -374,16 +374,19 @@
   //   Step 1 — Visit details (date/time, location, handle, furniture range, T&C)
   //   Step 2 — Rooms (add/remove rooms with door style, dimensions, units, price)
   //   Step 3 — Review + submit
-  async function openDesignVisitWizard(handler, ctx) {
+  async function openDesignVisitWizard(handler, ctx, existingVisit) {
     _injectStyle();
     const cfg = handler.config || {};
     const defaultDuration = cfg.defaultDurationMin || 90;
     const contactId       = ctx?.contactId    || ctx?.contact_id    || '';
     const contactName     = ctx?.contactName  || ctx?.contact_name  || '';
     const contactEmail    = ctx?.contactEmail || ctx?.contact_email || '';
+    const editMode        = !!(existingVisit && existingVisit.id);
+    const editVisitId     = editMode ? existingVisit.id : null;
 
     // Apply in-progress lead status as soon as the wizard opens (non-fatal).
-    if (cfg.intermediateLeadStatus && contactId) {
+    // Skipped in edit mode — the visit was already past that stage.
+    if (!editMode && cfg.intermediateLeadStatus && contactId) {
       fetch(`/api/contacts/${encodeURIComponent(contactId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -408,9 +411,27 @@
       if (tr.ok) { const td = await tr.json(); termsText = td.terms || ''; termsVersionNumber = td.versionNumber || null; }
     } catch {}
 
-    // Wizard state
+    // Wizard state — pre-populated from existingVisit when in edit mode
     let step = 1;
-    let rooms = [_makeRoom()];
+    let rooms;
+    if (editMode && Array.isArray(existingVisit.rooms) && existingVisit.rooms.length) {
+      rooms = existingVisit.rooms.map(r => ({
+        roomName:       r.room_name || r.roomName || '',
+        doorStyleId:    r.door_style_id || r.doorStyleId || '',
+        widthMm:        r.width_mm  ?? r.widthMm  ?? null,
+        heightMm:       r.height_mm ?? r.heightMm ?? null,
+        depthMm:        r.depth_mm  ?? r.depthMm  ?? null,
+        unitCount:      Math.max(1, parseInt(r.unit_count ?? r.unitCount ?? 1, 10) || 1),
+        unitPricePence: Math.max(0, parseInt(r.unit_price_pence ?? r.unitPricePence ?? 0, 10) || 0),
+        notes:          r.notes || '',
+        images:         Array.isArray(r.images) ? r.images.map(i => ({
+          storageKey: i.storageKey || i.storage_key || '',
+          mimeType:   i.mimeType   || i.mime_type   || null,
+        })) : [],
+      }));
+    } else {
+      rooms = [_makeRoom()];
+    }
     const wizardStyle = `
       .dv-wizard-backdrop {
         position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;
@@ -490,7 +511,7 @@
     backdrop.innerHTML = `
       <div class="dv-wizard" role="dialog" aria-modal="true" aria-label="Design Visit Wizard">
         <div class="dv-wizard-header">
-          <h2>Design Visit</h2>
+          <h2>${editMode ? 'Edit Design Visit' : 'Design Visit'}</h2>
           <button class="dv-wizard-close" id="dv-close-x" aria-label="Close">×</button>
         </div>
         <div class="dv-wizard-body"><div id="dv-wiz-inner"></div></div>
@@ -524,11 +545,34 @@
     const _cleanupChans = () => { _dvChans.forEach(ch => { try { ch.close(); } catch {} }); };
     backdrop.querySelector('#dv-close-x').addEventListener('click', _cleanupChans);
 
-    // State for step 1
+    // State for step 1 — pre-populated from existingVisit when in edit mode
     const s1 = {
       visitDate: '', duration: String(defaultDuration), location: '',
       designerName: '', handleId: '', furnitureRangeId: '', termsAccepted: false,
     };
+    if (editMode) {
+      const ev = existingVisit;
+      if (ev.visit_date) {
+        try {
+          const d = new Date(ev.visit_date);
+          const pad = n => String(n).padStart(2, '0');
+          s1.visitDate = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        } catch {}
+      }
+      if (ev.duration_min) s1.duration = String(ev.duration_min);
+      if (ev.location)     s1.location = String(ev.location);
+      if (ev.handle_id          != null) s1.handleId         = String(ev.handle_id);
+      if (ev.furniture_range_id != null) s1.furnitureRangeId = String(ev.furniture_range_id);
+      // Designer name was stored in notes as "Designer: <name>" by the original
+      // submit path; pull it back out so the field round-trips.
+      if (ev.notes) {
+        const m = String(ev.notes).match(/^Designer:\s*(.+)$/);
+        if (m) s1.designerName = m[1].trim();
+      }
+      // Visit was already accepted once — pre-tick so designer doesn't have to
+      // re-ask the customer just to fix a typo.
+      s1.termsAccepted = !!ev.terms_accepted;
+    }
 
     function renderStepIndicator() {
       return `<div class="dv-step-indicator">
@@ -786,10 +830,10 @@
 
       _renderFooter(null, [
         { cls: 'dv-btn-back', label: '← Back', fn: () => { step = 2; renderStep2(); }},
-        { cls: 'dv-btn-next', id: 'dv-submit', label: 'Submit visit', fn: async () => {
+        { cls: 'dv-btn-next', id: 'dv-submit', label: editMode ? 'Save changes' : 'Submit visit', fn: async () => {
           const errEl = inner.querySelector('#dv-s3-err');
           const btn   = footer.querySelector('#dv-submit');
-          btn.disabled = true; btn.textContent = 'Submitting…';
+          btn.disabled = true; btn.textContent = editMode ? 'Saving…' : 'Submitting…';
           errEl.textContent = '';
           try {
             const payload = {
@@ -818,23 +862,34 @@
               })),
               handlerConfig: cfg,
             };
-            const resp = await fetch('/api/design-visits', {
-              method: 'POST',
+            const url    = editMode ? `/api/design-visits/${encodeURIComponent(editVisitId)}` : '/api/design-visits';
+            const method = editMode ? 'PUT' : 'POST';
+            const resp = await fetch(url, {
+              method,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload),
             });
             const data = await resp.json();
-            if (!resp.ok) throw new Error(data.error || 'Submission failed');
+            if (!resp.ok) throw new Error(data.error || (editMode ? 'Save failed' : 'Submission failed'));
             _cleanupChans();
             backdrop.remove();
+            const successMsg = editMode
+              ? 'Design visit updated. A fresh sign-off email has been sent.'
+              : 'Design visit submitted. Customer sign-off email sent.';
             if (typeof window.toast === 'function') {
-              window.toast('Design visit submitted. Customer sign-off email sent.');
+              window.toast(successMsg);
+            } else if (typeof window.showToast === 'function') {
+              window.showToast(successMsg);
             } else {
-              alert('Design visit submitted successfully. The customer will receive a sign-off link by email.');
+              alert(successMsg);
+            }
+            // Refresh the customer-detail design visit list if present
+            if (typeof window.renderDesignVisits === 'function') {
+              try { window.renderDesignVisits(); } catch {}
             }
           } catch (e) {
-            btn.disabled = false; btn.textContent = 'Submit visit';
-            errEl.textContent = e.message || 'Submission failed. Please try again.';
+            btn.disabled = false; btn.textContent = editMode ? 'Save changes' : 'Submit visit';
+            errEl.textContent = e.message || (editMode ? 'Save failed. Please try again.' : 'Submission failed. Please try again.');
           }
         }},
       ]);
@@ -842,6 +897,7 @@
 
     renderStep1();
   }
+  window.openDesignVisitWizard = openDesignVisitWizard;
 
   function _makeRoom() {
     return { roomName: '', doorStyleId: '', widthMm: null, heightMm: null, depthMm: null, unitCount: 1, unitPricePence: 0, notes: '' };

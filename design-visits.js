@@ -1146,6 +1146,151 @@ router.patch('/api/design-visits/:id', isAuthenticated, requirePrivilege('member
   }
 });
 
+// PUT /api/design-visits/:id — re-open and replace a submitted / revision_requested
+// visit so designers can correct mistakes. Rooms (and their images) are fully
+// replaced from the request body, then the full side-effect chain re-runs:
+// status → submitted, fresh sign-off token, new QB estimate, new customer
+// email. The previous sign-off link is invalidated because the token hash
+// changes.
+router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  const userId = req.user?.claims?.sub;
+  if (!checkDvRateLimit(userId)) {
+    return res.status(429).json({ error: 'Too many requests. Please wait before resubmitting.' });
+  }
+
+  const {
+    contactName, contactEmail,
+    handleId, furnitureRangeId, visitDate, durationMin,
+    location, notes, termsAccepted, rooms = [],
+    handlerConfig,
+  } = req.body;
+
+  if (!Array.isArray(rooms) || !rooms.length) return res.status(400).json({ error: 'At least one room is required' });
+  if (!termsAccepted) return res.status(400).json({ error: 'Terms and conditions must be accepted' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const cur = await client.query(
+      `SELECT status FROM design_visits WHERE id=$1 FOR UPDATE`, [id]
+    );
+    if (!cur.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Visit not found' });
+    }
+    const status = cur.rows[0].status;
+    if (status !== 'submitted' && status !== 'revision_requested' && status !== 'draft') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `Cannot edit visit in status: ${status}` });
+    }
+
+    // Stamp the visit with the latest T&C version (mirrors POST behaviour)
+    let termsVersionId = null;
+    try {
+      const tvr = await client.query(
+        `SELECT id FROM terms_conditions_versions ORDER BY version_number DESC LIMIT 1`
+      );
+      termsVersionId = tvr.rows[0]?.id || null;
+    } catch {}
+
+    await client.query(`
+      UPDATE design_visits SET
+        contact_name               = $1,
+        contact_email              = $2,
+        handle_id                  = $3,
+        furniture_range_id         = $4,
+        visit_date                 = $5,
+        duration_min               = $6,
+        location                   = $7,
+        notes                      = $8,
+        terms_accepted             = $9,
+        terms_condition_version_id = $10,
+        status                     = 'draft',
+        signoff_token_hash         = NULL,
+        signoff_expires_at         = NULL,
+        updated_at                 = NOW()
+      WHERE id = $11`,
+      [
+        contactName  ? String(contactName).slice(0, 300)  : null,
+        contactEmail ? String(contactEmail).slice(0, 300) : null,
+        handleId         ? parseInt(handleId, 10)         || null : null,
+        furnitureRangeId ? parseInt(furnitureRangeId, 10) || null : null,
+        visitDate ? new Date(visitDate).toISOString() : null,
+        durationMin ? parseInt(durationMin, 10) || 90 : 90,
+        location ? String(location).slice(0, 500) : null,
+        notes    ? String(notes).slice(0, 4000)   : null,
+        !!termsAccepted,
+        termsVersionId,
+        id,
+      ]
+    );
+
+    // Replace all rooms (cascades to images)
+    await client.query(`DELETE FROM design_visit_rooms WHERE design_visit_id=$1`, [id]);
+
+    for (let i = 0; i < rooms.length; i++) {
+      const rm = rooms[i];
+      const rr = await client.query(`
+        INSERT INTO design_visit_rooms
+          (design_visit_id, room_name, door_style_id, width_mm, height_mm, depth_mm,
+           unit_count, unit_price_pence, notes, sort_order)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        RETURNING id`,
+        [
+          id,
+          String(rm.roomName || rm.room_name || 'Room').slice(0, 200),
+          rm.doorStyleId || rm.door_style_id ? parseInt(rm.doorStyleId || rm.door_style_id, 10) || null : null,
+          rm.widthMm  || rm.width_mm  ? parseInt(rm.widthMm  || rm.width_mm,  10) || null : null,
+          rm.heightMm || rm.height_mm ? parseInt(rm.heightMm || rm.height_mm, 10) || null : null,
+          rm.depthMm  || rm.depth_mm  ? parseInt(rm.depthMm  || rm.depth_mm,  10) || null : null,
+          Math.max(1, parseInt(rm.unitCount || rm.unit_count || 1, 10)),
+          Math.max(0, parseInt(rm.unitPricePence || rm.unit_price_pence || 0, 10)),
+          rm.notes ? String(rm.notes).slice(0, 2000) : null,
+          i,
+        ]
+      );
+      const roomId = rr.rows[0].id;
+      const images = Array.isArray(rm.images) ? rm.images : [];
+      const MAX_IMG_BYTES = 10 * 1024 * 1024;
+      for (const img of images) {
+        const raw = String(img.storageKey || img.storage_key || img.url || '');
+        if (!raw) continue;
+        const isDataImage = /^data:image\/(png|jpe?g|gif|webp|bmp);base64,/i.test(raw);
+        const isHttpUrl   = /^https?:\/\//i.test(raw);
+        const isAppPath   = raw.startsWith('/');
+        if (!isDataImage && !isHttpUrl && !isAppPath) continue;
+        if (raw.length > MAX_IMG_BYTES) continue;
+        await client.query(
+          `INSERT INTO design_visit_room_images (room_id, storage_key, mime_type) VALUES ($1,$2,$3)`,
+          [roomId, raw, img.mimeType || img.mime_type || null]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+
+    // Re-run the full submit pipeline (sets status back to 'submitted', mints a
+    // new sign-off token, creates a new QB estimate, re-sends the customer
+    // email). The previous sign-off link is invalidated by the new token hash.
+    try {
+      await runSubmitSideEffects(id, handlerConfig || {}, req.user);
+    } catch (e) {
+      console.error('[design-visits] Side effect chain error on PUT:', e.message);
+    }
+
+    res.json({ ok: true, designVisitId: id });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('[design-visits] PUT /api/design-visits/:id error:', e.message);
+    res.status(500).json({ error: 'Could not update design visit.' });
+  } finally {
+    client.release();
+  }
+});
+
 router.delete('/api/design-visits/:id', isAuthenticated, requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });

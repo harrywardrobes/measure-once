@@ -2089,6 +2089,7 @@ async function renderDesignVisits() {
     const when     = _fmtDesignVisitWhen(v.visit_date || v.created_at);
     const totalGbp = ((Number(v.estimate_total_pence) || 0) / 100).toFixed(2);
     const canRevise  = v.status === 'submitted' || v.status === 'signed_off';
+    const canEdit    = v.status === 'submitted' || v.status === 'revision_requested' || v.status === 'draft';
     const expanded = _designVisitsExpanded.has(v.id);
     return `
       <div class="comment-item" style="margin-bottom:6px;flex-direction:column;align-items:stretch;gap:6px">
@@ -2104,6 +2105,7 @@ async function renderDesignVisits() {
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
             <button class="btn-cancel-note" style="padding:4px 10px;font-size:0.75rem" onclick="toggleDesignVisitReview(${v.id})">${expanded ? 'Hide' : 'Review'}</button>
+            ${canEdit ? `<button class="btn-cancel-note" style="padding:4px 10px;font-size:0.75rem" onclick="editDesignVisit(${v.id})">Edit</button>` : ''}
             ${isAdmin && canRevise ? `<button class="btn-cancel-note" style="padding:4px 10px;font-size:0.75rem" onclick="markDesignVisitRevision(${v.id})">Request revision</button>` : ''}
             ${isAdmin ? `<button class="btn-cancel-note" style="padding:4px 10px;font-size:0.75rem;color:#b91c1c" onclick="deleteDesignVisit(${v.id})">Delete</button>` : ''}
           </div>
@@ -2175,6 +2177,32 @@ async function _loadDesignVisitDetail(id) {
     ${v.notes          ? `<div style="margin-top:8px;white-space:pre-wrap"><strong>Notes:</strong> ${escHtml(v.notes)}</div>` : ''}
     ${v.revision_note  ? `<div style="margin-top:8px;white-space:pre-wrap;color:#991b1b"><strong>Revision note:</strong> ${escHtml(v.revision_note)}</div>` : ''}
   `;
+}
+
+async function editDesignVisit(id) {
+  if (typeof window.openDesignVisitWizard !== 'function') {
+    showToast('Edit wizard is not available on this page.', true);
+    return;
+  }
+  let visit;
+  try { visit = await GET(`/api/design-visits/${id}`); }
+  catch (e) { showToast(`Could not load visit: ${e.message || 'error'}`, true); return; }
+  if (!visit) { showToast('Visit not found', true); return; }
+  if (!['submitted', 'revision_requested', 'draft'].includes(visit.status)) {
+    showToast(`Cannot edit a visit in status "${visit.status}".`, true);
+    return;
+  }
+  const contact = state.selectedContact?.properties || {};
+  const ctx = {
+    contactId:    visit.contact_id || state.selectedContactId,
+    contactName:  visit.contact_name  || [contact.firstname, contact.lastname].filter(Boolean).join(' ') || '',
+    contactEmail: visit.contact_email || contact.email || '',
+  };
+  // No handler config available when re-opening from the customer-detail page —
+  // pass an empty config so the wizard still works. The downstream side-effects
+  // chain (HubSpot note, QB estimate, customer email) will run regardless;
+  // only the optional lead-status flip and inline T&C text are config-driven.
+  window.openDesignVisitWizard({ config: {} }, ctx, visit);
 }
 
 async function markDesignVisitRevision(id) {
