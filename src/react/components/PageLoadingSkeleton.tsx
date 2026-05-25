@@ -506,6 +506,178 @@ export function AdminAuditLogPageSkeleton() {
 }
 
 /**
+ * Shape-matched skeleton for AdminSettingsPage.
+ *
+ * Mirrors the real page structure:
+ *   • Integrations card — heading + subtitle + HubSpot status row + divider
+ *     + Lead Statuses heading/Save row + table placeholder rows
+ *     + "Add new status" inset with key / stage / label fields + button
+ */
+export function AdminSettingsPageSkeleton() {
+  const visible = useVisible();
+  if (!visible) return null;
+
+  return (
+    <Stack spacing={2}>
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        {/* Integrations heading */}
+        <MuiSkeleton variant="text" width={120} height={28} sx={{ mb: 0.5 }} />
+        <MuiSkeleton variant="text" width="70%" height={16} sx={{ mb: 2 }} />
+
+        {/* HubSpot status row */}
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center',
+          border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.25 }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <MuiSkeleton variant="rounded" width={18} height={18} />
+            <MuiSkeleton variant="text" width={100} height={18} />
+          </Stack>
+          <MuiSkeleton variant="rounded" width={80} height={22} />
+        </Stack>
+
+        {/* Divider */}
+        <Box sx={{ my: 3, borderTop: '1px solid', borderColor: 'divider' }} />
+
+        {/* Lead Statuses heading + Save button */}
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+          <Box>
+            <MuiSkeleton variant="text" width={130} height={22} sx={{ mb: 0.5 }} />
+            <MuiSkeleton variant="text" width="75%" height={16} />
+          </Box>
+          <MuiSkeleton variant="rounded" width={72} height={36} sx={{ flexShrink: 0 }} />
+        </Stack>
+
+        {/* Table header */}
+        <Stack direction="row" spacing={2} sx={{ mb: 1 }}>
+          {[100, 90, 160, 60, 80].map((w, i) => (
+            <MuiSkeleton key={i} variant="text" width={w} height={14} />
+          ))}
+        </Stack>
+
+        {/* 4 lead-status rows */}
+        <Stack spacing={1}>
+          {[0, 1, 2, 3].map((i) => (
+            <Stack key={i} direction="row" spacing={2} sx={{ alignItems: 'center',
+              py: 0.75, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <MuiSkeleton variant="text" width={90} height={18} sx={{ flexShrink: 0 }} />
+              <MuiSkeleton variant="rounded" width={80} height={22} />
+              <MuiSkeleton variant="text" width={140} height={18} sx={{ flex: 1 }} />
+              <MuiSkeleton variant="rounded" width={28} height={22} />
+              <Stack direction="row" spacing={0.5}>
+                <MuiSkeleton variant="circular" width={28} height={28} />
+                <MuiSkeleton variant="circular" width={28} height={28} />
+              </Stack>
+            </Stack>
+          ))}
+        </Stack>
+
+        {/* Add new status inset */}
+        <Box sx={{ mt: 3, p: 2, borderRadius: 1, border: '1px solid', borderColor: 'divider',
+          bgcolor: 'background.default' }}>
+          <MuiSkeleton variant="text" width={120} height={18} sx={{ mb: 1.5 }} />
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ alignItems: { md: 'flex-end' } }}>
+            <MuiSkeleton variant="rounded" height={40} sx={{ flex: 1 }} />
+            <MuiSkeleton variant="rounded" width={160} height={40} />
+            <MuiSkeleton variant="rounded" height={40} sx={{ flex: 2 }} />
+            <MuiSkeleton variant="rounded" width={100} height={40} />
+          </Stack>
+        </Box>
+      </Box>
+    </Stack>
+  );
+}
+
+/**
+ * Shape-matched skeleton for CardActionsPage.
+ *
+ * Mirrors the real page structure:
+ *   • Single card — heading + subtitle + Save button
+ *     + table rows (stage label column + a few lead-status label inputs)
+ */
+export function CardActionsPageSkeleton() {
+  const visible = useVisible();
+  if (!visible) return null;
+
+  return (
+    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+      {/* Heading row + Save button */}
+      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+        <Box>
+          <MuiSkeleton variant="text" width={160} height={28} sx={{ mb: 0.5 }} />
+          <MuiSkeleton variant="text" width="70%" height={16} />
+          <MuiSkeleton variant="text" width="55%" height={16} />
+        </Box>
+        <MuiSkeleton variant="rounded" width={72} height={36} sx={{ flexShrink: 0 }} />
+      </Stack>
+
+      {/* Table header row */}
+      <Stack direction="row" spacing={2} sx={{ mb: 1 }}>
+        <MuiSkeleton variant="text" width={90} height={14} />
+        {[120, 140, 130, 120].map((w, i) => (
+          <MuiSkeleton key={i} variant="text" width={w} height={14} />
+        ))}
+      </Stack>
+
+      {/* 5 stage × status rows */}
+      <Stack spacing={0}>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Stack key={i} direction="row" spacing={2}
+            sx={{ py: 1, borderBottom: '1px solid', borderColor: 'divider', alignItems: 'center' }}>
+            <MuiSkeleton variant="text" width={80} height={18} sx={{ flexShrink: 0 }} />
+            {[0, 1, 2, 3].map((j) => (
+              <MuiSkeleton key={j} variant="rounded" height={34} sx={{ flex: 1 }} />
+            ))}
+          </Stack>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
+/**
+ * Shape-matched skeleton for ActionHandlersPage.
+ *
+ * Mirrors the real page structure:
+ *   • Single card — heading + subtitle
+ *     + handler rows (action label + bound handler chip or "+ Add action" button + handler name)
+ */
+export function ActionHandlersPageSkeleton() {
+  const visible = useVisible();
+  if (!visible) return null;
+
+  return (
+    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+      {/* Heading */}
+      <MuiSkeleton variant="text" width={150} height={28} sx={{ mb: 0.5 }} />
+      <MuiSkeleton variant="text" width="75%" height={16} />
+      <MuiSkeleton variant="text" width="60%" height={16} sx={{ mb: 2 }} />
+
+      {/* 6 handler rows */}
+      <Stack spacing={0}>
+        {[160, 140, 175, 130, 155, 145].map((w, i) => (
+          <Stack key={i} direction="row" spacing={2}
+            sx={{ py: 1.25, borderBottom: '1px solid', borderColor: 'divider', alignItems: 'center' }}>
+            {/* Action label */}
+            <MuiSkeleton variant="text" width={w} height={18} sx={{ flex: 1 }} />
+            {/* Stage chip */}
+            <MuiSkeleton variant="rounded" width={80} height={22} sx={{ flexShrink: 0 }} />
+            {/* Handler chip or add button */}
+            {i % 2 === 0
+              ? <MuiSkeleton variant="rounded" width={130} height={28} sx={{ flexShrink: 0 }} />
+              : <MuiSkeleton variant="rounded" width={100} height={28} sx={{ flexShrink: 0 }} />
+            }
+            {/* Edit/delete icons */}
+            <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+              <MuiSkeleton variant="circular" width={28} height={28} />
+              <MuiSkeleton variant="circular" width={28} height={28} />
+            </Stack>
+          </Stack>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
+/**
  * Shape-matched skeleton for HomePage.
  *
  * Mirrors the real page structure:

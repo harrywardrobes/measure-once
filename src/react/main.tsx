@@ -12,6 +12,9 @@ import {
   AdminPermissionsPageSkeleton,
   AdminRequestsPageSkeleton,
   AdminAuditLogPageSkeleton,
+  AdminSettingsPageSkeleton,
+  CardActionsPageSkeleton,
+  ActionHandlersPageSkeleton,
 } from './components/PageLoadingSkeleton';
 
 /*
@@ -103,9 +106,9 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'tab-permissions',      render: () => <AdminPermissionsPage />, fallback: <AdminPermissionsPageSkeleton /> },
   { id: 'tab-requests',         render: () => <AdminRequestsPage />,   fallback: <AdminRequestsPageSkeleton /> },
   { id: 'tab-auditlog',         render: () => <AdminAuditLogPage />,   fallback: <AdminAuditLogPageSkeleton /> },
-  { id: 'tab-settings',         render: () => <SettingsPage /> },
-  { id: 'tab-cardactions',      render: () => <CardActionsPage /> },
-  { id: 'tab-actionhandlers',   render: () => <ActionHandlersPage /> },
+  { id: 'tab-settings',         render: () => <SettingsPage />,        fallback: <AdminSettingsPageSkeleton /> },
+  { id: 'tab-cardactions',      render: () => <CardActionsPage />,     fallback: <CardActionsPageSkeleton /> },
+  { id: 'tab-actionhandlers',   render: () => <ActionHandlersPage />,  fallback: <ActionHandlersPageSkeleton /> },
   { id: 'tab-designvisit',      render: () => <DesignVisitPage /> },
   { id: 'tab-devenv',           render: () => <DevEnvironmentPage /> },
 ];
