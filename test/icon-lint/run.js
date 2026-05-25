@@ -77,6 +77,31 @@ function extractIconImports(src) {
 }
 
 /**
+ * Strip single-line comments (`//…`) and quoted string literals (single,
+ * double, and template) from source text before scanning for icon usages.
+ *
+ * This prevents false positives such as:
+ *   // import DeleteIcon here
+ *   const label = 'DeleteIcon';
+ * from being counted as real usages of the DeleteIcon identifier.
+ *
+ * The replacement preserves newlines so that multi-line template literals
+ * don't collapse the surrounding code onto one line and confuse the regexes
+ * that follow. Everything else inside a matched token is replaced with a
+ * space so overall character positions stay roughly stable.
+ *
+ * The single combined regex processes left-to-right, ensuring that `//`
+ * inside a string literal is consumed as part of the string and never
+ * treated as a line-comment start.
+ */
+function stripCommentsAndStrings(src) {
+  return src.replace(
+    /`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\/\/[^\n]*/g,
+    (match) => match.replace(/[^\n]/g, ' '),
+  );
+}
+
+/**
  * Remove all import declarations that reference @mui/icons-material so that
  * the usage scan does not accidentally count imported names as "used" just
  * because they appear in the import statement itself.
@@ -142,6 +167,96 @@ function extractIconUsages(src) {
   return usages;
 }
 
+// ── smoke tests ───────────────────────────────────────────────────────────────
+// Lightweight inline assertions that run once on startup to guard the helpers
+// against regressions.  A failure here exits immediately with a clear message.
+
+(function runSmokeTests() {
+  function assert(cond, msg) {
+    if (!cond) {
+      console.error(`[icon-lint] Smoke test FAILED: ${msg}`);
+      process.exit(1);
+    }
+  }
+
+  // --- stripCommentsAndStrings ---
+
+  // 1. Identifier appearing ONLY in a // comment must not be detected as used.
+  {
+    const src = [
+      "import DeleteIcon from '@mui/icons-material/Delete';",
+      '// DeleteIcon is mentioned here but not actually used',
+      'export const Foo = () => <div />;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.every((u) => u.identifier !== 'DeleteIcon'),
+      'DeleteIcon in a // comment must not be counted as a real usage',
+    );
+  }
+
+  // 2. Identifier appearing ONLY in a single-quoted string must not be detected.
+  {
+    const src = [
+      "import AddIcon from '@mui/icons-material/Add';",
+      "const label = 'AddIcon';",
+      'export const Bar = () => <div />;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.every((u) => u.identifier !== 'AddIcon'),
+      'AddIcon in a single-quoted string must not be counted as a real usage',
+    );
+  }
+
+  // 3. Identifier appearing ONLY in a double-quoted string must not be detected.
+  {
+    const src = [
+      "import EditIcon from '@mui/icons-material/Edit';",
+      'const key = "EditIcon";',
+      'export const Baz = () => <div />;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.every((u) => u.identifier !== 'EditIcon'),
+      'EditIcon in a double-quoted string must not be counted as a real usage',
+    );
+  }
+
+  // 4. A real JSX usage must still be detected after stripping.
+  {
+    const src = [
+      "import SaveIcon from '@mui/icons-material/Save';",
+      '// SaveIcon is used below',
+      'export const Widget = () => <SaveIcon />;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.some((u) => u.identifier === 'SaveIcon'),
+      'SaveIcon used as a JSX element must still be detected after stripping',
+    );
+  }
+
+  // 5. `//` inside a string literal must not be treated as a line-comment start.
+  {
+    const src = [
+      "import CloseIcon from '@mui/icons-material/Close';",
+      "const url = 'https://example.com'; // fine",
+      'export const Link = () => <CloseIcon />;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.some((u) => u.identifier === 'CloseIcon'),
+      'CloseIcon after a string containing // must still be detected',
+    );
+  }
+})();
+
 // ── scan ─────────────────────────────────────────────────────────────────────
 
 const files = walkSync(
@@ -169,7 +284,9 @@ for (const file of files.sort()) {
 
   // Strip icon import lines before scanning usages so that the imported
   // identifiers themselves don't appear as "used" just from the import line.
-  const bodySrc = stripIconImportLines(src);
+  // Also strip comments and string literals so that an identifier appearing
+  // only inside `// a comment` or `'a string'` is not counted as a real usage.
+  const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
   const usages  = extractIconUsages(bodySrc);
   const usedSet = new Set(usages.map((u) => u.identifier));
 
