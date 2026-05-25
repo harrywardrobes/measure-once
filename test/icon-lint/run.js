@@ -96,65 +96,196 @@ function extractIconImports(src) {
  * that follow. Everything else inside a matched token is replaced with a
  * space so overall character positions stay roughly stable.
  *
- * The single combined regex processes left-to-right, ensuring that `//`
- * inside a string literal is consumed as part of the string and never
- * treated as a line-comment start, and that `/*` inside a string is
- * similarly consumed before the block-comment branch can fire.
+ * Uses a full character-by-character parser (rather than a regex) so that
+ * template literals nested inside ${} interpolations are handled correctly:
  *
- * Single-quoted and double-quoted string branches intentionally exclude `\n`
- * from the matched content ([^'"\\\n]).  JavaScript string literals cannot
- * legally span a newline without a backslash continuation, and JSX attribute
- * values never span lines.  Without this guard, a lone `'` or `"` in JSX
- * text or an MUI `sx` prop value would silently consume all source text up
- * to the *next* quote character, potentially crossing many lines and
- * swallowing real icon identifiers.
+ *   `outer ${`inner ${FooIcon}`} more`
+ *
+ * The outer regex approach fails here because it cannot match a backtick-
+ * delimited literal that itself contains backticks.  The recursive parser
+ * tracks string/template nesting depth and correctly blanks only the static
+ * parts of each template, preserving all ${...} expression content so that
+ * icon identifiers inside them are visible to the usage scan.
+ *
+ * Single-quoted and double-quoted strings inside interpolations also stop
+ * at newlines to avoid spanning multiple lines on a lone unmatched quote.
  */
 function stripCommentsAndStrings(src) {
-  return src.replace(
-    /`(?:[^`\\]|\\.)*`|"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
-    (match) => {
-      if (match[0] === '`') {
-        // Template literal: blank out the static string parts but preserve
-        // ${...} interpolation expressions so that icon identifiers used
-        // inside them (e.g. `${FooIcon}` or `${fn({ icon: FooIcon })}`) are
-        // still found by the usage scan.
-        //
-        // Uses a character-by-character approach with a brace-depth counter so
-        // that arbitrarily nested `{}` inside an interpolation are handled
-        // correctly (the previous `[^}]*` regex only handled one level).
-        let result = '';
-        let i = 0;
-        while (i < match.length) {
-          const ch = match[i];
-          if (ch === '\\') {
-            result += match[i + 1] === '\n' ? ' \n' : '  ';
-            i += 2;
-            continue;
-          }
-          if (ch === '$' && i + 1 < match.length && match[i + 1] === '{') {
-            // Walk forward tracking brace depth to find the matching '}'.
-            let depth = 1;
-            let j = i + 2;
-            while (j < match.length && depth > 0) {
-              if (match[j] === '{') depth++;
-              else if (match[j] === '}') depth--;
-              j++;
-            }
-            // Preserve the entire interpolation (${...}) verbatim so that
-            // any icon identifiers inside it are visible to the usage scan.
-            result += match.slice(i, j);
-            i = j;
-            continue;
-          }
-          // Static template content — preserve newlines, blank everything else.
-          result += ch === '\n' ? '\n' : ' ';
+  let result = '';
+  let i = 0;
+
+  function blankNonNewline(ch) {
+    result += ch === '\n' ? '\n' : ' ';
+  }
+
+  // Parse a single-quoted string body (opening ' already consumed).
+  // Blanks content; stops at closing ' or newline.
+  function parseSingleQuoted() {
+    while (i < src.length) {
+      const ch = src[i];
+      if (ch === '\\') {
+        blankNonNewline(' ');
+        blankNonNewline(' ');
+        i += 2;
+      } else if (ch === "'" || ch === '\n') {
+        blankNonNewline(ch);
+        i++;
+        return;
+      } else {
+        blankNonNewline(ch);
+        i++;
+      }
+    }
+  }
+
+  // Parse a double-quoted string body (opening " already consumed).
+  function parseDoubleQuoted() {
+    while (i < src.length) {
+      const ch = src[i];
+      if (ch === '\\') {
+        blankNonNewline(' ');
+        blankNonNewline(' ');
+        i += 2;
+      } else if (ch === '"' || ch === '\n') {
+        blankNonNewline(ch);
+        i++;
+        return;
+      } else {
+        blankNonNewline(ch);
+        i++;
+      }
+    }
+  }
+
+  // Forward declaration — parseTemplateLiteralBody and parseInterpolationBody
+  // are mutually recursive.
+  let parseTemplateLiteralBody;
+
+  // Parse inside a ${...} interpolation (the ${ has already been emitted).
+  // Emits content verbatim so icon identifiers remain visible.
+  // Stops (without emitting the closing }) when the matching } is found.
+  // Handles: nested braces, nested template literals, nested strings.
+  function parseInterpolationBody() {
+    let depth = 1;
+    while (i < src.length) {
+      const ch = src[i];
+      if (ch === '{') {
+        depth++;
+        result += ch;
+        i++;
+      } else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          i++; // consume the closing }
+          return;
+        }
+        result += ch;
+        i++;
+      } else if (ch === '`') {
+        // Nested template literal inside the interpolation.
+        // Blank its static parts but preserve its own ${...} expressions.
+        i++; // consume opening backtick (blanked — it's not an identifier)
+        parseTemplateLiteralBody();
+        // parseTemplateLiteralBody consumes the closing backtick
+      } else if (ch === "'") {
+        i++; // consume opening quote
+        parseSingleQuoted();
+      } else if (ch === '"') {
+        i++; // consume opening quote
+        parseDoubleQuoted();
+      } else if (ch === '/' && i + 1 < src.length && src[i + 1] === '/') {
+        // Line comment inside interpolation (edge case)
+        while (i < src.length && src[i] !== '\n') {
+          result += ' ';
           i++;
         }
-        return result;
+      } else if (ch === '/' && i + 1 < src.length && src[i + 1] === '*') {
+        // Block comment inside interpolation (edge case)
+        i += 2;
+        while (i < src.length) {
+          if (src[i] === '*' && i + 1 < src.length && src[i + 1] === '/') {
+            result += '  ';
+            i += 2;
+            break;
+          }
+          blankNonNewline(src[i]);
+          i++;
+        }
+      } else {
+        result += ch;
+        i++;
       }
-      return match.replace(/[^\n]/g, ' ');
-    },
-  );
+    }
+  }
+
+  // Parse a template literal body (opening backtick already consumed).
+  // Blanks static parts; preserves ${...} interpolation content.
+  // Consumes the closing backtick before returning.
+  parseTemplateLiteralBody = function () {
+    while (i < src.length) {
+      const ch = src[i];
+      if (ch === '\\') {
+        result += src[i + 1] === '\n' ? ' \n' : '  ';
+        i += 2;
+      } else if (ch === '`') {
+        // Closing backtick of this template literal
+        i++;
+        return;
+      } else if (ch === '$' && i + 1 < src.length && src[i + 1] === '{') {
+        // Interpolation — emit ${ so the content remains in result, then
+        // parse the body, then emit } to close.
+        result += '${';
+        i += 2;
+        parseInterpolationBody();
+        result += '}';
+      } else {
+        // Static template content — blank, preserve newlines.
+        blankNonNewline(ch);
+        i++;
+      }
+    }
+  };
+
+  // Main parse loop
+  while (i < src.length) {
+    const ch = src[i];
+    if (ch === '/' && i + 1 < src.length && src[i + 1] === '/') {
+      // Line comment — blank to end of line
+      while (i < src.length && src[i] !== '\n') {
+        result += ' ';
+        i++;
+      }
+    } else if (ch === '/' && i + 1 < src.length && src[i + 1] === '*') {
+      // Block comment — blank everything, preserve newlines
+      i += 2;
+      while (i < src.length) {
+        if (src[i] === '*' && i + 1 < src.length && src[i + 1] === '/') {
+          result += '  ';
+          i += 2;
+          break;
+        }
+        blankNonNewline(src[i]);
+        i++;
+      }
+    } else if (ch === '"') {
+      result += ' '; // blank the opening quote
+      i++;
+      parseDoubleQuoted();
+    } else if (ch === "'") {
+      result += ' '; // blank the opening quote
+      i++;
+      parseSingleQuoted();
+    } else if (ch === '`') {
+      result += ' '; // blank the opening backtick
+      i++;
+      parseTemplateLiteralBody();
+    } else {
+      result += ch;
+      i++;
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -485,6 +616,25 @@ function extractIconUsages(src) {
     assert(
       failures.every((f) => f.identifier !== 'ListItemIcon'),
       'ListItemIcon imported from @mui/material must not be flagged as unimported from @mui/icons-material',
+    );
+  }
+
+  // 15. Identifier inside a template literal that is itself nested inside a
+  //     ${} interpolation of an outer template literal must be detected.
+  //     e.g. `outer ${`inner ${FooIcon}`} more`
+  //     The outer regex approach fails here because the outer backtick regex
+  //     terminates at the first inner backtick; the character-by-character
+  //     parser handles this correctly via mutual recursion.
+  {
+    const src = [
+      "import LayersIcon from '@mui/icons-material/Layers';",
+      'const x = `outer ${ `inner ${LayersIcon}` } more`;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.some((u) => u.identifier === 'LayersIcon'),
+      'LayersIcon inside a template literal nested within a ${} interpolation must be detected as a usage',
     );
   }
 })();
