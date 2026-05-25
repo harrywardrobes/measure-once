@@ -3027,7 +3027,7 @@
         <button class="tab-btn"        data-tab="actionhandlers" onclick="switchTab('actionhandlers');loadCardActionHandlersAdmin()">Action handlers</button>
         <button class="tab-btn"        data-tab="designvisit"   onclick="switchTab('designvisit');loadDvCatalogue()">Design visit</button>
         <button class="tab-btn"        data-tab="search"        onclick="switchTab('search')">Search</button>
-        <button class="tab-btn"        data-tab="workshop"    onclick="switchTab('workshop');loadWorkshopSettings()">Workshop</button>
+        <button class="tab-btn"        data-tab="workshop"    onclick="switchTab('workshop')">Workshop</button>
         <button class="tab-btn"        data-tab="designsystem" onclick="switchTab('designsystem')">Design system</button>
         <a class="tab-btn" href="/admin/database" style="text-decoration:none;">Database</a>
         <button class="tab-btn"        data-tab="devenv"      onclick="switchTab('devenv')" id="tab-btn-devenv" style="display:none;">Dev environment</button>
@@ -3396,15 +3396,11 @@
       <div class="tab-panel" id="tab-search"></div>
 
       <!-- WORKSHOP -->
-      <div class="tab-panel" id="tab-workshop">
-        <div class="card">
-          <div class="card-title">Lead Times</div>
-          <p class="card-desc" style="margin-bottom:16px;">Manufacturing lead times used for scheduling. Edit a value and click Save to update it.</p>
-          <div id="workshop-settings-wrap">
-            <p class="admin-msg admin-msg--muted">Loading…</p>
-          </div>
-        </div>
-      </div>
+      <!--
+        Workshop tab is now a React island (src/react/pages/WorkshopSettingsPage.tsx).
+        The /react/main.js bundle self-mounts into #tab-workshop.
+      -->
+      <div class="tab-panel" id="tab-workshop"></div>
 
       <!-- DESIGN SYSTEM -->
       <div class="tab-panel" id="tab-designsystem"></div>
@@ -3504,7 +3500,7 @@
       else if (savedTab === 'actionhandlers') { switchTab('actionhandlers'); loadCardActionHandlersAdmin(); }
       else if (savedTab === 'designvisit') { switchTab('designvisit'); loadDvCatalogue(); }
       else if (savedTab === 'search') { switchTab('search'); }
-      else if (savedTab === 'workshop') { switchTab('workshop'); loadWorkshopSettings(); }
+      else if (savedTab === 'workshop') { switchTab('workshop'); }
       else if (savedTab === 'designsystem') { switchTab('designsystem'); }
       else { switchTab(savedTab); }
     }
@@ -4148,83 +4144,8 @@
   // need to live here. The vanilla SEARCH_ACTIONS_META list and all _ss*
   // helpers were removed when the tab was ported.
 
-  // ── Workshop Settings tab ────────────────────────────────────────────────────
-  let _workshopLoaded = false;
-  let _workshopData   = [];
-
-  async function loadWorkshopSettings() {
-    if (_workshopLoaded) return;
-    const wrap = document.getElementById('workshop-settings-wrap');
-    if (!wrap) return;
-    try {
-      _workshopData   = await api('GET', '/api/admin/workshop-settings');
-      _workshopLoaded = true;
-      renderWorkshopSettings();
-    } catch (e) {
-      if (wrap) wrap.innerHTML = `<p style="color:#991b1b;font-size:.82rem;">Could not load: ${esc(e.message)}</p>`;
-    }
-  }
-
-  function renderWorkshopSettings() {
-    const wrap = document.getElementById('workshop-settings-wrap');
-    if (!wrap) return;
-    if (!_workshopData.length) {
-      wrap.innerHTML = `<p style="color:var(--ink-4);font-size:.82rem;font-style:italic;">No settings found.</p>`;
-      return;
-    }
-    wrap.innerHTML = _workshopData.map(row => {
-      const updatedBy = row.updated_by ? ` · last updated by ${esc(row.updated_by)}` : '';
-      const updatedAt = row.updated_at
-        ? ` on ${new Date(row.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
-        : '';
-      return `
-        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--stone-soft);" data-ws-key="${esc(row.key)}">
-          <div style="flex:1;">
-            <div style="font-weight:600;font-size:.875rem;color:var(--ink-1);">${esc(row.label)}</div>
-            <div style="font-size:.72rem;color:var(--ink-4);margin-top:2px;">key: <code>${esc(row.key)}</code>${updatedAt}${updatedBy}</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-            <input type="number" min="0" step="1" class="field ws-value-input"
-              data-key="${esc(row.key)}"
-              value="${esc(row.value)}"
-              style="width:90px;text-align:right;"
-              aria-label="${esc(row.label)} (days)">
-            <span style="font-size:.82rem;color:var(--ink-3);white-space:nowrap;">days</span>
-            <button class="btn btn-primary ws-save-btn"
-              data-key="${esc(row.key)}"
-              onclick="saveWorkshopSetting('${esc(row.key)}', this)"
-              style="padding:5px 14px;font-size:.82rem;">Save</button>
-          </div>
-        </div>
-      `;
-    }).join('') + `<div style="height:4px;"></div>`;
-  }
-
-  async function saveWorkshopSetting(key, btn) {
-    const input = document.querySelector(`.ws-value-input[data-key="${key}"]`);
-    if (!input) return;
-    const value = input.value.trim();
-    if (value === '' || isNaN(Number(value)) || Number(value) < 0) {
-      showToast('Please enter a valid number of days.', true);
-      return;
-    }
-    const origText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Saving…';
-    try {
-      await api('PATCH', '/api/admin/workshop-settings', { key, value });
-      const row = _workshopData.find(r => r.key === key);
-      if (row) { row.value = value; row.updated_at = new Date().toISOString(); }
-      showToast('Lead time saved.');
-      _workshopLoaded = false;
-      await loadWorkshopSettings();
-    } catch (e) {
-      showToast('Save failed: ' + e.message, true);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = origText;
-    }
-  }
+  // Workshop Settings tab is now a React island
+  // (src/react/pages/WorkshopSettingsPage.tsx).
 
   init();
 </script>

@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { DesignSystemPage } from './pages/DesignSystemPage';
 import { SearchSettingsPage } from './pages/SearchSettingsPage';
+import { WorkshopSettingsPage } from './pages/WorkshopSettingsPage';
 
 /**
  * Entry point for the React island that co-exists with the legacy static
@@ -19,6 +20,7 @@ import { SearchSettingsPage } from './pages/SearchSettingsPage';
 const MOUNTS: Array<{ id: string; render: () => React.ReactElement }> = [
   { id: 'tab-designsystem', render: () => <DesignSystemPage /> },
   { id: 'tab-search',       render: () => <SearchSettingsPage /> },
+  { id: 'tab-workshop',     render: () => <WorkshopSettingsPage /> },
 ];
 
 function mount() {
