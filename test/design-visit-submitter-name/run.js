@@ -302,7 +302,46 @@ async function main() {
       return m ? m[1] : null;
     }
 
+    // Verifies the sign-off link actually resolves: a real customer clicking
+    // the URL would hit GET /api/design-visits/sign-off/:token and expect
+    // the visit payload (200) — not a 404 from an appBaseUrl/route drift.
+    async function assertSignoffLinkResolves(idTag, token, expectedVisitId) {
+      if (!token) {
+        record(`${idTag}.signoff-link-resolves`, false,
+          'no token available to verify GET sign-off route');
+        return;
+      }
+      let res, body;
+      try {
+        res = await fetch(`${BASE}/api/design-visits/sign-off/${token}`);
+        body = await res.json().catch(() => null);
+      } catch (e) {
+        record(`${idTag}.signoff-link-resolves`, false,
+          `GET sign-off threw: ${e.message}`);
+        return;
+      }
+      const expectedContact = 'PrivTest DV Name Contact';
+      const kitchen = body && Array.isArray(body.rooms)
+        ? body.rooms.find(r => r.roomName === 'Kitchen') : null;
+      const grandTotal = body && Array.isArray(body.rooms)
+        ? body.rooms.reduce((s, r) => s + (Number(r.totalPence) || 0), 0)
+        : null;
+      const ok = res.status === 200
+        && body
+        && body.id === expectedVisitId
+        && body.contactName === expectedContact
+        && !!kitchen
+        && kitchen.unitCount === 2
+        && kitchen.unitPricePence === 50000
+        && grandTotal === 2 * 50000;
+      record(`${idTag}.signoff-link-resolves`, ok,
+        ok
+          ? `GET sign-off 200, contactName="${expectedContact}", Kitchen room present, grand total = ${grandTotal}p`
+          : `GET sign-off status=${res?.status} body=${JSON.stringify(body).slice(0, 300)}`);
+    }
+
     const approveToken = customerMail ? extractToken(customerMail) : null;
+    await assertSignoffLinkResolves('SIGNOFF-APPROVE', approveToken, visitId);
     if (!approveToken) {
       record('SIGNOFF-APPROVE.team-email', false,
         'could not extract sign-off token from customer email');
@@ -367,6 +406,7 @@ async function main() {
         return h === newTokenHash;
       });
       const revisionToken = customerMailRevision ? extractToken(customerMailRevision) : null;
+      await assertSignoffLinkResolves('SIGNOFF-REVISION', revisionToken, revisionVisitId);
 
       if (!revisionToken) {
         record('SIGNOFF-REVISION.team-email', false,
