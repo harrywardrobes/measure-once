@@ -149,7 +149,7 @@ async function _renderProjectsViewImpl() {
 
   let bodyHtml;
   if (!rows.length) {
-    bodyHtml = `<p class="projects-empty-msg">${emptyMsg}</p>`;
+    bodyHtml = UI.renderEmptyState(emptyMsg, true);
   } else if (groupBy) {
     // Group cards by the contact's most-advanced stage
     const groups = new Map();

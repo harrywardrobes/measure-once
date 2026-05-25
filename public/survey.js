@@ -380,7 +380,7 @@ async function renderSurveyList() {
 
   const cardsHtml = visibleEntries.length
     ? visibleEntries.map(e => _svCardHtml(e)).join('')
-    : `<p class="projects-empty-msg">No surveys yet.</p>`;
+    : UI.renderEmptyState('No surveys yet.', true);
 
   const badge = count
     ? `<span class="eq-col-header-count" style="background:rgba(${rgb},0.1);color:${hex}">${count}</span>` : '';

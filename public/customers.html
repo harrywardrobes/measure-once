@@ -20,97 +20,51 @@
 
   <div id="tab-customers" class="app-body">
     <div id="list-panel" class="list-panel list-panel-fw">
-      <div id="customers-view">
-        <div class="project-stage-tabs-bar">
-          <div class="skeleton-line" style="height:30px;width:42px;border-radius:20px"></div>
-          <div class="skeleton-line" style="height:30px;width:38px;border-radius:20px"></div>
-          <div class="skeleton-line" style="height:30px;width:62px;border-radius:20px"></div>
-          <div class="skeleton-line" style="height:30px;width:76px;border-radius:20px"></div>
-          <div class="skeleton-line" style="height:30px;width:56px;border-radius:20px"></div>
-        </div>
-        <div class="projects-inner">
-          <div class="customer-project-card">
-            <div class="cl-card-main">
-              <div class="cl-card-name-row">
-                <div class="skeleton-line" style="height:16px;width:60%"></div>
-              </div>
-              <div class="cl-card-pills">
-                <div class="skeleton-line skeleton-pill" style="width:72px"></div>
-                <div class="skeleton-line skeleton-pill" style="width:56px"></div>
-              </div>
-            </div>
-            <div class="cl-card-footer">
-              <div class="skeleton-line skeleton-pill" style="width:144px"></div>
-              <div class="skeleton-line skeleton-pill" style="width:88px"></div>
-            </div>
-          </div>
-          <div class="customer-project-card">
-            <div class="cl-card-main">
-              <div class="cl-card-name-row">
-                <div class="skeleton-line" style="height:16px;width:48%"></div>
-              </div>
-              <div class="cl-card-pills">
-                <div class="skeleton-line skeleton-pill" style="width:80px"></div>
-              </div>
-            </div>
-          </div>
-          <div class="customer-project-card">
-            <div class="cl-card-main">
-              <div class="cl-card-name-row">
-                <div class="skeleton-line" style="height:16px;width:70%"></div>
-              </div>
-              <div class="cl-card-pills">
-                <div class="skeleton-line skeleton-pill" style="width:64px"></div>
-                <div class="skeleton-line skeleton-pill" style="width:88px"></div>
-              </div>
-            </div>
-          </div>
-          <div class="customer-project-card">
-            <div class="cl-card-main">
-              <div class="cl-card-name-row">
-                <div class="skeleton-line" style="height:16px;width:53%"></div>
-              </div>
-              <div class="cl-card-pills">
-                <div class="skeleton-line skeleton-pill" style="width:76px"></div>
-                <div class="skeleton-line skeleton-pill" style="width:60px"></div>
-              </div>
-            </div>
-            <div class="cl-card-footer">
-              <div class="skeleton-line skeleton-pill" style="width:132px"></div>
-            </div>
-          </div>
-          <div class="customer-project-card">
-            <div class="cl-card-main">
-              <div class="cl-card-name-row">
-                <div class="skeleton-line" style="height:16px;width:43%"></div>
-              </div>
-              <div class="cl-card-pills">
-                <div class="skeleton-line skeleton-pill" style="width:84px"></div>
-              </div>
-            </div>
-          </div>
-          <div class="customer-project-card">
-            <div class="cl-card-main">
-              <div class="cl-card-name-row">
-                <div class="skeleton-line" style="height:16px;width:65%"></div>
-              </div>
-              <div class="cl-card-pills">
-                <div class="skeleton-line skeleton-pill" style="width:68px"></div>
-                <div class="skeleton-line skeleton-pill" style="width:52px"></div>
-              </div>
-            </div>
-            <div class="cl-card-footer">
-              <div class="skeleton-line skeleton-pill" style="width:148px"></div>
-              <div class="skeleton-line skeleton-pill" style="width:92px"></div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <div id="customers-view"></div>
     </div>
   </div>
 
   <script src="/chrome.js"></script>
   <script src="/components.js"></script>
+  <script>
+    // Paint a lightweight loading skeleton via the shared UI.skeletonLine
+    // helper so the page isn't blank during the initial bootstrap()/data fetch.
+    (function paintCustomerListSkeleton() {
+      const view = document.getElementById('customers-view');
+      if (!view || !window.UI || typeof UI.skeletonLine !== 'function') return;
+      const tabW = [42, 38, 62, 76, 56];
+      const tabs = tabW.map(w =>
+        `<div class="skeleton-line" style="height:30px;width:${w}px;border-radius:20px"></div>`
+      ).join('');
+      const cards = [
+        { name: '60%', pills: [72, 56], footer: [144, 88] },
+        { name: '48%', pills: [80] },
+        { name: '70%', pills: [64, 88] },
+        { name: '53%', pills: [76, 60], footer: [132] },
+        { name: '43%', pills: [84] },
+        { name: '65%', pills: [68, 52], footer: [148, 92] },
+      ].map(c => {
+        const pills = c.pills.map(w =>
+          `<div class="skeleton-line skeleton-pill" style="width:${w}px"></div>`
+        ).join('');
+        const footer = c.footer
+          ? `<div class="cl-card-footer">${c.footer.map(w =>
+              `<div class="skeleton-line skeleton-pill" style="width:${w}px"></div>`
+            ).join('')}</div>`
+          : '';
+        return `<div class="customer-project-card">
+          <div class="cl-card-main">
+            <div class="cl-card-name-row">${UI.skeletonLine(c.name, 16)}</div>
+            <div class="cl-card-pills">${pills}</div>
+          </div>
+          ${footer}
+        </div>`;
+      }).join('');
+      view.innerHTML =
+        `<div class="project-stage-tabs-bar">${tabs}</div>` +
+        `<div class="projects-inner">${cards}</div>`;
+    })();
+  </script>
   <script src="/command-palette.js"></script>
   <script src="/core.js"></script>
   <script src="/workflow-core.js"></script>

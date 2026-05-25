@@ -297,6 +297,12 @@ function openInvoicePanelFromBadge(btn) {
   if (ids.length) openInvoicePanel(ids[0], ids);
 }
 
+function _invStatusVariant(statusKey) {
+  if (statusKey === 'paid')    return 'success';
+  if (statusKey === 'overdue') return 'danger';
+  return 'neutral';
+}
+
 function renderInvoicePanelBody() {
   const inv   = state.qb.panel;
   if (!inv) return;
@@ -328,7 +334,7 @@ function renderInvoicePanelBody() {
       <li class="inv-jump-item${d.selected ? ' inv-jump-item--active' : ''}"
           role="option" aria-selected="${d.selected}"
           onclick="jumpToInvoice(${d.i}); closeInvoiceJumpDropdown()">
-        ${d.statusLabel ? `<span class="inv-status-badge inv-status-${d.statusKey}">${escHtml(d.statusLabel)}</span>` : ''}
+        ${d.statusLabel ? UI.renderPill(d.statusLabel, _invStatusVariant(d.statusKey)) : ''}
         <span class="inv-jump-item-label">${escHtml(d.label)}</span>
       </li>`).join('');
 
@@ -341,7 +347,7 @@ function renderInvoicePanelBody() {
       <span class="inv-nav-docnum">#${escHtml(inv.docNumber || inv.id)}</span>
       <div class="inv-jump-dropdown" id="inv-jump-dd">
         <button class="inv-jump-trigger" onclick="toggleInvoiceJumpDropdown(event)" aria-haspopup="listbox" aria-expanded="false" aria-label="Jump to invoice">
-          ${currentItem.statusLabel ? `<span class="inv-status-badge inv-status-${currentItem.statusKey}">${escHtml(currentItem.statusLabel)}</span>` : ''}
+          ${currentItem.statusLabel ? UI.renderPill(currentItem.statusLabel, _invStatusVariant(currentItem.statusKey)) : ''}
           <span class="inv-jump-item-label">${escHtml(currentItem.label)}</span>
           <span class="inv-jump-caret" aria-hidden="true">&#9662;</span>
         </button>
