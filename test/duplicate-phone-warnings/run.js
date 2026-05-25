@@ -729,6 +729,35 @@ async function main() {
         !!(submitState && submitState.disabled === true && /phone/i.test(submitState.title)),
       );
 
+      // Click the notice link → modal should re-open in Edit mode for company A.
+      await page.evaluate(() => {
+        const link = document.querySelector('#tf-company-phone-notice .trades-phone-notice-link');
+        if (link) link.click();
+      });
+
+      const editingA = await pollPage(page, (id) => {
+        const editId = document.getElementById('trades-edit-id');
+        const title  = document.getElementById('trades-modal-title');
+        const co     = document.getElementById('tf-company');
+        return editId && String(editId.value) === String(id)
+          ? {
+              title:   (title && title.textContent) || '',
+              company: (co && co.value) || '',
+            }
+          : null;
+      }, tradeA.id, 3000);
+      const editOk = !!editingA
+        && editingA.title === 'Edit Company'
+        && editingA.company === TRADES_COMPANY_A;
+      record(
+        'TRADES EDIT CO-PHONE: clicking the notice link opens Company A in Edit mode',
+        `#trades-edit-id=${tradeA.id}, title="Edit Company", company input="${TRADES_COMPANY_A}"`,
+        editingA
+          ? `title=${JSON.stringify(editingA.title)} company=${JSON.stringify(editingA.company)}`
+          : 'not editing A',
+        editOk,
+      );
+
       await page.close();
     }
   } catch (e) {
@@ -790,7 +819,8 @@ async function writeReport(runId, findings) {
     '- **(TRADES – Edit mode, company-phone)** Opens Company B in Edit mode, types',
     "  Company A's `company_phone` into `#tf-company-phone`, and asserts",
     '  `#tf-company-phone-notice` appears naming Company A, links to Company A',
-    '  via `data-trade-id`, and `#trades-submit-btn` is disabled.',
+    '  via `data-trade-id`, `#trades-submit-btn` is disabled, and clicking the',
+    '  link re-opens the modal in Edit mode for Company A.',
     '',
   ];
   const outPath = path.join(dir, 'duplicate-phone-warnings.md');
