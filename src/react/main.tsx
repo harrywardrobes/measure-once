@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppThemeProvider } from './AppThemeProvider';
 import { IslandErrorBoundary } from './components/IslandErrorBoundary';
+import { PageLoadingSkeleton } from './components/PageLoadingSkeleton';
 
 /*
  * Shell components that are always present on every page are imported
@@ -49,7 +50,7 @@ function withTheme(node: React.ReactElement, islandId: string): React.ReactEleme
   return (
     <AppThemeProvider>
       <IslandErrorBoundary islandId={islandId}>
-        <Suspense fallback={null}>{node}</Suspense>
+        <Suspense fallback={<PageLoadingSkeleton />}>{node}</Suspense>
       </IslandErrorBoundary>
     </AppThemeProvider>
   );
