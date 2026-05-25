@@ -20,6 +20,7 @@ import {
   Pagination,
   Select,
   Skeleton,
+  Snackbar,
   Stack,
   TextField,
   ToggleButton,
@@ -604,6 +605,7 @@ export function CustomersPage(): React.ReactElement {
   const [error, setError] = React.useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
   const [openLeadsCacheAge, setOpenLeadsCacheAge] = React.useState<number | null>(null);
+  const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
 
   const isViewer = useIsViewer();
   const [newOpen, setNewOpen] = React.useState<boolean>(() => {
@@ -893,42 +895,59 @@ export function CustomersPage(): React.ReactElement {
   // until the server's 60 s TTL has elapsed then silently swap in fresh data.
   // No loading spinner is shown; the "Data may be up to 1 min old" hint
   // disappears once fresh results arrive.
+  // On failure: retry up to MAX_RETRIES times (30 s apart). If all attempts
+  // fail, show a brief Snackbar so the user knows the hint is stale.
   React.useEffect(() => {
     if (openLeadsCacheAge === null || viewMode !== 'active') return;
 
     // Delay = time left until server TTL expires + 5 s for the HubSpot fetch.
     const OPEN_LEADS_TTL_S = 60;
-    const delay = Math.max(5_000, (OPEN_LEADS_TTL_S - openLeadsCacheAge) * 1_000 + 5_000);
+    const initialDelay = Math.max(5_000, (OPEN_LEADS_TTL_S - openLeadsCacheAge) * 1_000 + 5_000);
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 30_000;
 
     let cancelled = false;
-    const timer = setTimeout(async () => {
-      try {
-        const r = await fetch('/api/open-leads', { headers: { Accept: 'application/json' } });
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    function scheduleAttempt(retryCount: number, waitMs: number) {
+      const t = setTimeout(async () => {
         if (cancelled) return;
-        if (r.status === 401) { location.href = '/login'; return; }
-        if (!r.ok) return;
-        const data = await r.json().catch(() => null) as ContactsResponse | null;
-        if (cancelled || !data) return;
-        const cacheStatus = r.headers.get('X-Cache-Status');
-        const ageHeader = r.headers.get('X-Cache-Age');
-        const newAge = ageHeader !== null ? Number(ageHeader) : NaN;
-        const NEAR_TTL_THRESHOLD_S = 45;
-        const isStillCached =
-          cacheStatus === 'fresh' &&
-          Number.isFinite(newAge) &&
-          newAge >= NEAR_TTL_THRESHOLD_S;
-        const list = data.results || [];
-        setContacts(list);
-        setTotal(data.total != null ? data.total : list.length);
-        setOpenLeadsCacheAge(isStillCached ? newAge : null);
-      } catch {
-        // Best-effort: silently ignore background-fetch errors.
-      }
-    }, delay);
+        try {
+          const r = await fetch('/api/open-leads', { headers: { Accept: 'application/json' } });
+          if (cancelled) return;
+          if (r.status === 401) { location.href = '/login'; return; }
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const data = await r.json().catch(() => null) as ContactsResponse | null;
+          if (cancelled || !data) return;
+          const cacheStatus = r.headers.get('X-Cache-Status');
+          const ageHeader = r.headers.get('X-Cache-Age');
+          const newAge = ageHeader !== null ? Number(ageHeader) : NaN;
+          const NEAR_TTL_THRESHOLD_S = 45;
+          const isStillCached =
+            cacheStatus === 'fresh' &&
+            Number.isFinite(newAge) &&
+            newAge >= NEAR_TTL_THRESHOLD_S;
+          const list = data.results || [];
+          setContacts(list);
+          setTotal(data.total != null ? data.total : list.length);
+          setOpenLeadsCacheAge(isStillCached ? newAge : null);
+        } catch {
+          if (cancelled) return;
+          if (retryCount < MAX_RETRIES) {
+            scheduleAttempt(retryCount + 1, RETRY_DELAY_MS);
+          } else {
+            setBgRefreshFailed(true);
+          }
+        }
+      }, waitMs);
+      timers.push(t);
+    }
+
+    scheduleAttempt(0, initialDelay);
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      timers.forEach(clearTimeout);
     };
   }, [openLeadsCacheAge, viewMode]);
 
@@ -1294,6 +1313,12 @@ export function CustomersPage(): React.ReactElement {
           setRefreshNonce((n) => n + 1);
           loadLeadStatusCounts().then(populateLeadStatusFilter).catch(() => {});
         }}
+      />
+      <Snackbar
+        open={bgRefreshFailed}
+        autoHideDuration={8000}
+        onClose={() => setBgRefreshFailed(false)}
+        message="Couldn't refresh live data — fresh results will load on your next visit"
       />
     </Container>
   );
