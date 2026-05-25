@@ -184,6 +184,15 @@ function _mergeContactIntoState(freshContact) {
   }
 }
 
+// When /api/open-leads returns X-Cache-Status: stale or fresh while the tab
+// is hidden we defer the badge update so the user sees it only when they look
+// at the tab again (same pattern as _pendingRoomAssignmentsStale).
+// null = no pending update.
+// A test hook (window.__setTestPendingOpenLeadsStale) lets integration tests
+// drive the pending ref directly without a network round-trip.
+let _pendingOpenLeadsStale = null;
+window.__setTestPendingOpenLeadsStale = (v) => { _pendingOpenLeadsStale = v; };
+
 async function _loadOpenLeadsImpl() {
   const r = await fetch('/api/open-leads', { method: 'GET', headers: { 'Content-Type': 'application/json' } });
   if (r.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
@@ -194,8 +203,15 @@ async function _loadOpenLeadsImpl() {
     throw err;
   }
   const cacheStatus = r.headers.get('X-Cache-Status');
-  if (cacheStatus === 'fresh') state.openLeadsStale = false;
-  else if (cacheStatus === 'stale') state.openLeadsStale = true;
+  if (cacheStatus === 'fresh' || cacheStatus === 'stale') {
+    const nextStale = cacheStatus === 'stale';
+    if (document.hidden) {
+      _pendingOpenLeadsStale = nextStale;
+    } else {
+      state.openLeadsStale = nextStale;
+      _pendingOpenLeadsStale = null;
+    }
+  }
   state.contacts = data.results || [];
   _reapplyPendingLeadStatuses();
   state.filteredContacts = [...state.contacts];
@@ -493,6 +509,12 @@ document.addEventListener('visibilitychange', () => {
     state.roomAssignmentsStale = _pendingRoomAssignmentsStale;
     _pendingRoomAssignmentsStale = null;
     renderProjectsView();
+  }
+  // Apply any deferred open-leads stale-badge update and re-render.
+  if (_pendingOpenLeadsStale !== null) {
+    state.openLeadsStale = _pendingOpenLeadsStale;
+    _pendingOpenLeadsStale = null;
+    if (typeof renderWorkflowStages === 'function') renderWorkflowStages();
   }
   Promise.all([loadLeadStatuses(), loadLeadStatusCounts(), loadLeadSubstatuses()]).then(() => {
     populateLeadStatusFilter();
