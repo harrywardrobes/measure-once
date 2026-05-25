@@ -36,6 +36,25 @@ server serves it as static assets.
 3. Add a Storybook story next to it (`<Name>.stories.tsx`) when the
    component has interesting variants.
 
+## Shared shell mounts
+
+Two island components render into placeholders that `public/chrome.js`
+inserts on every page:
+
+- `#app-header-mount` → `components/GlobalHeader.tsx` (the fixed AppBar).
+- `#page-heading-mount` → `components/PageHeadingPanel.tsx` (the per-page
+  title strip immediately below the AppBar).
+
+`PageHeadingPanel` resolves the title from `window.PAGE_TITLES`, applies
+the same suppression rules as before (`/admin*`, `/customers/:id`,
+missing title → renders nothing), and exposes a stable
+**`#page-heading-action`** slot on the right. Pages that need a header
+button (e.g. Customers' "+ New customer") portal a node into that slot
+using `createPortal(...)`; if no node is portalled in, the slot
+collapses (`&:empty { display: none }`). When changing this contract,
+audit consumers — currently only `pages/CustomersPage.tsx` portals into
+`#page-heading-action`.
+
 ## Adding a new page mount
 
 1. Create `pages/<Name>Page.tsx`. Wrap the page's top-level layout in
