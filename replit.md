@@ -35,10 +35,18 @@ Project management dashboard (HubSpot CRM integration).
   `state.user?.privilege_level` directly is deprecated. Route all privilege
   checks through one of the two helpers above.
 - **Lint guard:** `npm run test:privilege-reads` (script:
-  `scripts/check-privilege-reads.mjs`) fails CI if any `.js` file under
-  `public/` — except `core.js`, `react/`, and `storybook/` (auto-generated) —
-  contains a non-comment line with `privilege_level`. Run standalone or via
-  `npm run test:ci`.
+  `scripts/check-privilege-reads.mjs`) fails CI if any guarded file contains
+  a non-comment line with `privilege_level` outside an approved context.
+  Two surfaces are scanned:
+  - `.js` files under `public/` — except `core.js`, `react/`, and `storybook/`
+    (auto-generated).
+  - `.ts`/`.tsx` files under `src/react/` — except `hooks/usePrivilege.ts` and
+    `hooks/usePrivilegeSync.ts` (canonical implementations) and `*.stories.*`
+    (Storybook fixtures). TypeScript property-declaration lines
+    (`privilege_level?: string`) are skipped automatically; admin data-management
+    lines that legitimately reference another user's field are annotated with a
+    trailing `// privilege-read-ok: <reason>` comment.
+  Run standalone or via `npm run test:ci`.
 
 ## Authentication
 Email + password via `auth.js` (bcrypt + Passport session in PostgreSQL — no

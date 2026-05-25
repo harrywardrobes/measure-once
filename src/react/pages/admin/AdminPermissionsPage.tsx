@@ -17,7 +17,7 @@ import { NavCustomiseDialog } from '../../components/NavCustomiseDialog';
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
 type _Icons = typeof CheckIcon | typeof CloseIcon | typeof DeleteIcon | typeof TuneIcon;
 
-type JobRole = { name: string; privilege_level?: string };
+type JobRole = { name: string; privilege_level?: string }; // privilege-read-ok: data field managed by admin
 type Feature = { feat: string; desc?: string; levels?: string[]; group?: string };
 type Capabilities = { levels: string[]; features: Feature[] };
 type NavRoleConfig = { role_name: string; primary_keys: string[] };
@@ -77,7 +77,7 @@ export function AdminPermissionsPage() {
     const name = newRole.trim();
     if (!name) return;
     try {
-      await api('POST', '/api/admin/job-roles', { name, privilege_level: newPriv });
+      await api('POST', '/api/admin/job-roles', { name, privilege_level: newPriv }); // privilege-read-ok: admin API payload
       toast(existingRole ? 'Role updated' : 'Role added');
       setNewRole(''); setNewPriv('member');
       emitAdminChange('roles');
@@ -89,8 +89,8 @@ export function AdminPermissionsPage() {
 
   async function updatePriv(name: string, level: string) {
     try {
-      await api('POST', '/api/admin/job-roles', { name, privilege_level: level });
-      setJobRoles(prev => prev.map(r => r.name === name ? { ...r, privilege_level: level } : r));
+      await api('POST', '/api/admin/job-roles', { name, privilege_level: level }); // privilege-read-ok: admin API payload
+      setJobRoles(prev => prev.map(r => r.name === name ? { ...r, privilege_level: level } : r)); // privilege-read-ok: admin state update
       toast('Role updated');
       emitAdminChange('roles');
     } catch (e: unknown) {
@@ -168,7 +168,7 @@ export function AdminPermissionsPage() {
               onKeyDown={(e) => { if (e.key === 'Enter') submitNewRole(); }}
               slotProps={{ htmlInput: { maxLength: 64 }}} />
             <FormControl size="small" sx={{ minWidth: 140 }}>
-              <Select value={existingRole?.privilege_level || newPriv}
+              <Select value={existingRole?.privilege_level || newPriv} /* privilege-read-ok: admin form reads another role's data */
                 onChange={(e) => setNewPriv(e.target.value)}>
                 {PRIVILEGE_LEVELS.map(p => (
                   <MenuItem key={p} value={p}>{PRIVILEGE_LABEL[p]}</MenuItem>
@@ -194,7 +194,7 @@ export function AdminPermissionsPage() {
                       sx={{ p: 1, border: 1, borderColor: 'divider', borderRadius: 1, flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
                       <Typography variant="body2" sx={{ flex: 1, fontWeight: 600, minWidth: 100 }}>{r.name}</Typography>
                       <FormControl size="small" sx={{ minWidth: 140 }}>
-                        <Select value={r.privilege_level || 'member'}
+                        <Select value={r.privilege_level || 'member'} /* privilege-read-ok: admin form displays another role's data */
                           onChange={(e) => updatePriv(r.name, e.target.value)}>
                           {PRIVILEGE_LEVELS.map(p => (
                             <MenuItem key={p} value={p}>{PRIVILEGE_LABEL[p]}</MenuItem>

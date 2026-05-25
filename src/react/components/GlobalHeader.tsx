@@ -11,6 +11,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ShieldIcon from '@mui/icons-material/Shield';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrivilegeSync } from '../hooks/usePrivilegeSync';
 
 export type { CurrentUser as HeaderUser } from '../hooks/useCurrentUser';
@@ -78,7 +79,7 @@ export function GlobalHeader() {
     };
   }, []);
 
-  const isAdmin = user?.privilege_level === 'admin';
+  const { isAdmin } = usePrivilege();
 
   useEffect(() => {
     if (!isAdmin) { setPendingCount(0); return; }

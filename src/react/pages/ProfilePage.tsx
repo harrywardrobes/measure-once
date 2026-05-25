@@ -16,6 +16,7 @@ import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { ChangePasswordCard } from '../components/ChangePasswordDialog';
+import { usePrivilege } from '../hooks/usePrivilege';
 
 type Profile = {
   id: string;
@@ -68,6 +69,7 @@ export function ProfilePage(): React.ReactElement {
   // window.state.user. Seed from the global, listen for the `mo:user` event
   // bootstrap fires, AND as a last-resort fall back to fetching /api/auth/user
   // directly so this page never depends on event timing.
+  const { isAdmin } = usePrivilege();
   const [appUser, setAppUser] = React.useState<AppUser | null>(() => getAppUser());
   const [profile, setProfile] = React.useState<Profile | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -153,7 +155,7 @@ export function ProfilePage(): React.ReactElement {
       <IdentityCard profile={profile} appUser={appUser} onReload={reload} />
       <RoleCard profile={profile} />
       <ChangePasswordCard profile={profile} />
-      <AccountActionsCard isAdmin={appUser.privilege_level === 'admin'} />
+      <AccountActionsCard isAdmin={isAdmin} />
     </Box>
   );
 }

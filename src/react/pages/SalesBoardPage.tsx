@@ -71,7 +71,7 @@ interface StateGlobal {
   filteredContacts?: Contact[];
   contactStageCache?: Record<string, Room[]>;
   workflow?: WorkflowDef;
-  user?: { privilege_level?: string };
+  user?: { privilege_level?: string }; // privilege-read-ok: global state shape declaration
 }
 
 interface WindowGlobals {

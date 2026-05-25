@@ -35,7 +35,7 @@ type Allowed = {
   metadata?: Record<string, string>;
 };
 
-type JobRole = { name: string; privilege_level?: string };
+type JobRole = { name: string; privilege_level?: string }; // privilege-read-ok: data field managed by admin
 
 type AccessRequest = {
   id: number;
@@ -234,7 +234,7 @@ export function AdminTeamPage() {
       ec_last_name: m.ec_last_name || '',
       ec_phone: m.ec_phone || '',
       job_role: u.job_role || '',
-      privilege_level: u.privilege_level || 'member',
+      privilege_level: u.privilege_level || 'member', // privilege-read-ok: seeding edit form with another user's data
       note: u.note || '',
     });
   }
@@ -533,7 +533,7 @@ export function AdminTeamPage() {
                           </Stack>
                         </TableCell>
                         <TableCell>{u.job_role || '—'}</TableCell>
-                        <TableCell><PrivilegeChip level={u.privilege_level} /></TableCell>
+                        <TableCell><PrivilegeChip level={u.privilege_level} /></TableCell> {/* privilege-read-ok: displaying another user's privilege level */}
                         <TableCell>
                           {needsInfo
                             ? <Chip size="small" color="warning" icon={<WarningAmberIcon />} label="More info required" />
@@ -836,8 +836,8 @@ export function AdminTeamPage() {
             <Grid size={12}>
               <FormControl fullWidth>
                 <InputLabel>Privilege level</InputLabel>
-                <Select label="Privilege level" value={editForm.privilege_level || 'member'}
-                  onChange={(e) => setEditForm({ ...editForm, privilege_level: e.target.value })}>
+                <Select label="Privilege level" value={editForm.privilege_level || 'member'} /* privilege-read-ok: admin edit form for another user */
+                  onChange={(e) => setEditForm({ ...editForm, privilege_level: e.target.value })}> {/* privilege-read-ok: admin form state update */}
                   {PRIVILEGE_LEVELS.map((p) => (
                     <MenuItem key={p} value={p}>{PRIVILEGE_LABEL[p]}</MenuItem>
                   ))}
