@@ -4,6 +4,7 @@ import { EmptyState } from '../components/EmptyState';
 import { Skeleton } from '../components/Skeleton';
 import { TabBar } from '../components/TabBar';
 import { Swatch } from '../components/Swatch';
+import { Button } from '../components/Button';
 
 /**
  * <DesignSystemPage/> — React port of the legacy `public/design-system.js`.
@@ -167,10 +168,10 @@ export function DesignSystemPage() {
           Existing button classes (rendered in their current style — not editable here).
         </p>
         <div className="ds-buttons-row">
-          <button className="btn btn-primary" type="button">Primary</button>
-          <button className="btn btn-ghost" type="button">Ghost</button>
-          <button className="btn btn-approve" type="button">Approve</button>
-          <button className="btn btn-primary" type="button" disabled>Disabled</button>
+          <Button variant="primary">Primary</Button>
+          <Button variant="ghost">Ghost</Button>
+          <Button variant="approve">Approve</Button>
+          <Button variant="primary" disabled>Disabled</Button>
         </div>
       </div>
 
