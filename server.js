@@ -451,7 +451,7 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
       }
     }
 
-    await axios.patch(
+    await hubspotRequestWithRetry('patch',
       `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
       {
         properties: {
@@ -460,8 +460,7 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
           measure_once_stage:    stage    || '',
           measure_once_substage: substage || '',
         }
-      },
-      { headers: hsHeaders() }
+      }
     );
     bustSharedCache();
     res.json({ success: true });

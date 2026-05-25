@@ -97,6 +97,58 @@ function hubspotApiBase() {
   // at a local mock server. Never set in production.
   return process.env.HUBSPOT_API_BASE_OVERRIDE || 'https://api.hubapi.com';
 }
+function dvHsHeaders() {
+  return {
+    Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+    'Content-Type': 'application/json',
+  };
+}
+async function dvHubspotRequestWithRetry(method, url, data, { timeout = 15000, maxAttempts = 4, baseDelayMs = 300, maxDelayMs = 4000 } = {}) {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const isTransient = err => {
+    const s = err.response?.status;
+    if (s === 429) return true;
+    if (s && s >= 500 && s < 600) return true;
+    if (!err.response) return true;
+    return false;
+  };
+  const retryAfterMs = (err) => {
+    const h = err.response?.headers?.['retry-after'];
+    if (!h) return null;
+    const asInt = parseInt(h, 10);
+    if (!Number.isNaN(asInt) && asInt >= 0) return Math.min(asInt * 1000, maxDelayMs);
+    const asDate = Date.parse(h);
+    if (!Number.isNaN(asDate)) {
+      const ms = asDate - Date.now();
+      return ms > 0 ? Math.min(ms, maxDelayMs) : 0;
+    }
+    return null;
+  };
+  const cfg = { headers: dvHsHeaders(), timeout };
+  let lastErr;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      if (method === 'get' || method === 'delete') return await axios[method](url, cfg);
+      return await axios[method](url, data, cfg);
+    } catch (err) {
+      lastErr = err;
+      if (!isTransient(err)) throw err;
+      if (attempt === maxAttempts - 1) break;
+      const hinted = retryAfterMs(err);
+      const backoff = hinted != null ? hinted : Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
+      if (process.env.DEBUG_HUBSPOT) {
+        console.warn('[design-visits/hubspot-retry] attempt=%d status=%s backoff=%dms endpoint=%s %s',
+          attempt + 1, err.response?.status || 'network', backoff, method.toUpperCase(), url);
+      }
+      await sleep(backoff);
+    }
+  }
+  const base = hubspotApiBase();
+  const shortUrl = url.startsWith(base) ? url.slice(base.length) : url;
+  console.error('[design-visits/hubspot-retry] all %d attempts exhausted endpoint=%s %s finalStatus=%s',
+    maxAttempts, method.toUpperCase(), shortUrl, lastErr?.response?.status || 'network');
+  throw lastErr;
+}
 function adminEmails() {
   return (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim()).filter(Boolean);
 }
@@ -387,10 +439,9 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
   const submittedLeadStatus = handlerConfig?.submittedLeadStatus;
   if (submittedLeadStatus && process.env.HUBSPOT_ACCESS_TOKEN && visit.contact_id) {
     try {
-      await axios.patch(
-        `https://api.hubapi.com/crm/v3/objects/contacts/${encodeURIComponent(visit.contact_id)}`,
-        { properties: { hs_lead_status: submittedLeadStatus } },
-        { headers: { Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
+      await dvHubspotRequestWithRetry('patch',
+        `${hubspotApiBase()}/crm/v3/objects/contacts/${encodeURIComponent(visit.contact_id)}`,
+        { properties: { hs_lead_status: submittedLeadStatus } }
       );
     } catch (e) {
       console.warn('[design-visits] HubSpot lead status update failed:', e.message);
@@ -411,7 +462,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
         visit.visit_date          ? `Visit date: ${new Date(visit.visit_date).toLocaleString()}` : null,
         roomLines ? `Rooms:\n${roomLines}` : null,
       ].filter(Boolean).join('\n');
-      await axios.post(
+      await dvHubspotRequestWithRetry('post',
         `${hubspotApiBase()}/crm/v3/objects/notes`,
         {
           properties: {
@@ -423,8 +474,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
             to: { id: visit.contact_id },
             types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 202 }],
           }],
-        },
-        { headers: { Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`, 'Content-Type': 'application/json' } }
+        }
       );
     } catch (e) {
       console.warn('[design-visits] HubSpot note creation failed:', e.message);
