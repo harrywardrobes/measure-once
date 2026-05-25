@@ -82,11 +82,30 @@
   <script src="/command-palette.js"></script>
   <script src="/core.js"></script>
   <script src="/workflow-core.js"></script>
-  <script src="/invoices-core.js"></script>
-  <script src="/workflow.js"></script>
-  <script src="/projects.js"></script>
-  <script src="/sales.js"></script>
   <script src="/card-action-handlers.js"></script>
+  <script>
+    // Data-bridge event wiring for SalesBoardPage (inlined from sales.js).
+    // Overrides the open-leads loader so bootstrap fetches ALL contacts.
+    registerOpenLeadsLoader(loadAllContacts);
+    // Notify the React SalesBoardPage whenever fresh data is available.
+    registerCustomerListRenderer(function salesBoardNotifyReact() {
+      document.dispatchEvent(new CustomEvent('sales-board-data-ready'));
+    });
+    registerProjectsViewRenderer(function salesProjectsViewNotifyReact() {
+      document.dispatchEvent(new CustomEvent('sales-board-data-ready'));
+    });
+    // Reload contacts and workflow on background data changes, then notify React.
+    document.addEventListener('localdata-updated', async () => {
+      try {
+        await Promise.all([loadAllContacts(), loadWorkflowStages()]);
+        state.filteredContacts = [...state.contacts];
+        document.dispatchEvent(new CustomEvent('sales-board-data-ready'));
+      } catch (e) {
+        console.error('[SalesBoard] background refresh failed', e);
+        document.dispatchEvent(new CustomEvent('sales-board-bg-refresh-failed'));
+      }
+    });
+  </script>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       await bootstrap();

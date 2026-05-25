@@ -4,9 +4,10 @@
 // call the matching register*() function instead of re-declaring the global,
 // so script load order no longer matters.
 
-// Sales-owned renderers (real impls in sales.js). Pages that load
-// workflow-core.js but NOT sales.js (calendar, customers, index, invoices,
-// projects) fall back to the no-op.
+// Sales/survey board renderers. Real impls are registered inline in sales.html
+// and survey.html after their respective workflow-core.js loads. Pages that
+// don't register a real impl (calendar, customers, index, projects) fall back
+// to the no-op.
 let _workflowHeaderRenderer = function() {};
 function renderWorkflowHeader() { _workflowHeaderRenderer(); }
 function registerWorkflowHeaderRenderer(fn) { _workflowHeaderRenderer = fn; }
@@ -54,7 +55,7 @@ let _dealsFilter = function() {};
 function filterDeals(query) { _dealsFilter(query); }
 function registerDealsFilter(fn) { _dealsFilter = fn; }
 
-// Sales stubs — safe no-ops on pages that don't load sales.js
+// Stub — safe no-op on pages that don't register a real impl.
 function renderGoogleEmailSection() {}
 
 // invoices-core-owned loader. Pages that don't load invoices-core.js

@@ -30,11 +30,22 @@
   <script src="/command-palette.js"></script>
   <script src="/core.js"></script>
   <script src="/workflow-core.js"></script>
-  <script src="/invoices-core.js"></script>
-  <script src="/workflow.js"></script>
-  <script src="/projects.js"></script>
-  <script src="/survey.js"></script>
   <script src="/card-action-handlers.js"></script>
+  <script>
+    // Data-bridge event wiring for SurveyBoardPage (inlined from survey.js).
+    // Overrides the open-leads loader so bootstrap fetches ALL contacts.
+    registerOpenLeadsLoader(loadAllContacts);
+    // Notify the React SurveyBoardPage whenever fresh data is available.
+    registerCustomerListRenderer(function surveyBoardNotifyReact() {
+      document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
+    });
+    // Reload contacts and workflow on background data changes, then notify React.
+    document.addEventListener('localdata-updated', async () => {
+      await Promise.all([loadAllContacts(), loadWorkflowStages()]);
+      state.filteredContacts = [...state.contacts];
+      document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
+    });
+  </script>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       await bootstrap();
