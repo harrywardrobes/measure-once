@@ -5,6 +5,7 @@ import { DesignSystemPage } from './pages/DesignSystemPage';
 import { SearchSettingsPage } from './pages/SearchSettingsPage';
 import { WorkshopSettingsPage } from './pages/WorkshopSettingsPage';
 import { CustomersPage } from './pages/CustomersPage';
+import { HomePage } from './pages/HomePage';
 import { SettingsPage } from './pages/admin/SettingsPage';
 import { CardActionsPage } from './pages/admin/CardActionsPage';
 import { ActionHandlersPage } from './pages/admin/ActionHandlersPage';
@@ -43,6 +44,7 @@ function withTheme(node: React.ReactElement): React.ReactElement {
 const MOUNTS: Array<{ id: string; render: () => React.ReactElement }> = [
   { id: 'app-header-mount',     render: () => <GlobalHeader /> },
   { id: 'page-heading-mount',   render: () => <PageHeadingPanel /> },
+  { id: 'home-view',            render: () => <HomePage /> },
   { id: 'admin-mui-tabs-mount', render: () => <AdminTabsBar /> },
   { id: 'tab-designsystem',     render: () => <DesignSystemPage /> },
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },

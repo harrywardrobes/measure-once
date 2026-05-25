@@ -17,7 +17,7 @@
 <body>
 
   <div id="tab-home" class="home-tab">
-    <div id="home-view" class="home-inner"></div>
+    <div id="home-view"></div>
   </div>
 
   <script src="/chrome.js"></script>
@@ -29,59 +29,13 @@
   <script src="/invoices-core.js"></script>
   <script src="/home.js"></script>
   <script>
-    async function loadCalendarForHome() {
-      state.calendarError = false;
-      state.calendarLoading = true;
-      state.calendarErrorCode = null;
-      renderHomeTab();
-      try {
-        const cal = await GET('/api/calendar/upcoming');
-        if (cal && cal.error) {
-          state.calendarError     = true;
-          state.calendarErrorCode = cal.code || 'GOOGLE_ERROR';
-          state.calendarConnected = !!(cal && cal.connected);
-          state.calendarEvents    = [];
-        } else {
-          state.calendarError     = false;
-          state.calendarErrorCode = null;
-          state.calendarEvents    = (cal && cal.events) || [];
-          state.calendarConnected = !!(cal && cal.connected);
-        }
-      } catch {
-        state.calendarError     = true;
-        state.calendarErrorCode = 'GOOGLE_ERROR';
-        state.calendarConnected = false;
-        state.calendarEvents    = [];
-      }
-      state.calendarLoading = false;
-      renderHomeTab();
-    }
-
+    // The Home tab is rendered by React (see src/react/pages/HomePage.tsx
+    // — mount id "home-view" in src/react/main.tsx). Bootstrap is still
+    // invoked so chrome/header, auth state, and shared globals used by
+    // legacy pages are initialised, but the React island fetches its own
+    // data and renders its own loading skeleton independently.
     document.addEventListener('DOMContentLoaded', async () => {
-      // Show skeleton immediately while data loads.
-      state.homeLoading = true;
-      renderHomeTab();
-
-      if (!await bootstrap()) return;
-      // Home needs personal tasks and upcoming calendar events for its cards.
-      const [tasks, cal] = await Promise.all([
-        GET('/api/personal-tasks').catch(() => []),
-        GET('/api/calendar/upcoming').catch(e => ({ _error: true, errorMsg: e.message })),
-      ]);
-      state.personalTasks = tasks || [];
-      if (cal && (cal._error || cal.error)) {
-        state.calendarError     = true;
-        state.calendarErrorCode = cal._error ? 'GOOGLE_ERROR' : (cal.code || 'GOOGLE_ERROR');
-        state.calendarConnected = !!(cal && cal.connected);
-        state.calendarEvents    = [];
-      } else {
-        state.calendarError     = false;
-        state.calendarErrorCode = null;
-        state.calendarEvents    = (cal && cal.events) || [];
-        state.calendarConnected = !!(cal && cal.connected);
-      }
-      state.homeLoading = false;
-      renderHomeTab();
+      try { await bootstrap(); } catch { /* HomePage shows its own errors */ }
     });
   </script>
 </body>
