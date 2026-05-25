@@ -383,7 +383,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
       ).join('\n');
       const noteBody = [
         `Design visit submitted`,
-        `Designer: ${submitterUser?.email || 'unknown'}`,
+        `Designer: ${submitterUser?.claims?.email || submitterUser?.email || 'unknown'}`,
         visit.handle_name         ? `Handle: ${visit.handle_name}` : null,
         visit.furniture_range_name ? `Furniture range: ${visit.furniture_range_name}` : null,
         visit.visit_date          ? `Visit date: ${new Date(visit.visit_date).toLocaleString()}` : null,
@@ -648,7 +648,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
         to: admins.join(', '),
         subject: `Design visit submitted — ${visit.contact_name || visit.contact_id}`,
         text: [
-          `Design visit submitted by ${submitterUser?.email || 'unknown'}`,
+          `Design visit submitted by ${submitterUser?.claims?.email || submitterUser?.email || 'unknown'}`,
           '',
           `Contact: ${visit.contact_name || '—'} (${visit.contact_id})`,
           visit.visit_date ? `Visit date: ${new Date(visit.visit_date).toLocaleString()}` : '',
@@ -666,7 +666,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
 <head><meta charset="utf-8"></head>
 <body style="font-family:sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:24px;">
   <h2 style="font-size:1.2rem;">Design visit submitted</h2>
-  <p>Submitted by <strong>${_esc(submitterUser?.email || 'unknown')}</strong></p>
+  <p>Submitted by <strong>${_esc(submitterUser?.claims?.email || submitterUser?.email || 'unknown')}</strong></p>
   <table cellpadding="0" cellspacing="0" style="margin:12px 0;font-size:.9rem;">
     <tr><td style="padding:3px 14px 3px 0;font-weight:600;">Contact</td><td>${_esc(visit.contact_name || '—')} (${_esc(visit.contact_id)})</td></tr>
     ${visit.visit_date ? `<tr><td style="padding:3px 14px 3px 0;font-weight:600;">Visit date</td><td>${new Date(visit.visit_date).toLocaleString()}</td></tr>` : ''}
