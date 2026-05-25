@@ -43,6 +43,30 @@
 //        The submit endpoint must still return 200 (non-fatal catch path) and
 //        the exhaustion log line must appear in the server output.
 //
+//   (DV5) revision-requested resubmit: note 429 → retry → success — seeds a
+//        visit in revision_requested status (customer asked for changes) then
+//        POST /api/design-visits/:id/submit.  The mock returns 429 on the
+//        first note creation and 200 on the second.  dvHubspotRequestWithRetry
+//        must retry automatically; submit must return 200 with exactly 2 note
+//        calls observed.
+//
+//   (DV6) revision-requested resubmit: note exhaustion → non-fatal — same
+//        revision_requested setup but the mock always returns 500 for note
+//        creation.  After all 4 attempts the exhaustion log line is emitted;
+//        submit must still return 200 (non-fatal catch path).
+//
+//   (DV7) sign-off re-open (PUT): note 429 → retry → success — seeds a visit
+//        in submitted status (sent to customer awaiting sign-off) then re-opens
+//        it via PUT /api/design-visits/:id (the designer-correction path).
+//        runSubmitSideEffects re-runs; the mock returns 429 on the first note
+//        creation and 200 on the second.  PUT must return 200 with exactly 2
+//        note calls.
+//
+//   (DV8) sign-off re-open (PUT): note exhaustion → non-fatal — same submitted
+//        setup but the mock always returns 500 for note creation.  After all 4
+//        attempts the exhaustion log line is emitted; PUT must still return 200
+//        (non-fatal try/catch wrapping runSubmitSideEffects on the PUT path).
+//
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:hubspot-429-retry
 //   PRIVTEST_ALLOW_SHARED_DB=1 npm run test:hubspot-429-retry
@@ -165,6 +189,35 @@ function startMockHubspot() {
   });
 }
 
+// ── HTTP helper (PUT with JSON body) ─────────────────────────────────────────
+function httpPut(base, urlPath, cookie, bodyObj) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(bodyObj);
+    const u = new URL(urlPath, base);
+    const req = http.request({
+      method: 'PUT',
+      hostname: u.hostname,
+      port:     u.port,
+      path:     u.pathname + u.search,
+      headers: {
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+    }, res => {
+      let raw = '';
+      res.on('data', c => (raw += c));
+      res.on('end', () => {
+        let json = null;
+        try { json = raw ? JSON.parse(raw) : null; } catch {}
+        resolve({ status: res.statusCode, body: raw, json });
+      });
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
 // ── HTTP helper (POST with JSON body) ────────────────────────────────────────
 function httpPost(base, urlPath, cookie, bodyObj) {
   return new Promise((resolve, reject) => {
@@ -219,7 +272,7 @@ function httpGet(base, urlPath, cookie) {
 
 // ── Design-visit DB helpers ───────────────────────────────────────────────────
 
-async function seedDesignVisit(pool) {
+async function seedDesignVisit(pool, status = 'draft') {
   const r = await pool.query(
     `INSERT INTO design_visits
        (contact_id, contact_name, contact_email, created_by, visit_date,
@@ -227,9 +280,9 @@ async function seedDesignVisit(pool) {
      VALUES ($1, 'PrivTest DV Retry Contact', 'privtest-dv-retry@privtest.local',
              'privtest-dv-retry-submitter@privtest.local',
              NOW(), 60, 'Retry test location', 'hubspot retry test', TRUE,
-             'draft')
+             $2)
      RETURNING id`,
-    [DV_CONTACT_ID],
+    [DV_CONTACT_ID, status],
   );
   return r.rows[0].id;
 }
@@ -624,6 +677,150 @@ async function main() {
         ? `found "${exhaustionMarker}" in server log`
         : `exhaustion line not found; last 500 chars of new log: ${logAfterDV4.slice(-500)}`);
 
+    // ── (DV5) revision-requested resubmit: note 429 → retry → success ──────────
+    // Seeds a visit already in revision_requested status (simulating a visit the
+    // customer asked to revise), then POSTs to the submit endpoint.
+    // runSubmitSideEffects fires; the mock returns 429 on the first note creation
+    // and 200 on the second.  Submit must return 200 with exactly 2 note calls.
+    console.log('\n  [DV5] revision-requested resubmit: note 429 → retry → success');
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint('/crm/v3/objects/notes', 'retryOnce', NOTE_CREATE_SUCCESS);
+
+    const dv5Id = await seedDesignVisit(pool, 'revision_requested');
+    const dv5 = await httpPost(BASE, `/api/design-visits/${dv5Id}/submit`, cookie, {});
+
+    const dv5NoteCalls = mock.calls.filter(c => c.url === '/crm/v3/objects/notes');
+
+    record('DV5.1 submit returns 200',
+      dv5.status === 200,
+      `status=${dv5.status} body=${dv5.body.slice(0, 200)}`);
+    record('DV5.2 notes endpoint called twice (429 + retry)',
+      dv5NoteCalls.length === 2,
+      `note calls=${dv5NoteCalls.length} statuses=${dv5NoteCalls.map(c => c.status).join(',')}`);
+    record('DV5.3 first note call returned 429',
+      dv5NoteCalls[0]?.status === 429,
+      `first status=${dv5NoteCalls[0]?.status}`);
+    record('DV5.4 second note call returned 200',
+      dv5NoteCalls[1]?.status === 200,
+      `second status=${dv5NoteCalls[1]?.status}`);
+
+    // ── (DV6) revision-requested resubmit: note always 500 → exhaustion + non-fatal
+    // Same setup but the mock always returns 500 for note creation.  After all 4
+    // attempts dvHubspotRequestWithRetry logs the exhaustion line; the surrounding
+    // try/catch treats the failure as non-fatal, so submit still returns 200.
+    console.log('\n  [DV6] revision-requested resubmit: note always 500 → exhaustion + non-fatal 200');
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint('/crm/v3/objects/notes', 'alwaysFail', null);
+
+    const logBeforeDV6 = logBuf.join('');
+
+    const dv6Id = await seedDesignVisit(pool, 'revision_requested');
+    const dv6 = await httpPost(BASE, `/api/design-visits/${dv6Id}/submit`, cookie, {});
+
+    const logDeadline6 = Date.now() + 1000;
+    while (Date.now() < logDeadline6 &&
+           !logBuf.join('').slice(logBeforeDV6.length).includes(exhaustionMarker)) {
+      await new Promise(res => setTimeout(res, 50));
+    }
+
+    const dv6NoteCalls = mock.calls.filter(c => c.url === '/crm/v3/objects/notes');
+    const logAfterDV6  = logBuf.join('').slice(logBeforeDV6.length);
+
+    record('DV6.1 submit still returns 200 (non-fatal)',
+      dv6.status === 200,
+      `status=${dv6.status} body=${dv6.body.slice(0, 200)}`);
+    record('DV6.2 notes endpoint called 4 times (all attempts)',
+      dv6NoteCalls.length === 4,
+      `note calls=${dv6NoteCalls.length} statuses=${dv6NoteCalls.map(c => c.status).join(',')}`);
+    record('DV6.3 all note calls returned 500',
+      dv6NoteCalls.every(c => c.status === 500),
+      `statuses=${dv6NoteCalls.map(c => c.status).join(',')}`);
+    record('DV6.4 exhaustion log line emitted',
+      logAfterDV6.includes(exhaustionMarker),
+      logAfterDV6.includes(exhaustionMarker)
+        ? `found "${exhaustionMarker}" in server log`
+        : `exhaustion line not found; last 500 chars of new log: ${logAfterDV6.slice(-500)}`);
+
+    // A minimal room payload reused by DV7 and DV8.  The PUT endpoint requires
+    // at least one room and termsAccepted=true; no QB tokens are configured so
+    // the QB block is skipped gracefully.
+    const PUT_ROOMS = [{ roomName: 'Kitchen', unitCount: 1, unitPricePence: 0 }];
+    const PUT_BODY = {
+      contactName: 'PrivTest DV Retry Contact',
+      contactEmail: 'privtest-dv-retry@privtest.local',
+      termsAccepted: true,
+      rooms: PUT_ROOMS,
+    };
+
+    // ── (DV7) sign-off re-open (PUT): note 429 → retry → success ─────────────
+    // Seeds a visit in submitted status to simulate a visit already sent to the
+    // customer.  The designer corrects it via PUT /api/design-visits/:id, which
+    // re-runs runSubmitSideEffects.  The mock returns 429 on the first note
+    // creation and 200 on the second.  PUT must return 200 with exactly 2 note calls.
+    console.log('\n  [DV7] sign-off re-open (PUT): note 429 → retry → success');
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint('/crm/v3/objects/notes', 'retryOnce', NOTE_CREATE_SUCCESS);
+
+    const dv7Id = await seedDesignVisit(pool, 'submitted');
+    const dv7 = await httpPut(BASE, `/api/design-visits/${dv7Id}`, cookie, PUT_BODY);
+
+    const dv7NoteCalls = mock.calls.filter(c => c.url === '/crm/v3/objects/notes');
+
+    record('DV7.1 PUT returns 200',
+      dv7.status === 200,
+      `status=${dv7.status} body=${dv7.body.slice(0, 200)}`);
+    record('DV7.2 notes endpoint called twice (429 + retry)',
+      dv7NoteCalls.length === 2,
+      `note calls=${dv7NoteCalls.length} statuses=${dv7NoteCalls.map(c => c.status).join(',')}`);
+    record('DV7.3 first note call returned 429',
+      dv7NoteCalls[0]?.status === 429,
+      `first status=${dv7NoteCalls[0]?.status}`);
+    record('DV7.4 second note call returned 200',
+      dv7NoteCalls[1]?.status === 200,
+      `second status=${dv7NoteCalls[1]?.status}`);
+
+    // ── (DV8) sign-off re-open (PUT): note always 500 → exhaustion + non-fatal ─
+    // Same setup but notes always return 500.  The PUT endpoint wraps
+    // runSubmitSideEffects in a try/catch so it still returns 200 even when
+    // dvHubspotRequestWithRetry exhausts all 4 attempts.  The exhaustion log
+    // line must appear in the server output.
+    console.log('\n  [DV8] sign-off re-open (PUT): note always 500 → exhaustion + non-fatal 200');
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint('/crm/v3/objects/notes', 'alwaysFail', null);
+
+    const logBeforeDV8 = logBuf.join('');
+
+    const dv8Id = await seedDesignVisit(pool, 'submitted');
+    const dv8 = await httpPut(BASE, `/api/design-visits/${dv8Id}`, cookie, PUT_BODY);
+
+    const logDeadline8 = Date.now() + 1000;
+    while (Date.now() < logDeadline8 &&
+           !logBuf.join('').slice(logBeforeDV8.length).includes(exhaustionMarker)) {
+      await new Promise(res => setTimeout(res, 50));
+    }
+
+    const dv8NoteCalls = mock.calls.filter(c => c.url === '/crm/v3/objects/notes');
+    const logAfterDV8  = logBuf.join('').slice(logBeforeDV8.length);
+
+    record('DV8.1 PUT still returns 200 (non-fatal)',
+      dv8.status === 200,
+      `status=${dv8.status} body=${dv8.body.slice(0, 200)}`);
+    record('DV8.2 notes endpoint called 4 times (all attempts)',
+      dv8NoteCalls.length === 4,
+      `note calls=${dv8NoteCalls.length} statuses=${dv8NoteCalls.map(c => c.status).join(',')}`);
+    record('DV8.3 all note calls returned 500',
+      dv8NoteCalls.every(c => c.status === 500),
+      `statuses=${dv8NoteCalls.map(c => c.status).join(',')}`);
+    record('DV8.4 exhaustion log line emitted',
+      logAfterDV8.includes(exhaustionMarker),
+      logAfterDV8.includes(exhaustionMarker)
+        ? `found "${exhaustionMarker}" in server log`
+        : `exhaustion line not found; last 500 chars of new log: ${logAfterDV8.slice(-500)}`);
+
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
@@ -687,6 +884,24 @@ async function writeReport(runId) {
     '- **(DV4) design-visit lead-status PATCH exhaustion → non-fatal**: same setup',
     '  but the mock always returns 500.  After all 4 attempts the exhaustion log',
     '  line is emitted and the submit endpoint still returns 200 (non-fatal catch).',
+    '- **(DV5) revision-requested resubmit: note 429 → retry → success**: seeds a',
+    '  visit in `revision_requested` status then calls `POST /api/design-visits/:id/submit`.',
+    '  The mock returns 429 on the first note creation and 200 on the second.',
+    '  `dvHubspotRequestWithRetry` retries automatically and submit returns 200 with',
+    '  exactly two note-creation calls observed.',
+    '- **(DV6) revision-requested resubmit: note exhaustion → non-fatal**: same',
+    '  `revision_requested` setup but the mock always returns 500 for note creation.',
+    '  After all 4 attempts the exhaustion log line is emitted and submit still',
+    '  returns 200 (non-fatal catch path).',
+    '- **(DV7) sign-off re-open (PUT): note 429 → retry → success**: seeds a visit',
+    '  in `submitted` status then re-opens it via `PUT /api/design-visits/:id`',
+    '  (the designer-correction path).  `runSubmitSideEffects` re-runs; the mock',
+    '  returns 429 on the first note creation and 200 on the second.  PUT returns',
+    '  200 with exactly two note-creation calls observed.',
+    '- **(DV8) sign-off re-open (PUT): note exhaustion → non-fatal**: same',
+    '  `submitted` setup but the mock always returns 500 for note creation.  After',
+    '  all 4 attempts the exhaustion log line is emitted and PUT still returns 200',
+    '  (the `try/catch` wrapping `runSubmitSideEffects` on the PUT path).',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
