@@ -121,6 +121,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/design-visits/0',           level: 'member' },
   { method: 'POST',   path: '/api/design-visits',             level: 'member',  body: {} },
   { method: 'PATCH',  path: '/api/design-visits/0',           level: 'member',  body: {} },
+  { method: 'PUT',    path: '/api/design-visits/0',           level: 'member',  body: {} },
   { method: 'POST',   path: '/api/design-visits/0/submit',    level: 'member',  body: {} },
   { method: 'POST',   path: '/api/design-visits/0/revision',  level: 'member',  body: {} },
 
@@ -241,6 +242,7 @@ const ROUTES = [
   { method: 'PATCH',  path: '/api/admin/db/__nope__/rows/0',                   level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/db/__nope__/rows/0',                   level: 'admin' },
   { method: 'GET',    path: '/api/admin/db/audit',                             level: 'admin' },
+  { method: 'POST',   path: '/api/admin/db/audit/0/revert',                    level: 'admin', body: {} },
 
   // Design-visit catalogue admin endpoints (design-visits.js).
   { method: 'GET',    path: '/api/admin/design-visit-handles',                 level: 'admin' },
