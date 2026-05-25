@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, Avatar, Box, Button, Card, CardContent, Chip, CircularProgress,
+  Alert, AlertTitle, Avatar, Box, Button, Card, CardContent, Chip, CircularProgress,
   Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl,
-  Grid, InputLabel, MenuItem, Select, Skeleton, Stack, Table, TableBody,
+  Grid, InputLabel, Link, MenuItem, Select, Skeleton, Stack, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -37,6 +37,23 @@ type Allowed = {
 
 type JobRole = { name: string; privilege_level?: string };
 
+type AccessRequest = {
+  id: number;
+  email: string;
+  name?: string;
+  status?: string;
+  created_at?: string;
+};
+
+type DuplicateMatch =
+  | { kind: 'user'; user: User; label: string }
+  | { kind: 'allowed'; allowed: Allowed; label: string }
+  | { kind: 'request'; request: AccessRequest; label: string };
+
+function normalizeEmail(e: string): string {
+  return (e || '').trim().toLowerCase();
+}
+
 function fullName(u: User): string {
   return [u.first_name, u.last_name].filter(Boolean).join(' ');
 }
@@ -69,6 +86,7 @@ export function AdminTeamPage() {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
   const [allowed, setAllowed] = useState<Allowed[]>([]);
+  const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
   const [busyEmail, setBusyEmail] = useState<string | null>(null);
   const [editing, setEditing] = useState<User | null>(null);
@@ -78,19 +96,22 @@ export function AdminTeamPage() {
   const [invite, setInvite] = useState({ ...EMPTY_INVITE });
   const [inviteErr, setInviteErr] = useState<string | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [debouncedInviteEmail, setDebouncedInviteEmail] = useState('');
   const mountedRef = useRef(true);
 
   async function load() {
     try {
-      const [u, a, r] = await Promise.all([
+      const [u, a, r, q] = await Promise.all([
         api<User[]>('GET', '/api/admin/users'),
         api<Allowed[]>('GET', '/api/admin/allowed'),
         api<JobRole[]>('GET', '/api/admin/job-roles'),
+        api<AccessRequest[]>('GET', '/api/admin/requests'),
       ]);
       if (!mountedRef.current) return;
       setUsers(Array.isArray(u) ? u : []);
       setAllowed(Array.isArray(a) ? a : []);
       setJobRoles(Array.isArray(r) ? r : []);
+      setRequests(Array.isArray(q) ? q : []);
       setTeamCount(Array.isArray(u) ? u.length : 0);
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : String(e), true);
@@ -103,7 +124,7 @@ export function AdminTeamPage() {
     mountedRef.current = true;
     load();
     const off = onAdminChange((kind) => {
-      if (kind === 'team' || kind === 'roles' || kind === 'photos') load();
+      if (kind === 'team' || kind === 'roles' || kind === 'photos' || kind === 'requests') load();
     });
     return () => { mountedRef.current = false; off(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -188,11 +209,89 @@ export function AdminTeamPage() {
     }
   }
 
+  // Debounce the invite email so the duplicate check only runs once typing pauses.
+  useEffect(() => {
+    const value = invite.email;
+    const t = setTimeout(() => {
+      if (mountedRef.current) setDebouncedInviteEmail(value);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [invite.email]);
+
+  const inviteDuplicate: DuplicateMatch | null = useMemo(() => {
+    const needle = normalizeEmail(debouncedInviteEmail);
+    if (!needle) return null;
+    const matchedUser = users.find((u) => normalizeEmail(u.email || '') === needle);
+    if (matchedUser) {
+      const name = fullName(matchedUser) || matchedUser.email || needle;
+      return { kind: 'user', user: matchedUser, label: name };
+    }
+    const matchedAllowed = allowed.find((a) => normalizeEmail(a.email || '') === needle);
+    if (matchedAllowed) {
+      const m = matchedAllowed.metadata || {};
+      const name = [m.first_name, m.last_name].filter(Boolean).join(' ') || matchedAllowed.email;
+      return { kind: 'allowed', allowed: matchedAllowed, label: name };
+    }
+    const matchedRequest = requests.find(
+      (q) => q.status === 'pending' && normalizeEmail(q.email || '') === needle,
+    );
+    if (matchedRequest) {
+      return { kind: 'request', request: matchedRequest, label: matchedRequest.name || matchedRequest.email };
+    }
+    return null;
+  }, [debouncedInviteEmail, users, allowed, requests]);
+
+  function jumpToAllowedRow(email: string) {
+    const key = normalizeEmail(email);
+    const el = document.querySelector<HTMLElement>(`[data-allowed-email="${CSS.escape(key)}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('admin-row-flash');
+    setTimeout(() => el.classList.remove('admin-row-flash'), 1800);
+  }
+
+  function openRequestsTab() {
+    const sw = (window as unknown as { switchTab?: (id: string) => void }).switchTab;
+    if (typeof sw === 'function') sw('requests');
+  }
+
+  function viewDuplicate(match: DuplicateMatch) {
+    if (match.kind === 'user') openEdit(match.user);
+    else if (match.kind === 'allowed') jumpToAllowedRow(match.allowed.email);
+    else if (match.kind === 'request') openRequestsTab();
+  }
+
+  function describeDuplicate(match: DuplicateMatch): { title: string; body: string; cta: string } {
+    if (match.kind === 'user') {
+      return {
+        title: 'This email already belongs to a team member',
+        body: `${match.label} (${match.user.email}) is already on the team.`,
+        cta: 'Open team member',
+      };
+    }
+    if (match.kind === 'allowed') {
+      return {
+        title: 'This email is already on the allow-list',
+        body: `${match.label} (${match.allowed.email}) has already been approved.`,
+        cta: 'View approved entry',
+      };
+    }
+    return {
+      title: 'This email has a pending access request',
+      body: `${match.label} (${match.request.email}) is waiting for a decision in Pending Requests.`,
+      cta: 'Go to Pending Requests',
+    };
+  }
+
   async function submitInvite() {
     setInviteErr(null);
     const email = invite.email.trim();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setInviteErr('Please enter a valid email address.');
+      return;
+    }
+    if (inviteDuplicate) {
+      setInviteErr('This email is already in use — see the notice above.');
       return;
     }
     setInviteBusy(true);
@@ -379,8 +478,40 @@ export function AdminTeamPage() {
             onChange={(e) => setInvite({ ...invite, note: e.target.value })}
             placeholder="e.g. New hire · Site manager" inputProps={{ maxLength: 200 }} />
 
+          {inviteDuplicate && (() => {
+            const d = describeDuplicate(inviteDuplicate);
+            return (
+              <Alert
+                severity="warning"
+                sx={{ mt: 2 }}
+                action={
+                  <Button color="inherit" size="small" onClick={() => viewDuplicate(inviteDuplicate)}>
+                    {d.cta}
+                  </Button>
+                }
+              >
+                <AlertTitle>{d.title}</AlertTitle>
+                {d.body}{' '}
+                <Link
+                  component="button"
+                  type="button"
+                  variant="body2"
+                  onClick={() => viewDuplicate(inviteDuplicate)}
+                  sx={{ verticalAlign: 'baseline' }}
+                >
+                  {d.cta}
+                </Link>
+              </Alert>
+            );
+          })()}
+
           <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 2 }}>
-            <Button variant="contained" disabled={inviteBusy} onClick={submitInvite}>
+            <Button
+              variant="contained"
+              disabled={inviteBusy || !!inviteDuplicate}
+              onClick={submitInvite}
+              title={inviteDuplicate ? 'This email is already in use' : undefined}
+            >
               {inviteBusy ? 'Adding…' : 'Add team member'}
             </Button>
             {inviteErr && <Alert severity="error" sx={{ flex: 1 }}>{inviteErr}</Alert>}
@@ -417,7 +548,14 @@ export function AdminTeamPage() {
                     const name = [m.first_name, m.last_name].filter(Boolean).join(' ');
                     const ec = [m.ec_first_name, m.ec_last_name].filter(Boolean).join(' ');
                     return (
-                      <TableRow key={a.email}>
+                      <TableRow
+                        key={a.email}
+                        data-allowed-email={normalizeEmail(a.email)}
+                        sx={{
+                          transition: 'background-color 0.6s ease',
+                          '&.admin-row-flash': { backgroundColor: 'warning.light' },
+                        }}
+                      >
                         <TableCell>
                           <Typography variant="body2" fontWeight={600}>{name || a.email}</Typography>
                           {name && <Typography variant="caption" color="text.secondary">{a.email}</Typography>}
