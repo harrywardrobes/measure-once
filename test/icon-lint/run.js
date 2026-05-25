@@ -1,10 +1,19 @@
 'use strict';
 // test/icon-lint/run.js
 //
-// Static lint check: every identifier ending with `Icon` that is used as a
-// JSX element (<FooIcon …/>) or as a bare value (e.g. in an object literal or
-// passed as a prop value) in any React component under `src/react/` must be
-// actually imported from `@mui/icons-material` in that same file.
+// Static lint check with two complementary passes:
+//
+//  Pass 1 — used-but-not-imported:
+//    Every identifier ending with `Icon` that is used as a JSX element
+//    (<FooIcon …/>) or as a bare value (e.g. in an object literal or passed
+//    as a prop value) in any React component under `src/react/` must be
+//    actually imported from `@mui/icons-material` in that same file.
+//
+//  Pass 2 — imported-but-never-used:
+//    Every identifier imported from `@mui/icons-material` must appear at
+//    least once as a JSX element or bare value reference in the file body
+//    (outside the import declaration itself). Dead imports are flagged as
+//    dead code / copy-paste leftovers.
 //
 // A misspelled or missing import only surfaces during the TypeScript build;
 // this check makes the rule explicit and machine-enforced in CI so the
@@ -68,9 +77,32 @@ function extractIconImports(src) {
 }
 
 /**
- * Find all identifiers that look like icon component references in the source:
+ * Remove all import declarations that reference @mui/icons-material so that
+ * the usage scan does not accidentally count imported names as "used" just
+ * because they appear in the import statement itself.
+ *
+ * Handles both default imports and named imports (including multi-line braces).
+ */
+function stripIconImportLines(src) {
+  // Default imports: import FooIcon from '@mui/icons-material/Foo'
+  let stripped = src.replace(
+    /import\s+\w+\s+from\s+['"]@mui\/icons-material[^'"]*['"]\s*;?/g,
+    '',
+  );
+  // Named imports (possibly multi-line): import { FooIcon, BarIcon } from '@mui/icons-material'
+  stripped = stripped.replace(
+    /import\s+\{[^}]+\}\s+from\s+['"]@mui\/icons-material[^'"]*['"]\s*;?/g,
+    '',
+  );
+  return stripped;
+}
+
+/**
+ * Find all identifiers that look like icon component references in the source
+ * body (import declarations must already be stripped via stripIconImportLines):
  *  - JSX opening/self-closing tags:  <FooIcon  <FooIcon/  <FooIcon>
  *  - Bare value in JSX expression:   {<FooIcon … />}
+ *  - Value position:  Icon: FooIcon   icon={FooIcon}
  *
  * Returns an array of { identifier, context } objects (context is the
  * surrounding snippet for diagnostics).
@@ -134,24 +166,36 @@ for (const file of files.sort()) {
   }
 
   const imports = extractIconImports(src);
-  const usages  = extractIconUsages(src);
+
+  // Strip icon import lines before scanning usages so that the imported
+  // identifiers themselves don't appear as "used" just from the import line.
+  const bodySrc = stripIconImportLines(src);
+  const usages  = extractIconUsages(bodySrc);
+  const usedSet = new Set(usages.map((u) => u.identifier));
 
   // Only report files that either import icons or use icons — skip purely
   // non-icon files to keep the report tidy.
   if (imports.size === 0 && usages.length === 0) continue;
 
+  // Pass 1: used but not imported.
   const failures = usages.filter((u) => !imports.has(u.identifier));
-  const rel      = path.relative(path.resolve(__dirname, '../..'), file);
 
-  fileResults.push({ file: rel, imports, usages, failures });
+  // Pass 2: imported but never used.
+  const unusedImports = [...imports].filter((name) => !usedSet.has(name));
+
+  const rel = path.relative(path.resolve(__dirname, '../..'), file);
+
+  fileResults.push({ file: rel, imports, usages, failures, unusedImports });
 }
 
 // ── report ────────────────────────────────────────────────────────────────────
 
-const totalFiles    = fileResults.length;
-const failedFiles   = fileResults.filter((r) => r.failures.length > 0);
-const totalUsages   = fileResults.reduce((n, r) => n + r.usages.length, 0);
-const totalFailures = failedFiles.reduce((n, r) => n + r.failures.length, 0);
+const totalFiles         = fileResults.length;
+const failedFiles        = fileResults.filter((r) => r.failures.length > 0);
+const unusedImportFiles  = fileResults.filter((r) => r.unusedImports.length > 0);
+const totalUsages        = fileResults.reduce((n, r) => n + r.usages.length, 0);
+const totalFailures      = failedFiles.reduce((n, r) => n + r.failures.length, 0);
+const totalUnused        = unusedImportFiles.reduce((n, r) => n + r.unusedImports.length, 0);
 
 const lines = [
   '# icon-lint',
@@ -161,10 +205,12 @@ const lines = [
   '',
 ];
 
+// ── Pass 1: used-but-not-imported ────────────────────────────────────────────
+
 if (failedFiles.length === 0) {
-  lines.push(`**All ${totalUsages} icon usages are properly imported. ✓**`);
+  lines.push(`**Pass 1 (used but not imported): All ${totalUsages} icon usages are properly imported. ✓**`);
 } else {
-  lines.push(`**${totalFailures} unimported icon usage${totalFailures === 1 ? '' : 's'} in ${failedFiles.length} file${failedFiles.length === 1 ? '' : 's'}:**`);
+  lines.push(`**Pass 1 (used but not imported): ${totalFailures} unimported icon usage${totalFailures === 1 ? '' : 's'} in ${failedFiles.length} file${failedFiles.length === 1 ? '' : 's'}:**`);
   lines.push('');
   for (const r of failedFiles) {
     lines.push(`### \`${r.file}\``);
@@ -177,13 +223,32 @@ if (failedFiles.length === 0) {
 }
 
 lines.push('');
+
+// ── Pass 2: imported-but-never-used ──────────────────────────────────────────
+
+if (unusedImportFiles.length === 0) {
+  lines.push(`**Pass 2 (imported but never used): No unused icon imports found. ✓**`);
+} else {
+  lines.push(`**Pass 2 (imported but never used): ${totalUnused} unused icon import${totalUnused === 1 ? '' : 's'} in ${unusedImportFiles.length} file${unusedImportFiles.length === 1 ? '' : 's'}:**`);
+  lines.push('');
+  for (const r of unusedImportFiles) {
+    lines.push(`### \`${r.file}\``);
+    for (const name of r.unusedImports) {
+      lines.push(`- **\`${name}\`** is imported from \`@mui/icons-material\` but never used`);
+    }
+    lines.push('');
+  }
+}
+
+lines.push('');
 lines.push('## Per-file summary');
 lines.push('');
-lines.push('| file | icon imports | icon usages | unimported |');
-lines.push('| ---- | ----------- | ----------- | ---------- |');
+lines.push('| file | icon imports | icon usages | unimported | unused imports |');
+lines.push('| ---- | ----------- | ----------- | ---------- | -------------- |');
 for (const r of fileResults) {
-  const flag = r.failures.length > 0 ? ` ⚠ **${r.failures.length}**` : '0';
-  lines.push(`| \`${r.file}\` | ${r.imports.size} | ${r.usages.length} | ${flag} |`);
+  const failFlag   = r.failures.length > 0      ? ` ⚠ **${r.failures.length}**`     : '0';
+  const unusedFlag = r.unusedImports.length > 0 ? ` ⚠ **${r.unusedImports.length}**` : '0';
+  lines.push(`| \`${r.file}\` | ${r.imports.size} | ${r.usages.length} | ${failFlag} | ${unusedFlag} |`);
 }
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true });
@@ -191,11 +256,10 @@ fs.writeFileSync(OUT, lines.join('\n') + '\n');
 
 // ── console summary ───────────────────────────────────────────────────────────
 
-if (failedFiles.length === 0) {
-  console.log(
-    `[icon-lint] All ${totalUsages} icon usage${totalUsages === 1 ? '' : 's'} across ${totalFiles} file${totalFiles === 1 ? '' : 's'} are properly imported. ✓`,
-  );
-} else {
+let hasErrors = false;
+
+if (failedFiles.length > 0) {
+  hasErrors = true;
   for (const r of failedFiles) {
     for (const f of r.failures) {
       console.error(
@@ -204,7 +268,28 @@ if (failedFiles.length === 0) {
     }
   }
   console.error(
-    `[icon-lint] ${totalFailures} unimported icon usage${totalFailures === 1 ? '' : 's'} found across ${failedFiles.length} file${failedFiles.length === 1 ? '' : 's'}.`,
+    `[icon-lint] Pass 1: ${totalFailures} unimported icon usage${totalFailures === 1 ? '' : 's'} found across ${failedFiles.length} file${failedFiles.length === 1 ? '' : 's'}.`,
   );
+}
+
+if (unusedImportFiles.length > 0) {
+  hasErrors = true;
+  for (const r of unusedImportFiles) {
+    for (const name of r.unusedImports) {
+      console.error(
+        `[icon-lint] ${r.file}: "${name}" is imported from @mui/icons-material but never used`,
+      );
+    }
+  }
+  console.error(
+    `[icon-lint] Pass 2: ${totalUnused} unused icon import${totalUnused === 1 ? '' : 's'} found across ${unusedImportFiles.length} file${unusedImportFiles.length === 1 ? '' : 's'}.`,
+  );
+}
+
+if (!hasErrors) {
+  console.log(
+    `[icon-lint] All ${totalUsages} icon usage${totalUsages === 1 ? '' : 's'} across ${totalFiles} file${totalFiles === 1 ? '' : 's'} are properly imported, and all imports are used. ✓`,
+  );
+} else {
   process.exit(1);
 }
