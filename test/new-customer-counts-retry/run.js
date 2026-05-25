@@ -1,0 +1,561 @@
+'use strict';
+// test/new-customer-counts-retry/run.js
+//
+// Focused integration test for the retry logic inside the `onCreated` callback
+// of CustomersPage.tsx (task #840 / task #850).
+//
+// The `attemptCreatedCounts` helper fires immediately after a new customer is
+// created, retrying `loadLeadStatusCounts` up to MAX_CREATED_RETRIES=2 times
+// (3 total attempts) with a 30 s gap.  On final failure it sets
+// `bgRefreshFailed=true`, which renders the Snackbar:
+//   "Couldn't refresh live data — fresh results will load on your next visit"
+//
+// Strategy
+// ────────
+// • Boot Express + a minimal mock HubSpot (for contact creation only).
+// • Use Puppeteer request interception to control what `/api/contacts-lead-status-counts`
+//   returns, avoiding the need to manipulate the server-side HubSpot layer.
+// • Inject `evaluateOnNewDocument` to collapse any `setTimeout(fn, delay)`
+//   with delay > 1 s to 10 ms so the 30 s retry gaps run almost instantly.
+//
+// Probes
+// ──────
+// [D] All retries fail — Snackbar "Couldn't refresh live data…" appears.
+// [E] Second attempt succeeds — Snackbar does NOT appear.
+//
+// Usage:
+//   DATABASE_URL_TEST=<isolated-db> npm run test:new-customer-counts-retry
+//   PRIVTEST_ALLOW_SHARED_DB=1     npm run test:new-customer-counts-retry
+
+const fs   = require('fs');
+const path = require('path');
+const http = require('http');
+const { Pool } = require('pg');
+
+require('dotenv').config();
+
+const {
+  spawnServer,
+  waitForServer,
+  seedUsers,
+  cleanupTestData,
+  resetRateLimitStore,
+  login,
+  setPool,
+  BASE,
+  PASSWORD,
+} = require('../privileges/harness');
+
+let puppeteer = null;
+try { puppeteer = require('puppeteer'); } catch {}
+
+const REPORT_PATH = path.join(
+  __dirname, '..', '..', 'test-results', 'new-customer-counts-retry.md'
+);
+
+// ── Minimal mock HubSpot ──────────────────────────────────────────────────────
+// Handles only the endpoints needed for the new-customer form flow.
+// /api/contacts-lead-status-counts is intercepted at the browser level, so
+// the mock never receives those search calls.
+function startMockHubspot() {
+  const state = {
+    createPosts: [],
+    nextContactId: 989800000850,
+    contacts: [],
+  };
+
+  const server = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', c => { raw += c; });
+    req.on('end', () => {
+      const u = new URL(req.url, `http://${req.headers.host}`);
+      const send = (code, obj) => {
+        res.writeHead(code, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(obj));
+      };
+      let body = {};
+      try { body = raw ? JSON.parse(raw) : {}; } catch {}
+
+      // POST /crm/v3/properties/contacts — ensureHubSpotProperties
+      if (req.method === 'POST' && u.pathname === '/crm/v3/properties/contacts') {
+        return send(409, { message: 'Property already exists' });
+      }
+
+      // POST /crm/v3/objects/contacts/search — contacts-all cache
+      if (req.method === 'POST' && u.pathname === '/crm/v3/objects/contacts/search') {
+        return send(200, { results: state.contacts.slice(), paging: {} });
+      }
+
+      // POST /crm/v3/objects/contacts — create new contact
+      if (req.method === 'POST' && u.pathname === '/crm/v3/objects/contacts') {
+        state.createPosts.push(body);
+        const id = String(state.nextContactId++);
+        const contact = {
+          id,
+          properties: { ...(body.properties || {}), hw_test_user: 'true' },
+        };
+        state.contacts.push(contact);
+        return send(201, { id, properties: { ...contact.properties } });
+      }
+
+      // PATCH /crm/v3/objects/contacts/:id
+      const m = u.pathname.match(/^\/crm\/v3\/objects\/contacts\/([^/]+)$/);
+      if (m && req.method === 'PATCH') {
+        return send(200, { id: decodeURIComponent(m[1]), properties: { ...(body.properties || {}) } });
+      }
+      if (m && req.method === 'GET') {
+        return send(200, { id: decodeURIComponent(m[1]), properties: {} });
+      }
+
+      send(404, { error: 'mock: not_found', method: req.method, path: u.pathname });
+    });
+  });
+
+  return new Promise(resolve => {
+    server.listen(0, '127.0.0.1', () => {
+      resolve({ server, port: server.address().port, state });
+    });
+  });
+}
+
+// ── Puppeteer helpers ─────────────────────────────────────────────────────────
+function parseCookieKV(jar) {
+  if (!jar) return null;
+  const idx = jar.indexOf('=');
+  if (idx < 0) return null;
+  return { name: jar.slice(0, idx), value: jar.slice(idx + 1) };
+}
+
+async function injectSession(page, jar) {
+  const kv = parseCookieKV(jar);
+  if (!kv) return;
+  const { hostname } = new URL(BASE);
+  await page.setCookie({
+    name: kv.name, value: kv.value,
+    domain: hostname, path: '/', httpOnly: true,
+  });
+}
+
+async function pollPage(page, fn, arg, timeoutMs = 10000, intervalMs = 100) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    let got = null;
+    try { got = await page.evaluate(fn, arg); } catch {}
+    if (got) return got;
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  return null;
+}
+
+async function newPageWithSession(browser, jar) {
+  const ctx = await (browser.createBrowserContext
+    ? browser.createBrowserContext()
+    : browser.createIncognitoBrowserContext());
+  const page = await ctx.newPage();
+  page.__ctx = ctx;
+  await page.setCacheEnabled(false);
+  const logs = [];
+  page.on('console',       m => logs.push(`[${m.type()}] ${m.text()}`));
+  page.on('pageerror',     e => logs.push(`[pageerror] ${e.message}`));
+  page.on('requestfailed', r => logs.push(`[reqfailed] ${r.url()} ${r.failure()?.errorText || ''}`));
+  page.on('response',      r => {
+    const s = r.status();
+    if (s >= 400) logs.push(`[resp ${s}] ${r.request().method()} ${r.url()}`);
+  });
+  await injectSession(page, jar);
+  page.__logs = logs;
+  return page;
+}
+
+async function closePage(p) {
+  try { await p.close(); } catch {}
+  try { await p.__ctx?.close(); } catch {}
+}
+
+// Collapse any large setTimeout delays so the 30 s retry gaps run instantly.
+// This is injected before page scripts run via evaluateOnNewDocument.
+async function installFastTimers(page) {
+  await page.evaluateOnNewDocument(() => {
+    const _orig = window.setTimeout.bind(window);
+    window.setTimeout = (fn, delay, ...args) => _orig(fn, delay > 1000 ? 10 : delay, ...args);
+  });
+}
+
+// Enable request interception and install a counts interceptor.
+// Returns an object whose `mode` property can be updated by the caller.
+async function installCountsInterceptor(page) {
+  const ctrl = { mode: 'succeed', failCount: 0 };
+
+  await page.setRequestInterception(true);
+  page.on('request', (req) => {
+    const url = req.url();
+    if (url.includes('/api/contacts-lead-status-counts')) {
+      const body502 = JSON.stringify({ error: 'mock-fail', code: 'HUBSPOT_ERROR' });
+      const body200 = JSON.stringify({});
+      const ct = 'application/json';
+
+      if (ctrl.mode === 'always-fail') {
+        req.respond({ status: 502, contentType: ct, body: body502 });
+      } else if (ctrl.mode === 'fail-once') {
+        ctrl.failCount++;
+        if (ctrl.failCount <= 1) {
+          req.respond({ status: 502, contentType: ct, body: body502 });
+        } else {
+          req.respond({ status: 200, contentType: ct, body: body200 });
+        }
+      } else {
+        // 'succeed'
+        req.respond({ status: 200, contentType: ct, body: body200 });
+      }
+      return;
+    }
+    req.continue();
+  });
+
+  return ctrl;
+}
+
+// Wait for the Snackbar with the bgRefreshFailed message.
+// MUI Snackbar renders with role="alert" inside role="presentation".
+async function waitForRefreshFailedSnackbar(page, timeoutMs = 10000) {
+  return pollPage(page, () => {
+    // MUI Snackbar with message sets role="alert" on the content
+    const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+    return alerts.some(el =>
+      (el.textContent || '').includes("Couldn't refresh live data")
+    ) ? 'visible' : null;
+  }, null, timeoutMs);
+}
+
+// Assert the Snackbar does NOT appear within a window.
+async function assertNoSnackbar(page, waitMs = 4000) {
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    const found = await page.evaluate(() => {
+      const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+      return alerts.some(el =>
+        (el.textContent || '').includes("Couldn't refresh live data")
+      );
+    });
+    if (found) return 'appeared'; // Snackbar appeared — bad
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return null; // never appeared — good
+}
+
+async function waitForCustomersMounted(page) {
+  await pollPage(page, () => {
+    const hs = Array.from(document.querySelectorAll('h1'))
+      .some(h => /Customers/i.test(h.textContent || ''));
+    return hs ? 'ok' : null;
+  }, null, 15000);
+}
+
+// Fill and submit the NewCustomerDialog for a given email.
+async function submitNewCustomerDialog(page, runId, suffix) {
+  // Click the New Customer button.
+  await page.evaluate(() => {
+    const b = document.getElementById('new-customer-btn');
+    if (b) b.click();
+  });
+  // Wait for the dialog to open.
+  const opened = await pollPage(page,
+    () => document.getElementById('new-customer-form') ? 'ok' : null, null, 8000);
+  if (!opened) throw new Error('new-customer-form did not appear');
+
+  // Fill fields.
+  const email = `nc-retry-${suffix}-${runId}@privtest.local`;
+  await page.evaluate((args) => {
+    const setVal = (id, v) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const proto = Object.getPrototypeOf(el);
+      const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+      setter ? setter.call(el, v) : (el.value = v);
+      el.dispatchEvent(new Event('input',  { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    setVal('nc-firstname', args.fn);
+    setVal('nc-lastname',  args.ln);
+    setVal('nc-email',     args.email);
+    setVal('nc-phone',     '07900111222');
+    setVal('nc-postcode',  'EC1A 1BB');
+  }, { fn: 'Retry', ln: 'Probe', email });
+
+  // Submit the form.
+  await page.evaluate(() => {
+    const form = document.getElementById('new-customer-form');
+    if (!form) return;
+    if (form.requestSubmit) form.requestSubmit();
+    else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+
+  return email;
+}
+
+// ── main ─────────────────────────────────────────────────────────────────────
+async function main() {
+  const hasTestDb   = !!process.env.DATABASE_URL_TEST;
+  const allowShared = process.env.PRIVTEST_ALLOW_SHARED_DB === '1';
+  const connStr     = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL;
+
+  if (!connStr) {
+    console.error('DATABASE_URL_TEST (preferred) or DATABASE_URL is required.');
+    process.exit(2);
+  }
+  if (!hasTestDb && !allowShared) {
+    console.error(
+      '\n  ✘ Refuses to run against the shared DATABASE_URL by default.\n'
+      + '    Set DATABASE_URL_TEST=<disposable> or PRIVTEST_ALLOW_SHARED_DB=1.\n',
+    );
+    process.exit(2);
+  }
+
+  const runId = Math.random().toString(36).slice(2, 8);
+  console.log(`\n  new-customer-counts-retry  run=${runId}`);
+  console.log(`  Using ${hasTestDb ? 'DATABASE_URL_TEST (isolated)' : 'shared DATABASE_URL (PRIVTEST_ALLOW_SHARED_DB=1)'}`);
+
+  const pool = new Pool({ connectionString: connStr });
+  setPool(pool);
+
+  await cleanupTestData(pool);
+  const users = await seedUsers(pool, runId);
+  console.log(`  Seeded users  member=${users.member.email}`);
+
+  const mock = await startMockHubspot();
+  console.log(`  Mock HubSpot on 127.0.0.1:${mock.port}`);
+
+  const { child, logBuf } = spawnServer({
+    extraEnv: {
+      HUBSPOT_API_URL:      `http://127.0.0.1:${mock.port}`,
+      HUBSPOT_ACCESS_TOKEN: 'mock-token-counts-retry',
+      HUBSPOT_TOKEN:        'mock-token-counts-retry',
+    },
+  });
+  let exited = false;
+  child.on('exit', () => { exited = true; });
+
+  const findings = [];
+  function record(name, expected, observed, ok) {
+    findings.push({ name, expected, observed, ok });
+    const mark = ok ? '  ✓' : '  ✗';
+    console.log(`${mark}  ${name}`);
+    if (!ok) {
+      console.log(`     expected : ${expected}`);
+      console.log(`     observed : ${observed}`);
+    }
+  }
+
+  let teardownInFlight = false;
+  const cleanupAndExit = async (code) => {
+    if (teardownInFlight) return;
+    teardownInFlight = true;
+    try { if (!exited) child.kill('SIGTERM'); } catch {}
+    try { mock.server.close(); } catch {}
+    try { await cleanupTestData(pool); } catch {}
+    await pool.end().catch(() => {});
+    process.exit(code);
+  };
+  process.on('SIGINT',  () => cleanupAndExit(130));
+  process.on('SIGTERM', () => cleanupAndExit(130));
+  process.on('uncaughtException',  (e) => { console.error('Uncaught:',  e); cleanupAndExit(2); });
+  process.on('unhandledRejection', (e) => { console.error('Unhandled:', e); cleanupAndExit(2); });
+
+  try {
+    await waitForServer();
+    await resetRateLimitStore(pool);
+    console.log(`  Server up at ${BASE}`);
+  } catch (e) {
+    console.error('Server boot failed:', e.message);
+    console.error(logBuf.join('').slice(-2000));
+    await cleanupAndExit(2);
+    return;
+  }
+
+  const memberClient = await login(users.member.email, PASSWORD);
+
+  // ── Puppeteer probes ──────────────────────────────────────────────────────
+  const UI_LABELS = [
+    '[D] all retries fail — Snackbar "Couldn\'t refresh live data…" appears',
+    '[E] second attempt succeeds — Snackbar does NOT appear',
+  ];
+
+  if (!puppeteer) {
+    for (const l of UI_LABELS) record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    const fail = findings.filter(f => !f.ok).length;
+    await writeReport(runId, findings);
+    await cleanupAndExit(fail > 0 ? 1 : 0);
+    return;
+  }
+
+  const { findChromium } = require('../shared/find-chromium');
+  let browser = null;
+  let launchErr = null;
+  const launchArgs = ['--no-sandbox', '--disable-setuid-sandbox'];
+  const attempts = [{ args: launchArgs }];
+  const sysChrome = findChromium();
+  if (sysChrome) attempts.push({ executablePath: sysChrome, args: launchArgs });
+  for (const opts of attempts) {
+    try {
+      browser = await puppeteer.launch({ headless: true, ...opts });
+      launchErr = null;
+      break;
+    } catch (e) { launchErr = e; browser = null; }
+  }
+
+  if (!browser) {
+    const msg = (launchErr?.message || String(launchErr)).slice(0, 200);
+    for (const l of UI_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
+    const fail = findings.filter(f => !f.ok).length;
+    await writeReport(runId, findings);
+    await cleanupAndExit(fail > 0 ? 1 : 0);
+    return;
+  }
+
+  try {
+    // ══════════════════════════════════════════════════════════════════════════
+    // Probe D — all counts calls fail → Snackbar appears
+    // ══════════════════════════════════════════════════════════════════════════
+    console.log('\n  [D] All retries fail → Snackbar expected');
+    {
+      const page = await newPageWithSession(browser, memberClient.cookie);
+
+      // Collapse large setTimeout delays before any page script runs.
+      await installFastTimers(page);
+
+      // Intercept /api/contacts-lead-status-counts — always return 502.
+      const ctrl = await installCountsInterceptor(page);
+      ctrl.mode = 'always-fail';
+
+      await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+      await waitForCustomersMounted(page);
+
+      // Wait for the New Customer button to appear.
+      const btnPresent = await pollPage(page,
+        () => document.getElementById('new-customer-btn') ? 'ok' : null, null, 8000);
+
+      if (!btnPresent) {
+        record(UI_LABELS[0],
+          'Snackbar visible after all retries',
+          '#new-customer-btn not found — page may not have mounted correctly',
+          false);
+      } else {
+        // Submit a new customer.
+        await submitNewCustomerDialog(page, runId, 'd');
+
+        // All 3 attempts (0 + 2 retries) fail → Snackbar must appear.
+        // With fast timers the 30 s gaps collapse to ~10 ms each.
+        const snackbar = await waitForRefreshFailedSnackbar(page, 10000);
+        record(UI_LABELS[0],
+          'Snackbar visible after all retries',
+          `snackbar=${snackbar === 'visible' ? 'visible' : 'not seen'}`,
+          snackbar === 'visible');
+      }
+
+      if (page.__logs.some(l => l.includes('[pageerror]'))) {
+        console.log('  Page errors (probe D):', page.__logs.filter(l => l.includes('[pageerror]')));
+      }
+      await closePage(page);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Probe E — second attempt succeeds → Snackbar must NOT appear
+    // ══════════════════════════════════════════════════════════════════════════
+    console.log('\n  [E] Second attempt succeeds → no Snackbar expected');
+    {
+      const page = await newPageWithSession(browser, memberClient.cookie);
+
+      // Collapse large setTimeout delays.
+      await installFastTimers(page);
+
+      // Start in 'succeed' mode so page load counts call (which is silently
+      // caught) succeeds.  We switch to 'fail-once' just before submitting
+      // so the first onCreated attempt fails and the retry succeeds.
+      const ctrl = await installCountsInterceptor(page);
+      ctrl.mode = 'succeed';
+
+      await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+      await waitForCustomersMounted(page);
+
+      const btnPresent = await pollPage(page,
+        () => document.getElementById('new-customer-btn') ? 'ok' : null, null, 8000);
+
+      if (!btnPresent) {
+        record(UI_LABELS[1],
+          'Snackbar absent after successful retry',
+          '#new-customer-btn not found — page may not have mounted correctly',
+          false);
+      } else {
+        // Switch interceptor to 'fail-once' right before triggering onCreated:
+        // first counts call → 502, second counts call → 200.
+        ctrl.mode = 'fail-once';
+        ctrl.failCount = 0;
+
+        await submitNewCustomerDialog(page, runId, 'e');
+
+        // Give the retry enough time to fire and resolve (fast timers + network).
+        // The second attempt should succeed before this window closes.
+        const appeared = await assertNoSnackbar(page, 5000);
+        record(UI_LABELS[1],
+          'Snackbar absent after successful retry',
+          `snackbar=${appeared === 'appeared' ? 'appeared (bad)' : 'never appeared (good)'}`,
+          appeared === null);
+      }
+
+      if (page.__logs.some(l => l.includes('[pageerror]'))) {
+        console.log('  Page errors (probe E):', page.__logs.filter(l => l.includes('[pageerror]')));
+      }
+      await closePage(page);
+    }
+  } finally {
+    await browser.close().catch(() => {});
+  }
+
+  const pass = findings.filter(f => f.ok).length;
+  const fail = findings.filter(f => !f.ok).length;
+  console.log(`\n  Results: ${pass} passed, ${fail} failed`);
+
+  await writeReport(runId, findings);
+  await cleanupAndExit(fail > 0 ? 1 : 0);
+}
+
+async function writeReport(runId, findings) {
+  fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
+  const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const lines = [
+    '# New Customer Counts Retry — Integration Test',
+    '',
+    `- Run ID: \`${runId}\``,
+    `- Date: ${new Date().toISOString()}`,
+    `- Command: \`npm run test:new-customer-counts-retry\``,
+    '',
+    '## Summary',
+    '',
+    `- Passed: ${findings.filter(f => f.ok).length} / ${findings.length}`,
+    `- Failed: ${findings.filter(f => !f.ok).length} / ${findings.length}`,
+    '',
+    '## Results',
+    '',
+    '| Result | Probe | Expected | Observed |',
+    '|---|---|---|---|',
+    ...findings.map(f =>
+      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+    ),
+    '',
+    '## Coverage',
+    '',
+    '- **[D] All retries fail**: after `NewCustomerDialog.onCreated` fires,',
+    '  `loadLeadStatusCounts` is called immediately and twice more (3 total,',
+    '  `MAX_CREATED_RETRIES=2`).  When every attempt returns HTTP 502 the',
+    '  `bgRefreshFailed` Snackbar ("Couldn\'t refresh live data…") must appear.',
+    '  Large `setTimeout` delays (30 s) are collapsed to 10 ms via',
+    '  `evaluateOnNewDocument`; `/api/contacts-lead-status-counts` is',
+    '  intercepted at the Puppeteer layer and always returns 502.',
+    '- **[E] Second attempt succeeds**: first `onCreated` counts call returns',
+    '  502, the retry (second call) returns 200.  The Snackbar must NOT appear.',
+  ];
+  fs.writeFileSync(REPORT_PATH, lines.join('\n'));
+  console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
+}
+
+main();
