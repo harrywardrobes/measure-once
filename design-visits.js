@@ -1528,7 +1528,8 @@ router.post('/api/design-visits/:id/submit', isAuthenticated, requirePrivilege('
 router.post('/api/design-visits/:id/revision', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const note = req.body?.note ? String(req.body.note).slice(0, 2000) : null;
+  const rawNote = req.body?.revisionNote ?? req.body?.note;
+  const note = rawNote ? String(rawNote).slice(0, 2000) : null;
   try {
     const r = await pool.query(`
       UPDATE design_visits SET

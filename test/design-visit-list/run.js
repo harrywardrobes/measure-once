@@ -406,6 +406,7 @@ async function main() {
     '[ADM] Non-admin (member) sees neither Request-revision nor Delete',
     '[ADM] Admin DELETE /api/design-visits/:id removes the visit from the list',
     '[ADM] Admin Request-revision flips status to revision_requested',
+    '[ADM] Admin Request-revision persists the typed note to revision_note',
   ];
 
   if (!puppeteer) {
@@ -561,12 +562,16 @@ async function main() {
           return 'ok';
         }, visitA.id, 6000);
         const dbAfterRevision = await pool.query(
-          `SELECT status FROM design_visits WHERE id = $1`, [visitA.id]);
+          `SELECT status, revision_note FROM design_visits WHERE id = $1`, [visitA.id]);
         const dbRow = dbAfterRevision.rows[0];
         record(UI_LABELS[7],
           'visitA status=revision_requested in DB + pill flips in UI',
           `uiOk=${revisionOk === 'ok'}, dbStatus=${dbRow?.status}`,
           revisionOk === 'ok' && dbRow?.status === 'revision_requested');
+        record(UI_LABELS[8],
+          'visitA revision_note = "e2e revision note"',
+          `dbNote=${JSON.stringify(dbRow?.revision_note)}`,
+          dbRow?.revision_note === 'e2e revision note');
 
         await adminPage.close();
         try { await adminPage.__ctx?.close(); } catch {}
