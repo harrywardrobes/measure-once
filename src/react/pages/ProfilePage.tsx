@@ -90,9 +90,10 @@ function checkPasswordPolicy(pw: string, userInputs: string[]): string | null {
 }
 
 export function ProfilePage(): React.ReactElement {
-  // bootstrap() in core.js populates window.state.user asynchronously and fires
-  // `mo:user` on every change. The React island mounts before bootstrap finishes,
-  // so seed from window.state.user and re-read on each mo:user event.
+  // The React island mounts before core.js bootstrap() finishes populating
+  // window.state.user. Seed from the global, listen for the `mo:user` event
+  // bootstrap fires, AND as a last-resort fall back to fetching /api/auth/user
+  // directly so this page never depends on event timing.
   const [appUser, setAppUser] = React.useState<AppUser | null>(() => getAppUser());
   const [profile, setProfile] = React.useState<Profile | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -100,10 +101,25 @@ export function ProfilePage(): React.ReactElement {
   const [reloadNonce, setReloadNonce] = React.useState(0);
 
   React.useEffect(() => {
-    const refresh = () => setAppUser(getAppUser());
-    window.addEventListener('mo:user', refresh);
-    if (!appUser) refresh();
-    return () => window.removeEventListener('mo:user', refresh);
+    if (appUser) return;
+    let cancelled = false;
+    const onEvent = (e: Event) => {
+      const detail = (e as CustomEvent<AppUser | null>).detail;
+      if (cancelled) return;
+      if (detail) setAppUser(detail);
+      else {
+        const u = getAppUser();
+        if (u) setAppUser(u);
+      }
+    };
+    window.addEventListener('mo:user', onEvent);
+    // Fallback: if bootstrap already finished (or never runs on this page),
+    // fetch /api/auth/user directly so we don't sit forever waiting.
+    fetch('/api/auth/user', { headers: { Accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u: AppUser | null) => { if (!cancelled && u) setAppUser((prev) => prev || u); })
+      .catch(() => { /* surfaced when profile fetch retries */ });
+    return () => { cancelled = true; window.removeEventListener('mo:user', onEvent); };
   }, [appUser]);
 
   React.useEffect(() => {
