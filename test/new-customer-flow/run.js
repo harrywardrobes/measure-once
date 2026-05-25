@@ -311,6 +311,7 @@ async function main() {
     '[UI] member /customers — clicking opens the dialog',
     '[UI] member /customers — submitting creates the contact (mock POST observed)',
     '[UI] member /customers — newly-created contact appears in the list',
+    '[UI] member /customers — typing an existing email shows duplicate notice and disables Create',
     '[UI] member /customers?new=1 — dialog auto-opens on load',
     '[UI] viewer /customers — New customer button is absent',
   ];
@@ -426,6 +427,47 @@ async function main() {
           `inList=${inList === 'ok'}`,
           inList === 'ok');
 
+        // ── Duplicate-email warning ───────────────────────────────────────────
+        // Re-open the dialog and type the email of the contact created in the
+        // [API] phase. The NewCustomerDialog debounced-lookup against
+        // /api/contacts-all should surface #nc-duplicate-notice and disable
+        // #nc-submit.
+        await memberPage.evaluate(() => {
+          const b = document.getElementById('new-customer-btn');
+          if (b) b.click();
+        });
+        await pollPage(memberPage,
+          () => document.getElementById('new-customer-form') ? 'ok' : null,
+          null, 6000);
+        const existingEmail = `nc-${runId}@privtest.local`;
+        await memberPage.evaluate((em) => {
+          const el = document.getElementById('nc-email');
+          if (!el) return;
+          const proto = Object.getPrototypeOf(el);
+          const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+          setter ? setter.call(el, em) : (el.value = em);
+          el.dispatchEvent(new Event('input',  { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }, existingEmail);
+        const dupSnap = await pollPage(memberPage, () => {
+          const notice = document.getElementById('nc-duplicate-notice');
+          if (!notice) return null;
+          const link = document.getElementById('nc-duplicate-link');
+          const submit = document.getElementById('nc-submit');
+          return {
+            visible: true,
+            href: link?.getAttribute('href') || '',
+            disabled: !!(submit && submit.hasAttribute('disabled')),
+          };
+        }, null, 8000);
+        record(UI_LABELS[4],
+          '#nc-duplicate-notice visible, link → /customers/<id>, #nc-submit disabled',
+          `snap=${JSON.stringify(dupSnap)}`,
+          !!dupSnap
+            && dupSnap.visible === true
+            && /^\/customers\/[^/]+/.test(dupSnap.href || '')
+            && dupSnap.disabled === true);
+
         await closePage(memberPage);
 
         // ── Member /customers?new=1 ───────────────────────────────────────────
@@ -435,7 +477,7 @@ async function main() {
         const autoOpen = await pollPage(deepLinkPage,
           () => document.getElementById('new-customer-form') ? 'ok' : null,
           null, 8000);
-        record(UI_LABELS[4],
+        record(UI_LABELS[5],
           '#new-customer-form auto-opens on ?new=1',
           `open=${autoOpen === 'ok'}`,
           autoOpen === 'ok');
@@ -452,7 +494,7 @@ async function main() {
           hasButton: !!document.getElementById('new-customer-btn'),
           viewerMode: document.body.classList.contains('viewer-mode'),
         }));
-        record(UI_LABELS[5],
+        record(UI_LABELS[6],
           'no #new-customer-btn in the rendered page for viewer',
           `hasButton=${viewerSnap.hasButton}, viewerMode=${viewerSnap.viewerMode}`,
           viewerSnap.hasButton === false);

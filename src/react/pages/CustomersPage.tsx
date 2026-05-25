@@ -1245,6 +1245,8 @@ function NewCustomerDialog({
   const [postcode, setPostcode] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
+  const [duplicate, setDuplicate] = React.useState<Contact | null>(null);
+  const [checkingDup, setCheckingDup] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) {
@@ -1255,8 +1257,48 @@ function NewCustomerDialog({
       setPostcode('');
       setErr(null);
       setSubmitting(false);
+      setDuplicate(null);
+      setCheckingDup(false);
     }
   }, [open]);
+
+  // Debounced duplicate-email check against /api/contacts-all so users get a
+  // warning while typing instead of after submission. We only consider exact
+  // case-insensitive email matches — the endpoint's `q` does a broader
+  // substring search across name/phone/email, so we filter the results
+  // client-side.
+  React.useEffect(() => {
+    const em = email.trim().toLowerCase();
+    if (!open) return;
+    if (!em || !em.includes('@')) {
+      setDuplicate(null);
+      setCheckingDup(false);
+      return;
+    }
+    let cancelled = false;
+    setCheckingDup(true);
+    const h = setTimeout(() => {
+      apiGet<ContactsResponse>(`/api/contacts-all?q=${encodeURIComponent(em)}&limit=10`)
+        .then((data) => {
+          if (cancelled) return;
+          const match = (data?.results || []).find(
+            (c) => (c.properties?.email || '').trim().toLowerCase() === em,
+          );
+          setDuplicate(match || null);
+        })
+        .catch(() => {
+          if (!cancelled) setDuplicate(null);
+        })
+        .finally(() => {
+          if (!cancelled) setCheckingDup(false);
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(h);
+      setCheckingDup(false);
+    };
+  }, [email, open]);
 
   const handleSubmit = async (ev: React.FormEvent) => {
     ev.preventDefault();
@@ -1355,7 +1397,35 @@ function NewCustomerDialog({
               fullWidth
               size="small"
               disabled={submitting}
+              error={!!duplicate}
+              helperText={
+                checkingDup
+                  ? 'Checking for existing customer…'
+                  : duplicate
+                    ? 'A customer with this email already exists.'
+                    : undefined
+              }
             />
+            {duplicate ? (
+              <Alert
+                id="nc-duplicate-notice"
+                severity="warning"
+                action={
+                  <Button
+                    component="a"
+                    href={`/customers/${encodeURIComponent(duplicate.id)}`}
+                    id="nc-duplicate-link"
+                    size="small"
+                    color="inherit"
+                  >
+                    Open
+                  </Button>
+                }
+              >
+                This email is already a customer
+                {contactName(duplicate) ? `: ${contactName(duplicate)}` : ''}.
+              </Alert>
+            ) : null}
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
                 id="nc-phone"
@@ -1387,7 +1457,7 @@ function NewCustomerDialog({
             type="submit"
             variant="contained"
             id="nc-submit"
-            disabled={submitting}
+            disabled={submitting || !!duplicate}
           >
             {submitting ? 'Creating…' : 'Create customer'}
           </Button>
