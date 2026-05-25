@@ -419,6 +419,44 @@ async function runProbes({ clients, users, pool, runId }) {
       'high', r4.status === 403);
   }
 
+  // ── QuickBooks invoice write/send gate (task-962) ─────────────────────────
+  // The sparse-update (POST /api/quickbooks/invoice/:id) and email-send
+  // (POST /api/quickbooks/invoice/:id/send) routes carry requireAdmin in
+  // quickbooks.js.  Non-admin roles must receive 403 from the gate before the
+  // handler ever checks whether a QB token is present.  Admin receives a non-
+  // 403 response (503 because QB is not connected in the test environment).
+  {
+    const invoiceId = '0';
+    for (const actor of ['viewer', 'member', 'manager']) {
+      const c = clients[actor];
+      const ru = await c.post(`/api/quickbooks/invoice/${invoiceId}`,
+        { syncToken: '0', dueDate: '2099-01-01' });
+      await record('qb-invoice-gate', `${actor} cannot update a QB invoice (POST /api/quickbooks/invoice/:id)`,
+        '403 forbidden', `status=${ru.status}`,
+        'critical', ru.status === 403);
+      const rs = await c.post(`/api/quickbooks/invoice/${invoiceId}/send`,
+        { email: 'probe@privtest.local' });
+      await record('qb-invoice-gate', `${actor} cannot send a QB invoice (POST /api/quickbooks/invoice/:id/send)`,
+        '403 forbidden', `status=${rs.status}`,
+        'critical', rs.status === 403);
+    }
+    // Admin should pass the gate — QB is not connected so the handler returns
+    // 503, but that is *not* a gate denial.
+    const admin = clients.admin;
+    const au = await admin.post(`/api/quickbooks/invoice/${invoiceId}`,
+      { syncToken: '0', dueDate: '2099-01-01' });
+    await record('qb-invoice-gate', 'admin is not blocked by invoice update gate',
+      'status ≠ 403 (gate passes; handler may 503 — QB not connected)',
+      `status=${au.status}`,
+      'critical', au.status !== 403);
+    const as_ = await admin.post(`/api/quickbooks/invoice/${invoiceId}/send`,
+      { email: 'probe@privtest.local' });
+    await record('qb-invoice-gate', 'admin is not blocked by invoice send gate',
+      'status ≠ 403 (gate passes; handler may 503 — QB not connected)',
+      `status=${as_.status}`,
+      'critical', as_.status !== 403);
+  }
+
   // ── Admin lifecycle smoke ─────────────────────────────────────────────────
   {
     const admin = clients.admin;
