@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { usePrivilege } from '../hooks/usePrivilege';
 import Box from '@mui/material/Box';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
@@ -19,7 +20,6 @@ import HandymanIcon from '@mui/icons-material/Handyman';
 import HandymanOutlinedIcon from '@mui/icons-material/HandymanOutlined';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
-import { useCurrentUser } from '../hooks/useCurrentUser';
 
 /**
  * Bottom navigation bar rendered as a React/MUI island into
@@ -37,7 +37,7 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
  *   `public/admin.html` (which toggles `style.display` by element id)
  *   still works without errors.
  * - Privilege-gated tabs are conditionally rendered based on the user's
- *   `privilege_level` from `useCurrentUser` — no DOM mutation needed.
+ *   privilege level from `usePrivilege` — no DOM mutation needed.
  */
 type NavItem = {
   key: string;
@@ -74,16 +74,12 @@ function matchPath(pathname: string): string | false {
 
 export function BottomNav() {
   const theme = useTheme();
+  const { isManager } = usePrivilege();
   const navRef = useRef<HTMLElement | null>(null);
   const firstScroll = useRef(true);
   const [value, setValue] = useState<string | false>(() =>
     typeof window === 'undefined' ? false : matchPath(window.location.pathname),
   );
-  const { user } = useCurrentUser();
-
-  const priv = user?.privilege_level;
-  const isManagerOrAdmin = priv === 'manager' || priv === 'admin';
-  const isAdmin = priv === 'admin';
 
   useEffect(() => {
     const sync = () => setValue(matchPath(window.location.pathname));
@@ -111,12 +107,6 @@ export function BottomNav() {
       el.scrollIntoView();
     }
   }, [value]);
-
-  const visibleNav = NAV.filter((n) => {
-    if (n.adminOnly) return isAdmin;
-    if (n.managerOnly) return isManagerOrAdmin;
-    return true;
-  });
 
   return (
     <Box
@@ -155,7 +145,11 @@ export function BottomNav() {
           bgcolor: 'transparent',
         }}
       >
-        {visibleNav.map((n) => {
+        {NAV.filter((n) => {
+          if (n.adminOnly) return false;
+          if (n.managerOnly) return isManager;
+          return true;
+        }).map((n) => {
           const accent = accentFor(n.key, theme);
           const isSelected = value === n.key;
           const IconComponent = isSelected ? n.Icon : n.IconOutlined;

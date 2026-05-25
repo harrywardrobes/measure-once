@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePrivilege } from '../hooks/usePrivilege';
 import {
   Alert,
   Box,
@@ -130,10 +131,6 @@ function showToast(msg: string, isError = false) {
   else console.log('[toast]', msg);
 }
 
-function isViewerOnly(): boolean {
-  return typeof document !== 'undefined' && document.body.classList.contains('viewer-mode');
-}
-
 function contactDisplayName(c: Contact): string {
   const p = c.properties || {};
   const n = `${p.firstname || ''} ${p.lastname || ''}`.trim();
@@ -151,6 +148,7 @@ const SYNC_PROVIDERS = [
 // ── Calendar Page ────────────────────────────────────────────────────────────
 
 export function CalendarPage(): React.ReactElement {
+  const { isViewer } = usePrivilege();
   const [cursor, setCursor] = React.useState<Date>(() => startOfDay(new Date()));
   const [showWorkshop, setShowWorkshop] = React.useState<boolean>(true);
   const [visits, setVisits] = React.useState<Visit[]>([]);
@@ -236,7 +234,7 @@ export function CalendarPage(): React.ReactElement {
   };
 
   const openVisitModal = (visit: Visit | null, prefillDate?: string | null) => {
-    if (isViewerOnly()) return;
+    if (isViewer) return;
     ensureContacts();
     setModal({ open: true, visit, prefillDate: prefillDate || null });
   };
@@ -254,6 +252,7 @@ export function CalendarPage(): React.ReactElement {
         onNext={() => setCursor((c) => addDays(c, 7))}
         onToday={() => setCursor(startOfDay(new Date()))}
         onWorkshopChange={onToggleWorkshop}
+        isViewer={isViewer}
         onNewVisit={() => openVisitModal(null)}
       />
       <TopPanel
@@ -332,6 +331,7 @@ function headerTitle(cursor: Date) {
 function CalendarHeader(props: {
   cursor: Date;
   showWorkshop: boolean;
+  isViewer: boolean;
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
@@ -356,16 +356,17 @@ function CalendarHeader(props: {
           label={<Typography variant="body2">Workshop time</Typography>}
           sx={{ m: 0 }}
         />
-        <Button
-          variant="contained"
-          color="primary"
-          size="small"
-          startIcon={<AddIcon />}
-          onClick={props.onNewVisit}
-          data-viewer-hide
-        >
-          New visit
-        </Button>
+        {!props.isViewer && (
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={props.onNewVisit}
+          >
+            New visit
+          </Button>
+        )}
       </Stack>
     </Stack>
   );

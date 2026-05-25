@@ -92,6 +92,36 @@ For repeated styles, reach for `styled()` from `@mui/material/styles`.
 Avoid hand-rolled `#hex` values inside React components — let the theme
 provide them so a later theme refresh propagates automatically.
 
+## Privilege gating
+
+React components gate on `privilege_level` from the user object via the
+`usePrivilege()` hook in `src/react/hooks/usePrivilege.ts`:
+
+```tsx
+import { usePrivilege } from '../hooks/usePrivilege';
+
+function MyComponent() {
+  const { isAdmin, isManager, isViewer } = usePrivilege();
+  return (
+    <>
+      {!isViewer && <Button>Edit</Button>}
+      {isAdmin && <Button>Admin action</Button>}
+    </>
+  );
+}
+```
+
+The hook reads `privilege_level` from the user object published by
+`core.js` via `window.__moHeaderUser` and the `mo:user` window event.
+It returns `{ privilegeLevel, isAdmin, isManager, isViewer }` where
+`isManager` is true for both `manager` and `admin` privilege levels.
+
+**Convention:** React components always use `usePrivilege()` and
+conditional rendering. The `data-admin-only`, `data-viewer-hide`, and
+`data-manager-only` attributes and body-class checks
+(`document.body.classList.contains('viewer-mode')`) are reserved for
+legacy vanilla-JS pages in `public/` only — do not use them in React.
+
 ## Icons
 
 All icons in React come from `@mui/icons-material` — one named export

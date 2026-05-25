@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePrivilege } from '../hooks/usePrivilege';
 import { createPortal } from 'react-dom';
 import {
   Alert,
@@ -213,19 +214,8 @@ async function apiPost<T = unknown>(path: string, body: unknown): Promise<T> {
 }
 
 function useIsViewer(): boolean {
-  const { user } = useCurrentUser();
-  const [bodyClass, setBodyClass] = React.useState<boolean>(() =>
-    typeof document !== 'undefined' && document.body.classList.contains('viewer-mode'),
-  );
-  React.useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const sync = () => setBodyClass(document.body.classList.contains('viewer-mode'));
-    const obs = new MutationObserver(sync);
-    obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-    return () => obs.disconnect();
-  }, []);
-  if (user) return user.privilege_level === 'viewer';
-  return bodyClass;
+  const { isViewer } = usePrivilege();
+  return isViewer;
 }
 
 /**
