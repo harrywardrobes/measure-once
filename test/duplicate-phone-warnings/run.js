@@ -455,6 +455,45 @@ async function main() {
         !!flashed,
       );
 
+      // Clear the duplicate phone and verify the warning disappears and the
+      // submit button becomes enabled again.
+      await page.evaluate(() => {
+        const labels = Array.from(document.querySelectorAll('label'))
+          .filter(l => (l.textContent || '').trim().startsWith('Mobile number'));
+        if (!labels.length) throw new Error('no Mobile number label found');
+        const inputId = labels[0].getAttribute('for');
+        const input = inputId ? document.getElementById(inputId) : null;
+        if (!input) throw new Error('Mobile number input not found');
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, '');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+
+      const alertGone = await pollPage(page, () => {
+        const alerts = Array.from(document.querySelectorAll('.MuiAlert-root'));
+        const hit = alerts.find(a => /phone number is already in use/i.test(a.textContent || ''));
+        return !hit;
+      }, null, 4000);
+      record(
+        'TEAM: clearing the phone field removes the duplicate-phone Alert',
+        'no MuiAlert-root containing "phone number is already in use"',
+        `alertGone=${!!alertGone}`,
+        !!alertGone,
+      );
+
+      const submitReEnabled = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button'));
+        const btn = btns.find(b => (b.textContent || '').trim() === 'Add team member'
+                                  || (b.textContent || '').trim() === 'Adding…');
+        return btn ? btn.disabled : null;
+      });
+      record(
+        'TEAM: "Add team member" button is re-enabled after clearing the duplicate phone',
+        'button.disabled === false',
+        `disabled=${submitReEnabled}`,
+        submitReEnabled === false,
+      );
+
       await page.close();
     }
 
