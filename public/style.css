@@ -6731,3 +6731,584 @@ body.dv-signoff-page {
 }
 .admin-page .admin-msg--muted { color: var(--ink-4); }
 .admin-page .admin-msg--error { color: var(--status-danger-text); }
+
+/* ── Admin template-literal helpers ─────────────────────────────────────────
+   Token-backed equivalents of the compound inline-style attributes that
+   used to live inside admin.html's template literals (lead-status table,
+   card-action stages, audit/dev-env lists, trade-submission cards,
+   design-visit catalogue + modals, Settings header rows). Naming uses
+   the `adm-` prefix so it doesn't collide with other modules.
+─────────────────────────────────────────────────────────────────────────── */
+
+/* Compact data table chrome */
+.admin-page .adm-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.admin-page .adm-th {
+  text-align: left; padding: 6px 8px;
+  font-weight: 600; color: var(--ink-3);
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+}
+.admin-page .adm-th--center { text-align: center; }
+.admin-page .adm-th--nowrap { white-space: nowrap; }
+.admin-page .adm-tr  { border-bottom: 1px solid var(--border); }
+.admin-page .adm-tr--alt { background: var(--stone-soft); }
+.admin-page .adm-td  { padding: 7px 8px; }
+.admin-page .adm-td--center  { text-align: center; }
+.admin-page .adm-td--right   { text-align: right; }
+.admin-page .adm-td--nowrap  { white-space: nowrap; }
+.admin-page .adm-td--actions { padding: 4px 4px; white-space: nowrap; }
+.admin-page .adm-td--mono    { font-family: monospace; color: var(--ink-3); font-size: .78rem; }
+.admin-page .adm-td--muted   { color: var(--ink-4); font-size: .78rem; font-style: italic; }
+.admin-page .adm-td--mono-muted {
+  font-family: monospace; color: var(--ink-4);
+  font-size: .78rem; font-style: italic;
+}
+.admin-page .adm-td--muted-center {
+  text-align: center; color: var(--ink-4);
+  font-size: .72rem; font-style: italic;
+}
+
+/* Reorder / icon mini-buttons */
+.admin-page .adm-iconbtn      { padding: 2px 7px; font-size: 1rem; line-height: 1; }
+.admin-page .adm-iconbtn--dim { opacity: .3; }
+.admin-page .adm-iconbtn--xs  { padding: 2px 5px; font-size: .75rem; line-height: 1; }
+.admin-page .adm-btn-xs       { padding: 3px 8px; font-size: .75rem; }
+.admin-page .adm-btn-xs--danger { color: #991b1b; }
+
+/* Save / action buttons in section headers (nowrap, compact) */
+.admin-page .adm-btn-save { white-space: nowrap; padding: 6px 14px; font-size: .8rem; }
+
+/* Form-style inputs used inside admin data tables */
+.admin-page .adm-input-shorthand {
+  padding: 4px 7px; font-size: .78rem; font-family: monospace;
+  text-transform: uppercase; width: 62px; letter-spacing: .05em;
+}
+.admin-page .adm-input-label {
+  padding: 4px 7px; font-size: .82rem; width: 100%; min-width: 120px;
+}
+.admin-page .adm-input-stage {
+  padding: 4px 7px; font-size: .78rem; min-width: 130px;
+}
+.admin-page .adm-input-key {
+  padding: 4px 7px; font-size: .78rem; font-family: monospace;
+  text-transform: uppercase; width: 100%; min-width: 110px;
+  border-color: #f59e0b;
+}
+.admin-page .adm-input-excl { width: 16px; height: 16px; cursor: pointer; }
+
+/* Settings-tab section header rows (title + Save / Add) */
+.admin-page .adm-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px;
+}
+.admin-page .adm-section-head--tight  { margin-bottom: 6px; flex-wrap: wrap; }
+.admin-page .adm-divider {
+  border-top: 1px solid var(--border); margin: 20px 0 16px;
+}
+
+/* "Add new …" mini-form panel under the lead-status table */
+.admin-page .adm-mini-form {
+  margin-top: 12px; padding: 10px 12px;
+  background: var(--stone-soft);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.admin-page .adm-mini-form-title {
+  font-size: .75rem; font-weight: 600; color: var(--ink-3);
+  margin-bottom: 8px; text-transform: uppercase; letter-spacing: .05em;
+}
+.admin-page .adm-mini-form-row {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;
+}
+.admin-page .adm-mini-field      { flex: 1; min-width: 120px; }
+.admin-page .adm-mini-field--md  { flex: 1; min-width: 140px; }
+.admin-page .adm-mini-field--wide{ flex: 2; min-width: 150px; }
+.admin-page .adm-mini-label {
+  font-size: .75rem; color: var(--ink-3);
+  display: block; margin-bottom: 3px;
+}
+
+/* Modal labels (Action handler dialog, DV item editor, etc.) */
+.admin-page .adm-modal-label {
+  display: block; font-size: .78rem; color: #4b5563;
+  margin: 10px 0 4px; font-weight: 600;
+}
+.admin-page .adm-modal-label--first { margin: 0 0 4px; }
+.admin-page .adm-req      { color: #991b1b; }
+.admin-page .adm-optional { font-weight: 400; color: var(--ink-4); }
+
+/* Error / status lines under form fields */
+.admin-page .adm-err-line {
+  color: #b91c1c; font-size: .82rem; margin-top: 8px; min-height: 18px;
+}
+.admin-page .adm-err-line--shorter { min-height: 16px; }
+.admin-page .adm-err-line--sm {
+  color: #b91c1c; font-size: .78rem; margin-top: 3px;
+}
+.admin-page .adm-msg-err-sm { color: #991b1b; font-size: .82rem; }
+.admin-page .adm-msg-err-xs {
+  font-size: .78rem; color: #991b1b; margin-top: 6px;
+}
+
+/* Modal scrim children (the inner white card) */
+.admin-page .adm-modal-card {
+  background: #fff; border-radius: 12px; padding: 20px;
+  width: 100%; max-width: 500px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+  max-height: 90vh; overflow: auto;
+}
+.admin-page .adm-modal-card--narrow { max-width: 440px; padding: 22px 24px; }
+.admin-page .adm-modal-title {
+  margin: 0 0 6px; font-size: 1.05rem; font-weight: 700;
+}
+.admin-page .adm-modal-title--big   { margin: 0 0 16px; font-size: 1rem; }
+.admin-page .adm-modal-sub {
+  margin: 0 0 14px; font-size: .78rem; color: var(--ink-4);
+}
+.admin-page .adm-modal-sub--narrow { line-height: 1.5; font-size: .8rem; }
+.admin-page .adm-modal-actions {
+  display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px;
+}
+.admin-page .adm-modal-list {
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+/* Dev-environment list (each suppressed feature is one row) */
+.admin-page .adm-devenv-list { display: flex; flex-direction: column; gap: 0; }
+.admin-page .adm-devenv-item {
+  padding: 14px 0; border-bottom: 1px solid var(--stone-soft);
+}
+.admin-page .adm-devenv-item:last-child { border-bottom: none; }
+.admin-page .adm-devenv-head {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-bottom: 4px; flex-wrap: wrap;
+}
+.admin-page .adm-devenv-name {
+  font-weight: 700; font-size: .875rem; color: var(--ink-1);
+}
+.admin-page .adm-devenv-loc {
+  font-size: .72rem; font-weight: 600;
+  background: var(--stone); color: var(--ink-4);
+  padding: 2px 8px; border-radius: var(--radius-pill);
+}
+.admin-page .adm-devenv-desc {
+  margin: 0; font-size: .82rem; color: var(--ink-3); line-height: 1.5;
+}
+.admin-page .adm-inline-code {
+  background: var(--stone-soft);
+  padding: 1px 4px; border-radius: 3px;
+}
+
+/* Trade-submission cards */
+.admin-page .adm-tsub-row {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.admin-page .adm-tsub-body { flex: 1; min-width: 0; }
+.admin-page .adm-tsub-name {
+  font-size: 1rem; font-weight: 700; color: var(--ink-1); margin-bottom: 4px;
+}
+.admin-page .adm-tsub-meta {
+  display: flex; gap: 8px; align-items: center;
+  flex-wrap: wrap; margin-bottom: 8px;
+}
+.admin-page .adm-tsub-details {
+  font-size: .8rem; color: var(--ink-3); margin-bottom: 6px;
+}
+.admin-page .adm-tsub-links {
+  font-size: .82rem; color: var(--ink-2);
+  margin-bottom: 6px; display: flex; gap: 16px; flex-wrap: wrap;
+}
+.admin-page .adm-tsub-notes {
+  font-size: .82rem; color: var(--ink-3);
+  margin-bottom: 8px; font-style: italic;
+}
+.admin-page .adm-tsub-contacts { margin-bottom: 8px; }
+.admin-page .adm-tsub-contacts-title {
+  font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
+  color: var(--ink-4); margin-bottom: 4px;
+}
+.admin-page .adm-tsub-contact-row {
+  font-size: .82rem; color: var(--ink-2); padding: 2px 0;
+}
+.admin-page .adm-tsub-prefchip {
+  background: var(--surface-2, #f1f5f9);
+  border-radius: 3px; padding: 0 5px; font-size: .75rem;
+}
+.admin-page .adm-tsub-submitter {
+  font-size: .75rem; color: var(--ink-4); margin-top: 4px;
+}
+.admin-page .adm-tsub-link-web {
+  color: var(--accent, #3b82f6); text-decoration: none;
+}
+.admin-page .adm-tsub-link-tel { color: inherit; text-decoration: none; }
+.admin-page .adm-tsub-pill { font-size: .8rem; color: var(--ink-3); }
+
+/* Generic typography helpers used inside admin templates */
+.admin-page .adm-text-strong-sm {
+  font-weight: 600; font-size: .875rem; color: var(--ink-1);
+}
+.admin-page .adm-text-strong-md {
+  font-weight: 700; font-size: .875rem; color: var(--ink-1);
+}
+.admin-page .adm-text-muted-xs { font-size: .72rem; color: var(--ink-4); }
+.admin-page .adm-text-muted-sm { font-size: .78rem; color: var(--ink-4); }
+.admin-page .adm-text-muted-mt { font-size: .72rem; color: var(--ink-4); margin-top: 2px; }
+.admin-page .adm-text-faint-mono {
+  font-family: monospace; font-size: .7rem; color: var(--ink-4);
+}
+
+/* Card-action stages renderer (admin Card-actions tab) */
+.admin-page .adm-ca-stage {
+  margin-bottom: 22px; border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.admin-page .adm-ca-stage-toggle {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; background: var(--stone-soft);
+  border: 0; border-bottom: 1px solid var(--border);
+  font-weight: 600; font-size: .85rem; color: var(--ink-2);
+  cursor: pointer; text-align: left; font: inherit;
+}
+.admin-page .adm-ca-stage-toggle.is-collapsed { border-bottom: 0; }
+.admin-page .adm-ca-chevron {
+  display: inline-block; width: 10px;
+  transition: transform .15s ease;
+}
+.admin-page .adm-ca-chevron.is-collapsed { transform: rotate(-90deg); }
+.admin-page .adm-ca-empty {
+  padding: 14px; font-size: .78rem; color: var(--ink-4);
+}
+.admin-page .adm-ca-block {
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+}
+.admin-page .adm-ca-block-head {
+  display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;
+}
+.admin-page .adm-ca-block-title { font-size: .85rem; color: var(--ink-1); }
+.admin-page .adm-ca-block-title.is-null { font-style: italic; }
+.admin-page .adm-ca-default-row {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 6px; flex-wrap: wrap;
+}
+.admin-page .adm-ca-default-label {
+  flex: 0 0 220px; font-size: .78rem; color: var(--ink-3);
+}
+.admin-page .adm-ca-default-input {
+  flex: 1; min-width: 160px;
+  padding: 5px 8px; font-size: .82rem;
+}
+.admin-page .adm-ca-sub-list { margin-top: 8px; }
+.admin-page .adm-ca-add-sub  { margin-top: 8px; }
+.admin-page .adm-ca-add-sub .btn {
+  padding: 4px 10px; font-size: .74rem;
+}
+.admin-page .adm-ca-sub-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 0; border-top: 1px dashed var(--border);
+}
+.admin-page .adm-ca-sub-row--new { background: #fffbeb; }
+.admin-page .adm-ca-sub-arrows {
+  flex: 0 0 auto; display: flex; flex-direction: column; line-height: 1;
+}
+.admin-page .adm-ca-sub-arrow {
+  padding: 0 5px; font-size: .7rem; line-height: 1;
+}
+.admin-page .adm-ca-sub-arrow--dim { opacity: .3; }
+.admin-page .adm-ca-sub-key-wrap {
+  display: flex; align-items: stretch; flex: 0 0 auto;
+}
+.admin-page .adm-ca-sub-key-prefix {
+  flex: 0 0 auto;
+  padding: 4px 0 4px 7px;
+  font-size: .78rem; font-family: monospace; color: var(--ink-3);
+  background: #f3f4f6;
+  border: 1px solid var(--border); border-right: none;
+  border-radius: 6px 0 0 6px;
+  line-height: 1.4; user-select: none;
+}
+.admin-page .adm-ca-sub-key {
+  flex: 0 0 140px;
+  padding: 4px 7px; font-size: .78rem; font-family: monospace;
+  text-transform: uppercase;
+}
+.admin-page .adm-ca-sub-key--has-prefix {
+  flex: 0 0 90px;
+  border-radius: 0 6px 6px 0;
+}
+.admin-page .adm-ca-sub-input {
+  flex: 1; padding: 4px 7px; font-size: .78rem;
+}
+
+/* Card-action handler badges + conflict-fix button (lives next to default labels) */
+.admin-page .adm-handler-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px; margin-left: 6px;
+  background: #ede0ff; color: #3d0f7a;
+  border-radius: 999px;
+  font-size: .7rem; font-weight: 600;
+  line-height: 1.5; white-space: nowrap; vertical-align: middle;
+}
+.admin-page .adm-handler-fix {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 8px; margin-left: 4px;
+  background: #fef3c7; color: #92400e;
+  border: 1px solid #fbbf24; border-radius: 999px;
+  font-size: .7rem; font-weight: 700;
+  line-height: 1.5; white-space: nowrap;
+  vertical-align: middle; cursor: pointer;
+}
+
+/* Conflict-resolution modal rows (admin Action handlers tab) */
+.admin-page .adm-conflict-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: 8px; background: #fafaf7;
+}
+.admin-page .adm-conflict-row-body { flex: 1; min-width: 0; }
+.admin-page .adm-conflict-row-title {
+  font-weight: 600; font-size: .85rem; color: var(--ink-1);
+}
+.admin-page .adm-conflict-row-icon { margin-right: 4px; }
+.admin-page .adm-conflict-row-desc {
+  font-size: .75rem; color: var(--ink-4);
+  margin-top: 2px; line-height: 1.4;
+}
+.admin-page .adm-conflict-remove {
+  flex: 0 0 auto; font-size: .78rem;
+  padding: 4px 12px; color: #991b1b; white-space: nowrap;
+}
+
+/* Action-handler editor modal (admin Action handlers tab) */
+.admin-page .adm-modal-card--wide {
+  max-width: 560px;
+  background: var(--surface-card);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-modal);
+}
+.admin-page .adm-modal-label--sm { margin: 8px 0 4px; }
+.admin-page .adm-block-mt12 { margin-top: 12px; }
+.admin-page .adm-hint {
+  font-size: .7rem; color: var(--ink-4); margin-top: 3px;
+}
+.admin-page .adm-type-desc {
+  margin-top: 8px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--stone-soft);
+  font-size: .78rem; color: var(--ink-2);
+  line-height: 1.5; white-space: pre-line;
+}
+.admin-page .adm-info-amber {
+  margin-top: 4px; padding: 6px 10px; border-radius: 6px;
+  background: #fef3c7; border: 1px solid #fcd34d;
+  font-size: .75rem; color: #92400e; line-height: 1.5;
+}
+.admin-page .adm-info-blue {
+  margin-top: 8px; padding: 7px 10px; border-radius: 6px;
+  background: #eff6ff; border: 1px solid #bfdbfe;
+  font-size: .75rem; color: #1e40af; line-height: 1.5;
+}
+.admin-page .adm-checkbox-row {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .82rem; color: #4b5563; cursor: pointer;
+}
+.admin-page .adm-conflict-box {
+  margin-top: 12px; padding: 10px 12px;
+  border: 1px solid #fbbf24; border-radius: 8px;
+  background: #fffbeb;
+}
+.admin-page .adm-conflict-box-head {
+  font-size: .8rem; font-weight: 600; color: #92400e; margin-bottom: 6px;
+}
+.admin-page .adm-conflict-box-list {
+  font-size: .78rem; color: #78350f; margin-bottom: 10px; line-height: 1.6;
+}
+.admin-page .adm-conflict-box-actions { display: flex; gap: 8px; }
+.admin-page .adm-btn-conflict { font-size: .78rem; padding: 4px 12px; }
+.admin-page .adm-btn-conflict--primary {
+  background: #d97706; color: #fff;
+  border: none; border-radius: 6px; cursor: pointer;
+}
+
+/* Audit log + misc admin helpers */
+.admin-page .adm-mb-12 { margin-bottom: 12px; }
+.admin-page .adm-mb-14 { margin-bottom: 14px; }
+.admin-page .adm-mb-16 { margin-bottom: 16px; }
+.admin-page .adm-mt-8  { margin-top: 8px; }
+.admin-page .adm-audit-loadmore-wrap { text-align: center; margin-top: 16px; }
+
+/* Settings — Integrations row */
+.admin-page .adm-card-desc--intro { margin: 0 0 18px; }
+.admin-page .adm-integration-row {
+  display: flex; align-items: center; gap: 14px;
+}
+.admin-page .adm-integration-row-label {
+  display: flex; align-items: center; gap: 8px; flex: 1;
+}
+.admin-page .adm-status-badge {
+  font-size: .72rem; font-weight: 600;
+  padding: 3px 10px; border-radius: var(--radius-pill);
+  background: var(--stone); color: var(--ink-4);
+}
+
+/* Settings — Lead-status mini-form helpers */
+.admin-page .adm-key-input {
+  font-family: monospace; font-size: .8rem; text-transform: uppercase;
+}
+.admin-page .adm-fs-80 { font-size: .8rem; }
+.admin-page .adm-add-status-btn { white-space: nowrap; align-self: flex-end; }
+
+/* Dev test users section */
+.admin-page .adm-dtu-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; margin-bottom: 14px;
+}
+.admin-page .adm-dtu-title { margin: 0 0 4px; }
+.admin-page .adm-dtu-toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; margin-bottom: 14px;
+  background: var(--surface-2, #f8f9fa);
+  border: 1px solid var(--border); border-radius: 8px; gap: 12px;
+}
+.admin-page .adm-dtu-status-badge {
+  font-size: .78rem; font-weight: 600;
+  margin-bottom: 14px; padding: 2px 8px;
+  display: inline-block; border-radius: 4px;
+  background: #dcfce7; color: #166534;
+}
+.admin-page .adm-dtu-backfill-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 16px; flex-wrap: wrap;
+}
+.admin-page .adm-dtu-backfill-btn { font-size: .8rem; padding: 5px 14px; }
+.admin-page .adm-dtu-list { max-height: 480px; overflow-y: auto; }
+
+/* card-desc tight margin (used across section heads) */
+.admin-page .adm-card-desc--tight { margin: 2px 0 0; }
+
+/* DV Terms inline publish editor */
+.admin-page .adm-terms-editor {
+  margin-top: 4px; padding: 14px;
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-md);
+  background: var(--stone-soft);
+}
+.admin-page .adm-terms-editor-head {
+  font-size: .78rem; font-weight: 700;
+  color: var(--ink-2); margin-bottom: 8px;
+}
+.admin-page .adm-terms-textarea { font-size: .84rem; width: 100%; }
+.admin-page .adm-terms-editor-actions {
+  display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px;
+}
+.admin-page .adm-terms-publish-err {
+  color: #b91c1c; font-size: .8rem; margin-top: 6px;
+}
+
+/* Handler summary card (action-handlers tab) */
+.admin-page .adm-handler-actionname {
+  display: inline-block; margin-left: 6px; padding: 1px 7px;
+  background: #ede9fe; color: #5b21b6;
+  border-radius: 999px; font-size: .72rem; font-weight: 600;
+  letter-spacing: .01em;
+}
+.admin-page .adm-muted-inline { color: var(--ink-4); }
+.admin-page .adm-handler-extra {
+  margin-top: 6px; padding-top: 6px;
+  border-top: 1px dashed #d8c7f5;
+  font-size: .76rem; color: var(--ink-2); line-height: 1.5;
+}
+.admin-page .adm-handler-summary {
+  border: 1px solid #d8c7f5; border-radius: 8px;
+  padding: 8px 10px; background: #f7f2ff;
+}
+.admin-page .adm-handler-summary-head {
+  display: flex; align-items: center; gap: 6px;
+  font-weight: 600; font-size: .82rem; color: #3d0f7a;
+}
+.admin-page .adm-handler-summary-desc {
+  margin-top: 5px; font-size: .78rem; color: var(--ink-2);
+  line-height: 1.5; white-space: pre-line;
+}
+
+/* Handlers table */
+.admin-page .adm-handlers-none { color: var(--ink-4); font-size: .82rem; }
+.admin-page .adm-btn-remove { color: #991b1b; }
+.admin-page .adm-btn-add-action { padding: 4px 12px; font-size: .78rem; }
+.admin-page .adm-handlers-row { border-top: 1px solid var(--stone-light); }
+.admin-page .adm-handlers-cell {
+  padding: 10px 12px; vertical-align: top;
+}
+.admin-page .adm-handlers-cell--slot { width: 34%; }
+.admin-page .adm-handlers-cell--actions { text-align: right; white-space: nowrap; }
+.admin-page .adm-handlers-slot-label {
+  font-weight: 600; font-size: .85rem; color: var(--ink-1);
+}
+.admin-page .adm-handlers-slot-sub {
+  font-size: .72rem; color: var(--ink-4); margin-top: 2px;
+}
+.admin-page .adm-handlers-group { border-top: 1px solid var(--stone-light); }
+.admin-page .adm-handlers-group-head {
+  padding: 7px 12px; font-size: .74rem; font-weight: 600;
+  color: var(--ink-3); background: #fafaf7;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.admin-page .adm-handlers-table {
+  width: 100%; border-collapse: collapse; font-size: .85rem;
+}
+.admin-page .adm-handlers-stage {
+  margin-bottom: 18px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden;
+}
+.admin-page .adm-handlers-stage-head {
+  padding: 10px 14px; background: var(--stone-soft);
+  font-weight: 600; font-size: .85rem; color: var(--ink-2);
+}
+
+/* DV terms */
+.admin-page .adm-terms-empty {
+  font-size: .82rem; color: var(--ink-4); font-style: italic;
+}
+.admin-page .adm-terms-empty-inline { color: var(--ink-4); }
+.admin-page .adm-terms-current-head {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+}
+.admin-page .adm-terms-version-pill {
+  display: inline-block; padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--stone); color: var(--ink-2);
+  font-size: .72rem; font-weight: 700;
+}
+.admin-page .adm-terms-version-pill--current {
+  padding: 2px 10px; background: var(--plum); color: #fff;
+}
+.admin-page .adm-terms-meta { font-size: .78rem; color: var(--ink-4); }
+.admin-page .adm-terms-body {
+  background: #fff; border: 1px solid var(--stone);
+  border-radius: var(--radius-sm); padding: 10px 12px;
+  font-size: .82rem; color: var(--ink-2);
+  white-space: pre-line; max-height: 140px; overflow-y: auto;
+  line-height: 1.6;
+}
+.admin-page .adm-terms-history { margin-top: 10px; }
+.admin-page .adm-terms-history-summary {
+  font-size: .78rem; font-weight: 600;
+  color: var(--ink-3); cursor: pointer;
+}
+.admin-page .adm-terms-history-list {
+  margin-top: 10px; display: flex; flex-direction: column; gap: 10px;
+}
+.admin-page .adm-terms-history-item {
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-sm); padding: 8px 12px;
+}
+.admin-page .adm-terms-history-item-summary {
+  cursor: pointer; display: flex; align-items: center; gap: 10px;
+  list-style: none;
+}
+.admin-page .adm-terms-history-body {
+  margin-top: 8px; font-size: .8rem; color: var(--ink-2);
+  white-space: pre-line; max-height: 120px; overflow-y: auto;
+  line-height: 1.6;
+}

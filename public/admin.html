@@ -701,10 +701,10 @@
       const contactsHtml = contacts.map(c => {
         const parts = [esc(c.name || '')];
         if (c.role)  parts.push(esc(c.role));
-        if (c.phone) parts.push(`<a href="tel:${esc(c.phone)}" style="color:inherit;">${esc(c.phone)}</a>`);
+        if (c.phone) parts.push(`<a href="tel:${esc(c.phone)}" class="adm-tsub-link-tel">${esc(c.phone)}</a>`);
         if (c.email) parts.push(esc(c.email));
-        if (c.preferred_contact) parts.push(`<span style="background:var(--surface-2,#f1f5f9);border-radius:3px;padding:0 5px;font-size:.75rem;">${esc(c.preferred_contact)}</span>`);
-        return `<div style="font-size:.82rem;color:var(--ink-2);padding:2px 0;">${parts.join(' · ')}</div>`;
+        if (c.preferred_contact) parts.push(`<span class="adm-tsub-prefchip">${esc(c.preferred_contact)}</span>`);
+        return `<div class="adm-tsub-contact-row">${parts.join(' · ')}</div>`;
       }).join('');
       const details = [
         s.timescale      ? `Lead time: ${esc(s.timescale)}`    : '',
@@ -713,26 +713,26 @@
       ].filter(Boolean);
       return `
         <div class="card" id="tsub-${s.id}" style="margin-bottom:16px;">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:1rem;font-weight:700;color:var(--ink-1);margin-bottom:4px;">${esc(s.company_name)}</div>
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+          <div class="adm-tsub-row">
+            <div class="adm-tsub-body">
+              <div class="adm-tsub-name">${esc(s.company_name)}</div>
+              <div class="adm-tsub-meta">
                 <span class="trades-audit-badge">${esc(s.trade_type)}</span>
-                ${areas ? `<span style="font-size:.8rem;color:var(--ink-3);">${esc(areas)}</span>` : ''}
+                ${areas ? `<span class="adm-tsub-pill">${esc(areas)}</span>` : ''}
               </div>
-              ${details.length ? `<div style="font-size:.8rem;color:var(--ink-3);margin-bottom:6px;">${details.join(' · ')}</div>` : ''}
-              ${(s.website || s.company_phone) ? `<div style="font-size:.82rem;color:var(--ink-2);margin-bottom:6px;display:flex;gap:16px;flex-wrap:wrap;">
-                ${s.website && safeUrl(s.website) ? `<a href="${esc(safeUrl(s.website))}" target="_blank" rel="noopener" style="color:var(--accent,#3b82f6);text-decoration:none;">🌐 ${esc(s.website)}</a>` : ''}
-                ${s.company_phone ? `<a href="tel:${esc(s.company_phone)}" style="color:inherit;text-decoration:none;">📞 ${esc(s.company_phone)}</a>` : ''}
+              ${details.length ? `<div class="adm-tsub-details">${details.join(' · ')}</div>` : ''}
+              ${(s.website || s.company_phone) ? `<div class="adm-tsub-links">
+                ${s.website && safeUrl(s.website) ? `<a href="${esc(safeUrl(s.website))}" target="_blank" rel="noopener" class="adm-tsub-link-web">🌐 ${esc(s.website)}</a>` : ''}
+                ${s.company_phone ? `<a href="tel:${esc(s.company_phone)}" class="adm-tsub-link-tel">📞 ${esc(s.company_phone)}</a>` : ''}
               </div>` : ''}
-              ${s.notes ? `<div style="font-size:.82rem;color:var(--ink-3);margin-bottom:8px;font-style:italic;">${esc(s.notes)}</div>` : ''}
-              ${contacts.length ? `<div style="margin-bottom:8px;"><div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-4);margin-bottom:4px;">Contacts</div>${contactsHtml}</div>` : ''}
-              <div style="font-size:.75rem;color:var(--ink-4);margin-top:4px;">
+              ${s.notes ? `<div class="adm-tsub-notes">${esc(s.notes)}</div>` : ''}
+              ${contacts.length ? `<div class="adm-tsub-contacts"><div class="adm-tsub-contacts-title">Contacts</div>${contactsHtml}</div>` : ''}
+              <div class="adm-tsub-submitter">
                 Submitted by <strong>${esc(s.submitter_name || s.submitter_email || 'Unknown')}</strong>
                 · ${fmtDate(s.created_at)}
               </div>
             </div>
-            <div class="actions" style="flex-shrink:0;">
+            <div class="actions flex-shrink-0">
               <button class="btn btn-approve" onclick="approveTradeSubmission(${s.id})">Approve</button>
               <button class="btn btn-reject"  onclick="rejectTradeSubmission(${s.id})">Reject</button>
             </div>
@@ -747,7 +747,7 @@
         </div>`
       : `<div class="card" style="margin-bottom:4px;">
           <div class="card-title">Trade submissions <span class="card-count">(${_tradeSubmissions.length})</span></div>
-          <p class="card-desc" style="margin:0;">Review and approve or reject trade company submissions from managers.</p>
+          <p class="card-desc admin-msg">Review and approve or reject trade company submissions from managers.</p>
         </div>
         ${tradeCards}`;
 
@@ -1471,10 +1471,7 @@
     const badges = handlers.map(h => {
       const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
       const title = `${typeLbl} — manage in the Action handlers card below`;
-      return `<span class="ca-handler-badge" title="${esc(title)}"
-        style="display:inline-flex;align-items:center;gap:4px;padding:1px 7px;margin-left:6px;
-          background:#ede0ff;color:#3d0f7a;border-radius:999px;font-size:.7rem;font-weight:600;
-          line-height:1.5;white-space:nowrap;vertical-align:middle;">
+      return `<span class="ca-handler-badge adm-handler-badge" title="${esc(title)}">
         <span aria-hidden="true">⚡</span><span>${esc(typeLbl)}</span>
       </span>`;
     }).join('');
@@ -1504,45 +1501,43 @@
       const collapsed = _collapsedCardActionStages.has(stage.key);
       const bodyId    = `ca-stage-body-${esc(stage.key)}`;
       return `
-      <section data-stage-section="${esc(stage.key)}" style="margin-bottom:22px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
-        <button type="button" class="ca-stage-toggle" data-stage-toggle="${esc(stage.key)}"
-          aria-expanded="${collapsed ? 'false' : 'true'}" aria-controls="${bodyId}"
-          style="width:100%;display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--stone-soft);border:0;border-bottom:${collapsed ? '0' : '1px solid var(--border)'};font-weight:600;font-size:.85rem;color:var(--ink-2);cursor:pointer;text-align:left;font:inherit;">
-          <span class="ca-stage-chevron" aria-hidden="true" style="display:inline-block;width:10px;transition:transform .15s ease;transform:rotate(${collapsed ? '-90deg' : '0deg'});">▾</span>
-          <span style="font-weight:600;">${esc(stage.label)}</span>
+      <section class="adm-ca-stage" data-stage-section="${esc(stage.key)}">
+        <button type="button" class="ca-stage-toggle adm-ca-stage-toggle${collapsed ? ' is-collapsed' : ''}" data-stage-toggle="${esc(stage.key)}"
+          aria-expanded="${collapsed ? 'false' : 'true'}" aria-controls="${bodyId}">
+          <span class="ca-stage-chevron adm-ca-chevron${collapsed ? ' is-collapsed' : ''}" aria-hidden="true">▾</span>
+          <span class="fw-600">${esc(stage.label)}</span>
         </button>
         <div id="${bodyId}" data-stage-body="${esc(stage.key)}"${collapsed ? ' hidden' : ''}>
         ${stage.statuses.length === 0 ? `
-          <div style="padding:14px;font-size:.78rem;color:var(--ink-4);"><em>No lead statuses configured for this stage yet.</em></div>
+          <div class="adm-ca-empty"><em>No lead statuses configured for this stage yet.</em></div>
         ` : stage.statuses.map(ls => `
-          <div data-ls-block="${esc(ls.key)}" style="padding:12px 14px;border-bottom:1px solid var(--border);">
-            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">
-              <strong style="font-size:.85rem;color:var(--ink-1);${ls.isNullRow ? 'font-style:italic;' : ''}">${esc(ls.label)}</strong>
+          <div class="adm-ca-block" data-ls-block="${esc(ls.key)}">
+            <div class="adm-ca-block-head">
+              <strong class="adm-ca-block-title${ls.isNullRow ? ' is-null' : ''}">${esc(ls.label)}</strong>
               ${ls.isNullRow
-                ? `<span style="font-size:.7rem;color:var(--ink-4);">contact has no <code>hs_lead_status</code></span>`
-                : `<span style="font-family:monospace;font-size:.7rem;color:var(--ink-4);">${esc(ls.key)}</span>`}
+                ? `<span class="adm-text-muted-xs">contact has no <code>hs_lead_status</code></span>`
+                : `<span class="adm-text-faint-mono">${esc(ls.key)}</span>`}
             </div>
 
             <!-- Lead-status default row -->
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
-              <div style="flex:0 0 220px;font-size:.78rem;color:var(--ink-3);">Default action label</div>
-              <input type="text" class="field ca-default-input" maxlength="128"
+            <div class="adm-ca-default-row">
+              <div class="adm-ca-default-label">Default action label</div>
+              <input type="text" class="field ca-default-input adm-ca-default-input" maxlength="128"
                 data-kind="ls-default" data-stage="${esc(stage.key)}" data-status="${esc(ls.defaultStatusKey)}"
                 data-original="${esc(ls.defaultLabel)}"
                 value="${esc(ls.defaultLabel)}"
                 placeholder="(used when no sub-status set)"
-                style="flex:1;min-width:160px;padding:5px 8px;font-size:.82rem;"
                 onkeydown="if(event.key==='Enter')this.blur()">
               ${_handlerBadgesHtml({ stage_key: stage.key, status_key: ls.defaultStatusKey })}
             </div>
 
             <!-- Sub-statuses -->
-            <div data-sub-list="${esc(ls.key)}" style="margin-top:8px;">
+            <div class="adm-ca-sub-list" data-sub-list="${esc(ls.key)}">
               ${ls.substatuses.map((sub, i, arr) => _renderSubstatusRow(ls.key, sub, i, arr.length)).join('')}
             </div>
 
-            <div style="margin-top:8px;">
-              <button class="btn btn-ghost" style="padding:4px 10px;font-size:.74rem;"
+            <div class="adm-ca-add-sub">
+              <button class="btn btn-ghost"
                 onclick="addCardActionSubstatus('${esc(ls.key)}')">+ Add sub-status</button>
             </div>
           </div>
@@ -1573,9 +1568,9 @@
     if (!btn || !body) return;
     const collapsed = _collapsedCardActionStages.has(stageKey);
     btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-    btn.style.borderBottom = collapsed ? '0' : '1px solid var(--border)';
+    btn.classList.toggle('is-collapsed', collapsed);
     const chev = btn.querySelector('.ca-stage-chevron');
-    if (chev) chev.style.transform = `rotate(${collapsed ? '-90deg' : '0deg'})`;
+    if (chev) chev.classList.toggle('is-collapsed', collapsed);
     if (collapsed) body.setAttribute('hidden', '');
     else           body.removeAttribute('hidden');
   }
@@ -1599,41 +1594,34 @@
     const prefix = (sh && subKey.toUpperCase().startsWith(`${sh}_`)) ? `${sh}_` : '';
     const suffix = prefix ? subKey.slice(prefix.length) : subKey;
     const prefixHtml = prefix
-      ? `<span class="ca-sub-key-prefix"
-            title="Lead-status shorthand (not editable)"
-            style="flex:0 0 auto;padding:4px 0 4px 7px;font-size:.78rem;font-family:monospace;color:var(--ink-3);background:#f3f4f6;border:1px solid var(--border);border-right:none;border-radius:6px 0 0 6px;line-height:1.4;user-select:none;">${esc(prefix)}</span>`
+      ? `<span class="ca-sub-key-prefix adm-ca-sub-key-prefix"
+            title="Lead-status shorthand (not editable)">${esc(prefix)}</span>`
       : '';
-    const keyInputStyle = prefix
-      ? 'flex:0 0 90px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;border-radius:0 6px 6px 0;'
-      : 'flex:0 0 140px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;';
+    const keyInputClass = prefix
+      ? 'field ca-sub-key adm-ca-sub-key adm-ca-sub-key--has-prefix'
+      : 'field ca-sub-key adm-ca-sub-key';
     return `
-      <div class="ca-sub-row" data-sub-id="${esc(id)}" data-sub-ls="${esc(lsKey)}"
-           data-orig-key="${esc(subKey)}" data-orig-label="${esc(subLabel)}" data-orig-action="${esc(subAction)}"
-           style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px dashed var(--border);">
-        <div style="flex:0 0 auto;display:flex;flex-direction:column;line-height:1;">
-          <button class="btn btn-ghost" title="Move up" ${isFirst ? 'disabled' : ''}
-            style="padding:0 5px;font-size:.7rem;line-height:1;${isFirst ? 'opacity:.3;' : ''}"
+      <div class="ca-sub-row adm-ca-sub-row" data-sub-id="${esc(id)}" data-sub-ls="${esc(lsKey)}"
+           data-orig-key="${esc(subKey)}" data-orig-label="${esc(subLabel)}" data-orig-action="${esc(subAction)}">
+        <div class="adm-ca-sub-arrows">
+          <button class="btn btn-ghost adm-ca-sub-arrow${isFirst ? ' adm-ca-sub-arrow--dim' : ''}" title="Move up" ${isFirst ? 'disabled' : ''}
             onclick="moveCardActionSubstatus(${esc(id)}, 'up')">▲</button>
-          <button class="btn btn-ghost" title="Move down" ${isLast ? 'disabled' : ''}
-            style="padding:0 5px;font-size:.7rem;line-height:1;${isLast ? 'opacity:.3;' : ''}"
+          <button class="btn btn-ghost adm-ca-sub-arrow${isLast ? ' adm-ca-sub-arrow--dim' : ''}" title="Move down" ${isLast ? 'disabled' : ''}
             onclick="moveCardActionSubstatus(${esc(id)}, 'down')">▼</button>
         </div>
-        <div style="display:flex;align-items:stretch;flex:0 0 auto;">
+        <div class="adm-ca-sub-key-wrap">
           ${prefixHtml}
-          <input type="text" class="field ca-sub-key" maxlength="64"
+          <input type="text" class="${keyInputClass}" maxlength="64"
             data-key-prefix="${esc(prefix)}"
             value="${esc(suffix)}"
-            placeholder="${prefix ? 'SUFFIX' : 'KEY'}"
-            style="${keyInputStyle}">
+            placeholder="${prefix ? 'SUFFIX' : 'KEY'}">
         </div>
-        <input type="text" class="field ca-sub-label" maxlength="128"
+        <input type="text" class="field ca-sub-label adm-ca-sub-input" maxlength="128"
           value="${esc(subLabel)}"
-          placeholder="Display label"
-          style="flex:1;padding:4px 7px;font-size:.78rem;">
-        <input type="text" class="field ca-sub-action" maxlength="128"
+          placeholder="Display label">
+        <input type="text" class="field ca-sub-action adm-ca-sub-input" maxlength="128"
           value="${esc(subAction)}"
-          placeholder="Action label"
-          style="flex:1;padding:4px 7px;font-size:.78rem;">
+          placeholder="Action label">
         ${_handlerBadgesHtml({ substatus_id: id })}
       </div>`;
   }
@@ -1700,31 +1688,26 @@
     const sh = (ls && ls.shorthand) ? String(ls.shorthand).toUpperCase() : '';
     const prefix = sh ? `${sh}_` : '';
     const prefixHtml = prefix
-      ? `<span class="ca-sub-key-prefix"
-            title="Lead-status shorthand (not editable)"
-            style="flex:0 0 auto;padding:4px 0 4px 7px;font-size:.78rem;font-family:monospace;color:var(--ink-3);background:#f3f4f6;border:1px solid var(--border);border-right:none;border-radius:6px 0 0 6px;line-height:1.4;user-select:none;">${esc(prefix)}</span>`
+      ? `<span class="ca-sub-key-prefix adm-ca-sub-key-prefix"
+            title="Lead-status shorthand (not editable)">${esc(prefix)}</span>`
       : '';
-    const keyInputStyle = prefix
-      ? 'flex:0 0 90px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;border-radius:0 6px 6px 0;'
-      : 'flex:0 0 140px;padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;';
+    const keyInputClass = prefix
+      ? 'field ca-sub-key adm-ca-sub-key adm-ca-sub-key--has-prefix'
+      : 'field ca-sub-key adm-ca-sub-key';
     const tmp = document.createElement('div');
     tmp.innerHTML = `
-      <div class="ca-sub-row" data-sub-new="1" data-sub-ls="${esc(lsKey)}"
-           data-orig-key="" data-orig-label="" data-orig-action=""
-           style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px dashed var(--border);background:#fffbeb;">
-        <div style="display:flex;align-items:stretch;flex:0 0 auto;">
+      <div class="ca-sub-row adm-ca-sub-row adm-ca-sub-row--new" data-sub-new="1" data-sub-ls="${esc(lsKey)}"
+           data-orig-key="" data-orig-label="" data-orig-action="">
+        <div class="adm-ca-sub-key-wrap">
           ${prefixHtml}
-          <input type="text" class="field ca-sub-key" maxlength="64"
+          <input type="text" class="${keyInputClass}" maxlength="64"
             data-key-prefix="${esc(prefix)}"
-            placeholder="SUFFIX"
-            style="${keyInputStyle}">
+            placeholder="SUFFIX">
         </div>
-        <input type="text" class="field ca-sub-label" maxlength="128"
-          placeholder="Display label"
-          style="flex:1;padding:4px 7px;font-size:.78rem;">
-        <input type="text" class="field ca-sub-action" maxlength="128"
-          placeholder="Action label"
-          style="flex:1;padding:4px 7px;font-size:.78rem;">
+        <input type="text" class="field ca-sub-label adm-ca-sub-input" maxlength="128"
+          placeholder="Display label">
+        <input type="text" class="field ca-sub-action adm-ca-sub-input" maxlength="128"
+          placeholder="Action label">
       </div>`;
     list.appendChild(tmp.firstElementChild);
     const newRow = list.lastElementChild;
@@ -2220,28 +2203,28 @@
   function _handlerSummaryHtml(h) {
     const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
     const desc    = HANDLER_TYPE_DESCRIPTIONS[h.type] || 'No description available for this handler type.';
-    const actionName = h.config?.action_name ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;background:#ede9fe;color:#5b21b6;border-radius:999px;font-size:.72rem;font-weight:600;letter-spacing:.01em;">${esc(h.config.action_name)}</span>` : '';
+    const actionName = h.config?.action_name ? `<span class="adm-handler-actionname">${esc(h.config.action_name)}</span>` : '';
     let extraHtml = '';
     if (h.type === 'start_design_visit') {
       const rows = [];
       const intermediate = h.config?.intermediateLeadStatus;
       const submitted    = h.config?.submittedLeadStatus;
       if (intermediate) {
-        rows.push(`<div><span style="color:var(--ink-4);">In-progress status:</span> <strong>${esc(_resolveLeadStatusLabel(intermediate))}</strong></div>`);
+        rows.push(`<div><span class="adm-muted-inline">In-progress status:</span> <strong>${esc(_resolveLeadStatusLabel(intermediate))}</strong></div>`);
       }
       if (submitted) {
-        rows.push(`<div><span style="color:var(--ink-4);">Submitted status:</span> <strong>${esc(_resolveLeadStatusLabel(submitted))}</strong></div>`);
+        rows.push(`<div><span class="adm-muted-inline">Submitted status:</span> <strong>${esc(_resolveLeadStatusLabel(submitted))}</strong></div>`);
       }
       if (rows.length) {
-        extraHtml = `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #d8c7f5;font-size:.76rem;color:var(--ink-2);line-height:1.5;">${rows.join('')}</div>`;
+        extraHtml = `<div class="adm-handler-extra">${rows.join('')}</div>`;
       }
     }
     return `
-      <div style="border:1px solid #d8c7f5;border-radius:8px;padding:8px 10px;background:#f7f2ff;">
-        <div style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:.82rem;color:#3d0f7a;">
+      <div class="adm-handler-summary">
+        <div class="adm-handler-summary-head">
           <span aria-hidden="true">⚡</span><span>${esc(typeLbl)}</span>${actionName}
         </div>
-        <div style="margin-top:5px;font-size:.78rem;color:var(--ink-2);line-height:1.5;white-space:pre-line;">${esc(desc)}</div>
+        <div class="adm-handler-summary-desc">${esc(desc)}</div>
         ${extraHtml}
       </div>`;
   }
@@ -2264,35 +2247,35 @@
           const handler = _handlersForSlot(slot)[0] || null;
           const actionHtml = handler
             ? _handlerSummaryHtml(handler)
-            : `<em style="color:var(--ink-4);font-size:.82rem;">No action attached.</em>`;
+            : `<em class="adm-handlers-none">No action attached.</em>`;
           const btnHtml = handler
             ? `<button class="btn btn-ghost" data-slot-idx="${idx}" data-act="change">Change</button>
-               <button class="btn btn-ghost" data-handler-id="${handler.id}" data-act="remove" style="color:#991b1b;">Remove</button>`
-            : `<button class="btn btn-primary" data-slot-idx="${idx}" data-act="add" style="padding:4px 12px;font-size:.78rem;">+ Add action</button>`;
+               <button class="btn btn-ghost adm-btn-remove" data-handler-id="${handler.id}" data-act="remove">Remove</button>`
+            : `<button class="btn btn-primary adm-btn-add-action" data-slot-idx="${idx}" data-act="add">+ Add action</button>`;
           return `
-            <tr style="border-top:1px solid var(--stone-light);">
-              <td style="padding:10px 12px;vertical-align:top;width:34%;">
-                <div style="font-weight:600;font-size:.85rem;color:var(--ink-1);">${esc(slot.label)}</div>
-                <div style="font-size:.72rem;color:var(--ink-4);margin-top:2px;">${esc(slot.rowLabel)}</div>
+            <tr class="adm-handlers-row">
+              <td class="adm-handlers-cell adm-handlers-cell--slot">
+                <div class="adm-handlers-slot-label">${esc(slot.label)}</div>
+                <div class="adm-handlers-slot-sub">${esc(slot.rowLabel)}</div>
               </td>
-              <td style="padding:10px 12px;vertical-align:top;">${actionHtml}</td>
-              <td style="padding:10px 12px;vertical-align:top;text-align:right;white-space:nowrap;">${btnHtml}</td>
+              <td class="adm-handlers-cell">${actionHtml}</td>
+              <td class="adm-handlers-cell adm-handlers-cell--actions">${btnHtml}</td>
             </tr>`;
         }).join('');
         const lsLabel = g.ls.isNullRow ? `${esc(g.ls.label)} (no lead status)` : esc(g.ls.label);
         return `
-          <div style="border-top:1px solid var(--stone-light);">
-            <div style="padding:7px 12px;font-size:.74rem;font-weight:600;color:var(--ink-3);background:#fafaf7;text-transform:uppercase;letter-spacing:.04em;">
+          <div class="adm-handlers-group">
+            <div class="adm-handlers-group-head">
               ${lsLabel}
             </div>
-            <table style="width:100%;border-collapse:collapse;font-size:.85rem;">
+            <table class="adm-handlers-table">
               <tbody>${rowsHtml}</tbody>
             </table>
           </div>`;
       }).join('');
       return `
-        <section style="margin-bottom:18px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
-          <div style="padding:10px 14px;background:var(--stone-soft);font-weight:600;font-size:.85rem;color:var(--ink-2);">
+        <section class="adm-handlers-stage">
+          <div class="adm-handlers-stage-head">
             ${esc(stage.stage.label)}
           </div>
           ${groupsHtml}
@@ -2368,52 +2351,52 @@
     const wrap = document.createElement('div');
     wrap.className = 'js-modal-scrim';
     wrap.innerHTML = `
-      <div style="background:var(--surface-card);border-radius:var(--radius-2xl);padding:20px;width:100%;max-width:560px;box-shadow:var(--shadow-modal);max-height:90vh;overflow:auto;">
-        <h3 style="margin:0 0 4px;font-size:1.05rem;font-weight:700;">${existing ? 'Change action' : 'Add action'}</h3>
-        <p style="margin:0 0 14px;font-size:.78rem;color:var(--ink-4);">for <strong>${esc(slot.label)}</strong> <span style="color:var(--ink-4);font-weight:normal;">(${esc(slot.rowLabel || '')})</span></p>
-        <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Action name <span style="font-weight:400;color:var(--ink-4);">(optional)</span></label>
+      <div class="adm-modal-card adm-modal-card--wide">
+        <h3 class="adm-modal-title">${existing ? 'Change action' : 'Add action'}</h3>
+        <p class="adm-modal-sub">for <strong>${esc(slot.label)}</strong> <span class="adm-optional">(${esc(slot.rowLabel || '')})</span></p>
+        <label class="adm-modal-label">Action name <span class="adm-optional">(optional)</span></label>
         <input id="cah-action-name" type="text" class="field" maxlength="80" placeholder="e.g. send_quote" style="font-size:.85rem;" value="${esc(config.action_name || '')}">
-        <div id="cah-action-name-err" style="display:none;color:#b91c1c;font-size:.78rem;margin-top:3px;">Only lowercase letters, digits, and underscores are allowed (e.g. <code>send_quote</code>).</div>
-        <div style="margin-top:4px;padding:6px 10px;border-radius:6px;background:#fef3c7;border:1px solid #fcd34d;font-size:.75rem;color:#92400e;line-height:1.5;">⚙️ Backend automation coming soon — this name will be used to trigger workflows automatically once wired up. When set, it also displays as the label on the card action strip.</div>
-        <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Action type</label>
+        <div id="cah-action-name-err" class="adm-err-line--sm hidden">Only lowercase letters, digits, and underscores are allowed (e.g. <code>send_quote</code>).</div>
+        <div class="adm-info-amber">⚙️ Backend automation coming soon — this name will be used to trigger workflows automatically once wired up. When set, it also displays as the label on the card action strip.</div>
+        <label class="adm-modal-label">Action type</label>
         <select id="cah-type" class="field">
           ${Object.entries(HANDLER_TYPE_LABELS).map(([k, v]) =>
             `<option value="${k}" ${k === type ? 'selected' : ''}>${esc(v)}</option>`).join('')}
         </select>
-        <div id="cah-type-desc" style="margin-top:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--stone-soft);font-size:.78rem;color:var(--ink-2);line-height:1.5;white-space:pre-line;"></div>
+        <div id="cah-type-desc" class="adm-type-desc"></div>
 
         <!-- show_message: dedicated message field. Hidden for other types. -->
-        <div id="cah-msg-block" style="display:none;margin-top:12px;">
-          <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Popup title (optional)</label>
+        <div id="cah-msg-block" class="hidden adm-block-mt12">
+          <label class="adm-modal-label adm-modal-label--first">Popup title (optional)</label>
           <input id="cah-msg-title" type="text" class="field" maxlength="120" style="font-size:.85rem;">
-          <label style="display:block;font-size:.78rem;color:#4b5563;margin:8px 0 4px;font-weight:600;">Message to display <span style="color:#991b1b;">*</span></label>
+          <label class="adm-modal-label adm-modal-label--sm">Message to display <span class="adm-req">*</span></label>
           <textarea id="cah-msg-body" class="field" rows="4" maxlength="2000" placeholder="What should the operator do when they click this label?" style="font-size:.85rem;"></textarea>
-          <div style="font-size:.7rem;color:var(--ink-4);margin-top:3px;">Shown verbatim in a popup. Plain text only; line breaks are preserved.</div>
+          <div class="adm-hint">Shown verbatim in a popup. Plain text only; line breaks are preserved.</div>
         </div>
 
         <!-- start_design_visit: dedicated config fields. -->
-        <div id="cah-sdv-block" style="display:none;margin-top:12px;">
+        <div id="cah-sdv-block" class="hidden adm-block-mt12">
           <div>
-            <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Default duration (min)</label>
+            <label class="adm-modal-label adm-modal-label--first">Default duration (min)</label>
             <input id="cah-sdv-duration" type="number" class="field" min="5" max="1440" step="5" value="${esc(String(config.defaultDurationMin || 90))}" style="font-size:.85rem;">
           </div>
           <div style="margin-top:10px;">
-            <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">In-progress lead status <span style="font-weight:400;color:var(--ink-4);">(optional — set when wizard opens)</span></label>
+            <label class="adm-modal-label adm-modal-label--first">In-progress lead status <span class="adm-optional">(optional — set when wizard opens)</span></label>
             <select id="cah-sdv-lead-status-intermediate" class="field" style="font-size:.85rem;">${_buildLeadStatusOnlyOptions(config.intermediateLeadStatus || '')}</select>
           </div>
-          <div style="margin-top:8px;padding:7px 10px;border-radius:6px;background:#eff6ff;border:1px solid #bfdbfe;font-size:.75rem;color:#1e40af;line-height:1.5;">
+          <div class="adm-info-blue">
             <strong>Two-phase status flow:</strong> Opening the wizard sets the in-progress status. Submitting the form sets the submitted status.
           </div>
           <div style="margin-top:8px;">
-            <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Submitted lead status <span style="font-weight:400;color:var(--ink-4);">(optional — set on submit)</span></label>
+            <label class="adm-modal-label adm-modal-label--first">Submitted lead status <span class="adm-optional">(optional — set on submit)</span></label>
             <select id="cah-sdv-lead-status-submitted" class="field" style="font-size:.85rem;">${_buildLeadStatusWithSubsOptions(config.submittedLeadStatus || '')}</select>
           </div>
           <div style="margin-top:10px;">
-            <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Terms &amp; Conditions <span style="font-weight:400;color:var(--ink-4);">(optional, ≤4000 chars — also editable in the T&C section below)</span></label>
+            <label class="adm-modal-label adm-modal-label--first">Terms &amp; Conditions <span class="adm-optional">(optional, ≤4000 chars — also editable in the T&C section below)</span></label>
             <textarea id="cah-sdv-terms" class="field" rows="4" maxlength="4000" placeholder="Your terms and conditions text…" style="font-size:.82rem;">${esc(config.termsAndConditions || '')}</textarea>
           </div>
           <div style="margin-top:8px;">
-            <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;color:#4b5563;cursor:pointer;">
+            <label class="adm-checkbox-row">
               <input type="checkbox" id="cah-sdv-google" ${config.addToGoogleCalendar !== false ? 'checked' : ''}>
               Also add to Google Calendar
             </label>
@@ -2421,21 +2404,21 @@
         </div>
 
         <!-- Advanced JSON config: hidden for show_message and start_design_visit since they have dedicated fields. -->
-        <div id="cah-cfg-block" style="margin-top:12px;">
-          <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Advanced configuration (JSON, optional)</label>
+        <div id="cah-cfg-block" class="adm-block-mt12">
+          <label class="adm-modal-label adm-modal-label--first">Advanced configuration (JSON, optional)</label>
           <textarea id="cah-config" class="field" rows="4" style="font-family:monospace;font-size:.82rem;">${esc(JSON.stringify(config, null, 2))}</textarea>
         </div>
 
-        <div id="cah-conflict" style="display:none;margin-top:12px;padding:10px 12px;border:1px solid #fbbf24;border-radius:8px;background:#fffbeb;">
-          <div style="font-size:.8rem;font-weight:600;color:#92400e;margin-bottom:6px;">⚠️ Slot already has a handler</div>
-          <div id="cah-conflict-list" style="font-size:.78rem;color:#78350f;margin-bottom:10px;line-height:1.6;"></div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-ghost" id="cah-conflict-cancel" style="font-size:.78rem;padding:4px 12px;">Keep editing</button>
-            <button class="btn" id="cah-conflict-confirm" style="font-size:.78rem;padding:4px 12px;background:#d97706;color:#fff;border:none;border-radius:6px;cursor:pointer;">Bind anyway</button>
+        <div id="cah-conflict" class="hidden adm-conflict-box">
+          <div class="adm-conflict-box-head">⚠️ Slot already has a handler</div>
+          <div id="cah-conflict-list" class="adm-conflict-box-list"></div>
+          <div class="adm-conflict-box-actions">
+            <button class="btn btn-ghost adm-btn-conflict" id="cah-conflict-cancel">Keep editing</button>
+            <button class="btn adm-btn-conflict adm-btn-conflict--primary" id="cah-conflict-confirm">Bind anyway</button>
           </div>
         </div>
-        <div id="cah-edit-err" style="color:#b91c1c;font-size:.82rem;margin-top:8px;min-height:18px;"></div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+        <div id="cah-edit-err" class="adm-err-line"></div>
+        <div class="adm-modal-actions">
           <button class="btn btn-ghost" id="cah-cancel">Cancel</button>
           <button class="btn btn-primary" id="cah-save">${existing ? 'Save' : 'Add'}</button>
         </div>
@@ -2637,34 +2620,32 @@
       const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
       const desc    = HANDLER_TYPE_DESCRIPTIONS[h.type] || '';
       return `
-        <div class="ca-conflict-row" data-handler-id="${h.id}"
-          style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#fafaf7;">
-          <div style="flex:1;min-width:0;">
-            <div style="font-weight:600;font-size:.85rem;color:var(--ink-1);">
-              <span aria-hidden="true" style="margin-right:4px;">⚡</span>${esc(typeLbl)}
+        <div class="ca-conflict-row adm-conflict-row" data-handler-id="${h.id}">
+          <div class="adm-conflict-row-body">
+            <div class="adm-conflict-row-title">
+              <span aria-hidden="true" class="adm-conflict-row-icon">⚡</span>${esc(typeLbl)}
             </div>
-            ${desc ? `<div style="font-size:.75rem;color:var(--ink-4);margin-top:2px;line-height:1.4;">${esc(desc)}</div>` : ''}
+            ${desc ? `<div class="adm-conflict-row-desc">${esc(desc)}</div>` : ''}
           </div>
-          <button type="button" class="btn btn-ghost ca-conflict-remove-btn"
-            data-handler-id="${h.id}"
-            style="flex:0 0 auto;font-size:.78rem;padding:4px 12px;color:#991b1b;white-space:nowrap;">
+          <button type="button" class="btn btn-ghost ca-conflict-remove-btn adm-conflict-remove"
+            data-handler-id="${h.id}">
             Remove
           </button>
         </div>`;
     }).join('');
 
     wrap.innerHTML = `
-      <div style="background:#fff;border-radius:12px;padding:20px;width:100%;max-width:500px;box-shadow:0 20px 60px rgba(0,0,0,0.25);max-height:90vh;overflow:auto;">
-        <h3 style="margin:0 0 6px;font-size:1.05rem;font-weight:700;">Fix conflicting handlers</h3>
-        <p style="margin:0 0 14px;font-size:.8rem;color:var(--ink-4);line-height:1.5;">
+      <div class="adm-modal-card">
+        <h3 class="adm-modal-title adm-modal-title--big">Fix conflicting handlers</h3>
+        <p class="adm-modal-sub">
           The slot ${slotDesc} has <strong>${handlers.length} handlers</strong> bound to it.
           Remove all but one to resolve the conflict.
         </p>
-        <div style="display:flex;flex-direction:column;gap:8px;" id="ca-conflict-list">
+        <div class="adm-modal-list" id="ca-conflict-list">
           ${rowsHtml}
         </div>
-        <div id="ca-conflict-err" style="color:#b91c1c;font-size:.82rem;margin-top:8px;min-height:18px;"></div>
-        <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+        <div id="ca-conflict-err" class="adm-err-line"></div>
+        <div class="adm-modal-actions">
           <button class="btn btn-ghost" id="ca-conflict-close">Close</button>
         </div>
       </div>`;
@@ -2735,90 +2716,83 @@
     // delete button. The server also rejects DELETE requests for this row with 400.
     // Do NOT add a generic delete button here without re-checking is_null_row first.
     const nullRowHtml = nullRow ? `
-      <tr style="border-bottom:1px solid var(--border);background:var(--stone-soft);" data-ls-key="${esc(nullRow.key)}" data-ls-no-delete="1">
-        <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
-          <button class="btn btn-ghost" disabled style="padding:2px 7px;font-size:1rem;line-height:1;opacity:.3;" title="Cannot reorder">↑</button>
-          <button class="btn btn-ghost" disabled style="padding:2px 7px;font-size:1rem;line-height:1;opacity:.3;" title="Cannot reorder">↓</button>
+      <tr class="adm-tr adm-tr--alt" data-ls-key="${esc(nullRow.key)}" data-ls-no-delete="1">
+        <td class="adm-td adm-td--center adm-td--nowrap">
+          <button class="btn btn-ghost adm-iconbtn adm-iconbtn--dim" disabled title="Cannot reorder">↑</button>
+          <button class="btn btn-ghost adm-iconbtn adm-iconbtn--dim" disabled title="Cannot reorder">↓</button>
         </td>
-        <td style="padding:7px 8px;color:var(--ink-4);font-size:.78rem;font-style:italic;">—</td>
-        <td style="padding:7px 8px;font-family:monospace;color:var(--ink-4);font-size:.78rem;font-style:italic;">— none —</td>
-        <td style="padding:7px 8px;">
-          <input type="text" class="field ls-shorthand-input" maxlength="4"
+        <td class="adm-td adm-td--muted">—</td>
+        <td class="adm-td adm-td--mono-muted">— none —</td>
+        <td class="adm-td">
+          <input type="text" class="field ls-shorthand-input adm-input-shorthand" maxlength="4"
             value="${esc(nullRow.shorthand || '')}" data-key="${esc(nullRow.key)}"
             title="4-character shorthand (must be unique). Used to prefix new sub-status keys under No lead status."
-            style="padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;width:62px;letter-spacing:.05em;"
             oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4)"
             onkeydown="if(event.key==='Enter')this.blur()">
         </td>
-        <td style="padding:7px 8px;">
-          <input type="text" class="field ls-label-input" value="${esc(nullRow.label)}" data-key="${esc(nullRow.key)}"
-            style="padding:4px 7px;font-size:.82rem;width:100%;min-width:120px;"
+        <td class="adm-td">
+          <input type="text" class="field ls-label-input adm-input-label" value="${esc(nullRow.label)}" data-key="${esc(nullRow.key)}"
             onkeydown="if(event.key==='Enter')this.blur()">
         </td>
-        <td style="padding:7px 8px;text-align:center;color:var(--ink-4);font-size:.72rem;font-style:italic;">—</td>
+        <td class="adm-td adm-td--muted-center">—</td>
       </tr>
     ` : '';
 
     wrap.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+      <table class="adm-table">
         <thead>
-          <tr style="border-bottom:1px solid var(--border);">
-            <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Order</th>
-            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Stage</th>
-            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Key</th>
-            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;" title="4-character shorthand used to prefix new sub-status keys (must be unique).">Shorthand</th>
-            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Display Label</th>
-            <th style="text-align:center;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">Excl. from Sales</th>
+          <tr class="adm-tr">
+            <th class="adm-th adm-th--center">Order</th>
+            <th class="adm-th">Stage</th>
+            <th class="adm-th">Key</th>
+            <th class="adm-th" title="4-character shorthand used to prefix new sub-status keys (must be unique).">Shorthand</th>
+            <th class="adm-th">Display Label</th>
+            <th class="adm-th adm-th--center adm-th--nowrap">Excl. from Sales</th>
           </tr>
         </thead>
         <tbody>
           ${nullRowHtml}
           ${realStatuses.map((s, i) => `
-            <tr style="border-bottom:1px solid var(--border);${i % 2 === 0 ? '' : 'background:var(--stone-soft);'}" data-ls-key="${esc(s.key)}">
-              <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
-                <button class="btn btn-ghost" title="Move up"
-                  style="padding:2px 7px;font-size:1rem;line-height:1;" ${i === 0 ? 'disabled' : ''}
+            <tr class="adm-tr${i % 2 ? ' adm-tr--alt' : ''}" data-ls-key="${esc(s.key)}">
+              <td class="adm-td adm-td--center adm-td--nowrap">
+                <button class="btn btn-ghost adm-iconbtn" title="Move up"
+                  ${i === 0 ? 'disabled' : ''}
                   onclick="moveLeadStatus('${esc(s.key)}', 'up')">↑</button>
-                <button class="btn btn-ghost" title="Move down"
-                  style="padding:2px 7px;font-size:1rem;line-height:1;" ${i === realStatuses.length - 1 ? 'disabled' : ''}
+                <button class="btn btn-ghost adm-iconbtn" title="Move down"
+                  ${i === realStatuses.length - 1 ? 'disabled' : ''}
                   onclick="moveLeadStatus('${esc(s.key)}', 'down')">↓</button>
               </td>
-              <td style="padding:7px 8px;">
-                <select class="field ls-stage-select" id="ls-stage-${esc(s.key)}" data-key="${esc(s.key)}"
+              <td class="adm-td">
+                <select class="field ls-stage-select adm-input-stage" id="ls-stage-${esc(s.key)}" data-key="${esc(s.key)}"
                   data-stage="${esc(s.stage || '')}"
-                  oninput="this.dataset.stage=this.value"
-                  style="padding:4px 7px;font-size:.78rem;min-width:130px;">
+                  oninput="this.dataset.stage=this.value">
                   ${_stageOptionsHtml(s.stage)}
                 </select>
               </td>
-              <td style="padding:7px 8px;font-family:monospace;color:var(--ink-3);font-size:.78rem;">
+              <td class="adm-td adm-td--mono">
                 ${s.key
                   ? esc(s.key)
-                  : `<input type="text" class="field ls-key-input" placeholder="SET_KEY"
+                  : `<input type="text" class="field ls-key-input adm-input-key" placeholder="SET_KEY"
                        data-old-key="${esc(s.key)}"
-                       style="padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;width:100%;min-width:110px;border-color:#f59e0b;"
                        oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')"
                        onblur="saveLeadStatusKey(this)"
                        onkeydown="if(event.key==='Enter')this.blur()">`
                 }
               </td>
-              <td style="padding:7px 8px;">
-                <input type="text" class="field ls-shorthand-input" maxlength="4"
+              <td class="adm-td">
+                <input type="text" class="field ls-shorthand-input adm-input-shorthand" maxlength="4"
                   value="${esc(s.shorthand || '')}" data-key="${esc(s.key)}"
                   title="4-character shorthand (must be unique). Used to prefix new sub-status keys."
-                  style="padding:4px 7px;font-size:.78rem;font-family:monospace;text-transform:uppercase;width:62px;letter-spacing:.05em;"
                   oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4)"
                   onkeydown="if(event.key==='Enter')this.blur()">
               </td>
-              <td style="padding:7px 8px;">
-                <input type="text" class="field ls-label-input" value="${esc(s.label)}" data-key="${esc(s.key)}"
-                  style="padding:4px 7px;font-size:.82rem;width:100%;min-width:120px;"
+              <td class="adm-td">
+                <input type="text" class="field ls-label-input adm-input-label" value="${esc(s.label)}" data-key="${esc(s.key)}"
                   onkeydown="if(event.key==='Enter')this.blur()">
               </td>
-              <td style="padding:7px 8px;text-align:center;">
-                <input type="checkbox" ${s.excluded_from_sales ? 'checked' : ''} data-key="${esc(s.key)}"
-                  title="Exclude from Sales board"
-                  style="width:16px;height:16px;cursor:pointer;">
+              <td class="adm-td adm-td--center">
+                <input type="checkbox" class="adm-input-excl" ${s.excluded_from_sales ? 'checked' : ''} data-key="${esc(s.key)}"
+                  title="Exclude from Sales board">
               </td>
             </tr>
           `).join('')}
@@ -3207,12 +3181,12 @@
       <div class="tab-panel" id="tab-auditlog">
         <div class="card">
           <div class="card-title">Audit log <span class="card-count count-muted">(read-only)</span></div>
-          <p class="card-desc" style="margin-bottom:16px;">
+          <p class="card-desc adm-mb-16">
             A unified, time-ordered record of admin actions and trade company changes.
           </p>
           <div class="audit-feed" id="audit-feed"></div>
-          <div style="text-align:center;margin-top:16px;">
-            <button class="btn btn-ghost" id="audit-load-more" onclick="loadMoreAudit()" style="display:none;">Load more</button>
+          <div class="adm-audit-loadmore-wrap">
+            <button class="btn btn-ghost hidden" id="audit-load-more" onclick="loadMoreAudit()">Load more</button>
           </div>
         </div>
       </div>
@@ -3221,44 +3195,43 @@
       <div class="tab-panel" id="tab-settings">
         <div class="card">
           <div class="card-title">Integrations</div>
-          <p class="card-desc" style="margin:0 0 18px;">Connection status for external services used by Measure Once.</p>
-          <div id="hubspot-status-row" style="display:flex;align-items:center;gap:14px;">
-            <div style="display:flex;align-items:center;gap:8px;flex:1;">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style="flex-shrink:0;">
+          <p class="card-desc adm-card-desc--intro">Connection status for external services used by Measure Once.</p>
+          <div id="hubspot-status-row" class="adm-integration-row">
+            <div class="adm-integration-row-label">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" class="flex-shrink-0">
                 <rect width="18" height="18" rx="4" fill="#FF7A59"/>
                 <text x="9" y="13" text-anchor="middle" font-size="10" font-weight="700" fill="#fff" font-family="sans-serif">HS</text>
               </svg>
-              <span style="font-weight:600;font-size:.875rem;color:var(--ink-1);">HubSpot CRM</span>
+              <span class="adm-text-strong-sm">HubSpot CRM</span>
             </div>
-            <span id="hubspot-status-badge" style="font-size:.72rem;font-weight:600;padding:3px 10px;border-radius:var(--radius-pill);background:var(--stone);color:var(--ink-4);">Checking…</span>
+            <span id="hubspot-status-badge" class="adm-status-badge">Checking…</span>
           </div>
 
-          <div style="border-top:1px solid var(--border);margin:20px 0 16px;"></div>
+          <div class="adm-divider"></div>
 
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+          <div class="adm-section-head">
             <div>
-              <div style="font-weight:600;font-size:.875rem;color:var(--ink-1);">Lead Statuses</div>
-              <p class="card-desc" style="margin:2px 0 0;">Define the HubSpot lead status values and their display labels. Statuses marked "Excl. from Sales" are hidden from the Sales board.</p>
+              <div class="adm-text-strong-sm">Lead Statuses</div>
+              <p class="card-desc adm-card-desc--tight">Define the HubSpot lead status values and their display labels. Statuses marked "Excl. from Sales" are hidden from the Sales board.</p>
             </div>
-            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="saveAllLeadStatuses()">Save</button>
+            <button class="btn btn-primary adm-btn-save" onclick="saveAllLeadStatuses()">Save</button>
           </div>
 
           <div id="lead-statuses-table-wrap">
             <p class="admin-msg admin-msg--muted">Loading…</p>
           </div>
 
-          <div style="margin-top:12px;padding:10px 12px;background:var(--stone-soft);border-radius:var(--radius);border:1px solid var(--border);">
-            <div style="font-size:.75rem;font-weight:600;color:var(--ink-3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Add new status</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
-              <div style="flex:1;min-width:120px;">
-                <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Key (e.g. AWAITING_PHOTOS)</label>
-                <input id="ls-new-key" type="text" class="field" placeholder="KEY" maxlength="64"
-                  style="font-family:monospace;font-size:.8rem;text-transform:uppercase;"
+          <div class="adm-mini-form">
+            <div class="adm-mini-form-title">Add new status</div>
+            <div class="adm-mini-form-row">
+              <div class="adm-mini-field">
+                <label class="adm-mini-label">Key (e.g. AWAITING_PHOTOS)</label>
+                <input id="ls-new-key" type="text" class="field adm-key-input" placeholder="KEY" maxlength="64"
                   oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')">
               </div>
-              <div style="flex:1;min-width:140px;">
-                <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Stage</label>
-                <select id="ls-new-stage" class="field" style="font-size:.8rem;">
+              <div class="adm-mini-field adm-mini-field--md">
+                <label class="adm-mini-label">Stage</label>
+                <select id="ls-new-stage" class="field adm-fs-80">
                   <option value="">—</option>
                   <option value="SALES">Sales</option>
                   <option value="DESIGN_VISIT">Design Visit</option>
@@ -3272,45 +3245,45 @@
                   <option value="CUSTOMER_SERVICE">Customer Service</option>
                 </select>
               </div>
-              <div style="flex:2;min-width:150px;">
-                <label style="font-size:.75rem;color:var(--ink-3);display:block;margin-bottom:3px;">Display label</label>
+              <div class="adm-mini-field adm-mini-field--wide">
+                <label class="adm-mini-label">Display label</label>
                 <input id="ls-new-label" type="text" class="field" placeholder="Human-readable label" maxlength="128">
               </div>
-              <button class="btn btn-primary" onclick="addLeadStatus()" style="white-space:nowrap;align-self:flex-end;">Add status</button>
+              <button class="btn btn-primary adm-add-status-btn" onclick="addLeadStatus()">Add status</button>
             </div>
-            <div id="ls-add-error" style="display:none;font-size:.78rem;color:#991b1b;margin-top:6px;"></div>
+            <div id="ls-add-error" class="adm-msg-err-xs hidden"></div>
           </div>
         </div>
 
         <!-- Dev test users (hidden in production) -->
-        <div class="card" id="dev-test-users-section" style="display:none;">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;">
+        <div class="card hidden" id="dev-test-users-section">
+          <div class="adm-dtu-header">
             <div>
-              <div class="card-title" style="margin:0 0 4px;">Dev test users</div>
-              <p class="card-desc" style="margin:0;">In development mode the customer list is filtered to contacts marked below. Toggle a contact to include or exclude it from the dev view.</p>
+              <div class="card-title adm-dtu-title">Dev test users</div>
+              <p class="card-desc admin-msg">In development mode the customer list is filtered to contacts marked below. Toggle a contact to include or exclude it from the dev view.</p>
             </div>
           </div>
 
           <!-- Global dev filter toggle -->
-          <div id="dev-filter-toggle-row" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;margin-bottom:14px;background:var(--surface-2,#f8f9fa);border:1px solid var(--border);border-radius:8px;gap:12px;">
+          <div id="dev-filter-toggle-row" class="adm-dtu-toggle-row">
             <div>
-              <div style="font-size:.875rem;font-weight:600;color:var(--ink-1);">Dev filter</div>
-              <div style="font-size:.78rem;color:var(--ink-4);margin-top:2px;">When ON, only contacts marked below appear in the Customers list and lead-status counts. Turn OFF to see all HubSpot contacts as in production.</div>
+              <div class="adm-text-strong-sm">Dev filter</div>
+              <div class="adm-text-muted-mt">When ON, only contacts marked below appear in the Customers list and lead-status counts. Turn OFF to see all HubSpot contacts as in production.</div>
             </div>
-            <label class="ss-toggle" title="Toggle dev filter" style="flex-shrink:0;">
+            <label class="ss-toggle flex-shrink-0" title="Toggle dev filter">
               <input type="checkbox" id="dev-filter-global-toggle" checked onchange="setDevFilter(this.checked)">
               <span class="ss-toggle-track"></span>
             </label>
           </div>
-          <div id="dev-filter-toggle-label" style="font-size:.78rem;font-weight:600;margin-bottom:14px;padding:2px 8px;display:inline-block;border-radius:4px;background:#dcfce7;color:#166534;">Dev filter: ON</div>
+          <div id="dev-filter-toggle-label" class="adm-dtu-status-badge">Dev filter: ON</div>
 
           <!-- Backfill action -->
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-            <button class="btn" id="dev-backfill-btn" onclick="backfillTestUserDefaults()" style="font-size:.8rem;padding:5px 14px;">Set unset contacts to false</button>
-            <span id="dev-backfill-result" style="font-size:.78rem;color:var(--ink-4);"></span>
+          <div class="adm-dtu-backfill-row">
+            <button class="btn adm-dtu-backfill-btn" id="dev-backfill-btn" onclick="backfillTestUserDefaults()">Set unset contacts to false</button>
+            <span id="dev-backfill-result" class="adm-text-muted-sm"></span>
           </div>
 
-          <div id="dev-test-users-list" style="max-height:480px;overflow-y:auto;">
+          <div id="dev-test-users-list" class="adm-dtu-list">
             <p class="admin-msg admin-msg--muted">Loading…</p>
           </div>
         </div>
@@ -3319,12 +3292,12 @@
       <!-- CARD ACTIONS -->
       <div class="tab-panel" id="tab-cardactions">
         <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+          <div class="adm-section-head">
             <div>
-              <div class="card-title" style="margin:0;">Card action labels</div>
-              <p class="card-desc" style="margin:2px 0 0;">The bottom strip on Sales &amp; Survey cards. One row per (stage × lead status); rows mirror the order of the Lead Statuses table in Settings and refresh automatically when that table is reordered or renamed.</p>
+              <div class="card-title admin-msg">Card action labels</div>
+              <p class="card-desc adm-card-desc--tight">The bottom strip on Sales &amp; Survey cards. One row per (stage × lead status); rows mirror the order of the Lead Statuses table in Settings and refresh automatically when that table is reordered or renamed.</p>
             </div>
-            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="saveAllCardActionLabels()">Save</button>
+            <button class="btn btn-primary adm-btn-save" onclick="saveAllCardActionLabels()">Save</button>
           </div>
 
           <div id="card-actions-table-wrap">
@@ -3336,13 +3309,13 @@
       <!-- ACTION HANDLERS -->
       <div class="tab-panel" id="tab-actionhandlers">
         <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+          <div class="adm-section-head">
             <div>
-              <div class="card-title" style="margin:0;">Action handlers</div>
-              <p class="card-desc" style="margin:2px 0 0;">Every action label from the Card actions table is listed here. Use <em>+ Add action</em> on a row to make that label clickable on Sales / Survey cards; the attached action's exact behaviour (which APIs are called, which calendars or emails are affected) is described inline once added.</p>
+              <div class="card-title admin-msg">Action handlers</div>
+              <p class="card-desc adm-card-desc--tight">Every action label from the Card actions table is listed here. Use <em>+ Add action</em> on a row to make that label clickable on Sales / Survey cards; the attached action's exact behaviour (which APIs are called, which calendars or emails are affected) is described inline once added.</p>
             </div>
           </div>
-          <div id="card-action-handlers-conflict-banner" style="display:none;margin-bottom:12px;"></div>
+          <div id="card-action-handlers-conflict-banner" class="hidden adm-mb-12"></div>
           <div id="card-action-handlers-wrap">
             <p class="admin-msg admin-msg--muted">Loading…</p>
           </div>
@@ -3353,65 +3326,65 @@
       <div class="tab-panel" id="tab-designvisit">
         <!-- ── Design Visit Catalogue ──────────────────────────────────── -->
         <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
+          <div class="adm-section-head adm-section-head--tight">
             <div>
-              <div class="card-title" style="margin:0;">Design Visit — Handles</div>
-              <p class="card-desc" style="margin:2px 0 0;">Handle options displayed in the design visit wizard for the customer to choose from.</p>
+              <div class="card-title admin-msg">Design Visit — Handles</div>
+              <p class="card-desc adm-card-desc--tight">Handle options displayed in the design visit wizard for the customer to choose from.</p>
             </div>
-            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openDvHandleEditor()">+ Add handle</button>
+            <button class="btn btn-primary adm-btn-save" onclick="openDvHandleEditor()">+ Add handle</button>
           </div>
           <div id="dv-handles-wrap"><p class="admin-msg admin-msg--muted">Loading…</p></div>
         </div>
 
         <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
+          <div class="adm-section-head adm-section-head--tight">
             <div>
-              <div class="card-title" style="margin:0;">Design Visit — Furniture Ranges</div>
-              <p class="card-desc" style="margin:2px 0 0;">Furniture ranges displayed in the design visit wizard.</p>
+              <div class="card-title admin-msg">Design Visit — Furniture Ranges</div>
+              <p class="card-desc adm-card-desc--tight">Furniture ranges displayed in the design visit wizard.</p>
             </div>
-            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openDvFurnitureEditor()">+ Add range</button>
+            <button class="btn btn-primary adm-btn-save" onclick="openDvFurnitureEditor()">+ Add range</button>
           </div>
           <div id="dv-furniture-wrap"><p class="admin-msg admin-msg--muted">Loading…</p></div>
         </div>
 
         <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
+          <div class="adm-section-head adm-section-head--tight">
             <div>
-              <div class="card-title" style="margin:0;">Design Visit — Door Styles</div>
-              <p class="card-desc" style="margin:2px 0 0;">Door styles the designer can select per room in the wizard.</p>
+              <div class="card-title admin-msg">Design Visit — Door Styles</div>
+              <p class="card-desc adm-card-desc--tight">Door styles the designer can select per room in the wizard.</p>
             </div>
-            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openDvDoorStyleEditor()">+ Add style</button>
+            <button class="btn btn-primary adm-btn-save" onclick="openDvDoorStyleEditor()">+ Add style</button>
           </div>
           <div id="dv-door-styles-wrap"><p class="admin-msg admin-msg--muted">Loading…</p></div>
         </div>
 
         <div class="card" id="dv-terms-card">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;">
+          <div class="adm-section-head">
             <div>
-              <div class="card-title" style="margin:0;">Design Visit — Terms &amp; Conditions</div>
-              <p class="card-desc" style="margin:2px 0 0;">Each published revision is versioned and stamped on the visit at submission time. Customers always see the version that was active when their visit was submitted.</p>
+              <div class="card-title admin-msg">Design Visit — Terms &amp; Conditions</div>
+              <p class="card-desc adm-card-desc--tight">Each published revision is versioned and stamped on the visit at submission time. Customers always see the version that was active when their visit was submitted.</p>
             </div>
-            <button class="btn btn-primary" style="white-space:nowrap;padding:6px 14px;font-size:.8rem;" onclick="openPublishTermsEditor()">Publish new version</button>
+            <button class="btn btn-primary adm-btn-save" onclick="openPublishTermsEditor()">Publish new version</button>
           </div>
 
           <!-- Current version display -->
-          <div id="dv-terms-current" style="margin-bottom:14px;">
+          <div id="dv-terms-current" class="adm-mb-14">
             <p class="admin-msg admin-msg--muted">Loading…</p>
           </div>
 
           <!-- Inline publish editor (hidden by default) -->
-          <div id="dv-terms-editor" style="display:none;margin-top:4px;padding:14px;border:1px solid var(--stone);border-radius:var(--radius-md);background:var(--stone-soft);">
-            <div style="font-size:.78rem;font-weight:700;color:var(--ink-2);margin-bottom:8px;">New terms text (will become the active version)</div>
-            <textarea id="dv-terms-new-text" class="field" rows="8" maxlength="4000" placeholder="Enter the full terms and conditions text…" style="font-size:.84rem;width:100%;"></textarea>
-            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+          <div id="dv-terms-editor" class="hidden adm-terms-editor">
+            <div class="adm-terms-editor-head">New terms text (will become the active version)</div>
+            <textarea id="dv-terms-new-text" class="field adm-terms-textarea" rows="8" maxlength="4000" placeholder="Enter the full terms and conditions text…"></textarea>
+            <div class="adm-terms-editor-actions">
               <button class="btn btn-ghost" onclick="closeDvTermsEditor()">Cancel</button>
               <button class="btn btn-primary" onclick="publishDvTermsVersion()">Publish</button>
             </div>
-            <div id="dv-terms-publish-err" style="display:none;color:#b91c1c;font-size:.8rem;margin-top:6px;"></div>
+            <div id="dv-terms-publish-err" class="hidden adm-terms-publish-err"></div>
           </div>
 
           <!-- Version history -->
-          <div id="dv-terms-history" style="margin-top:8px;"></div>
+          <div id="dv-terms-history" class="adm-mt-8"></div>
         </div>
       </div>
 
@@ -3476,38 +3449,38 @@
           <div class="card-title">Dev-only features in this panel</div>
           <p class="card-desc" style="margin-bottom:16px;">Each entry below names the feature, the tab it lives in, and why it is excluded from production.</p>
 
-          <div style="display:flex;flex-direction:column;gap:0;">
+          <div class="adm-devenv-list">
 
-            <div style="padding:14px 0;border-bottom:1px solid var(--stone-soft);">
-              <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
-                <span style="font-weight:700;font-size:.875rem;color:var(--ink-1);">Dev test users</span>
-                <span style="font-size:.72rem;font-weight:600;background:var(--stone);color:var(--ink-4);padding:2px 8px;border-radius:var(--radius-pill);">Settings tab</span>
+            <div class="adm-devenv-item">
+              <div class="adm-devenv-head">
+                <span class="adm-devenv-name">Dev test users</span>
+                <span class="adm-devenv-loc">Settings tab</span>
               </div>
-              <p style="margin:0;font-size:.82rem;color:var(--ink-3);line-height:1.5;">A contact-by-contact toggle that marks individual HubSpot contacts as test data by setting the <code style="background:var(--stone-soft);padding:1px 4px;border-radius:3px;">hw_test_user</code> property. Excluded from production because test-data labelling is only relevant during development and automated testing — it should never be surfaced to a production admin.</p>
+              <p class="adm-devenv-desc">A contact-by-contact toggle that marks individual HubSpot contacts as test data by setting the <code class="adm-inline-code">hw_test_user</code> property. Excluded from production because test-data labelling is only relevant during development and automated testing — it should never be surfaced to a production admin.</p>
             </div>
 
-            <div style="padding:14px 0;border-bottom:1px solid var(--stone-soft);">
-              <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
-                <span style="font-weight:700;font-size:.875rem;color:var(--ink-1);">Dev filter toggle</span>
-                <span style="font-size:.72rem;font-weight:600;background:var(--stone);color:var(--ink-4);padding:2px 8px;border-radius:var(--radius-pill);">Settings tab</span>
+            <div class="adm-devenv-item">
+              <div class="adm-devenv-head">
+                <span class="adm-devenv-name">Dev filter toggle</span>
+                <span class="adm-devenv-loc">Settings tab</span>
               </div>
-              <p style="margin:0;font-size:.82rem;color:var(--ink-3);line-height:1.5;">A global on/off switch that limits all contact views to test users only (those with <code style="background:var(--stone-soft);padding:1px 4px;border-radius:3px;">hw_test_user = true</code>). Excluded from production because real contact lists must never be filtered to test data only — enabling it in production would hide all real customers from every view.</p>
+              <p class="adm-devenv-desc">A global on/off switch that limits all contact views to test users only (those with <code class="adm-inline-code">hw_test_user = true</code>). Excluded from production because real contact lists must never be filtered to test data only — enabling it in production would hide all real customers from every view.</p>
             </div>
 
-            <div style="padding:14px 0;border-bottom:1px solid var(--stone-soft);">
-              <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
-                <span style="font-weight:700;font-size:.875rem;color:var(--ink-1);">Seed contacts cache</span>
-                <span style="font-size:.72rem;font-weight:600;background:var(--stone);color:var(--ink-4);padding:2px 8px;border-radius:var(--radius-pill);">Internal API only</span>
+            <div class="adm-devenv-item">
+              <div class="adm-devenv-head">
+                <span class="adm-devenv-name">Seed contacts cache</span>
+                <span class="adm-devenv-loc">Internal API only</span>
               </div>
-              <p style="margin:0;font-size:.82rem;color:var(--ink-3);line-height:1.5;">Internal API endpoint (<code style="background:var(--stone-soft);padding:1px 4px;border-radius:3px;">POST /api/admin/test/seed-contacts-cache</code>) used by automated tests to inject synthetic contacts into the server-side cache without a real HubSpot token. Excluded from production because injecting fake contacts into a live cache would corrupt real customer data.</p>
+              <p class="adm-devenv-desc">Internal API endpoint (<code class="adm-inline-code">POST /api/admin/test/seed-contacts-cache</code>) used by automated tests to inject synthetic contacts into the server-side cache without a real HubSpot token. Excluded from production because injecting fake contacts into a live cache would corrupt real customer data.</p>
             </div>
 
-            <div style="padding:14px 0;">
-              <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
-                <span style="font-weight:700;font-size:.875rem;color:var(--ink-1);">Backfill hw_test_user defaults</span>
-                <span style="font-size:.72rem;font-weight:600;background:var(--stone);color:var(--ink-4);padding:2px 8px;border-radius:var(--radius-pill);">Settings tab</span>
+            <div class="adm-devenv-item">
+              <div class="adm-devenv-head">
+                <span class="adm-devenv-name">Backfill hw_test_user defaults</span>
+                <span class="adm-devenv-loc">Settings tab</span>
               </div>
-              <p style="margin:0;font-size:.82rem;color:var(--ink-3);line-height:1.5;">A one-time API action that sets <code style="background:var(--stone-soft);padding:1px 4px;border-radius:3px;">hw_test_user = false</code> on all HubSpot contacts that have no value for the property. Excluded from production because this mass-write operation is only needed during initial development setup and would be a destructive no-op against a live contact database.</p>
+              <p class="adm-devenv-desc">A one-time API action that sets <code class="adm-inline-code">hw_test_user = false</code> on all HubSpot contacts that have no value for the property. Excluded from production because this mass-write operation is only needed during initial development setup and would be a destructive no-op against a live contact database.</p>
             </div>
 
           </div>
@@ -3776,40 +3749,40 @@
       return;
     }
     wrap.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+      <table class="adm-table">
         <thead>
-          <tr style="border-bottom:1px solid var(--border);">
+          <tr class="adm-tr">
             ${_DV_DRAG_HANDLE_TH}
-            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Image</th>
-            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Name</th>
-            <th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">Style</th>
+            <th class="adm-th">Image</th>
+            <th class="adm-th">Name</th>
+            <th class="adm-th">Style</th>
             <th style="width:52px;"></th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           ${sorted.map((item, i) => `
-            <tr draggable="true" data-id="${item.id}" style="border-bottom:1px solid var(--border);${i % 2 ? 'background:var(--stone-soft);' : ''}">
+            <tr class="adm-tr${i % 2 ? ' adm-tr--alt' : ''}" draggable="true" data-id="${item.id}">
               ${_DV_DRAG_HANDLE_CELL}
-              <td style="padding:7px 8px;">
+              <td class="adm-td">
                 ${item.image_url
                   ? `<img src="${esc(item.image_url)}" alt="${esc(item.name)}" style="width:32px;height:32px;object-fit:contain;border-radius:4px;border:1px solid var(--border);" onerror="this.style.display='none';">`
                   : '<span style="color:var(--ink-4);">—</span>'}
               </td>
-              <td style="padding:7px 8px;">${esc(item.name || '—')}</td>
-              <td style="padding:7px 8px;">${esc(item.style || '—')}</td>
-              <td style="padding:4px 4px;white-space:nowrap;">
-                <button class="btn btn-ghost" style="padding:2px 5px;font-size:.75rem;line-height:1;" title="Move up"
+              <td class="adm-td">${esc(item.name || '—')}</td>
+              <td class="adm-td">${esc(item.style || '—')}</td>
+              <td class="adm-td--actions">
+                <button class="btn btn-ghost adm-iconbtn--xs" title="Move up"
                   ${i === 0 ? 'disabled' : ''}
                   onclick="moveDvItem('handle', ${item.id}, 'up')">▲</button>
-                <button class="btn btn-ghost" style="padding:2px 5px;font-size:.75rem;line-height:1;" title="Move down"
+                <button class="btn btn-ghost adm-iconbtn--xs" title="Move down"
                   ${i === sorted.length - 1 ? 'disabled' : ''}
                   onclick="moveDvItem('handle', ${item.id}, 'down')">▼</button>
               </td>
-              <td style="padding:7px 8px;text-align:right;white-space:nowrap;">
-                <button class="btn btn-ghost" style="padding:3px 8px;font-size:.75rem;"
+              <td class="adm-td adm-td--right adm-td--nowrap">
+                <button class="btn btn-ghost adm-btn-xs"
                   onclick="openDvItemEditor('handle', ${item.id})">Edit</button>
-                <button class="btn btn-ghost" style="padding:3px 8px;font-size:.75rem;color:#991b1b;"
+                <button class="btn btn-ghost adm-btn-xs adm-btn-xs--danger"
                   onclick="deleteDvItem('handle', ${item.id})">Delete</button>
               </td>
             </tr>`).join('')}
@@ -3859,32 +3832,32 @@
       return;
     }
     wrap.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;font-size:.82rem;">
+      <table class="adm-table">
         <thead>
-          <tr style="border-bottom:1px solid var(--border);">
+          <tr class="adm-tr">
             ${_DV_DRAG_HANDLE_TH}
-            ${labels.map(l => `<th style="text-align:left;padding:6px 8px;font-weight:600;color:var(--ink-3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;">${esc(l)}</th>`).join('')}
+            ${labels.map(l => `<th class="adm-th">${esc(l)}</th>`).join('')}
             <th style="width:52px;"></th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           ${sorted.map((item, i) => `
-            <tr draggable="true" data-id="${item.id}" style="border-bottom:1px solid var(--border);${i % 2 ? 'background:var(--stone-soft);' : ''}">
+            <tr class="adm-tr${i % 2 ? ' adm-tr--alt' : ''}" draggable="true" data-id="${item.id}">
               ${_DV_DRAG_HANDLE_CELL}
-              ${fields.map(f => `<td style="padding:7px 8px;">${esc(item[f] || '—')}</td>`).join('')}
-              <td style="padding:4px 4px;white-space:nowrap;">
-                <button class="btn btn-ghost" style="padding:2px 5px;font-size:.75rem;line-height:1;" title="Move up"
+              ${fields.map(f => `<td class="adm-td">${esc(item[f] || '—')}</td>`).join('')}
+              <td class="adm-td--actions">
+                <button class="btn btn-ghost adm-iconbtn--xs" title="Move up"
                   ${i === 0 ? 'disabled' : ''}
                   onclick="moveDvItem('${type}', ${item.id}, 'up')">▲</button>
-                <button class="btn btn-ghost" style="padding:2px 5px;font-size:.75rem;line-height:1;" title="Move down"
+                <button class="btn btn-ghost adm-iconbtn--xs" title="Move down"
                   ${i === sorted.length - 1 ? 'disabled' : ''}
                   onclick="moveDvItem('${type}', ${item.id}, 'down')">▼</button>
               </td>
-              <td style="padding:7px 8px;text-align:right;white-space:nowrap;">
-                <button class="btn btn-ghost" style="padding:3px 8px;font-size:.75rem;"
+              <td class="adm-td adm-td--right adm-td--nowrap">
+                <button class="btn btn-ghost adm-btn-xs"
                   onclick="openDvItemEditor('${type}', ${item.id})">Edit</button>
-                <button class="btn btn-ghost" style="padding:3px 8px;font-size:.75rem;color:#991b1b;"
+                <button class="btn btn-ghost adm-btn-xs adm-btn-xs--danger"
                   onclick="deleteDvItem('${type}', ${item.id})">Delete</button>
               </td>
             </tr>`).join('')}
@@ -3955,23 +3928,23 @@
     const wrap = document.createElement('div');
     wrap.className = 'js-modal-scrim js-modal-scrim--below';
     wrap.innerHTML = `
-      <div style="background:#fff;border-radius:12px;padding:22px 24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25);">
-        <h3 style="margin:0 0 16px;font-size:1rem;font-weight:700;">${item ? 'Edit' : 'Add'} ${esc(typeLabels[type])}</h3>
-        <label style="display:block;font-size:.78rem;color:#4b5563;margin:0 0 4px;font-weight:600;">Name <span style="color:#991b1b;">*</span></label>
+      <div class="adm-modal-card adm-modal-card--narrow">
+        <h3 class="adm-modal-title">${item ? 'Edit' : 'Add'} ${esc(typeLabels[type])}</h3>
+        <label class="adm-modal-label adm-modal-label--first">Name <span class="adm-req">*</span></label>
         <input id="dvie-name" type="text" class="field" maxlength="200" value="${esc(item?.name || '')}" style="font-size:.88rem;">
         ${hasStyleSelect ? `
-          <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Style${item ? '' : ' <span style="color:#991b1b;">*</span>'}</label>
+          <label class="adm-modal-label">Style${item ? '' : ' <span class="adm-req">*</span>'}</label>
           <select id="dvie-style" class="field" style="font-size:.85rem;">
             <option value="">— select —</option>
             ${DV_HANDLE_STYLES.map(s => `<option value="${esc(s)}"${item?.style === s ? ' selected' : ''}>${esc(s)}</option>`).join('')}
           </select>
         ` : ''}
         ${hasDescription ? `
-          <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Description</label>
+          <label class="adm-modal-label">Description</label>
           <textarea id="dvie-desc" class="field" rows="2" maxlength="500" style="font-size:.85rem;resize:vertical;">${esc(item?.description || '')}</textarea>
         ` : ''}
         ${hasImageUrl ? `
-          <label style="display:block;font-size:.78rem;color:#4b5563;margin:10px 0 4px;font-weight:600;">Image${type === 'handle' ? '' : ' URL'}</label>
+          <label class="adm-modal-label">Image${type === 'handle' ? '' : ' URL'}</label>
           ${type === 'handle' ? `
             <div id="dvie-img-preview-wrap" style="margin-bottom:6px;${item?.image_url ? '' : 'display:none;'}">
               <img id="dvie-img-preview" src="${esc(item?.image_url || '')}" alt="Current image"
@@ -3982,8 +3955,8 @@
             <input id="dvie-img" type="url" class="field" maxlength="500" value="${esc(item?.image_url || '')}" placeholder="https://…" style="font-size:.85rem;">
           `}
         ` : ''}
-        <div id="dvie-err" style="color:#b91c1c;font-size:.82rem;margin-top:8px;min-height:16px;"></div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+        <div id="dvie-err" class="adm-err-line"></div>
+        <div class="adm-modal-actions">
           <button class="btn btn-ghost" id="dvie-cancel">Cancel</button>
           <button class="btn btn-primary" id="dvie-save">${item ? 'Save' : 'Add'}</button>
         </div>
@@ -4094,7 +4067,7 @@
     try {
       const versions = await api('GET', '/api/admin/terms-conditions/versions');
       if (!versions.length) {
-        currentEl.innerHTML = `<p style="font-size:.82rem;color:var(--ink-4);font-style:italic;">No terms published yet. Click "Publish new version" to add the first version.</p>`;
+        currentEl.innerHTML = `<p class="adm-terms-empty">No terms published yet. Click "Publish new version" to add the first version.</p>`;
         if (historyEl) historyEl.innerHTML = '';
         return;
       }
@@ -4102,26 +4075,26 @@
       const fmtDate = d => new Date(d).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
       // Current version display
       currentEl.innerHTML = `
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-          <span style="display:inline-block;padding:2px 10px;border-radius:var(--radius-pill);background:var(--plum);color:#fff;font-size:.72rem;font-weight:700;">v${latest.version_number} (current)</span>
-          <span style="font-size:.78rem;color:var(--ink-4);">Published ${fmtDate(latest.created_at)} by ${esc(latest.created_by || '—')}</span>
+        <div class="adm-terms-current-head">
+          <span class="adm-terms-version-pill adm-terms-version-pill--current">v${latest.version_number} (current)</span>
+          <span class="adm-terms-meta">Published ${fmtDate(latest.created_at)} by ${esc(latest.created_by || '—')}</span>
         </div>
-        <div style="background:#fff;border:1px solid var(--stone);border-radius:var(--radius-sm);padding:10px 12px;font-size:.82rem;color:var(--ink-2);white-space:pre-line;max-height:140px;overflow-y:auto;line-height:1.6;">${esc(latest.terms_text) || '<em style="color:var(--ink-4)">Empty</em>'}</div>`;
+        <div class="adm-terms-body">${esc(latest.terms_text) || '<em class="adm-terms-empty-inline">Empty</em>'}</div>`;
       // Version history (all versions except current)
       if (historyEl) {
         const older = versions.slice(1);
         if (!older.length) { historyEl.innerHTML = ''; return; }
         historyEl.innerHTML = `
-          <details style="margin-top:10px;">
-            <summary style="font-size:.78rem;font-weight:600;color:var(--ink-3);cursor:pointer;">Version history (${older.length} older revision${older.length > 1 ? 's' : ''})</summary>
-            <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px;">
+          <details class="adm-terms-history">
+            <summary class="adm-terms-history-summary">Version history (${older.length} older revision${older.length > 1 ? 's' : ''})</summary>
+            <div class="adm-terms-history-list">
               ${older.map(v => `
-                <details style="border:1px solid var(--stone);border-radius:var(--radius-sm);padding:8px 12px;">
-                  <summary style="cursor:pointer;display:flex;align-items:center;gap:10px;list-style:none;">
-                    <span style="font-size:.72rem;font-weight:700;padding:1px 8px;border-radius:var(--radius-pill);background:var(--stone);color:var(--ink-2);">v${v.version_number}</span>
-                    <span style="font-size:.78rem;color:var(--ink-4);">${fmtDate(v.created_at)} · ${esc(v.created_by || '—')}</span>
+                <details class="adm-terms-history-item">
+                  <summary class="adm-terms-history-item-summary">
+                    <span class="adm-terms-version-pill">v${v.version_number}</span>
+                    <span class="adm-terms-meta">${fmtDate(v.created_at)} · ${esc(v.created_by || '—')}</span>
                   </summary>
-                  <div style="margin-top:8px;font-size:.8rem;color:var(--ink-2);white-space:pre-line;max-height:120px;overflow-y:auto;line-height:1.6;">${esc(v.terms_text)}</div>
+                  <div class="adm-terms-history-body">${esc(v.terms_text)}</div>
                 </details>`).join('')}
             </div>
           </details>`;
