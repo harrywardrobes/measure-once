@@ -4044,6 +4044,19 @@ app.post('/api/admin/test/seed-contacts-cache', isAuthenticated, requireAdmin, (
   res.json({ ok: true, count: contacts.length });
 });
 
+// ── Dev-only: bust the shared contacts fresh cache ────────────────────────────
+// Clears _allContactsCache so the next request triggers a fresh HubSpot scan.
+// Does NOT clear _allContactsLastGood, so the stale-fallback path is testable:
+// after busting, a subsequent call that fails HubSpot will still serve stale.
+// Only available when NODE_ENV !== 'production'.
+app.post('/api/admin/test/bust-contacts-cache', isAuthenticated, requireAdmin, (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  _allContactsCache = null;
+  res.json({ ok: true });
+});
+
 // ── Admin: toggle HW_test_user on a contact ───────────────────────────────────
 // The production guard runs as a middleware *before* requireHubspotToken so
 // the 404 is returned even when HUBSPOT_TOKEN is absent.

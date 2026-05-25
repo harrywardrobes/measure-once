@@ -3,7 +3,9 @@
 //
 // Focused integration test confirming that GET /api/contacts-all and
 // GET /api/open-leads recover from a transient HubSpot 429 via
-// hubspotSearchWithRetry.
+// hubspotSearchWithRetry, and that contacts-all behaves correctly when all
+// retries are exhausted (both the no-cache error path and the stale-cache
+// fallback path).
 //
 //   (CA) contacts-all retry — GET /api/contacts-all: first call to
 //        /crm/v3/objects/contacts/search returns 429 + Retry-After: 0;
@@ -12,6 +14,14 @@
 //   (OL) open-leads retry — GET /api/open-leads: first call to
 //        /crm/v3/objects/contacts/search returns 429 + Retry-After: 0;
 //        retry succeeds → endpoint returns leads.
+//
+//   (CA-F) contacts-all exhausted — all retry attempts return 429 with no
+//          prior good cache → endpoint returns 502 with code HUBSPOT_RATE_LIMIT.
+//
+//   (CA-S) contacts-all stale fallback — after a prior good response was
+//          cached, a sustained HubSpot outage (all retries 429) causes the
+//          endpoint to serve the stale cache with X-Cache-Status: stale
+//          instead of returning an error.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:hubspot-429-retry-contacts
@@ -53,9 +63,10 @@ const CONTACTS_SEARCH_SUCCESS = {
 };
 
 // ── Mock HubSpot server ───────────────────────────────────────────────────────
-// Each endpoint rule has an independent hit counter. In 'retryOnce' mode the
-// first hit returns 429 + Retry-After: 0 (instant retry so tests stay fast);
-// subsequent hits return successBody with 200. 'ok' mode always returns 200.
+// Each endpoint rule has an independent hit counter. Modes:
+//   'retryOnce'  — first hit returns 429 + Retry-After: 0; subsequent hits 200
+//   'ok'         — always returns 200 with successBody
+//   'alwaysFail' — every hit returns 429 (simulates all retries exhausted)
 
 function startMockHubspot() {
   const rules = {};
@@ -92,6 +103,12 @@ function startMockHubspot() {
       const rule = rules[matched];
       rule.hits++;
 
+      if (rule.mode === 'alwaysFail') {
+        calls.push({ url, status: 429, at: Date.now() });
+        res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '0' });
+        return res.end(JSON.stringify({ status: 'error', message: 'rate limited (exhausted)' }));
+      }
+
       if (rule.mode === 'retryOnce' && rule.hits === 1) {
         calls.push({ url, status: 429, at: Date.now() });
         res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '0' });
@@ -111,7 +128,7 @@ function startMockHubspot() {
   });
 }
 
-// ── HTTP helper ───────────────────────────────────────────────────────────────
+// ── HTTP helpers ──────────────────────────────────────────────────────────────
 function httpGet(base, urlPath, cookie) {
   return new Promise((resolve, reject) => {
     const u = new URL(urlPath, base);
@@ -133,6 +150,47 @@ function httpGet(base, urlPath, cookie) {
     req.on('error', reject);
     req.end();
   });
+}
+
+function httpPost(base, urlPath, body, cookie) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(urlPath, base);
+    const bodyStr = JSON.stringify(body);
+    const req = http.request({
+      method: 'POST',
+      hostname: u.hostname,
+      port:     u.port,
+      path:     u.pathname + u.search,
+      headers: {
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(bodyStr),
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+    }, res => {
+      let raw = '';
+      res.on('data', c => (raw += c));
+      res.on('end', () => {
+        let json = null;
+        try { json = raw ? JSON.parse(raw) : null; } catch {}
+        resolve({ status: res.statusCode, headers: res.headers, body: raw, json });
+      });
+    });
+    req.on('error', reject);
+    req.write(bodyStr);
+    req.end();
+  });
+}
+
+async function waitForServer(base, timeoutMs = 15000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const r = await httpGet(base, '/api/turnstile-config', null);
+      if (r.status === 200) return true;
+    } catch {}
+    await new Promise(r => setTimeout(r, 200));
+  }
+  throw new Error(`Test server did not start on ${base} within ${timeoutMs}ms`);
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -166,7 +224,7 @@ async function main() {
   process.env.PRIVTEST_USE_HUBSPOT_ACCESS_TOKEN = '1';
 
   const {
-    spawnServer, waitForServer, seedUsers, cleanupTestData,
+    spawnServer, waitForServer: harnessWait, seedUsers, cleanupTestData,
     resetRateLimitStore, login, setPool, BASE, PASSWORD,
   } = require('../privileges/harness');
   setPool(pool);
@@ -174,11 +232,18 @@ async function main() {
   await cleanupTestData(pool);
   const users = await seedUsers(pool, runId);
 
-  const { child, logBuf } = spawnServer();
+  // ── Server 1 (port 5050): transient-retry tests (CA + OL) ────────────────
+  const { child: child1, logBuf: logBuf1 } = spawnServer();
+
+  // ── Server 2 (port 5051): exhausted-retry + stale-fallback tests (CA-F + CA-S) ──
+  const BASE2 = 'http://127.0.0.1:5051';
+  const { child: child2, logBuf: logBuf2 } = spawnServer({ extraEnv: { PORT: '5051' } });
+
   let exitCode = 1;
 
   const cleanup = async () => {
-    try { child.kill('SIGTERM'); } catch {}
+    try { child1.kill('SIGTERM'); } catch {}
+    try { child2.kill('SIGTERM'); } catch {}
     try { await cleanupTestData(pool); } catch {}
     await pool.end().catch(() => {});
     try { mock.server.close(); } catch {}
@@ -187,12 +252,23 @@ async function main() {
   process.on('SIGTERM', () => cleanup().then(() => process.exit(130)));
 
   try {
-    await waitForServer();
+    // Both servers start in parallel to save time.
+    await Promise.all([
+      harnessWait(),
+      waitForServer(BASE2),
+    ]);
     await resetRateLimitStore(pool);
-    console.log(`  test server up at ${BASE}\n`);
+    console.log(`  test server 1 up at ${BASE}`);
+    console.log(`  test server 2 up at ${BASE2}\n`);
 
     const client = await login(users.member.email, PASSWORD);
     const cookie = client.cookie;
+
+    // Both servers share the same session store (same DB + SESSION_SECRET), so
+    // sessions created on server 1 are valid on server 2.  We create all needed
+    // cookies once here and reuse them across both servers.
+    const adminClient = await login(users.admin.email, PASSWORD);
+    const adminCookie = adminClient.cookie;
 
     // ── (CA) contacts-all: search 429 → retry → success ───────────────────────
     // The shared contacts cache starts cold on a fresh server. The first call to
@@ -270,12 +346,99 @@ async function main() {
       olSearchCalls[1]?.status === 200,
       `second status=${olSearchCalls[1]?.status}`);
 
+    // ── (CA-F) contacts-all: all retries exhausted, no prior cache → 502 ──────
+    // Server 2 starts cold (no caches). Mock is set to alwaysFail so every
+    // attempt returns 429. With no _allContactsLastGood to fall back on the
+    // endpoint must return 502 with code HUBSPOT_RATE_LIMIT.
+    console.log('\n  [CA-F] contacts-all: all retries exhausted, no cache → 502');
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint(
+      '/crm/v3/objects/contacts/search',
+      'alwaysFail',
+      null,
+    );
+
+    const caf = await httpGet(BASE2, '/api/contacts-all', cookie);
+
+    const cafSearchCalls = mock.calls.filter(c =>
+      c.url.startsWith('/crm/v3/objects/contacts/search'),
+    );
+
+    record('CA-F.1 endpoint returns 502',
+      caf.status === 502,
+      `status=${caf.status}`);
+    record('CA-F.2 error code is HUBSPOT_RATE_LIMIT',
+      caf.json?.code === 'HUBSPOT_RATE_LIMIT',
+      `code=${caf.json?.code} body=${caf.body.slice(0, 160)}`);
+    record('CA-F.3 all search attempts were 429s (4 attempts)',
+      cafSearchCalls.length === 4 && cafSearchCalls.every(c => c.status === 429),
+      `search calls=${cafSearchCalls.length} statuses=${cafSearchCalls.map(c => c.status).join(',')}`);
+
+    // ── (CA-S) contacts-all: all retries exhausted, stale cache available → 200 ─
+    // On server 2, first make a successful request (sets _allContactsLastGood).
+    // Then bust the fresh cache so the next request hits HubSpot again. With
+    // mock set to alwaysFail, the fresh fetch fails but the endpoint should
+    // serve the stale contacts with X-Cache-Status: stale.
+    console.log('\n  [CA-S] contacts-all: all retries exhausted, stale cache fallback → 200');
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint(
+      '/crm/v3/objects/contacts/search',
+      'ok',
+      CONTACTS_SEARCH_SUCCESS,
+    );
+
+    // Warm up both _allContactsCache and _allContactsLastGood via a successful fetch.
+    const casWarm = await httpGet(BASE2, '/api/contacts-all', cookie);
+    record('CA-S.1 warm-up request succeeds',
+      casWarm.status === 200,
+      `status=${casWarm.status}`);
+
+    // Bust only the fresh cache (_allContactsLastGood survives) — admin required.
+    const bust = await httpPost(BASE2, '/api/admin/test/bust-contacts-cache', {}, adminCookie);
+    record('CA-S.2 bust-contacts-cache succeeds',
+      bust.status === 200 && bust.json?.ok === true,
+      `status=${bust.status} body=${bust.body.slice(0, 120)}`);
+
+    // Switch mock to alwaysFail so every retry returns 429.
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint(
+      '/crm/v3/objects/contacts/search',
+      'alwaysFail',
+      null,
+    );
+
+    const cas = await httpGet(BASE2, '/api/contacts-all', cookie);
+
+    const casSearchCalls = mock.calls.filter(c =>
+      c.url.startsWith('/crm/v3/objects/contacts/search'),
+    );
+
+    record('CA-S.3 endpoint returns 200 (stale fallback)',
+      cas.status === 200,
+      `status=${cas.status}`);
+    record('CA-S.4 results array present in stale response',
+      cas.json && Array.isArray(cas.json.results),
+      `body=${cas.body.slice(0, 160)}`);
+    record('CA-S.5 at least one contact in stale response',
+      cas.json && Array.isArray(cas.json.results) && cas.json.results.length >= 1,
+      `count=${cas.json?.results?.length}`);
+    record('CA-S.6 X-Cache-Status header is stale',
+      cas.headers['x-cache-status'] === 'stale',
+      `x-cache-status=${cas.headers['x-cache-status']}`);
+    record('CA-S.7 all search attempts for stale request were 429s (4 attempts)',
+      casSearchCalls.length === 4 && casSearchCalls.every(c => c.status === 429),
+      `search calls=${casSearchCalls.length} statuses=${casSearchCalls.map(c => c.status).join(',')}`);
+
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
   } catch (e) {
     console.error('Test crashed:', e);
-    console.error(logBuf.join('').slice(-3000));
+    console.error(logBuf1.join('').slice(-2000));
+    console.error(logBuf2.join('').slice(-2000));
   } finally {
     await writeReport(runId);
     await cleanup();
@@ -313,6 +476,14 @@ async function writeReport(runId) {
     '- **(OL) open-leads retry**: `GET /api/open-leads` with',
     '  `/crm/v3/objects/contacts/search` returning 429 on the first attempt',
     '  recovers via `hubspotSearchWithRetry` and returns a valid leads list.',
+    '- **(CA-F) contacts-all exhausted, no cache**: `GET /api/contacts-all` with',
+    '  `/crm/v3/objects/contacts/search` returning 429 on every attempt',
+    '  (all 4 retries exhausted) and no prior good cache → returns 502 with',
+    '  `code: HUBSPOT_RATE_LIMIT`.',
+    '- **(CA-S) contacts-all stale-cache fallback**: after a prior good response',
+    '  populates `_allContactsLastGood`, a sustained HubSpot outage (all 4 retries',
+    '  returning 429) causes the endpoint to serve the stale contacts list with',
+    '  `X-Cache-Status: stale` instead of surfacing an error.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
