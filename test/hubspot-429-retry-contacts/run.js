@@ -5,8 +5,9 @@
 // GET /api/open-leads recover from a transient HubSpot 429 via
 // hubspotSearchWithRetry, that contacts-all behaves correctly when all
 // retries are exhausted (both the no-cache error path and the stale-cache
-// fallback path), and that GET /api/localdata/all serves stale room data
-// from the catch-block fallback when the stale cap has expired.
+// fallback path), that the endpoint recovers and fetches fresh data once
+// HubSpot stops rate-limiting, and that GET /api/localdata/all serves
+// stale room data from the catch-block fallback when the stale cap has expired.
 //
 //   (CA) contacts-all retry — GET /api/contacts-all: first call to
 //        /crm/v3/objects/contacts/search returns 429 + Retry-After: 0;
@@ -23,6 +24,12 @@
 //          cached, a sustained HubSpot outage (all retries 429) causes the
 //          endpoint to serve the stale cache with X-Cache-Status: stale
 //          instead of returning an error.
+//
+//   (CA-R) contacts-all recovery — after a 429 storm has caused stale data
+//          to be served (CA-S state), switching HubSpot back to ok causes the
+//          next request to perform a fresh fetch (HubSpot is actually called,
+//          X-Cache-Status is not stale). A follow-up request is then served
+//          from the newly populated in-memory cache with no new HubSpot call.
 //
 //   (LD) localdata/all catch-block stale fallback — after _allContactsLastGood
 //        is populated with rooms data and the stale cap has expired (via
@@ -473,6 +480,62 @@ async function main() {
       casSearchCalls.length === 4 && casSearchCalls.every(c => c.status === 429),
       `search calls=${casSearchCalls.length} statuses=${casSearchCalls.map(c => c.status).join(',')}`);
 
+    // ── (CA-R) contacts-all: recovery after 429 storm ────────────────────────
+    // Continues directly from CA-S state on Server 2:
+    //   _allContactsCache  — null (bust + failed refresh left it empty)
+    //   _allContactsLastGood — still holds the warm-up snapshot
+    // Switching mock back to 'ok' means the next request must perform a fresh
+    // HubSpot fetch.  The response must:
+    //   • return 200
+    //   • NOT have X-Cache-Status: stale (i.e. real fresh data)
+    //   • show at least one successful HubSpot search call in mock.calls
+    // A follow-up GET must be served from the newly populated in-memory cache
+    // with no additional HubSpot call.
+    console.log('\n  [CA-R] contacts-all: recovery after 429 storm → fresh data, then cached');
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint(
+      '/crm/v3/objects/contacts/search',
+      'ok',
+      CONTACTS_SEARCH_SUCCESS,
+    );
+
+    const carFresh = await httpGet(BASE2, '/api/contacts-all', cookie);
+
+    const carFreshSearchCalls = mock.calls.filter(c =>
+      c.url.startsWith('/crm/v3/objects/contacts/search'),
+    );
+
+    record('CA-R.1 endpoint returns 200 after storm clears',
+      carFresh.status === 200,
+      `status=${carFresh.status}`);
+    record('CA-R.2 results array present in fresh response',
+      carFresh.json && Array.isArray(carFresh.json.results),
+      `body=${carFresh.body.slice(0, 160)}`);
+    record('CA-R.3 X-Cache-Status is not stale (fresh data returned)',
+      carFresh.headers['x-cache-status'] !== 'stale',
+      `x-cache-status=${carFresh.headers['x-cache-status']}`);
+    record('CA-R.4 HubSpot was actually called during recovery fetch',
+      carFreshSearchCalls.length >= 1 && carFreshSearchCalls.every(c => c.status === 200),
+      `search calls=${carFreshSearchCalls.length} statuses=${carFreshSearchCalls.map(c => c.status).join(',')}`);
+
+    // Second GET — must be served from the newly populated in-memory cache
+    // with no new outbound HubSpot call.
+    mock.calls.length = 0;
+
+    const carCached = await httpGet(BASE2, '/api/contacts-all', cookie);
+
+    const carCachedSearchCalls = mock.calls.filter(c =>
+      c.url.startsWith('/crm/v3/objects/contacts/search'),
+    );
+
+    record('CA-R.5 follow-up GET returns 200 (in-memory cache hit)',
+      carCached.status === 200,
+      `status=${carCached.status}`);
+    record('CA-R.6 no new HubSpot call for follow-up GET (served from cache)',
+      carCachedSearchCalls.length === 0,
+      `search calls=${carCachedSearchCalls.length}`);
+
     // ── (LD) localdata/all: catch-block stale fallback ────────────────────────
     // Server 3 has ALL_CONTACTS_STALE_MAX_MS_OVERRIDE=1 so the stale cap
     // expires in 1 ms.  The sequence is:
@@ -584,6 +647,12 @@ async function writeReport(runId) {
     '  populates `_allContactsLastGood`, a sustained HubSpot outage (all 4 retries',
     '  returning 429) causes the endpoint to serve the stale contacts list with',
     '  `X-Cache-Status: stale` instead of surfacing an error.',
+    '- **(CA-R) contacts-all recovery after 429 storm**: once HubSpot stops',
+    '  rate-limiting (mock switches from `alwaysFail` back to `ok`), the next',
+    '  request performs a fresh HubSpot fetch — `X-Cache-Status` is not `stale`',
+    '  and at least one successful search call is recorded. A follow-up request',
+    '  is served from the newly populated in-memory cache with no new HubSpot',
+    '  call (`search calls = 0`).',
     '- **(LD) localdata/all catch-block stale fallback**: with',
     '  `ALL_CONTACTS_STALE_MAX_MS_OVERRIDE=1` the stale cap expires immediately.',
     '  After warming `_allContactsLastGood` with rooms data, busting the fresh',
