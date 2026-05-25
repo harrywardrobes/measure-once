@@ -7,7 +7,8 @@
  * helper here maps 1:1 to a future component.
  *
  * Helpers
- *   window.UI.skeletonLine(width, height?)
+ *   window.UI.skeletonLine(width, height?, opts?)
+ *     opts: { className?: extra class names, style?: extra CSS declarations }
  *   window.UI.renderPill(label, variant?)
  *   window.UI.renderEmptyState(message, compact?)
  *   window.UI.renderTabBar(tabs, activeKey, onSelectName)
@@ -29,10 +30,21 @@
     return (typeof v === 'number') ? v + 'px' : String(v);
   }
 
-  function skeletonLine(width, height) {
-    const w = _size(width, '100%');
-    const h = _size(height, '10px');
-    return `<div class="skeleton-line" style="width:${w};height:${h}"></div>`;
+  function skeletonLine(width, height, opts) {
+    const o = opts || {};
+    const cls = o.className ? ' ' + String(o.className) : '';
+    // When width/height are both omitted and a className is supplied, defer
+    // sizing to the CSS class (e.g. .skeleton-wf-name, .skeleton-pill) so the
+    // inline style attribute doesn't override the class-driven dimensions.
+    const sizeOmitted = (width == null || width === '') && (height == null || height === '');
+    const parts = [];
+    if (!sizeOmitted) {
+      parts.push('width:' + _size(width, '100%'));
+      parts.push('height:' + _size(height, '10px'));
+    }
+    if (o.style) parts.push(String(o.style));
+    const styleAttr = parts.length ? ` style="${parts.join(';')}"` : '';
+    return `<div class="skeleton-line${cls}"${styleAttr}></div>`;
   }
 
   const PILL_VARIANTS = new Set(['neutral', 'success', 'danger', 'warn', 'info']);

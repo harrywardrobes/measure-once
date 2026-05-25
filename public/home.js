@@ -5,7 +5,7 @@ function renderHomeTab() {
   // ── Full-page loading skeleton ─────────────────────────────────────────────
   if (state.homeLoading) {
     const skLine = (w, h = 13, extra = '') =>
-      `<div class="skeleton-line" style="height:${h}px;width:${w}${extra ? ';' + extra : ''}"></div>`;
+      UI.skeletonLine(w, h, extra ? { style: extra } : undefined);
     const skCard = (w1 = '50%', w2 = '44px') => `
       <div class="home-card" style="pointer-events:none;cursor:default">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
@@ -130,8 +130,8 @@ function renderHomeTab() {
       </div>
       ${[['60%', '40%'], ['50%', '36%']].map(([w1, w2]) => `
         <div class="home-card" style="pointer-events:none;cursor:default">
-          <div class="skeleton-line" style="height:10px;width:${w2}"></div>
-          <div class="skeleton-line" style="height:13px;width:${w1};margin-top:6px"></div>
+          ${UI.skeletonLine(w2, 10)}
+          ${UI.skeletonLine(w1, 13, { style: 'margin-top:6px' })}
         </div>`).join('')}
     </div>` : calError ? `
     <div class="home-section">
@@ -178,10 +178,10 @@ function renderHomeTab() {
       ${[['52%', '56px'], ['40%', '48px']].map(([w1, w2]) => `
         <div class="home-card" style="pointer-events:none;cursor:default">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-            <div class="skeleton-line" style="height:13px;width:${w1}"></div>
-            <div class="skeleton-line" style="height:18px;width:${w2};border-radius:999px;flex-shrink:0"></div>
+            ${UI.skeletonLine(w1, 13)}
+            ${UI.skeletonLine(w2, 18, { style: 'border-radius:999px;flex-shrink:0' })}
           </div>
-          <div class="skeleton-line" style="height:10px;width:88px;margin-top:5px"></div>
+          ${UI.skeletonLine('88px', 10, { style: 'margin-top:5px' })}
         </div>`).join('')}
     </div>` : qbError ? (() => {
       const isDbError = state.qb.errorCode === 'DB_ERROR';

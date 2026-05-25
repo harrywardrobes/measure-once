@@ -215,21 +215,26 @@ async function _doSelectContact(contactId, roomIdx) {
     <div class="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 shadow-sm">
       <div class="flex items-start justify-between gap-4">
         <div class="flex-1 min-w-0">
-          <div class="skeleton-line skeleton-wf-name"></div>
+          ${UI.skeletonLine(null, null, { className: 'skeleton-wf-name' })}
           <div class="flex items-center gap-2 mt-3">
-            <div class="skeleton-line skeleton-wf-badge"></div>
-            <div class="skeleton-line skeleton-wf-email"></div>
-            <div class="skeleton-line skeleton-wf-phone"></div>
+            ${UI.skeletonLine(null, null, { className: 'skeleton-wf-badge' })}
+            ${UI.skeletonLine(null, null, { className: 'skeleton-wf-email' })}
+            ${UI.skeletonLine(null, null, { className: 'skeleton-wf-phone' })}
           </div>
         </div>
-        <div class="skeleton-line skeleton-wf-select"></div>
+        ${UI.skeletonLine(null, null, { className: 'skeleton-wf-select' })}
       </div>
     </div>
     <div class="workflow-inner">
       <div class="space-y-2">
-        <div class="skeleton-stage-row"><div class="flex items-center gap-3 flex-1"><div class="skeleton-line skeleton-stage-dot"></div><div class="skeleton-line skeleton-stage-label"></div></div><div class="skeleton-line skeleton-stage-count"></div></div>
-        <div class="skeleton-stage-row"><div class="flex items-center gap-3 flex-1"><div class="skeleton-line skeleton-stage-dot"></div><div class="skeleton-line skeleton-stage-label skeleton-stage-label-md"></div></div><div class="skeleton-line skeleton-stage-count"></div></div>
-        <div class="skeleton-stage-row"><div class="flex items-center gap-3 flex-1"><div class="skeleton-line skeleton-stage-dot"></div><div class="skeleton-line skeleton-stage-label skeleton-stage-label-sm"></div></div><div class="skeleton-line skeleton-stage-count"></div></div>
+        ${['', 'skeleton-stage-label-md', 'skeleton-stage-label-sm'].map(extra => `
+          <div class="skeleton-stage-row">
+            <div class="flex items-center gap-3 flex-1">
+              ${UI.skeletonLine(null, null, { className: 'skeleton-stage-dot' })}
+              ${UI.skeletonLine(null, null, { className: 'skeleton-stage-label' + (extra ? ' ' + extra : '') })}
+            </div>
+            ${UI.skeletonLine(null, null, { className: 'skeleton-stage-count' })}
+          </div>`).join('')}
       </div>
     </div>
   `;
@@ -1573,17 +1578,17 @@ function renderWorkflowInvoices() {
         <div class="qb-section-title">Invoices</div>
         <div class="qb-invoice-row" style="pointer-events:none">
           <div class="qb-invoice-meta">
-            <div class="skeleton-line" style="height:11px;width:90px"></div>
-            <div class="skeleton-line" style="height:9px;width:64px;margin-top:4px"></div>
+            ${UI.skeletonLine('90px', 11)}
+            ${UI.skeletonLine('64px', 9, { style: 'margin-top:4px' })}
           </div>
-          <div class="skeleton-line" style="height:13px;width:48px;flex-shrink:0"></div>
+          ${UI.skeletonLine('48px', 13, { style: 'flex-shrink:0' })}
         </div>
         <div class="qb-invoice-row" style="pointer-events:none">
           <div class="qb-invoice-meta">
-            <div class="skeleton-line" style="height:11px;width:74px"></div>
-            <div class="skeleton-line" style="height:9px;width:56px;margin-top:4px"></div>
+            ${UI.skeletonLine('74px', 11)}
+            ${UI.skeletonLine('56px', 9, { style: 'margin-top:4px' })}
           </div>
-          <div class="skeleton-line" style="height:13px;width:42px;flex-shrink:0"></div>
+          ${UI.skeletonLine('42px', 13, { style: 'flex-shrink:0' })}
         </div>
       </div>`;
     return;

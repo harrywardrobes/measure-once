@@ -282,8 +282,8 @@ function customerCardHtml(contact, rooms, isAdmin) {
   if (!state.qb.statusKnown || state.qb.loading || (state.qb.connected && !state.qb.loaded)) {
     invoiceSection = `
       <div class="project-card-invoices" style="pointer-events:none">
-        <div class="skeleton-line" style="height:10px;width:72px"></div>
-        <div class="skeleton-line" style="height:10px;width:48px;margin-top:4px"></div>
+        ${UI.skeletonLine('72px', 10)}
+        ${UI.skeletonLine('48px', 10, { style: 'margin-top:4px' })}
       </div>`;
   } else if (state.qb.connected) {
     const invs  = matchInvoicesForContact(contact);

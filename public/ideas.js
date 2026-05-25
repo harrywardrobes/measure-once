@@ -8,13 +8,13 @@ function ideaSkeletonHtml() {
   return `
     <div class="idea-card idea-card-skeleton">
       <div class="idea-card-body">
-        <div class="skeleton-line" style="height:13px;width:72%;margin-bottom:8px"></div>
-        <div class="skeleton-line" style="height:13px;width:88%"></div>
-        <div class="skeleton-line" style="height:13px;width:55%;margin-top:6px"></div>
+        ${UI.skeletonLine('72%', 13, { style: 'margin-bottom:8px' })}
+        ${UI.skeletonLine('88%', 13)}
+        ${UI.skeletonLine('55%', 13, { style: 'margin-top:6px' })}
       </div>
       <div class="idea-card-meta">
-        <div class="skeleton-line" style="height:11px;width:90px"></div>
-        <div class="skeleton-line" style="height:11px;width:60px"></div>
+        ${UI.skeletonLine('90px', 11)}
+        ${UI.skeletonLine('60px', 11)}
       </div>
     </div>`;
 }

@@ -54,19 +54,19 @@ function fmtTradeDate(iso) {
 
 function tradeSkeletonHtml(namePct, badgeW, chipCount) {
   const chips = Array.from({length: chipCount}, () =>
-    `<div class="skeleton-line skeleton-pill" style="width:${80 + Math.random()*40|0}px;height:32px;border-radius:16px"></div>`
+    UI.skeletonLine((80 + Math.random()*40|0) + 'px', 32, { className: 'skeleton-pill', style: 'border-radius:16px' })
   ).join('');
   return `
     <div class="trades-row-skeleton">
-      <div class="skel-bar skeleton-line" style="width:5px;height:56px;border-radius:3px;flex-shrink:0"></div>
+      ${UI.skeletonLine('5px', 56, { className: 'skel-bar', style: 'border-radius:3px;flex-shrink:0' })}
       <div class="skel-left" style="flex:0 0 28%;display:flex;flex-direction:column;gap:6px">
-        <div class="skeleton-line" style="height:14px;width:${namePct}%"></div>
-        <div class="skeleton-line skeleton-pill" style="width:${badgeW}px;height:18px"></div>
-        <div class="skeleton-line" style="height:11px;width:70%"></div>
+        ${UI.skeletonLine(namePct + '%', 14)}
+        ${UI.skeletonLine(badgeW + 'px', 18, { className: 'skeleton-pill' })}
+        ${UI.skeletonLine('70%', 11)}
       </div>
       <div class="skel-mid" style="flex:1;display:flex;gap:8px;flex-wrap:wrap">${chips}</div>
       <div class="skel-right" style="flex:0 0 18%;display:flex;flex-direction:column;align-items:flex-end;gap:8px">
-        <div class="skeleton-line skeleton-pill" style="width:80px;height:22px"></div>
+        ${UI.skeletonLine('80px', 22, { className: 'skeleton-pill' })}
       </div>
     </div>`;
 }

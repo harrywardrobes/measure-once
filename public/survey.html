@@ -18,79 +18,52 @@
 
   <div id="tab-survey" class="app-body">
     <aside id="list-panel" class="list-panel sales-list-panel">
-      <div id="survey-view">
-        <div class="sales-board">
-          <div class="eq-col eq-col-active">
-            <div class="eq-col-header" style="border-top:3px solid #e2e8f0">
-              <div class="skeleton-line" style="height:13px;width:72px"></div>
-              <div class="skeleton-line skeleton-pill" style="width:26px"></div>
-            </div>
-            <div class="enquiry-list">
-              <div class="eq-card" style="pointer-events:none">
-                <div class="skeleton-line" style="height:3px;border-radius:0;margin:0"></div>
-                <div class="eq-card-body">
-                  <div class="eq-card-name-row">
-                    <div class="skeleton-line" style="height:13px;width:58%"></div>
-                    <div class="skeleton-line" style="height:11px;width:38px"></div>
-                  </div>
-                  <div class="eq-card-meta">
-                    <div class="skeleton-line skeleton-pill" style="width:80px"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="eq-card" style="pointer-events:none">
-                <div class="skeleton-line" style="height:3px;border-radius:0;margin:0"></div>
-                <div class="eq-card-body">
-                  <div class="eq-card-name-row">
-                    <div class="skeleton-line" style="height:13px;width:44%"></div>
-                    <div class="skeleton-line" style="height:11px;width:44px"></div>
-                  </div>
-                  <div class="eq-card-meta">
-                    <div class="skeleton-line skeleton-pill" style="width:96px"></div>
-                    <div class="skeleton-line skeleton-pill" style="width:54px"></div>
-                  </div>
-                </div>
-                <div class="eq-card-action" style="pointer-events:none;opacity:0.4">
-                  <div class="skeleton-line" style="height:11px;width:60%"></div>
-                </div>
-              </div>
-              <div class="eq-card" style="pointer-events:none">
-                <div class="skeleton-line" style="height:3px;border-radius:0;margin:0"></div>
-                <div class="eq-card-body">
-                  <div class="eq-card-name-row">
-                    <div class="skeleton-line" style="height:13px;width:66%"></div>
-                    <div class="skeleton-line" style="height:11px;width:34px"></div>
-                  </div>
-                  <div class="eq-card-meta">
-                    <div class="skeleton-line skeleton-pill" style="width:72px"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="eq-card" style="pointer-events:none">
-                <div class="skeleton-line" style="height:3px;border-radius:0;margin:0"></div>
-                <div class="eq-card-body">
-                  <div class="eq-card-name-row">
-                    <div class="skeleton-line" style="height:13px;width:50%"></div>
-                    <div class="skeleton-line" style="height:11px;width:42px"></div>
-                  </div>
-                  <div class="eq-card-meta">
-                    <div class="skeleton-line skeleton-pill" style="width:88px"></div>
-                    <div class="skeleton-line skeleton-pill" style="width:58px"></div>
-                  </div>
-                </div>
-                <div class="eq-card-action" style="pointer-events:none;opacity:0.4">
-                  <div class="skeleton-line" style="height:11px;width:55%"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <div id="survey-view"></div>
     </aside>
   </div>
 
   <script src="/chrome.js"></script>
   <script src="/components.js"></script>
+  <script>
+    // Paint a lightweight loading skeleton via the shared UI.skeletonLine
+    // helper so the column isn't blank during the initial bootstrap()/data fetch.
+    (function paintSurveyBoardSkeleton() {
+      const view = document.getElementById('survey-view');
+      if (!view || !window.UI || typeof UI.skeletonLine !== 'function') return;
+      const line = UI.skeletonLine;
+      const cards = [
+        { name: '58%', cnt: '38px', pills: [80] },
+        { name: '44%', cnt: '44px', pills: [96, 54], action: '60%' },
+        { name: '66%', cnt: '34px', pills: [72] },
+        { name: '50%', cnt: '42px', pills: [88, 58], action: '55%' },
+      ].map(c => {
+        const pills = c.pills.map(w =>
+          line(w + 'px', null, { className: 'skeleton-pill' })
+        ).join('');
+        const action = c.action
+          ? `<div class="eq-card-action" style="pointer-events:none;opacity:0.4">${line(c.action, 11)}</div>`
+          : '';
+        return `<div class="eq-card" style="pointer-events:none">
+          ${line('100%', 3, { style: 'border-radius:0;margin:0' })}
+          <div class="eq-card-body">
+            <div class="eq-card-name-row">${line(c.name, 13)}${line(c.cnt, 11)}</div>
+            <div class="eq-card-meta">${pills}</div>
+          </div>
+          ${action}
+        </div>`;
+      }).join('');
+      view.innerHTML =
+        `<div class="sales-board">
+          <div class="eq-col eq-col-active">
+            <div class="eq-col-header" style="border-top:3px solid #e2e8f0">
+              ${line('72px', 13)}
+              ${line('26px', null, { className: 'skeleton-pill' })}
+            </div>
+            <div class="enquiry-list">${cards}</div>
+          </div>
+        </div>`;
+    })();
+  </script>
   <script src="/command-palette.js"></script>
   <script src="/core.js"></script>
   <script src="/workflow-core.js"></script>
