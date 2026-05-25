@@ -147,6 +147,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/trades/0/audit',            level: 'manager' },
   { method: 'DELETE', path: '/api/trades/0',                  level: 'manager' },
   { method: 'POST',   path: '/api/trades/submissions',        level: 'manager', body: {} },
+  { method: 'GET',    path: '/api/admin/phone-directory',     level: 'manager' },
   // QuickBooks invoice read/write/PDF endpoints all live behind requireAdmin
   // in quickbooks.js (the shared-tenant token is admin-scoped); the matrix
   // mirrors that. routeAudit.auditMatrixLevels keeps this row honest.
