@@ -5,12 +5,13 @@ import MuiSkeleton from '@mui/material/Skeleton';
 
 const DELAY_MS = 200;
 
-function useVisible() {
-  const [visible, setVisible] = useState(false);
+function useVisible(forceVisible?: boolean) {
+  const [visible, setVisible] = useState(!!forceVisible);
   useEffect(() => {
+    if (forceVisible) return;
     const id = setTimeout(() => setVisible(true), DELAY_MS);
     return () => clearTimeout(id);
-  }, []);
+  }, [forceVisible]);
   return visible;
 }
 
@@ -18,8 +19,8 @@ function useVisible() {
  * Generic Suspense fallback — a few grey bars that work for any panel.
  * Used for admin tabs and other low-traffic pages.
  */
-export function PageLoadingSkeleton() {
-  const visible = useVisible();
+export function PageLoadingSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
   if (!visible) return null;
 
   return (
@@ -41,8 +42,8 @@ export function PageLoadingSkeleton() {
  *   • 4 CustomerCard outlines (name/status chip, stage pills, contact chips)
  *   • Pagination row
  */
-export function CustomersPageSkeleton() {
-  const visible = useVisible();
+export function CustomersPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
   if (!visible) return null;
 
   return (
@@ -112,8 +113,8 @@ export function CustomersPageSkeleton() {
  *   • Two mini month-grid calendars side by side (header + 5-row × 7-col grid)
  *   • 3 agenda day rows (date label + 1–2 event cards)
  */
-export function CalendarPageSkeleton() {
-  const visible = useVisible();
+export function CalendarPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
   if (!visible) return null;
 
   const MiniMonth = () => (
@@ -206,8 +207,8 @@ export function CalendarPageSkeleton() {
  *   • ChangePasswordCard — card with a button row
  *   • AccountActionsCard — action-list rows
  */
-export function ProfilePageSkeleton() {
-  const visible = useVisible();
+export function ProfilePageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
   if (!visible) return null;
 
   return (
@@ -261,8 +262,8 @@ export function ProfilePageSkeleton() {
  *   • Team card — heading + chip + 4-row table skeleton
  *   • Add team member card — heading + subtitle + a few field outlines
  */
-export function AdminTeamPageSkeleton() {
-  const visible = useVisible();
+export function AdminTeamPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
   if (!visible) return null;
 
   return (
@@ -513,8 +514,8 @@ export function AdminAuditLogPageSkeleton() {
  *   • "Upcoming" section + 2 event cards
  *   • "Active Projects" section + 3 project cards
  */
-export function HomePageSkeleton() {
-  const visible = useVisible();
+export function HomePageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
   if (!visible) return null;
 
   const SectionHeader = ({ width }: { width: number }) => (

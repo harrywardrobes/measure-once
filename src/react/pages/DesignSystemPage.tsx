@@ -1135,7 +1135,7 @@ export function DesignSystemPage() {
           <ComponentShowcase
             name="PageLoadingSkeleton"
             description="Generic fallback — a few grey bars that work for any panel or admin tab."
-            demo={<Box sx={{ width: '100%' }}><PageLoadingSkeleton /></Box>}
+            demo={<Box sx={{ width: '100%' }}><PageLoadingSkeleton forceVisible /></Box>}
             code={`import { PageLoadingSkeleton } from '../components/PageLoadingSkeleton';
 
 // Inside a Suspense boundary:
@@ -1147,7 +1147,7 @@ export function DesignSystemPage() {
           <ComponentShowcase
             name="CustomersPageSkeleton"
             description="Shape-matched skeleton for the Customers list: stage filter tabs, search + dropdowns, four customer card outlines, and a pagination row."
-            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><CustomersPageSkeleton /></Box>}
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><CustomersPageSkeleton forceVisible /></Box>}
             code={`import { CustomersPageSkeleton } from '../components/PageLoadingSkeleton';
 
 <Suspense fallback={<CustomersPageSkeleton />}>
@@ -1158,7 +1158,7 @@ export function DesignSystemPage() {
           <ComponentShowcase
             name="CalendarPageSkeleton"
             description="Shape-matched skeleton for the Calendar: toolbar with nav buttons, two mini month grids, and three agenda day rows with event cards."
-            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><CalendarPageSkeleton /></Box>}
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><CalendarPageSkeleton forceVisible /></Box>}
             code={`import { CalendarPageSkeleton } from '../components/PageLoadingSkeleton';
 
 <Suspense fallback={<CalendarPageSkeleton />}>
@@ -1169,7 +1169,7 @@ export function DesignSystemPage() {
           <ComponentShowcase
             name="HomePageSkeleton"
             description="Shape-matched skeleton for the Home page: big date header, My Tasks section, Upcoming section, and Active Projects section."
-            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><HomePageSkeleton /></Box>}
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><HomePageSkeleton forceVisible /></Box>}
             code={`import { HomePageSkeleton } from '../components/PageLoadingSkeleton';
 
 <Suspense fallback={<HomePageSkeleton />}>
