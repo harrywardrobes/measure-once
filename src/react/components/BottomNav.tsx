@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePrivilege } from '../hooks/usePrivilege';
 import Box from '@mui/material/Box';
 import BottomNavigation from '@mui/material/BottomNavigation';
@@ -126,6 +126,11 @@ export function BottomNav() {
   const [primaryKeys, setPrimaryKeys] = useState<string[]>(DEFAULT_PRIMARY_KEYS);
   const [configLoaded, setConfigLoaded] = useState(false);
 
+  // Always reflects the latest defaultPrimaryKeys so the prefs-load callback
+  // can use it even if isManager resolved after the effect ran.
+  const defaultPrimaryKeysRef = useRef(defaultPrimaryKeys);
+  defaultPrimaryKeysRef.current = defaultPrimaryKeys;
+
   useEffect(() => {
     const sync = () => setValue(matchPath(window.location.pathname));
     window.addEventListener('popstate', sync);
@@ -142,7 +147,15 @@ export function BottomNav() {
     let cancelled = false;
     loadRoleNavConfig().then((keys) => {
       if (cancelled) return;
-      if (keys) setPrimaryKeys(keys);
+      if (keys) {
+        setPrimaryKeys(keys);
+      } else {
+        // No saved pref — use role-aware defaults. Reading from the ref
+        // captures the current value of isManager even when it resolved
+        // asynchronously after this effect started (e.g. bootstrap() races
+        // the React mount and isManager was false at mount time).
+        setPrimaryKeys(defaultPrimaryKeysRef.current);
+      }
       setConfigLoaded(true);
     });
     return () => { cancelled = true; };
