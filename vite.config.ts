@@ -20,18 +20,25 @@ import { resolve } from 'path';
  * small shared UI shell (GlobalHeader, BottomNav, PageHeadingPanel,
  * AppThemeProvider, IslandErrorBoundary).
  *
- *   vendor-zxcvbn     zxcvbn password-strength library (large, loaded only
- *                     on pages with a password field)
- *   vendor-mui-icons  @mui/icons-material (tree-shaken, separate chunk so
- *                     adding new icon imports doesn't bust the core chunk)
- *   vendor          react + react-dom + @mui/material + @emotion/*
- *                   (merged into one chunk — MUI imports React internally,
- *                   splitting them produces Rollup circular-chunk warnings)
- *   chunks/<page>-* one chunk per lazily-imported page component
- *                   (Rollup creates these automatically from dynamic imports
- *                   in main.tsx; no manual grouping needed)
- *   everything else node_modules Rollup doesn't recognise above are split
- *                   automatically
+ * Always-loaded chunks (every page, confirmed via bundle analysis):
+ *   main.js           mount detection + shell UI    ~8 kB gzip
+ *   vendor            react + react-dom + @mui/*   ~160 kB gzip
+ *   vendor-mui-icons  icons used by GlobalHeader    ~5 kB gzip
+ *                     and BottomNav (always present)
+ *                     ─────────────────────────────────────────
+ *                     TOTAL always-loaded          ~173 kB gzip
+ *
+ * Lazy chunks (downloaded only when needed):
+ *   vendor-zxcvbn     zxcvbn password-strength library (~819 kB / 398 kB
+ *                     gzip). Kept in its own named chunk for cacheability.
+ *                     Never preloaded by main.js. Loaded on demand inside
+ *                     ProfilePage via loadZxcvbn() — fires only when the
+ *                     user types into a password field.
+ *   chunks/<page>-*   one chunk per lazily-imported page component
+ *                     (Rollup creates these automatically from React.lazy()
+ *                     calls in main.tsx; no manual grouping needed)
+ *   everything else   node_modules Rollup doesn't recognise above are split
+ *                     automatically
  */
 export default defineConfig({
   root: resolve(__dirname, 'src/react'),

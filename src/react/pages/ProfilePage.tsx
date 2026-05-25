@@ -54,6 +54,12 @@ type ZxcvbnFn = (password: string, userInputs?: string[]) => ZxcvbnResult;
 
 let _zxcvbnCache: ZxcvbnFn | null = null;
 let _zxcvbnPromise: Promise<ZxcvbnFn> | null = null;
+/*
+ * loadZxcvbn() fetches the zxcvbn chunk on demand — only called when the
+ * user types into a password field (see PasswordStrengthMeter useEffect and
+ * checkPasswordPolicy). The singleton promise/cache means the 819 kB chunk
+ * is downloaded at most once per session and never preloaded by main.js.
+ */
 function loadZxcvbn(): Promise<ZxcvbnFn> {
   if (_zxcvbnCache) return Promise.resolve(_zxcvbnCache);
   if (!_zxcvbnPromise) {
