@@ -323,6 +323,9 @@ async function loadLeadStatusCounts() {
       // (X-Cache-Status: stale) for transient HubSpot hiccups, which arrives
       // here as a successful response — no toast needed.
       console.warn('Could not load lead status counts:', e.message);
+      // Mark counts as stale so the dot stays visible (or re-appears) after
+      // a hard failure — the displayed counts may now be arbitrarily old.
+      state.leadStatusCountsStale = true;
     } finally {
       _llscLastSettledAt = Date.now();
       _llscInFlight = null;
