@@ -3483,6 +3483,12 @@
       </div>
     `;
 
+    // Mount the React island synchronously now that #tab-search and
+    // #tab-designsystem exist, so those panels don't briefly flash empty
+    // while the deferred React bundle is waiting on its MutationObserver
+    // fallback. See src/react/main.tsx.
+    try { window.__reactIslandMount && window.__reactIslandMount(); } catch (_) {}
+
     renderTeam();
     renderJobRoles();
     renderRequests();

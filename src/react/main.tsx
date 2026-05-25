@@ -51,7 +51,10 @@ function mount() {
   // #tab-designsystem into #page asynchronously after its data fetches
   // resolve, which happens *after* this deferred module script executes.
   // Observe the DOM and try again whenever new nodes appear, stopping as
-  // soon as we've mounted every entry in MOUNTS.
+  // soon as we've mounted every entry in MOUNTS. admin.html also calls
+  // window.__reactIslandMount() synchronously right after it sets
+  // #page.innerHTML so the React panels render in the same tick — the
+  // observer is a belt-and-braces fallback for other future mount sites.
   const observer = new MutationObserver(() => {
     const mounted = MOUNTS.every(m => {
       const el = document.getElementById(m.id);
@@ -62,6 +65,10 @@ function mount() {
   });
   observer.observe(document.body, { childList: true, subtree: true });
 }
+
+(window as unknown as { __reactIslandMount?: () => void }).__reactIslandMount = () => {
+  mountKnown();
+};
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', mount, { once: true });
