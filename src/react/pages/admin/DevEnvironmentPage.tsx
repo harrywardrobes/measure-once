@@ -53,6 +53,20 @@ const DEV_ONLY_FEATURES: Array<{
     ),
   },
   {
+    name: 'Bust contacts cache',
+    location: 'Internal API only',
+    description: (
+      <>
+        Internal API endpoint (
+        <code className="adm-inline-code">POST /api/admin/test/bust-contacts-cache</code>) used by
+        automated tests to clear the server-side contacts cache so the next request triggers a
+        fresh HubSpot scan. Excluded from production because forcibly invalidating the shared cache
+        in a live environment would cause unnecessary load on HubSpot and degrade response times
+        for all users.
+      </>
+    ),
+  },
+  {
     name: 'Backfill hw_test_user defaults',
     location: 'Settings tab',
     description: (
