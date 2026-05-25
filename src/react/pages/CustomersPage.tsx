@@ -489,6 +489,22 @@ function QBBadge({ invoices }: { invoices: QBInvoice[] }) {
   );
 }
 
+const CUSTOMERS_SCROLL_KEY = 'customers_scroll';
+
+function saveCustomersScroll() {
+  try {
+    const y =
+      window.scrollY ||
+      window.pageYOffset ||
+      document.documentElement.scrollTop ||
+      document.body.scrollTop ||
+      0;
+    sessionStorage.setItem(CUSTOMERS_SCROLL_KEY, String(y));
+  } catch {
+    /* ignore */
+  }
+}
+
 function CustomerCard({
   contact,
   statusMap,
@@ -522,6 +538,7 @@ function CustomerCard({
       <CardActionArea
         component="a"
         href={`/customers/${encodeURIComponent(contact.id)}`}
+        onClick={saveCustomersScroll}
         sx={{ p: 2, display: 'block' }}
       >
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
@@ -597,6 +614,34 @@ export function CustomersPage(): React.ReactElement {
     const p = new URLSearchParams(location.search);
     return p.get('new') === '1';
   });
+
+  // After the first successful contacts render, restore the scroll
+  // position saved when the user navigated into a customer (see
+  // saveCustomersScroll on CardActionArea click). One-shot per visit.
+  const scrollRestoredRef = React.useRef(false);
+  React.useEffect(() => {
+    if (scrollRestoredRef.current) return;
+    if (loading) return;
+    let saved: string | null = null;
+    try {
+      saved = sessionStorage.getItem(CUSTOMERS_SCROLL_KEY);
+    } catch {
+      /* ignore */
+    }
+    if (saved == null) return;
+    try {
+      sessionStorage.removeItem(CUSTOMERS_SCROLL_KEY);
+    } catch {
+      /* ignore */
+    }
+    const y = parseInt(saved, 10) || 0;
+    scrollRestoredRef.current = true;
+    // Defer to the next frame so the list DOM has its final height before
+    // we scroll.
+    requestAnimationFrame(() => {
+      window.scrollTo(0, y);
+    });
+  }, [loading, contacts]);
 
   // If the page is opened with `?new=1`, strip the flag from the URL so a
   // refresh doesn't keep re-opening the dialog. (Matches the legacy
