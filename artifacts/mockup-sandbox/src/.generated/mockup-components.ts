@@ -2,9 +2,6 @@
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/customer-card-wireframes/CustomerCardWireframes.tsx": () => import("../components/mockups/customer-card-wireframes/CustomerCardWireframes.tsx"),
-  "./components/mockups/customers-list/AccessibilityReadability.tsx": () => import("../components/mockups/customers-list/AccessibilityReadability.tsx"),
-  "./components/mockups/customers-list/AffordanceVisibility.tsx": () => import("../components/mockups/customers-list/AffordanceVisibility.tsx"),
-  "./components/mockups/customers-list/HierarchyClarity.tsx": () => import("../components/mockups/customers-list/HierarchyClarity.tsx"),
   "./components/mockups/header-variants/CommandPalette.tsx": () => import("../components/mockups/header-variants/CommandPalette.tsx"),
   "./components/mockups/header-variants/ContextualStrip.tsx": () => import("../components/mockups/header-variants/ContextualStrip.tsx"),
   "./components/mockups/header-variants/FloatingCard.tsx": () => import("../components/mockups/header-variants/FloatingCard.tsx"),
@@ -15,6 +12,9 @@ export const modules: ModuleMap = {
   "./components/mockups/home-variants/TodayTimeline.tsx": () => import("../components/mockups/home-variants/TodayTimeline.tsx"),
   "./components/mockups/home-variants/UrgencyFeed.tsx": () => import("../components/mockups/home-variants/UrgencyFeed.tsx"),
   "./components/mockups/home-variants/WarmEditorial.tsx": () => import("../components/mockups/home-variants/WarmEditorial.tsx"),
+  "./components/mockups/customers-list/AccessibilityReadability.tsx": () => import("../components/mockups/customers-list/AccessibilityReadability.tsx"),
+  "./components/mockups/customers-list/AffordanceVisibility.tsx": () => import("../components/mockups/customers-list/AffordanceVisibility.tsx"),
+  "./components/mockups/customers-list/HierarchyClarity.tsx": () => import("../components/mockups/customers-list/HierarchyClarity.tsx"),
   "./components/mockups/sales-cards/VariantA.tsx": () => import("../components/mockups/sales-cards/VariantA.tsx"),
   "./components/mockups/sales-cards/VariantB.tsx": () => import("../components/mockups/sales-cards/VariantB.tsx"),
   "./components/mockups/sales-cards/VariantB1.tsx": () => import("../components/mockups/sales-cards/VariantB1.tsx"),

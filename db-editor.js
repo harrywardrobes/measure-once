@@ -289,11 +289,11 @@ async function findBlockingRows(targetTable, beforeRow, limitPerTable = 5) {
     const r = await pool.query(
       `SELECT con.conname AS constraint_name,
               cl.relname  AS ref_table,
-              (SELECT array_agg(a.attname ORDER BY u.ord)
+              (SELECT array_agg(a.attname::text ORDER BY u.ord)
                  FROM unnest(con.conkey) WITH ORDINALITY u(attnum, ord)
                  JOIN pg_attribute a
                    ON a.attrelid = con.conrelid AND a.attnum = u.attnum) AS ref_cols,
-              (SELECT array_agg(a.attname ORDER BY u.ord)
+              (SELECT array_agg(a.attname::text ORDER BY u.ord)
                  FROM unnest(con.confkey) WITH ORDINALITY u(attnum, ord)
                  JOIN pg_attribute a
                    ON a.attrelid = con.confrelid AND a.attnum = u.attnum) AS target_cols
