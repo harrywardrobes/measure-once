@@ -283,107 +283,18 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
 }
 
 /* ── Header Search ───────────────────────────────────────────────────────────── */
-.header-search-wrap {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  max-width: 520px;
-}
-.header-search-pill {
-  flex: 1;
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-@media (max-width: 480px) {
-  .header-new-customer-btn span { display: none; }
-  .header-new-customer-btn { padding: 4px 6px; }
-}
-.header-search-icon {
-  position: absolute;
-  left: 10px;
-  width: 14px; height: 14px;
-  color: rgba(255,255,255,0.5);
-  pointer-events: none;
-  flex-shrink: 0;
-}
-.header-search-input {
-  width: 100%;
-  background: rgba(255,255,255,0.11);
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: var(--radius-pill);
-  color: #fff;
-  padding: 7px 28px 7px 30px;
-  font-size: 0.82rem;
-  font-family: inherit;
-  outline: none;
-  transition: background 0.15s, border-color 0.15s;
-}
-.header-new-customer-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-  background: rgba(255,255,255,0.18);
-  border: 1px solid rgba(255,255,255,0.22);
-  border-radius: 6px;
-  color: #fff;
-  padding: 4px 10px 4px 7px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s;
-  -webkit-tap-highlight-color: transparent;
-}
-.header-new-customer-btn:hover { background: rgba(255,255,255,0.28); }
-.header-new-customer-btn:active { background: rgba(255,255,255,0.35); }
-.header-search-customers {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: rgba(255,255,255,0.9);
-  background: rgba(255,255,255,0.18);
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 6px;
-  text-decoration: none;
-  padding: 5px 6px;
-  transition: background 0.15s, color 0.15s;
-  -webkit-tap-highlight-color: transparent;
-}
-.header-search-customers:hover {
-  background: rgba(255,255,255,0.28);
-  color: #fff;
-}
-.header-search-customers:active { background: rgba(255,255,255,0.35); }
-.header-search-input::placeholder { color: rgba(255,255,255,0.58); }
-.header-search-input:focus {
-  background: rgba(255,255,255,0.17);
-  border-color: rgba(255,255,255,0.28);
-}
-.header-search-clear {
-  position: absolute;
-  right: 8px;
-  background: none;
-  border: none;
-  color: rgba(255,255,255,0.5);
-  cursor: pointer;
-  padding: 4px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  z-index: var(--z-base);
-}
-/* .header-back-btn, .header-icon-btn[--active], .search-kbd-hint were the
-   styles for the legacy chrome.js header. They were retired when the top
-   app bar moved to MUI — see src/react/components/GlobalHeader.tsx. */
+/* The top app bar (including search/navigation) is fully migrated to React MUI —
+   see src/react/components/GlobalHeader.tsx. All .header-search-* /
+   .header-new-customer-btn / .header-search-customers rules were removed once
+   the GlobalHeader island took ownership. */
 
 /* ── Bottom Navigation ───────────────────────────────────────────────────────── */
+/* The bottom nav is fully migrated to React MUI — see
+   src/react/components/BottomNav.tsx (mount id "app-bottom-nav-mount").
+   MUI's sx props handle all layout/colour; .bottom-nav-btn / .bottom-nav-inner /
+   .bottom-nav-active / per-tab overrides were removed. The .bottom-nav
+   class name is kept on the MUI nav element as a stable test selector
+   (see BottomNav.tsx), so the base rule below is preserved. */
 .bottom-nav {
   position: fixed;
   bottom: 0; left: 0; right: 0;
@@ -393,75 +304,6 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
   border-top: 1px solid var(--stone);
   z-index: var(--z-header);
 }
-.bottom-nav-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-top: 2px solid transparent;
-  background: none;
-  cursor: pointer;
-  font-family: inherit;
-  color: var(--ink-4);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  transition: color 0.15s, border-color 0.15s;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  text-decoration: none;
-}
-
-/* Mobile: horizontal-scrolling, text-only nav */
-@media (max-width: 639px) {
-  .bottom-nav {
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-  .bottom-nav::-webkit-scrollbar { display: none; }
-  .bottom-nav-inner {
-    display: flex;
-    align-items: stretch;
-    min-width: max-content;
-    height: 60px;
-  }
-  .bottom-nav-btn {
-    flex: none;
-    padding: 0 1.125rem;
-    font-size: 0.7rem;
-    white-space: nowrap;
-  }
-}
-
-/* Desktop/tablet: centred equal-width tabs (unchanged behaviour) */
-@media (min-width: 640px) {
-  .bottom-nav {
-    display: flex;
-    align-items: stretch;
-    justify-content: center;
-  }
-  .bottom-nav-inner {
-    max-width: 640px;
-    width: 100%;
-    display: flex;
-    align-items: stretch;
-  }
-  .bottom-nav-btn {
-    flex: 1;
-    padding: 0 4px;
-    font-size: 0.6rem;
-  }
-}
-
-.bottom-nav-btn.bottom-nav-active { color: var(--orchid); border-top-color: var(--orchid); }
-
-/* Per-tab stage colour overrides — each mapped tab uses its stage accent */
-#bnav-sales.bottom-nav-active    { color: var(--stage-sales-bg);  border-top-color: var(--stage-sales-bg); }
-#bnav-survey.bottom-nav-active   { color: var(--stage-survey-bg); border-top-color: var(--stage-survey-bg); }
-#bnav-projects.bottom-nav-active { color: var(--stage-order-bg);  border-top-color: var(--stage-order-bg); }
 
 /* ── Viewer read-only banner ─────────────────────────────────────────────────── */
 .viewer-banner {
@@ -566,15 +408,6 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
   overflow: hidden;
   transition: transform 0.25s ease, opacity 0.2s ease;
   -webkit-overflow-scrolling: touch;
-}
-
-/* Full-width list panel — used on the standalone customers list page */
-.list-panel-fw {
-  flex: 1;
-  border-right: none;
-}
-@media (min-width: 768px) {
-  .list-panel-fw { width: 100% !important; }
 }
 
 /* Standalone workflow panel — used on the customer detail page */
@@ -1799,6 +1632,12 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 
 /* ── Home Tab ────────────────────────────────────────────────────────────────── */
+/* The home page is fully migrated to React MUI — see
+   src/react/pages/HomePage.tsx (mount id "home-view", home.js is a no-op).
+   The .home-tab wrapper div in index.html still provides fixed positioning
+   for the React mount; all .home-inner / .home-date-* / .home-section-* /
+   .home-card-* / .home-badge-* / .home-empty / .home-more rules were
+   removed once the React island took ownership of all home UI. */
 .home-tab {
   position: fixed;
   top: var(--header-h);
@@ -1809,108 +1648,6 @@ body.showing-workflow .workflow-panel { display: flex; }
   -webkit-overflow-scrolling: touch;
 }
 .home-tab.hidden { display: none; }
-.home-inner {
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 16px 14px 24px;
-}
-.home-date-header {
-  margin-bottom: 20px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--stone);
-}
-.home-date-day {
-  font-size: 1.35rem;
-  font-weight: 800;
-  color: var(--ink-1);
-  line-height: 1.1;
-}
-.home-date-full {
-  font-size: 0.82rem;
-  color: var(--ink-4);
-  margin-top: 2px;
-}
-.home-section { margin-bottom: 22px; }
-.home-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.home-section-title {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-4);
-}
-.home-section-link {
-  font-size: 0.72rem;
-  color: var(--orchid);
-  font-weight: 700;
-  cursor: pointer;
-  background: none;
-  border: none;
-  font-family: inherit;
-  padding: 0;
-}
-.home-card {
-  background: var(--paper);
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-lg);
-  padding: 12px 14px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: background 0.12s;
-  -webkit-tap-highlight-color: transparent;
-}
-.home-card:hover { background: var(--paper-deep); }
-.home-card-title {
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--ink-1);
-}
-.home-card-sub {
-  font-size: 0.75rem;
-  color: var(--ink-3);
-  margin-top: 3px;
-}
-.home-card-sub-red { color: #dc2626; }
-.home-badge-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin-top: 6px;
-  flex-wrap: wrap;
-}
-.home-badge {
-  font-size: 0.67rem;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  letter-spacing: 0.02em;
-}
-.home-badge-red   { background: #fee2e2; color: #dc2626; }
-.home-badge-amber { background: #fef3c7; color: #b45309; }
-.home-badge-stage { background: var(--orchid-tint); color: var(--orchid-deep); }
-.home-empty {
-  font-size: 0.82rem;
-  color: var(--ink-4);
-  text-align: center;
-  padding: 16px 0;
-  background: var(--paper);
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-lg);
-}
-.home-more {
-  font-size: 0.75rem;
-  color: var(--orchid);
-  font-weight: 600;
-  cursor: pointer;
-  padding: 6px 0 0;
-  display: block;
-  text-align: center;
-}
 
 .customer-num-badge {
   font-family: monospace;
@@ -3003,86 +2740,9 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
    src/react/components/GlobalHeader.tsx. */
 
 /* ── Profile page ────────────────────────────────────────────────────────────
-   The profile page is now a React MUI island — see
-   src/react/pages/ProfilePage.tsx. The .profile-tab / .profile-inner /
-   .profile-card / .profile-identity* / .profile-name / .profile-email /
-   .profile-field* / .profile-section-title / .profile-card-header /
-   .profile-back-btn / .profile-save-btn / .profile-cancel-btn /
-   .profile-edit-actions / .profile-error / .profile-loading /
-   .profile-action-* / .profile-avatar-* / .photo-preview-* /
-   .photo-pending-badge / .photo-upload-prompt rules that used to live
-   here are gone. The remaining .profile-level-* / .profile-edit-btn /
-   .profile-input / .profile-integration-* rules below are kept for
-   admin / other surfaces. */
-.profile-level-badge {
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 2px 10px;
-  border-radius: var(--radius-pill);
-  text-transform: capitalize;
-}
-.profile-level-viewer  { background: #f1f5f9; color: #475569; }
-.profile-level-member  { background: #dbeafe; color: #1d4ed8; }
-.profile-level-manager { background: #fef3c7; color: #b45309; }
-.profile-level-admin   { background: #ede0ff; color: #3d0f7a; }
-.profile-edit-btn {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--orchid);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  font-family: inherit;
-}
-.profile-edit-btn:hover { color: var(--orchid-deep); }
-.profile-input {
-  width: 100%;
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-md);
-  padding: 7px 10px;
-  font-size: 0.85rem;
-  font-family: inherit;
-  background: #fff;
-  color: var(--ink-1);
-  outline: none;
-  transition: border-color 0.15s;
-}
-.profile-input:focus { border-color: var(--orchid); }
-.profile-integration-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--paper-deep);
-}
-.profile-integration-row:last-child { border-bottom: none; }
-.profile-int-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.85rem;
-  color: var(--ink-2);
-  font-weight: 600;
-}
-.profile-int-status {
-  font-size: 0.8rem;
-  color: var(--ink-4);
-}
-.profile-int-action {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--orchid);
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  padding: 0;
-  text-decoration: none;
-}
-.profile-int-action:hover { color: var(--orchid-deep); }
-.profile-int-connect { color: #16a34a; }
-.profile-int-connect:hover { color: #15803d; }
+   The profile page is fully migrated to React MUI — see
+   src/react/pages/ProfilePage.tsx. All .profile-* CSS rules were removed
+   once the React island took ownership of all profile UI. */
 
 
 /* ── Skip link ───────────────────────────────────────────────────────────────── */
@@ -3473,13 +3133,8 @@ body.showing-workflow .sales-layout #workflow-panel {
 }
 
 /* ── Customers page — project-card layout ─────────────────────────────────── */
-.list-panel-fw > #customers-view {
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  display: flex;
-  flex-direction: column;
-}
+/* .list-panel-fw > #customers-view removed — list-panel-fw is no longer used
+   now that the customers page is a React island (#tab-customers). */
 
 #customers-view .customer-project-card {
   cursor: pointer;
@@ -3502,15 +3157,8 @@ body.showing-workflow .sales-layout #workflow-panel {
   box-shadow: var(--shadow-md);
 }
 
-.customer-list-secondary {
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.customer-list-email {
-  font-size: 0.75rem;
-  color: var(--ink-3);
-  font-weight: 500;
-}
+/* .customer-list-secondary / .customer-list-email removed — no longer used
+   after the customers page migrated to React (#tab-customers). */
 
 /* ── Customer list card (redesign: one card per contact) ─────────────────────── */
 .cl-card-main {

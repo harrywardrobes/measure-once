@@ -126,8 +126,14 @@ export function BottomNav() {
   const [primaryKeys, setPrimaryKeys] = useState<string[]>(DEFAULT_PRIMARY_KEYS);
   const [configLoaded, setConfigLoaded] = useState(false);
 
-  // Always reflects the latest defaultPrimaryKeys so the prefs-load callback
-  // can use it even if isManager resolved after the effect ran.
+  // Role-aware fallback used when the API returns no saved config.
+  // Manager users see sales as a primary tab by default; non-managers see
+  // DEFAULT_PRIMARY_KEYS. The ref is updated every render so the async
+  // loadRoleNavConfig callback always reads the latest isManager value even
+  // when isManager resolved after the effect started.
+  const defaultPrimaryKeys = isManager
+    ? (['home', 'sales', 'calendar'] as string[])
+    : DEFAULT_PRIMARY_KEYS;
   const defaultPrimaryKeysRef = useRef(defaultPrimaryKeys);
   defaultPrimaryKeysRef.current = defaultPrimaryKeys;
 
