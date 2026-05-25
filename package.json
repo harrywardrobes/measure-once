@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "postinstall": "npx puppeteer browsers install chrome",
+    "prestart": "npm run build:react",
     "start": "node server.js",
+    "predev": "npm run build:react",
     "dev": "nodemon server.js",
     "build:css": "tailwindcss -i ./src/tailwind.css -o ./public/tailwind.css --minify",
     "watch:css": "tailwindcss -i ./src/tailwind.css -o ./public/tailwind.css --watch",
