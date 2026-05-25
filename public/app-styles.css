@@ -3134,25 +3134,6 @@ body.showing-workflow .sales-layout #workflow-panel {
   opacity: 1;
 }
 
-/* ── Action strip (customer-detail workflow panel) ───────────────────────────
- * These rules are kept because customer-detail.js still renders an action
- * strip using these classes inside the stage-panel of the customer detail page.
- * The board-level board/column/card layout rules were removed once both the
- * Sales and Survey boards migrated to React (MUI sx props). */
-.eq-card-action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 12px;
-  cursor: default;
-  border-top: 1px solid rgba(0,0,0,0.06);
-}
-.eq-card-action-label {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
 
 /* ── Customers page — project-card layout ─────────────────────────────────── */
 /* .list-panel-fw > #customers-view removed — list-panel-fw is no longer used

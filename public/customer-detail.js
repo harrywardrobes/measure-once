@@ -1048,12 +1048,12 @@ function _renderWorkflowStagesImpl() {
       const _cahNameMatch = handlerAttrs && handlerAttrs.match(/data-card-action-name="([^"]*)"/);
       const _cahName = _cahNameMatch ? _cahNameMatch[1].replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '';
       const _stripLabel = _cahName || label;
-      const interactiveAttrs = handlerAttrs
-        ? `${handlerAttrs} role="button" tabindex="0" title="Run action" style="background:${actionTint};cursor:pointer"`
-        : `style="background:${actionTint}"`;
+      const _actionStyle = `display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-top:1px solid rgba(0,0,0,0.06);background:${actionTint};cursor:${handlerAttrs ? 'pointer' : 'default'}`;
+      const _labelStyle = `font-size:0.6875rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:${actionText}`;
+      const _interactiveAttrs = handlerAttrs ? `${handlerAttrs} role="button" tabindex="0" title="Run action"` : '';
       actionHtml = `
-        <div class="eq-card-action" ${interactiveAttrs}>
-          <span class="eq-card-action-label" style="color:${actionText}">${escHtml(_stripLabel)}</span>
+        <div style="${_actionStyle}" ${_interactiveAttrs}>
+          <span style="${_labelStyle}">${escHtml(_stripLabel)}</span>
         </div>`;
     }
   }
