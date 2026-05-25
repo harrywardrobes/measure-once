@@ -868,6 +868,16 @@ function _invalidateLeadStatusCountsCache() {
   _leadStatusCountsCache = null;
 }
 
+// ── Open-Leads in-memory cache (single-flight + 60 s TTL) ────────────────────
+// Mirrors the lead-status-counts cache pattern. Invalidated on any
+// hs_lead_status mutation or dev-filter toggle.
+const OPEN_LEADS_TTL_MS = 60_000;
+let _openLeadsCache    = null; // { results, total, fetchedAt }
+let _openLeadsInFlight = null;
+function _invalidateOpenLeadsCache() {
+  _openLeadsCache = null;
+}
+
 async function _fetchLeadStatusCounts() {
   const { rows: statusRows } = await pool.query(
     'SELECT key FROM lead_status_config WHERE is_null_row IS NOT TRUE ORDER BY sort_order ASC, key ASC'
@@ -952,42 +962,66 @@ app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken
 
 // ── HubSpot: Open Leads (contacts with hs_lead_status = OPEN_DEAL) ────────────
 app.get('/api/open-leads', async (req, res) => {
-  try {
-    const allResults = [];
-    let after = undefined;
-    // In dev mode every listing endpoint is narrowed to hw_test_user contacts.
-    // This is skipped when the global dev-filter toggle is OFF.
-    const devFilters = (process.env.NODE_ENV !== 'production' && await getDevFilterEnabled())
-      ? [{ propertyName: 'hw_test_user', operator: 'EQ', value: 'true' }]
-      : [];
-    do {
-      const body = {
-        filterGroups: [{
-          filters: [
-            { propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' },
-            ...devFilters,
-          ]
-        }],
-        properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
-        sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
-        limit: 100
-      };
-      if (after) body.after = after;
-      const r = await hubspotSearchWithRetry(body);
-      allResults.push(...(r.data.results || []));
-      after = r.data.paging?.next?.after;
-    } while (after);
-    res.json({ results: allResults, total: allResults.length });
-  } catch (e) {
-    const status = e.response?.status;
-    if (status === 401 || status === 403) {
-      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
-    }
-    if (status === 429) {
-      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
-    }
-    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+  // Fresh cache hit — return immediately.
+  if (_openLeadsCache && Date.now() - _openLeadsCache.fetchedAt < OPEN_LEADS_TTL_MS) {
+    res.setHeader('X-Cache-Status', 'fresh');
+    return res.json({ results: _openLeadsCache.results, total: _openLeadsCache.total });
   }
+
+  // Single-flight: all concurrent cold-cache callers share one HubSpot fan-out.
+  if (!_openLeadsInFlight) {
+    _openLeadsInFlight = (async () => {
+      try {
+        const allResults = [];
+        let after = undefined;
+        // In dev mode every listing endpoint is narrowed to hw_test_user contacts.
+        // This is skipped when the global dev-filter toggle is OFF.
+        const devFilters = (process.env.NODE_ENV !== 'production' && await getDevFilterEnabled())
+          ? [{ propertyName: 'hw_test_user', operator: 'EQ', value: 'true' }]
+          : [];
+        do {
+          const body = {
+            filterGroups: [{
+              filters: [
+                { propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' },
+                ...devFilters,
+              ]
+            }],
+            properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
+            sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
+            limit: 100
+          };
+          if (after) body.after = after;
+          const r = await hubspotSearchWithRetry(body);
+          allResults.push(...(r.data.results || []));
+          after = r.data.paging?.next?.after;
+        } while (after);
+        _openLeadsCache = { results: allResults, total: allResults.length, fetchedAt: Date.now() };
+        return { ok: true, results: allResults, total: allResults.length };
+      } catch (err) {
+        return { ok: false, err };
+      } finally {
+        setImmediate(() => { _openLeadsInFlight = null; });
+      }
+    })();
+  }
+
+  const outcome = await _openLeadsInFlight;
+
+  if (outcome.ok) {
+    res.setHeader('X-Cache-Status', 'fresh');
+    return res.json({ results: outcome.results, total: outcome.total });
+  }
+
+  const e = outcome.err;
+  const status = e.response?.status;
+  if (status === 401 || status === 403) {
+    return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+  }
+  if (status === 429) {
+    return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+  }
+  res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
 });
 
 // ── HubSpot: Contacts ─────────────────────────────────────────────────────────
@@ -1189,6 +1223,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     bustSharedCache();
     if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status')) {
       _invalidateLeadStatusCountsCache();
+      _invalidateOpenLeadsCache();
     }
     res.json(patchResp.data);
   } catch (e) {
@@ -3406,6 +3441,7 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
       [key, label, next, stage, shorthand]
     );
     _invalidateLeadStatusCountsCache();
+    _invalidateOpenLeadsCache();
     res.status(201).json(rows[0]);
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
@@ -3483,6 +3519,7 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
       [finalKey, newLabel, newOrder, newExcluded, newStage, newShorthand, key]
     );
     _invalidateLeadStatusCountsCache();
+    _invalidateOpenLeadsCache();
     res.json(rows[0]);
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
@@ -3511,6 +3548,7 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
     }
     await pool.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
     _invalidateLeadStatusCountsCache();
+    _invalidateOpenLeadsCache();
     res.json({ ok: true });
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
@@ -3822,6 +3860,7 @@ app.patch('/api/admin/hubspot/dev-filter', isAuthenticated, requireAdmin, async 
     // the new filter setting immediately.
     bustSharedCache();
     _invalidateLeadStatusCountsCache();
+    _invalidateOpenLeadsCache();
     res.json({ ok: true, enabled });
   } catch (e) {
     console.error('PATCH /api/admin/hubspot/dev-filter error:', e.message);
