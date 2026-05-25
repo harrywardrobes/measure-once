@@ -90,14 +90,24 @@ function checkPasswordPolicy(pw: string, userInputs: string[]): string | null {
 }
 
 export function ProfilePage(): React.ReactElement {
-  const appUser = getAppUser();
+  // bootstrap() in core.js populates window.state.user asynchronously and fires
+  // `mo:user` on every change. The React island mounts before bootstrap finishes,
+  // so seed from window.state.user and re-read on each mo:user event.
+  const [appUser, setAppUser] = React.useState<AppUser | null>(() => getAppUser());
   const [profile, setProfile] = React.useState<Profile | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = React.useState(0);
 
   React.useEffect(() => {
-    if (!appUser) { setLoading(false); return; }
+    const refresh = () => setAppUser(getAppUser());
+    window.addEventListener('mo:user', refresh);
+    if (!appUser) refresh();
+    return () => window.removeEventListener('mo:user', refresh);
+  }, [appUser]);
+
+  React.useEffect(() => {
+    if (!appUser) return;
     let cancelled = false;
     setLoading(true); setError(null);
     jget<Profile>(`/api/users/${encodeURIComponent(appUser.id)}/profile`)
