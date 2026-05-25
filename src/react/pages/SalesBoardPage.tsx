@@ -97,6 +97,7 @@ interface WindowGlobals {
     leadStatusKey: string | undefined,
     hwSubstatusValue: string | undefined,
   ) => string;
+  __salesBoardBootstrapFailed?: { code: string | undefined; message: string } | undefined;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -815,7 +816,12 @@ export function SalesBoardPage() {
   // Bootstrap-failure error state — fires when core.js bootstrap() throws and
   // dispatches 'sales-board-bootstrap-failed' instead of writing to #sales-view
   // innerHTML (which would orphan this React tree).
-  const [bootstrapFailed, setBootstrapFailed] = useState(false);
+  // Read the window flag synchronously as the initial value so the component
+  // shows the error immediately even when the event fired before this chunk
+  // finished loading (race condition: bootstrap can fail before React mounts).
+  const [bootstrapFailed, setBootstrapFailed] = useState(
+    () => !!(window as unknown as WindowGlobals).__salesBoardBootstrapFailed,
+  );
   useEffect(() => {
     const onBootstrapFail = () => setBootstrapFailed(true);
     document.addEventListener('sales-board-bootstrap-failed', onBootstrapFail);
@@ -837,6 +843,9 @@ export function SalesBoardPage() {
 
   useEffect(() => {
     const onReady = () => {
+      // Clear the window flag so a successful reload after a failure doesn't
+      // immediately re-show the error on the next mount.
+      (window as unknown as WindowGlobals).__salesBoardBootstrapFailed = undefined;
       setBootstrapFailed(false);
       forceUpdate();
     };

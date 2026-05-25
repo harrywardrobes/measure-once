@@ -325,7 +325,10 @@ async function bootstrap() {
     // Sales page: dispatch an event so the React SalesBoardPage component can
     // render a proper error state inside the board area. Writing innerHTML to
     // #sales-view would destroy #sales-board-mount and orphan the React tree.
+    // Also persist the failure on window so a late-mounting component can detect
+    // it synchronously (the React chunk may not have loaded yet when this fires).
     if (salesView && !list && !projectView) {
+      window.__salesBoardBootstrapFailed = { code: e.code, message: e.message };
       document.dispatchEvent(new CustomEvent('sales-board-bootstrap-failed', {
         detail: { code: e.code, message: e.message },
       }));
