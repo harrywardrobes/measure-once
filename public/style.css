@@ -6248,31 +6248,28 @@ body.dv-signoff-page {
   background: #f3f4f6; cursor: zoom-in;
 }
 
-/* ── Admin page ─────────────────────────────────────────────────────────────
-   All admin-specific layout consolidated here from public/admin.html. Every
-   rule below is scoped under .admin-page (the <body> class on admin.html) so
-   class names that overlap with shared rules elsewhere (.toast, .btn-primary,
-   .card etc.) keep their admin-specific appearance without affecting other
-   pages. Z-index values use the ladder tokens defined on :root.
-─────────────────────────────────────────────────────────────────────────────── */
-.admin-page .header-icon-btn,
-.admin-page .cp-hint-bar { display: none !important; }
+/* ── Shared admin-derived design tokens ─────────────────────────────────────
+   Rules below were originally written for /admin but use generic class names
+   (.card, .tabs, .modal, .badge, .lvl, .field, secondary .btn variants).
+   Audit (May 2026): no other page uses these bare class names in markup —
+   other pages namespace their variants (.eq-card, .trades-modal, .db-tabs,
+   .auth-card, etc.) — so promoting them to global has zero impact today and
+   gives future pages a ready-made design-system vocabulary.
+   The remaining .admin-page-scoped block below keeps things that genuinely
+   need to override or live only inside the admin shell (.btn-primary plum
+   override, .toast slide-from-bottom variant, table element selectors,
+   admin-specific layout chrome, the permissions matrix, audit feed, etc.).
+─────────────────────────────────────────────────────────────────────────── */
 
-.admin-page { min-height: 100vh; }
-
-.admin-page .page { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
-.admin-page .page-title { font-size: 1.25rem; font-weight: 700; margin: 0 0 2px; }
-.admin-page .page-sub   { color: var(--ink-3); font-size: .88rem; margin: 0 0 22px; }
-
-/* Tabs */
-.admin-page .tabs {
+/* Tabs (also used by future settings-style pages) */
+.tabs {
   display: flex; gap: 2px;
   border-bottom: 2px solid var(--stone);
   margin-bottom: 24px;
   overflow-x: auto; overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
 }
-.admin-page .tab-btn {
+.tab-btn {
   padding: 9px 16px;
   font-size: .82rem; font-weight: 600;
   color: var(--ink-3);
@@ -6284,34 +6281,137 @@ body.dv-signoff-page {
   transition: color .15s, background .15s;
   white-space: nowrap; flex-shrink: 0;
 }
-.admin-page .tab-btn:hover  { color: var(--ink-1); background: var(--stone-soft); }
-.admin-page .tab-btn.active { color: var(--plum); border-bottom-color: var(--plum); }
-.admin-page .tab-badge {
+.tab-btn:hover  { color: var(--ink-1); background: var(--stone-soft); }
+.tab-btn.active { color: var(--plum); border-bottom-color: var(--plum); }
+.tab-badge {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 5px;
   background: var(--orchid); color: #fff;
   border-radius: var(--radius-pill);
   font-size: .65rem; font-weight: 700; margin-left: 5px;
 }
-.admin-page .tab-panel         { display: none; }
-.admin-page .tab-panel.active  { display: block; }
+.tab-panel         { display: none; }
+.tab-panel.active  { display: block; }
 
-/* Card */
-.admin-page .card {
+/* Card panel */
+.card {
   background: var(--chalk);
   border: 1px solid var(--stone);
   border-radius: var(--radius-lg);
   padding: 20px; margin-bottom: 20px;
   box-shadow: var(--shadow-sm);
 }
-.admin-page .card-title {
+.card-title {
   font-size: .75rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: .06em;
   color: var(--ink-3); margin: 0 0 16px;
 }
-.admin-page .card-count { font-weight: 400; color: var(--ink-4); }
+.card-count { font-weight: 400; color: var(--ink-4); }
 
-/* Table */
+/* Privilege level / status pill */
+.lvl {
+  display: inline-block; padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  font-size: .7rem; font-weight: 700;
+  text-transform: capitalize; letter-spacing: .02em;
+}
+.lvl-viewer  { background: #f3f4f6; color: #6b7280; }
+.lvl-member  { background: #e5e7eb; color: #374151; }
+.lvl-manager { background: #6b7280; color: #fff; }
+.lvl-admin   { background: #111827; color: #fff; }
+/* User-status pill variants (re-skinned .lvl badges used on the Team table). */
+.lvl-needs-info {
+  background: var(--status-warn-bg);
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+.lvl-active {
+  background: var(--status-success-bg);
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+/* Status badges */
+.badge {
+  display: inline-block; padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: .7rem; font-weight: 600; text-transform: capitalize;
+}
+.badge-pending  { background: var(--status-warn-bg); color: #92400e; }
+.badge-approved { background: var(--status-success-bg); color: #166534; }
+.badge-rejected { background: var(--status-danger-bg); color: var(--status-danger-text); }
+
+/* Secondary button variants. Pairs with the global .btn base defined above.
+   .btn-primary stays scoped under .admin-page (admin uses plum, the global
+   .btn-primary used elsewhere is orchid). */
+.btn-danger  { background: var(--chalk); color: var(--status-danger-text); border-color: #fecaca; }
+.btn-danger:hover:not(:disabled)  { background: var(--status-danger-bg); }
+.btn-ghost   { background: var(--chalk); color: var(--ink-2); border-color: var(--stone); }
+.btn-ghost:hover:not(:disabled)   { background: var(--stone-soft); }
+.btn-approve { background: #059669; color: #fff; border: none; }
+.btn-approve:hover:not(:disabled) { background: #047857; }
+.btn-reject  { background: var(--chalk); color: var(--status-danger-text); border-color: #fecaca; }
+.btn-reject:hover:not(:disabled)  { background: var(--status-danger-bg); }
+
+/* Field inputs (compact text input used in admin forms and inline edit rows). */
+.field {
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: .82rem; font-family: inherit;
+  color: var(--ink-1); background: #fff;
+  outline: none;
+  transition: border-color .15s;
+}
+.field:focus { border-color: var(--orchid); }
+.field-upper { text-transform: uppercase; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(20,20,19,.52);
+  display: flex; align-items: center; justify-content: center;
+  z-index: var(--z-modal); padding: 16px;
+}
+.modal-overlay.hidden { display: none; }
+.modal {
+  background: var(--chalk);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%; max-width: 640px;
+  padding: 24px;
+  max-height: 90vh; overflow-y: auto;
+}
+.modal--sm  { max-width: 440px; }
+.modal-title { font-size: 1rem; font-weight: 700; margin: 0 0 2px; color: var(--ink-1); }
+.modal-sub   { font-size: .78rem; color: var(--ink-4); margin: 0 0 18px; }
+.modal-err   { font-size: .8rem; color: var(--status-danger-text); margin-top: 10px; display: none; }
+.modal-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+  margin-top: 20px; padding-top: 16px;
+  border-top: 1px solid var(--stone);
+}
+
+/* ── Admin page ─────────────────────────────────────────────────────────────
+   Rules that genuinely live only inside the admin shell. The .admin-page
+   body class survives because of:
+     - the .btn-primary (plum) and .toast overrides below (they would collide
+       with the global versions if unscoped),
+     - bare element selectors (table/th/td) we don't want leaking globally,
+     - layout chrome and admin-only widgets (matrix, audit feed, perm-toggle,
+       Search-Settings rows, etc.).
+   Z-index values use the ladder tokens defined on :root.
+─────────────────────────────────────────────────────────────────────────── */
+.admin-page .header-icon-btn,
+.admin-page .cp-hint-bar { display: none !important; }
+
+.admin-page { min-height: 100vh; }
+
+.admin-page .page { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
+.admin-page .page-title { font-size: 1.25rem; font-weight: 700; margin: 0 0 2px; }
+.admin-page .page-sub   { color: var(--ink-3); font-size: .88rem; margin: 0 0 22px; }
+
+/* Table (bare element selectors — kept scoped to avoid bleeding globally) */
 .admin-page table { width: 100%; border-collapse: collapse; font-size: .875rem; }
 .admin-page th {
   text-align: left; padding: 8px 12px;
@@ -6331,39 +6431,6 @@ body.dv-signoff-page {
 }
 .admin-page .table-empty--padded { padding: 28px 0; }
 
-/* Privilege level badges */
-.admin-page .lvl {
-  display: inline-block; padding: 2px 9px;
-  border-radius: var(--radius-pill);
-  font-size: .7rem; font-weight: 700;
-  text-transform: capitalize; letter-spacing: .02em;
-}
-.admin-page .lvl-viewer  { background: #f3f4f6; color: #6b7280; }
-.admin-page .lvl-member  { background: #e5e7eb; color: #374151; }
-.admin-page .lvl-manager { background: #6b7280; color: #fff; }
-.admin-page .lvl-admin   { background: #111827; color: #fff; }
-/* User-status pill variants (re-skinned .lvl badges used on the Team table). */
-.admin-page .lvl-needs-info {
-  background: var(--status-warn-bg);
-  color: #92400e;
-  border: 1px solid #fde68a;
-}
-.admin-page .lvl-active {
-  background: var(--status-success-bg);
-  color: #166534;
-  border: 1px solid #bbf7d0;
-}
-
-/* Status badges */
-.admin-page .badge {
-  display: inline-block; padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  font-size: .7rem; font-weight: 600; text-transform: capitalize;
-}
-.admin-page .badge-pending  { background: var(--status-warn-bg); color: #92400e; }
-.admin-page .badge-approved { background: var(--status-success-bg); color: #166534; }
-.admin-page .badge-rejected { background: var(--status-danger-bg); color: var(--status-danger-text); }
-
 /* Avatar */
 .admin-page .avatar {
   width: 28px; height: 28px; border-radius: 50%;
@@ -6381,40 +6448,11 @@ body.dv-signoff-page {
 .admin-page .user-cell-role { font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
 .admin-page .actions-nowrap { white-space: nowrap; }
 
-/* Buttons (admin variants override the orchid .btn-primary used elsewhere). */
-.admin-page .btn {
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 8px 16px;
-  font-size: .88rem; font-weight: 600;
-  cursor: pointer; font-family: inherit;
-  transition: background .15s, opacity .15s;
-  white-space: nowrap;
-}
-.admin-page .btn:disabled { opacity: .55; cursor: not-allowed; }
+/* Admin's plum .btn-primary overrides the global orchid one. The shared .btn
+   base lives in the "Shared button base" block earlier in this file; admin's
+   copy of it has been removed because the two declarations were identical. */
 .admin-page .btn-primary { background: var(--plum); color: #fff; }
 .admin-page .btn-primary:hover:not(:disabled) { background: #2e0f5a; }
-.admin-page .btn-danger  { background: var(--chalk); color: var(--status-danger-text); border-color: #fecaca; }
-.admin-page .btn-danger:hover:not(:disabled)  { background: var(--status-danger-bg); }
-.admin-page .btn-ghost   { background: var(--chalk); color: var(--ink-2); border-color: var(--stone); }
-.admin-page .btn-ghost:hover:not(:disabled)   { background: var(--stone-soft); }
-.admin-page .btn-approve { background: #059669; color: #fff; border: none; }
-.admin-page .btn-approve:hover:not(:disabled) { background: #047857; }
-.admin-page .btn-reject  { background: var(--chalk); color: var(--status-danger-text); border-color: #fecaca; }
-.admin-page .btn-reject:hover:not(:disabled)  { background: var(--status-danger-bg); }
-
-/* Field inputs */
-.admin-page .field {
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-sm);
-  padding: 6px 10px;
-  font-size: .82rem; font-family: inherit;
-  color: var(--ink-1); background: #fff;
-  outline: none;
-  transition: border-color .15s;
-}
-.admin-page .field:focus { border-color: var(--orchid); }
-.admin-page .field-upper { text-transform: uppercase; }
 
 /* Inline edit row */
 .admin-page .edit-row td { background: var(--stone-soft); padding: 10px 12px; }
@@ -6605,31 +6643,8 @@ body.dv-signoff-page {
   font-size: .72rem; opacity: .85;
 }
 
-/* Edit user modal */
-.admin-page .modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(20,20,19,.52);
-  display: flex; align-items: center; justify-content: center;
-  z-index: var(--z-modal); padding: 16px;
-}
-.admin-page .modal-overlay.hidden { display: none; }
-.admin-page .modal {
-  background: var(--chalk);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  width: 100%; max-width: 640px;
-  padding: 24px;
-  max-height: 90vh; overflow-y: auto;
-}
-.admin-page .modal--sm  { max-width: 440px; }
-.admin-page .modal-title { font-size: 1rem; font-weight: 700; margin: 0 0 2px; color: var(--ink-1); }
-.admin-page .modal-sub   { font-size: .78rem; color: var(--ink-4); margin: 0 0 18px; }
-.admin-page .modal-err   { font-size: .8rem; color: var(--status-danger-text); margin-top: 10px; display: none; }
-.admin-page .modal-actions {
-  display: flex; gap: 8px; justify-content: flex-end;
-  margin-top: 20px; padding-top: 16px;
-  border-top: 1px solid var(--stone);
-}
+/* Edit user modal styling is now globally available — see .modal-overlay /
+   .modal rules at the top of the shared admin-derived block above. */
 
 /* Permissions toggle */
 .admin-page .perm-toggle {
