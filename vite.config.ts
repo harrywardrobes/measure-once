@@ -21,12 +21,20 @@ import { resolve } from 'path';
  * AppThemeProvider, IslandErrorBoundary).
  *
  * Always-loaded chunks (every page, confirmed via bundle analysis):
- *   main.js           mount detection + shell UI    ~8 kB gzip
- *   vendor            react + react-dom + @mui/*   ~160 kB gzip
- *   vendor-mui-icons  icons used by GlobalHeader    ~5 kB gzip
+ *   main.js           mount detection + shell UI      ~9 kB gzip
+ *   vendor-react      react + react-dom + scheduler  ~46 kB gzip
+ *   vendor-emotion    @emotion/* styling engine       ~11 kB gzip
+ *   vendor-mui        @mui/material + system + base ~104 kB gzip
+ *   vendor-mui-icons  icons used by GlobalHeader       ~5 kB gzip
  *                     and BottomNav (always present)
  *                     ─────────────────────────────────────────
- *                     TOTAL always-loaded          ~173 kB gzip
+ *                     TOTAL always-loaded            ~175 kB gzip
+ *
+ * Splitting into three vendor chunks (vendor-react / vendor-emotion /
+ * vendor-mui) gives tighter cache boundaries: a MUI patch release only
+ * busts vendor-mui (~95 kB) rather than the entire ~160 kB vendor blob.
+ * Dependency order (react → emotion → mui) is acyclic so Rollup does not
+ * emit circular-chunk warnings.
  *
  * Lazy chunks (downloaded only when needed):
  *   vendor-zxcvbn     zxcvbn password-strength library (~819 kB / 398 kB
@@ -87,18 +95,27 @@ export default defineConfig({
             return 'vendor-mui-icons';
           }
 
-          // React runtime + MUI core + Emotion are merged into one chunk.
-          // MUI imports React internally, so splitting them creates Rollup
-          // circular-chunk warnings; keeping them together avoids that and
-          // still gives long-lived caching for this stable group.
+          // React runtime — no upstream deps within node_modules.
+          // Use /node_modules/react/ (not just /react/) so that
+          // @emotion/react is not accidentally captured here.
           if (
-            id.includes('/react-dom/') ||
-            id.includes('/react/') ||
-            id.includes('/scheduler/') ||
-            id.includes('/@mui/') ||
-            id.includes('/@emotion/')
+            id.includes('/node_modules/react-dom/') ||
+            id.includes('/node_modules/react/') ||
+            id.includes('/node_modules/scheduler/')
           ) {
-            return 'vendor';
+            return 'vendor-react';
+          }
+
+          // Emotion styling engine — depends on react, not on MUI.
+          if (id.includes('/@emotion/')) {
+            return 'vendor-emotion';
+          }
+
+          // MUI core packages (icons-material already handled above).
+          // Depends on react + emotion, so comes last; acyclic ordering
+          // prevents Rollup circular-chunk warnings.
+          if (id.includes('/@mui/')) {
+            return 'vendor-mui';
           }
 
           // All other node_modules: let Rollup split them automatically.
