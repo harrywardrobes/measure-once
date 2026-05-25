@@ -30,7 +30,8 @@
     "test:db-editor": "node test/db-editor/run.js",
     "test:db-editor-blocking-rows": "node test/db-editor/blocking-rows.js",
     "test:window-ui-smoke": "node test/window-ui-smoke/run.js",
-    "test:ci": "npm run test:privileges && npm run test:lead-status-sync && npm run test:lead-status-sync-customer-detail && npm run test:card-action-handlers && npm run test:design-visit-qb-resubmit && npm run test:hw-test-user && npm run test:start-design-visit && npm run test:design-visit && npm run test:design-visit-list && npm run test:dv-catalogue-admin && npm run test:dv-catalogue-image-upload && npm run test:dv-catalogue-reorder && npm run test:db-editor && npm run test:db-editor-blocking-rows && npm run test:window-ui-smoke",
+    "test:sign-off-stale-link": "node test/sign-off-stale-link/run.js",
+    "test:ci": "npm run test:privileges && npm run test:lead-status-sync && npm run test:lead-status-sync-customer-detail && npm run test:card-action-handlers && npm run test:design-visit-qb-resubmit && npm run test:hw-test-user && npm run test:start-design-visit && npm run test:design-visit && npm run test:design-visit-list && npm run test:dv-catalogue-admin && npm run test:dv-catalogue-image-upload && npm run test:dv-catalogue-reorder && npm run test:db-editor && npm run test:db-editor-blocking-rows && npm run test:window-ui-smoke && npm run test:sign-off-stale-link",
     "backfill:ec-name-casing": "node scripts/backfill-ec-name-casing.js"
   },
   "dependencies": {
