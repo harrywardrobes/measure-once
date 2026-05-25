@@ -1169,29 +1169,49 @@ export function CustomersPage(): React.ReactElement {
             }}
           />
 
-          <FormControl size="small" sx={{ minWidth: 200 }} disabled={viewMode !== 'all'}>
-            <InputLabel htmlFor="lead-status-filter" shrink>
-              Lead status
-            </InputLabel>
-            <Select
-              native
-              label="Lead status"
-              value={leadStatus}
-              onChange={(e) => {
-                const v = (e.target as HTMLSelectElement).value;
-                setLeadStatus(v);
-                setSubstatus('');
-                setPage(1);
+          {/* Keep the select in the DOM at all times so populateLeadStatusFilter()
+              can find it via getElementById. While statuses are still loading
+              we overlay a Skeleton and hide the FormControl with
+              visibility:hidden (which preserves DOM presence). */}
+          <Box sx={{ position: 'relative', minWidth: 200, flexShrink: 0 }}>
+            {!store.loaded && (
+              <Skeleton
+                variant="rounded"
+                sx={{ position: 'absolute', inset: 0, zIndex: 1 }}
+              />
+            )}
+            <FormControl
+              size="small"
+              sx={{
+                minWidth: 200,
+                width: '100%',
+                visibility: store.loaded ? 'visible' : 'hidden',
               }}
-              slotProps={{ input: { id: 'lead-status-filter', name: 'lead-status-filter' } }}
+              disabled={viewMode !== 'all'}
             >
-              {/* Native options are managed by populateLeadStatusFilter() so
-                  the existing lead-status-sync test can mutate them
-                  directly. React seeds an initial empty option here so the
-                  control renders before the first fetch completes. */}
-              <option value="">All statuses</option>
-            </Select>
-          </FormControl>
+              <InputLabel htmlFor="lead-status-filter" shrink>
+                Lead status
+              </InputLabel>
+              <Select
+                native
+                label="Lead status"
+                value={leadStatus}
+                onChange={(e) => {
+                  const v = (e.target as HTMLSelectElement).value;
+                  setLeadStatus(v);
+                  setSubstatus('');
+                  setPage(1);
+                }}
+                slotProps={{ input: { id: 'lead-status-filter', name: 'lead-status-filter' } }}
+              >
+                {/* Native options are managed by populateLeadStatusFilter() so
+                    the existing lead-status-sync test can mutate them
+                    directly. React seeds an initial empty option here so the
+                    control renders before the first fetch completes. */}
+                <option value="">All statuses</option>
+              </Select>
+            </FormControl>
+          </Box>
 
           <FormControl size="small" sx={{ minWidth: 180 }}>
             <InputLabel id="customers-sort-label">Sort by</InputLabel>
