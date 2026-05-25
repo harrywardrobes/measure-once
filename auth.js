@@ -1326,6 +1326,13 @@ async function setupAuth(app) {
       if (firstGuess) meta.first_name = firstGuess;
       if (lastGuess)  meta.last_name  = lastGuess;
 
+      // Optional contact details captured by the admin at approval time.
+      const trimTo = (v, max) => (v || '').toString().trim().slice(0, max) || null;
+      const approveMobile = trimTo(req.body?.mobile_number, 30);
+      if (approveMobile) meta.mobile_number = approveMobile;
+      const approveEcPhone = trimTo(req.body?.ec_phone, 30);
+      if (approveEcPhone) meta.ec_phone = approveEcPhone;
+
       // Admin-chosen role at approval time (optional — defaults to member).
       const requestedRole = (req.body?.job_role || '').trim() || null;
       let chosenRole = null;

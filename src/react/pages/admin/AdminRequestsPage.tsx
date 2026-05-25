@@ -1,13 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert, AlertTitle, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
-  DialogContent, DialogTitle, FormControl, InputLabel, Link, MenuItem, Select,
+  DialogContent, DialogTitle, FormControl, Grid, InputLabel, Link, MenuItem, Select,
   Skeleton, Stack, Table, TableBody, TableCell, TableContainer, TableHead,
-  TableRow, Typography,
+  TableRow, TextField, Typography,
 } from '@mui/material';
 import LanguageIcon from '@mui/icons-material/Language';
 import PhoneIcon from '@mui/icons-material/Phone';
 import { api, toast, fmtDate, emitAdminChange, onAdminChange, setRequestsBadge } from './adminApi';
+import {
+  findPhoneDuplicate,
+  describePhoneDuplicate,
+  type PhoneDuplicateMatch,
+} from './adminPhoneHelpers';
 
 type Req = { id: number; name: string; email: string; status: string; created_at?: string };
 type User = {
@@ -17,6 +22,8 @@ type User = {
 type Allowed = {
   email: string; metadata?: Record<string, string>;
 };
+type ApproveForm = { mobile_number: string; ec_phone: string };
+const EMPTY_APPROVE_FORM: ApproveForm = { mobile_number: '', ec_phone: '' };
 type ApproveDuplicate =
   | { kind: 'user'; label: string; email: string }
   | { kind: 'allowed'; label: string; email: string };
@@ -58,6 +65,9 @@ export function AdminRequestsPage() {
   const [approveRole, setApproveRole] = useState('');
   const [approveErr, setApproveErr] = useState<string | null>(null);
   const [approveBusy, setApproveBusy] = useState(false);
+  const [approveForm, setApproveForm] = useState<ApproveForm>({ ...EMPTY_APPROVE_FORM });
+  const [debouncedApproveMobile, setDebouncedApproveMobile] = useState('');
+  const [debouncedApproveEcPhone, setDebouncedApproveEcPhone] = useState('');
 
   async function load() {
     try {
@@ -120,16 +130,28 @@ export function AdminRequestsPage() {
     if (typeof sw === 'function') sw('team');
   }
 
-  function openApprove(r: Req) { setApproving(r); setApproveRole(''); setApproveErr(null); }
+  function openApprove(r: Req) {
+    setApproving(r); setApproveRole(''); setApproveErr(null);
+    setApproveForm({ ...EMPTY_APPROVE_FORM });
+    setDebouncedApproveMobile(''); setDebouncedApproveEcPhone('');
+  }
   async function confirmApprove() {
     if (!approving) return;
     if (approveDuplicate) {
       setApproveErr('This email is already in use — see the notice above.');
       return;
     }
+    if (mobileDuplicate || ecPhoneDuplicate) {
+      setApproveErr('A phone number is already in use — see the notice above.');
+      return;
+    }
     setApproveBusy(true); setApproveErr(null);
     try {
-      await api('POST', `/api/admin/requests/${approving.id}/approve`, { job_role: approveRole || null });
+      await api('POST', `/api/admin/requests/${approving.id}/approve`, {
+        job_role: approveRole || null,
+        mobile_number: approveForm.mobile_number.trim() || null,
+        ec_phone: approveForm.ec_phone.trim() || null,
+      });
       toast('Approved — user can now sign in');
       setApproving(null);
       emitAdminChange('requests'); emitAdminChange('team');
@@ -138,6 +160,36 @@ export function AdminRequestsPage() {
     } finally {
       setApproveBusy(false);
     }
+  }
+
+  // Debounce the optional phone fields so the duplicate check only runs once
+  // typing pauses (mirrors the Add team member form on the Team tab).
+  useEffect(() => {
+    const value = approveForm.mobile_number;
+    const t = setTimeout(() => setDebouncedApproveMobile(value), 300);
+    return () => clearTimeout(t);
+  }, [approveForm.mobile_number]);
+
+  useEffect(() => {
+    const value = approveForm.ec_phone;
+    const t = setTimeout(() => setDebouncedApproveEcPhone(value), 300);
+    return () => clearTimeout(t);
+  }, [approveForm.ec_phone]);
+
+  const mobileDuplicate: PhoneDuplicateMatch | null = useMemo(
+    () => findPhoneDuplicate(debouncedApproveMobile, users, allowed),
+    [debouncedApproveMobile, users, allowed],
+  );
+  const ecPhoneDuplicate: PhoneDuplicateMatch | null = useMemo(
+    () => findPhoneDuplicate(debouncedApproveEcPhone, users, allowed),
+    [debouncedApproveEcPhone, users, allowed],
+  );
+
+  function viewPhoneDuplicate(match: PhoneDuplicateMatch) {
+    // Both kinds live on the Team tab; jump there so admins can find the
+    // existing record.
+    jumpToTeamTab();
+    void match;
   }
 
   async function rejectReq(id: number) {
@@ -426,6 +478,52 @@ export function AdminRequestsPage() {
               {jobRoles.map(r => <MenuItem key={r.name} value={r.name}>{r.name}</MenuItem>)}
             </Select>
           </FormControl>
+
+          <Typography variant="overline" sx={{ mt: 2, display: 'block' }}>Contact details (optional)</Typography>
+          <Typography variant="caption" component="p" color="text.secondary" sx={{ mb: 1 }}>
+            Capture phone numbers now if you have them — they'll be saved to this person's profile.
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField fullWidth label="Mobile number" type="tel" value={approveForm.mobile_number}
+                onChange={(e) => setApproveForm({ ...approveForm, mobile_number: e.target.value })}
+                placeholder="+44 7700 900000" inputProps={{ maxLength: 30 }} />
+              {mobileDuplicate && (() => {
+                const d = describePhoneDuplicate(mobileDuplicate);
+                return (
+                  <Alert severity="warning" sx={{ mt: 1 }}
+                    action={
+                      <Button color="inherit" size="small" onClick={() => viewPhoneDuplicate(mobileDuplicate)}>
+                        {d.cta}
+                      </Button>
+                    }>
+                    <AlertTitle>{d.title}</AlertTitle>
+                    {d.body}
+                  </Alert>
+                );
+              })()}
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField fullWidth label="Emergency contact phone" type="tel" value={approveForm.ec_phone}
+                onChange={(e) => setApproveForm({ ...approveForm, ec_phone: e.target.value })}
+                placeholder="+44 7700 900000" inputProps={{ maxLength: 30 }} />
+              {ecPhoneDuplicate && (() => {
+                const d = describePhoneDuplicate(ecPhoneDuplicate);
+                return (
+                  <Alert severity="warning" sx={{ mt: 1 }}
+                    action={
+                      <Button color="inherit" size="small" onClick={() => viewPhoneDuplicate(ecPhoneDuplicate)}>
+                        {d.cta}
+                      </Button>
+                    }>
+                    <AlertTitle>{d.title}</AlertTitle>
+                    {d.body}
+                  </Alert>
+                );
+              })()}
+            </Grid>
+          </Grid>
+
           {approveErr && <Alert severity="error" sx={{ mt: 2 }}>{approveErr}</Alert>}
         </DialogContent>
         <DialogActions>
@@ -434,8 +532,14 @@ export function AdminRequestsPage() {
             variant="contained"
             color="success"
             onClick={confirmApprove}
-            disabled={approveBusy || !!approveDuplicate}
-            title={approveDuplicate ? 'This email is already in use' : undefined}
+            disabled={approveBusy || !!approveDuplicate || !!mobileDuplicate || !!ecPhoneDuplicate}
+            title={
+              approveDuplicate
+                ? 'This email is already in use'
+                : (mobileDuplicate || ecPhoneDuplicate)
+                  ? 'A phone number is already in use'
+                  : undefined
+            }
           >
             {approveBusy ? 'Approving…' : 'Approve'}
           </Button>

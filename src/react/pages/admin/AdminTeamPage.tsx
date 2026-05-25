@@ -10,7 +10,6 @@ import {
   api, toast, fmtDate, fmtDateShort, emitAdminChange, onAdminChange,
   setTeamCount, PRIVILEGE_LEVELS, PRIVILEGE_LABEL,
 } from './adminApi';
-
 type User = {
   id: string;
   email?: string;
@@ -84,22 +83,6 @@ type PhoneDuplicateMatch =
 
 function normalizeEmail(e: string): string {
   return (e || '').trim().toLowerCase();
-}
-
-function phoneDigits(s: string | undefined): string {
-  return String(s || '').replace(/\D+/g, '');
-}
-
-// Match two phone numbers if their digit-only forms share the same last 9
-// digits (UK mobile/landline length). Skip anything too short to be meaningful.
-function phoneKey(s: string | undefined): string {
-  const d = phoneDigits(s);
-  if (d.length < 7) return '';
-  return d.length > 9 ? d.slice(-9) : d;
-}
-
-function phoneFieldLabel(field: PhoneField): string {
-  return field === 'mobile_number' ? 'mobile number' : 'emergency contact phone';
 }
 
 function fullName(u: User): string {
