@@ -124,6 +124,8 @@ const ROUTES = [
   { method: 'PUT',    path: '/api/design-visits/0',           level: 'member',  body: {} },
   { method: 'POST',   path: '/api/design-visits/0/submit',    level: 'member',  body: {} },
   { method: 'POST',   path: '/api/design-visits/0/revision',  level: 'member',  body: {} },
+  { method: 'POST',   path: '/api/design-visits/uploads',     level: 'member',  body: {} },
+  { method: 'GET',    path: '/api/design-visit-images/x',     level: 'auth' },
 
   // ── manager-level surface ─────────────────────────────────────────────────
   { method: 'POST',   path: '/api/workflow',                  level: 'manager', body: {} },

@@ -6,6 +6,10 @@ import { SearchSettingsPage } from './pages/SearchSettingsPage';
 import { WorkshopSettingsPage } from './pages/WorkshopSettingsPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { AdminTabsBar } from './components/AdminTabsBar';
+import { AdminTeamPage } from './pages/admin/AdminTeamPage';
+import { AdminPermissionsPage } from './pages/admin/AdminPermissionsPage';
+import { AdminRequestsPage } from './pages/admin/AdminRequestsPage';
+import { AdminAuditLogPage } from './pages/admin/AdminAuditLogPage';
 
 /**
  * Every React mount goes through `AppThemeProvider` so the shared MUI
@@ -35,6 +39,10 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement }> = [
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },
   { id: 'tab-workshop',         render: () => <WorkshopSettingsPage /> },
   { id: 'tab-customers',        render: () => <CustomersPage /> },
+  { id: 'tab-team',             render: () => <AdminTeamPage /> },
+  { id: 'tab-permissions',      render: () => <AdminPermissionsPage /> },
+  { id: 'tab-requests',         render: () => <AdminRequestsPage /> },
+  { id: 'tab-auditlog',         render: () => <AdminAuditLogPage /> },
 ];
 
 function mountKnown(): number {
