@@ -3050,201 +3050,28 @@
       <div class="tab-panel" id="tab-auditlog"></div>
 
       <!-- SETTINGS -->
-      <div class="tab-panel" id="tab-settings">
-        <div class="card">
-          <div class="card-title">Integrations</div>
-          <p class="card-desc adm-card-desc--intro">Connection status for external services used by Measure Once.</p>
-          <div id="hubspot-status-row" class="adm-integration-row">
-            <div class="adm-integration-row-label">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" class="flex-shrink-0">
-                <rect width="18" height="18" rx="4" fill="#FF7A59"/>
-                <text x="9" y="13" text-anchor="middle" font-size="10" font-weight="700" fill="#fff" font-family="sans-serif">HS</text>
-              </svg>
-              <span class="adm-text-strong-sm">HubSpot CRM</span>
-            </div>
-            <span id="hubspot-status-badge" class="adm-status-badge">Checking…</span>
-          </div>
+      <!--
+        Settings, Card actions, Action handlers, Design visit, and Dev
+        environment tabs are React islands (src/react/pages/admin/*.tsx).
+        Each MUI shell preserves the legacy inner mount divs / input ids
+        (#hubspot-status-badge, #lead-statuses-table-wrap, #ls-new-key,
+        #card-actions-table-wrap, #card-action-handlers-wrap,
+        #card-action-handlers-conflict-banner, #dv-handles-wrap,
+        #dv-furniture-wrap, #dv-door-styles-wrap, #dv-terms-current,
+        #dv-terms-editor, #dv-terms-new-text, #dv-terms-history,
+        #dev-test-users-section, #dev-test-users-list,
+        #dev-filter-global-toggle, #dev-filter-toggle-label,
+        #dev-backfill-btn, #dev-backfill-result) so the legacy loaders
+        (loadHubspotStatus, loadLeadStatusesAdmin, loadDevTestUsers,
+        loadCardActionsAdmin, loadCardActionHandlersAdmin, loadDvCatalogue)
+        and the test:card-action-handlers / test:lead-status-sync selectors
+        keep working unchanged.
+      -->
+      <div class="tab-panel" id="tab-settings"></div>
+      <div class="tab-panel" id="tab-cardactions"></div>
+      <div class="tab-panel" id="tab-actionhandlers"></div>
+      <div class="tab-panel" id="tab-designvisit"></div>
 
-          <div class="adm-divider"></div>
-
-          <div class="adm-section-head">
-            <div>
-              <div class="adm-text-strong-sm">Lead Statuses</div>
-              <p class="card-desc adm-card-desc--tight">Define the HubSpot lead status values and their display labels. Statuses marked "Excl. from Sales" are hidden from the Sales board.</p>
-            </div>
-            <button class="btn btn-primary adm-btn-save" onclick="saveAllLeadStatuses()">Save</button>
-          </div>
-
-          <div id="lead-statuses-table-wrap">
-            <p class="admin-msg admin-msg--muted">Loading…</p>
-          </div>
-
-          <div class="adm-mini-form">
-            <div class="adm-mini-form-title">Add new status</div>
-            <div class="adm-mini-form-row">
-              <div class="adm-mini-field">
-                <label class="adm-mini-label">Key (e.g. AWAITING_PHOTOS)</label>
-                <input id="ls-new-key" type="text" class="field adm-key-input" placeholder="KEY" maxlength="64"
-                  oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'')">
-              </div>
-              <div class="adm-mini-field adm-mini-field--md">
-                <label class="adm-mini-label">Stage</label>
-                <select id="ls-new-stage" class="field adm-fs-80">
-                  <option value="">—</option>
-                  <option value="SALES">Sales</option>
-                  <option value="DESIGN_VISIT">Design Visit</option>
-                  <option value="SURVEY">Survey</option>
-                  <option value="ORDER">Order</option>
-                  <option value="WORKSHOP">Workshop</option>
-                  <option value="PACKING">Packing</option>
-                  <option value="DELIVERY">Delivery</option>
-                  <option value="INSTALLATION">Installation</option>
-                  <option value="AFTERCARE">Aftercare</option>
-                  <option value="CUSTOMER_SERVICE">Customer Service</option>
-                </select>
-              </div>
-              <div class="adm-mini-field adm-mini-field--wide">
-                <label class="adm-mini-label">Display label</label>
-                <input id="ls-new-label" type="text" class="field" placeholder="Human-readable label" maxlength="128">
-              </div>
-              <button class="btn btn-primary adm-add-status-btn" onclick="addLeadStatus()">Add status</button>
-            </div>
-            <div id="ls-add-error" class="adm-msg-err-xs hidden"></div>
-          </div>
-        </div>
-
-        <!-- Dev test users (hidden in production) -->
-        <div class="card hidden" id="dev-test-users-section">
-          <div class="adm-dtu-header">
-            <div>
-              <div class="card-title adm-dtu-title">Dev test users</div>
-              <p class="card-desc admin-msg">In development mode the customer list is filtered to contacts marked below. Toggle a contact to include or exclude it from the dev view.</p>
-            </div>
-          </div>
-
-          <!-- Global dev filter toggle -->
-          <div id="dev-filter-toggle-row" class="adm-dtu-toggle-row">
-            <div>
-              <div class="adm-text-strong-sm">Dev filter</div>
-              <div class="adm-text-muted-mt">When ON, only contacts marked below appear in the Customers list and lead-status counts. Turn OFF to see all HubSpot contacts as in production.</div>
-            </div>
-            <label class="ss-toggle flex-shrink-0" title="Toggle dev filter">
-              <input type="checkbox" id="dev-filter-global-toggle" checked onchange="setDevFilter(this.checked)">
-              <span class="ss-toggle-track"></span>
-            </label>
-          </div>
-          <div id="dev-filter-toggle-label" class="adm-dtu-status-badge">Dev filter: ON</div>
-
-          <!-- Backfill action -->
-          <div class="adm-dtu-backfill-row">
-            <button class="btn adm-dtu-backfill-btn" id="dev-backfill-btn" onclick="backfillTestUserDefaults()">Set unset contacts to false</button>
-            <span id="dev-backfill-result" class="adm-text-muted-sm"></span>
-          </div>
-
-          <div id="dev-test-users-list" class="adm-dtu-list">
-            <p class="admin-msg admin-msg--muted">Loading…</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- CARD ACTIONS -->
-      <div class="tab-panel" id="tab-cardactions">
-        <div class="card">
-          <div class="adm-section-head">
-            <div>
-              <div class="card-title admin-msg">Card action labels</div>
-              <p class="card-desc adm-card-desc--tight">The bottom strip on Sales &amp; Survey cards. One row per (stage × lead status); rows mirror the order of the Lead Statuses table in Settings and refresh automatically when that table is reordered or renamed.</p>
-            </div>
-            <button class="btn btn-primary adm-btn-save" onclick="saveAllCardActionLabels()">Save</button>
-          </div>
-
-          <div id="card-actions-table-wrap">
-            <p class="admin-msg admin-msg--muted">Loading…</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- ACTION HANDLERS -->
-      <div class="tab-panel" id="tab-actionhandlers">
-        <div class="card">
-          <div class="adm-section-head">
-            <div>
-              <div class="card-title admin-msg">Action handlers</div>
-              <p class="card-desc adm-card-desc--tight">Every action label from the Card actions table is listed here. Use <em>+ Add action</em> on a row to make that label clickable on Sales / Survey cards; the attached action's exact behaviour (which APIs are called, which calendars or emails are affected) is described inline once added.</p>
-            </div>
-          </div>
-          <div id="card-action-handlers-conflict-banner" class="hidden adm-mb-12"></div>
-          <div id="card-action-handlers-wrap">
-            <p class="admin-msg admin-msg--muted">Loading…</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- DESIGN VISIT -->
-      <div class="tab-panel" id="tab-designvisit">
-        <!-- ── Design Visit Catalogue ──────────────────────────────────── -->
-        <div class="card">
-          <div class="adm-section-head adm-section-head--tight">
-            <div>
-              <div class="card-title admin-msg">Design Visit — Handles</div>
-              <p class="card-desc adm-card-desc--tight">Handle options displayed in the design visit wizard for the customer to choose from.</p>
-            </div>
-            <button class="btn btn-primary adm-btn-save" onclick="openDvHandleEditor()">+ Add handle</button>
-          </div>
-          <div id="dv-handles-wrap"><p class="admin-msg admin-msg--muted">Loading…</p></div>
-        </div>
-
-        <div class="card">
-          <div class="adm-section-head adm-section-head--tight">
-            <div>
-              <div class="card-title admin-msg">Design Visit — Furniture Ranges</div>
-              <p class="card-desc adm-card-desc--tight">Furniture ranges displayed in the design visit wizard.</p>
-            </div>
-            <button class="btn btn-primary adm-btn-save" onclick="openDvFurnitureEditor()">+ Add range</button>
-          </div>
-          <div id="dv-furniture-wrap"><p class="admin-msg admin-msg--muted">Loading…</p></div>
-        </div>
-
-        <div class="card">
-          <div class="adm-section-head adm-section-head--tight">
-            <div>
-              <div class="card-title admin-msg">Design Visit — Door Styles</div>
-              <p class="card-desc adm-card-desc--tight">Door styles the designer can select per room in the wizard.</p>
-            </div>
-            <button class="btn btn-primary adm-btn-save" onclick="openDvDoorStyleEditor()">+ Add style</button>
-          </div>
-          <div id="dv-door-styles-wrap"><p class="admin-msg admin-msg--muted">Loading…</p></div>
-        </div>
-
-        <div class="card" id="dv-terms-card">
-          <div class="adm-section-head">
-            <div>
-              <div class="card-title admin-msg">Design Visit — Terms &amp; Conditions</div>
-              <p class="card-desc adm-card-desc--tight">Each published revision is versioned and stamped on the visit at submission time. Customers always see the version that was active when their visit was submitted.</p>
-            </div>
-            <button class="btn btn-primary adm-btn-save" onclick="openPublishTermsEditor()">Publish new version</button>
-          </div>
-
-          <!-- Current version display -->
-          <div id="dv-terms-current" class="adm-mb-14">
-            <p class="admin-msg admin-msg--muted">Loading…</p>
-          </div>
-
-          <!-- Inline publish editor (hidden by default) -->
-          <div id="dv-terms-editor" class="hidden adm-terms-editor">
-            <div class="adm-terms-editor-head">New terms text (will become the active version)</div>
-            <textarea id="dv-terms-new-text" class="field adm-terms-textarea" rows="8" maxlength="4000" placeholder="Enter the full terms and conditions text…"></textarea>
-            <div class="adm-terms-editor-actions">
-              <button class="btn btn-ghost" onclick="closeDvTermsEditor()">Cancel</button>
-              <button class="btn btn-primary" onclick="publishDvTermsVersion()">Publish</button>
-            </div>
-            <div id="dv-terms-publish-err" class="hidden adm-terms-publish-err"></div>
-          </div>
-
-          <!-- Version history -->
-          <div id="dv-terms-history" class="adm-mt-8"></div>
-        </div>
-      </div>
 
       <!-- SEARCH SETTINGS -->
       <!--
@@ -3287,59 +3114,16 @@
         "Dev-only admin features".
         ============================================================
       -->
-      <div class="tab-panel" id="tab-devenv" hidden>
-        <div class="adm-devenv-banner">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="adm-devenv-banner-icon">
-            <circle cx="10" cy="10" r="9" fill="#facc15"/>
-            <text x="10" y="15" text-anchor="middle" font-size="12" font-weight="800" fill="#713f12" font-family="sans-serif">!</text>
-          </svg>
-          <div>
-            <div class="adm-devenv-banner-title">You are in development mode</div>
-            <div class="adm-devenv-banner-text">The items listed below are <strong>not visible in the published app</strong>. They are suppressed when <code class="adm-devenv-banner-code">NODE_ENV=production</code>.</div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">Dev-only features in this panel</div>
-          <p class="card-desc adm-mb-16">Each entry below names the feature, the tab it lives in, and why it is excluded from production.</p>
-
-          <div class="adm-devenv-list">
-
-            <div class="adm-devenv-item">
-              <div class="adm-devenv-head">
-                <span class="adm-devenv-name">Dev test users</span>
-                <span class="adm-devenv-loc">Settings tab</span>
-              </div>
-              <p class="adm-devenv-desc">A contact-by-contact toggle that marks individual HubSpot contacts as test data by setting the <code class="adm-inline-code">hw_test_user</code> property. Excluded from production because test-data labelling is only relevant during development and automated testing — it should never be surfaced to a production admin.</p>
-            </div>
-
-            <div class="adm-devenv-item">
-              <div class="adm-devenv-head">
-                <span class="adm-devenv-name">Dev filter toggle</span>
-                <span class="adm-devenv-loc">Settings tab</span>
-              </div>
-              <p class="adm-devenv-desc">A global on/off switch that limits all contact views to test users only (those with <code class="adm-inline-code">hw_test_user = true</code>). Excluded from production because real contact lists must never be filtered to test data only — enabling it in production would hide all real customers from every view.</p>
-            </div>
-
-            <div class="adm-devenv-item">
-              <div class="adm-devenv-head">
-                <span class="adm-devenv-name">Seed contacts cache</span>
-                <span class="adm-devenv-loc">Internal API only</span>
-              </div>
-              <p class="adm-devenv-desc">Internal API endpoint (<code class="adm-inline-code">POST /api/admin/test/seed-contacts-cache</code>) used by automated tests to inject synthetic contacts into the server-side cache without a real HubSpot token. Excluded from production because injecting fake contacts into a live cache would corrupt real customer data.</p>
-            </div>
-
-            <div class="adm-devenv-item">
-              <div class="adm-devenv-head">
-                <span class="adm-devenv-name">Backfill hw_test_user defaults</span>
-                <span class="adm-devenv-loc">Settings tab</span>
-              </div>
-              <p class="adm-devenv-desc">A one-time API action that sets <code class="adm-inline-code">hw_test_user = false</code> on all HubSpot contacts that have no value for the property. Excluded from production because this mass-write operation is only needed during initial development setup and would be a destructive no-op against a live contact database.</p>
-            </div>
-
-          </div>
-        </div>
-      </div>
+      <!--
+        Dev environment tab is now a React island
+        (src/react/pages/admin/DevEnvironmentPage.tsx). The DEV_ONLY_FEATURES
+        array inside that component is the single source of truth for the
+        "Dev-only features in this panel" list — update it when you add a
+        new dev-only admin feature (see replit.md → "Dev-only admin
+        features"). `_applyDevEnvTabVisibility()` still toggles the `hidden`
+        attribute on this mount div based on /api/admin/hubspot/dev-mode.
+      -->
+      <div class="tab-panel" id="tab-devenv" hidden></div>
     `;
 
     // Mount the React island synchronously now that #tab-search and

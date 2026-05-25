@@ -5,6 +5,11 @@ import { DesignSystemPage } from './pages/DesignSystemPage';
 import { SearchSettingsPage } from './pages/SearchSettingsPage';
 import { WorkshopSettingsPage } from './pages/WorkshopSettingsPage';
 import { CustomersPage } from './pages/CustomersPage';
+import { SettingsPage } from './pages/admin/SettingsPage';
+import { CardActionsPage } from './pages/admin/CardActionsPage';
+import { ActionHandlersPage } from './pages/admin/ActionHandlersPage';
+import { DesignVisitPage } from './pages/admin/DesignVisitPage';
+import { DevEnvironmentPage } from './pages/admin/DevEnvironmentPage';
 import { AdminTabsBar } from './components/AdminTabsBar';
 import { AdminTeamPage } from './pages/admin/AdminTeamPage';
 import { AdminPermissionsPage } from './pages/admin/AdminPermissionsPage';
@@ -43,6 +48,11 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement }> = [
   { id: 'tab-permissions',      render: () => <AdminPermissionsPage /> },
   { id: 'tab-requests',         render: () => <AdminRequestsPage /> },
   { id: 'tab-auditlog',         render: () => <AdminAuditLogPage /> },
+  { id: 'tab-settings',         render: () => <SettingsPage /> },
+  { id: 'tab-cardactions',      render: () => <CardActionsPage /> },
+  { id: 'tab-actionhandlers',   render: () => <ActionHandlersPage /> },
+  { id: 'tab-designvisit',      render: () => <DesignVisitPage /> },
+  { id: 'tab-devenv',           render: () => <DevEnvironmentPage /> },
 ];
 
 function mountKnown(): number {
