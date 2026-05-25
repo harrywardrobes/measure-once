@@ -197,6 +197,19 @@ async function ensureDesignVisitTables() {
   await pool.query(`ALTER TABLE design_visits ADD COLUMN IF NOT EXISTS qb_estimate_history JSONB NOT NULL DEFAULT '[]'::jsonb`);
   await pool.query(`CREATE INDEX IF NOT EXISTS design_visits_contact_id_idx ON design_visits (contact_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS design_visits_status_idx ON design_visits (status)`);
+  // Track sign-off token hashes that have been invalidated because the designer
+  // re-opened the visit. Lets the public sign-off route distinguish a genuine
+  // 404 (unknown token) from a stale-but-recognised link so the customer sees a
+  // "your designer is making changes" notice instead of an error page.
+  await pool.query(`
+    ALTER TABLE design_visits
+      ADD COLUMN IF NOT EXISTS superseded_signoff_token_hashes TEXT[]
+        NOT NULL DEFAULT ARRAY[]::TEXT[]
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS design_visits_superseded_token_hashes_idx
+      ON design_visits USING GIN (superseded_signoff_token_hashes)
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS design_visit_rooms (
       id               SERIAL PRIMARY KEY,
@@ -321,9 +334,20 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
   const rawToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  // If a previous sign-off token exists on this visit (e.g. designer re-opening
+  // a submitted visit via POST /:id/submit), remember its hash so the public
+  // sign-off route can recognise the stale link and explain the situation
+  // instead of returning a generic 404.
   await pool.query(`
     UPDATE design_visits
-    SET status = 'submitted', signoff_token_hash = $1, signoff_expires_at = $2, updated_at = NOW()
+    SET status = 'submitted',
+        superseded_signoff_token_hashes = CASE WHEN signoff_token_hash IS NOT NULL
+          AND signoff_token_hash <> $1
+          THEN COALESCE(superseded_signoff_token_hashes, ARRAY[]::TEXT[]) || ARRAY[signoff_token_hash]
+          ELSE superseded_signoff_token_hashes END,
+        signoff_token_hash = $1,
+        signoff_expires_at = $2,
+        updated_at = NOW()
     WHERE id = $3`, [tokenHash, expiresAt.toISOString(), visitId]);
 
   // 2. HubSpot lead status update (non-fatal)
@@ -1287,6 +1311,9 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
         terms_accepted             = $9,
         terms_condition_version_id = $10,
         status                     = 'draft',
+        superseded_signoff_token_hashes = CASE WHEN signoff_token_hash IS NOT NULL
+          THEN COALESCE(superseded_signoff_token_hashes, ARRAY[]::TEXT[]) || ARRAY[signoff_token_hash]
+          ELSE superseded_signoff_token_hashes END,
         signoff_token_hash         = NULL,
         signoff_expires_at         = NULL,
         updated_at                 = NOW()
@@ -1482,7 +1509,14 @@ router.post('/api/design-visits/:id/revision', isAuthenticated, requirePrivilege
   const note = req.body?.note ? String(req.body.note).slice(0, 2000) : null;
   try {
     const r = await pool.query(`
-      UPDATE design_visits SET status='revision_requested', revision_note=$1, updated_at=NOW()
+      UPDATE design_visits SET
+        status='revision_requested',
+        revision_note=$1,
+        superseded_signoff_token_hashes = CASE WHEN signoff_token_hash IS NOT NULL
+          THEN COALESCE(superseded_signoff_token_hashes, ARRAY[]::TEXT[]) || ARRAY[signoff_token_hash]
+          ELSE superseded_signoff_token_hashes END,
+        signoff_token_hash=NULL,
+        updated_at=NOW()
       WHERE id=$2 AND status='submitted' RETURNING id`, [note, id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Visit not found or not in submitted status' });
     res.json({ success: true });
@@ -1498,7 +1532,7 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
   if (!rawToken || rawToken.length > 200) return res.status(404).json({ error: 'Not found' });
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   try {
-    const vr = await pool.query(`
+    let vr = await pool.query(`
       SELECT dv.id, dv.contact_name, dv.contact_email, dv.status,
              dv.signoff_expires_at, dv.visit_date, dv.location, dv.notes,
              dv.terms_accepted, dvh.name AS handle_name, dvfr.name AS furniture_range_name
@@ -1506,13 +1540,32 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
       LEFT JOIN design_visit_handles          dvh  ON dvh.id  = dv.handle_id
       LEFT JOIN design_visit_furniture_ranges dvfr ON dvfr.id = dv.furniture_range_id
       WHERE dv.signoff_token_hash = $1`, [tokenHash]);
-    if (!vr.rows.length) return res.status(404).json({ error: 'Not found' });
+    let superseded = false;
+    if (!vr.rows.length) {
+      // No active token matched — check whether this is a stale-but-recognised
+      // link whose visit has since been re-opened by the designer. In that case
+      // we render the page with a "changes in progress" notice instead of 404.
+      const sup = await pool.query(`
+        SELECT dv.id, dv.contact_name, dv.contact_email, dv.status,
+               dv.signoff_expires_at, dv.visit_date, dv.location, dv.notes,
+               dv.terms_accepted, dvh.name AS handle_name, dvfr.name AS furniture_range_name
+        FROM design_visits dv
+        LEFT JOIN design_visit_handles          dvh  ON dvh.id  = dv.handle_id
+        LEFT JOIN design_visit_furniture_ranges dvfr ON dvfr.id = dv.furniture_range_id
+        WHERE $1 = ANY(dv.superseded_signoff_token_hashes)
+        LIMIT 1`, [tokenHash]);
+      if (!sup.rows.length) return res.status(404).json({ error: 'Not found' });
+      vr = sup;
+      superseded = true;
+    }
     const visit = vr.rows[0];
-    // Always 404 for any token state that is not the expected sign-off window
-    // (submitted + not expired). Avoids oracle leakage on consumed/expired tokens.
-    if (visit.status !== 'submitted') return res.status(404).json({ error: 'Not found' });
-    if (visit.signoff_expires_at && new Date() > new Date(visit.signoff_expires_at)) {
-      return res.status(404).json({ error: 'Not found' });
+    if (!superseded) {
+      // Always 404 for any token state that is not the expected sign-off window
+      // (submitted + not expired). Avoids oracle leakage on consumed/expired tokens.
+      if (visit.status !== 'submitted') return res.status(404).json({ error: 'Not found' });
+      if (visit.signoff_expires_at && new Date() > new Date(visit.signoff_expires_at)) {
+        return res.status(404).json({ error: 'Not found' });
+      }
     }
     // Load rooms
     const rooms = await pool.query(`
@@ -1573,7 +1626,11 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
     res.json({
       id:                 visit.id,
       contactName:        visit.contact_name,
-      status:             visit.status,
+      // When the token is stale (designer re-opened the visit) we expose the
+      // synthetic 'superseded' status so the page can show a "changes in
+      // progress" notice and hide the sign-off form, instead of leaking the
+      // current backend status (draft / revision_requested / etc.).
+      status:             superseded ? 'superseded' : visit.status,
       visitDate:          visit.visit_date,
       location:           visit.location,
       notes:              visit.notes,
@@ -1614,7 +1671,22 @@ router.post('/api/design-visits/sign-off/:token', async (req, res) => {
     const vr = await pool.query(`
       SELECT id, status, signoff_expires_at, contact_name
       FROM design_visits WHERE signoff_token_hash = $1`, [tokenHash]);
-    if (!vr.rows.length) return res.status(404).json({ error: 'Not found' });
+    if (!vr.rows.length) {
+      // No active token — check whether this is a stale link the designer has
+      // since superseded. Reject with a clear 409 so a customer who submits via
+      // a cached form sees a meaningful message instead of a generic error.
+      const sup = await pool.query(
+        `SELECT 1 FROM design_visits WHERE $1 = ANY(superseded_signoff_token_hashes) LIMIT 1`,
+        [tokenHash]
+      );
+      if (sup.rows.length) {
+        return res.status(409).json({
+          status: 'superseded',
+          error: 'Your designer is currently making changes to this visit. A new link will be sent when it\'s ready for your approval.',
+        });
+      }
+      return res.status(404).json({ error: 'Not found' });
+    }
     const visit = vr.rows[0];
     // Token is only actionable while the visit is in submitted state + not expired.
     if (visit.status !== 'submitted') return res.status(404).json({ error: 'Not found' });
@@ -1641,10 +1713,18 @@ router.post('/api/design-visits/sign-off/:token', async (req, res) => {
       } catch {}
       res.json({ success: true, status: 'signed_off' });
     } else {
-      // Invalidate the token on revision too — prevents replay
+      // Invalidate the token on revision too — prevents replay. Track the old
+      // hash so a second click on the link surfaces the "designer is making
+      // changes" notice rather than a generic 404.
       await pool.query(`
-        UPDATE design_visits SET status='revision_requested', revision_note=$1,
-          signoff_token_hash=NULL, updated_at=NOW()
+        UPDATE design_visits SET
+          status='revision_requested',
+          revision_note=$1,
+          superseded_signoff_token_hashes = CASE WHEN signoff_token_hash IS NOT NULL
+            THEN COALESCE(superseded_signoff_token_hashes, ARRAY[]::TEXT[]) || ARRAY[signoff_token_hash]
+            ELSE superseded_signoff_token_hashes END,
+          signoff_token_hash=NULL,
+          updated_at=NOW()
         WHERE id=$2`, [note, visit.id]);
       // Notify team
       try {

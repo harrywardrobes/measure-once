@@ -28,6 +28,15 @@
       </div>
     </div>
 
+    <div id="superseded-banner" class="dv-state-block" style="display:none;background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;padding:16px;border-radius:8px;margin-bottom:16px;">
+      <div class="dv-state-title" style="font-size:1.05rem;margin-bottom:4px;">Changes in progress</div>
+      <div class="dv-state-sub">
+        Your designer is currently making changes to this visit.
+        A new link will be sent when it's ready for your approval.
+        The summary below shows the version you previously received.
+      </div>
+    </div>
+
     <div id="main-content" style="display:none;">
       <h1>Your Design Visit Summary</h1>
       <p class="dv-subtitle" id="visit-subtitle"></p>
@@ -200,6 +209,16 @@
           }
 
           show('main-content');
+
+          // Stale link: the designer has re-opened the visit since this email
+          // was sent. Show the summary as a reference but block sign-off — a
+          // fresh link will be emailed when the new version is ready.
+          if (data.status === 'superseded') {
+            document.getElementById('superseded-banner').style.display = '';
+            const actionCard = document.getElementById('action-card');
+            if (actionCard) actionCard.style.display = 'none';
+            return;
+          }
 
           const btnApprove  = document.getElementById('btn-approve');
           const btnRevision = document.getElementById('btn-revision');
