@@ -129,10 +129,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/workflow',                  level: 'manager', body: {} },
   { method: 'PATCH',  path: '/api/contacts/0/rooms/0/fitter', level: 'manager', body: {}, needsHubspot: true },
   { method: 'GET',    path: '/trades',                        level: 'manager' },
-  // GET /api/trades is currently `isAuthenticated`-only in server.js (no
-  // requireManagerOrAdmin), so the matrix level reflects the actual gate.
-  // Hardening this read endpoint to manager-or-admin is tracked separately.
-  { method: 'GET',    path: '/api/trades',                    level: 'auth' },
+  { method: 'GET',    path: '/api/trades',                    level: 'manager' },
   { method: 'POST',   path: '/api/trades',                    level: 'manager', body: {} },
   { method: 'PUT',    path: '/api/trades/0',                  level: 'manager', body: {} },
   { method: 'GET',    path: '/api/trades/0/audit',            level: 'manager' },

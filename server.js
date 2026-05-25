@@ -2119,7 +2119,7 @@ app.get('/invoices', isAuthenticated, requireManagerOrAdminPage, (_req, res) => 
   res.sendFile(path.join(__dirname, 'public', 'invoices.html'));
 });
 
-app.get('/api/trades', isAuthenticated, async (req, res) => {
+app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
   try {
     const { rows: companies } = await _tradesPool.query(`
       SELECT
