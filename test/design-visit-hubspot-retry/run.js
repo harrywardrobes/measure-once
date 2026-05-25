@@ -3,7 +3,9 @@
 //
 // Focused integration test confirming that dvHubspotRequestWithRetry (in
 // design-visits.js) and hubspotRequestWithRetry (in server.js) recover from
-// a transient HubSpot 429 in the design-visit submission and localdata pipelines.
+// a transient HubSpot 429 in the design-visit submission and localdata pipelines,
+// and that a permanently-failing HubSpot notes endpoint does not prevent the
+// visit row from reaching `submitted` status.
 //
 //   (DV1) design-visit note creation retry — POST /api/design-visits/:id/submit:
 //         first attempt to POST /crm/v3/objects/notes returns 429 + Retry-After: 0;
@@ -13,6 +15,11 @@
 //         with handlerConfig.submittedLeadStatus set: first PATCH to
 //         /crm/v3/objects/contacts/:id returns 429; retry succeeds → endpoint
 //         returns 200.
+//
+//   (DV3) design-visit note permanent failure — POST /api/design-visits/:id/submit
+//         with /crm/v3/objects/notes always returning 500 on every attempt.
+//         The submission still returns 200, the DB row reaches `submitted`, and
+//         no uncaught exception surfaces to the client.
 //
 //   (LD) localdata PATCH retry — POST /api/contacts/:id/localdata: first PATCH
 //        to /crm/v3/objects/contacts/:id returns 429; retry succeeds → endpoint
@@ -118,6 +125,12 @@ function startMockHubspot() {
         calls.push({ method, url, status: 429, at: Date.now() });
         res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '0' });
         return res.end(JSON.stringify({ status: 'error', message: 'rate limited' }));
+      }
+
+      if (rule.mode === 'alwaysFail') {
+        calls.push({ method, url, status: 500, at: Date.now() });
+        res.writeHead(500, { 'Content-Type': 'application/json', 'Retry-After': '0' });
+        return res.end(JSON.stringify({ status: 'error', message: 'internal server error' }));
       }
 
       calls.push({ method, url, status: 200, at: Date.now() });
@@ -317,6 +330,39 @@ async function main() {
       dv2ContactPatches[1]?.status === 200,
       `second status=${dv2ContactPatches[1]?.status}`);
 
+    // ── (DV3) design-visit note permanent failure: POST /crm/v3/objects/notes always 500
+    // dvHubspotRequestWithRetry exhausts all maxAttempts (4), then the outer
+    // try/catch in runSubmitSideEffects swallows the error. The submission
+    // endpoint must still return 200 and the DB row must reach `submitted`.
+    console.log('\n  [DV3] design-visit note POST: permanent 500 → submission still succeeds');
+    await resetVisit(pool, visitId);
+    mock.resetHits();
+    mock.calls.length = 0;
+
+    mock.configEndpoint('/crm/v3/objects/contacts/', 'ok',
+      { id: CONTACT_ID, properties: {} });
+    mock.configEndpoint('/crm/v3/objects/notes', 'alwaysFail', null, 'POST');
+
+    const dv3 = await client.post(`/api/design-visits/${visitId}/submit`, {});
+
+    const dv3NoteCalls = mock.calls.filter(c => c.url.startsWith('/crm/v3/objects/notes'));
+    const dv3Row = await pool.query(
+      `SELECT status FROM design_visits WHERE id = $1`, [visitId]
+    );
+
+    record('DV3.1 submit returns 200 despite note failure',
+      dv3.status === 200,
+      `status=${dv3.status} body=${dv3.text.slice(0, 120)}`);
+    record('DV3.2 DB row is submitted',
+      dv3Row.rows[0]?.status === 'submitted',
+      `db_status=${dv3Row.rows[0]?.status}`);
+    record('DV3.3 notes endpoint exhausted all 4 attempts',
+      dv3NoteCalls.length === 4,
+      `calls=${dv3NoteCalls.length} statuses=${dv3NoteCalls.map(c => c.status).join(',')}`);
+    record('DV3.4 all note attempts returned 500',
+      dv3NoteCalls.every(c => c.status === 500),
+      `statuses=${dv3NoteCalls.map(c => c.status).join(',')}`);
+
     // ── (LD) localdata PATCH: PATCH /crm/v3/objects/contacts/:id → 429 retry
     // POST /api/contacts/:id/localdata first issues a GET (inside a try/catch
     // that swallows errors, so 200 is fine) then issues the rooms PATCH via
@@ -397,6 +443,11 @@ async function writeReport(runId) {
     '  with `handlerConfig.submittedLeadStatus` set. The `PATCH /crm/v3/objects/contacts/:id`',
     '  returns 429 on the first attempt, recovers via `dvHubspotRequestWithRetry`,',
     '  and the endpoint returns 200.',
+    '- **(DV3) design-visit note permanent failure**: `POST /api/design-visits/:id/submit`',
+    '  with `POST /crm/v3/objects/notes` always returning 500. All 4 retry attempts',
+    '  are exhausted; the outer non-fatal `try/catch` in `runSubmitSideEffects` swallows',
+    '  the error. The endpoint still returns 200, the DB row reaches `submitted` status,',
+    '  and no uncaught exception surfaces to the client.',
     '- **(LD) localdata PATCH retry**: `POST /api/contacts/:id/localdata` with the',
     '  `PATCH /crm/v3/objects/contacts/:id` returning 429 on the first attempt.',
     '  Recovers via `hubspotRequestWithRetry` and the endpoint returns 200 (not 502).',
