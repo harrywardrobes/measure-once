@@ -6,7 +6,7 @@ import { useTheme, type Theme } from '@mui/material/styles';
 import HomeIcon from '@mui/icons-material/Home';
 import SellIcon from '@mui/icons-material/Sell';
 import AssignmentIcon from '@mui/icons-material/Assignment';
-import ConstructionIcon from '@mui/icons-material/Construction';
+import SquareFootIcon from '@mui/icons-material/SquareFoot';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import HandymanIcon from '@mui/icons-material/Handyman';
@@ -44,7 +44,7 @@ export const NAV: NavItem[] = [
   { key: 'home',     href: '/',         label: 'Home',     Icon: HomeIcon },
   { key: 'sales',    href: '/sales',    label: 'Sales',    Icon: SellIcon,           managerOnly: true },
   { key: 'survey',   href: '/survey',   label: 'Survey',   Icon: AssignmentIcon,     managerOnly: true },
-  { key: 'projects', href: '/projects', label: 'Projects', Icon: ConstructionIcon,   managerOnly: true },
+  { key: 'projects', href: '/projects', label: 'Projects', Icon: SquareFootIcon,     managerOnly: true },
   { key: 'calendar', href: '/calendar', label: 'Calendar', Icon: CalendarMonthIcon },
   { key: 'invoices', href: '/invoices', label: 'Invoices', Icon: ReceiptLongIcon,    managerOnly: true },
   { key: 'trades',   href: '/trades',   label: 'Trades',   Icon: HandymanIcon },
