@@ -4,13 +4,21 @@ import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
 import { useTheme, type Theme } from '@mui/material/styles';
 import HomeIcon from '@mui/icons-material/Home';
+import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import SellIcon from '@mui/icons-material/Sell';
+import SellOutlinedIcon from '@mui/icons-material/SellOutlined';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import SquareFootIcon from '@mui/icons-material/SquareFoot';
+import SquareFootOutlinedIcon from '@mui/icons-material/SquareFootOutlined';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import HandymanIcon from '@mui/icons-material/Handyman';
+import HandymanOutlinedIcon from '@mui/icons-material/HandymanOutlined';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
+import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 
 /**
  * Bottom navigation bar rendered as a React/MUI island into
@@ -36,19 +44,20 @@ type NavItem = {
   href: string;
   label: string;
   Icon: typeof HomeIcon;
+  IconOutlined: typeof HomeIcon;
   managerOnly?: boolean;
   adminOnly?: boolean;
 };
 
 export const NAV: NavItem[] = [
-  { key: 'home',     href: '/',         label: 'Home',     Icon: HomeIcon },
-  { key: 'sales',    href: '/sales',    label: 'Sales',    Icon: SellIcon,           managerOnly: true },
-  { key: 'survey',   href: '/survey',   label: 'Survey',   Icon: AssignmentIcon,     managerOnly: true },
-  { key: 'projects', href: '/projects', label: 'Projects', Icon: SquareFootIcon,     managerOnly: true },
-  { key: 'calendar', href: '/calendar', label: 'Calendar', Icon: CalendarMonthIcon },
-  { key: 'invoices', href: '/invoices', label: 'Invoices', Icon: ReceiptLongIcon,    managerOnly: true },
-  { key: 'trades',   href: '/trades',   label: 'Trades',   Icon: HandymanIcon },
-  { key: 'ideas',    href: '/ideas',    label: 'Ideas',    Icon: LightbulbIcon },
+  { key: 'home',     href: '/',         label: 'Home',     Icon: HomeIcon,          IconOutlined: HomeOutlinedIcon },
+  { key: 'sales',    href: '/sales',    label: 'Sales',    Icon: SellIcon,          IconOutlined: SellOutlinedIcon,          managerOnly: true },
+  { key: 'survey',   href: '/survey',   label: 'Survey',   Icon: AssignmentIcon,    IconOutlined: AssignmentOutlinedIcon,    managerOnly: true },
+  { key: 'projects', href: '/projects', label: 'Projects', Icon: SquareFootIcon,    IconOutlined: SquareFootOutlinedIcon,    managerOnly: true },
+  { key: 'calendar', href: '/calendar', label: 'Calendar', Icon: CalendarMonthIcon, IconOutlined: CalendarMonthOutlinedIcon },
+  { key: 'invoices', href: '/invoices', label: 'Invoices', Icon: ReceiptLongIcon,   IconOutlined: ReceiptLongOutlinedIcon,   managerOnly: true },
+  { key: 'trades',   href: '/trades',   label: 'Trades',   Icon: HandymanIcon,      IconOutlined: HandymanOutlinedIcon },
+  { key: 'ideas',    href: '/ideas',    label: 'Ideas',    Icon: LightbulbIcon,     IconOutlined: LightbulbOutlinedIcon },
 ];
 
 function accentFor(key: string, theme: Theme): string {
@@ -152,6 +161,8 @@ export function BottomNav() {
       >
         {NAV.map((n) => {
           const accent = accentFor(n.key, theme);
+          const isSelected = value === n.key;
+          const IconComponent = isSelected ? n.Icon : n.IconOutlined;
           return (
             <BottomNavigationAction
               key={n.key}
@@ -160,7 +171,7 @@ export function BottomNav() {
               component="a"
               href={n.href}
               label={n.label}
-              icon={<n.Icon />}
+              icon={<IconComponent />}
               sx={{
                 color: 'text.secondary',
                 minWidth: { xs: 72, sm: 0 },
