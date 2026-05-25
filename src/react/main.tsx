@@ -2,7 +2,12 @@ import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppThemeProvider } from './AppThemeProvider';
 import { IslandErrorBoundary } from './components/IslandErrorBoundary';
-import { PageLoadingSkeleton } from './components/PageLoadingSkeleton';
+import {
+  PageLoadingSkeleton,
+  CustomersPageSkeleton,
+  CalendarPageSkeleton,
+  HomePageSkeleton,
+} from './components/PageLoadingSkeleton';
 
 /*
  * Shell components that are always present on every page are imported
@@ -46,11 +51,15 @@ const AdminAuditLogPage  = React.lazy(() => import('./pages/admin/AdminAuditLogP
  * Lazy page components are wrapped in `Suspense` (fallback: nothing) so
  * the rest of the page is never blocked while a chunk downloads.
  */
-function withTheme(node: React.ReactElement, islandId: string): React.ReactElement {
+function withTheme(
+  node: React.ReactElement,
+  islandId: string,
+  fallback: React.ReactElement = <PageLoadingSkeleton />,
+): React.ReactElement {
   return (
     <AppThemeProvider>
       <IslandErrorBoundary islandId={islandId}>
-        <Suspense fallback={<PageLoadingSkeleton />}>{node}</Suspense>
+        <Suspense fallback={fallback}>{node}</Suspense>
       </IslandErrorBoundary>
     </AppThemeProvider>
   );
@@ -69,18 +78,18 @@ function withTheme(node: React.ReactElement, islandId: string): React.ReactEleme
  * The vite-dev playground (`src/react/index.html`) provides a `#root`
  * element so `npm run dev:react` still gives a standalone preview.
  */
-const MOUNTS: Array<{ id: string; render: () => React.ReactElement }> = [
+const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: React.ReactElement }> = [
   { id: 'app-header-mount',     render: () => <GlobalHeader /> },
   { id: 'page-heading-mount',   render: () => <PageHeadingPanel /> },
   { id: 'app-bottom-nav-mount', render: () => <BottomNav /> },
-  { id: 'home-view',            render: () => <HomePage /> },
-  { id: 'tab-calendar',         render: () => <CalendarPage /> },
+  { id: 'home-view',            render: () => <HomePage />,     fallback: <HomePageSkeleton /> },
+  { id: 'tab-calendar',         render: () => <CalendarPage />, fallback: <CalendarPageSkeleton /> },
   { id: 'profile-view',         render: () => <ProfilePage /> },
   { id: 'admin-mui-tabs-mount', render: () => <AdminTabsBar /> },
   { id: 'tab-designsystem',     render: () => <DesignSystemPage /> },
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },
   { id: 'tab-workshop',         render: () => <WorkshopSettingsPage /> },
-  { id: 'tab-customers',        render: () => <CustomersPage /> },
+  { id: 'tab-customers',        render: () => <CustomersPage />, fallback: <CustomersPageSkeleton /> },
   { id: 'tab-team',             render: () => <AdminTeamPage /> },
   { id: 'tab-permissions',      render: () => <AdminPermissionsPage /> },
   { id: 'tab-requests',         render: () => <AdminRequestsPage /> },
@@ -107,7 +116,7 @@ function mountKnown(): number {
     if (el.dataset.dsRendered === '1') { count++; continue; }
     el.dataset.dsRendered = '1';
     try {
-      createRoot(el).render(withTheme(m.render(), m.id));
+      createRoot(el).render(withTheme(m.render(), m.id, m.fallback));
     } catch (err) {
       // Synchronous throw during initial render() — extremely rare, but if
       // it happens we want a visible message rather than a blank panel.
