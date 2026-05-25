@@ -90,8 +90,8 @@ async function injectSession(page, jar) {
 //
 // IMPORTANT: stamp window.__renderToken so the BC/visibilitychange assertions
 // can prove the tracker re-rendered in place (no full page reload).
-async function bootstrapTracker(page, currentLs, currentSub = '') {
-  return page.evaluate(async (lsKey, subVal) => {
+async function bootstrapTracker(page, currentLs, currentSub = '', role = 'admin') {
+  return page.evaluate(async (lsKey, subVal, userRole) => {
     const wv = document.getElementById('workflow-view');
     if (wv) {
       wv.innerHTML = '<div class="workflow-inner"><div id="workflow-stages" class="space-y-2"></div></div>';
@@ -107,11 +107,13 @@ async function bootstrapTracker(page, currentLs, currentSub = '') {
       },
     };
     state.selectedContactId = '999999999';
+    state.user = { privilege_level: userRole };
+    window.__moHeaderUser = { privilege_level: userRole };
     state.focusedLeadStatus = null; // let renderer clamp to current
     window.__renderToken = window.__renderToken || ('tok_' + Math.random().toString(36).slice(2));
     if (typeof renderWorkflowStages === 'function') renderWorkflowStages();
     return { renderToken: window.__renderToken };
-  }, currentLs, currentSub);
+  }, currentLs, currentSub, role);
 }
 
 async function trackerSnapshot(page) {
@@ -1039,7 +1041,7 @@ async function main() {
     // The page bootstrap can't render its own header because /api/contacts/:id
     // 503s under the stripped HUBSPOT_TOKEN, so we inject a #workflow-header
     // mount the same way probe C does for #workflow-stages.
-    await bootstrapTracker(viewerTab, KEY_A, '');
+    await bootstrapTracker(viewerTab, KEY_A, '', 'viewer');
     await viewerTab.evaluate(() => {
       const wv = document.getElementById('workflow-view');
       if (wv && !document.getElementById('workflow-header')) {
