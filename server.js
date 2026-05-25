@@ -4110,6 +4110,21 @@ app.post('/api/admin/test/bust-contacts-cache', isAuthenticated, requireAdmin, (
   res.json({ ok: true });
 });
 
+// ── Dev-only: expire the open-leads fresh cache ───────────────────────────────
+// Sets _openLeadsCache.fetchedAt = 0 so the TTL check fails on the next
+// request (triggering a fresh HubSpot fetch), while keeping the cached data
+// intact so the stale-fallback path is exercisable: if that fresh fetch also
+// fails, the handler falls back to the now-expired _openLeadsCache as stale.
+// Does NOT clear _openLeadsCache to null — that would prevent stale fallback.
+// Only available when NODE_ENV !== 'production'.
+app.post('/api/admin/test/bust-open-leads-cache', isAuthenticated, requireAdmin, (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  if (_openLeadsCache) _openLeadsCache.fetchedAt = 0;
+  res.json({ ok: true, hadCache: _openLeadsCache !== null });
+});
+
 // ── Admin: toggle HW_test_user on a contact ───────────────────────────────────
 // The production guard runs as a middleware *before* requireHubspotToken so
 // the 404 is returned even when HUBSPOT_TOKEN is absent.

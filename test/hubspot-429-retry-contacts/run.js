@@ -17,6 +17,13 @@
 //        /crm/v3/objects/contacts/search returns 429 + Retry-After: 0;
 //        retry succeeds → endpoint returns leads.
 //
+//   (OL-R) open-leads recovery — after _openLeadsCache is warmed (OL state),
+//          its TTL is expired via bust-open-leads-cache, a 429 storm causes
+//          stale data to be served, then switching HubSpot back to ok causes
+//          the next request to perform a fresh fetch (HubSpot is actually
+//          called, X-Cache-Status is not stale). A follow-up request is served
+//          from the newly populated in-memory cache with no new HubSpot call.
+//
 //   (CA-F) contacts-all exhausted — all retry attempts return 429 with no
 //          prior good cache → endpoint returns 502 with code HUBSPOT_RATE_LIMIT.
 //
@@ -394,6 +401,103 @@ async function main() {
       olSearchCalls[1]?.status === 200,
       `second status=${olSearchCalls[1]?.status}`);
 
+    // ── (OL-R) open-leads: recovery after 429 storm ───────────────────────────
+    // Continues directly from OL state on Server 1:
+    //   _openLeadsCache — populated with a fresh result from the OL test
+    // Step 1: expire the cache via bust-open-leads-cache (sets fetchedAt = 0).
+    //         The data is kept so the stale-fallback path can be exercised.
+    // Step 2: switch mock to alwaysFail and make a GET — cache is expired so a
+    //         fresh HubSpot fetch is attempted; all retries fail; _openLeadsCache
+    //         is still non-null so the handler falls back to stale data.
+    // Step 3: switch mock back to 'ok' — the cache is still expired (fetchedAt
+    //         was not updated during the stale serve), so the next request must
+    //         perform a real HubSpot fetch.  The response must:
+    //           • return 200
+    //           • NOT have X-Cache-Status: stale (fresh data returned)
+    //           • show at least one successful HubSpot search call in mock.calls
+    //         A follow-up GET must be served from the newly populated in-memory
+    //         cache with no additional HubSpot call.
+    console.log('\n  [OL-R] open-leads: recovery after 429 storm → stale → fresh → cached');
+
+    // Step 1: expire _openLeadsCache so the TTL check fails on the next request.
+    const olrBust = await httpPost(BASE, '/api/admin/test/bust-open-leads-cache', {}, adminCookie);
+    record('OL-R.1 bust-open-leads-cache succeeds',
+      olrBust.status === 200 && olrBust.json?.ok === true,
+      `status=${olrBust.status} body=${olrBust.body.slice(0, 120)}`);
+
+    // Step 2: exhaust retries — stale data should be served.
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint(
+      '/crm/v3/objects/contacts/search',
+      'alwaysFail',
+      null,
+    );
+
+    const olrStale = await httpGet(BASE, '/api/open-leads', cookie);
+
+    const olrStaleSearchCalls = mock.calls.filter(c =>
+      c.url.startsWith('/crm/v3/objects/contacts/search'),
+    );
+
+    record('OL-R.2 stale response returns 200',
+      olrStale.status === 200,
+      `status=${olrStale.status}`);
+    record('OL-R.3 results array present in stale response',
+      olrStale.json && Array.isArray(olrStale.json.results),
+      `body=${olrStale.body.slice(0, 160)}`);
+    record('OL-R.4 X-Cache-Status is stale',
+      olrStale.headers['x-cache-status'] === 'stale',
+      `x-cache-status=${olrStale.headers['x-cache-status']}`);
+    record('OL-R.5 all search attempts during stale request were 429s (4 attempts)',
+      olrStaleSearchCalls.length === 4 && olrStaleSearchCalls.every(c => c.status === 429),
+      `search calls=${olrStaleSearchCalls.length} statuses=${olrStaleSearchCalls.map(c => c.status).join(',')}`);
+
+    // Step 3: switch mock back to ok — recovery fetch must not return stale.
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint(
+      '/crm/v3/objects/contacts/search',
+      'ok',
+      CONTACTS_SEARCH_SUCCESS,
+    );
+
+    const olrFresh = await httpGet(BASE, '/api/open-leads', cookie);
+
+    const olrFreshSearchCalls = mock.calls.filter(c =>
+      c.url.startsWith('/crm/v3/objects/contacts/search'),
+    );
+
+    record('OL-R.6 endpoint returns 200 after storm clears',
+      olrFresh.status === 200,
+      `status=${olrFresh.status}`);
+    record('OL-R.7 results array present in fresh response',
+      olrFresh.json && Array.isArray(olrFresh.json.results),
+      `body=${olrFresh.body.slice(0, 160)}`);
+    record('OL-R.8 X-Cache-Status is not stale (fresh data returned)',
+      olrFresh.headers['x-cache-status'] !== 'stale',
+      `x-cache-status=${olrFresh.headers['x-cache-status']}`);
+    record('OL-R.9 HubSpot was actually called during recovery fetch',
+      olrFreshSearchCalls.length >= 1 && olrFreshSearchCalls.every(c => c.status === 200),
+      `search calls=${olrFreshSearchCalls.length} statuses=${olrFreshSearchCalls.map(c => c.status).join(',')}`);
+
+    // Follow-up GET — must be served from the newly populated in-memory cache
+    // with no new outbound HubSpot call.
+    mock.calls.length = 0;
+
+    const olrCached = await httpGet(BASE, '/api/open-leads', cookie);
+
+    const olrCachedSearchCalls = mock.calls.filter(c =>
+      c.url.startsWith('/crm/v3/objects/contacts/search'),
+    );
+
+    record('OL-R.10 follow-up GET returns 200 (in-memory cache hit)',
+      olrCached.status === 200,
+      `status=${olrCached.status}`);
+    record('OL-R.11 no new HubSpot call for follow-up GET (served from cache)',
+      olrCachedSearchCalls.length === 0,
+      `search calls=${olrCachedSearchCalls.length}`);
+
     // ── (CA-F) contacts-all: all retries exhausted, no prior cache → 502 ──────
     // Server 2 starts cold (no caches). Mock is set to alwaysFail so every
     // attempt returns 429. With no _allContactsLastGood to fall back on the
@@ -639,6 +743,14 @@ async function writeReport(runId) {
     '- **(OL) open-leads retry**: `GET /api/open-leads` with',
     '  `/crm/v3/objects/contacts/search` returning 429 on the first attempt',
     '  recovers via `hubspotSearchWithRetry` and returns a valid leads list.',
+    '- **(OL-R) open-leads recovery after 429 storm**: after `_openLeadsCache` is',
+    '  warmed by OL, `bust-open-leads-cache` expires the TTL (sets `fetchedAt=0`).',
+    '  A sustained HubSpot outage (all 4 retries returning 429) causes stale data',
+    '  to be served (`X-Cache-Status: stale`). Once HubSpot stops rate-limiting',
+    '  (mock switches from `alwaysFail` back to `ok`), the next request performs',
+    '  a fresh fetch — `X-Cache-Status` is not `stale` and at least one successful',
+    '  search call is recorded. A follow-up request is served from the newly',
+    '  populated `_openLeadsCache` with no new HubSpot call (`search calls = 0`).',
     '- **(CA-F) contacts-all exhausted, no cache**: `GET /api/contacts-all` with',
     '  `/crm/v3/objects/contacts/search` returning 429 on every attempt',
     '  (all 4 retries exhausted) and no prior good cache → returns 502 with',
