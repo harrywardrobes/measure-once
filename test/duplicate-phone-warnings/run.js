@@ -1079,6 +1079,38 @@ async function main() {
         !!(submitState && submitState.disabled === true && /phone/i.test(submitState.title)),
       );
 
+      // Clear the duplicate → notice must hide → submit must re-enable.
+      await setNativeInputValue(page, '#tf-company-phone', '');
+
+      const coPhoneNoticeClearedEdit = await pollPage(page, () => {
+        const n = document.getElementById('tf-company-phone-notice');
+        return n ? n.classList.contains('hidden') : true;
+      }, null, 3000);
+      record(
+        'TRADES EDIT CO-PHONE: #tf-company-phone-notice hides after clearing the duplicate',
+        '#tf-company-phone-notice has class "hidden"',
+        coPhoneNoticeClearedEdit ? 'notice hidden' : 'notice still visible',
+        coPhoneNoticeClearedEdit === true,
+      );
+
+      const coPhoneSubmitReenabledEdit = await page.evaluate(() => {
+        const btn = document.getElementById('trades-submit-btn');
+        return btn ? !btn.disabled : null;
+      });
+      record(
+        'TRADES EDIT CO-PHONE: #trades-submit-btn re-enables after clearing the company-phone duplicate',
+        'submit-btn not disabled',
+        coPhoneSubmitReenabledEdit === null ? 'no button' : `disabled=${!coPhoneSubmitReenabledEdit}`,
+        coPhoneSubmitReenabledEdit === true,
+      );
+
+      // Restore the duplicate so the notice link is present for the click-link test below.
+      await setNativeInputValue(page, '#tf-company-phone', TRADES_CO_PHONE);
+      await pollPage(page, () => {
+        const n = document.getElementById('tf-company-phone-notice');
+        return !!(n && !n.classList.contains('hidden'));
+      }, null, 3000);
+
       // Click the notice link → modal should re-open in Edit mode for company A.
       await page.evaluate(() => {
         const link = document.querySelector('#tf-company-phone-notice .trades-phone-notice-link');
@@ -1205,8 +1237,9 @@ async function writeReport(runId, findings) {
     '- **(TRADES – Edit mode, company-phone)** Opens Company B in Edit mode, types',
     "  Company A's `company_phone` into `#tf-company-phone`, and asserts",
     '  `#tf-company-phone-notice` appears naming Company A, links to Company A',
-    '  via `data-trade-id`, `#trades-submit-btn` is disabled, and clicking the',
-    '  link re-opens the modal in Edit mode for Company A.',
+    '  via `data-trade-id`, and `#trades-submit-btn` is disabled. Then clears',
+    '  the field, asserts the notice hides and the button re-enables, restores',
+    '  the duplicate, and asserts clicking the link re-opens Company A in Edit mode.',
     '',
   ];
   const outPath = path.join(dir, 'duplicate-phone-warnings.md');
