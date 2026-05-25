@@ -146,6 +146,72 @@
   --stage-customerservice-bg:    #475569;
   --stage-customerservice-light: #f1f5f9;
   --stage-customerservice-text:  #1e293b;
+
+  /* ── Typography scale ───────────────────────────────────────────────────────
+     One set of three tokens per MUI typography variant, mirroring the values
+     in src/react/theme.ts. The Design System Tokens tab reads these via
+     useLiveCssVar() so overriding any variable in DevTools immediately updates
+     the live preview row without a page reload.
+     If you change a value in theme.ts, keep this block in sync.
+  ─────────────────────────────────────────────────────────────────────────── */
+  --typo-h1-font-size:          2rem;
+  --typo-h1-font-weight:        700;
+  --typo-h1-line-height:        1.2;
+
+  --typo-h2-font-size:          1.5rem;
+  --typo-h2-font-weight:        700;
+  --typo-h2-line-height:        1.25;
+
+  --typo-h3-font-size:          1.25rem;
+  --typo-h3-font-weight:        700;
+  --typo-h3-line-height:        1.3;
+
+  --typo-h4-font-size:          1.125rem;
+  --typo-h4-font-weight:        700;
+  --typo-h4-line-height:        1.35;
+
+  --typo-h5-font-size:          1rem;
+  --typo-h5-font-weight:        700;
+  --typo-h5-line-height:        1.4;
+
+  --typo-h6-font-size:          0.875rem;
+  --typo-h6-font-weight:        700;
+  --typo-h6-line-height:        1.45;
+
+  --typo-subtitle1-font-size:   0.95rem;
+  --typo-subtitle1-font-weight: 600;
+  --typo-subtitle1-line-height: 1.5;
+
+  --typo-subtitle2-font-size:   0.82rem;
+  --typo-subtitle2-font-weight: 600;
+  --typo-subtitle2-line-height: 1.5;
+
+  --typo-body1-font-size:       0.95rem;
+  --typo-body1-font-weight:     400;
+  --typo-body1-line-height:     1.55;
+
+  --typo-body2-font-size:       0.82rem;
+  --typo-body2-font-weight:     400;
+  --typo-body2-line-height:     1.55;
+
+  --typo-button-font-size:      0.88rem;
+  --typo-button-font-weight:    600;
+  --typo-button-line-height:    1.75;
+
+  --typo-caption-font-size:     0.72rem;
+  --typo-caption-font-weight:   400;
+  --typo-caption-line-height:   1.4;
+
+  --typo-overline-font-size:    0.68rem;
+  --typo-overline-font-weight:  700;
+  --typo-overline-line-height:  2.66;
+
+  /* ── Spacing unit ───────────────────────────────────────────────────────────
+     MUI's base spacing unit in pixels. SpacingRow in the Design System Tokens
+     tab multiplies this by the step multiplier to draw the bar widths.
+     Override in DevTools to see all spacing bars rescale live.
+  ─────────────────────────────────────────────────────────────────────────── */
+  --spacing-unit: 8;
 }
 
 /* ── Reset ───────────────────────────────────────────────────────────────────── */
