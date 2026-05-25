@@ -302,8 +302,50 @@ const TYPOGRAPHY_VARIANTS = [
   'button','caption','overline',
 ] as const;
 
-function TokensTab() {
+function TypographyRow({ variant }: { variant: typeof TYPOGRAPHY_VARIANTS[number] }) {
   const theme = useTheme();
+  const spec = theme.typography[variant] as { fontSize?: string | number; fontWeight?: number | string; lineHeight?: number | string };
+  const fallbackSize   = String(spec.fontSize   ?? '');
+  const fallbackWeight = String(spec.fontWeight  ?? '');
+  const fallbackLh     = String(spec.lineHeight  ?? '');
+
+  const fontSize   = useLiveCssVar(`--typo-${variant}-font-size`,   fallbackSize);
+  const fontWeight = useLiveCssVar(`--typo-${variant}-font-weight`,  fallbackWeight);
+  const lineHeight  = useLiveCssVar(`--typo-${variant}-line-height`, fallbackLh);
+
+  return (
+    <Box sx={{ py: 1.25, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'baseline', gap: 2, flexWrap: 'wrap' }}>
+      <Box sx={{ minWidth: 140 }}>
+        <Typography variant="subtitle2" sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{variant}</Typography>
+        <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'ui-monospace, monospace' }}>
+          {fontSize} · w{fontWeight} · lh{lineHeight}
+        </Typography>
+      </Box>
+      <Typography variant={variant} sx={{ flex: 1, minWidth: 200 }}>
+        The quick brown fox jumps over the lazy dog
+      </Typography>
+    </Box>
+  );
+}
+
+function SpacingRow({ n }: { n: typeof SPACING_STEPS[number] }) {
+  const unitStr = useLiveCssVar('--spacing-unit', '8');
+  const px = parseFloat(unitStr) * n;
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      <Box sx={{ minWidth: 120 }}>
+        <CodeRef>theme.spacing({n})</CodeRef>
+      </Box>
+      <Box sx={{ width: px, height: 16, bgcolor: 'primary.main', borderRadius: 0.5 }} />
+      <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace', color: 'text.secondary' }}>
+        {px}px
+      </Typography>
+    </Box>
+  );
+}
+
+function TokensTab() {
   return (
     <>
       <TokenCard title="Brand colours">
@@ -337,22 +379,9 @@ function TokensTab() {
           {' '}<CodeRef>{`<Typography variant="h3">`}</CodeRef>.
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', divider: 1 }}>
-          {TYPOGRAPHY_VARIANTS.map((v) => {
-            const spec = theme.typography[v] as { fontSize?: string | number; fontWeight?: number | string; lineHeight?: number | string };
-            return (
-              <Box key={v} sx={{ py: 1.25, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'baseline', gap: 2, flexWrap: 'wrap' }}>
-                <Box sx={{ minWidth: 140 }}>
-                  <Typography variant="subtitle2" sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{v}</Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'ui-monospace, monospace' }}>
-                    {String(spec.fontSize || '')} · w{String(spec.fontWeight || '')} · lh{String(spec.lineHeight || '')}
-                  </Typography>
-                </Box>
-                <Typography variant={v} sx={{ flex: 1, minWidth: 200 }}>
-                  The quick brown fox jumps over the lazy dog
-                </Typography>
-              </Box>
-            );
-          })}
+          {TYPOGRAPHY_VARIANTS.map((v) => (
+            <TypographyRow key={v} variant={v} />
+          ))}
         </Box>
       </TokenCard>
 
@@ -362,20 +391,9 @@ function TokensTab() {
           the shorthand <CodeRef>{`sx={{ p: 2 }}`}</CodeRef> (= 16&nbsp;px).
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {SPACING_STEPS.map((n) => {
-            const px = Number(theme.spacing(n).toString().replace('px',''));
-            return (
-              <Box key={n} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Box sx={{ minWidth: 120 }}>
-                  <CodeRef>theme.spacing({n})</CodeRef>
-                </Box>
-                <Box sx={{ width: px, height: 16, bgcolor: 'primary.main', borderRadius: 0.5 }} />
-                <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace', color: 'text.secondary' }}>
-                  {px}px
-                </Typography>
-              </Box>
-            );
-          })}
+          {SPACING_STEPS.map((n) => (
+            <SpacingRow key={n} n={n} />
+          ))}
         </Box>
       </TokenCard>
 
