@@ -193,7 +193,9 @@ async function _loadOpenLeadsImpl() {
     if (data.code) err.code = data.code;
     throw err;
   }
-  state.openLeadsStale = r.headers.get('X-Cache-Status') === 'stale';
+  const cacheStatus = r.headers.get('X-Cache-Status');
+  if (cacheStatus === 'fresh') state.openLeadsStale = false;
+  else if (cacheStatus === 'stale') state.openLeadsStale = true;
   state.contacts = data.results || [];
   _reapplyPendingLeadStatuses();
   state.filteredContacts = [...state.contacts];
