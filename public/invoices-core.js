@@ -303,6 +303,21 @@ function _invStatusVariant(statusKey) {
   return 'neutral';
 }
 
+const _INV_PILL_BASE = 'display:inline-flex;align-items:center;padding:2px 9px;border-radius:var(--radius-pill);font-size:.72rem;font-weight:600;line-height:1.4';
+const _INV_PILL_COLORS = {
+  success: 'background:var(--status-success-bg);color:var(--status-success-text)',
+  danger:  'background:var(--status-danger-bg);color:var(--status-danger-text)',
+  warn:    'background:var(--status-warn-bg);color:var(--status-warn-text)',
+  info:    'background:var(--orchid-tint);color:var(--orchid-deep)',
+  neutral: 'background:var(--stone-soft);color:var(--ink-2)',
+};
+function _invStatusPill(label, variantOrKey, isKey) {
+  const variant = isKey ? _invStatusVariant(variantOrKey) : variantOrKey;
+  const colors = _INV_PILL_COLORS[variant] || _INV_PILL_COLORS.neutral;
+  const safe = (typeof escHtml === 'function') ? escHtml(label) : String(label);
+  return `<span style="${_INV_PILL_BASE};${colors}">${safe}</span>`;
+}
+
 function renderInvoicePanelBody() {
   const inv   = state.qb.panel;
   if (!inv) return;
@@ -334,7 +349,7 @@ function renderInvoicePanelBody() {
       <li class="inv-jump-item${d.selected ? ' inv-jump-item--active' : ''}"
           role="option" aria-selected="${d.selected}"
           onclick="jumpToInvoice(${d.i}); closeInvoiceJumpDropdown()">
-        ${d.statusLabel ? UI.renderPill(d.statusLabel, _invStatusVariant(d.statusKey)) : ''}
+        ${d.statusLabel ? _invStatusPill(d.statusLabel, d.statusKey, true) : ''}
         <span class="inv-jump-item-label">${escHtml(d.label)}</span>
       </li>`).join('');
 
@@ -347,7 +362,7 @@ function renderInvoicePanelBody() {
       <span class="inv-nav-docnum">#${escHtml(inv.docNumber || inv.id)}</span>
       <div class="inv-jump-dropdown" id="inv-jump-dd">
         <button class="inv-jump-trigger" onclick="toggleInvoiceJumpDropdown(event)" aria-haspopup="listbox" aria-expanded="false" aria-label="Jump to invoice">
-          ${currentItem.statusLabel ? UI.renderPill(currentItem.statusLabel, _invStatusVariant(currentItem.statusKey)) : ''}
+          ${currentItem.statusLabel ? _invStatusPill(currentItem.statusLabel, currentItem.statusKey, true) : ''}
           <span class="inv-jump-item-label">${escHtml(currentItem.label)}</span>
           <span class="inv-jump-caret" aria-hidden="true">&#9662;</span>
         </button>

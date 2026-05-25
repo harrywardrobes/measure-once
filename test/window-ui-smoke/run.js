@@ -3,7 +3,7 @@
 //
 // Smoke test: shared chrome includes must be present on every dashboard page.
 //
-// public/components.js attaches `window.UI = { skeletonLine, renderPill,
+// public/components.js attaches `window.UI = { skeletonLine,
 // renderEmptyState, renderTabBar, … }` and is included via an explicit
 // `<script src="/components.js">` tag after `/chrome.js` on every dashboard
 // HTML page. public/chrome.js attaches `window.getShortcut` and
@@ -65,7 +65,7 @@ const ROUTES = [
   '/profile',
 ];
 
-const REQUIRED_HELPERS = ['skeletonLine', 'renderPill', 'renderEmptyState', 'renderTabBar'];
+const REQUIRED_HELPERS = ['skeletonLine', 'renderEmptyState', 'renderTabBar'];
 
 function parseCookieKV(jar) {
   if (!jar) return null;
@@ -317,8 +317,8 @@ async function writeReport(findings) {
     '',
     'Visits each dashboard route below with an admin session and asserts:',
     '',
-    '- `window.UI` is an object with `skeletonLine`, `renderPill`,',
-    '  `renderEmptyState`, `renderTabBar` (from `public/components.js`)',
+    '- `window.UI` is an object with `skeletonLine`, `renderEmptyState`,',
+    '  `renderTabBar` (from `public/components.js`)',
     '- `window.getShortcut` is a function (from `public/chrome.js`)',
     '- `window.handleAccessRequestSubmit` is a function (from `public/chrome.js`)',
     '- `#app-header-mount` is mounted (injected by `public/chrome.js`,',

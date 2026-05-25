@@ -9,7 +9,6 @@
  * Helpers
  *   window.UI.skeletonLine(width, height?, opts?)
  *     opts: { className?: extra class names, style?: extra CSS declarations }
- *   window.UI.renderPill(label, variant?)
  *   window.UI.renderEmptyState(message, compact?)
  *   window.UI.renderTabBar(tabs, activeKey, onSelectName)
  *
@@ -47,12 +46,6 @@
     return `<div class="skeleton-line${cls}"${styleAttr}></div>`;
   }
 
-  const PILL_VARIANTS = new Set(['neutral', 'success', 'danger', 'warn', 'info']);
-  function renderPill(label, variant) {
-    const v = PILL_VARIANTS.has(variant) ? variant : 'neutral';
-    return `<span class="ui-pill ui-pill--${v}">${esc(label)}</span>`;
-  }
-
   function renderEmptyState(message, compact) {
     const cls = compact ? 'ui-empty ui-empty--compact' : 'ui-empty';
     return `<div class="${cls}">${esc(message)}</div>`;
@@ -87,7 +80,6 @@
 
   window.UI = {
     skeletonLine: skeletonLine,
-    renderPill: renderPill,
     renderEmptyState: renderEmptyState,
     renderTabBar: renderTabBar,
     _esc: esc,

@@ -170,7 +170,7 @@ function renderInvoicesTab() {
           ${inv.dueDate ? `<span class="qb-row-date">Due ${fmtQBDate(inv.dueDate)}</span>` : ''}
         </div>
         <div class="flex items-center gap-2">
-          ${UI.renderPill(statusLabel, statusVariant)}
+          ${_invStatusPill(statusLabel, statusVariant)}
           <span class="qb-row-amount">${fmtGBP(inv.balance)}</span>
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:var(--stone-deep);flex-shrink:0">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>

@@ -1638,7 +1638,7 @@ function renderWorkflowInvoices() {
           ${inv.dueDate ? `<span class="qb-invoice-date">Due ${fmtQBDate(inv.dueDate)}</span>` : ''}
         </div>
         <div class="flex items-center gap-1" style="flex-shrink:0">
-          ${UI.renderPill(statusLabel, statusKey === 'paid' ? 'success' : statusKey === 'overdue' ? 'danger' : 'neutral')}
+          ${_invStatusPill(statusLabel, statusKey, true)}
           <span class="qb-invoice-amount">${fmtGBP(inv.balance)}</span>
         </div>
       </div>

@@ -586,45 +586,6 @@ body.showing-workflow .workflow-panel { display: flex; }
   letter-spacing: 0.02em;
 }
 
-/* ── Stage chip — coloured badge using stage CSS variables ───────────────────
-   Usage: <span class="stage-chip stage-chip-sales">Sales</span>
-   The base class provides shared geometry; the modifier supplies the palette.
-─────────────────────────────────────────────────────────────────────────────── */
-.stage-chip {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.68rem;
-  font-weight: 700;
-  padding: 3px 9px;
-  border-radius: var(--radius-pill);
-  white-space: nowrap;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-.stage-chip-sales           { background: var(--stage-sales-light);           color: var(--stage-sales-text); }
-.stage-chip-designvisit     { background: var(--stage-designvisit-light);     color: var(--stage-designvisit-text); }
-.stage-chip-survey          { background: var(--stage-survey-light);          color: var(--stage-survey-text); }
-.stage-chip-order           { background: var(--stage-order-light);           color: var(--stage-order-text); }
-.stage-chip-workshop        { background: var(--stage-workshop-light);        color: var(--stage-workshop-text); }
-.stage-chip-packing         { background: var(--stage-packing-light);         color: var(--stage-packing-text); }
-.stage-chip-delivery        { background: var(--stage-delivery-light);        color: var(--stage-delivery-text); }
-.stage-chip-installation    { background: var(--stage-installation-light);    color: var(--stage-installation-text); }
-.stage-chip-aftercare       { background: var(--stage-aftercare-light);       color: var(--stage-aftercare-text); }
-.stage-chip-customerservice { background: var(--stage-customerservice-light); color: var(--stage-customerservice-text); }
-
-/* Solid variant — white text on the full accent colour */
-.stage-chip.stage-chip-solid { color: #fff; }
-.stage-chip.stage-chip-solid.stage-chip-sales           { background: var(--stage-sales-bg); }
-.stage-chip.stage-chip-solid.stage-chip-designvisit     { background: var(--stage-designvisit-bg); }
-.stage-chip.stage-chip-solid.stage-chip-survey          { background: var(--stage-survey-bg); }
-.stage-chip.stage-chip-solid.stage-chip-order           { background: var(--stage-order-bg); }
-.stage-chip.stage-chip-solid.stage-chip-workshop        { background: var(--stage-workshop-bg); }
-.stage-chip.stage-chip-solid.stage-chip-packing         { background: var(--stage-packing-bg); }
-.stage-chip.stage-chip-solid.stage-chip-delivery        { background: var(--stage-delivery-bg); }
-.stage-chip.stage-chip-solid.stage-chip-installation    { background: var(--stage-installation-bg); }
-.stage-chip.stage-chip-solid.stage-chip-aftercare       { background: var(--stage-aftercare-bg); }
-.stage-chip.stage-chip-solid.stage-chip-customerservice { background: var(--stage-customerservice-bg); }
-
 /* ── Admin Lead Statuses table — Stage select coloured left border ───────────
    data-stage is set by JS on render and oninput so CSS always reflects current
    value without a full re-render.
@@ -6054,19 +6015,6 @@ body.dv-signoff-page {
 }
 .ds-stage-tab:hover { color: var(--ink-1); background: var(--stone-soft); }
 .ds-stage-tab.is-active { color: var(--plum); border-bottom-color: var(--plum); }
-
-/* Shared lightweight pill (used by renderPill helper) */
-.ui-pill {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 9px; border-radius: var(--radius-pill);
-  font-size: .72rem; font-weight: 600; line-height: 1.4;
-  background: var(--stone-soft); color: var(--ink-2);
-}
-.ui-pill--success { background: var(--status-success-bg); color: var(--status-success-text); }
-.ui-pill--danger  { background: var(--status-danger-bg);  color: var(--status-danger-text); }
-.ui-pill--warn    { background: var(--status-warn-bg);    color: var(--status-warn-text); }
-.ui-pill--info    { background: var(--orchid-tint);       color: var(--orchid-deep); }
-.ui-pill--neutral { background: var(--stone-soft);        color: var(--ink-2); }
 
 /* Shared empty-state block (used by renderEmptyState helper) */
 .ui-empty {
