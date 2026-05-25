@@ -274,6 +274,54 @@ async function main() {
       searchRowAppeared && searchRowCount > 0,
     );
 
+    // ── Team tab ─────────────────────────────────────────────────────────
+    // Regression guard for Task #793: AdminTeamPage was throwing a render-time
+    // ReferenceError (missing phoneKey/phoneFieldLabel import), which left
+    // #tab-team blank without any visible error. Confirm the panel mounts and
+    // produces non-empty React-rendered content.
+    await page.evaluate(() => {
+      if (typeof window.switchTab === 'function') window.switchTab('team');
+    });
+
+    const teamPanelExists = await page.evaluate(() =>
+      !!document.getElementById('tab-team'),
+    );
+    record(
+      '#tab-team mount point exists in admin.html',
+      'element with id="tab-team" present',
+      `present=${teamPanelExists}`,
+      teamPanelExists,
+    );
+
+    const teamMounted = await page.evaluate(() => {
+      const el = document.getElementById('tab-team');
+      return !!el && el.dataset.dsRendered === '1';
+    });
+    record(
+      'React island flags #tab-team as mounted (data-ds-rendered="1")',
+      'data-ds-rendered="1" on #tab-team',
+      `flagged=${teamMounted}`,
+      teamMounted,
+    );
+
+    // AdminTeamPage renders <TableBody id="team-body"> within a few hundred
+    // ms after fetch resolves. Wait for it explicitly.
+    const teamBodyAppeared = await waitForSelectorInPanel(page, 'tab-team', '#team-body', 6000);
+    const teamPanelNonEmpty = await page.evaluate(() => {
+      const el = document.getElementById('tab-team');
+      if (!el) return false;
+      // A render-time error boundary fallback would leave a [data-island-error]
+      // marker — explicitly fail if that's all we got.
+      if (el.querySelector('[data-island-error]')) return false;
+      return el.textContent.trim().length > 0;
+    });
+    record(
+      '#tab-team renders AdminTeamPage content (non-empty, no island-error fallback)',
+      '#team-body present and panel text non-empty',
+      `bodyAppeared=${teamBodyAppeared} nonEmpty=${teamPanelNonEmpty}`,
+      teamBodyAppeared && teamPanelNonEmpty,
+    );
+
     // ── Design System tab ────────────────────────────────────────────────
     await page.evaluate(() => {
       if (typeof window.switchTab === 'function') window.switchTab('designsystem');
@@ -362,6 +410,10 @@ async function writeReport(runId, findings) {
     '- **(Search tab)** Asserts `#tab-search` exists, is flagged by',
     '  `src/react/main.tsx` with `data-ds-rendered="1"`, and contains at',
     '  least one `.ss-action-row` rendered by `<SearchSettingsPage/>`.',
+    '- **(Team tab)** Regression guard for Task #793 — asserts `#tab-team`',
+    '  exists, is flagged as mounted, and renders the `<AdminTeamPage/>`',
+    '  table (`#team-body`) with non-empty text and no `[data-island-error]`',
+    '  fallback. A render-time throw (e.g. missing import) would surface here.',
     '- **(Design System tab)** Asserts `#tab-designsystem` exists, is',
     '  flagged the same way, and contains at least one `.ds-section`',
     '  rendered by `<DesignSystemPage/>`.',

@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppThemeProvider } from './AppThemeProvider';
+import { IslandErrorBoundary } from './components/IslandErrorBoundary';
 import { DesignSystemPage } from './pages/DesignSystemPage';
 import { SearchSettingsPage } from './pages/SearchSettingsPage';
 import { WorkshopSettingsPage } from './pages/WorkshopSettingsPage';
@@ -26,8 +27,12 @@ import { BottomNav } from './components/BottomNav';
  * theme + `ScopedCssBaseline` apply everywhere. New mount points only
  * need to add an entry to `MOUNTS` below — the wrapper is automatic.
  */
-function withTheme(node: React.ReactElement): React.ReactElement {
-  return <AppThemeProvider>{node}</AppThemeProvider>;
+function withTheme(node: React.ReactElement, islandId: string): React.ReactElement {
+  return (
+    <AppThemeProvider>
+      <IslandErrorBoundary islandId={islandId}>{node}</IslandErrorBoundary>
+    </AppThemeProvider>
+  );
 }
 
 /**
@@ -72,7 +77,15 @@ function mountKnown(): number {
     if (!el) continue;
     if (el.dataset.dsRendered === '1') { count++; continue; }
     el.dataset.dsRendered = '1';
-    createRoot(el).render(withTheme(m.render()));
+    try {
+      createRoot(el).render(withTheme(m.render(), m.id));
+    } catch (err) {
+      // Synchronous throw during initial render() — extremely rare, but if
+      // it happens we want a visible message rather than a blank panel.
+      // eslint-disable-next-line no-console
+      console.error(`[react-island] "${m.id}" failed to mount:`, err);
+      el.textContent = 'This panel failed to load — see the browser console.';
+    }
     count++;
   }
   return count;
@@ -85,7 +98,7 @@ function mount() {
   // Vite dev-only standalone playground.
   const root = document.getElementById('root');
   if (root) {
-    createRoot(root).render(withTheme(<DesignSystemPage />));
+    createRoot(root).render(withTheme(<DesignSystemPage />, 'root'));
     return;
   }
 
