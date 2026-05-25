@@ -274,15 +274,39 @@ let LEAD_STATUS_OPTIONS = [
 
 let NULL_LEAD_STATUS_LABEL = 'No status';
 
+// Single-flight + min-interval debounce so bursts of triggers (bootstrap +
+// visibilitychange + BroadcastChannel listeners + populateLeadStatusFilter
+// refreshes) collapse into one HubSpot fan-out. Server-side caching alone
+// isn't enough: a cold-cache burst would still hit the per-second budget.
+let _llscInFlight = null;
+let _llscLastSettledAt = 0;
+const LLSC_MIN_INTERVAL_MS = 1500;
+
 async function loadLeadStatusCounts() {
-  try {
-    const counts = await GET('/api/contacts-lead-status-counts');
-    if (counts && typeof counts === 'object') {
-      state.leadStatusCounts = counts;
+  // Reuse an in-flight request for any concurrent caller.
+  if (_llscInFlight) return _llscInFlight;
+  // Debounce rapid repeats: if we just finished, return the cached state
+  // instead of firing another request — the burst callers all see the same
+  // freshly-loaded counts.
+  if (Date.now() - _llscLastSettledAt < LLSC_MIN_INTERVAL_MS) return;
+
+  _llscInFlight = (async () => {
+    try {
+      const counts = await GET('/api/contacts-lead-status-counts');
+      if (counts && typeof counts === 'object') {
+        state.leadStatusCounts = counts;
+      }
+    } catch (e) {
+      // Surface only hard failures; the server falls back to stale counts
+      // (X-Cache-Status: stale) for transient HubSpot hiccups, which arrives
+      // here as a successful response — no toast needed.
+      console.warn('Could not load lead status counts:', e.message);
+    } finally {
+      _llscLastSettledAt = Date.now();
+      _llscInFlight = null;
     }
-  } catch (e) {
-    console.warn('Could not load lead status counts:', e.message);
-  }
+  })();
+  return _llscInFlight;
 }
 
 // ── Stage action labels ──────────────────────────────────────────────────────

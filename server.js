@@ -106,6 +106,54 @@ const hsHeaders = () => ({
   'Content-Type': 'application/json'
 });
 
+// Shared HubSpot search retry helper. Retries on 429 (honouring Retry-After
+// when present) and transient 5xx / network errors using bounded exponential
+// backoff so a brief HubSpot hiccup doesn't surface as an error to the UI.
+// Used by /api/contacts-lead-status-counts and /api/open-leads — the two
+// search-API fan-outs that have been hitting per-second rate limits.
+async function hubspotSearchWithRetry(body, { maxAttempts = 4, baseDelayMs = 300, maxDelayMs = 4000 } = {}) {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const isTransient = err => {
+    const s = err.response?.status;
+    if (s === 429) return true;
+    if (s && s >= 500 && s < 600) return true;
+    if (!err.response) return true; // network / timeout
+    return false;
+  };
+  const retryAfterMs = (err) => {
+    const h = err.response?.headers?.['retry-after'];
+    if (!h) return null;
+    const asInt = parseInt(h, 10);
+    if (!Number.isNaN(asInt) && asInt >= 0) return Math.min(asInt * 1000, maxDelayMs);
+    const asDate = Date.parse(h);
+    if (!Number.isNaN(asDate)) {
+      const ms = asDate - Date.now();
+      return ms > 0 ? Math.min(ms, maxDelayMs) : 0;
+    }
+    return null;
+  };
+
+  let lastErr;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await axios.post(
+        `${HS}/crm/v3/objects/contacts/search`,
+        body,
+        { headers: hsHeaders(), timeout: 15000 }
+      );
+    } catch (err) {
+      lastErr = err;
+      if (attempt === maxAttempts - 1 || !isTransient(err)) throw err;
+      const hinted = retryAfterMs(err);
+      const backoff = hinted != null
+        ? hinted
+        : Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
+      await sleep(backoff);
+    }
+  }
+  throw lastErr;
+}
+
 // Guard: return a clear error if no token is set
 function requireHubspotToken(req, res, next) {
   if (!process.env.HUBSPOT_ACCESS_TOKEN) {
@@ -798,58 +846,102 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
 });
 
 // ── HubSpot: Lead-status counts (for filter dropdown) ─────────────────────────
-// In-memory cache — invalidated after a lead-status PATCH or 120 s, whichever
-// comes first, so the N+1 fan-out only fires once per two-minute window.
-let _leadStatusCountsCache = null;   // { counts: {…}, expiresAt: ms }
-function _invalidateLeadStatusCountsCache() { _leadStatusCountsCache = null; }
+// In-memory cache. `fresh` is the latest successful counts within the 120s TTL.
+// `lastGood` is the most recent successful counts of any age — used to serve a
+// stale response when HubSpot is unavailable (rate-limited / 5xx) so the UI
+// doesn't surface a red error toast for a transient hiccup.
+// `inFlight` is a shared promise so concurrent callers on a cold cache trigger
+// a single HubSpot fan-out instead of one per request.
+const LEAD_STATUS_COUNTS_TTL_MS = 120_000;
+const LEAD_STATUS_COUNTS_STALE_MAX_MS = 60 * 60 * 1000; // 1 h hard cap on staleness
+let _leadStatusCountsCache = null;   // { counts, fetchedAt } — used while fresh
+let _leadStatusCountsLastGood = null; // { counts, fetchedAt } — survives invalidation, used on error
+let _leadStatusCountsInFlight = null;
+function _invalidateLeadStatusCountsCache() {
+  // Drop the freshness window so the next request refetches, but keep
+  // `_leadStatusCountsLastGood` so a failed refetch can still serve stale
+  // counts instead of erroring out to the UI.
+  _leadStatusCountsCache = null;
+}
+
+async function _fetchLeadStatusCounts() {
+  const { rows: statusRows } = await pool.query(
+    'SELECT key FROM lead_status_config WHERE is_null_row IS NOT TRUE ORDER BY sort_order ASC, key ASC'
+  );
+  const keys = statusRows.map(r => r.key);
+
+  // In dev mode, counts are scoped to hw_test_user contacts only so the
+  // filter-dropdown numbers stay consistent with what the contacts list shows.
+  // This is skipped when the global dev-filter toggle is OFF.
+  const devCountFilter = (process.env.NODE_ENV !== 'production' && await getDevFilterEnabled())
+    ? [{ propertyName: 'hw_test_user', operator: 'EQ', value: 'true' }]
+    : [];
+
+  const searches = [
+    hubspotSearchWithRetry(
+      { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'NOT_HAS_PROPERTY' }, ...devCountFilter] }], limit: 1 }
+    ).then(r => ['__no_status__', r.data.total ?? 0]),
+    ...keys.map(key =>
+      hubspotSearchWithRetry(
+        { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: key }, ...devCountFilter] }], limit: 1 }
+      ).then(r => [key, r.data.total ?? 0])
+    ),
+  ];
+
+  const entries = await Promise.all(searches);
+  return Object.fromEntries(entries);
+}
 
 app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken, async (req, res) => {
-  try {
-    if (_leadStatusCountsCache && Date.now() < _leadStatusCountsCache.expiresAt) {
-      return res.json(_leadStatusCountsCache.counts);
-    }
-
-    const { rows: statusRows } = await pool.query(
-      'SELECT key FROM lead_status_config WHERE is_null_row IS NOT TRUE ORDER BY sort_order ASC, key ASC'
-    );
-    const keys = statusRows.map(r => r.key);
-
-    // In dev mode, counts are scoped to hw_test_user contacts only so the
-    // filter-dropdown numbers stay consistent with what the contacts list shows.
-    // This is skipped when the global dev-filter toggle is OFF.
-    const devCountFilter = (process.env.NODE_ENV !== 'production' && await getDevFilterEnabled())
-      ? [{ propertyName: 'hw_test_user', operator: 'EQ', value: 'true' }]
-      : [];
-
-    const searches = [
-      axios.post(
-        `${HS}/crm/v3/objects/contacts/search`,
-        { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'NOT_HAS_PROPERTY' }, ...devCountFilter] }], limit: 1 },
-        { headers: hsHeaders() }
-      ).then(r => ['__no_status__', r.data.total ?? 0]),
-      ...keys.map(key =>
-        axios.post(
-          `${HS}/crm/v3/objects/contacts/search`,
-          { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: key }, ...devCountFilter] }], limit: 1 },
-          { headers: hsHeaders() }
-        ).then(r => [key, r.data.total ?? 0])
-      ),
-    ];
-
-    const entries = await Promise.all(searches);
-    const counts = Object.fromEntries(entries);
-    _leadStatusCountsCache = { counts, expiresAt: Date.now() + 120_000 };
-    res.json(counts);
-  } catch (e) {
-    const status = e.response?.status;
-    if (status === 401 || status === 403) {
-      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
-    }
-    if (status === 429) {
-      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
-    }
-    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+  // Fresh cache hit — return immediately.
+  if (_leadStatusCountsCache && Date.now() - _leadStatusCountsCache.fetchedAt < LEAD_STATUS_COUNTS_TTL_MS) {
+    res.setHeader('X-Cache-Status', 'fresh');
+    return res.json(_leadStatusCountsCache.counts);
   }
+
+  // Single-flight: all concurrent cold-cache callers share one fan-out.
+  if (!_leadStatusCountsInFlight) {
+    _leadStatusCountsInFlight = (async () => {
+      try {
+        const counts = await _fetchLeadStatusCounts();
+        const entry = { counts, fetchedAt: Date.now() };
+        _leadStatusCountsCache    = entry;
+        _leadStatusCountsLastGood = entry;
+        return { ok: true, counts };
+      } catch (err) {
+        return { ok: false, err };
+      } finally {
+        // Release after a microtask tick so callers awaiting the same promise
+        // all observe the resolved state before the next request starts a new
+        // in-flight fetch.
+        setImmediate(() => { _leadStatusCountsInFlight = null; });
+      }
+    })();
+  }
+
+  const outcome = await _leadStatusCountsInFlight;
+
+  if (outcome.ok) {
+    res.setHeader('X-Cache-Status', 'fresh');
+    return res.json(outcome.counts);
+  }
+
+  // Fetch failed — serve last-good counts if we have any recent enough.
+  const e = outcome.err;
+  const status = e.response?.status;
+  if (_leadStatusCountsLastGood && Date.now() - _leadStatusCountsLastGood.fetchedAt < LEAD_STATUS_COUNTS_STALE_MAX_MS) {
+    console.warn('[lead-status-counts] HubSpot fetch failed (status=%s); serving stale counts age=%dms',
+      status || 'network', Date.now() - _leadStatusCountsLastGood.fetchedAt);
+    res.setHeader('X-Cache-Status', 'stale');
+    return res.json(_leadStatusCountsLastGood.counts);
+  }
+  if (status === 401 || status === 403) {
+    return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+  }
+  if (status === 429) {
+    return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+  }
+  res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
 });
 
 // ── HubSpot: Open Leads (contacts with hs_lead_status = OPEN_DEAL) ────────────
@@ -875,11 +967,7 @@ app.get('/api/open-leads', async (req, res) => {
         limit: 100
       };
       if (after) body.after = after;
-      const r = await axios.post(
-        `${HS}/crm/v3/objects/contacts/search`,
-        body,
-        { headers: hsHeaders() }
-      );
+      const r = await hubspotSearchWithRetry(body);
       allResults.push(...(r.data.results || []));
       after = r.data.paging?.next?.after;
     } while (after);
@@ -3311,6 +3399,7 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
       'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage, shorthand) VALUES ($1, $2, $3, FALSE, $4, $5) RETURNING *',
       [key, label, next, stage, shorthand]
     );
+    _invalidateLeadStatusCountsCache();
     res.status(201).json(rows[0]);
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
@@ -3387,6 +3476,7 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
       'UPDATE lead_status_config SET key = $1, label = $2, sort_order = $3, excluded_from_sales = $4, stage = $5, shorthand = $6 WHERE key = $7 RETURNING *',
       [finalKey, newLabel, newOrder, newExcluded, newStage, newShorthand, key]
     );
+    _invalidateLeadStatusCountsCache();
     res.json(rows[0]);
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
@@ -3414,6 +3504,7 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
       return res.status(400).json({ error: 'The null-status sentinel row cannot be deleted.' });
     }
     await pool.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
+    _invalidateLeadStatusCountsCache();
     res.json({ ok: true });
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
