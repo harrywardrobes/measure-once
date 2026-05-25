@@ -102,8 +102,15 @@ function _stageLabel(stageKey) {
 // ── localdata-updated listener ────────────────────────────────────────────────
 // When local workflow data changes (room saves, substage edits, etc.) reload
 // all contacts and workflow stages then notify the React board to re-render.
+// On failure, dispatch sales-board-bg-refresh-failed so the React component
+// can surface a Snackbar (with Page Visibility pause) to the user.
 document.addEventListener('localdata-updated', async () => {
-  await Promise.all([loadAllContacts(), loadWorkflowStages()]);
-  state.filteredContacts = [...state.contacts];
-  document.dispatchEvent(new CustomEvent('sales-board-data-ready'));
+  try {
+    await Promise.all([loadAllContacts(), loadWorkflowStages()]);
+    state.filteredContacts = [...state.contacts];
+    document.dispatchEvent(new CustomEvent('sales-board-data-ready'));
+  } catch (e) {
+    console.error('[SalesBoard] background refresh failed', e);
+    document.dispatchEvent(new CustomEvent('sales-board-bg-refresh-failed'));
+  }
 });

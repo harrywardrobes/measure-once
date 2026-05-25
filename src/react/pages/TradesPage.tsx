@@ -1305,6 +1305,20 @@ export function TradesPage() {
   const [deleteId, setDeleteId] = React.useState<number | null>(null);
 
   const [snackbar, setSnackbar] = React.useState<{ message: string; severity: 'success' | 'error' } | null>(null);
+  // autoHideDuration is set to null while the document is hidden so the MUI
+  // Snackbar timer is paused (Page Visibility API).  Restored to 4 s when the
+  // tab returns to the foreground.
+  const [snackbarHideDuration, setSnackbarHideDuration] = React.useState<number | null>(4000);
+  const snackbarRef = React.useRef<{ message: string; severity: 'success' | 'error' } | null>(null);
+  React.useEffect(() => { snackbarRef.current = snackbar; }, [snackbar]);
+  React.useEffect(() => {
+    const onVis = () => {
+      if (!snackbarRef.current) return;
+      setSnackbarHideDuration(document.hidden ? null : 4000);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -1547,7 +1561,7 @@ export function TradesPage() {
       {/* Snackbar */}
       <Snackbar
         open={!!snackbar}
-        autoHideDuration={4000}
+        autoHideDuration={snackbarHideDuration}
         onClose={() => setSnackbar(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >

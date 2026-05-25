@@ -20,6 +20,8 @@
 //   (I) UI:  viewer cannot reach /trades (redirected to /login or 403)
 //   (J) UI:  duplicate phone warning appears in the Add Company dialog and
 //             disables the submit button
+//   (K) UI:  Snackbar visibility pause — "Company deleted" Snackbar stays
+//             visible when the tab is hidden (timer paused), then dismisses
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:trades
@@ -51,6 +53,7 @@ require('dotenv').config();
 const CO_ALPHA   = 'PrivTest Trades Alpha';   // primary company
 const CO_BETA    = 'PrivTest Trades Beta';    // secondary company (different type)
 const CO_GAMMA   = 'PrivTest Trades Gamma';   // for search-by-contact-name test
+const CO_KAPPA   = 'PrivTest Trades Kappa';   // ephemeral company for probe K (snackbar)
 const CONTACT_GAMMA = 'PrivTest GammaContact';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -129,7 +132,7 @@ async function waitForTradesLoaded(page, minCards = 0) {
 }
 
 async function purgeFixtures(pool) {
-  for (const name of [CO_ALPHA, CO_BETA, CO_GAMMA]) {
+  for (const name of [CO_ALPHA, CO_BETA, CO_GAMMA, CO_KAPPA]) {
     try {
       await pool.query(
         `DELETE FROM trade_companies WHERE company_name = $1`,
@@ -810,6 +813,149 @@ async function main() {
       await closePage(viewerPage);
     }
 
+    // ── (K) Snackbar visibility pause (tab-hide) ──────────────────────────
+    // Probe K: trigger the "Company deleted" Snackbar by deleting a fresh
+    // company via the UI, then simulate the document going hidden.  The MUI
+    // Snackbar must still be visible after the 4 s autoHideDuration has
+    // elapsed (proving the timer was paused), then auto-dismiss once the tab
+    // returns to the foreground.
+    console.log('\n  ── (K) UI: Snackbar visibility pause (tab-hide) ──');
+    {
+      // Seed a fresh company for this probe so deleting it does not interfere
+      // with CO_ALPHA which is still needed by probe J.
+      const kappaBody = {
+        company_name: CO_KAPPA,
+        trade_type: 'Electrical',
+        areas_served: [],
+        timescale: '',
+        notes: '',
+        website: '',
+        company_phone: '',
+        contacts: [{ name: 'Kappa Contact', role: '', phone: '', email: '', preferred_contact: 'Phone' }],
+      };
+      const kappaR = await adminClient.post('/api/trades', kappaBody);
+      const kappaId = kappaR.json && kappaR.json.id;
+
+      if (!kappaId) {
+        record('K.1 Kappa company seeded for snackbar probe', 'id present', 'no id returned', false);
+      } else {
+        record('K.1 Kappa company seeded for snackbar probe', 'id present', `id=${kappaId}`, true);
+
+        const kPage = await openPage(browser, adminClient.cookie);
+        try {
+          await kPage.goto(`${BASE}/trades`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+          await waitForTradesPageMounted(kPage);
+          await waitForTradesLoaded(kPage, 1);
+
+          // Find and click the delete button for "PrivTest Trades Kappa".
+          const deleteClicked = await kPage.evaluate(() => {
+            const cards = Array.from(document.querySelectorAll('.MuiCard-root'));
+            for (const card of cards) {
+              if ((card.textContent || '').includes('PrivTest Trades Kappa')) {
+                const btn = card.querySelector('[aria-label="Delete company"]');
+                if (btn) { btn.click(); return true; }
+              }
+            }
+            return false;
+          });
+
+          record('K.2 Delete icon clicked for Kappa company', 'true', `${deleteClicked}`, deleteClicked);
+
+          if (deleteClicked) {
+            // Wait for the confirm dialog to open.
+            const dialogReady = await pollPage(kPage, () => {
+              const d = document.querySelector('[role="dialog"]');
+              return d ? 'open' : null;
+            }, null, 5000);
+
+            if (!dialogReady) {
+              record('K.3–K.5 Snackbar visibility pause', 'confirm dialog opened', 'dialog not found', false);
+            } else {
+              // Click the "Delete" confirm button inside the dialog.
+              const confirmed = await kPage.evaluate(() => {
+                const btns = Array.from(document.querySelectorAll('[role="dialog"] button'));
+                const btn = btns.find(b => /^delete$/i.test((b.textContent || '').trim()));
+                if (btn) { btn.click(); return true; }
+                return false;
+              });
+
+              if (!confirmed) {
+                record('K.3–K.5 Snackbar visibility pause', '"Delete" button clicked', 'button not found', false);
+              } else {
+                // Step 1: Wait for "Company deleted" Snackbar to appear.
+                const snackbarAppeared = await pollPage(kPage, () => {
+                  const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+                  return alerts.some(el => (el.textContent || '').includes('Company deleted')) ? 'visible' : null;
+                }, null, 5000);
+
+                if (snackbarAppeared !== 'visible') {
+                  record('K.3 "Company deleted" Snackbar appears', 'visible', `snackbar=${snackbarAppeared}`, false);
+                  record('K.4 Snackbar paused while tab hidden (>4 s)', 'skipped', 'snackbar never appeared', false);
+                  record('K.5 Snackbar dismisses after tab returns visible', 'skipped', 'snackbar never appeared', false);
+                } else {
+                  record('K.3 "Company deleted" Snackbar appears', 'visible', 'visible', true);
+
+                  // Step 2: Simulate the tab going hidden.
+                  await kPage.evaluate(() => {
+                    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+                    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+                    document.dispatchEvent(new Event('visibilitychange'));
+                  });
+
+                  // Step 3: Wait 5 s (> 4 s autoHideDuration). If the pause were broken
+                  // the Snackbar would have dismissed by now.
+                  await new Promise(r => setTimeout(r, 5000));
+
+                  const stillVisible = await kPage.evaluate(() => {
+                    const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+                    return alerts.some(el => (el.textContent || '').includes('Company deleted'));
+                  }).catch(() => false);
+
+                  record(
+                    'K.4 Snackbar paused while tab hidden (>4 s)',
+                    'still visible (timer paused)',
+                    stillVisible ? 'still visible — timer paused (good)' : 'already dismissed — timer NOT paused (bad)',
+                    stillVisible,
+                  );
+
+                  // Step 4: Restore the tab to visible.
+                  await kPage.evaluate(() => {
+                    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+                    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+                    document.dispatchEvent(new Event('visibilitychange'));
+                  });
+
+                  // Step 5: Snackbar must now auto-dismiss (4 s timer restarts).
+                  // Allow up to 8 s (4 s autoHide + animation buffer).
+                  const deadline = Date.now() + 8000;
+                  let gone = false;
+                  while (Date.now() < deadline) {
+                    const still = await kPage.evaluate(() => {
+                      const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+                      return alerts.some(el => (el.textContent || '').includes('Company deleted'));
+                    }).catch(() => true);
+                    if (!still) { gone = true; break; }
+                    await new Promise(r => setTimeout(r, 100));
+                  }
+
+                  record(
+                    'K.5 Snackbar dismisses after tab returns visible',
+                    'dismissed within 8 s of tab-show',
+                    gone ? 'dismissed (good)' : 'still visible after 8 s (bad)',
+                    gone,
+                  );
+                }
+              }
+            }
+          }
+        } finally {
+          // Kappa may already be deleted by the test; 404 is fine.
+          await adminClient.delete(`/api/trades/${kappaId}`).catch(() => {});
+          await closePage(kPage);
+        }
+      }
+    }
+
     // ── (J) Duplicate phone warning in Add Company dialog ─────────────────
     console.log('\n  ── (J) UI: duplicate phone warning in dialog ──');
     {
@@ -997,6 +1143,10 @@ async function writeReport(runId, findings) {
     '  banner and the React component shows a load error (API returns 403 for viewer).',
     '- **(J) UI duplicate phone warning**: typing a known-duplicate company phone in the',
     '  Add Company dialog shows an MUI Alert and disables the submit button.',
+    '- **(K) UI Snackbar visibility pause**: deleting a company shows the "Company deleted"',
+    '  Snackbar; simulating tab-hide proves the MUI autoHideDuration timer is paused',
+    '  (Snackbar still visible after 5 s > 4 s), then auto-dismisses once the tab',
+    '  returns to the foreground.',
     '',
   ];
   const outPath = path.resolve(dir, 'trades.md');

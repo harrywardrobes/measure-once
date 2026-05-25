@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Card, Typography } from '@mui/material';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Box, Card, Snackbar, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
@@ -788,6 +788,27 @@ export function SalesBoardPage() {
   const { isManager } = usePrivilege();
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
 
+  // Retry-failure Snackbar with Page Visibility pause — mirrors the pattern
+  // in CustomersPage.tsx.  autoHideDuration is set to null while the document
+  // is hidden so the MUI timer is paused; restored to 8 s on tab focus.
+  const [bgRefreshFailed, setBgRefreshFailed] = useState(false);
+  const [snackbarHideDuration, setSnackbarHideDuration] = useState<number | null>(8000);
+  const bgRefreshFailedRef = useRef(false);
+  useEffect(() => { bgRefreshFailedRef.current = bgRefreshFailed; }, [bgRefreshFailed]);
+  useEffect(() => {
+    const onVis = () => {
+      if (!bgRefreshFailedRef.current) return;
+      setSnackbarHideDuration(document.hidden ? null : 8000);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+  useEffect(() => {
+    const onFail = () => setBgRefreshFailed(true);
+    document.addEventListener('sales-board-bg-refresh-failed', onFail);
+    return () => document.removeEventListener('sales-board-bg-refresh-failed', onFail);
+  }, []);
+
   useEffect(() => {
     document.addEventListener(DATA_READY_EVENT, forceUpdate);
     return () => document.removeEventListener(DATA_READY_EVENT, forceUpdate);
@@ -829,6 +850,7 @@ export function SalesBoardPage() {
   };
 
   return (
+    <>
     <Box
       sx={{
         display: 'flex',
@@ -972,5 +994,22 @@ export function SalesBoardPage() {
         );
       })}
     </Box>
+
+    <Snackbar
+      open={bgRefreshFailed}
+      autoHideDuration={snackbarHideDuration}
+      onClose={() => setBgRefreshFailed(false)}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+    >
+      <Alert
+        severity="warning"
+        onClose={() => setBgRefreshFailed(false)}
+        variant="filled"
+        sx={{ minWidth: 280 }}
+      >
+        Couldn&apos;t refresh live data — fresh results will load on your next visit
+      </Alert>
+    </Snackbar>
+    </>
   );
 }
