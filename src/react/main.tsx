@@ -23,23 +23,44 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement }> = [
   { id: 'tab-workshop',     render: () => <WorkshopSettingsPage /> },
 ];
 
-function mount() {
-  let mountedAny = false;
+function mountKnown(): number {
+  let count = 0;
   for (const m of MOUNTS) {
     const el = document.getElementById(m.id);
     if (!el) continue;
-    if (el.dataset.dsRendered === '1') { mountedAny = true; continue; }
+    if (el.dataset.dsRendered === '1') { count++; continue; }
     el.dataset.dsRendered = '1';
     createRoot(el).render(m.render());
-    mountedAny = true;
+    count++;
   }
+  return count;
+}
+
+function mount() {
+  const mountedAny = mountKnown() > 0;
   if (mountedAny) return;
 
   // Vite dev-only standalone playground.
   const root = document.getElementById('root');
   if (root) {
     createRoot(root).render(<DesignSystemPage />);
+    return;
   }
+
+  // Mount points may not exist yet — admin.html renders #tab-search /
+  // #tab-designsystem into #page asynchronously after its data fetches
+  // resolve, which happens *after* this deferred module script executes.
+  // Observe the DOM and try again whenever new nodes appear, stopping as
+  // soon as we've mounted every entry in MOUNTS.
+  const observer = new MutationObserver(() => {
+    const mounted = MOUNTS.every(m => {
+      const el = document.getElementById(m.id);
+      return el && el.dataset.dsRendered === '1';
+    });
+    mountKnown();
+    if (mounted) observer.disconnect();
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 if (document.readyState === 'loading') {
