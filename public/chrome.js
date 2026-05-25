@@ -28,24 +28,6 @@ window.getShortcut = function (key) {
     '/admin': 'Admin', '/profile': 'Profile',
   };
 
-  const NAV = [
-    { key: 'home',     href: '/',         label: 'Home',
-      svg: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-    { key: 'sales',    href: '/sales',    label: 'Sales',    managerOnly: true,
-      svg: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
-    { key: 'survey',   href: '/survey',   label: 'Survey',   managerOnly: true,
-      svg: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
-    { key: 'projects', href: '/projects', label: 'Projects', managerOnly: true,
-      svg: 'M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2' },
-    { key: 'calendar', href: '/calendar', label: 'Calendar',
-      svg: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
-    { key: 'invoices', href: '/invoices', label: 'Invoices', managerOnly: true,
-      svg: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-    { key: 'trades',   href: '/trades',   label: 'Trades',
-      svg: 'M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z' },
-    { key: 'ideas',    href: '/ideas',    label: 'Ideas',
-      svg: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
-  ];
 
   const skipLink = `<a href="#main-content" class="skip-link">Skip to content</a>`;
   const toastLive = `<div id="toast-live" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"></div>`;
@@ -124,16 +106,12 @@ window.getShortcut = function (key) {
   // synchronously so layout reserves space immediately.
   const pageHeading = `<div id="page-heading-mount"></div>`;
 
-  const bottomNav = `
-    <nav class="bottom-nav" id="main-content">
-      <div class="bottom-nav-inner">
-        ${NAV.map(n => {
-          const active = n.href === path ? ' bottom-nav-active' : '';
-          const hidden = (n.managerOnly || n.adminOnly) ? ' style="display:none"' : '';
-          return `<a class="bottom-nav-btn${active}" id="bnav-${n.key}" href="${n.href}" aria-label="${n.label}"${hidden}>${n.label}</a>`;
-        }).join('')}
-      </div>
-    </nav>`;
+  // The bottom navigation is a React island
+  // (src/react/components/BottomNav.tsx) mounted into
+  // #app-bottom-nav-mount by /react/main.js. We insert the placeholder
+  // synchronously on non-admin pages so the layout reserves space
+  // immediately and the React island fills it when the bundle loads.
+  const bottomNav = `<div id="app-bottom-nav-mount"></div>`;
 
   const invoicePanel = `
     <div id="inv-overlay" class="inv-overlay hidden" onclick="closeInvoicePanel()"></div>
@@ -173,33 +151,8 @@ window.getShortcut = function (key) {
   document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner + pageHeading);
   document.body.insertAdjacentHTML('beforeend', invoicePanel + (isAdminPage ? '' : bottomNav));
 
-  function scrollActiveNavIntoView(behavior) {
-    const btn = document.querySelector('.bottom-nav-active');
-    if (btn) btn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: behavior || 'instant' });
-  }
-
-  function syncActiveNav(behavior) {
-    const currentPath = location.pathname;
-    const buttons = document.querySelectorAll('.bottom-nav-btn');
-    if (!buttons.length) return;
-    let changed = false;
-    buttons.forEach(btn => {
-      const href = btn.getAttribute('href');
-      const wasActive = btn.classList.contains('bottom-nav-active');
-      const isActive = href === currentPath;
-      if (isActive !== wasActive) {
-        btn.classList.toggle('bottom-nav-active', isActive);
-        changed = true;
-      }
-    });
-    if (changed) scrollActiveNavIntoView(behavior);
-  }
-
-  scrollActiveNavIntoView('instant');
-
-  window.addEventListener('popstate', () => syncActiveNav('smooth'));
-  window.addEventListener('hashchange', () => syncActiveNav('smooth'));
-  window.addEventListener('mo:navigation', () => syncActiveNav('smooth'));
+  // Active-state sync + auto-scroll-into-view are handled by the React
+  // BottomNav island; see src/react/components/BottomNav.tsx.
 })();
 
 // ── Access request form ───────────────────────────────────────────────────────

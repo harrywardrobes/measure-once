@@ -18,6 +18,7 @@ import { AdminRequestsPage } from './pages/admin/AdminRequestsPage';
 import { AdminAuditLogPage } from './pages/admin/AdminAuditLogPage';
 import { GlobalHeader } from './components/GlobalHeader';
 import { PageHeadingPanel } from './components/PageHeadingPanel';
+import { BottomNav } from './components/BottomNav';
 
 /**
  * Every React mount goes through `AppThemeProvider` so the shared MUI
@@ -44,6 +45,7 @@ function withTheme(node: React.ReactElement): React.ReactElement {
 const MOUNTS: Array<{ id: string; render: () => React.ReactElement }> = [
   { id: 'app-header-mount',     render: () => <GlobalHeader /> },
   { id: 'page-heading-mount',   render: () => <PageHeadingPanel /> },
+  { id: 'app-bottom-nav-mount', render: () => <BottomNav /> },
   { id: 'home-view',            render: () => <HomePage /> },
   { id: 'admin-mui-tabs-mount', render: () => <AdminTabsBar /> },
   { id: 'tab-designsystem',     render: () => <DesignSystemPage /> },
