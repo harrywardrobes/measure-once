@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import { EmptyState } from '../components/EmptyState';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
 type _Icons = typeof RefreshIcon | typeof WarningAmberIcon;
@@ -329,7 +330,15 @@ function CalendarSection({
       </Box>
     );
   }
-  if (!connected || events.length === 0) return null;
+  if (!connected) return null;
+  if (events.length === 0) {
+    return (
+      <Box sx={{ mb: 3 }}>
+        <SectionHeader title="Upcoming" linkLabel="Calendar" linkHref="/calendar" />
+        <EmptyState message="No upcoming events" />
+      </Box>
+    );
+  }
   return (
     <Box sx={{ mb: 3 }}>
       <SectionHeader title="Upcoming" linkLabel="Calendar" linkHref="/calendar" />

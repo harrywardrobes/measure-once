@@ -91,6 +91,7 @@ import { useTheme } from '@mui/material/styles';
 
 import { ComponentShowcase } from '../components/mui/ComponentShowcase';
 import { Pill } from '../components/Pill';
+import { EmptyState } from '../components/EmptyState';
 import { BRAND_COLORS, STAGE_COLORS, RADIUS } from '../theme';
 import {
   PageLoadingSkeleton,
@@ -982,6 +983,20 @@ export function DesignSystemPage() {
             code={`<Tooltip title="Refresh the table">
   <Button variant="outlined">Hover me</Button>
 </Tooltip>`}
+          />
+          <ComponentShowcase
+            name="EmptyState"
+            description="Dashed-border placeholder shown when a list or section has no content. Use the compact prop for tighter contexts."
+            demo={
+              <Stack spacing={2} sx={{ width: '100%' }}>
+                <EmptyState message="No results found" />
+                <EmptyState message="No upcoming events" compact />
+              </Stack>
+            }
+            code={`import { EmptyState } from '../components/EmptyState';
+
+<EmptyState message="No results found" />
+<EmptyState message="No upcoming events" compact />`}
           />
         </>
       )}
