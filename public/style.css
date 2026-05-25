@@ -16,9 +16,10 @@
 
 /* ── Brand Tokens ──────────────────────────────────────────────────────────────
    Canonical source: src/react/theme.ts (BRAND_COLORS, STAGE_COLORS, RADIUS).
-   The hex / radius values below are mirrored from that file so legacy
-   non-React pages stay in lockstep with MUI components. When changing a
-   token, update *both* files.
+   The hex / radius values below are a manually-kept mirror of that file.
+   When changing a token, update src/react/theme.ts first, then reflect the
+   change here. This block (and this file) will be deleted once every legacy
+   page is fully on MUI — see task #787.
 ─────────────────────────────────────────────────────────────────────────── */
 :root {
   color-scheme: light;
