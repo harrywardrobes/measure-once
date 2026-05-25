@@ -34,6 +34,11 @@ Project management dashboard (HubSpot CRM integration).
 - **Deprecated:** reading `window.__moHeaderUser?.privilege_level` or
   `state.user?.privilege_level` directly is deprecated. Route all privilege
   checks through one of the two helpers above.
+- **Lint guard:** `npm run test:privilege-reads` (script:
+  `scripts/check-privilege-reads.mjs`) fails CI if any `.js` file under
+  `public/` — except `core.js`, `react/`, and `storybook/` (auto-generated) —
+  contains a non-comment line with `privilege_level`. Run standalone or via
+  `npm run test:ci`.
 
 ## Authentication
 Email + password via `auth.js` (bcrypt + Passport session in PostgreSQL — no
