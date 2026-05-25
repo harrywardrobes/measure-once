@@ -148,7 +148,13 @@ async function main() {
   const users = await seedUsers(pool, runId);
   console.log(`  Seeded users  admin=${users.admin.email}  member=${users.member.email}`);
 
-  const { child, logBuf } = spawnServer();
+  const { child, logBuf } = spawnServer({
+    // Stub @replit/object-storage so the upload + signed-image-serve probes
+    // run without a real Replit bucket. The preload hooks Module._resolve
+    // before server.js loads, so design-visit-uploads.js's lazy
+    // `require('@replit/object-storage')` resolves to an in-memory client.
+    nodeOptions: `--require ${path.resolve(__dirname, 'preload-object-storage-stub.js')}`,
+  });
   let exited = false;
   child.on('exit', () => { exited = true; });
 
@@ -513,12 +519,16 @@ async function main() {
       && afterRevision?.revision_note === 'Please change the door style.');
 
   {
+    // After a revision is accepted, the prior hash is moved into
+    // superseded_signoff_token_hashes and POST replies 409 + status="superseded"
+    // (so a customer who re-submits via a cached form sees a "your designer is
+    // making changes" notice rather than a generic 404).
     const r = await anonClient.post(`/api/design-visits/sign-off/${revisionRaw}`,
       { action: 'approve' });
-    record('[PUB] revision-consumed token returns 404 on re-use',
-      'status=404',
-      `status=${r.status}`,
-      r.status === 404);
+    record('[PUB] revision-consumed token returns 409 superseded on re-use',
+      'status=409, body.status="superseded"',
+      `status=${r.status} body.status=${r.json?.status}`,
+      r.status === 409 && r.json?.status === 'superseded');
   }
 
   // POST with bogus action
@@ -529,6 +539,186 @@ async function main() {
       'status=400 with error message',
       `status=${r.status} err=${r.json?.error || ''}`,
       r.status === 400);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // [PHOTO] Cloud-hosted room photos — upload + signed serve + visit round-trip
+  // ════════════════════════════════════════════════════════════════════════════
+  console.log('\n  [PHOTO] Upload + signed-image serve');
+
+  // 1×1 transparent PNG.
+  const TINY_PNG_B64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  const TINY_PNG_DATA_URL = `data:image/png;base64,${TINY_PNG_B64}`;
+
+  // (A) Upload a 1×1 PNG via the wizard endpoint.
+  let uploadStorageKey = null;
+  let uploadViewUrl = null;
+  {
+    const r = await memberClient.post('/api/design-visits/uploads', { dataUrl: TINY_PNG_DATA_URL });
+    const ok = r.status === 200
+      && typeof r.json?.storageKey === 'string'
+      && /^obj:[A-Za-z0-9_-]+\.png$/.test(r.json.storageKey)
+      && typeof r.json?.viewUrl === 'string'
+      && /^\/api\/design-visit-images\/obj%3A[A-Za-z0-9_.-]+\?exp=\d+&sig=[a-f0-9]{64}$/.test(r.json.viewUrl);
+    record('[PHOTO] POST /api/design-visits/uploads stores object and returns signed viewUrl',
+      'status=200, storageKey=obj:<id>.png, viewUrl=/api/design-visit-images/...?exp=&sig=',
+      `status=${r.status} storageKey=${r.json?.storageKey} viewUrl=${r.json?.viewUrl ? 'set' : 'NULL'}`,
+      ok);
+    if (ok) {
+      uploadStorageKey = r.json.storageKey;
+      uploadViewUrl    = r.json.viewUrl;
+    }
+  }
+
+  // (B) Fetching the signed viewUrl returns the bytes with image/png CT.
+  if (uploadViewUrl) {
+    const r = await fetch(`${BASE}${uploadViewUrl}`);
+    const ct  = r.headers.get('content-type') || '';
+    const buf = Buffer.from(await r.arrayBuffer());
+    const bytesOk = buf.length > 0 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+    record('[PHOTO] GET signed image URL returns PNG bytes with content-type image/png',
+      'status=200, content-type=image/png, body starts with PNG magic bytes',
+      `status=${r.status} ct=${ct} bytes=${buf.length} pngMagic=${bytesOk}`,
+      r.status === 200 && /^image\/png/.test(ct) && bytesOk);
+  } else {
+    record('[PHOTO] GET signed image URL returns PNG bytes with content-type image/png',
+      'depends on upload succeeding', 'upload failed', false);
+  }
+
+  // (C) Tampered signature → 403.
+  if (uploadViewUrl) {
+    const tampered = uploadViewUrl.replace(/sig=([a-f0-9]+)/, (_, s) =>
+      'sig=' + (s[0] === '0' ? '1' : '0') + s.slice(1));
+    const r = await fetch(`${BASE}${tampered}`);
+    record('[PHOTO] GET signed image URL with tampered signature → 403',
+      'status=403', `status=${r.status}`, r.status === 403);
+  } else {
+    record('[PHOTO] GET signed image URL with tampered signature → 403',
+      'depends on upload succeeding', 'upload failed', false);
+  }
+
+  // (D) Expired signature (correctly signed with a past exp) → 403.
+  // Mints the same HMAC the server does, so this proves the time-window check
+  // is enforced (not just the signature check).
+  if (uploadStorageKey) {
+    const sessionSecret = process.env.SESSION_SECRET;
+    if (!sessionSecret) {
+      record('[PHOTO] GET signed image URL with expired exp (validly signed) → 403',
+        'SESSION_SECRET set so the test can mint an expired signature',
+        'SESSION_SECRET missing in test env', false);
+    } else {
+      const pastExp = Math.floor(Date.now() / 1000) - 60;
+      const sig = crypto.createHmac('sha256', sessionSecret)
+        .update(`${uploadStorageKey}|${pastExp}`)
+        .digest('hex');
+      const url = `/api/design-visit-images/${encodeURIComponent(uploadStorageKey)}?exp=${pastExp}&sig=${sig}`;
+      const r = await fetch(`${BASE}${url}`);
+      record('[PHOTO] GET signed image URL with expired exp (validly signed) → 403',
+        'status=403 because the exp timestamp is in the past',
+        `status=${r.status}`,
+        r.status === 403);
+    }
+  } else {
+    record('[PHOTO] GET signed image URL with expired exp (validly signed) → 403',
+      'depends on upload succeeding', 'upload failed', false);
+  }
+
+  // (E) Non-image data URL → 400.
+  {
+    const r = await memberClient.post('/api/design-visits/uploads',
+      { dataUrl: 'data:text/plain;base64,aGVsbG8=' });
+    record('[PHOTO] POST /api/design-visits/uploads with non-image data URL → 400',
+      'status=400 with JSON error', `status=${r.status} err=${JSON.stringify(r.json?.error)}`,
+      r.status === 400 && typeof r.json?.error === 'string');
+  }
+
+  // (F) Oversized upload (>10MB) → 400.
+  // MAX_UPLOAD_BYTES in design-visit-uploads.js is 10 MB; express.json caps
+  // the body at 15 MB. 10.5 MB of raw bytes (~14 MB base64) sits comfortably
+  // between those two so the request reaches parseDataUrl, which then rejects
+  // it for exceeding MAX_UPLOAD_BYTES.
+  {
+    const big = Buffer.alloc(10.5 * 1024 * 1024).toString('base64');
+    const r = await memberClient.post('/api/design-visits/uploads',
+      { dataUrl: `data:image/png;base64,${big}` });
+    record('[PHOTO] POST /api/design-visits/uploads with oversized image → 4xx',
+      'status in 4xx (parseDataUrl rejects buf.length > MAX_UPLOAD_BYTES)',
+      `status=${r.status}`,
+      r.status >= 400 && r.status < 500);
+  }
+
+  // (G) Round-trip a storage key through POST /api/design-visits → load the
+  // visit and assert the DB stores `obj:` and the API returns a signed URL.
+  if (uploadStorageKey && handleId && furnitureId && doorStyleId) {
+    const photoVisit = await memberClient.post('/api/design-visits', {
+      contactId:        `${FAKE_CONTACT_ID}-photo`,
+      contactName:      'DV Photo Customer',
+      contactEmail:     'dv-photo-customer@privtest.local',
+      handleId, furnitureRangeId: furnitureId,
+      visitDate: new Date(Date.now() + 7 * 86400 * 1000).toISOString(),
+      durationMin: 90, location: '1 Photo Lane', notes: '[PHOTO] round-trip',
+      termsAccepted: true,
+      rooms: [{
+        roomName: 'Kitchen', doorStyleId,
+        widthMm: 3000, heightMm: 2400, depthMm: 600,
+        unitCount: 1, unitPricePence: 9900,
+        images: [{ storageKey: uploadStorageKey, mimeType: 'image/png' }],
+      }],
+      handlerConfig: {},
+    });
+    const photoVisitId = photoVisit.json?.designVisitId;
+    record('[PHOTO] POST /api/design-visits with a storageKey-bearing room → 201',
+      'status=201, ok=true, integer designVisitId',
+      `status=${photoVisit.status} id=${photoVisitId}`,
+      photoVisit.status === 201 && Number.isInteger(photoVisitId));
+
+    if (Number.isInteger(photoVisitId)) {
+      const dbRow = await pool.query(`
+        SELECT dvri.storage_key
+        FROM design_visit_room_images dvri
+        JOIN design_visit_rooms dvr ON dvr.id = dvri.room_id
+        WHERE dvr.design_visit_id = $1`, [photoVisitId]);
+      const dbKey = dbRow.rows[0]?.storage_key;
+      record('[PHOTO] design_visit_room_images.storage_key persists the obj: key',
+        `storage_key === "${uploadStorageKey}"`,
+        `storage_key=${dbKey}`,
+        dbKey === uploadStorageKey);
+
+      const getR = await memberClient.get(`/api/design-visits/${photoVisitId}`);
+      const room = getR.json?.rooms?.[0];
+      const img  = room?.images?.[0];
+      const sigUrlOk = typeof img?.viewUrl === 'string'
+        && /^\/api\/design-visit-images\/obj%3A[A-Za-z0-9_.-]+\?exp=\d+&sig=[a-f0-9]{64}$/.test(img.viewUrl);
+      record('[PHOTO] GET /api/design-visits/:id returns image.viewUrl as a signed /api/design-visit-images/... URL',
+        'rooms[0].images[0].viewUrl matches /api/design-visit-images/<key>?exp=&sig=<64 hex>',
+        `viewUrl=${img?.viewUrl}`,
+        getR.status === 200 && sigUrlOk);
+
+      if (sigUrlOk) {
+        const r2 = await fetch(`${BASE}${img.viewUrl}`);
+        record('[PHOTO] viewUrl from GET /api/design-visits/:id resolves to the uploaded PNG bytes',
+          'status=200, content-type=image/png',
+          `status=${r2.status} ct=${r2.headers.get('content-type')}`,
+          r2.status === 200 && /^image\/png/.test(r2.headers.get('content-type') || ''));
+      } else {
+        record('[PHOTO] viewUrl from GET /api/design-visits/:id resolves to the uploaded PNG bytes',
+          'depends on prior probe', 'viewUrl shape failed', false);
+      }
+    } else {
+      for (const lbl of [
+        '[PHOTO] design_visit_room_images.storage_key persists the obj: key',
+        '[PHOTO] GET /api/design-visits/:id returns image.viewUrl as a signed /api/design-visit-images/... URL',
+        '[PHOTO] viewUrl from GET /api/design-visits/:id resolves to the uploaded PNG bytes',
+      ]) record(lbl, 'depends on visit creation', 'visit creation failed', false);
+    }
+  } else {
+    for (const lbl of [
+      '[PHOTO] POST /api/design-visits with a storageKey-bearing room → 201',
+      '[PHOTO] design_visit_room_images.storage_key persists the obj: key',
+      '[PHOTO] GET /api/design-visits/:id returns image.viewUrl as a signed /api/design-visit-images/... URL',
+      '[PHOTO] viewUrl from GET /api/design-visits/:id resolves to the uploaded PNG bytes',
+    ]) record(lbl, 'depends on upload + catalogue rows', 'prerequisites missing', false);
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -857,6 +1047,24 @@ async function writeReport(runId, findings) {
     '  to `revision_requested`, persists the note, and clears the token.',
     '  Re-using the consumed token returns 404. A POST with an unknown',
     '  `action` is rejected with 400.',
+    '- **[PHOTO] Cloud-hosted room photos** — the spawned server preloads an',
+    '  in-memory `@replit/object-storage` stub (',
+    '  `test/design-visit/fake-object-storage.js` via',
+    '  `preload-object-storage-stub.js`) so the upload/serve probes run',
+    '  without a real Replit bucket. POST `/api/design-visits/uploads` with a',
+    '  1×1 PNG data URL must return an opaque `obj:<id>.png` storage key and a',
+    '  signed `/api/design-visit-images/<key>?exp=&sig=<64-hex>` viewUrl.',
+    '  Fetching that URL must return the PNG bytes with `Content-Type:',
+    '  image/png`. Tampering the signature must 403; supplying a validly',
+    '  signed but past-`exp` URL must also 403 (proving the time window is',
+    '  enforced, not just the HMAC). Upload negatives: a non-image data URL',
+    '  must 400 and an oversized image (>10 MB but under the 15 MB JSON',
+    '  body limit) must return 4xx. A round-trip POST `/api/design-visits`',
+    '  carrying the storage key must persist `obj:` in',
+    '  `design_visit_room_images.storage_key` and the follow-up',
+    '  GET `/api/design-visits/:id` must hand the key back as a signed',
+    '  `/api/design-visit-images/...` viewUrl that itself resolves to the',
+    '  uploaded PNG bytes.',
     '- **[WIZ] Wizard dispatch from a card action** — a `start_design_visit`',
     '  handler is seeded directly in the DB; the test navigates `/sales`,',
     '  injects an `.eq-card-action` element bound to that handler with the',

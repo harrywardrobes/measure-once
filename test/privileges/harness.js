@@ -65,7 +65,8 @@ async function seedUsers(pool, runId) {
   return seeded;
 }
 
-function spawnServer() {
+function spawnServer(opts = {}) {
+  const { extraEnv = {}, nodeOptions = '' } = opts;
   // External credentials are stripped by default so the harness runs without
   // third-party access. Each can be *opted back in* by exporting it before
   // invoking the suite (e.g. `TURNSTILE_SECRET_KEY=… npm run test:privileges`)
@@ -94,7 +95,11 @@ function spawnServer() {
     QB_CLIENT_SECRET:     optionalPassthrough('QB_CLIENT_SECRET'),
     APP_URL: BASE,
     ADMIN_EMAILS: '',
+    ...extraEnv,
   };
+  if (nodeOptions) {
+    env.NODE_OPTIONS = [process.env.NODE_OPTIONS, nodeOptions].filter(Boolean).join(' ');
+  }
   const child = spawn('node', ['server.js'], {
     cwd: path.resolve(__dirname, '..', '..'),
     env,
