@@ -267,7 +267,7 @@ export function CalendarPage(): React.ReactElement {
       />
       <Box sx={{ px: { xs: 0, sm: 1.5 } }}>
         {loading ? (
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ p: 2, color: 'text.secondary' }}>
+          <Stack direction="row" spacing={1} sx={{  p: 2, color: 'text.secondary', alignItems: 'center' }}>
             <CircularProgress size={16} />
             <Typography variant="body2">Loading…</Typography>
           </Stack>
@@ -280,7 +280,7 @@ export function CalendarPage(): React.ReactElement {
             </Alert>
             <Button variant="outlined" size="small" onClick={reload}>Retry</Button>
             {error.db && (
-              <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary' }}>
+              <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
                 If this keeps happening, try refreshing the page.
               </Typography>
             )}
@@ -341,18 +341,16 @@ function CalendarHeader(props: {
   return (
     <Stack
       direction={{ xs: 'column', sm: 'row' }}
-      alignItems={{ xs: 'stretch', sm: 'center' }}
-      justifyContent="space-between"
       spacing={1.5}
-      sx={{ px: { xs: 1, sm: 1.5 }, py: 1.5 }}
+      sx={{ px: { xs: 1, sm: 1.5 }, py: 1.5, alignItems: { xs: 'stretch', sm: 'center' } }}
     >
-      <Stack direction="row" alignItems="center" spacing={0.75}>
+      <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
         <IconButton aria-label="Previous week" size="small" onClick={props.onPrev}><ChevronLeftIcon /></IconButton>
         <Button size="small" variant="outlined" onClick={props.onToday}>Today</Button>
         <IconButton aria-label="Next week" size="small" onClick={props.onNext}><ChevronRightIcon /></IconButton>
         <Typography data-testid="cal-header-title" variant="subtitle1" sx={{ ml: 1, fontWeight: 600 }}>{headerTitle(props.cursor)}</Typography>
       </Stack>
-      <Stack direction="row" alignItems="center" spacing={1.5}>
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
         <FormControlLabel
           control={<Box component="span" data-testid="cal-workshop-wrap"><Switch checked={props.showWorkshop} onChange={(e) => props.onWorkshopChange(e.target.checked)} size="small" /></Box>}
           label={<Typography variant="body2">Workshop time</Typography>}
@@ -442,7 +440,7 @@ function TopPanel(props: {
       </Typography>
       {Object.entries(VISIT_TYPE_META).map(([k, m]) =>
         typeCounts[k] ? (
-          <Stack key={k} direction="row" alignItems="center" spacing={1} sx={{ py: 0.25 }}>
+          <Stack key={k} direction="row" spacing={1} sx={{  py: 0.25, alignItems: 'center' }}>
             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: m.color }} />
             <Typography variant="body2" sx={{ flex: 1 }}>{m.label}</Typography>
             <Typography variant="body2" sx={{ fontWeight: 700 }}>{typeCounts[k]}</Typography>
@@ -607,11 +605,11 @@ function AgendaView(props: {
           >
             <Stack
               direction="row"
-              alignItems="center"
-              justifyContent="space-between"
+
+
               sx={{ px: 1.5, py: 1.25, borderBottom: '1px solid', borderColor: 'divider', ...(isToday && { bgcolor: 'primary.main', color: 'primary.contrastText', opacity: 0.95 }) }}
             >
-              <Stack direction="row" alignItems="center" spacing={1.25}>
+              <Stack direction="row" spacing={1.25} sx={{ alignItems: 'center' }}>
                 <Box
                   component="span"
                   sx={{
@@ -626,7 +624,7 @@ function AgendaView(props: {
                 >
                   {day.getDate()}
                 </Box>
-                <Stack direction="row" alignItems="baseline" spacing={0.75}>
+                <Stack direction="row" spacing={0.75} sx={{ alignItems: 'baseline' }}>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
                     {day.toLocaleDateString('en-GB', { weekday: 'long' })}
                   </Typography>
@@ -673,7 +671,7 @@ function AgendaView(props: {
                     );
                   })}
                 </Box>
-                <Stack direction="row" justifyContent="space-between" sx={{ px: 1.5, pt: 0.25, color: 'text.secondary' }}>
+                <Stack direction="row" sx={{  px: 1.5, pt: 0.25, color: 'text.secondary', justifyContent: 'space-between' }}>
                   <Typography variant="caption">{DAY_START_HOUR}:00</Typography>
                   <Typography variant="caption">{Math.floor((DAY_START_HOUR + DAY_END_HOUR) / 2)}:00</Typography>
                   <Typography variant="caption">{DAY_END_HOUR}:00</Typography>
@@ -708,7 +706,7 @@ function AgendaRow({ visit, platformUsers, onClick, testId }: { visit: Visit; pl
   return (
     <Stack
       direction="row"
-      alignItems="center"
+
       spacing={1.25}
       data-testid={testId}
       data-visit-id={visit.id}
@@ -723,12 +721,12 @@ function AgendaRow({ visit, platformUsers, onClick, testId }: { visit: Visit; pl
         {fmtTime(s)} – {fmtTime(e)}
       </Typography>
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Stack direction="row" alignItems="center" spacing={0.75} sx={{ flexWrap: 'wrap' }}>
+        <Stack direction="row" spacing={0.75} sx={{  flexWrap: 'wrap', alignItems: 'center' }}>
           <Chip label={meta.label} size="small" sx={{ bgcolor: meta.color, color: '#fff', height: 18, fontSize: 11 }} />
           <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{customer}</Typography>
         </Stack>
         {(visit.location || assigneeLabel) && (
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.25, color: 'text.secondary' }}>
+          <Stack direction="row" spacing={1} sx={{  mt: 0.25, color: 'text.secondary', alignItems: 'center' }}>
             {visit.location && <Typography variant="caption">📍 {visit.location}</Typography>}
             {assigneeLabel && <Chip label={assigneeLabel} size="small" variant="outlined" sx={{ height: 18, fontSize: 11 }} />}
           </Stack>
@@ -799,7 +797,7 @@ function PersonalTasksSection(props: {
                 onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
                 autoFocus
               />
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+              <Stack direction="row" spacing={1} sx={{  mt: 1, alignItems: 'center' }}>
                 <TextField
                   type="date"
                   size="small"
@@ -1032,17 +1030,17 @@ function VisitModal(props: {
             <TextField
               type="date" size="small" label="Date" value={date}
               onChange={(e) => setDate(e.target.value)}
-              InputLabelProps={{ shrink: true }} sx={{ flex: 1 }}
+              slotProps={{ inputLabel: { shrink: true }}} sx={{ flex: 1 }}
             />
             <TextField
               type="time" size="small" label="Start" value={start}
               onChange={(e) => setStart(e.target.value)}
-              InputLabelProps={{ shrink: true }} sx={{ flex: 1 }}
+              slotProps={{ inputLabel: { shrink: true }}} sx={{ flex: 1 }}
             />
             <TextField
               type="time" size="small" label="End" value={end}
               onChange={(e) => setEnd(e.target.value)}
-              InputLabelProps={{ shrink: true }} sx={{ flex: 1 }}
+              slotProps={{ inputLabel: { shrink: true }}} sx={{ flex: 1 }}
             />
           </Stack>
 

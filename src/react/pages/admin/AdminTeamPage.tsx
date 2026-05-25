@@ -493,7 +493,7 @@ export function AdminTeamPage() {
       {/* Team table */}
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+          <Stack direction="row" spacing={1} sx={{  mb: 2, alignItems: 'center' }}>
             <Typography variant="h6">Team</Typography>
             <Chip size="small" label={users.length} />
           </Stack>
@@ -522,12 +522,12 @@ export function AdminTeamPage() {
                     return (
                       <TableRow key={u.id} hover>
                         <TableCell>
-                          <Stack direction="row" spacing={1.5} alignItems="center">
+                          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
                             <Avatar src={avatarSrc(u)} sx={{ width: 32, height: 32, fontSize: 14 }}>
                               {initials(name || u.email || '?')}
                             </Avatar>
                             <Box>
-                              <Typography variant="body2" fontWeight={600}>{name}</Typography>
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>{name}</Typography>
                               <Typography variant="caption" color="text.secondary">{u.email || ''}</Typography>
                             </Box>
                           </Stack>
@@ -541,7 +541,7 @@ export function AdminTeamPage() {
                         </TableCell>
                         <TableCell><Typography variant="body2">{fmtDateShort(u.created_at)}</Typography></TableCell>
                         <TableCell align="right">
-                          <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
                             {u.email && (
                               <Button
                                 size="small" variant="text"
@@ -586,32 +586,32 @@ export function AdminTeamPage() {
             <Grid size={12}>
               <TextField fullWidth label="Work email address" type="email"
                 value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })}
-                placeholder="colleague@example.com" inputProps={{ maxLength: 254 }} />
+                placeholder="colleague@example.com" slotProps={{ htmlInput: { maxLength: 254 }}} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth label="First name" value={invite.first_name}
                 onChange={(e) => setInvite({ ...invite, first_name: e.target.value })}
-                placeholder="Jane" inputProps={{ maxLength: 100 }} />
+                placeholder="Jane" slotProps={{ htmlInput: { maxLength: 100 }}} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth label="Last name" value={invite.last_name}
                 onChange={(e) => setInvite({ ...invite, last_name: e.target.value })}
-                placeholder="Smith" inputProps={{ maxLength: 100 }} />
+                placeholder="Smith" slotProps={{ htmlInput: { maxLength: 100 }}} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField fullWidth type="date" label="Date of birth" InputLabelProps={{ shrink: true }}
+              <TextField fullWidth type="date" label="Date of birth" slotProps={{ inputLabel: { shrink: true }}}
                 value={invite.date_of_birth}
                 onChange={(e) => setInvite({ ...invite, date_of_birth: e.target.value })} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth label="National Insurance number" value={invite.ni_number}
                 onChange={(e) => setInvite({ ...invite, ni_number: e.target.value.toUpperCase() })}
-                placeholder="AB 12 34 56 C" inputProps={{ maxLength: 20, style: { textTransform: 'uppercase' } }} />
+                placeholder="AB 12 34 56 C" slotProps={{ htmlInput: { maxLength: 20, style: { textTransform: 'uppercase' }} }} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth label="Mobile number" type="tel" value={invite.mobile_number}
                 onChange={(e) => setInvite({ ...invite, mobile_number: e.target.value })}
-                placeholder="+44 7700 900000" inputProps={{ maxLength: 30 }} />
+                placeholder="+44 7700 900000" slotProps={{ htmlInput: { maxLength: 30 }}} />
               {mobileDuplicate && (() => {
                 const d = describePhoneDuplicate(mobileDuplicate);
                 return (
@@ -634,17 +634,17 @@ export function AdminTeamPage() {
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth label="First name" value={invite.ec_first_name}
                 onChange={(e) => setInvite({ ...invite, ec_first_name: e.target.value })}
-                placeholder="John" inputProps={{ maxLength: 100 }} />
+                placeholder="John" slotProps={{ htmlInput: { maxLength: 100 }}} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth label="Last name" value={invite.ec_last_name}
                 onChange={(e) => setInvite({ ...invite, ec_last_name: e.target.value })}
-                placeholder="Smith" inputProps={{ maxLength: 100 }} />
+                placeholder="Smith" slotProps={{ htmlInput: { maxLength: 100 }}} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth label="Mobile number" type="tel" value={invite.ec_phone}
                 onChange={(e) => setInvite({ ...invite, ec_phone: e.target.value })}
-                placeholder="+44 7700 900000" inputProps={{ maxLength: 30 }} />
+                placeholder="+44 7700 900000" slotProps={{ htmlInput: { maxLength: 30 }}} />
               {ecPhoneDuplicate && (() => {
                 const d = describePhoneDuplicate(ecPhoneDuplicate);
                 return (
@@ -676,7 +676,7 @@ export function AdminTeamPage() {
           <Typography variant="overline">Note (optional)</Typography>
           <TextField fullWidth sx={{ mt: 1 }} value={invite.note}
             onChange={(e) => setInvite({ ...invite, note: e.target.value })}
-            placeholder="e.g. New hire · Site manager" inputProps={{ maxLength: 200 }} />
+            placeholder="e.g. New hire · Site manager" slotProps={{ htmlInput: { maxLength: 200 }}} />
 
           {inviteDuplicate && (() => {
             const d = describeDuplicate(inviteDuplicate);
@@ -705,7 +705,7 @@ export function AdminTeamPage() {
             );
           })()}
 
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 2 }}>
+          <Stack direction="row" spacing={2} sx={{  mt: 2, alignItems: 'center' }}>
             <Button
               variant="contained"
               disabled={inviteBusy || !!inviteDuplicate || !!mobileDuplicate || !!ecPhoneDuplicate}
@@ -726,7 +726,7 @@ export function AdminTeamPage() {
       {/* Approved emails */}
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+          <Stack direction="row" spacing={1} sx={{  mb: 2, alignItems: 'center' }}>
             <Typography variant="h6">Approved team members</Typography>
             <Chip size="small" label={allowed.length} />
           </Stack>
@@ -761,7 +761,7 @@ export function AdminTeamPage() {
                         }}
                       >
                         <TableCell>
-                          <Typography variant="body2" fontWeight={600}>{name || a.email}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{name || a.email}</Typography>
                           {name && <Typography variant="caption" color="text.secondary">{a.email}</Typography>}
                         </TableCell>
                         <TableCell>
@@ -806,7 +806,7 @@ export function AdminTeamPage() {
             <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="First name" value={editForm.first_name || ''} onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })} /></Grid>
             <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="Last name" value={editForm.last_name || ''} onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })} /></Grid>
             <Grid size={12}><TextField fullWidth label="Work email address" type="email" value={editForm.email || ''} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} /></Grid>
-            <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth type="date" label="Date of birth" InputLabelProps={{ shrink: true }} value={editForm.date_of_birth || ''} onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })} /></Grid>
+            <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth type="date" label="Date of birth" slotProps={{ inputLabel: { shrink: true }}} value={editForm.date_of_birth || ''} onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })} /></Grid>
             <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="National Insurance number" value={editForm.ni_number || ''} onChange={(e) => setEditForm({ ...editForm, ni_number: e.target.value.toUpperCase() })} /></Grid>
             <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="Mobile number" type="tel" value={editForm.mobile_number || ''} onChange={(e) => setEditForm({ ...editForm, mobile_number: e.target.value })} /></Grid>
           </Grid>
@@ -846,7 +846,7 @@ export function AdminTeamPage() {
             </Grid>
             <Grid size={12}>
               <TextField fullWidth label="Note (optional)" value={editForm.note || ''}
-                onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} inputProps={{ maxLength: 200 }} />
+                onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} slotProps={{ htmlInput: { maxLength: 200 }}} />
             </Grid>
           </Grid>
           {editErr && <Alert severity="error" sx={{ mt: 2 }}>{editErr}</Alert>}

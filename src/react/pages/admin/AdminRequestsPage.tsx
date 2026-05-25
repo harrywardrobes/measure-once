@@ -246,7 +246,7 @@ export function AdminRequestsPage() {
       {/* Access requests */}
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+          <Stack direction="row" spacing={1} sx={{  mb: 2, alignItems: 'center' }}>
             <Typography variant="h6">Access requests</Typography>
             <Chip size="small" label={pending.length} />
           </Stack>
@@ -270,7 +270,7 @@ export function AdminRequestsPage() {
                       <TableCell><Typography variant="body2" color="text.secondary">{r.email}</Typography></TableCell>
                       <TableCell><Typography variant="body2">{fmtDate(r.created_at)}</Typography></TableCell>
                       <TableCell align="right">
-                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
                           <Button size="small" variant="contained" color="success" onClick={() => openApprove(r)}>Approve</Button>
                           <Button size="small" variant="outlined" color="error" onClick={() => rejectReq(r.id)}>Reject</Button>
                         </Stack>
@@ -317,7 +317,7 @@ export function AdminRequestsPage() {
       {/* Photo approvals */}
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+          <Stack direction="row" spacing={1} sx={{  mb: 2, alignItems: 'center' }}>
             <Typography variant="h6">Photo approvals</Typography>
             {photos.length > 0 && <Chip size="small" label={photos.length} />}
           </Stack>
@@ -336,7 +336,7 @@ export function AdminRequestsPage() {
                       <Box component="img" src={u.pending_photo} alt=""
                         sx={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', display: 'block' }} />
                       <CardContent>
-                        <Typography variant="body2" fontWeight={600}>{name}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{name}</Typography>
                         <Typography variant="caption" color="text.secondary">{u.email || ''}</Typography>
                         <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                           <Button size="small" variant="contained" onClick={() => approvePhoto(u.id)}>Approve</Button>
@@ -355,7 +355,7 @@ export function AdminRequestsPage() {
       {/* Trade submissions */}
       <Card variant="outlined">
         <CardContent>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+          <Stack direction="row" spacing={1} sx={{  mb: 1, alignItems: 'center' }}>
             <Typography variant="h6">Trade submissions</Typography>
             {trades.length > 0 && <Chip size="small" label={trades.length} />}
           </Stack>
@@ -380,10 +380,10 @@ export function AdminRequestsPage() {
         return (
           <Card key={s.id} variant="outlined" id={`tsub-${s.id}`}>
             <CardContent>
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} justifyContent="space-between">
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ justifyContent: 'space-between' }}>
                 <Box sx={{ flex: 1 }}>
                   <Typography variant="h6">{s.company_name}</Typography>
-                  <Stack direction="row" spacing={1} sx={{ my: 1 }} flexWrap="wrap" useFlexGap>
+                  <Stack direction="row" spacing={1} sx={{  my: 1, flexWrap: 'wrap' }}>
                     <Chip size="small" label={s.trade_type} color="primary" variant="outlined" />
                     {areas && <Chip size="small" label={areas} />}
                   </Stack>
@@ -419,7 +419,7 @@ export function AdminRequestsPage() {
                     Submitted by <strong>{s.submitter_name || s.submitter_email || 'Unknown'}</strong> · {fmtDate(s.created_at)}
                   </Typography>
                 </Box>
-                <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }} alignItems="flex-start">
+                <Stack direction="row" spacing={1} sx={{  flexShrink: 0, alignItems: 'flex-start' }}>
                   <Button variant="contained" color="success" onClick={() => approveTrade(s.id)}>Approve</Button>
                   <Button variant="outlined" color="error" onClick={() => rejectTrade(s.id)}>Reject</Button>
                 </Stack>
@@ -487,7 +487,7 @@ export function AdminRequestsPage() {
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth label="Mobile number" type="tel" value={approveForm.mobile_number}
                 onChange={(e) => setApproveForm({ ...approveForm, mobile_number: e.target.value })}
-                placeholder="+44 7700 900000" inputProps={{ maxLength: 30 }} />
+                placeholder="+44 7700 900000" slotProps={{ htmlInput: { maxLength: 30 }}} />
               {mobileDuplicate && (() => {
                 const d = describePhoneDuplicate(mobileDuplicate);
                 return (
@@ -506,7 +506,7 @@ export function AdminRequestsPage() {
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField fullWidth label="Emergency contact phone" type="tel" value={approveForm.ec_phone}
                 onChange={(e) => setApproveForm({ ...approveForm, ec_phone: e.target.value })}
-                placeholder="+44 7700 900000" inputProps={{ maxLength: 30 }} />
+                placeholder="+44 7700 900000" slotProps={{ htmlInput: { maxLength: 30 }}} />
               {ecPhoneDuplicate && (() => {
                 const d = describePhoneDuplicate(ecPhoneDuplicate);
                 return (

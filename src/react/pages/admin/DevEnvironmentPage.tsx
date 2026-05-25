@@ -71,7 +71,7 @@ export function DevEnvironmentPage() {
   return (
     <Stack spacing={2}>
       <Alert severity="warning" variant="outlined">
-        <Typography variant="subtitle2" fontWeight={700}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
           You are in development mode
         </Typography>
         <Typography variant="body2">
@@ -110,7 +110,7 @@ export function DevEnvironmentPage() {
                     flexWrap: 'wrap',
                   }}
                 >
-                  <Typography variant="subtitle2" fontWeight={700}>{f.name}</Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{f.name}</Typography>
                   <Chip label={f.location} size="small" />
                 </Box>
                 <Typography variant="body2" color="text.secondary">

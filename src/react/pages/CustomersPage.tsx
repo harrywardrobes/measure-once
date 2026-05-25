@@ -140,7 +140,7 @@ function readUrlState() {
     sort: p.get('sort') || 'newest',
     q: p.get('q') || '',
     stage: p.get('stage') || '',
-    view: p.get('view') === 'active' ? 'active' : 'all',
+    view: (p.get('view') === 'active' ? 'active' : 'all') as 'all' | 'active',
     archived: p.get('archived') === '1',
   };
 }
@@ -542,10 +542,10 @@ function CustomerCard({
         onClick={saveCustomersScroll}
         sx={{ p: 2, display: 'block' }}
       >
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+        <Stack direction="row" spacing={1} sx={{  alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <Typography
             variant="subtitle1"
-            fontWeight={600}
+
             noWrap
             sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
           >
@@ -556,7 +556,7 @@ function CustomerCard({
           </Typography>
           {lsLabel ? <Chip label={lsLabel} size="small" color="primary" variant="outlined" /> : null}
         </Stack>
-        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+        <Stack direction="row" spacing={0.75} sx={{  mt: 1, flexWrap: 'wrap' }}>
           {effectiveRooms.map((r, idx) => {
             const sk = r.stageKey || 'sales';
             const lbl =
@@ -573,7 +573,7 @@ function CustomerCard({
             );
           })}
         </Stack>
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+        <Stack direction="row" spacing={1} sx={{  mt: 1, flexWrap: 'wrap' }}>
           {email ? <Chip label={email} size="small" variant="outlined" /> : null}
           {phone ? <Chip label={phone} size="small" variant="outlined" /> : null}
           <QBBadge invoices={invoices} />
@@ -1058,26 +1058,28 @@ export function CustomersPage(): React.ReactElement {
             onChange={(e) => setSearchInput(e.target.value)}
             size="small"
             sx={{ flexGrow: 1 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-              endAdornment: searchInput ? (
-                <InputAdornment position="end">
-                  <Button
-                    size="small"
-                    onClick={() => setSearchInput('')}
-                    aria-label="Clear search"
-                    sx={{ minWidth: 0 }}
-                  >
-                    <ClearIcon fontSize="small" />
-                  </Button>
-                </InputAdornment>
-              ) : null,
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+                endAdornment: searchInput ? (
+                  <InputAdornment position="end">
+                    <Button
+                      size="small"
+                      onClick={() => setSearchInput('')}
+                      aria-label="Clear search"
+                      sx={{ minWidth: 0 }}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </Button>
+                  </InputAdornment>
+                ) : null,
+              },
+              htmlInput: { 'aria-label': 'Search customers' },
             }}
-            inputProps={{ 'aria-label': 'Search customers' }}
           />
 
           <FormControl size="small" sx={{ minWidth: 200 }} disabled={viewMode !== 'all'}>
@@ -1094,7 +1096,7 @@ export function CustomersPage(): React.ReactElement {
                 setSubstatus('');
                 setPage(1);
               }}
-              inputProps={{ id: 'lead-status-filter', name: 'lead-status-filter' }}
+              slotProps={{ input: { id: 'lead-status-filter', name: 'lead-status-filter' } }}
             >
               {/* Native options are managed by populateLeadStatusFilter() so
                   the existing lead-status-sync test can mutate them
@@ -1154,7 +1156,7 @@ export function CustomersPage(): React.ReactElement {
         </Stack>
 
         {availableSubstatuses.length > 0 ? (
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             <Chip
               label="All sub-statuses"
               variant={substatus === '' ? 'filled' : 'outlined'}
@@ -1220,7 +1222,7 @@ export function CustomersPage(): React.ReactElement {
         )}
 
         {totalPages > 1 ? (
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 1 }}>
+          <Stack direction="row" sx={{   pt: 1, alignItems: 'center', justifyContent: 'space-between' }}>
             <Typography variant="body2" color="text.secondary">
               Showing {Math.min(total, (page - 1) * PAGE_LIMIT + 1)}–
               {Math.min(total, (page - 1) * PAGE_LIMIT + visibleContacts.length)} of {total}

@@ -106,8 +106,8 @@ function SectionHeader({
   linkHref?: string;
 }) {
   return (
-    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-      <Stack direction="row" alignItems="center" spacing={1}>
+    <Stack direction="row" sx={{   mb: 1, alignItems: 'center', justifyContent: 'space-between' }}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <Typography variant="overline" sx={{ letterSpacing: 0.6, color: 'text.secondary' }}>
           {title}
         </Typography>
@@ -148,7 +148,7 @@ function HomeCard({
 function SkeletonCard({ titleW = '50%', badgeW = 44 }: { titleW?: string; badgeW?: number }) {
   return (
     <HomeCard disabled>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+      <Stack direction="row" spacing={1} sx={{  alignItems: 'center', justifyContent: 'space-between' }}>
         <Skeleton variant="text" width={titleW} height={18} />
         <Skeleton variant="rounded" width={badgeW} height={18} sx={{ borderRadius: 999 }} />
       </Stack>
@@ -238,7 +238,7 @@ function TaskSection({
             const isOvr = !!t.dueDate && new Date(t.dueDate).getTime() < todayMs;
             return (
               <HomeCard key={t.id} onClick={() => (location.href = '/calendar')}>
-                <Typography variant="body2" fontWeight={600} noWrap>
+                <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
                   {t.title}
                 </Typography>
                 {t.dueDate ? (
@@ -314,7 +314,7 @@ function CalendarSection({
             )
           }
         >
-          <Typography variant="body2" fontWeight={600}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
             {authError ? 'Your Google account was disconnected' : "Calendar couldn't be loaded"}
           </Typography>
           <Typography variant="caption" sx={{ display: 'block' }}>
@@ -346,7 +346,7 @@ function CalendarSection({
                 {when}
               </Typography>
             ) : null}
-            <Typography variant="body2" fontWeight={600} noWrap>
+            <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
               {ev.summary || 'Event'}
             </Typography>
           </HomeCard>
@@ -393,7 +393,7 @@ function InvoicesSection({
             </Button>
           }
         >
-          <Typography variant="body2" fontWeight={600}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
             Invoices couldn't be loaded
           </Typography>
           <Typography variant="caption" sx={{ display: 'block' }}>
@@ -420,8 +420,8 @@ function InvoicesSection({
             else location.href = '/invoices';
           }}
         >
-          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
-            <Typography variant="body2" fontWeight={600} noWrap sx={{ minWidth: 0 }}>
+          <Stack direction="row" spacing={1} sx={{  alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="body2" noWrap sx={{  minWidth: 0, fontWeight: 600 }}>
               {inv.customerName || '—'}
             </Typography>
             <Chip label={fmtGBP(inv.balance)} size="small" color="error" sx={{ height: 20 }} />
@@ -485,8 +485,8 @@ function ProjectsSection({
               else location.href = `/customers/${encodeURIComponent(c.id)}`;
             }}
           >
-            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
-              <Typography variant="body2" fontWeight={600} noWrap>
+            <Stack direction="row" spacing={1} sx={{  alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
                 {contactDisplayName(c)}
               </Typography>
               {stageLbl ? (

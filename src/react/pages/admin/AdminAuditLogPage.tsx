@@ -82,7 +82,7 @@ export function AdminAuditLogPage() {
   return (
     <Card variant="outlined">
       <CardContent>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+        <Stack direction="row" spacing={1} sx={{  mb: 1, alignItems: 'center' }}>
           <Typography variant="h6">Audit log</Typography>
           <Chip size="small" label="read-only" variant="outlined" />
         </Stack>
@@ -102,9 +102,9 @@ export function AdminAuditLogPage() {
                     <Stack key={i} direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ py: 1.5 }}>
                       <Typography variant="caption" color="text.secondary" sx={{ minWidth: 160 }}>{fmtDate(e.ts)}</Typography>
                       <Box sx={{ flex: 1 }}>
-                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                        <Stack direction="row" spacing={1} sx={{  alignItems: 'center', flexWrap: 'wrap' }}>
                           <Chip size="small" label="trade company" color="secondary" variant="outlined" />
-                          <Typography variant="body2" fontWeight={600}>{e.company_name || ''}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{e.company_name || ''}</Typography>
                           {e.trade_type && <Chip size="small" label={e.trade_type} />}
                         </Stack>
                         <Typography variant="caption" color="text.secondary">
@@ -123,9 +123,9 @@ export function AdminAuditLogPage() {
                   <Stack key={i} direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ py: 1.5 }}>
                     <Typography variant="caption" color="text.secondary" sx={{ minWidth: 160 }}>{fmtDate(e.ts)}</Typography>
                     <Box sx={{ flex: 1 }}>
-                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                      <Stack direction="row" spacing={1} sx={{  alignItems: 'center', flexWrap: 'wrap' }}>
                         <Chip size="small" label={(e.action_type || '').replace(/_/g, ' ')} variant="outlined" />
-                        <Typography variant="body2" fontWeight={600}>{label}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{label}</Typography>
                       </Stack>
                       <Typography variant="caption" color="text.secondary">
                         By <strong>{e.admin_email || ''}</strong>{meta ? ' · ' + meta : ''}
@@ -138,7 +138,7 @@ export function AdminAuditLogPage() {
           )}
         </Box>
         {hasMore && (
-          <Stack alignItems="center" sx={{ mt: 2 }}>
+          <Stack sx={{  mt: 2, alignItems: 'center' }}>
             <Button onClick={loadMore} disabled={loadingMore}>
               {loadingMore ? 'Loading…' : 'Load more'}
             </Button>

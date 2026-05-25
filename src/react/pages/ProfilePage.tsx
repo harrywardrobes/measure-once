@@ -161,7 +161,7 @@ export function ProfilePage(): React.ReactElement {
   if (loading) {
     return (
       <Box sx={{ maxWidth: 720, mx: 'auto', px: 2, py: 3 }}>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ color: 'text.secondary' }}>
+        <Stack direction="row" spacing={1} sx={{  color: 'text.secondary', alignItems: 'center' }}>
           <CircularProgress size={16} />
           <Typography variant="body2">Loading…</Typography>
         </Stack>
@@ -286,7 +286,7 @@ function IdentityCard({
   return (
     <Card variant="outlined" sx={{ mb: 1.5 }}>
       <CardContent>
-        <Stack direction="row" spacing={2} alignItems="center">
+        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
           <Box sx={{ position: 'relative' }}>
             <Avatar
               src={photoSrc || undefined}
@@ -382,7 +382,7 @@ function RoleCard({ profile }: { profile: Profile }) {
         <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
           Role &amp; Permissions
         </Typography>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Stack direction="row" sx={{  alignItems: 'center', justifyContent: 'space-between' }}>
           <Typography variant="body2" color="text.secondary">Job role</Typography>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
             {profile.job_role || '—'}
@@ -427,7 +427,7 @@ function StrengthMeter({ value, userInputs }: { value: string; userInputs: strin
         color={STRENGTH_COLORS[score]}
         sx={{ height: 6, borderRadius: 999 }}
       />
-      <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.5 }}>
+      <Stack direction="row" sx={{  mt: 0.5, justifyContent: 'space-between' }}>
         <Typography variant="caption" color="text.secondary">
           Strength: <Box component="strong" sx={{ color: 'text.primary' }}>{STRENGTH_LABELS[score]}</Box>
         </Typography>

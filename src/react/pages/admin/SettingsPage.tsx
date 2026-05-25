@@ -90,7 +90,7 @@ export function SettingsPage() {
                   HS
                 </text>
               </Box>
-              <Typography variant="body2" fontWeight={600}>HubSpot CRM</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>HubSpot CRM</Typography>
             </Box>
             <span id="hubspot-status-badge" className="adm-status-badge">Checking…</span>
           </Box>
@@ -107,7 +107,7 @@ export function SettingsPage() {
             }}
           >
             <Box>
-              <Typography variant="subtitle1" fontWeight={600}>Lead Statuses</Typography>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Lead Statuses</Typography>
               <Typography variant="body2" color="text.secondary">
                 Define the HubSpot lead status values and their display labels. Statuses marked
                 "Excl. from Sales" are hidden from the Sales board.
@@ -137,13 +137,13 @@ export function SettingsPage() {
               bgcolor: 'background.default',
             }}
           >
-            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>
+            <Typography variant="subtitle2" sx={{  mb: 1.5, fontWeight: 600 }}>
               Add new status
             </Typography>
             <Stack
               direction={{ xs: 'column', md: 'row' }}
               spacing={1.5}
-              alignItems={{ md: 'flex-end' }}
+              sx={{ alignItems: { md: 'flex-end' } }}
             >
               <TextField
                 size="small"
@@ -153,7 +153,7 @@ export function SettingsPage() {
                 onChange={(e) =>
                   setNewKey(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))
                 }
-                inputProps={{ id: 'ls-new-key', maxLength: 64, className: 'field adm-key-input' }}
+                slotProps={{ htmlInput: { id: 'ls-new-key', maxLength: 64, className: 'field adm-key-input' }}}
                 sx={{ flex: 1 }}
               />
               {/*
@@ -198,7 +198,7 @@ export function SettingsPage() {
                 placeholder="Human-readable label"
                 value={newLabel}
                 onChange={(e) => setNewLabel(e.target.value)}
-                inputProps={{ id: 'ls-new-label', maxLength: 128, className: 'field' }}
+                slotProps={{ htmlInput: { id: 'ls-new-label', maxLength: 128, className: 'field' }}}
                 sx={{ flex: 2 }}
               />
               <Button
@@ -255,7 +255,7 @@ export function SettingsPage() {
             }}
           >
             <Box>
-              <Typography variant="body2" fontWeight={600}>Dev filter</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>Dev filter</Typography>
               <Typography variant="caption" color="text.secondary">
                 When ON, only contacts marked below appear in the Customers list and lead-status
                 counts. Turn OFF to see all HubSpot contacts as in production.

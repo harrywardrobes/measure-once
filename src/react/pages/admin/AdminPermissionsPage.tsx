@@ -133,7 +133,7 @@ export function AdminPermissionsPage() {
             <TextField size="small" sx={{ flex: 1 }} placeholder="New role name…"
               value={newRole} onChange={(e) => setNewRole(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') submitNewRole(); }}
-              inputProps={{ maxLength: 64 }} />
+              slotProps={{ htmlInput: { maxLength: 64 }}} />
             <FormControl size="small" sx={{ minWidth: 140 }}>
               <Select value={existingRole?.privilege_level || newPriv}
                 onChange={(e) => setNewPriv(e.target.value)}>
@@ -155,7 +155,7 @@ export function AdminPermissionsPage() {
             ) : (
               <Stack spacing={1}>
                 {jobRoles.map((r) => (
-                  <Stack key={r.name} direction="row" alignItems="center" spacing={1.5}
+                  <Stack key={r.name} direction="row" spacing={1.5}
                     sx={{ p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
                     <Typography variant="body2" sx={{ flex: 1, fontWeight: 600 }}>{r.name}</Typography>
                     <FormControl size="small" sx={{ minWidth: 140 }}>
@@ -210,7 +210,7 @@ export function AdminPermissionsPage() {
                     return (
                       <TableRow key={row.feat} hover>
                         <TableCell>
-                          <Typography variant="body2" fontWeight={600}>{row.feat}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{row.feat}</Typography>
                           {row.desc && <Typography variant="caption" color="text.secondary">{row.desc}</Typography>}
                         </TableCell>
                         {levels.map(l => {
@@ -233,7 +233,7 @@ export function AdminPermissionsPage() {
               </Table>
             </TableContainer>
           )}
-          <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 2 }}>
+          <Stack direction="row" spacing={2} sx={{  mt: 2, alignItems: 'center' }}>
             <Button variant="contained" disabled={saving || !dirty} onClick={savePerms}>
               {saving ? 'Saving…' : 'Save permissions'}
             </Button>

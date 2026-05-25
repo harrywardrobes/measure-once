@@ -548,18 +548,18 @@ export function DesignSystemPage() {
             description="Primary call-to-action. Use `variant=contained` for the main action, `outlined` for secondary, `text` for tertiary. Sizes (`small`/`medium`/`large`) and colours (`primary`/`secondary`/`error`/`warning`/`info`/`success`) all shown below."
             demo={
               <Stack spacing={1.5} sx={{ width: '100%' }}>
-                <Stack direction="row" spacing={1} flexWrap="wrap">
+                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
                   <Button variant="contained">Contained</Button>
                   <Button variant="outlined">Outlined</Button>
                   <Button variant="text">Text</Button>
                   <Button variant="contained" disabled>Disabled</Button>
                 </Stack>
-                <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
+                <Stack direction="row" spacing={1} sx={{  alignItems: 'center', flexWrap: 'wrap' }}>
                   <Button variant="contained" size="small">Small</Button>
                   <Button variant="contained" size="medium">Medium</Button>
                   <Button variant="contained" size="large">Large</Button>
                 </Stack>
-                <Stack direction="row" spacing={1} flexWrap="wrap">
+                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
                   <Button variant="contained" color="primary">Primary</Button>
                   <Button variant="contained" color="secondary">Secondary</Button>
                   <Button variant="contained" color="success">Success</Button>
