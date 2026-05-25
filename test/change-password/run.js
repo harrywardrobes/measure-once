@@ -24,6 +24,9 @@
 //           fields and Submit/Cancel buttons
 //   [UI-zxcvbn] typing into "New password" triggers the strength meter (or at
 //           least does not crash the panel) — regression guard for task #870
+//   [UI-autofill] simulating browser autofill via native value setter +
+//           input event (bypassing React's onChange) — strength meter stays
+//           visible and no NaN/LinearProgress errors are emitted
 //   [UI.3]  submitting the empty form surfaces Mui-error helper texts for all
 //           three fields inside the dialog
 //   [UI.4]  clicking Cancel returns the dialog to a hidden state
@@ -410,6 +413,7 @@ async function main() {
   const UI_LABELS = [
     '[UI.1] /profile — profile card rendered; dialog hidden (display:none)',
     '[UI.2] clicking "Change password" button → dialog becomes visible with 3 fields',
+    '[UI-autofill] autofill simulation — strength meter (progressbar) visible; no NaN/LinearProgress error',
     '[UI-zxcvbn] strength meter probe — dialog survives typing into "New password"',
     '[UI.3] submitting empty dialog → Mui-error helper texts appear for all 3 fields',
     '[UI.4] clicking Cancel → dialog becomes hidden again',
@@ -419,7 +423,13 @@ async function main() {
   // Console errors from StrengthMeter and checkPasswordPolicy are expected when
   // zxcvbn throws internally (headless Chrome / module loading edge case).
   // Exclude them from the page-error accumulator.
-  const IGNORE_RE = /(favicon\.ico|\/storybook\/|\.map\b|Failed to load resource|\[StrengthMeter\]|\[checkPasswordPolicy\])/;
+  // TypeError about reading 'length' of null is thrown by zxcvbn's internal
+  // frequency-list lookups in headless Chrome (module data not fully available).
+  // It is caught and re-logged by StrengthMeter/checkPasswordPolicy with a
+  // recognisable prefix, but Chrome also logs the raw error object separately
+  // as a bare console.error without any caller prefix.  Both forms are expected
+  // noise in this environment and must not be treated as a test failure.
+  const IGNORE_RE = /(favicon\.ico|\/storybook\/|\.map\b|Failed to load resource|\[StrengthMeter\]|\[checkPasswordPolicy\]|Cannot read properties of null \(reading 'length'\))/;
 
   if (!puppeteer) {
     for (const l of UI_LABELS) record(l, 'puppeteer installed', 'puppeteer not installed', false);
@@ -491,14 +501,42 @@ async function main() {
             ui1.hasPasswordCard === true && ui1.dialogHidden === true,
           );
 
+          // Arm request interception to hold the vendor-zxcvbn dynamic chunk
+          // before the dialog is opened.  ChangePasswordCard's useEffect calls
+          // loadZxcvbn() the moment open=true; intercepting the chunk keeps
+          // _zxcvbnCache null throughout the autofill probe so StrengthMeter
+          // renders the indeterminate LinearProgress (the path that previously
+          // propagated NaN before the defensive score-clamping fix).
+          let _heldZxcvbnReq = null;
+          const _interceptZxcvbn = (req) => {
+            if (/vendor-zxcvbn/.test(req.url())) {
+              _heldZxcvbnReq = req; // held — NOT calling req.continue() yet
+            } else {
+              req.continue().catch(() => {});
+            }
+          };
+          await profilePage.setRequestInterception(true);
+          profilePage.on('request', _interceptZxcvbn);
+
+          const _releaseZxcvbn = async () => {
+            profilePage.off('request', _interceptZxcvbn);
+            if (_heldZxcvbnReq) {
+              _heldZxcvbnReq.continue().catch(() => {});
+              _heldZxcvbnReq = null;
+            }
+            try { await profilePage.setRequestInterception(false); } catch (_) {}
+          };
+
           // UI.2 — click the "Change password" button; dialog becomes visible
           const clicked = await clickChangePasswordBtn(profilePage);
           if (!clicked) {
+            await _releaseZxcvbn();
             record(UI_LABELS[1], 'button clicked', 'could not find button in Password card', false);
             record(UI_LABELS[2], 'button clicked first', 'button not found', false);
             record(UI_LABELS[3], 'button clicked first', 'button not found', false);
             record(UI_LABELS[4], 'button clicked first', 'button not found', false);
             record(UI_LABELS[5], 'button clicked first', 'button not found', false);
+            record(UI_LABELS[6], 'button clicked first', 'button not found', false);
           } else {
             const dialogVisible = await pollPage(profilePage, () => {
               const backdrop  = document.querySelector('.MuiBackdrop-root');
@@ -527,12 +565,114 @@ async function main() {
                 && dialogState.hasSubmit === true && dialogState.hasCancel === true,
             );
 
+            // UI-autofill — browser credential autofill regression guard.
+            //
+            // The vendor-zxcvbn chunk is held by request interception (armed
+            // before the dialog was opened), keeping _zxcvbnCache = null.
+            // When autofill sets the new-password field value, StrengthMeter
+            // renders the indeterminate LinearProgress — the exact render path
+            // that propagated NaN before the defensive score-clamping fix.
+            //
+            // MUI Dialog uses a React Portal (document.body), so DOM-dispatched
+            // synthetic events do not reach React's root-container delegation.
+            // We focus the input via screen coordinates (mouse.click crosses
+            // portal boundaries) and use keyboard.type(), which fires native
+            // browser input events that React's event system does intercept.
+            //
+            // The check is strict: the progressbar MUST be visible and no
+            // NaN/LinearProgress console errors may be emitted.
+            const autofillNaNErrors = [];
+            const autofillConsoleHandler = (msg) => {
+              if (msg.type() !== 'error') return;
+              const text = msg.text();
+              if (/NaN|LinearProgress/i.test(text) && !IGNORE_RE.test(text)) {
+                autofillNaNErrors.push(text);
+              }
+            };
+            profilePage.on('console', autofillConsoleHandler);
+
+            if (dialogVisible) {
+              // Wait for the dialog's password inputs to be present in the DOM.
+              await pollPage(profilePage, () => {
+                const dialogs = document.querySelectorAll('[role="dialog"]');
+                return Array.from(dialogs).some(
+                  d => d.querySelectorAll('input[type="password"]').length >= 2,
+                ) ? 'ready' : null;
+              }, null, 3000);
+
+              // Locate the new-password input's screen coordinates.
+              const newPwCoords = await profilePage.evaluate(() => {
+                const dialogs = document.querySelectorAll('[role="dialog"]');
+                for (const d of dialogs) {
+                  const inputs = Array.from(d.querySelectorAll('input[type="password"]'));
+                  const found = inputs.find(
+                    el => el.getAttribute('autocomplete') === 'new-password',
+                  ) || inputs[1];
+                  if (found) {
+                    const r = found.getBoundingClientRect();
+                    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+                  }
+                }
+                return null;
+              });
+
+              // Type one character to trigger onChange → StrengthMeter render.
+              // Because the zxcvbn chunk is still held, _zxcvbnCache is null →
+              // StrengthMeter renders the indeterminate LinearProgress.
+              // The synchronous evaluate after keyboard.type() reads the DOM
+              // before any pending macrotask (i.e. the chunk response) can run.
+              let autofillMeterVisible = false;
+              if (newPwCoords) {
+                await profilePage.mouse.click(newPwCoords.x, newPwCoords.y);
+                await profilePage.keyboard.type('A');
+                autofillMeterVisible = await profilePage.evaluate(() => {
+                  return Array.from(document.querySelectorAll('[role="dialog"]'))
+                    .some(d => !!d.querySelector('[role="progressbar"]'));
+                });
+                // Complete the field value (UI-zxcvbn will Tab/select/replace it).
+                await profilePage.keyboard.type('utofill1StrXQ9ok!', { delay: 0 });
+              }
+
+              // Release the held zxcvbn chunk so subsequent probes work normally.
+              await _releaseZxcvbn();
+
+              // Reset focus to the first (current-password) input so that the
+              // following UI-zxcvbn probe's Tab navigation starts from there.
+              await profilePage.evaluate(() => {
+                const dialogs = document.querySelectorAll('[role="dialog"]');
+                for (const d of dialogs) {
+                  const first = d.querySelector('input[type="password"]');
+                  if (first) { first.focus(); break; }
+                }
+              });
+
+              profilePage.off('console', autofillConsoleHandler);
+
+              record(UI_LABELS[2],
+                'role="progressbar" inside dialog after autofill (_zxcvbnCache=null); 0 NaN/LinearProgress errors',
+                `meter=${autofillMeterVisible ? 'visible' : 'not-visible'}, nanErrors=${autofillNaNErrors.length}`,
+                autofillMeterVisible && autofillNaNErrors.length === 0,
+                autofillNaNErrors.length
+                  ? 'NaN/LinearProgress error(s) emitted — ErrorBoundary may have caught a NaN render: '
+                    + autofillNaNErrors.slice(0, 2).join(' | ')
+                  : !autofillMeterVisible
+                    ? 'Indeterminate progressbar did not appear — input may not have been found, or chunk was not held.'
+                    : '',
+              );
+            } else {
+              await _releaseZxcvbn();
+              profilePage.off('console', autofillConsoleHandler);
+              record(UI_LABELS[2], 'dialog visible first', 'dialog not visible', false);
+            }
+
             // UI-zxcvbn — type into "New password" → strength meter or graceful catch
             // Regression guard for task #870: the panel must not crash when zxcvbn
             // throws internally. Uses Tab navigation (keyboard-only) to avoid
             // coordinate-based clicks that could land on the MUI backdrop.
             if (dialogVisible) {
-              // Allow dialog animation and FocusTrap to settle.
+              // Allow dialog animation and FocusTrap to settle.  The autofill
+              // already placed a value in the new-password field; fillByTab will
+              // Ctrl+A-select and replace it with the typed value.
               await new Promise(r => setTimeout(r, 500));
               // Tab once from auto-focused first element into "New password".
               await fillByTab(profilePage, 1, 'TestStr0ng88!');
@@ -551,13 +691,13 @@ async function main() {
               });
 
               if (meterAppeared) {
-                record(UI_LABELS[2],
+                record(UI_LABELS[3],
                   'role="progressbar" inside dialog (zxcvbn loading / scored)',
                   `appeared=${meterAppeared}`,
                   true,
                 );
               } else {
-                record(UI_LABELS[2],
+                record(UI_LABELS[3],
                   'dialog remains open after value change (zxcvbn catch path)',
                   `dialogAlive=${dialogAliveAfterType} meterRendered=${meterAppeared}`,
                   dialogAliveAfterType,
@@ -579,7 +719,7 @@ async function main() {
                 scoreLabelAppeared ? '' : 'zxcvbn may have caught an error; dialog stayed alive (UI-zxcvbn).',
               );
             } else {
-              record(UI_LABELS[2], 'dialog visible first', 'dialog not visible', false);
+              record(UI_LABELS[3], 'dialog visible first', 'dialog not visible', false);
               recordSoft('Strength label appears once zxcvbn finishes scoring (soft check)', '"Strength:" text', 'skipped', false, 'dialog did not open');
             }
 
@@ -643,7 +783,7 @@ async function main() {
               return realErrors.length >= 3 ? { errorCount: realErrors.length } : null;
             }, null, 8000);
 
-            record(UI_LABELS[3],
+            record(UI_LABELS[4],
               'at least 3 Mui-error helper texts inside dialog',
               errorSnap ? `errorCount=${errorSnap.errorCount}` : 'errors not found or < 3',
               !!errorSnap,
@@ -671,7 +811,7 @@ async function main() {
               return open ? null : 'hidden';
             }, null, 6000);
 
-            record(UI_LABELS[4],
+            record(UI_LABELS[5],
               'dialog hidden after Cancel',
               dialogHiddenAfterCancel === 'hidden' ? 'dialog hidden' : 'dialog still visible',
               dialogHiddenAfterCancel === 'hidden',
@@ -759,7 +899,7 @@ async function main() {
               return null;
             }, null, 20000);
 
-            record(UI_LABELS[5],
+            record(UI_LABELS[6],
               'dialog hidden + "Password updated" Alert visible on card',
               successSnap
                 ? `closed=${successSnap.closed}, alertText="${successSnap.alertText?.slice(0, 80)}"`
@@ -834,6 +974,17 @@ async function writeReport(runId, findings) {
     '              (indeterminate LinearProgress before zxcvbn loads). If zxcvbn',
     '              throws internally, StrengthMeter and checkPasswordPolicy catch it',
     '              gracefully — the dialog must remain open (regression guard #870).',
+    '- **[UI-autofill]** Browser autofill is simulated on a FRESH browser context',
+    '              (so `_zxcvbnCache` starts as null) via `page.evaluate`: the',
+    '              native `HTMLInputElement.prototype.value` setter sets the',
+    '              new-password field value (bypassing React keyboard onChange,',
+    '              as Chrome/Edge autofill does), then a bubbling `InputEvent` is',
+    '              dispatched so React\'s synthetic onChange fires `setNext()`.',
+    '              Since `_zxcvbnCache` is null at that moment, StrengthMeter',
+    '              renders the indeterminate `LinearProgress` — exactly the render',
+    '              path that propagated NaN before the defensive score-clamping fix.',
+    '              The check is strict: the progressbar must be visible and zero',
+    '              NaN/LinearProgress console errors may be emitted.',
     '- **[UI.3]**  Submitting the empty form surfaces `p.Mui-error` helper texts for',
     '              all three fields.',
     '- **[UI.4]**  Clicking "Cancel" returns the dialog to `display:none`.',
