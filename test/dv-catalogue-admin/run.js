@@ -32,6 +32,16 @@
 //            row (rename + new description, PATCH .../furniture-ranges/:id).
 //   (D/edit) Door-style edit — same shape against the seeded door-style row
 //            (rename + new image URL, PATCH .../door-styles/:id).
+//   (H/del)  Handle delete — stub window.confirm=true, click the row's Delete
+//            button, assert the DELETE hits /api/admin/design-visit-handles/:id,
+//            the row disappears from #dv-handles-wrap without a page reload,
+//            the DB row is gone, AND the seeded local image file under
+//            public/uploads/handles/ is unlinked by the server
+//            (_deleteLocalHandleImage).
+//   (F/del)  Furniture-range delete — same shape against the seeded furniture
+//            row (DELETE .../furniture-ranges/:id; no local-file side effect).
+//   (D/del)  Door-style delete — same shape against the seeded door-style row
+//            (DELETE .../door-styles/:id; no local-file side effect).
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:dv-catalogue-admin
@@ -60,6 +70,10 @@ require('dotenv').config();
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 const RUN_PREFIX = 'privtest-dvca';
+
+// Local file path that mirrors design-visits.js HANDLES_UPLOAD_DIR. Used by
+// the (H/del) probe to prove _deleteLocalHandleImage() runs server-side.
+const HANDLES_UPLOAD_DIR = path.resolve(__dirname, '..', '..', 'public', 'uploads', 'handles');
 
 const HANDLE_NAME     = `${RUN_PREFIX} handle`;
 const HANDLE_STYLE    = 'Bar';
@@ -582,6 +596,135 @@ async function main() {
       );
     }
 
+    // Helper: drive one row-level Delete flow against a seeded row.
+    //
+    //   spec.type            — 'handle' | 'furniture' | 'door-style'.
+    //   spec.endpoint        — base URL (no trailing id) for the DELETE route.
+    //   spec.wrapId          — id of the list wrap that should refresh.
+    //   spec.targetId        — id of the seeded row to delete.
+    //   spec.rowMarkerText   — substring whose disappearance from the wrap
+    //                          text proves the row is gone (e.g. the row's
+    //                          current name).
+    //   spec.dbProbe()       — async () returning the post-delete row (or
+    //                          null) for the DB-gone assertion.
+    async function runDeleteFlow(label, spec) {
+      console.log(`\n  [${label}/del] delete row id=${spec.targetId}`);
+
+      // Stub window.confirm so deleteDvItem() proceeds.  Re-installed every
+      // probe in case a prior flow swapped it back.
+      await page.evaluate(() => { window.confirm = () => true; });
+
+      // Sanity: the row's Delete button is rendered with the expected onclick.
+      const btnSelector =
+        `button[onclick="deleteDvItem('${spec.type}', ${spec.targetId})"]`;
+      const baselineRows = await page.evaluate((id) => {
+        const w = document.getElementById(id);
+        return w ? w.querySelectorAll('tbody tr').length : -1;
+      }, spec.wrapId);
+      const btnPresent = await page.evaluate((sel) =>
+        !!document.querySelector(sel), btnSelector);
+      record(
+        `[${label}/del] row Delete button rendered (${btnSelector})`,
+        'button present in wrap',
+        `present=${btnPresent} baselineRows=${baselineRows}`,
+        btnPresent === true && baselineRows > 0,
+      );
+
+      // Intercept DELETE so we can assert the right endpoint was hit.
+      await page.setRequestInterception(true);
+      const deleteUrl = `${spec.endpoint}/${spec.targetId}`;
+      let deleteSeen = null; // { url, method, status }
+      const reqListener = async (req) => {
+        try { await req.continue(); } catch {}
+      };
+      const respListener = (resp) => {
+        const req = resp.request();
+        if (req.method() === 'DELETE' && resp.url().endsWith(deleteUrl)) {
+          deleteSeen = { url: resp.url(), method: req.method(), status: resp.status() };
+        }
+      };
+      page.on('request',  reqListener);
+      page.on('response', respListener);
+
+      // Click the row's Delete button in-page.
+      await page.evaluate((sel) => {
+        const btn = document.querySelector(sel);
+        if (btn) btn.click();
+      }, btnSelector);
+
+      // Wait for the wrap to refresh (row count drops) and the DELETE to land.
+      const shrank = await pollPage(page, ({ id, baseline }) => {
+        const w = document.getElementById(id);
+        if (!w) return null;
+        const rows = w.querySelectorAll('tbody tr').length;
+        return rows < baseline ? { rows } : null;
+      }, { id: spec.wrapId, baseline: baselineRows }, 8000);
+
+      page.off('request',  reqListener);
+      page.off('response', respListener);
+      await page.setRequestInterception(false);
+
+      record(
+        `[${label}/del] DELETE ${deleteUrl} fired and returned 2xx`,
+        `method=DELETE url ends with ${deleteUrl}, status 200`,
+        `seen=${JSON.stringify(deleteSeen)}`,
+        !!deleteSeen && deleteSeen.status >= 200 && deleteSeen.status < 300,
+      );
+
+      record(
+        `[${label}/del] row removed from #${spec.wrapId} (row count dropped)`,
+        `row count < ${baselineRows}`,
+        `state=${JSON.stringify(shrank)}`,
+        !!shrank,
+      );
+
+      // Row-text gone from the wrap.
+      const wrapText = await page.evaluate((id) => {
+        const w = document.getElementById(id);
+        return w ? (w.textContent || '') : '';
+      }, spec.wrapId);
+      record(
+        `[${label}/del] wrap no longer mentions "${spec.rowMarkerText}"`,
+        `wrap.textContent excludes "${spec.rowMarkerText}"`,
+        `includes=${wrapText.includes(spec.rowMarkerText)}`,
+        !wrapText.includes(spec.rowMarkerText),
+      );
+
+      const stillSameLoad = await page.evaluate(t => window.__pageLoadToken === t, pageLoadToken);
+      record(
+        `[${label}/del] no full page reload (window.__pageLoadToken preserved)`,
+        `__pageLoadToken === "${pageLoadToken}"`,
+        `preserved=${stillSameLoad}`,
+        stillSameLoad === true,
+      );
+
+      const dbRow = await spec.dbProbe();
+      record(
+        `[${label}/del] DB row is gone`,
+        'dbProbe() returns null',
+        `row=${JSON.stringify(dbRow)}`,
+        dbRow === null,
+      );
+
+      if (typeof spec.assertLocalFileGone === 'string' && spec.assertLocalFileGone) {
+        // _deleteLocalHandleImage is fire-and-forget (async fs.unlink), so
+        // poll briefly for the file to disappear.
+        const deadline = Date.now() + 4000;
+        let stillThere = true;
+        while (Date.now() < deadline) {
+          stillThere = fs.existsSync(spec.assertLocalFileGone);
+          if (!stillThere) break;
+          await new Promise(r => setTimeout(r, 100));
+        }
+        record(
+          `[${label}/del] local handle image file unlinked by server`,
+          `${spec.assertLocalFileGone} no longer exists`,
+          `exists=${stillThere}`,
+          stillThere === false,
+        );
+      }
+    }
+
     // ── (H) Handle ────────────────────────────────────────────────────────────
     await runAddFlow('H', {
       addBtnLabel:     '+ Add handle',
@@ -655,6 +798,62 @@ async function main() {
       );
     }
 
+    // ── (H) Handle — delete existing row ─────────────────────────────────────
+    if (createdHandle) {
+      // Seed a local image file under public/uploads/handles/ and point the
+      // row's image_url at it, so DELETE exercises _deleteLocalHandleImage.
+      const handleImgFilename = `${RUN_PREFIX}-${runId}-${createdHandle.id}.png`;
+      const handleImgPath     = path.join(HANDLES_UPLOAD_DIR, handleImgFilename);
+      try {
+        fs.mkdirSync(HANDLES_UPLOAD_DIR, { recursive: true });
+        // 1×1 transparent PNG
+        fs.writeFileSync(handleImgPath, Buffer.from(
+          '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4'
+          + '890000000a49444154789c63000100000500010d0a2db40000000049454e44ae426082',
+          'hex',
+        ));
+      } catch (e) {
+        record(
+          '[H/del] seed local handle image file on disk',
+          `write ${handleImgPath}`,
+          `error: ${e.message}`,
+          false,
+        );
+      }
+      await pool.query(
+        `UPDATE design_visit_handles SET image_url=$1 WHERE id=$2`,
+        [`/uploads/handles/${handleImgFilename}`, createdHandle.id],
+      );
+
+      // Re-render the wrap so the Delete button for the seeded row is in DOM.
+      await page.evaluate(() => window.loadDvHandles && window.loadDvHandles());
+      await pollPage(page, (sel) => !!document.querySelector(sel),
+        `button[onclick="deleteDvItem('handle', ${createdHandle.id})"]`, 6000);
+
+      await runDeleteFlow('H', {
+        type:          'handle',
+        endpoint:      '/api/admin/design-visit-handles',
+        wrapId:        'dv-handles-wrap',
+        targetId:      createdHandle.id,
+        rowMarkerText: HANDLE_NAME_EDITED,
+        assertLocalFileGone: handleImgPath,
+        dbProbe: async () => {
+          const r = await pool.query(
+            `SELECT id FROM design_visit_handles WHERE id=$1`,
+            [createdHandle.id],
+          );
+          return r.rows[0] || null;
+        },
+      });
+    } else {
+      record(
+        '[H/del] seeded handle row available for delete probe',
+        'createdHandle is non-null after add flow',
+        'add flow did not surface a handle row to delete',
+        false,
+      );
+    }
+
     // ── (F) Furniture range ───────────────────────────────────────────────────
     await runAddFlow('F', {
       addBtnLabel:     '+ Add range',
@@ -720,6 +919,35 @@ async function main() {
       );
     }
 
+    // ── (F) Furniture range — delete existing row ────────────────────────────
+    if (furnitureRow) {
+      await page.evaluate(() => window.loadDvFurniture && window.loadDvFurniture());
+      await pollPage(page, (sel) => !!document.querySelector(sel),
+        `button[onclick="deleteDvItem('furniture', ${furnitureRow.id})"]`, 6000);
+
+      await runDeleteFlow('F', {
+        type:          'furniture',
+        endpoint:      '/api/admin/design-visit-furniture-ranges',
+        wrapId:        'dv-furniture-wrap',
+        targetId:      furnitureRow.id,
+        rowMarkerText: FURNITURE_NAME_EDITED,
+        dbProbe: async () => {
+          const r = await pool.query(
+            `SELECT id FROM design_visit_furniture_ranges WHERE id=$1`,
+            [furnitureRow.id],
+          );
+          return r.rows[0] || null;
+        },
+      });
+    } else {
+      record(
+        '[F/del] seeded furniture row available for delete probe',
+        'furniture row exists in DB after add flow',
+        'add flow did not produce a furniture row to delete',
+        false,
+      );
+    }
+
     // ── (D) Door style ────────────────────────────────────────────────────────
     await runAddFlow('D', {
       addBtnLabel:     '+ Add style',
@@ -781,6 +1009,35 @@ async function main() {
         '[D/edit] seeded door-style row available for edit probe',
         'door-style row exists in DB after add flow',
         'add flow did not produce a door-style row to edit',
+        false,
+      );
+    }
+
+    // ── (D) Door style — delete existing row ─────────────────────────────────
+    if (doorRow) {
+      await page.evaluate(() => window.loadDvDoorStyles && window.loadDvDoorStyles());
+      await pollPage(page, (sel) => !!document.querySelector(sel),
+        `button[onclick="deleteDvItem('door-style', ${doorRow.id})"]`, 6000);
+
+      await runDeleteFlow('D', {
+        type:          'door-style',
+        endpoint:      '/api/admin/design-visit-door-styles',
+        wrapId:        'dv-door-styles-wrap',
+        targetId:      doorRow.id,
+        rowMarkerText: DOOR_NAME_EDITED,
+        dbProbe: async () => {
+          const r = await pool.query(
+            `SELECT id FROM design_visit_door_styles WHERE id=$1`,
+            [doorRow.id],
+          );
+          return r.rows[0] || null;
+        },
+      });
+    } else {
+      record(
+        '[D/del] seeded door-style row available for delete probe',
+        'door-style row exists in DB after add flow',
+        'add flow did not produce a door-style row to delete',
         false,
       );
     }
@@ -856,6 +1113,25 @@ async function writeReport(runId, findings) {
     '    a full page reload (`window.__pageLoadToken` preserved) — and the',
     '    DB row for the same id reflects the edit (`name`, plus `style` /',
     '    `description` / `image_url`).',
+    '- **(H/F/D) Delete via row button**: for the row each add/edit flow just',
+    '  produced:',
+    '  - `window.confirm` is stubbed to return `true` so `deleteDvItem()`',
+    '    proceeds past its confirm-prompt branch.',
+    '  - The row\'s Delete button (rendered with',
+    '    `onclick="deleteDvItem(\'<type>\', <id>)"`) is clicked in-page.',
+    '  - A `DELETE` request lands on the matching endpoint',
+    '    (`/api/admin/design-visit-handles/:id`, `/...furniture-ranges/:id`,',
+    '    `/...door-styles/:id`) and returns a 2xx (response listener).',
+    '  - The matching catalogue wrap loses the row in place (row count',
+    '    drops, the row\'s name no longer appears in `wrap.textContent`)',
+    '    without a full page reload (`window.__pageLoadToken` preserved).',
+    '  - The DB row for the deleted id is gone.',
+    '- **(H/del) Local image file cleanup**: before the handle delete probe',
+    '  runs, a real 1×1 PNG is written to',
+    '  `public/uploads/handles/privtest-dvca-<runId>-<id>.png` and the row\'s',
+    '  `image_url` is pointed at it. After the DELETE returns, the test',
+    '  polls for the file to disappear from disk, proving',
+    '  `_deleteLocalHandleImage()` ran server-side.',
     '',
     '## Notes',
     '',
