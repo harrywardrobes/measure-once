@@ -18,6 +18,7 @@ type Props = {
   onClose: () => void;
   availableItems: NavItem[];
   currentKeys: string[];
+  defaultKeys: string[];
   onSave: (keys: string[]) => void;
 };
 
@@ -29,7 +30,7 @@ type Props = {
  * - cancelled edits are discarded on next open, and
  * - prefs loaded asynchronously after mount are reflected correctly.
  */
-export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys, onSave }: Props) {
+export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys, defaultKeys, onSave }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
 
   useEffect(() => {
@@ -46,6 +47,11 @@ export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys,
     });
   }
 
+  function handleReset() {
+    const validDefaults = defaultKeys.filter((k) => availableItems.some((n) => n.key === k));
+    setSelected(validDefaults.slice(0, BAR_SIZE));
+  }
+
   function handleSave() {
     if (selected.length !== BAR_SIZE) return;
     onSave(selected);
@@ -53,6 +59,11 @@ export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys,
   }
 
   const atLimit = selected.length >= BAR_SIZE;
+
+  const defaultSet = new Set(defaultKeys);
+  const isAtDefaults =
+    selected.length === defaultKeys.length &&
+    selected.every((k) => defaultSet.has(k));
 
   return (
     <Dialog
@@ -94,6 +105,9 @@ export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys,
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={handleReset} color="inherit" disabled={isAtDefaults} sx={{ mr: 'auto' }}>
+          Reset to defaults
+        </Button>
         <Button onClick={onClose} color="inherit">
           Cancel
         </Button>

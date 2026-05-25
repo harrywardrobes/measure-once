@@ -120,7 +120,7 @@ async function loadNavPref(): Promise<string[] | null> {
   }
 }
 
-async function saveNavPref(keys: string[]): Promise<void> {
+async function saveNavPref(keys: string[] | null): Promise<void> {
   const r = await fetch('/api/users/me/prefs', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -187,13 +187,16 @@ export function BottomNav() {
   const handleSavePref = useCallback(
     async (keys: string[]) => {
       setPrimaryKeys(keys);
+      const isDefault =
+        keys.length === defaultPrimaryKeys.length &&
+        keys.every((k, i) => defaultPrimaryKeys[i] === k);
       try {
-        await saveNavPref(keys);
+        await saveNavPref(isDefault ? null : keys);
       } catch {
         // non-critical; preference will re-apply on next load
       }
     },
-    [],
+    [defaultPrimaryKeys],
   );
 
   const actionSx = {
@@ -416,6 +419,7 @@ export function BottomNav() {
           onClose={() => setCustomiseOpen(false)}
           availableItems={visibleNav}
           currentKeys={resolvedPrimaryKeys}
+          defaultKeys={defaultPrimaryKeys}
           onSave={handleSavePref}
         />
       )}
