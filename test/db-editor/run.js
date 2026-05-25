@@ -583,6 +583,7 @@ async function main() {
         label: 'privtest lsc',
         sort_order: 9999,
       }),
+      update: { column: 'label', value: 'privtest lsc updated' },
     },
     lead_substatuses: {
       // status_key is a free-text reference here (no DB-level FK), so we can
@@ -593,6 +594,7 @@ async function main() {
         label:         'privtest sub',
         sort_order:    9999,
       }),
+      update: { column: 'label', value: 'privtest sub updated' },
     },
     stage_action_labels: {
       fixture: c => ({
@@ -600,9 +602,11 @@ async function main() {
         status_key: `PRIVTEST_STA_${c.runId}`,
         label:      'privtest stage action',
       }),
+      update: { column: 'label', value: 'privtest stage action updated' },
     },
     card_action_handlers: {
       fixture: () => ({ name: 'privtest handler', type: 'noop', config: {} }),
+      update: { column: 'name', value: 'privtest handler updated' },
     },
     card_action_handler_bindings: {
       parents: [
@@ -619,12 +623,17 @@ async function main() {
         stage_key:  `PRIVTEST_STG_${c.runId}`,
         status_key: `PRIVTEST_STA_${c.runId}`,
       }),
+      // status_key participates in cahb_label_uniq (stage_key,status_key)
+      // WHERE substatus_id IS NULL; rotate to a fresh sentinel to stay unique.
+      update: c => ({ column: 'status_key', value: `PRIVTEST_STA_${c.runId}_UPD` }),
     },
     trade_contacts: {
       fixture: () => ({ name: 'privtest trade', trade_type: 'PRIVTEST' }),
+      update: { column: 'notes', value: 'privtest trade notes updated' },
     },
     trade_companies: {
       fixture: () => ({ company_name: 'privtest co', trade_type: 'PRIVTEST' }),
+      update: { column: 'notes', value: 'privtest co notes updated' },
     },
     trade_company_contacts: {
       parents: [
@@ -635,26 +644,33 @@ async function main() {
         },
       ],
       fixture: c => ({ company_id: c.parents.company.id, name: 'privtest contact' }),
+      update: { column: 'name', value: 'privtest contact updated' },
     },
     trade_company_submissions: {
       fixture: () => ({ company_name: 'privtest sub', trade_type: 'PRIVTEST' }),
+      update: { column: 'notes', value: 'privtest sub notes updated' },
     },
     trade_audit_log: { readOnly: true },
     design_visit_handles: {
       fixture: () => ({ name: 'privtest handle' }),
+      update: { column: 'description', value: 'privtest handle description updated' },
     },
     design_visit_furniture_ranges: {
       fixture: () => ({ name: 'privtest range' }),
+      update: { column: 'description', value: 'privtest range description updated' },
     },
     design_visit_door_styles: {
       fixture: () => ({ name: 'privtest door' }),
+      update: { column: 'sort_order', value: 12345 },
     },
     terms_conditions_versions: {
       // version_number has no unique index but use a high sentinel anyway.
       fixture: () => ({ version_number: 999999, terms_text: 'privtest terms' }),
+      update: { column: 'terms_text', value: 'privtest terms updated' },
     },
     design_visits: {
       fixture: () => ({ contact_id: 'PRIVTEST', created_by: 'privtest' }),
+      update: { column: 'notes', value: 'privtest visit notes updated' },
     },
     design_visit_rooms: {
       parents: [
@@ -665,6 +681,7 @@ async function main() {
         },
       ],
       fixture: c => ({ design_visit_id: c.parents.visit.id, room_name: 'privtest room' }),
+      update: { column: 'room_name', value: 'privtest room updated' },
     },
     design_visit_room_images: {
       // Two-level parent chain: design_visit → design_visit_room → image.
@@ -681,6 +698,7 @@ async function main() {
         },
       ],
       fixture: c => ({ room_id: c.parents.room.id, storage_key: 'privtest/storage/key' }),
+      update: { column: 'mime_type', value: 'image/png' },
     },
     visits: {
       fixture: () => ({
@@ -689,9 +707,11 @@ async function main() {
         start_at:   '2099-01-01T00:00:00Z',
         end_at:     '2099-01-01T01:00:00Z',
       }),
+      update: { column: 'notes', value: 'privtest visit notes updated' },
     },
     ideas: {
       fixture: () => ({ author_user_id: 'privtest', body: 'privtest idea' }),
+      update: { column: 'body', value: 'privtest idea updated' },
     },
     idea_comments: {
       parents: [
@@ -702,19 +722,23 @@ async function main() {
         },
       ],
       fixture: c => ({ idea_id: c.parents.idea.id, author_user_id: 'privtest', body: 'privtest comment' }),
+      update: { column: 'body', value: 'privtest comment updated' },
     },
     app_settings: {
       fixture: c => ({ key: `PRIVTEST_APP_${c.runId}`, value: 'x' }),
+      update: { column: 'value', value: 'y' },
     },
     workshop_settings: {
       // value is NOT NULL but the editor coerces '' → NULL, so send a real
       // value to satisfy the constraint.
       fixture: c => ({ key: `PRIVTEST_WS_${c.runId}`, label: 'privtest ws', value: 'x' }),
+      update: { column: 'label', value: 'privtest ws updated' },
     },
     search_settings: {
       // pk id INTEGER DEFAULT 1; row id=1 is seeded on boot. Use a sentinel id
       // so we don't collide.
       fixture: () => ({ id: 999999 }),
+      update: { column: 'hint_placeholder', value: 'privtest hint updated' },
     },
     whatsapp_messages: {
       // sender_user_id is a real FK to users(id). Use the seeded admin user.
@@ -724,9 +748,12 @@ async function main() {
         mode:           'freeform',
         message_text:   'privtest msg',
       }),
+      update: { column: 'message_text', value: 'privtest msg updated' },
     },
     job_roles: {
       fixture: c => ({ name: `privtest_role_${c.runId}` }),
+      // name is UNIQUE; rotate to a fresh sentinel so the update is conflict-free.
+      update: c => ({ column: 'name', value: `privtest_role_${c.runId}_upd` }),
     },
   };
 
@@ -764,7 +791,7 @@ async function main() {
         'missing — add a fixture so schema drift is caught',
         false,
       );
-      tableMatrix.push({ table: t, get: '–', insert: '–', delete: '–', note: 'no fixture' });
+      tableMatrix.push({ table: t, get: '–', insert: '–', update: '–', delete: '–', note: 'no fixture' });
     }
   }
 
@@ -772,7 +799,7 @@ async function main() {
     const meta = tableMeta[table];
     const cfg  = FIXTURES[table];
     if (!cfg) continue; // already reported above
-    const row = { table, get: '–', insert: '–', delete: '–', note: '' };
+    const row = { table, get: '–', insert: '–', update: '–', delete: '–', note: '' };
 
     // (1) GET /rows must 200.
     {
@@ -787,9 +814,10 @@ async function main() {
       );
     }
 
-    // Skip insert/delete for read-only tables.
+    // Skip insert/update/delete for read-only tables.
     if (cfg.readOnly || meta.readOnlyTable) {
       row.insert = 'skip (read-only)';
+      row.update = 'skip (read-only)';
       row.delete = 'skip (read-only)';
       tableMatrix.push(row);
       continue;
@@ -852,6 +880,58 @@ async function main() {
         ok,
       );
       if (ok) insertedRow = r.row;
+    }
+
+    // (3b) Minimal update via PATCH (skip if insert failed or no update spec).
+    if (insertedRow && cfg.update) {
+      const upd = typeof cfg.update === 'function'
+        ? cfg.update(ctx, insertedRow)
+        : cfg.update;
+      const pkSeg = pkSegment(meta, insertedRow);
+      const beforeVal = insertedRow[upd.column];
+      const r = await adminClient.patch(
+        `/api/admin/db/${table}/rows/${encodeURIComponent(pkSeg)}`,
+        { [upd.column]: upd.value },
+      );
+      // Loose compare so numeric columns surfaced as strings by pg still match.
+      const httpOk = r.status === 200
+        && r.json?.row
+        && String(r.json.row[upd.column]) === String(upd.value);
+      let auditOk    = false;
+      let auditDetail = '';
+      if (httpOk) {
+        const a = await pool.query(
+          `SELECT before_data, after_data, admin_email
+             FROM db_editor_audit
+            WHERE table_name = $1 AND pk = $2 AND op = 'update'
+            ORDER BY acted_at DESC
+            LIMIT 1`,
+          [table, pkSeg],
+        );
+        const arow = a.rows[0];
+        auditOk = a.rowCount === 1
+          && arow.admin_email === users.admin.email
+          && String(arow.before_data?.[upd.column] ?? '') === String(beforeVal ?? '')
+          && String(arow.after_data?.[upd.column]  ?? '') === String(upd.value ?? '');
+        auditDetail = `audit before.${upd.column}=${JSON.stringify(arow?.before_data?.[upd.column])}`
+          + ` after.${upd.column}=${JSON.stringify(arow?.after_data?.[upd.column])}`
+          + ` admin=${arow?.admin_email}`;
+      }
+      const ok = httpOk && auditOk;
+      row.update = ok ? 'PASS' : `FAIL (${r.status})`;
+      record(
+        `[matrix] ${table}: PATCH update ${upd.column} → 200 with matching audit row`,
+        `status=200, row.${upd.column} updated, db_editor_audit update row before=${JSON.stringify(beforeVal)} after=${JSON.stringify(upd.value)}`,
+        `status=${r.status} body.row.${upd.column}=${JSON.stringify(r.json?.row?.[upd.column])} ${auditDetail}`,
+        ok,
+      );
+      // Refresh insertedRow so the subsequent delete uses current state (pk
+      // values are unchanged, but other coerced columns may have shifted).
+      if (httpOk) insertedRow = r.json.row;
+    } else if (insertedRow && !cfg.update) {
+      row.update = 'skip (no update spec)';
+    } else {
+      row.update = 'skip (insert failed)';
     }
 
     // (4) Delete the inserted row (skip if insert failed).
@@ -1020,18 +1100,23 @@ async function writeReport(runId, findings, tableMatrix = []) {
     '- **(e) Per-table smoke matrix**: walks every entry in `db-editor.js`',
     '  `TABLES`. For each allow-listed table the suite issues',
     '  `GET /api/admin/db/<table>/rows` and asserts 200. For non-read-only',
-    '  tables it also performs a minimal insert and the corresponding',
-    '  delete (including parent-row chains for FK-bearing children and the',
+    '  tables it also performs a minimal insert, a minimal PATCH update on a',
+    '  safe column declared by the fixture, and the corresponding delete',
+    '  (including parent-row chains for FK-bearing children and the',
     '  `pk1|pk2` segment for composite primary keys), then verifies the row',
-    '  is gone via a filtered GET. New tables added to the allow-list without',
-    '  a fixture surface as an explicit failure so schema drift is caught.',
+    '  is gone via a filtered GET. Every update probe also asserts that a',
+    '  matching `db_editor_audit` row of op=`update` was written with the',
+    '  acting admin email and before/after JSON for the changed column, so',
+    '  NOT NULL / type / FK regressions on the PATCH path are caught per',
+    '  table. New tables added to the allow-list without a fixture surface',
+    '  as an explicit failure so schema drift is caught.',
     '',
     '## Per-table matrix',
     '',
-    '| Table | GET rows | Insert | Delete | Notes |',
-    '|---|---|---|---|---|',
+    '| Table | GET rows | Insert | Update | Delete | Notes |',
+    '|---|---|---|---|---|---|',
     ...tableMatrix.map(r =>
-      `| \`${esc(r.table)}\` | ${esc(r.get)} | ${esc(r.insert)} | ${esc(r.delete)} | ${esc(r.note || '')} |`,
+      `| \`${esc(r.table)}\` | ${esc(r.get)} | ${esc(r.insert)} | ${esc(r.update)} | ${esc(r.delete)} | ${esc(r.note || '')} |`,
     ),
     '',
     '## Notes',
