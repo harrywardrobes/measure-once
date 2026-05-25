@@ -83,6 +83,18 @@ function showToast(msg: string, isError = false) {
   if (typeof w.showToast === 'function') w.showToast(msg, isError);
 }
 
+class StrengthMeterErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { caught: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { caught: false };
+  }
+  static getDerivedStateFromError() { return { caught: true }; }
+  render() { return this.state.caught ? null : this.props.children; }
+}
+
 function StrengthMeter({ value, userInputs }: { value: string; userInputs: string[] }) {
   const [zxcvbnFn, setZxcvbnFn] = React.useState<ZxcvbnFn | null>(() => _zxcvbnCache);
 
@@ -208,7 +220,7 @@ export function ChangePasswordCard({ profile }: { profile: Profile }) {
             Password
           </Typography>
           {success && <Alert severity="success" sx={{ mb: 1.5 }}>{success}</Alert>}
-          <Button variant="outlined" size="small" onClick={handleOpen}>
+          <Button variant="outlined" size="small" onClick={handleOpen} data-testid="change-password-btn">
             Change password
           </Button>
         </CardContent>
@@ -242,7 +254,9 @@ export function ChangePasswordCard({ profile }: { profile: Profile }) {
                   error={!!errors.next}
                   helperText={errors.next || 'At least 8 characters, with letters and numbers.'}
                 />
-                <StrengthMeter value={next} userInputs={userInputs} />
+                <StrengthMeterErrorBoundary>
+                  <StrengthMeter value={next} userInputs={userInputs} />
+                </StrengthMeterErrorBoundary>
               </Box>
               <TextField
                 label="Confirm new password"
