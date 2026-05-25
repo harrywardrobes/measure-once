@@ -122,6 +122,31 @@ async function purgeFixtures(pool) {
      HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B, HANDLER_NAME_ANAME,
      HANDLER_NAME_NAMING, HANDLER_NAME_ILS]
   );
+  // Prefix sweep: a previously crashed or partly-validated probe run can
+  // leave behind handlers whose names don't match the constants above
+  // (e.g. an unnamed handler "" created before validation rejected it) but
+  // whose bindings still occupy privtest_cah_* slots. Those stale bindings
+  // poison later "no conflicts anywhere" assertions in probe (D). Delete
+  // the parent handlers — the FK cascade clears the bindings.  Tables may
+  // not exist on first run, so wrap in try/catch.
+  try {
+    await pool.query(
+      `DELETE FROM card_action_handlers
+         WHERE id IN (
+           SELECT DISTINCT handler_id
+             FROM card_action_handler_bindings
+            WHERE status_key LIKE 'privtest_cah_%'
+         )`
+    );
+  } catch (_) {}
+  // Defensive: in case any binding ever exists without a parent handler
+  // (shouldn't happen — FK is NOT NULL — but cheap insurance).
+  try {
+    await pool.query(
+      `DELETE FROM card_action_handler_bindings
+         WHERE status_key LIKE 'privtest_cah_%'`
+    );
+  } catch (_) {}
   // Catalogue-reorder fixtures (probe G).  Tables may not exist on first run.
   try {
     await pool.query(`DELETE FROM design_visit_handles          WHERE name LIKE 'privtest-reorder-%'`);
