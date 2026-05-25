@@ -17,8 +17,6 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import LogoutIcon from '@mui/icons-material/Logout';
-import zxcvbn from 'zxcvbn';
-
 type Profile = {
   id: string;
   email?: string;
@@ -42,6 +40,26 @@ const STRENGTH_LABELS = ['Very weak', 'Weak', 'Fair', 'Good', 'Strong'];
 const STRENGTH_COLORS: Array<'error' | 'warning' | 'info' | 'success'> = [
   'error', 'warning', 'warning', 'success', 'success',
 ];
+
+interface ZxcvbnResult {
+  score: 0 | 1 | 2 | 3 | 4;
+  feedback?: { warning?: string; suggestions?: string[] };
+  crack_times_display?: { offline_slow_hashing_1e4_per_second?: string };
+}
+type ZxcvbnFn = (password: string, userInputs?: string[]) => ZxcvbnResult;
+
+let _zxcvbnCache: ZxcvbnFn | null = null;
+let _zxcvbnPromise: Promise<ZxcvbnFn> | null = null;
+function loadZxcvbn(): Promise<ZxcvbnFn> {
+  if (_zxcvbnCache) return Promise.resolve(_zxcvbnCache);
+  if (!_zxcvbnPromise) {
+    _zxcvbnPromise = import('zxcvbn').then((m) => {
+      _zxcvbnCache = m.default as unknown as ZxcvbnFn;
+      return _zxcvbnCache;
+    });
+  }
+  return _zxcvbnPromise;
+}
 
 function getAppUser(): AppUser | null {
   const w = window as unknown as { state?: { user?: AppUser } };
@@ -72,14 +90,15 @@ async function jpost<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-function checkPasswordPolicy(pw: string, userInputs: string[]): string | null {
+async function checkPasswordPolicy(pw: string, userInputs: string[]): Promise<string | null> {
   if (!pw) return 'Password is required.';
   if (pw.length < 8) return 'Password must be at least 8 characters.';
   if (pw.length > MAX_LENGTH) return 'Password is too long.';
   if (!/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) {
     return 'Password must contain both letters and numbers.';
   }
-  const r = zxcvbn(pw.slice(0, MAX_LENGTH), userInputs);
+  const zxcvbnFn = await loadZxcvbn();
+  const r = zxcvbnFn(pw.slice(0, MAX_LENGTH), userInputs);
   if (r.score < MIN_SCORE) {
     const warning = r.feedback?.warning;
     return warning
@@ -377,8 +396,24 @@ function RoleCard({ profile }: { profile: Profile }) {
 // ── Change password ────────────────────────────────────────────────────
 
 function StrengthMeter({ value, userInputs }: { value: string; userInputs: string[] }) {
+  const [zxcvbnFn, setZxcvbnFn] = React.useState<ZxcvbnFn | null>(() => _zxcvbnCache);
+
+  React.useEffect(() => {
+    if (!value || zxcvbnFn) return;
+    loadZxcvbn().then(setZxcvbnFn);
+  }, [value, zxcvbnFn]);
+
   if (!value) return null;
-  const r = zxcvbn(value.slice(0, MAX_LENGTH), userInputs);
+
+  if (!zxcvbnFn) {
+    return (
+      <Box sx={{ mt: 1 }}>
+        <LinearProgress variant="indeterminate" sx={{ height: 6, borderRadius: 999 }} />
+      </Box>
+    );
+  }
+
+  const r = zxcvbnFn(value.slice(0, MAX_LENGTH), userInputs);
   const score = r.score as 0 | 1 | 2 | 3 | 4;
   const crack = r.crack_times_display?.offline_slow_hashing_1e4_per_second || '';
   const suggestion = score < MIN_SCORE
@@ -432,7 +467,7 @@ function ChangePasswordCard({ profile }: { profile: Profile }) {
     if (!next) next_errors.next = 'Enter a new password.';
     else if (current && next === current) next_errors.next = 'New password must be different from your current password.';
     else {
-      const policyErr = checkPasswordPolicy(next, userInputs);
+      const policyErr = await checkPasswordPolicy(next, userInputs);
       if (policyErr) next_errors.next = policyErr;
     }
     if (!confirm) next_errors.confirm = 'Confirm your new password.';
