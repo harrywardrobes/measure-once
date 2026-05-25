@@ -1012,6 +1012,28 @@ async function main() {
     postDelImageCount === 0,
   );
 
+  // ── (A4b) Storage cleanup: DELETE handler logs one storage-delete line ────
+  // per seeded storage_key. The test keys are opaque (no `data:`, `http(s)://`,
+  // or `/uploads/` prefix) so they log as `skip (unrecognised key shape)` —
+  // the assertion is that the helper *ran* for every key, proving the new
+  // best-effort cloud-storage cleanup path is wired into the DELETE handler.
+  // Allow a tick for any async logging to settle.
+  await new Promise(r => setTimeout(r, 200));
+  const a4Logs = logBuf.join('');
+  const seededDelKeys = [delImg1Key, delImg2Key, delImg3Key];
+  const missingDelLogs = seededDelKeys.filter(k =>
+    !a4Logs.includes(`[design-visits] storage delete`) ||
+    !a4Logs.includes(`key=${k}`)
+  );
+  record(
+    '(A4) DELETE /api/design-visits/:id logs "[design-visits] storage delete" for every storage_key',
+    'one storage-delete log line per seeded storage_key (3 total)',
+    missingDelLogs.length === 0
+      ? `found storage-delete log lines for all 3 seeded keys`
+      : `missing storage-delete log for: ${missingDelLogs.join(', ')}`,
+    missingDelLogs.length === 0,
+  );
+
   // ── (B) Public sign-off: approve ──────────────────────────────────────────
   console.log('\n  [B] Sign-off: approve');
 

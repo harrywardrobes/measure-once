@@ -1291,12 +1291,83 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
   }
 });
 
+// Best-effort delete of the cloud / local object backing a design-visit room
+// image. Each `storage_key` may be a data: URI (inline bytes — nothing to
+// delete), an http(s) URL (external — we don't fan out to third parties), or
+// a server-relative `/uploads/...` path (a real file on disk we can unlink).
+// Failures are logged and swallowed so DB cleanup is never blocked.
+function _bestEffortDeleteDesignVisitStorageObject(storageKey) {
+  const keyPreview = String(storageKey || '').slice(0, 80);
+  try {
+    if (!storageKey || typeof storageKey !== 'string') {
+      console.log(`[design-visits] storage delete skip (empty key)`);
+      return;
+    }
+    if (/^data:/i.test(storageKey)) {
+      console.log(`[design-visits] storage delete skip (inline data URI) key=${keyPreview}`);
+      return;
+    }
+    if (/^https?:\/\//i.test(storageKey)) {
+      console.log(`[design-visits] storage delete skip (external url) key=${keyPreview}`);
+      return;
+    }
+    if (storageKey.startsWith('/uploads/')) {
+      const rel = storageKey.replace(/^\/+/, '');
+      const filePath = path.join(__dirname, 'public', rel);
+      const resolved = path.resolve(filePath);
+      const uploadsRoot = path.resolve(path.join(__dirname, 'public', 'uploads'));
+      if (!resolved.startsWith(uploadsRoot + path.sep)) {
+        console.warn(`[design-visits] storage delete refuse (path escapes uploads) key=${keyPreview}`);
+        return;
+      }
+      fs.unlink(resolved, err => {
+        if (err && err.code === 'ENOENT') {
+          console.log(`[design-visits] storage delete skip (file missing) key=${keyPreview}`);
+        } else if (err) {
+          console.warn(`[design-visits] storage delete fail key=${keyPreview} err=${err.message}`);
+        } else {
+          console.log(`[design-visits] storage delete ok key=${keyPreview}`);
+        }
+      });
+      return;
+    }
+    // Opaque key — treat as a cloud storage object id we don't recognise.
+    // We still log it so external cleanup tooling has a trail to follow.
+    console.log(`[design-visits] storage delete skip (unrecognised key shape) key=${keyPreview}`);
+  } catch (e) {
+    console.warn(`[design-visits] storage delete fail key=${keyPreview} err=${e.message}`);
+  }
+}
+
 router.delete('/api/design-visits/:id', isAuthenticated, requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   try {
+    // Collect storage_keys BEFORE the DB delete so we still know what to clean
+    // up after `ON DELETE CASCADE` drops `design_visit_room_images`.
+    let storageKeys = [];
+    try {
+      const k = await pool.query(
+        `SELECT dvri.storage_key
+           FROM design_visit_room_images dvri
+           JOIN design_visit_rooms dvr ON dvr.id = dvri.room_id
+          WHERE dvr.design_visit_id = $1`,
+        [id]
+      );
+      storageKeys = k.rows.map(r => r.storage_key).filter(Boolean);
+    } catch (lookupErr) {
+      console.warn('[design-visits] storage_key lookup failed before delete:', lookupErr.message);
+    }
+
     const r = await pool.query(`DELETE FROM design_visits WHERE id=$1 RETURNING id`, [id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+
+    // Fire-and-forget storage cleanup so the API response is not blocked by
+    // slow object-store deletes. Each helper invocation logs its own outcome.
+    for (const key of storageKeys) {
+      _bestEffortDeleteDesignVisitStorageObject(key);
+    }
+
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
