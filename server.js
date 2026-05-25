@@ -96,6 +96,27 @@ app.get('/login', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'lo
 app.get('/set-password', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'set-password.html')));
 app.get('/onboarding', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'onboarding.html')));
 
+// Hashed React chunks and assets are content-addressed (Vite appends a hash
+// to every filename), so they can be cached indefinitely by the browser.
+// These mounts must precede the general express.static below so that the
+// long-lived headers are applied before the default (no-cache) fallback.
+// main.js uses a stable filename and is intentionally excluded — it stays
+// under the general static middleware so browsers always re-validate it.
+app.use(
+  '/react/chunks',
+  express.static(path.join(__dirname, 'public', 'react', 'chunks'), {
+    maxAge: '1y',
+    immutable: true,
+  })
+);
+app.use(
+  '/react/assets',
+  express.static(path.join(__dirname, 'public', 'react', 'assets'), {
+    maxAge: '1y',
+    immutable: true,
+  })
+);
+
 app.use(express.static(path.join(__dirname, 'public')));
 installSession(app);
 
