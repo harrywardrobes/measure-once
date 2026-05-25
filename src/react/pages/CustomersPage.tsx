@@ -612,6 +612,7 @@ export function CustomersPage(): React.ReactElement {
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
   const [openLeadsCacheAge, setOpenLeadsCacheAge] = React.useState<number | null>(null);
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
+  const [contactsStale, setContactsStale] = React.useState(false);
 
   const isViewer = useIsViewer();
   const [newOpen, setNewOpen] = React.useState<boolean>(() => {
@@ -826,6 +827,7 @@ export function CustomersPage(): React.ReactElement {
     const countsRetryTimers: ReturnType<typeof setTimeout>[] = [];
     setLoading(true);
     setError(null);
+    setContactsStale(false);
 
     if (viewMode === 'active') {
       // Use raw fetch for open-leads so we can read response headers (X-Cache-Age).
@@ -873,9 +875,20 @@ export function CustomersPage(): React.ReactElement {
       if (leadStatus) qs.set('leadStatus', leadStatus);
       if (sortBy && sortBy !== 'newest') qs.set('sort', sortBy);
       if (search) qs.set('q', search);
-      apiGet<ContactsResponse>(`/api/contacts-all?${qs}`)
-        .then((data) => {
+      // Use raw fetch so we can read the X-Cache-Status response header and
+      // show a stale-data warning banner when HubSpot is temporarily down.
+      (async () => {
+        try {
+          const r = await fetch(`/api/contacts-all?${qs}`, { headers: { Accept: 'application/json' } });
+          if (r.status === 401) { location.href = '/login'; return; }
+          const data = await r.json().catch(() => ({})) as ContactsResponse;
+          if (!r.ok) {
+            const err = new Error((data as { error?: string }).error || `HTTP ${r.status}`);
+            (err as { code?: string }).code = (data as { code?: string }).code;
+            throw err;
+          }
           if (cancelled) return;
+          setContactsStale(r.headers.get('X-Cache-Status') === 'stale');
           const list = data.results || [];
           setContacts(list);
           setTotal(data.total != null ? data.total : list.length);
@@ -905,15 +918,16 @@ export function CustomersPage(): React.ReactElement {
             countsRetryTimers.push(t);
           }
           scheduleCountsAttempt(0, 0);
-        })
-        .catch((e: Error & { code?: string }) => {
+        } catch (e) {
           if (cancelled) return;
-          setError(humaniseError(e));
+          setContactsStale(false);
+          setError(humaniseError(e as Error & { code?: string }));
           setContacts([]);
           setTotal(0);
           setTotalPages(1);
           setLoading(false);
-        });
+        }
+      })();
     }
 
     return () => {
@@ -1295,6 +1309,12 @@ export function CustomersPage(): React.ReactElement {
         ) : null}
 
         {error ? <Alert severity="error">{error}</Alert> : null}
+
+        {!loading && contactsStale ? (
+          <Alert severity="warning" sx={{ py: 0 }} id="contacts-stale-banner">
+            Contact list may be out of date — HubSpot is temporarily unavailable.
+          </Alert>
+        ) : null}
 
         {!loading && viewMode === 'active' && openLeadsCacheAge !== null ? (
           <Alert severity="info" sx={{ py: 0 }}>
