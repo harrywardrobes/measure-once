@@ -125,12 +125,21 @@ const ROUTES = [
   { method: 'POST',   path: '/api/design-visits/0/submit',    level: 'member',  body: {} },
   { method: 'POST',   path: '/api/design-visits/0/revision',  level: 'member',  body: {} },
   { method: 'POST',   path: '/api/design-visits/uploads',     level: 'member',  body: {} },
-  { method: 'GET',    path: '/api/design-visit-images/x',     level: 'auth' },
+  // /api/design-visit-images/:key is registered on the design-visits router
+  // BEFORE the global /api isAuthenticated gate (server.js mounts the router
+  // at line 121, the gate at line 136), so it's intentionally public and
+  // gated by HMAC. It lives in PUBLIC_PATH_ALLOWLIST in routeAudit.js; no
+  // matrix row is needed because there's no privilege gate to measure.
 
   // ── manager-level surface ─────────────────────────────────────────────────
   { method: 'POST',   path: '/api/workflow',                  level: 'manager', body: {} },
   { method: 'PATCH',  path: '/api/contacts/0/rooms/0/fitter', level: 'manager', body: {}, needsHubspot: true },
-  { method: 'GET',    path: '/trades',                        level: 'manager' },
+  // /trades is just an HTML shell gated by isAuthenticated; the actual
+  // trade data is fetched via /api/trades (requireManagerOrAdmin below).
+  // The page therefore lives at the 'auth' level — non-managers landing on
+  // it see an empty UI but can't read any trade data. Matrix row stays
+  // here in the manager block for documentation; level is 'auth'.
+  { method: 'GET',    path: '/trades',                        level: 'auth' },
   { method: 'GET',    path: '/api/trades',                    level: 'manager' },
   { method: 'POST',   path: '/api/trades',                    level: 'manager', body: {} },
   { method: 'PUT',    path: '/api/trades/0',                  level: 'manager', body: {} },
@@ -236,10 +245,16 @@ const ROUTES = [
   // `__nope__` reaches the handler and 400s — the gate decision (which is
   // what the matrix measures) still fires first.
   { method: 'GET',    path: '/api/admin/db/tables',                            level: 'admin' },
-  { method: 'GET',    path: '/api/admin/db/__nope__/rows',                     level: 'admin' },
-  { method: 'POST',   path: '/api/admin/db/__nope__/rows',                     level: 'admin', body: {} },
-  { method: 'PATCH',  path: '/api/admin/db/__nope__/rows/0',                   level: 'admin', body: {} },
-  { method: 'DELETE', path: '/api/admin/db/__nope__/rows/0',                   level: 'admin' },
+  // db-editor :table param is validated against the allow-list in db-editor.js
+  // BEFORE any handler body runs and returns 403 for unknown tables. That
+  // overlaps with the requireAdmin 403 and made the admin actor look like a
+  // gate denial. Use a real allow-listed table (`lead_status_config`, PK
+  // `key`) so the admin reaches the handler — non-admins still get 403 from
+  // requireAdmin, admin reaches the handler (200 GET / 404 on missing PK).
+  { method: 'GET',    path: '/api/admin/db/lead_status_config/rows',           level: 'admin' },
+  { method: 'POST',   path: '/api/admin/db/lead_status_config/rows',           level: 'admin', body: {} },
+  { method: 'PATCH',  path: '/api/admin/db/lead_status_config/rows/__privtest_noop__', level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/db/lead_status_config/rows/__privtest_noop__', level: 'admin' },
   { method: 'GET',    path: '/api/admin/db/audit',                             level: 'admin' },
   { method: 'POST',   path: '/api/admin/db/audit/0/revert',                    level: 'admin', body: {} },
 

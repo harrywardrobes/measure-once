@@ -114,7 +114,7 @@ async function runUiSmoke({ users, runId, clients }) {
       if (kv) {
         const { hostname } = new URL(BASE);
         await page.setCookie({
-          name: kv.name, value: kv.value,
+          name: kv.name, value: kv.value, url: BASE,
           domain: hostname, path: '/', httpOnly: true,
         });
       }
@@ -236,8 +236,8 @@ async function runUiSmoke({ users, runId, clients }) {
       if (kv) {
         const { hostname } = new URL(BASE);
         await page.setCookie({
-          name: kv.name, value: kv.value, domain: hostname,
-          path: '/', httpOnly: true,
+          name: kv.name, value: kv.value, url: BASE,
+          domain: hostname, path: '/', httpOnly: true,
         });
       }
       await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
@@ -280,8 +280,8 @@ async function runUiSmoke({ users, runId, clients }) {
       const { hostname } = new URL(BASE);
       if (kv) {
         await page.setCookie({
-          name: kv.name, value: kv.value, domain: hostname,
-          path: '/', httpOnly: true,
+          name: kv.name, value: kv.value, url: BASE,
+          domain: hostname, path: '/', httpOnly: true,
         });
       }
       // Manager hits a manager-only API to confirm baseline access.
@@ -335,7 +335,7 @@ async function runUiSmoke({ users, runId, clients }) {
       if (kv) {
         const { hostname } = new URL(BASE);
         await page.setCookie({
-          name: kv.name, value: kv.value,
+          name: kv.name, value: kv.value, url: BASE,
           domain: hostname, path: '/', httpOnly: true,
         });
       }
@@ -464,7 +464,7 @@ async function runUiSmoke({ users, runId, clients }) {
       if (kv) {
         const { hostname } = new URL(BASE);
         await page.setCookie({
-          name: kv.name, value: kv.value,
+          name: kv.name, value: kv.value, url: BASE,
           domain: hostname, path: '/', httpOnly: true,
         });
       }
@@ -668,7 +668,7 @@ async function runUiSmoke({ users, runId, clients }) {
       if (kv) {
         const { hostname } = new URL(BASE);
         await page.setCookie({
-          name: kv.name, value: kv.value,
+          name: kv.name, value: kv.value, url: BASE,
           domain: hostname, path: '/', httpOnly: true,
         });
       }
@@ -753,7 +753,7 @@ async function runUiSmoke({ users, runId, clients }) {
       if (kv) {
         const { hostname } = new URL(BASE);
         await page.setCookie({
-          name: kv.name, value: kv.value,
+          name: kv.name, value: kv.value, url: BASE,
           domain: hostname, path: '/', httpOnly: true,
         });
       }
@@ -857,7 +857,7 @@ async function runUiSmoke({ users, runId, clients }) {
       if (kv) {
         const { hostname } = new URL(BASE);
         await page.setCookie({
-          name: kv.name, value: kv.value,
+          name: kv.name, value: kv.value, url: BASE,
           domain: hostname, path: '/', httpOnly: true,
         });
       }
@@ -959,7 +959,7 @@ async function runUiSmoke({ users, runId, clients }) {
       if (kv) {
         const { hostname } = new URL(BASE);
         await page.setCookie({
-          name: kv.name, value: kv.value,
+          name: kv.name, value: kv.value, url: BASE,
           domain: hostname, path: '/', httpOnly: true,
         });
       }

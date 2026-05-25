@@ -56,6 +56,10 @@ const PUBLIC_PATH_ALLOWLIST = [
   '/api/set-password/validate',
   // Token-gated public design-visit sign-off (server.js gate at line 138).
   /^\/api\/design-visits\/sign-off\/:[^/]+$/,
+  // HMAC-signed image stream (design-visits.js). The router is mounted
+  // BEFORE the global /api isAuthenticated gate in server.js, so this
+  // route is intentionally public and gated by the signature in `sig`.
+  /^\/api\/design-visit-images\/:[^/]+$/,
 ];
 
 function isPublicPath(pattern) {

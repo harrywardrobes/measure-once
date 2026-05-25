@@ -639,11 +639,11 @@ async function runProbes({ clients, users, pool, runId }) {
     const rows = Array.isArray(list.json) ? list.json : [];
     const found = rows.find(r => r.email === accessReqEmail);
     const stored = found && found.name === payload;
-    await record('xss', 'admin requests API returns the payload verbatim (must be HTML-escaped client-side)',
+    await record('xss', 'admin requests API returns the payload verbatim (data-confirmation; React escapes on render)',
       `name === ${JSON.stringify(payload)}`,
       `found=${!!found} name=${JSON.stringify(found?.name || null)}`,
-      'medium', stored,
-      'Check public/admin.html escaping — this is data confirmation, not a render test.');
+      'info', stored,
+      'Data-confirmation pass: the admin UI renders this via src/react/pages/admin/AdminRequestsPage.tsx ({r.name} in JSX), which React auto-escapes. The non-execution end of the round-trip is asserted by the "admin /admin renders the stored XSS payload as text, not script" probe in test/privileges/uiSmoke.js.');
     await pool.query(`DELETE FROM account_requests WHERE email = $1`, [accessReqEmail]);
 
     // Same XSS round-trip through the allow-list note field — the admin can
@@ -659,11 +659,11 @@ async function runProbes({ clients, users, pool, runId }) {
     const allowedRows = Array.isArray(allowed.json) ? allowed.json : [];
     const noteRow = allowedRows.find(r => r.email === noteEmail);
     const noteStored = noteRow && noteRow.note === notePayload;
-    await record('xss', 'admin allow-list API returns note payload verbatim (admin.html must HTML-escape)',
+    await record('xss', 'admin allow-list API returns note payload verbatim (data-confirmation; React escapes on render)',
       `note === ${JSON.stringify(notePayload)}`,
       `found=${!!noteRow} note=${JSON.stringify(noteRow?.note || null)}`,
-      'medium', noteStored,
-      'Check public/admin.html: the allow-list table must escape the note column.');
+      'info', noteStored,
+      'Data-confirmation pass: the admin UI renders the allow-list note via the React admin page (text node in JSX, auto-escaped). The non-execution end of the round-trip is asserted by the "admin /admin renders the stored XSS payload as text, not script" probe in test/privileges/uiSmoke.js.');
     await clients.admin.delete(`/api/admin/allowed/${encodeURIComponent(noteEmail)}`);
   }
 
