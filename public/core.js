@@ -335,6 +335,15 @@ async function bootstrap() {
       return true;
     }
 
+    const surveyView = document.getElementById('survey-view');
+    if (surveyView && !list && !projectView && !salesView) {
+      window.__surveyBoardBootstrapFailed = { code: e.code, message: e.message };
+      document.dispatchEvent(new CustomEvent('survey-board-bootstrap-failed', {
+        detail: { code: e.code, message: e.message },
+      }));
+      return true;
+    }
+
     const target = list || projectView;
     if (target) {
       let msg, action;

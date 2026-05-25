@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
+  Button,
   Card,
   Checkbox,
   FormControlLabel,
@@ -9,6 +10,7 @@ import {
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
 
@@ -100,6 +102,7 @@ interface WindowGlobals {
     leadStatusKey: string | undefined,
     hwSubstatusValue: string | undefined,
   ) => string;
+  __surveyBoardBootstrapFailed?: { code: string | undefined; message: string } | undefined;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -682,9 +685,31 @@ export function SurveyBoardPage() {
   const { isManager } = usePrivilege();
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
 
+  // Bootstrap-failure error state — fires when core.js bootstrap() throws and
+  // dispatches 'survey-board-bootstrap-failed' instead of writing to #survey-view
+  // innerHTML (which would orphan this React tree).
+  // Read the window flag synchronously as the initial value so the component
+  // shows the error immediately even when the event fired before this chunk
+  // finished loading (race condition: bootstrap can fail before React mounts).
+  const [bootstrapFailed, setBootstrapFailed] = useState(
+    () => !!(window as unknown as WindowGlobals).__surveyBoardBootstrapFailed,
+  );
   useEffect(() => {
-    document.addEventListener(DATA_READY_EVENT, forceUpdate);
-    return () => document.removeEventListener(DATA_READY_EVENT, forceUpdate);
+    const onBootstrapFail = () => setBootstrapFailed(true);
+    document.addEventListener('survey-board-bootstrap-failed', onBootstrapFail);
+    return () => document.removeEventListener('survey-board-bootstrap-failed', onBootstrapFail);
+  }, []);
+
+  useEffect(() => {
+    const onReady = () => {
+      // Clear the window flag so a successful reload after a failure doesn't
+      // immediately re-show the error on the next mount.
+      (window as unknown as WindowGlobals).__surveyBoardBootstrapFailed = undefined;
+      setBootstrapFailed(false);
+      forceUpdate();
+    };
+    document.addEventListener(DATA_READY_EVENT, onReady);
+    return () => document.removeEventListener(DATA_READY_EVENT, onReady);
   }, [forceUpdate]);
 
   useEffect(() => {
@@ -735,6 +760,48 @@ export function SurveyBoardPage() {
       return next;
     });
   };
+
+  if (bootstrapFailed) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: 4,
+          bgcolor: 'background.default',
+        }}
+      >
+        <Box
+          sx={{
+            maxWidth: 420,
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          <WarningAmberIcon sx={{ fontSize: 48, color: 'warning.main', opacity: 0.8 }} />
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            HubSpot is currently unavailable
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            The survey board couldn&apos;t load because HubSpot couldn&apos;t be reached.
+            This is usually a temporary issue.
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => window.location.reload()}
+            sx={{ mt: 1 }}
+          >
+            Reload page
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box
