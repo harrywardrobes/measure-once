@@ -1490,6 +1490,95 @@ app.get('/api/contacts/:id/tasks', requireHubspotToken, async (req, res) => {
   }
 });
 
+// Bulk task-urgency aggregator used by the Customers list. Accepts up to 100
+// contact ids and returns `{ urgency: { [id]: 'red'|'orange'|null } }` so the
+// React page can populate the per-card urgency dot in a single round-trip
+// instead of one tasks fetch per contact.
+app.post('/api/contacts/urgency', isAuthenticated, requireHubspotToken, async (req, res) => {
+  try {
+    const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const ids = Array.from(new Set(rawIds.map(v => String(v)).filter(v => /^\d+$/.test(v)))).slice(0, 100);
+    const urgency = {};
+    for (const id of ids) urgency[id] = null;
+    if (!ids.length) return res.json({ urgency });
+
+    // Batch read contact→task associations.
+    let assocResults = [];
+    try {
+      const assocR = await axios.post(
+        `${HS}/crm/v4/associations/contacts/tasks/batch/read`,
+        { inputs: ids.map(id => ({ id })) },
+        { headers: hsHeaders() }
+      );
+      assocResults = assocR.data?.results || [];
+    } catch (_e) {
+      return res.json({ urgency });
+    }
+
+    const taskIdsByContact = new Map();
+    const allTaskIds = new Set();
+    for (const row of assocResults) {
+      const fromId = String(row?.from?.id || '');
+      if (!fromId) continue;
+      const tos = Array.isArray(row?.to) ? row.to : [];
+      const taskIds = tos.map(t => String(t?.toObjectId ?? t?.id ?? '')).filter(Boolean);
+      taskIdsByContact.set(fromId, taskIds);
+      for (const t of taskIds) allTaskIds.add(t);
+    }
+    if (!allTaskIds.size) return res.json({ urgency });
+
+    // Batch read task properties (HubSpot batch/read accepts up to 100 inputs).
+    const tasksById = new Map();
+    const allTaskIdList = Array.from(allTaskIds);
+    for (let i = 0; i < allTaskIdList.length; i += 100) {
+      const chunk = allTaskIdList.slice(i, i + 100);
+      try {
+        const taskR = await axios.post(
+          `${HS}/crm/v3/objects/tasks/batch/read`,
+          {
+            properties: ['hs_task_status', 'hs_timestamp'],
+            inputs: chunk.map(id => ({ id })),
+          },
+          { headers: hsHeaders() }
+        );
+        for (const t of (taskR.data?.results || [])) tasksById.set(String(t.id), t);
+      } catch (_e) { /* skip chunk on failure; leave those urgencies null */ }
+    }
+
+    // Compute urgency using the same working-day window as the client's
+    // getTaskUrgency() in public/workflow-core.js.
+    const workingDayDeadline = (n) => {
+      const d = new Date();
+      let added = 0;
+      while (added < n) {
+        d.setDate(d.getDate() + 1);
+        if (d.getDay() !== 0 && d.getDay() !== 6) added++;
+      }
+      d.setHours(23, 59, 59, 999);
+      return d.getTime();
+    };
+    const one = workingDayDeadline(1);
+    const two = workingDayDeadline(2);
+
+    for (const [contactId, taskIds] of taskIdsByContact) {
+      let u = null;
+      for (const tid of taskIds) {
+        const t = tasksById.get(tid);
+        if (!t) continue;
+        if (t.properties?.hs_task_status === 'COMPLETED') continue;
+        const due = parseInt(t.properties?.hs_timestamp || '0', 10);
+        if (!due) continue;
+        if (due <= one) { u = 'red'; break; }
+        if (due <= two && u !== 'red') u = 'orange';
+      }
+      urgency[contactId] = u;
+    }
+    res.json({ urgency });
+  } catch (_e) {
+    res.json({ urgency: {} });
+  }
+});
+
 app.post('/api/contacts/:id/tasks', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   try {
     const { subject, dueDate, stageKey } = req.body;

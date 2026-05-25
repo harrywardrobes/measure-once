@@ -443,33 +443,6 @@ function matchInvoicesForContact(contact: Contact, invoices: QBInvoice[]): QBInv
   });
 }
 
-function workingDayDeadline(n: number): number {
-  const d = new Date();
-  let added = 0;
-  while (added < n) {
-    d.setDate(d.getDate() + 1);
-    if (d.getDay() !== 0 && d.getDay() !== 6) added++;
-  }
-  d.setHours(23, 59, 59, 999);
-  return d.getTime();
-}
-
-function computeUrgency(tasks: Array<{ properties?: Record<string, string | undefined> }>): Urgency {
-  const one = workingDayDeadline(1);
-  const two = workingDayDeadline(2);
-  let urgency: Urgency = null;
-  for (const t of tasks) {
-    if (t.properties?.hs_task_status === 'COMPLETED') continue;
-    const due = parseInt(t.properties?.hs_timestamp || '0', 10);
-    if (!due) continue;
-    if (due <= one) {
-      return 'red';
-    }
-    if (due <= two && urgency !== 'red') urgency = 'orange';
-  }
-  return urgency;
-}
-
 function fmtGBP(n: number): string {
   return (
     '£' +
@@ -763,23 +736,31 @@ export function CustomersPage(): React.ReactElement {
     const ids = contacts.map((c) => c.id).filter((id) => !(id in urgencyMap));
     if (!ids.length) return;
     (async () => {
-      const results = await Promise.all(
-        ids.map((id) =>
-          apiGet<{ results?: Array<{ properties?: Record<string, string | undefined> }> }>(
-            `/api/contacts/${encodeURIComponent(id)}/tasks`,
-          )
-            .then((d) => ({ id, tasks: d.results || [] }))
-            .catch(() => ({ id, tasks: [] as Array<{ properties?: Record<string, string | undefined> }> })),
-        ),
-      );
+      let urgencyById: Record<string, Urgency> = {};
+      try {
+        const res = await fetch('/api/contacts/urgency', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { urgency?: Record<string, Urgency> };
+          urgencyById = data.urgency || {};
+        }
+      } catch {
+        /* fall through with empty map; ids will be marked null below */
+      }
       if (cancelled) return;
-      const getUrgency = (
-        window as unknown as { getTaskUrgency?: (tasks: unknown[]) => Urgency }
-      ).getTaskUrgency;
+      const legacyCache = (
+        window as unknown as { state?: { contactUrgencyCache?: Record<string, Urgency> } }
+      ).state?.contactUrgencyCache;
       setUrgencyMap((prev) => {
         const next = { ...prev };
-        for (const { id, tasks } of results) {
-          next[id] = typeof getUrgency === 'function' ? getUrgency(tasks) || null : computeUrgency(tasks);
+        for (const id of ids) {
+          const u = id in urgencyById ? urgencyById[id] : null;
+          next[id] = u;
+          if (legacyCache) legacyCache[id] = u;
         }
         return next;
       });
