@@ -486,6 +486,27 @@ function saveCustomersScroll() {
   }
 }
 
+function CustomerCardSkeleton() {
+  return (
+    <Card variant="outlined" sx={{ width: '100%' }}>
+      <Box sx={{ p: 2 }}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+          <Skeleton variant="text" width="45%" height={22} />
+          <Skeleton variant="rounded" width={72} height={22} />
+        </Stack>
+        <Stack direction="row" spacing={0.75} sx={{ mb: 1 }}>
+          <Skeleton variant="rounded" width={80} height={20} />
+          <Skeleton variant="rounded" width={64} height={20} />
+        </Stack>
+        <Stack direction="row" spacing={1}>
+          <Skeleton variant="rounded" width={140} height={20} />
+          <Skeleton variant="rounded" width={100} height={20} />
+        </Stack>
+      </Box>
+    </Card>
+  );
+}
+
 function CustomerCard({
   contact,
   statusMap,
@@ -1262,9 +1283,9 @@ export function CustomersPage(): React.ReactElement {
         ) : null}
 
         {loading ? (
-          <Stack spacing={1}>
+          <Stack spacing={1.5}>
             {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} variant="rounded" height={84} />
+              <CustomerCardSkeleton key={i} />
             ))}
           </Stack>
         ) : visibleContacts.length === 0 ? (
