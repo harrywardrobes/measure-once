@@ -68,8 +68,13 @@ const CHUNKS_DIR = join(REACT_DIR, 'chunks');
 // TREND_DRIFT_PCT – warn (non-fatal) when the always-loaded total has grown by
 //                  more than this percentage relative to the oldest entry in the
 //                  window.  E.g. 10 means "warn if newest > oldest × 1.10".
+// SPIKE_PCT      – warn (non-fatal) when a single build increases the
+//                  always-loaded total by more than this percentage relative to
+//                  the immediately preceding history entry.  E.g. 5 means "warn
+//                  if this build added > 5% in one go".
 const TREND_WINDOW    = 10;
 const TREND_DRIFT_PCT = 10;   // percent
+const SPIKE_PCT       = 5;    // percent
 
 // ── Threshold definitions ────────────────────────────────────────────────────
 // Each entry matches chunks whose basename starts with `prefix`.
@@ -344,8 +349,30 @@ if (recentEntries.length >= 2) {
   }
 }
 
+// ── Per-build spike check ─────────────────────────────────────────────────────
+// Warn (non-fatal) when this single build increased the always-loaded total by
+// more than SPIKE_PCT % relative to the immediately preceding history entry.
+let spikeWarning = null;
+if (recentEntries.length >= 2) {
+  const prev = recentEntries[recentEntries.length - 2];
+  const curr = recentEntries[recentEntries.length - 1];
+  if (prev.totalAlwaysGzBytes > 0) {
+    const deltaPct = ((curr.totalAlwaysGzBytes - prev.totalAlwaysGzBytes) / prev.totalAlwaysGzBytes) * 100;
+    if (deltaPct > SPIKE_PCT) {
+      spikeWarning =
+        `Always-loaded total jumped ${deltaPct.toFixed(1)}% in this build ` +
+        `(${kbStr(prev.totalAlwaysGzBytes)} → ${kbStr(curr.totalAlwaysGzBytes)}, ` +
+        `threshold: >${SPIKE_PCT}%). A large dependency may have been added.`;
+    }
+  }
+}
+
 if (trendWarning) {
   console.log(`\n⚠  Trend warning: ${trendWarning}`);
+}
+
+if (spikeWarning) {
+  console.log(`\n⚠  Spike warning: ${spikeWarning}`);
 }
 
 const trendRows = recentEntries.map(e => {
@@ -364,8 +391,12 @@ const trendWarnMd = trendWarning
   ? `\n> ⚠ **Trend warning:** ${trendWarning}\n`
   : '';
 
+const spikeWarnMd = spikeWarning
+  ? `\n> ⚠ **Spike warning:** ${spikeWarning}\n`
+  : '';
+
 const trendSection = `\n## Trend (last ${recentEntries.length} run${recentEntries.length === 1 ? '' : 's'})` +
-  trendWarnMd + '\n' +
+  spikeWarnMd + trendWarnMd + '\n' +
   `| Date (UTC) | SHA | Total always-loaded | ${alwaysHeaders} | Result |\n` +
   `|---|---|---|${alwaysSeps}|---|\n` +
   trendRows + '\n';
