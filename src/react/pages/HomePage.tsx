@@ -330,7 +330,25 @@ function CalendarSection({
       </Box>
     );
   }
-  if (!connected) return null;
+  if (!connected) {
+    return (
+      <Box sx={{ mb: 3 }}>
+        <SectionHeader title="Upcoming" />
+        <Alert
+          severity="info"
+          action={
+            <Button size="small" href="/profile">
+              Connect
+            </Button>
+          }
+        >
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            Connect Google Calendar to see upcoming events
+          </Typography>
+        </Alert>
+      </Box>
+    );
+  }
   if (events.length === 0) {
     return (
       <Box sx={{ mb: 3 }}>

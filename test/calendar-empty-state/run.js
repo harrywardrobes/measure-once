@@ -2,12 +2,13 @@
 // test/calendar-empty-state/run.js
 //
 // Regression test for the CalendarSection empty-state branch added in task #954.
+// Updated in task #1082 to reflect that the "Upcoming" heading is always visible.
 //
 // Covers:
 //   [CAL-A] Connected + zero events → "Upcoming" heading and
 //           "No upcoming events" text are visible in the DOM.
-//   [CAL-B] Not connected (connected: false) → CalendarSection returns null;
-//           neither "Upcoming" heading nor "No upcoming events" appear.
+//   [CAL-B] Not connected (connected: false) → "Upcoming" heading is visible,
+//           a connect-Google prompt is shown, and "No upcoming events" is absent.
 //
 // Strategy: boots a disposable test server, drives the home page (/) with
 // Puppeteer, intercepts /api/calendar/upcoming to inject controlled JSON
@@ -170,8 +171,9 @@ async function writeReport(runId) {
     '  to return `{ connected: true, events: [] }`. The CalendarSection must render',
     '  the "Upcoming" section header and the "No upcoming events" empty-state message.',
     '- **[CAL-B] Not connected**: `/api/calendar/upcoming` returns',
-    '  `{ connected: false, events: [] }`. CalendarSection returns `null`; neither',
-    '  the "Upcoming" heading nor "No upcoming events" text should appear in the DOM.',
+    '  `{ connected: false, events: [] }`. CalendarSection must render the "Upcoming"',
+    '  section header and a "Connect Google Calendar" prompt; "No upcoming events"',
+    '  must NOT appear in the DOM.',
     '',
     'All other homepage API calls (`/api/personal-tasks`, `/api/quickbooks/status`,',
     '`/api/workflow`, `/api/contacts-all`, `/api/localdata/all`) are stubbed with',
@@ -248,7 +250,8 @@ async function main() {
   const UI_LABELS = [
     '[CAL-A] "Upcoming" heading is visible when connected=true and events=[]',
     '[CAL-A] "No upcoming events" text is visible when connected=true and events=[]',
-    '[CAL-B] "Upcoming" heading is absent when connected=false',
+    '[CAL-B] "Upcoming" heading is visible when connected=false',
+    '[CAL-B] connect-Google prompt is visible when connected=false',
     '[CAL-B] "No upcoming events" text is absent when connected=false',
   ];
 
@@ -348,17 +351,25 @@ async function main() {
       return el ? el.textContent : '';
     });
 
-    // [CAL-B] heading absent
+    // [CAL-B] heading present
     record(
       UI_LABELS[2],
-      '"Upcoming" heading absent from #home-view',
-      homeTextB.includes('Upcoming') ? 'found (unexpected)' : 'absent',
-      !homeTextB.includes('Upcoming'),
+      '"Upcoming" heading present in #home-view',
+      homeTextB.includes('Upcoming') ? 'found' : 'absent (unexpected)',
+      homeTextB.includes('Upcoming'),
+    );
+
+    // [CAL-B] connect prompt present
+    record(
+      UI_LABELS[3],
+      'connect-Google prompt present in #home-view',
+      homeTextB.includes('Connect Google Calendar') ? 'found' : 'absent (unexpected)',
+      homeTextB.includes('Connect Google Calendar'),
     );
 
     // [CAL-B] empty state message absent
     record(
-      UI_LABELS[3],
+      UI_LABELS[4],
       '"No upcoming events" absent from #home-view',
       homeTextB.includes('No upcoming events') ? 'found (unexpected)' : 'absent',
       !homeTextB.includes('No upcoming events'),
