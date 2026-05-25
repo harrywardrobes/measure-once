@@ -317,6 +317,9 @@ async function bootstrap() {
   }
 
   state.user = user;
+  // Notify React islands (GlobalHeader, ProfilePage, …) that state.user is now populated.
+  // checkAuthStatus() already fires this on re-checks; bootstrap was the missing path.
+  renderAuthStatus();
 
   const priv = user.privilege_level || 'member';
 
