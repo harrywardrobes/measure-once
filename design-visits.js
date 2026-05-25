@@ -194,6 +194,7 @@ async function ensureDesignVisitTables() {
       updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE design_visits ADD COLUMN IF NOT EXISTS qb_estimate_history JSONB NOT NULL DEFAULT '[]'::jsonb`);
   await pool.query(`CREATE INDEX IF NOT EXISTS design_visits_contact_id_idx ON design_visits (contact_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS design_visits_status_idx ON design_visits (status)`);
   await pool.query(`
@@ -374,6 +375,14 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
   }
 
   // 4. QuickBooks Estimate (non-fatal)
+  //
+  // If this visit already has a `qb_estimate_id`, attempt a sparse update so we
+  // edit the existing estimate in QuickBooks rather than orphaning it with a
+  // duplicate. Re-opened visits (revision_requested → resubmit) keep the same
+  // estimate id and doc number. If the prior estimate cannot be updated
+  // (accepted/closed/rejected, voided, deleted, or otherwise unreachable),
+  // fall back to creating a new one and append the old id to
+  // `qb_estimate_history` for audit.
   try {
     const qbt = await getQbTokens();
     if (qbt && visit.rooms && visit.rooms.length) {
@@ -399,31 +408,100 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
         visit.handle_name          ? `Handle: ${visit.handle_name}` : null,
         visit.furniture_range_name ? `Furniture range: ${visit.furniture_range_name}` : null,
       ].filter(Boolean).join('\n');
-      const qbResp = await axios.post(
-        `${qbBase()}/v3/company/${qbt.realm_id}/estimate`,
-        {
-          TxnDate:       new Date().toISOString().slice(0, 10),
-          CustomerRef:   { value: visit.contact_id },
-          BillEmail:     visit.contact_email ? { Address: visit.contact_email } : undefined,
-          CustomerMemo:  { value: memo },
-          ExpirationDate: expDate.toISOString().slice(0, 10),
-          Line: lines,
-        },
-        {
-          headers: { Authorization: `Bearer ${qbt.access_token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-          params: { minorversion: 65 },
+      const basePayload = {
+        TxnDate:        new Date().toISOString().slice(0, 10),
+        CustomerRef:    { value: visit.contact_id },
+        BillEmail:      visit.contact_email ? { Address: visit.contact_email } : undefined,
+        CustomerMemo:   { value: memo },
+        ExpirationDate: expDate.toISOString().slice(0, 10),
+        Line:           lines,
+      };
+      const qbHeaders = {
+        headers: { Authorization: `Bearer ${qbt.access_token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+        params:  { minorversion: 65 },
+      };
+
+      // Try sparse-update path if we already have an estimate on file.
+      let updated = false;
+      const priorId = visit.qb_estimate_id;
+      if (priorId) {
+        try {
+          const getResp = await axios.get(
+            `${qbBase()}/v3/company/${qbt.realm_id}/estimate/${encodeURIComponent(priorId)}`,
+            qbHeaders
+          );
+          const existing = getResp.data?.Estimate;
+          const txnStatus = String(existing?.TxnStatus || '').toLowerCase();
+          // "Pending" is the only freely-editable state. Accepted / Closed /
+          // Rejected estimates (and anything else QB hands back) should not be
+          // mutated — fall through to creating a replacement.
+          const isUpdatable = existing && existing.SyncToken != null &&
+            (txnStatus === '' || txnStatus === 'pending');
+          if (isUpdatable) {
+            const updResp = await axios.post(
+              `${qbBase()}/v3/company/${qbt.realm_id}/estimate`,
+              { ...basePayload, Id: existing.Id, SyncToken: existing.SyncToken, sparse: true },
+              qbHeaders
+            );
+            const est = updResp.data?.Estimate;
+            if (est?.Id) {
+              await pool.query(
+                `UPDATE design_visits SET qb_estimate_id = $1, qb_estimate_doc_num = $2, updated_at = NOW() WHERE id = $3`,
+                [est.Id, est.DocNumber || null, visitId]
+              );
+              updated = true;
+            }
+          } else {
+            console.warn(`[design-visits] QB estimate ${priorId} not updatable (TxnStatus=${existing?.TxnStatus || 'unknown'}); creating replacement.`);
+          }
+        } catch (e) {
+          // 404 / deleted / voided / token issue — fall back to create.
+          console.warn(`[design-visits] QB estimate ${priorId} fetch/update failed (${e.response?.status || ''} ${e.message}); creating replacement.`);
         }
-      );
-      const est = qbResp.data?.Estimate;
-      if (est?.Id) {
-        await pool.query(
-          `UPDATE design_visits SET qb_estimate_id = $1, qb_estimate_doc_num = $2, updated_at = NOW() WHERE id = $3`,
-          [est.Id, est.DocNumber || null, visitId]
+      }
+
+      if (!updated) {
+        const qbResp = await axios.post(
+          `${qbBase()}/v3/company/${qbt.realm_id}/estimate`,
+          basePayload,
+          qbHeaders
         );
+        const est = qbResp.data?.Estimate;
+        if (est?.Id) {
+          // If we are replacing an old estimate, append the old id to the
+          // audit history so finance can see the orphaned record.
+          if (priorId && priorId !== est.Id) {
+            await pool.query(
+              `UPDATE design_visits
+                  SET qb_estimate_id      = $1,
+                      qb_estimate_doc_num = $2,
+                      qb_estimate_history = qb_estimate_history || $3::jsonb,
+                      updated_at          = NOW()
+                WHERE id = $4`,
+              [
+                est.Id,
+                est.DocNumber || null,
+                JSON.stringify([{
+                  qb_estimate_id:      priorId,
+                  qb_estimate_doc_num: visit.qb_estimate_doc_num || null,
+                  replaced_at:         new Date().toISOString(),
+                  replaced_by:         submitterUser?.email || null,
+                  reason:              'prior_estimate_not_updatable',
+                }]),
+                visitId,
+              ]
+            );
+          } else {
+            await pool.query(
+              `UPDATE design_visits SET qb_estimate_id = $1, qb_estimate_doc_num = $2, updated_at = NOW() WHERE id = $3`,
+              [est.Id, est.DocNumber || null, visitId]
+            );
+          }
+        }
       }
     }
   } catch (e) {
-    console.warn('[design-visits] QuickBooks estimate creation failed:', e.message);
+    console.warn('[design-visits] QuickBooks estimate sync failed:', e.message);
   }
 
   // 5. Customer confirmation email (non-fatal)

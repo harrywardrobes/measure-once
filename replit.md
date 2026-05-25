@@ -253,6 +253,25 @@ name, the tab/location it lives in, and a short description of what it does
 and why it is excluded from production. A maintainer comment above the panel
 in `public/admin.html` repeats this rule and links back here.
 
+## Design visits — QuickBooks estimate sync
+
+`runSubmitSideEffects` in `design-visits.js` (section 4) is idempotent across
+re-submissions. When a visit is re-opened (revision_requested → resubmit) and
+already has `qb_estimate_id` set, the submit pipeline first fetches that
+estimate from QuickBooks and — if `TxnStatus` is `Pending` (or absent) and a
+`SyncToken` is returned — issues a **sparse update** via
+`POST /v3/company/<realm>/estimate` with `{ Id, SyncToken, sparse: true, ... }`
+so the same estimate is edited in place. The visit row keeps the same
+`qb_estimate_id` / `qb_estimate_doc_num`.
+
+Fallback to create-new happens when (a) the estimate cannot be fetched (404,
+voided, deleted, auth error) or (b) `TxnStatus` is anything other than
+`Pending` (e.g. `Accepted`, `Closed`, `Rejected`). In that case a new estimate
+is created and the prior `qb_estimate_id` / `qb_estimate_doc_num` is appended
+to a new `design_visits.qb_estimate_history` JSONB column (auto-created on
+boot) for finance audit, along with `replaced_at`, `replaced_by`, and
+`reason: prior_estimate_not_updatable`.
+
 ## Required Secrets
 - `DATABASE_URL`, `SESSION_SECRET` — required
 - `ADMIN_EMAILS` — comma-separated bootstrap admins
