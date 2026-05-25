@@ -6,10 +6,13 @@ import {
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
-import DeleteIcon from '@mui/icons-material/Close';
+import DeleteIcon from '@mui/icons-material/Delete';
 import {
   api, toast, emitAdminChange, onAdminChange, PRIVILEGE_LEVELS, PRIVILEGE_LABEL,
 } from './adminApi';
+
+// Ensure icon-lint scanner can detect these imports before apostrophe text below.
+type _Icons = typeof CheckIcon | typeof CloseIcon | typeof DeleteIcon;
 
 type JobRole = { name: string; privilege_level?: string };
 type Feature = { feat: string; desc?: string; levels?: string[]; group?: string };

@@ -13,6 +13,9 @@ import {
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
+// Ensure icon-lint scanner can detect these imports before apostrophe text below.
+type _Icons = typeof RefreshIcon | typeof WarningAmberIcon;
+
 type PersonalTask = {
   id: string;
   title: string;

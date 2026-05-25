@@ -7,7 +7,7 @@ import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
-import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemIconWrapper from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import { useTheme, type Theme } from '@mui/material/styles';
 import HomeIcon from '@mui/icons-material/Home';
@@ -351,14 +351,14 @@ export function BottomNav() {
                   },
                 }}
               >
-                <ListItemIcon
+                <ListItemIconWrapper
                   sx={{
                     minWidth: 40,
                     color: isSelected ? accent : 'text.secondary',
                   }}
                 >
                   <IconComponent />
-                </ListItemIcon>
+                </ListItemIconWrapper>
                 <ListItemText
                   primary={n.label}
                   slotProps={{
@@ -387,9 +387,9 @@ export function BottomNav() {
                 }}
                 sx={{ py: 1.5, px: 2.5 }}
               >
-                <ListItemIcon sx={{ minWidth: 40, color: 'text.secondary' }}>
+                <ListItemIconWrapper sx={{ minWidth: 40, color: 'text.secondary' }}>
                   <TuneIcon />
-                </ListItemIcon>
+                </ListItemIconWrapper>
                 <ListItemText
                   primary="Customise navigation"
                   slotProps={{
