@@ -19,6 +19,7 @@ import HandymanIcon from '@mui/icons-material/Handyman';
 import HandymanOutlinedIcon from '@mui/icons-material/HandymanOutlined';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 
 /**
  * Bottom navigation bar rendered as a React/MUI island into
@@ -31,13 +32,12 @@ import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
  * - Outer element is `<nav class="bottom-nav" id="main-content">` so
  *   `public/style.css` keeps finding it and the window-ui-smoke test
  *   selector (`nav.bottom-nav#main-content`) still matches.
- * - Each action's root element keeps `id="bnav-<key>"` so the
+ * - Each rendered action's root element keeps `id="bnav-<key>"` so the
  *   imperative capability gating in `public/core.js` and
  *   `public/admin.html` (which toggles `style.display` by element id)
- *   still works. We never pass a `style` prop on those elements after
- *   mount — initial hide for manager/admin-only tabs is applied once
- *   via a side-effect, after which React leaves the inline `style`
- *   attribute alone.
+ *   still works without errors.
+ * - Privilege-gated tabs are conditionally rendered based on the user's
+ *   `privilege_level` from `useCurrentUser` — no DOM mutation needed.
  */
 type NavItem = {
   key: string;
@@ -79,21 +79,11 @@ export function BottomNav() {
   const [value, setValue] = useState<string | false>(() =>
     typeof window === 'undefined' ? false : matchPath(window.location.pathname),
   );
+  const { user } = useCurrentUser();
 
-  // Apply the initial hidden state for capability-gated tabs once, via
-  // direct DOM mutation, so subsequent React renders never re-touch the
-  // `style` attribute and `public/core.js` / `public/admin.html` can
-  // freely toggle `style.display` later.
-  useEffect(() => {
-    NAV.forEach((n) => {
-      if (!n.managerOnly && !n.adminOnly) return;
-      const el = document.getElementById(`bnav-${n.key}`) as HTMLElement | null;
-      if (el && el.dataset.bnavInit !== '1') {
-        el.dataset.bnavInit = '1';
-        el.style.display = 'none';
-      }
-    });
-  }, []);
+  const priv = user?.privilege_level;
+  const isManagerOrAdmin = priv === 'manager' || priv === 'admin';
+  const isAdmin = priv === 'admin';
 
   useEffect(() => {
     const sync = () => setValue(matchPath(window.location.pathname));
@@ -121,6 +111,12 @@ export function BottomNav() {
       el.scrollIntoView();
     }
   }, [value]);
+
+  const visibleNav = NAV.filter((n) => {
+    if (n.adminOnly) return isAdmin;
+    if (n.managerOnly) return isManagerOrAdmin;
+    return true;
+  });
 
   return (
     <Box
@@ -159,7 +155,7 @@ export function BottomNav() {
           bgcolor: 'transparent',
         }}
       >
-        {NAV.map((n) => {
+        {visibleNav.map((n) => {
           const accent = accentFor(n.key, theme);
           const isSelected = value === n.key;
           const IconComponent = isSelected ? n.Icon : n.IconOutlined;

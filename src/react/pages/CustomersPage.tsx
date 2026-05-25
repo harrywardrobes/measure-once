@@ -29,6 +29,7 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import AddIcon from '@mui/icons-material/Add';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 
 type LeadStatus = {
   key: string;
@@ -211,26 +212,19 @@ async function apiPost<T = unknown>(path: string, body: unknown): Promise<T> {
 }
 
 function useIsViewer(): boolean {
-  const [isViewer, setIsViewer] = React.useState<boolean>(() =>
+  const { user } = useCurrentUser();
+  const [bodyClass, setBodyClass] = React.useState<boolean>(() =>
     typeof document !== 'undefined' && document.body.classList.contains('viewer-mode'),
   );
   React.useEffect(() => {
     if (typeof document === 'undefined') return;
-    const sync = () => setIsViewer(document.body.classList.contains('viewer-mode'));
-    sync();
+    const sync = () => setBodyClass(document.body.classList.contains('viewer-mode'));
     const obs = new MutationObserver(sync);
     obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-    // chrome.js fetches /api/auth/user asynchronously; fall back to a direct
-    // check so the New customer button can show even before that completes.
-    fetch('/api/auth/user', { headers: { Accept: 'application/json' } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((u: { privilege_level?: string } | null) => {
-        if (u && u.privilege_level === 'viewer') setIsViewer(true);
-      })
-      .catch(() => {});
     return () => obs.disconnect();
   }, []);
-  return isViewer;
+  if (user) return user.privilege_level === 'viewer';
+  return bodyClass;
 }
 
 /**

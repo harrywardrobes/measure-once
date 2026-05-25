@@ -10,27 +10,19 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ShieldIcon from '@mui/icons-material/Shield';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 
-type HeaderUser = {
-  id?: string;
-  first_name?: string;
-  last_name?: string;
-  has_custom_photo?: boolean;
-  profile_image_url?: string | null;
-  photo_v?: string | number;
-  privilege_level?: string;
-};
+export type { CurrentUser as HeaderUser } from '../hooks/useCurrentUser';
 
 declare global {
   interface Window {
     openCommandPalette?: () => void;
     getShortcut?: (key: string) => string;
     PAGE_TITLES?: Record<string, string>;
-    __moHeaderUser?: HeaderUser | null;
   }
 }
 
-function resolvePhotoSrc(user: HeaderUser): string | null {
+function resolvePhotoSrc(user: NonNullable<ReturnType<typeof useCurrentUser>['user']>): string | null {
   if (!user) return null;
   let src = user.has_custom_photo && user.id
     ? `/api/users/${encodeURIComponent(user.id)}/photo`
@@ -41,7 +33,7 @@ function resolvePhotoSrc(user: HeaderUser): string | null {
   return src;
 }
 
-function resolveInitials(user: HeaderUser): string {
+function resolveInitials(user: NonNullable<ReturnType<typeof useCurrentUser>['user']>): string {
   return [user?.first_name, user?.last_name]
     .filter(Boolean)
     .map((s) => (s as string)[0])
@@ -68,7 +60,7 @@ const ICON_BTN_ACTIVE_SX = {
 
 export function GlobalHeader() {
   const [path, setPath] = useState<string>(() => window.location.pathname);
-  const [user, setUser] = useState<HeaderUser | null>(() => window.__moHeaderUser || null);
+  const { user } = useCurrentUser();
   const [pendingCount, setPendingCount] = useState<number>(0);
 
   useEffect(() => {
@@ -81,16 +73,6 @@ export function GlobalHeader() {
       window.removeEventListener('hashchange', onNav);
       window.removeEventListener('mo:navigation', onNav as EventListener);
     };
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<HeaderUser | null>).detail || null;
-      setUser(detail);
-    };
-    window.addEventListener('mo:user', handler as EventListener);
-    if (window.__moHeaderUser) setUser(window.__moHeaderUser);
-    return () => window.removeEventListener('mo:user', handler as EventListener);
   }, []);
 
   const isAdmin = user?.privilege_level === 'admin';
