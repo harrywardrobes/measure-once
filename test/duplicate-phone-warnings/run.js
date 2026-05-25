@@ -494,6 +494,82 @@ async function main() {
         submitReEnabled === false,
       );
 
+      // ── email duplicate: clear-and-recover ─────────────────────────────────
+      // Type the seeded duplicate email into "Work email address" to trigger
+      // the "This email is already on the allow-list" MUI Alert.
+      await page.evaluate((dupEmail) => {
+        const labels = Array.from(document.querySelectorAll('label'));
+        const lab = labels.find(l => (l.textContent || '').trim().startsWith('Work email address'));
+        const input = lab ? document.getElementById(lab.getAttribute('for')) : null;
+        if (!input) throw new Error('Work email address input not found');
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, dupEmail);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }, TEAM_DUP_EMAIL);
+
+      // Poll for the duplicate-email Alert (debounce + render tick).
+      const emailAlertText = await pollPage(page, () => {
+        const alerts = Array.from(document.querySelectorAll('.MuiAlert-root'));
+        const hit = alerts.find(a => /This email is already on the allow-list/i.test(a.textContent || ''));
+        return hit ? hit.textContent : null;
+      }, null, 4000);
+      record(
+        'TEAM: duplicate-email Alert appears when seeded email is typed',
+        'MUI Alert containing "This email is already on the allow-list"',
+        `text=${emailAlertText ? JSON.stringify(emailAlertText.slice(0, 160)) : 'null'}`,
+        !!emailAlertText && /This email is already on the allow-list/i.test(emailAlertText),
+      );
+
+      // Submit button must be disabled while the email duplicate stands.
+      const emailSubmitDisabled = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button'));
+        const btn = btns.find(b => (b.textContent || '').trim() === 'Add team member'
+                                  || (b.textContent || '').trim() === 'Adding…');
+        return btn ? btn.disabled : null;
+      });
+      record(
+        'TEAM: "Add team member" button is disabled while email duplicate stands',
+        'button.disabled === true',
+        `disabled=${emailSubmitDisabled}`,
+        emailSubmitDisabled === true,
+      );
+
+      // Clear the email field and verify the Alert disappears.
+      await page.evaluate(() => {
+        const labels = Array.from(document.querySelectorAll('label'));
+        const lab = labels.find(l => (l.textContent || '').trim().startsWith('Work email address'));
+        const input = lab ? document.getElementById(lab.getAttribute('for')) : null;
+        if (!input) throw new Error('Work email address input not found');
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, '');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+
+      const emailAlertGone = await pollPage(page, () => {
+        const alerts = Array.from(document.querySelectorAll('.MuiAlert-root'));
+        const hit = alerts.find(a => /This email is already on the allow-list/i.test(a.textContent || ''));
+        return !hit;
+      }, null, 4000);
+      record(
+        'TEAM: clearing the email field removes the duplicate-email Alert',
+        'no MuiAlert-root containing "This email is already on the allow-list"',
+        `alertGone=${!!emailAlertGone}`,
+        !!emailAlertGone,
+      );
+
+      const emailSubmitReEnabled = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button'));
+        const btn = btns.find(b => (b.textContent || '').trim() === 'Add team member'
+                                  || (b.textContent || '').trim() === 'Adding…');
+        return btn ? btn.disabled : null;
+      });
+      record(
+        'TEAM: "Add team member" button is re-enabled after clearing the duplicate email',
+        'button.disabled === false',
+        `disabled=${emailSubmitReEnabled}`,
+        emailSubmitReEnabled === false,
+      );
+
       await page.close();
     }
 
@@ -1104,8 +1180,13 @@ async function writeReport(runId, findings) {
     '  `metadata.mobile_number`, opens `#tab-team` in `/admin`, types the same',
     '  number into the Personal-details Mobile number field, and asserts the',
     '  MUI Alert appears, the Add-team-member button disables, and the alert',
-    '  action highlights the existing approved-list row',
-    '  (`.admin-row-flash`).',
+    '  action highlights the existing approved-list row (`.admin-row-flash`).',
+    '  Also covers the phone clear-and-recover path (alert disappears, button',
+    '  re-enables) and the email duplicate clear-and-recover path: types the',
+    '  seeded duplicate email into Work email address, asserts the',
+    '  "This email is already on the allow-list" MUI Alert appears and the',
+    '  button disables, then clears the field and asserts the Alert disappears',
+    '  and the button is re-enabled.',
     '- **(TRADES – Add mode, contact-phone)** Seeds two trade companies via `POST /api/trades`, opens',
     '  the Trades modal in Add mode, types the duplicated contact phone into',
     '  `#tf-cphone-0`, and asserts `#tf-cphone-notice-0` shows the warning',
