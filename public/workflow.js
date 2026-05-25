@@ -343,6 +343,13 @@ function _renderCustomerListImpl() {
     ? `<span class="ls-stale-hint" title="Counts may be slightly out of date" aria-label="Using cached data">•</span>`
     : '';
   const lsPillBar = `<div class="project-stage-tabs-bar lead-status-pill-bar">${lsPills}${exclToggle}${staleCountsHint}</div>`;
+  const lsCountsErrorNotice = state.leadStatusCountsError
+    ? `<div class="ls-counts-error-notice" role="alert" id="ls-counts-error-notice-pills">
+        <span>Counts couldn\u2019t refresh \u2014 showing last cached values</span>
+        <button class="ls-counts-error-dismiss" aria-label="Dismiss"
+          onclick="state.leadStatusCountsError=false;document.getElementById('ls-counts-error-notice-pills')?.remove()">&#215;</button>
+      </div>`
+    : '';
 
   // ── Sub-status pill row (only when a lead status is selected) ──────────────
   let subPillBar = '';
@@ -543,6 +550,7 @@ function _renderCustomerListImpl() {
   view.innerHTML = `
     <div class="project-stage-tabs-bar">${stageTabs}${openLeadsStaleHint}</div>
     ${lsPillBar}
+    ${lsCountsErrorNotice}
     ${subPillBar}
     ${sortBar}
     ${stageFilterNote}

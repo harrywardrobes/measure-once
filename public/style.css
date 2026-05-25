@@ -3314,6 +3314,36 @@ body.showing-workflow .sales-layout #workflow-panel {
   margin-left: 4px;
   vertical-align: middle;
 }
+
+/* Inline notice shown when counts fail to load (hard error / 5xx / network) */
+.ls-counts-error-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  font-size: 0.78rem;
+  color: #78350f;
+  flex-shrink: 0;
+}
+.ls-counts-error-notice span {
+  flex: 1;
+}
+.ls-counts-error-dismiss {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #92400e;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.ls-counts-error-dismiss:hover {
+  opacity: 1;
+}
 .eq-ls-pills {
   display: flex;
   flex-wrap: wrap;

@@ -312,6 +312,8 @@ async function loadLeadStatusCounts() {
       }
       if (data && typeof data === 'object') {
         state.leadStatusCounts = data;
+        // Clear any prior hard-failure notice now that we have fresh data.
+        state.leadStatusCountsError = false;
         // Track whether the server is serving cached (stale) counts so the UI
         // can show a subtle hint without alarming the user.
         const cacheStatus = r.headers.get('X-Cache-Status');
@@ -326,6 +328,8 @@ async function loadLeadStatusCounts() {
       // Mark counts as stale so the dot stays visible (or re-appears) after
       // a hard failure — the displayed counts may now be arbitrarily old.
       state.leadStatusCountsStale = true;
+      // Signal a hard failure so the UI can show a dismissible notice.
+      state.leadStatusCountsError = true;
     } finally {
       _llscLastSettledAt = Date.now();
       _llscInFlight = null;
@@ -561,6 +565,33 @@ function populateLeadStatusFilter() {
     }
   } else if (existingHint) {
     existingHint.remove();
+  }
+
+  // Error notice: dismissible inline banner shown only on hard failures (network
+  // error, 5xx). Auto-clears when the next successful load arrives.
+  const existingErrorNotice = document.getElementById('ls-counts-error-notice');
+  if (state.leadStatusCountsError) {
+    if (!existingErrorNotice) {
+      const notice = document.createElement('div');
+      notice.id = 'ls-counts-error-notice';
+      notice.className = 'ls-counts-error-notice';
+      notice.setAttribute('role', 'alert');
+      const msg = document.createElement('span');
+      msg.textContent = "Counts couldn\u2019t refresh \u2014 showing last cached values";
+      const btn = document.createElement('button');
+      btn.className = 'ls-counts-error-dismiss';
+      btn.setAttribute('aria-label', 'Dismiss');
+      btn.textContent = '\u00d7';
+      btn.addEventListener('click', () => {
+        state.leadStatusCountsError = false;
+        notice.remove();
+      });
+      notice.append(msg, btn);
+      const lsRow = document.getElementById('lead-status-filter-row');
+      (lsRow || sel).insertAdjacentElement('afterend', notice);
+    }
+  } else if (existingErrorNotice) {
+    existingErrorNotice.remove();
   }
 }
 
