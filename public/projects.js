@@ -406,7 +406,7 @@ async function assignFitter(fitterId) {
   if (contactId === null || roomIdx === null) return;
 
   try {
-    await PATCH_REQ(`/api/contacts/${contactId}/rooms/${roomIdx}/fitter`, { fitterId: fitterId || null });
+    const result = await PATCH_REQ(`/api/contacts/${contactId}/rooms/${roomIdx}/fitter`, { fitterId: fitterId || null });
 
     // Update local cache immediately so the UI reflects the change
     const cached = state.contactStageCache[contactId];
@@ -415,7 +415,15 @@ async function assignFitter(fitterId) {
     }
 
     renderProjectsView();
-    showToast(fitterId ? 'Fitter assigned' : 'Assignment removed');
+    if (result && result.syncFailed) {
+      showToast(
+        (fitterId ? 'Fitter assigned' : 'Assignment removed') +
+        ' — HubSpot sync failed, CRM may be out of date',
+        true
+      );
+    } else {
+      showToast(fitterId ? 'Fitter assigned' : 'Assignment removed');
+    }
   } catch (e) {
     if (e.code === 'HUBSPOT_AUTH') {
       showToast('Could not save assignment — HubSpot token is invalid or expired. Ask an admin to update the token.', true);

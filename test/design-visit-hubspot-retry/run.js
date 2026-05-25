@@ -554,6 +554,35 @@ async function main() {
     record('RA2.3 all PATCH attempts returned 500',
       ra2ContactPatches.every(c => c.status === 500),
       `statuses=${ra2ContactPatches.map(c => c.status).join(',')}`);
+    record('RA2.4 response body includes syncFailed: true',
+      ra2.json?.syncFailed === true,
+      `syncFailed=${ra2.json?.syncFailed}`);
+
+    // ── (RA3) room-assignments fitter PATCH happy path — syncFailed absent
+    // When HubSpot PATCH succeeds, the response must NOT include syncFailed so
+    // the UI shows the plain "Fitter assigned" toast without a warning.
+    console.log('\n  [RA3] room-assignments fitter PATCH: HubSpot succeeds → no syncFailed in response');
+    mock.resetHits();
+    mock.calls.length = 0;
+
+    mock.configEndpoint('/crm/v3/objects/contacts/', 'ok',
+      { id: CONTACT_ID, properties: { measure_once_rooms: RA_ROOMS } }, 'GET');
+    mock.configEndpoint('/crm/v3/objects/contacts/', 'ok',
+      { id: CONTACT_ID, properties: {} }, 'PATCH');
+
+    const ra3 = await manager.patch(
+      `/api/contacts/${CONTACT_ID}/rooms/0/fitter`, { fitterId: null }
+    );
+
+    record('RA3.1 fitter PATCH returns 200',
+      ra3.status === 200,
+      `status=${ra3.status} body=${ra3.text.slice(0, 120)}`);
+    record('RA3.2 response body has no syncFailed flag',
+      ra3.json?.syncFailed == null,
+      `syncFailed=${ra3.json?.syncFailed}`);
+    record('RA3.3 response body has success: true',
+      ra3.json?.success === true,
+      `success=${ra3.json?.success}`);
 
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
@@ -621,7 +650,12 @@ async function writeReport(runId) {
     '- **(RA2) room-assignments fitter PATCH permanent failure**: `PATCH /api/contacts/:id/rooms/:roomIdx/fitter`',
     '  with `PATCH /crm/v3/objects/contacts/:id` always returning 500. All 4 retry',
     '  attempts are exhausted; the inner non-fatal `try/catch` in the route handler',
-    '  swallows the error. The endpoint still returns 200 and does not surface the failure.',
+    '  swallows the error. The endpoint still returns 200 with `syncFailed: true` in',
+    '  the body so the UI can show a non-blocking warning toast.',
+    '- **(RA3) room-assignments fitter PATCH happy path**: `PATCH /api/contacts/:id/rooms/:roomIdx/fitter`',
+    '  with `PATCH /crm/v3/objects/contacts/:id` succeeding immediately. The endpoint',
+    '  returns 200 with `success: true` and no `syncFailed` field, confirming the UI',
+    '  shows the plain "Fitter assigned" toast without a warning.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);

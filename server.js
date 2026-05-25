@@ -620,19 +620,21 @@ app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireMan
       delete rooms[roomIdx].assignedFitterId;
     }
 
+    let syncFailed = false;
     try {
       await hubspotRequestWithRetry('patch',
         `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
         { properties: { measure_once_rooms: JSON.stringify(rooms) } }
       );
     } catch (hsErr) {
+      syncFailed = true;
       console.error('[rooms-fitter] HubSpot PATCH failed after retries (non-fatal):', hsErr.message);
     }
 
     // Bust shared cache so next /api/localdata/all and /api/contacts-all reflect the new assignment
     bustSharedCache();
 
-    res.json({ success: true, rooms });
+    res.json({ success: true, rooms, ...(syncFailed ? { syncFailed: true } : {}) });
   } catch (e) {
     const status = e.response?.status;
     if (status === 401 || status === 403) {
