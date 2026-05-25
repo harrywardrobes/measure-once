@@ -147,5 +147,10 @@ so the renderer paths under test still run faithfully.
   once an admin sets their own password, and during the window after a
   `force-password-reset`. Use a strong random value. Every use is logged as
   `[SECURITY] Bootstrap admin login used`. Omit until needed.
+- `DEBUG_HUBSPOT` — optional. When truthy, enables verbose server logs for
+  HubSpot rate-limit events and stale-cache fallbacks in
+  `/api/contacts-lead-status-counts` (e.g. `serving stale counts`). Unset in
+  production to keep logs quiet; a `[DEBUG]` warning is printed at startup
+  when this flag is on.
 
 `REPL_ID` and Replit OIDC are no longer used.

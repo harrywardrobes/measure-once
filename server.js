@@ -930,8 +930,10 @@ app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken
   const e = outcome.err;
   const status = e.response?.status;
   if (_leadStatusCountsLastGood && Date.now() - _leadStatusCountsLastGood.fetchedAt < LEAD_STATUS_COUNTS_STALE_MAX_MS) {
-    console.warn('[lead-status-counts] HubSpot fetch failed (status=%s); serving stale counts age=%dms',
-      status || 'network', Date.now() - _leadStatusCountsLastGood.fetchedAt);
+    if (process.env.DEBUG_HUBSPOT) {
+      console.warn('[lead-status-counts] HubSpot fetch failed (status=%s); serving stale counts age=%dms',
+        status || 'network', Date.now() - _leadStatusCountsLastGood.fetchedAt);
+    }
     res.setHeader('X-Cache-Status', 'stale');
     return res.json(_leadStatusCountsLastGood.counts);
   }
@@ -4979,6 +4981,9 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
   app.listen(PORT, HOST, async () => {
     console.log(`\n  Measure Once`);
     console.log(`  Running at: http://localhost:${PORT}\n`);
+    if (process.env.DEBUG_HUBSPOT) {
+      console.warn('[DEBUG] DEBUG_HUBSPOT is enabled — verbose HubSpot rate-limit and stale-cache logs are active. Unset this flag in production.');
+    }
     await ensureHubSpotProperties();
     try { await ensureVisitsTable(); console.log('  Visits table ready'); }
     catch (e) { console.error('  Visits table setup failed:', e.message); }
