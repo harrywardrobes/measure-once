@@ -326,6 +326,185 @@ export function AdminTeamPageSkeleton() {
 }
 
 /**
+ * Shape-matched skeleton for AdminPermissionsPage.
+ *
+ * Mirrors the real page structure:
+ *   • "Manage job roles" card — heading + subtitle + add-role form row + 3 role rows
+ *   • "Permissions matrix" card — heading + table (feature column + 3 privilege columns)
+ *     + save button row
+ */
+export function AdminPermissionsPageSkeleton() {
+  const visible = useVisible();
+  if (!visible) return null;
+
+  return (
+    <Stack spacing={3}>
+      {/* Manage job roles card */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        <MuiSkeleton variant="text" width={160} height={28} sx={{ mb: 0.5 }} />
+        <MuiSkeleton variant="text" width="65%" height={16} sx={{ mb: 2 }} />
+
+        {/* Add-role form row */}
+        <Stack direction="row" spacing={1.5} sx={{ mb: 2 }}>
+          <MuiSkeleton variant="rounded" height={40} sx={{ flex: 1 }} />
+          <MuiSkeleton variant="rounded" width={140} height={40} />
+          <MuiSkeleton variant="rounded" width={96} height={40} />
+        </Stack>
+
+        {/* 3 role list rows */}
+        <Stack spacing={1}>
+          {[0, 1, 2].map((i) => (
+            <Stack key={i} direction="row" spacing={1.5}
+              sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1, alignItems: 'center' }}>
+              <MuiSkeleton variant="text" width="40%" height={18} sx={{ flex: 1 }} />
+              <MuiSkeleton variant="rounded" width={140} height={36} />
+              <MuiSkeleton variant="circular" width={28} height={28} />
+            </Stack>
+          ))}
+        </Stack>
+      </Box>
+
+      {/* Permissions matrix card */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        <MuiSkeleton variant="text" width={180} height={28} sx={{ mb: 2 }} />
+
+        {/* Table header */}
+        <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: 'center' }}>
+          <MuiSkeleton variant="text" width="35%" height={16} />
+          {[0, 1, 2].map((i) => (
+            <MuiSkeleton key={i} variant="rounded" width={72} height={24} sx={{ ml: 'auto' }} />
+          ))}
+        </Stack>
+
+        {/* Section group header */}
+        <MuiSkeleton variant="text" width={100} height={14} sx={{ mb: 0.75 }} />
+
+        {/* 5 feature rows */}
+        <Stack spacing={0.75} sx={{ mb: 2 }}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <Stack key={i} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Box sx={{ flex: 1 }}>
+                <MuiSkeleton variant="text" width="45%" height={16} />
+                <MuiSkeleton variant="text" width="60%" height={12} />
+              </Box>
+              {[0, 1, 2].map((j) => (
+                <MuiSkeleton key={j} variant="circular" width={28} height={28} sx={{ flexShrink: 0 }} />
+              ))}
+            </Stack>
+          ))}
+        </Stack>
+
+        {/* Save button row */}
+        <MuiSkeleton variant="rounded" width={140} height={36} />
+      </Box>
+    </Stack>
+  );
+}
+
+/**
+ * Shape-matched skeleton for AdminRequestsPage.
+ *
+ * Mirrors the real page structure:
+ *   • "Access requests" card — heading + count chip + table rows (name, email, date, buttons)
+ *   • "Photo approvals" card — heading
+ *   • "Trade submissions" card — heading
+ */
+export function AdminRequestsPageSkeleton() {
+  const visible = useVisible();
+  if (!visible) return null;
+
+  return (
+    <Stack spacing={3}>
+      {/* Access requests card */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: 'center' }}>
+          <MuiSkeleton variant="text" width={140} height={28} />
+          <MuiSkeleton variant="rounded" width={28} height={22} />
+        </Stack>
+
+        {/* Table header */}
+        <Stack direction="row" spacing={2} sx={{ mb: 1 }}>
+          {[100, 160, 80].map((w, i) => (
+            <MuiSkeleton key={i} variant="text" width={w} height={14} />
+          ))}
+        </Stack>
+
+        {/* 3 request rows */}
+        <Stack spacing={1.25}>
+          {[0, 1, 2].map((i) => (
+            <Stack key={i} direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+              <MuiSkeleton variant="text" width={110} height={18} />
+              <MuiSkeleton variant="text" width={160} height={18} />
+              <MuiSkeleton variant="text" width={80} height={18} />
+              <Stack direction="row" spacing={1} sx={{ ml: 'auto' }}>
+                <MuiSkeleton variant="rounded" width={72} height={28} />
+                <MuiSkeleton variant="rounded" width={60} height={28} />
+              </Stack>
+            </Stack>
+          ))}
+        </Stack>
+      </Box>
+
+      {/* Photo approvals card */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: 'center' }}>
+          <MuiSkeleton variant="text" width={140} height={28} />
+        </Stack>
+        <MuiSkeleton variant="text" width="50%" height={16} />
+      </Box>
+
+      {/* Trade submissions card */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        <MuiSkeleton variant="text" width={160} height={28} sx={{ mb: 1 }} />
+        <MuiSkeleton variant="text" width="45%" height={16} />
+      </Box>
+    </Stack>
+  );
+}
+
+/**
+ * Shape-matched skeleton for AdminAuditLogPage.
+ *
+ * Mirrors the real page structure:
+ *   • Single card — heading + "read-only" chip + subtitle
+ *   • 6 audit entry rows (date label + action chip + label text + meta caption)
+ */
+export function AdminAuditLogPageSkeleton() {
+  const visible = useVisible();
+  if (!visible) return null;
+
+  return (
+    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+      {/* Heading row */}
+      <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: 'center' }}>
+        <MuiSkeleton variant="text" width={90} height={28} />
+        <MuiSkeleton variant="rounded" width={74} height={22} />
+      </Stack>
+      <MuiSkeleton variant="text" width="65%" height={16} sx={{ mb: 2 }} />
+
+      {/* 6 audit entry rows */}
+      <Stack spacing={0}>
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <Stack key={i} direction="row" spacing={2}
+            sx={{ py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+            {/* Date label */}
+            <MuiSkeleton variant="text" width={120} height={14} sx={{ flexShrink: 0 }} />
+            {/* Action details */}
+            <Box sx={{ flex: 1 }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.5 }}>
+                <MuiSkeleton variant="rounded" width={90} height={22} />
+                <MuiSkeleton variant="text" width={i % 2 === 0 ? 160 : 130} height={16} />
+              </Stack>
+              <MuiSkeleton variant="text" width={i % 3 === 0 ? 200 : 150} height={12} />
+            </Box>
+          </Stack>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
+/**
  * Shape-matched skeleton for HomePage.
  *
  * Mirrors the real page structure:
