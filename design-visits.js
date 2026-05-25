@@ -81,6 +81,9 @@ function adminEmails() {
 // ── QuickBooks helpers (reads from qb_tokens table) ───────────────────────────
 const QB_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 function qbBase() {
+  // Test-only override so the integration suite can point QuickBooks HTTP
+  // traffic at a local mock server. Never set in production.
+  if (process.env.QB_API_BASE_OVERRIDE) return process.env.QB_API_BASE_OVERRIDE;
   return process.env.QB_ENVIRONMENT === 'sandbox'
     ? 'https://sandbox-quickbooks.api.intuit.com'
     : 'https://quickbooks.api.intuit.com';

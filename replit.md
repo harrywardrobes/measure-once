@@ -210,6 +210,35 @@ Probes covered:
 API pre-checks run before any browser tab opens so failures in the API surface
 clearly. `npm run test:ci` includes this suite.
 
+## Design-visit QuickBooks resubmit test
+Run `DATABASE_URL_TEST=<disposable> npm run test:design-visit-qb-resubmit`
+(or `PRIVTEST_ALLOW_SHARED_DB=1 npm run test:design-visit-qb-resubmit`) to
+exercise the QuickBooks-estimate branch of `runSubmitSideEffects` in
+`design-visits.js` (section 4). The harness boots a local mock QuickBooks HTTP
+server on a random port, sets `QB_API_BASE_OVERRIDE=http://127.0.0.1:<port>`
+before spawning the disposable Express server so all QB traffic is captured,
+seeds a long-lived `qb_tokens` row plus a `revision_requested` visit with one
+room, and drives `POST /api/design-visits/:id/submit` as a seeded member user.
+
+Probes covered:
+
+- **(A) Pending → sparse update** — mock GET returns `TxnStatus=Pending` with a
+  `SyncToken`; asserts the follow-up POST carries `Id`, `SyncToken`, and
+  `sparse: true`, that `qb_estimate_id` stays unchanged, and that
+  `qb_estimate_history` remains empty.
+- **(B) Accepted → create-new fallback** — mock GET returns
+  `TxnStatus=Accepted`; asserts the POST omits `Id`/`SyncToken`/`sparse`, that
+  `qb_estimate_id` moves to the new id, and that `qb_estimate_history` is
+  appended with the prior id and reason `prior_estimate_not_updatable`.
+- **(C) 404 → create-new fallback** — mock GET 404s; asserts the same
+  create-new payload shape and that `qb_estimate_history` is appended.
+
+A markdown report is written to `test-results/design-visit-qb-resubmit.md` and
+the command exits non-zero on failure. `npm run test:ci` includes this suite.
+
+The `QB_API_BASE_OVERRIDE` env var added to `qbBase()` in `design-visits.js`
+exists purely for this harness — never set it in production.
+
 ## Live HubSpot smoke run
 
 The hw_test_user suite has an opt-in `[REAL-HS]` phase that exercises
