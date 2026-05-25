@@ -419,7 +419,7 @@ function renderInvoicePanelBody() {
       </table>
     </div>
 
-    <div class="inv-section" data-admin-only>
+    ${isAdminMode() ? `<div class="inv-section">
       <h3 class="inv-section-title">Edit invoice</h3>
       <div class="inv-edit-grid">
         <label class="inv-edit-label">
@@ -438,7 +438,7 @@ function renderInvoicePanelBody() {
       <button id="inv-save-btn" class="inv-btn inv-btn-primary" onclick="saveInvoiceChanges()">Save changes</button>
       <button id="inv-discard-btn" class="inv-btn inv-btn-secondary hidden" onclick="discardInvoiceDraft()">Discard changes</button>
       <span id="inv-save-msg" class="inv-action-msg"></span>
-    </div>
+    </div>` : ''}
 
     <div class="inv-section inv-actions-row">
       <div>
@@ -452,13 +452,13 @@ function renderInvoicePanelBody() {
             </svg>
             Download PDF
           </a>
-          <button class="inv-btn inv-btn-secondary" id="inv-send-btn" onclick="sendInvoice()" data-admin-only>
+          ${isAdminMode() ? `<button class="inv-btn inv-btn-secondary" id="inv-send-btn" onclick="sendInvoice()">
             <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
             </svg>
             Send to customer
-          </button>
+          </button>` : ''}
         </div>
         <span id="inv-send-msg" class="inv-action-msg"></span>
       </div>

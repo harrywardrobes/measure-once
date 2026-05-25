@@ -1,15 +1,3 @@
-// ── Viewer-mode and privilege-gated CSS ───────────────────────────────────────
-// Injected once; hides elements based on role body classes.
-(function () {
-  const s = document.createElement('style');
-  s.textContent = [
-    'body.viewer-mode [data-viewer-hide]{display:none!important}',
-    'body:not(.admin-mode) [data-admin-only]{display:none!important}',
-    'body:not(.manager-mode):not(.admin-mode) [data-manager-only]{display:none!important}',
-  ].join('\n');
-  document.head.appendChild(s);
-}());
-
 // ── Cross-module dispatchers ──────────────────────────────────────────────────
 // Each shared function is a stable dispatcher that forwards to a registered
 // implementation (or a no-op when the owning module isn't loaded). Page modules
@@ -192,6 +180,10 @@ const DELETE_REQ = path      => api('DELETE', path);
 
 function isViewerOnly() {
   return document.body.classList.contains('viewer-mode');
+}
+
+function isAdminMode() {
+  return document.body.classList.contains('admin-mode');
 }
 
 // True only for manager+ users — controls who may change pipeline state
