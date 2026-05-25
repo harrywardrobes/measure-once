@@ -148,6 +148,10 @@ async function hubspotSearchWithRetry(body, { maxAttempts = 4, baseDelayMs = 300
       const backoff = hinted != null
         ? hinted
         : Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
+      if (process.env.DEBUG_HUBSPOT) {
+        console.warn('[hubspot-retry] attempt=%d status=%s backoff=%dms',
+          attempt + 1, err.response?.status || 'network', backoff);
+      }
       await sleep(backoff);
     }
   }
