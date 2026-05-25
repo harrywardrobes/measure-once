@@ -828,6 +828,42 @@ async function main() {
         !!(submitStateEdit && submitStateEdit.disabled === true && /phone/i.test(submitStateEdit.title)),
       );
 
+      // Closure check: clearing the duplicate must hide the warning and
+      // re-enable submit. Restore the duplicate afterwards so the click-link
+      // test below still works.
+      await setNativeInputValue(page, '#tf-cphone-0', '555-000-8888');
+
+      const noticeClearedBeforeLink = await pollPage(page, () => {
+        const n = document.getElementById('tf-cphone-notice-0');
+        return n && n.classList.contains('hidden') ? true : null;
+      }, null, 3000);
+      record(
+        'TRADES EDIT: clearing contact-phone duplicate hides #tf-cphone-notice-0 (before link test)',
+        '#tf-cphone-notice-0 gains the "hidden" class after setting a unique value',
+        noticeClearedBeforeLink ? 'hidden' : 'still visible',
+        !!noticeClearedBeforeLink,
+      );
+
+      const submitReenabledBeforeLink = await page.evaluate(() => {
+        const btn = document.getElementById('trades-submit-btn');
+        return btn ? { disabled: btn.disabled } : null;
+      });
+      record(
+        'TRADES EDIT: #trades-submit-btn re-enables after contact-phone duplicate is cleared (before link test)',
+        'submit-btn not disabled',
+        submitReenabledBeforeLink
+          ? `disabled=${submitReenabledBeforeLink.disabled}`
+          : 'no button',
+        !!(submitReenabledBeforeLink && submitReenabledBeforeLink.disabled === false),
+      );
+
+      // Restore the duplicate so the click-link test below still works.
+      await setNativeInputValue(page, '#tf-cphone-0', TRADES_DUP_PHONE);
+      await pollPage(page, () => {
+        const n = document.getElementById('tf-cphone-notice-0');
+        return n && !n.classList.contains('hidden') ? true : null;
+      }, null, 3000);
+
       // Click the link → modal should re-open in Edit mode for company A.
       await page.evaluate(() => {
         const link = document.querySelector('#tf-cphone-notice-0 .trades-phone-notice-link');
