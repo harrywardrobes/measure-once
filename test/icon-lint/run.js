@@ -272,9 +272,21 @@ function stripCommentsAndStrings(src) {
       i++;
       parseDoubleQuoted();
     } else if (ch === "'") {
-      result += ' '; // blank the opening quote
-      i++;
-      parseSingleQuoted();
+      // Only treat as a JS string delimiter when the preceding character is NOT
+      // a word character.  An apostrophe inside JSX text content (e.g. "You're",
+      // "MUI's") is always preceded by a letter/digit, whereas a real JS string
+      // literal opening quote is always preceded by whitespace or a punctuation
+      // character such as =, :, (, [, {, or , .
+      const prevCh = i > 0 ? src[i - 1] : '';
+      if (/\w/.test(prevCh)) {
+        // Apostrophe in prose — emit as-is, do not strip.
+        result += ch;
+        i++;
+      } else {
+        result += ' '; // blank the opening quote
+        i++;
+        parseSingleQuoted();
+      }
     } else if (ch === '`') {
       result += ' '; // blank the opening backtick
       i++;
@@ -619,7 +631,41 @@ function extractIconUsages(src) {
     );
   }
 
-  // 15. Identifier inside a template literal that is itself nested inside a
+  // 16. An apostrophe in JSX text content (e.g. "You're", "MUI's") must NOT
+  //     cause an icon identifier on the SAME LINE to be swallowed into the
+  //     "string body" and thus missed.  This guards against the bug where the
+  //     scanner treated any lone `'` as a JS string-literal opener, creating a
+  //     dead zone from the apostrophe to the next `'` or end-of-line.
+  {
+    const src = [
+      "import CheckCircleIcon from '@mui/icons-material/CheckCircle';",
+      "<Typography>You're all clear. <CheckCircleIcon /></Typography>",
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.some((u) => u.identifier === 'CheckCircleIcon'),
+      "CheckCircleIcon on the same line as an apostrophe (You're) must not be swallowed",
+    );
+  }
+
+  // 17. An apostrophe following a word character must not suppress stripping of
+  //     a REAL single-quoted JS string that appears later on the same line.
+  //     e.g.  `it's safe` followed by `const x = 'AddIcon'`
+  {
+    const src = [
+      "import AddIcon from '@mui/icons-material/Add';",
+      "const label = \"it's safe\"; const x = 'AddIcon';",
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.every((u) => u.identifier !== 'AddIcon'),
+      "AddIcon inside a single-quoted string after an apostrophe-word must still be stripped",
+    );
+  }
+
+  // 18. Identifier inside a template literal that is itself nested inside a
   //     ${} interpolation of an outer template literal must be detected.
   //     e.g. `outer ${`inner ${FooIcon}`} more`
   //     The outer regex approach fails here because the outer backtick regex
