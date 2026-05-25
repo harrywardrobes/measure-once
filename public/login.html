@@ -207,6 +207,13 @@
         }
       });
   };
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted) {
+      _turnstileAttempted.clear();
+      Object.keys(_turnstileWidgets).forEach(k => { _turnstileWidgets[k] = null; });
+      window.renderTurnstileWidgets();
+    }
+  });
   fetch('/api/turnstile-config')
     .then(r => r.json())
     .then(cfg => {

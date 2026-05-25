@@ -83,8 +83,8 @@
     },
     'sign-out': function () {
       fetch('/api/logout', { method: 'POST' })
-        .then(() => { location.href = '/login'; })
-        .catch(() => { location.href = '/login'; });
+        .then(() => { location.href = '/login?signed_out=1'; })
+        .catch(() => { location.href = '/login?signed_out=1'; });
     },
   };
 
