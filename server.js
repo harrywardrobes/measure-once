@@ -1038,9 +1038,11 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
 // a single HubSpot fan-out instead of one per request.
 const LEAD_STATUS_COUNTS_TTL_MS = 120_000;
 const LEAD_STATUS_COUNTS_STALE_MAX_MS = 60 * 60 * 1000; // 1 h hard cap on staleness
+const LEAD_STATUS_COUNTS_COOLDOWN_MS = 60_000; // 60 s post-429-wave cooldown
 let _leadStatusCountsCache = null;   // { counts, fetchedAt } — used while fresh
 let _leadStatusCountsLastGood = null; // { counts, fetchedAt } — survives invalidation, used on error
 let _leadStatusCountsInFlight = null;
+let _leadStatusCountsCooldownUntil = 0; // epoch ms — skip fan-out while active
 function _invalidateLeadStatusCountsCache() {
   // Drop the freshness window so the next request refetches, but keep
   // `_leadStatusCountsLastGood` so a failed refetch can still serve stale
@@ -1071,18 +1073,25 @@ async function _fetchLeadStatusCounts() {
     ? [{ propertyName: 'hw_test_user', operator: 'EQ', value: 'true' }]
     : [];
 
-  const searches = [
-    hubspotSearchWithRetry(
-      { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'NOT_HAS_PROPERTY' }, ...devCountFilter] }], limit: 1 }
-    ).then(r => ['__no_status__', r.data.total ?? 0]),
-    ...keys.map(key =>
-      hubspotSearchWithRetry(
-        { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: key }, ...devCountFilter] }], limit: 1 }
-      ).then(r => [key, r.data.total ?? 0])
-    ),
+  // Serialized searches — one at a time with a small inter-request pause so the
+  // N+1 fan-out never bursts beyond HubSpot's 10 req/s limit. Using Promise.all
+  // previously fired all searches simultaneously, which saturated the rate-limit
+  // quota and caused the cache to never repopulate (feedback loop).
+  const INTER_REQUEST_PAUSE_MS = 150;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  const searchConfigs = [
+    { key: '__no_status__', body: { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'NOT_HAS_PROPERTY' }, ...devCountFilter] }], limit: 1 } },
+    ...keys.map(key => ({ key, body: { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: key }, ...devCountFilter] }], limit: 1 } })),
   ];
 
-  const entries = await Promise.all(searches);
+  const entries = [];
+  for (let i = 0; i < searchConfigs.length; i++) {
+    const { key, body } = searchConfigs[i];
+    if (i > 0) await sleep(INTER_REQUEST_PAUSE_MS);
+    const r = await hubspotSearchWithRetry(body);
+    entries.push([key, r.data.total ?? 0]);
+  }
   return Object.fromEntries(entries);
 }
 
@@ -1093,6 +1102,21 @@ app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken
     return res.json(_leadStatusCountsCache.counts);
   }
 
+  // Post-429-wave cooldown: if a recent fan-out was rate-limited, skip starting
+  // a new fan-out and serve stale counts immediately. This prevents the feedback
+  // loop where every 120s TTL expiry triggers a fresh burst that also gets 429'd.
+  if (Date.now() < _leadStatusCountsCooldownUntil) {
+    if (_leadStatusCountsLastGood) {
+      if (process.env.DEBUG_HUBSPOT) {
+        console.warn('[lead-status-counts] cooldown active for %dms more; serving stale counts',
+          _leadStatusCountsCooldownUntil - Date.now());
+      }
+      res.setHeader('X-Cache-Status', 'stale');
+      return res.json(_leadStatusCountsLastGood.counts);
+    }
+    return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+  }
+
   // Single-flight: all concurrent cold-cache callers share one fan-out.
   if (!_leadStatusCountsInFlight) {
     _leadStatusCountsInFlight = (async () => {
@@ -1101,8 +1125,17 @@ app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken
         const entry = { counts, fetchedAt: Date.now() };
         _leadStatusCountsCache    = entry;
         _leadStatusCountsLastGood = entry;
+        _leadStatusCountsCooldownUntil = 0; // reset cooldown on success
         return { ok: true, counts };
       } catch (err) {
+        // If the fan-out hit rate limits, engage cooldown so the next 60 s of
+        // requests are served from stale cache instead of hammering HubSpot again.
+        if (err.response?.status === 429) {
+          _leadStatusCountsCooldownUntil = Date.now() + LEAD_STATUS_COUNTS_COOLDOWN_MS;
+          if (process.env.DEBUG_HUBSPOT) {
+            console.warn('[lead-status-counts] 429 wave detected; cooldown engaged for %ds', LEAD_STATUS_COUNTS_COOLDOWN_MS / 1000);
+          }
+        }
         return { ok: false, err };
       } finally {
         // Release after a microtask tick so callers awaiting the same promise

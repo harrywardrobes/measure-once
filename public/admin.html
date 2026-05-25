@@ -230,10 +230,13 @@
         badge.textContent = 'Connected';
         badge.style.background = '#dcfce7';
         badge.style.color = '#166534';
+      } else if (data.code === 'HUBSPOT_RATE_LIMIT') {
+        badge.textContent = 'Rate limited — try again shortly';
+        badge.style.background = '#fef3c7';
+        badge.style.color = '#92400e';
       } else {
         let label = 'Not connected — check your token';
         if (data.code === 'NO_TOKEN') label = 'No token set';
-        else if (data.code === 'HUBSPOT_RATE_LIMIT') label = 'Rate limited — try again shortly';
         badge.textContent = label;
         badge.style.background = '#fee2e2';
         badge.style.color = '#991b1b';
