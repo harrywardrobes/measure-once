@@ -1,22 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert, Box, Button, Card, CardContent, Chip, FormControl, IconButton,
-  InputLabel, MenuItem, Select, Skeleton, Stack, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, TextField, Typography,
+  MenuItem, Select, Skeleton, Stack, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
+import TuneIcon from '@mui/icons-material/Tune';
 import {
   api, toast, emitAdminChange, onAdminChange, PRIVILEGE_LEVELS, PRIVILEGE_LABEL,
 } from './adminApi';
+import { NAV } from '../../components/BottomNav';
+import { NavCustomiseDialog } from '../../components/NavCustomiseDialog';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
-type _Icons = typeof CheckIcon | typeof CloseIcon | typeof DeleteIcon;
+type _Icons = typeof CheckIcon | typeof CloseIcon | typeof DeleteIcon | typeof TuneIcon;
 
 type JobRole = { name: string; privilege_level?: string };
 type Feature = { feat: string; desc?: string; levels?: string[]; group?: string };
 type Capabilities = { levels: string[]; features: Feature[] };
+type NavRoleConfig = { role_name: string; primary_keys: string[] };
 
 export function AdminPermissionsPage() {
   const [loading, setLoading] = useState(true);
@@ -26,15 +30,20 @@ export function AdminPermissionsPage() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Nav role configs
+  const [navConfigs, setNavConfigs] = useState<Record<string, string[]>>({});
+  const [navEditTarget, setNavEditTarget] = useState<string | null>(null);
+
   // Add-role form
   const [newRole, setNewRole] = useState('');
   const [newPriv, setNewPriv] = useState('member');
 
   async function load() {
     try {
-      const [roles, capabilities] = await Promise.all([
+      const [roles, capabilities, navConfigRows] = await Promise.all([
         api<JobRole[]>('GET', '/api/admin/job-roles'),
         api<Capabilities>('GET', '/api/admin/capabilities'),
+        api<NavRoleConfig[]>('GET', '/api/admin/nav-role-configs'),
       ]);
       setJobRoles(Array.isArray(roles) ? roles : []);
       const c = capabilities || { levels: [...PRIVILEGE_LEVELS], features: [] };
@@ -43,6 +52,11 @@ export function AdminPermissionsPage() {
       (c.features || []).forEach(f => { if (!f.group) seed[f.feat] = [...(f.levels || [])]; });
       setEdits(seed);
       setDirty(false);
+      const navMap: Record<string, string[]> = {};
+      (Array.isArray(navConfigRows) ? navConfigRows : []).forEach(row => {
+        navMap[row.role_name] = row.primary_keys;
+      });
+      setNavConfigs(navMap);
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : String(e), true);
     } finally {
@@ -67,6 +81,7 @@ export function AdminPermissionsPage() {
       toast(existingRole ? 'Role updated' : 'Role added');
       setNewRole(''); setNewPriv('member');
       emitAdminChange('roles');
+      load();
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : String(e), true);
     }
@@ -91,6 +106,16 @@ export function AdminPermissionsPage() {
       setJobRoles(prev => prev.filter(r => r.name !== name));
       toast('Role removed');
       emitAdminChange('roles');
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : String(e), true);
+    }
+  }
+
+  async function saveNavConfig(roleName: string, keys: string[]) {
+    try {
+      await api('PATCH', `/api/admin/nav-role-config/${encodeURIComponent(roleName)}`, { primary_keys: keys });
+      setNavConfigs(prev => ({ ...prev, [roleName]: keys }));
+      toast(`Nav layout saved for "${roleName}"`);
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : String(e), true);
     }
@@ -121,6 +146,11 @@ export function AdminPermissionsPage() {
   }
 
   const levels = caps.levels.length ? caps.levels : [...PRIVILEGE_LEVELS];
+
+  const defaultNavKeys = navConfigs['__default__'] || ['home', 'calendar', 'trades'];
+  const editingNavKeys = navEditTarget
+    ? (navConfigs[navEditTarget] || defaultNavKeys)
+    : defaultNavKeys;
 
   return (
     <Stack spacing={3}>
@@ -157,28 +187,61 @@ export function AdminPermissionsPage() {
               <Typography variant="body2" color="text.secondary">No job roles defined yet.</Typography>
             ) : (
               <Stack spacing={1}>
-                {jobRoles.map((r) => (
-                  <Stack key={r.name} direction="row" spacing={1.5}
-                    sx={{ p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                    <Typography variant="body2" sx={{ flex: 1, fontWeight: 600 }}>{r.name}</Typography>
-                    <FormControl size="small" sx={{ minWidth: 140 }}>
-                      <Select value={r.privilege_level || 'member'}
-                        onChange={(e) => updatePriv(r.name, e.target.value)}>
-                        {PRIVILEGE_LEVELS.map(p => (
-                          <MenuItem key={p} value={p}>{PRIVILEGE_LABEL[p]}</MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                    <IconButton size="small" color="error" onClick={() => deleteRole(r.name)} title="Remove role">
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Stack>
-                ))}
+                {jobRoles.map((r) => {
+                  const roleNavKeys: string[] = navConfigs[r.name] || defaultNavKeys;
+                  return (
+                    <Stack key={r.name} direction="row" spacing={1.5}
+                      sx={{ p: 1, border: 1, borderColor: 'divider', borderRadius: 1, flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+                      <Typography variant="body2" sx={{ flex: 1, fontWeight: 600, minWidth: 100 }}>{r.name}</Typography>
+                      <FormControl size="small" sx={{ minWidth: 140 }}>
+                        <Select value={r.privilege_level || 'member'}
+                          onChange={(e) => updatePriv(r.name, e.target.value)}>
+                          {PRIVILEGE_LEVELS.map(p => (
+                            <MenuItem key={p} value={p}>{PRIVILEGE_LABEL[p]}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <Stack direction="row" spacing={0.5} sx={{ flex: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {roleNavKeys.map(k => {
+                          const item = NAV.find(n => n.key === k);
+                          return item ? (
+                            <Chip key={k} label={item.label} size="small" variant="outlined" />
+                          ) : null;
+                        })}
+                        <Tooltip title="Edit navigation layout">
+                          <IconButton size="small" onClick={() => setNavEditTarget(r.name)}>
+                            <TuneIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
+                      <IconButton size="small" color="error" onClick={() => deleteRole(r.name)} title="Remove role">
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                  );
+                })}
               </Stack>
             )}
           </Box>
+
+          <Alert severity="info" variant="outlined" sx={{ mt: 2 }}>
+            The navigation chips show which tabs appear in the bottom bar for each role.
+            Click the <strong>tune icon</strong> to change a role's primary tabs. Changes take effect the next time users with that role load the app.
+          </Alert>
         </CardContent>
       </Card>
+
+      {/* Nav layout editor dialog */}
+      <NavCustomiseDialog
+        open={navEditTarget !== null}
+        onClose={() => setNavEditTarget(null)}
+        availableItems={NAV.filter(n => !n.adminOnly)}
+        currentKeys={editingNavKeys}
+        onSave={(keys) => {
+          if (navEditTarget) saveNavConfig(navEditTarget, keys);
+          setNavEditTarget(null);
+        }}
+      />
 
       {/* Permissions matrix */}
       <Card variant="outlined">

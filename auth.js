@@ -416,6 +416,22 @@ async function ensureAuthTables() {
     );
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS nav_role_configs (
+      role_name    TEXT PRIMARY KEY,
+      primary_keys JSONB NOT NULL DEFAULT '["home","calendar","trades"]',
+      updated_at   TIMESTAMP DEFAULT NOW()
+    );
+    INSERT INTO nav_role_configs (role_name, primary_keys) VALUES
+      ('__default__',  '["home","calendar","trades"]'),
+      ('Fitter',       '["home","calendar","trades"]'),
+      ('Site Manager', '["home","sales","projects"]'),
+      ('Sales',        '["home","calendar","trades"]'),
+      ('Admin',        '["home","sales","projects"]'),
+      ('Office',       '["home","sales","projects"]')
+    ON CONFLICT (role_name) DO NOTHING;
+  `);
+
   // Seed admin emails from env var + create user rows for them so the very
   // first admin can sign in once they set a password via the emailed link.
   const admins = (process.env.ADMIN_EMAILS || '')
@@ -1964,6 +1980,12 @@ async function setupAuth(app) {
          ON CONFLICT (name) DO UPDATE SET privilege_level = EXCLUDED.privilege_level`,
         [name, privilege_level]
       );
+      await pool.query(
+        `INSERT INTO nav_role_configs (role_name, primary_keys)
+         SELECT $1, primary_keys FROM nav_role_configs WHERE role_name = '__default__'
+         ON CONFLICT (role_name) DO NOTHING`,
+        [name]
+      );
       const adminEmail = req.user?.claims?.email || req.user?.email || null;
       await logAdminAction(adminEmail, 'add_job_role', null, `Added job role "${name}" (${privilege_level})`);
       res.json({ ok: true, name, privilege_level });
@@ -1981,6 +2003,84 @@ async function setupAuth(app) {
         await logAdminAction(adminEmail, 'delete_job_role', null, `Deleted job role "${name}"`);
       }
       res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Nav role config ───────────────────────────────────────────────────────
+
+  // Returns the nav primary_keys for the calling user's job role (falls back
+  // to __default__ when the role has no explicit config or user has no role).
+  app.get('/api/nav-role-config', isAuthenticated, async (req, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const u = await pool.query('SELECT job_role FROM users WHERE id = $1', [userId]);
+      const jobRole = u.rows[0]?.job_role || null;
+      let r = null;
+      if (jobRole) {
+        r = await pool.query(
+          'SELECT primary_keys FROM nav_role_configs WHERE role_name = $1',
+          [jobRole]
+        );
+      }
+      if (!r || r.rows.length === 0) {
+        r = await pool.query(
+          "SELECT primary_keys FROM nav_role_configs WHERE role_name = '__default__'"
+        );
+      }
+      const primary_keys = r.rows[0]?.primary_keys || ['home', 'calendar', 'trades'];
+      res.json({ primary_keys, role: jobRole });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Admin: list all nav role configs.
+  app.get('/api/admin/nav-role-configs', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(
+        'SELECT role_name, primary_keys FROM nav_role_configs ORDER BY role_name ASC'
+      );
+      res.json(r.rows);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Admin: upsert nav primary_keys for a specific role.
+  const VALID_NAV_KEYS_SERVER = new Set([
+    'home', 'sales', 'survey', 'projects', 'calendar', 'invoices', 'trades', 'ideas',
+  ]);
+  app.patch('/api/admin/nav-role-config/:roleName', isAuthenticated, requireAdmin, async (req, res) => {
+    const roleName = req.params.roleName;
+    const primary_keys = req.body?.primary_keys;
+    if (
+      !Array.isArray(primary_keys) ||
+      primary_keys.length !== 3 ||
+      !primary_keys.every((k) => typeof k === 'string' && VALID_NAV_KEYS_SERVER.has(k)) ||
+      new Set(primary_keys).size !== 3
+    ) {
+      return res.status(400).json({
+        error: 'primary_keys must be an array of exactly 3 unique valid nav keys.',
+      });
+    }
+    try {
+      await pool.query(
+        `INSERT INTO nav_role_configs (role_name, primary_keys, updated_at)
+         VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (role_name) DO UPDATE
+           SET primary_keys = EXCLUDED.primary_keys, updated_at = NOW()`,
+        [roleName, JSON.stringify(primary_keys)]
+      );
+      const adminEmail = req.user?.claims?.email || null;
+      await logAdminAction(
+        adminEmail,
+        'update_nav_role_config',
+        null,
+        `Updated nav config for role "${roleName}": ${primary_keys.join(', ')}`
+      );
+      res.json({ ok: true, role_name: roleName, primary_keys });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

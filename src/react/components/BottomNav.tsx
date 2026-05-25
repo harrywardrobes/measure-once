@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePrivilege } from '../hooks/usePrivilege';
 import Box from '@mui/material/Box';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
-import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
@@ -27,8 +26,6 @@ import HandymanOutlinedIcon from '@mui/icons-material/HandymanOutlined';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
-import TuneIcon from '@mui/icons-material/Tune';
-import { NavCustomiseDialog } from './NavCustomiseDialog';
 
 /**
  * Bottom navigation bar rendered as a React/MUI island into
@@ -51,14 +48,14 @@ import { NavCustomiseDialog } from './NavCustomiseDialog';
  * Layout:
  * - Always shows exactly 4 items in the bar: 3 role-relevant primary tabs
  *   + a "More" button.
- * - Members primary: Home, Calendar, Trades → overflow: Ideas
- * - Managers primary: Home, Sales, Projects → overflow: Survey, Calendar,
- *   Invoices, Trades, Ideas
+ * - Primary tabs are determined by the user's job role via
+ *   GET /api/nav-role-config (falls back to __default__ if no match).
+ * - The managerOnly visibility filter still applies: tabs a user cannot
+ *   access are never shown regardless of the role config.
  * - Tapping "More" opens a bottom Drawer listing overflow tabs.
  * - "More" shows as selected when the active page is in the overflow set.
- * - Managers can customise which 3 tabs appear in the bar via the
- *   "Customise" button in the More drawer. The preference is persisted via
- *   PATCH /api/users/me/prefs as `nav_primary_keys`.
+ * - Nav layout is admin-configured per job role; users have no per-user
+ *   customise option.
  */
 export type NavItem = {
   key: string;
@@ -81,9 +78,7 @@ export const NAV: NavItem[] = [
   { key: 'ideas',    href: '/ideas',    label: 'Ideas',    Icon: LightbulbIcon,     IconOutlined: LightbulbOutlinedIcon },
 ];
 
-export const MEMBER_PRIMARY_KEYS = ['home', 'calendar', 'trades'];
-export const MANAGER_PRIMARY_KEYS = ['home', 'sales', 'projects'];
-
+const DEFAULT_PRIMARY_KEYS = ['home', 'calendar', 'trades'];
 const BAR_SIZE = 3;
 
 function accentFor(key: string, theme: Theme): string {
@@ -100,12 +95,12 @@ function matchPath(pathname: string): string | false {
 
 const VALID_NAV_KEYS = new Set(NAV.map((n) => n.key));
 
-async function loadNavPref(): Promise<string[] | null> {
+async function loadRoleNavConfig(): Promise<string[] | null> {
   try {
-    const r = await fetch('/api/users/me/prefs', { headers: { Accept: 'application/json' } });
+    const r = await fetch('/api/nav-role-config', { headers: { Accept: 'application/json' } });
     if (!r.ok) return null;
-    const prefs = await r.json() as { nav_primary_keys?: unknown };
-    const keys = prefs.nav_primary_keys;
+    const data = await r.json() as { primary_keys?: unknown };
+    const keys = data.primary_keys;
     if (
       Array.isArray(keys) &&
       keys.length === BAR_SIZE &&
@@ -120,17 +115,6 @@ async function loadNavPref(): Promise<string[] | null> {
   }
 }
 
-async function saveNavPref(keys: string[] | null): Promise<void> {
-  const r = await fetch('/api/users/me/prefs', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ nav_primary_keys: keys }),
-  });
-  if (!r.ok) {
-    throw new Error(`Failed to save nav preference: HTTP ${r.status}`);
-  }
-}
-
 export function BottomNav() {
   const theme = useTheme();
   const { isManager } = usePrivilege();
@@ -138,11 +122,9 @@ export function BottomNav() {
     typeof window === 'undefined' ? false : matchPath(window.location.pathname),
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [customiseOpen, setCustomiseOpen] = useState(false);
 
-  const defaultPrimaryKeys = isManager ? MANAGER_PRIMARY_KEYS : MEMBER_PRIMARY_KEYS;
-  const [primaryKeys, setPrimaryKeys] = useState<string[]>(defaultPrimaryKeys);
-  const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [primaryKeys, setPrimaryKeys] = useState<string[]>(DEFAULT_PRIMARY_KEYS);
+  const [configLoaded, setConfigLoaded] = useState(false);
 
   useEffect(() => {
     const sync = () => setValue(matchPath(window.location.pathname));
@@ -158,10 +140,10 @@ export function BottomNav() {
 
   useEffect(() => {
     let cancelled = false;
-    loadNavPref().then((saved) => {
+    loadRoleNavConfig().then((keys) => {
       if (cancelled) return;
-      if (saved) setPrimaryKeys(saved);
-      setPrefsLoaded(true);
+      if (keys) setPrimaryKeys(keys);
+      setConfigLoaded(true);
     });
     return () => { cancelled = true; };
   }, []);
@@ -172,9 +154,9 @@ export function BottomNav() {
     return true;
   });
 
-  const resolvedPrimaryKeys = prefsLoaded
+  const resolvedPrimaryKeys = configLoaded
     ? primaryKeys.filter((k) => visibleNav.some((n) => n.key === k))
-    : defaultPrimaryKeys;
+    : DEFAULT_PRIMARY_KEYS.filter((k) => visibleNav.some((n) => n.key === k));
 
   const barItems = visibleNav.filter((n) => resolvedPrimaryKeys.includes(n.key));
   const overflowItems = visibleNav.filter((n) => !resolvedPrimaryKeys.includes(n.key));
@@ -183,21 +165,6 @@ export function BottomNav() {
   const moreSelected = activeInOverflow || drawerOpen;
 
   const barValue = activeInOverflow ? '__more__' : (value || false);
-
-  const handleSavePref = useCallback(
-    async (keys: string[]) => {
-      setPrimaryKeys(keys);
-      const isDefault =
-        keys.length === defaultPrimaryKeys.length &&
-        keys.every((k, i) => defaultPrimaryKeys[i] === k);
-      try {
-        await saveNavPref(isDefault ? null : keys);
-      } catch {
-        // non-critical; preference will re-apply on next load
-      }
-    },
-    [defaultPrimaryKeys],
-  );
 
   const actionSx = {
     color: 'text.secondary',
@@ -379,40 +346,10 @@ export function BottomNav() {
               </ListItemButton>
             );
           })}
-
-          {isManager && (
-            <>
-              <Divider sx={{ mx: 2.5, my: 0.5 }} />
-              <ListItemButton
-                onClick={() => {
-                  setDrawerOpen(false);
-                  setCustomiseOpen(true);
-                }}
-                sx={{ py: 1.5, px: 2.5 }}
-              >
-                <ListItemIconWrapper sx={{ minWidth: 40, color: 'text.secondary' }}>
-                  <TuneIcon />
-                </ListItemIconWrapper>
-                <ListItemText
-                  primary="Customise navigation"
-                  slotProps={{
-                    primary: {
-                      style: {
-                        fontWeight: 600,
-                        fontSize: '0.95rem',
-                        letterSpacing: '0.02em',
-                        textTransform: 'uppercase',
-                        color: theme.palette.text.secondary,
-                      },
-                    },
-                  }}
-                />
-              </ListItemButton>
-            </>
-          )}
         </List>
       </Drawer>
 
+<<<<<<< HEAD
       {isManager && (
         <NavCustomiseDialog
           open={customiseOpen}
@@ -424,6 +361,8 @@ export function BottomNav() {
         />
       )}
 
+=======
+>>>>>>> bc741d1 (feat: admin-only nav customisation with per-job-role defaults (#968))
       {moreSelected && (
         <Box sx={{ display: 'none' }} aria-hidden="true" data-more-selected />
       )}
