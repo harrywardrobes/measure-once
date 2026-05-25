@@ -197,6 +197,135 @@ export function CalendarPageSkeleton() {
 }
 
 /**
+ * Shape-matched skeleton for ProfilePage.
+ *
+ * Mirrors the real page structure:
+ *   • Back button
+ *   • IdentityCard — avatar circle + name + email
+ *   • RoleCard — overline label + one label/value row
+ *   • ChangePasswordCard — card with a button row
+ *   • AccountActionsCard — action-list rows
+ */
+export function ProfilePageSkeleton() {
+  const visible = useVisible();
+  if (!visible) return null;
+
+  return (
+    <Box sx={{ maxWidth: 720, mx: 'auto', px: 2, py: 2 }}>
+      {/* Back button */}
+      <MuiSkeleton variant="rounded" width={72} height={28} sx={{ mb: 2 }} />
+
+      {/* IdentityCard */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2, mb: 1.5 }}>
+        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+          <MuiSkeleton variant="circular" width={64} height={64} />
+          <Box sx={{ flex: 1 }}>
+            <MuiSkeleton variant="text" width="50%" height={28} />
+            <MuiSkeleton variant="text" width="65%" height={18} />
+          </Box>
+        </Stack>
+      </Box>
+
+      {/* RoleCard */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2, mb: 1.5 }}>
+        <MuiSkeleton variant="text" width={120} height={14} sx={{ mb: 1.5 }} />
+        <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
+          <MuiSkeleton variant="text" width={60} height={18} />
+          <MuiSkeleton variant="text" width={80} height={18} />
+        </Stack>
+      </Box>
+
+      {/* ChangePasswordCard */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2, mb: 1.5 }}>
+        <MuiSkeleton variant="text" width={130} height={14} sx={{ mb: 1.5 }} />
+        <MuiSkeleton variant="rounded" width={140} height={34} />
+      </Box>
+
+      {/* AccountActionsCard */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden', mb: 1.5 }}>
+        <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <MuiSkeleton variant="text" width={100} height={20} />
+        </Box>
+        <Box sx={{ px: 2, py: 1.5 }}>
+          <MuiSkeleton variant="text" width={80} height={20} />
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Shape-matched skeleton for AdminTeamPage.
+ *
+ * Mirrors the real page structure:
+ *   • Team card — heading + chip + 4-row table skeleton
+ *   • Add team member card — heading + subtitle + a few field outlines
+ */
+export function AdminTeamPageSkeleton() {
+  const visible = useVisible();
+  if (!visible) return null;
+
+  return (
+    <Stack spacing={3}>
+      {/* Team table card */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        {/* Heading row */}
+        <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: 'center' }}>
+          <MuiSkeleton variant="text" width={48} height={28} />
+          <MuiSkeleton variant="rounded" width={28} height={22} />
+        </Stack>
+
+        {/* Table header */}
+        <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+          {[160, 100, 80, 90, 70, 60].map((w, i) => (
+            <MuiSkeleton key={i} variant="text" width={w} height={14} />
+          ))}
+        </Stack>
+
+        {/* 4 table rows */}
+        <Stack spacing={1.25}>
+          {[0, 1, 2, 3].map((i) => (
+            <Stack key={i} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              {/* Avatar + name/email */}
+              <MuiSkeleton variant="circular" width={32} height={32} sx={{ flexShrink: 0 }} />
+              <Box sx={{ width: 128 }}>
+                <MuiSkeleton variant="text" width="80%" height={16} />
+                <MuiSkeleton variant="text" width="100%" height={12} />
+              </Box>
+              {/* Job role */}
+              <MuiSkeleton variant="text" width={80} height={16} />
+              {/* Privilege chip */}
+              <MuiSkeleton variant="rounded" width={64} height={22} />
+              {/* Status chip */}
+              <MuiSkeleton variant="rounded" width={60} height={22} />
+              {/* Joined date */}
+              <MuiSkeleton variant="text" width={52} height={16} />
+              {/* Action button */}
+              <MuiSkeleton variant="rounded" width={48} height={28} sx={{ ml: 'auto' }} />
+            </Stack>
+          ))}
+        </Stack>
+      </Box>
+
+      {/* Add team member card */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        <MuiSkeleton variant="text" width={160} height={28} sx={{ mb: 0.5 }} />
+        <MuiSkeleton variant="text" width="70%" height={16} sx={{ mb: 2 }} />
+        <MuiSkeleton variant="text" width={110} height={14} sx={{ mb: 1 }} />
+        <Stack spacing={1.5}>
+          <MuiSkeleton variant="rounded" height={48} />
+          <Stack direction="row" spacing={1.5}>
+            <MuiSkeleton variant="rounded" height={48} sx={{ flex: 1 }} />
+            <MuiSkeleton variant="rounded" height={48} sx={{ flex: 1 }} />
+          </Stack>
+          <MuiSkeleton variant="rounded" width={120} height={36} />
+        </Stack>
+      </Box>
+    </Stack>
+  );
+}
+
+/**
  * Shape-matched skeleton for HomePage.
  *
  * Mirrors the real page structure:

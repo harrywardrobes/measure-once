@@ -7,6 +7,8 @@ import {
   CustomersPageSkeleton,
   CalendarPageSkeleton,
   HomePageSkeleton,
+  ProfilePageSkeleton,
+  AdminTeamPageSkeleton,
 } from './components/PageLoadingSkeleton';
 
 /*
@@ -84,13 +86,13 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'app-bottom-nav-mount', render: () => <BottomNav /> },
   { id: 'home-view',            render: () => <HomePage />,     fallback: <HomePageSkeleton /> },
   { id: 'tab-calendar',         render: () => <CalendarPage />, fallback: <CalendarPageSkeleton /> },
-  { id: 'profile-view',         render: () => <ProfilePage /> },
+  { id: 'profile-view',         render: () => <ProfilePage />,  fallback: <ProfilePageSkeleton /> },
   { id: 'admin-mui-tabs-mount', render: () => <AdminTabsBar /> },
   { id: 'tab-designsystem',     render: () => <DesignSystemPage /> },
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },
   { id: 'tab-workshop',         render: () => <WorkshopSettingsPage /> },
   { id: 'tab-customers',        render: () => <CustomersPage />, fallback: <CustomersPageSkeleton /> },
-  { id: 'tab-team',             render: () => <AdminTeamPage /> },
+  { id: 'tab-team',             render: () => <AdminTeamPage />, fallback: <AdminTeamPageSkeleton /> },
   { id: 'tab-permissions',      render: () => <AdminPermissionsPage /> },
   { id: 'tab-requests',         render: () => <AdminRequestsPage /> },
   { id: 'tab-auditlog',         render: () => <AdminAuditLogPage /> },
