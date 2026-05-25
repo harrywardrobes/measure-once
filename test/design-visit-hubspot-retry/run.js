@@ -331,7 +331,7 @@ async function main() {
     mock.configEndpoint('/crm/v3/objects/notes', 'ok',
       { id: 'note-mock-2', properties: {} });
 
-    const dv2 = await client.post(`/api/design-visits/${visitId}/submit`, {
+    const dv2 = await manager.post(`/api/design-visits/${visitId}/submit`, {
       handlerConfig: { submittedLeadStatus: 'PRIVTEST_LEAD_STATUS' },
     });
 
@@ -397,7 +397,7 @@ async function main() {
     mock.configEndpoint('/crm/v3/objects/notes', 'ok',
       { id: 'note-mock-4', properties: {} });
 
-    const dv4 = await client.post(`/api/design-visits/${visitId}/submit`, {
+    const dv4 = await manager.post(`/api/design-visits/${visitId}/submit`, {
       handlerConfig: { submittedLeadStatus: 'PRIVTEST_LEAD_STATUS' },
     });
 

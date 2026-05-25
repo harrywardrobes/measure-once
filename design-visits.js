@@ -436,7 +436,11 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
     WHERE id = $3`, [tokenHash, expiresAt.toISOString(), visitId]);
 
   // 2. HubSpot lead status update (non-fatal)
-  const submittedLeadStatus = handlerConfig?.submittedLeadStatus;
+  // Only manager/admin users may drive pipeline changes through this path —
+  // the same restriction enforced by PATCH /api/contacts/:id for direct updates.
+  const submitterPrivilege = submitterUser?.privilege_level || 'member';
+  const submitterCanEditPipeline = submitterPrivilege === 'admin' || submitterPrivilege === 'manager';
+  const submittedLeadStatus = submitterCanEditPipeline ? handlerConfig?.submittedLeadStatus : null;
   if (submittedLeadStatus && process.env.HUBSPOT_ACCESS_TOKEN && visit.contact_id) {
     try {
       await dvHubspotRequestWithRetry('patch',
@@ -1596,8 +1600,8 @@ router.post('/api/design-visits/:id/submit', isAuthenticated, requirePrivilege('
   }
 });
 
-// POST /api/design-visits/:id/revision — mark revision requested
-router.post('/api/design-visits/:id/revision', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+// POST /api/design-visits/:id/revision — mark revision requested (admin only)
+router.post('/api/design-visits/:id/revision', isAuthenticated, requirePrivilege('admin'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   const rawNote = req.body?.revisionNote ?? req.body?.note;

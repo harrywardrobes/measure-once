@@ -409,8 +409,10 @@ async function main() {
       }
     }
 
-    const client = await login(users.member.email, PASSWORD);
-    const cookie = client.cookie;
+    const client  = await login(users.member.email,   PASSWORD);
+    const cookie  = client.cookie;
+    const manager = await login(users.manager.email,  PASSWORD);
+    const managerCookie = manager.cookie;
 
     // ── (U1) urgency assoc-batch retry ────────────────────────────────────────
     // The assoc-batch call gets a 429 on its first attempt; the task-batch is
@@ -634,7 +636,7 @@ async function main() {
     const dv3 = await httpPost(
       BASE,
       `/api/design-visits/${dv3Id}/submit`,
-      cookie,
+      managerCookie,
       { handlerConfig: { submittedLeadStatus: 'PRIVTEST_LS_STATUS' } },
     );
 
@@ -673,7 +675,7 @@ async function main() {
     const dv4 = await httpPost(
       BASE,
       `/api/design-visits/${dv4Id}/submit`,
-      cookie,
+      managerCookie,
       { handlerConfig: { submittedLeadStatus: 'PRIVTEST_LS_STATUS' } },
     );
 
