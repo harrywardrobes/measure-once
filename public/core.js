@@ -185,11 +185,10 @@ const DELETE_REQ = path      => api('DELETE', path);
 // authoritative source in core.js.  All callers run after await bootstrap()
 // so the 'member' fallback fires only during early initialisation.
 //
-// AUDIT (task-857, task-861, task-862, task-881, task-900) — remaining vanilla-JS consumers (accepted legacy):
+// Remaining vanilla-JS consumers (accepted legacy):
 //   • core.js            isViewerOnly()               — ensurePrefs() early-exit
-// Ported off canEditPipeline() / isViewerOnly() / isAdminMode() (task-861, task-862, task-881, task-900):
-//   sales.js, survey.js, workflow.js, customer-detail.js now read
-//   window.__moHeaderUser?.privilege_level directly.
+// sales.js, survey.js, workflow.js, customer-detail.js, and invoices-core.js
+// now read window.__moHeaderUser?.privilege_level directly and no longer use these helpers.
 //
 // React components MUST use usePrivilege() (src/react/hooks/usePrivilege.ts)
 // and MUST NOT call these helpers directly.
@@ -205,15 +204,6 @@ function isViewerOnly() {
 /** @deprecated Use usePrivilege() in React components. Vanilla-JS pages: accepted legacy. */
 function isAdminMode() {
   return (state.user?.privilege_level ?? 'member') === 'admin';
-}
-
-// True only for manager+ users — controls who may change pipeline state
-// (customer stage, substage / completed tasks, and HubSpot lead status).
-// Members and viewers are treated identically for pipeline editing.
-/** @deprecated Use usePrivilege() in React components. Vanilla-JS pages: accepted legacy. */
-function canEditPipeline() {
-  const priv = state.user?.privilege_level ?? 'member';
-  return priv === 'manager' || priv === 'admin';
 }
 
 function showViewerBanner() {
