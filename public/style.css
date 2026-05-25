@@ -3367,15 +3367,6 @@ body.showing-workflow .sales-layout #workflow-panel {
 
 /* ── Sales board: 3-column layout ────────────────────────────────────────── */
 
-.eq-ls-filter-row {
-  display: flex;
-  align-items: flex-start;
-  padding: 10px 10px;
-  background: var(--paper);
-  border-bottom: 1px solid var(--stone);
-  flex-shrink: 0;
-}
-
 /* Subtle stale-counts dot shown when X-Cache-Status: stale is received */
 .ls-stale-hint {
   display: inline-flex;
@@ -3419,52 +3410,6 @@ body.showing-workflow .sales-layout #workflow-panel {
 .ls-counts-error-dismiss:hover {
   opacity: 1;
 }
-.eq-ls-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  min-width: 0;
-}
-.eq-ls-pill {
-  flex-shrink: 0;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--ink-2);
-  background: var(--paper);
-  border: 1px solid var(--stone);
-  border-radius: 999px;
-  padding: 3px 10px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-  line-height: 1.5;
-}
-.eq-ls-pill:hover:not(:disabled):not(.active) {
-  background: var(--lavender, #f3eeff);
-  border-color: var(--orchid);
-  color: var(--orchid);
-}
-.eq-ls-pill.active {
-  background: var(--orchid);
-  border-color: var(--orchid);
-  color: #fff;
-}
-.eq-ls-pill.dimmed,
-.eq-ls-pill:disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-@media (pointer: coarse) {
-  .eq-ls-pill {
-    min-height: 44px;
-    padding-top: 10px;
-    padding-bottom: 10px;
-  }
-}
-
 .sales-board {
   display: flex;
   flex-direction: column;
