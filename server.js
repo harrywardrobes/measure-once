@@ -3395,6 +3395,31 @@ async function ensureLeadSubstatusesTable() {
       UNIQUE (status_key, substatus_key)
     )
   `);
+  // Real FK so deleting a lead_status_config row that still has substatuses is
+  // blocked at the DB layer (Postgres 23503), which lets the admin db-editor
+  // surface its "blocking rows" preview instead of silently orphaning data.
+  // ON DELETE NO ACTION (the default) is intentional: the admin must remove
+  // or reassign the dependent substatuses first. There is no production code
+  // path that deletes a lead_status_config row with live substatuses, so this
+  // is a safety net, not a regression.
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'lead_substatuses_status_key_fk'
+      ) THEN
+        -- Drop orphans that would block the ALTER. None are expected, but a
+        -- pre-existing data anomaly should not crash boot.
+        DELETE FROM lead_substatuses s
+          WHERE NOT EXISTS (
+            SELECT 1 FROM lead_status_config c WHERE c.key = s.status_key
+          );
+        ALTER TABLE lead_substatuses
+          ADD CONSTRAINT lead_substatuses_status_key_fk
+          FOREIGN KEY (status_key) REFERENCES lead_status_config(key);
+      END IF;
+    END$$;
+  `);
 }
 
 // ── hw_test_user HubSpot property ─────────────────────────────────────────────

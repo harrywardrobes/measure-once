@@ -281,6 +281,21 @@ Sessions and users are stored in PostgreSQL (`sessions`, `users`,
 `password_set_tokens` — all auto-created on boot). Protect routes by importing
 `isAuthenticated` from `./auth`.
 
+## Schema constraints relied on by the db editor
+
+A small number of cross-table relationships in the db-editor allow-list are
+enforced by real Postgres FK constraints (`ON DELETE NO ACTION`) so that the
+admin db-editor's "blocking rows" preview surfaces when a parent row still has
+dependents, instead of silently orphaning data. Currently:
+
+- `lead_substatuses.status_key` → `lead_status_config(key)`
+  (`lead_substatuses_status_key_fk`, added in `ensureLeadSubstatusesTable` in
+  `server.js`).
+
+The two `card_action_handler_bindings` FKs are intentionally left as
+`ON DELETE CASCADE` because the admin handler-delete flow depends on the
+cascade to clean up bindings.
+
 ## Admin database editor
 
 Admins have a generic table editor at `/admin/database` (linked from the

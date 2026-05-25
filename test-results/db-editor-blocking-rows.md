@@ -1,7 +1,7 @@
 # Admin Database Editor — Blocking Rows Preview E2E Test
 
-- Run ID: `13ugpm`
-- Date: 2026-05-25T08:33:12.244Z
+- Run ID: `m4l2le`
+- Date: 2026-05-25T08:44:17.904Z
 - Command: `npm run test:db-editor-blocking-rows`
 
 ## Summary
@@ -18,7 +18,7 @@
 | PASS | blockingSample entry has refCols=[status_key], targetCols=[key] | refCols=status_key targetCols=key | refCols=status_key targetCols=key |
 | PASS | blockingSample entry reports total=2 with a 2-row sample | total=2 rows.length=2 | total=2 rows.length=2 |
 | PASS | blockingSample entry is marked allowed (referencing table is on the allow-list) | allowed=true | allowed=true |
-| PASS | blockingSample rows expose a usable pk + label hint | every row has numeric pk; labels match seeded substatuses | pkOk=true labelOk=true rows=[{"pk":"28","label":"PrivTest blocking substatus"},{"pk":"29","label":"PrivTest second substatus"}] |
+| PASS | blockingSample rows expose a usable pk + label hint | every row has numeric pk; labels match seeded substatuses | pkOk=true labelOk=true rows=[{"pk":"25","label":"PrivTest blocking substatus"},{"pk":"26","label":"PrivTest second substatus"}] |
 | PASS | failed FK-blocked delete does not remove the row | row still present | present=true |
 | PASS | single fcol/fval filter returns only matching rows | status=200 rows=2 (both with our status_key) activeFilters=[status_key] | status=200 rows=2 af=[{"column":"status_key","value":"privtest_blocks"}] |
 | PASS | composite fcol/fval (status_key + substatus_key) narrows to one row | status=200 rows=1 activeFilters=[status_key,substatus_key] | status=200 rows=1 af.cols=status_key,substatus_key |

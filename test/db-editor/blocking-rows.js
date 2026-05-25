@@ -49,26 +49,21 @@ try { puppeteer = require('puppeteer'); } catch {}
 require('dotenv').config();
 
 // ── fixtures ──────────────────────────────────────────────────────────────────
-// Both tables are on the db-editor allow-list. lead_substatuses already has
-// fkLabels pointing at lead_status_config(key); the production schema does
-// NOT enforce that as a real FK constraint, so the test installs one for the
-// duration of the run (and drops it on teardown) to faithfully exercise the
-// 23503 still-referenced branch + findBlockingRows.
+// Both tables are on the db-editor allow-list. lead_substatuses has a real
+// `lead_substatuses_status_key_fk` FK constraint installed by server boot
+// (see ensureLeadSubstatusesTable in server.js, task #739), so the seeded
+// status row genuinely cannot be deleted while substatuses reference it —
+// this faithfully exercises the 23503 still-referenced branch +
+// findBlockingRows without the test installing its own FK.
 const STATUS_KEY     = 'privtest_blocks';     // lead_status_config.key (also lead_substatuses.status_key)
 const STATUS_LABEL   = 'PrivTest blocked status';
 const SUB_KEY        = 'privtest_sub_a';
 const SUB_LABEL      = 'PrivTest blocking substatus';
 const SUB_KEY_B      = 'privtest_sub_b';
 const SUB_LABEL_B    = 'PrivTest second substatus';
-const FK_NAME        = 'privtest_block_sub_fk';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 async function purgeFixtures(pool) {
-  try {
-    await pool.query(
-      `ALTER TABLE lead_substatuses DROP CONSTRAINT IF EXISTS ${FK_NAME}`
-    );
-  } catch (_) {}
   try {
     await pool.query(
       `DELETE FROM lead_substatuses WHERE status_key = $1`,
@@ -225,11 +220,8 @@ async function main() {
        VALUES ($1, $2, $3, 1), ($1, $4, $5, 2)`,
     [STATUS_KEY, SUB_KEY, SUB_LABEL, SUB_KEY_B, SUB_LABEL_B]
   );
-  await pool.query(
-    `ALTER TABLE lead_substatuses
-       ADD CONSTRAINT ${FK_NAME}
-       FOREIGN KEY (status_key) REFERENCES lead_status_config(key)`
-  );
+  // The lead_substatuses.status_key → lead_status_config(key) FK is installed
+  // permanently by server boot (task #739), so no test-scoped ALTER is needed.
 
   const adminClient = await login(users.admin.email, PASSWORD);
 
