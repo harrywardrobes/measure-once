@@ -1,21 +1,14 @@
 'use strict';
 // test/customers-pagination/run.js
 //
-// Verifies that the Customers page pagination works correctly in both the
-// "All" (/api/contacts-all server-side paging) and "Active"
-// (/api/open-leads in-memory slicing) views.
+// Verifies that the Customers page pagination works correctly.
 //
 // Probes
 // ──────
-// [A] "All" view with 30 contacts: MUI Pagination control appears and
+// [A] All view with 30 contacts: MUI Pagination control appears and
 //     clicking page 2 sends a /api/contacts-all request with ?page=2.
 //
-// [B] "Active" view with 30 open leads: MUI Pagination control appears and
-//     clicking page 2 re-slices the in-memory list — no second
-//     /api/open-leads request is made.
-//
-// [C] "Showing X–Y of Z" count is visible on page 1 whenever there are results
-//     (All view and Active view).
+// [C] "Showing X–Y of Z" count is visible on page 1 whenever there are results.
 //
 // [D] Changing a filter (search, sort) resets to page 1 — tested by navigating
 //     to page 2 then mutating each filter and confirming the URL no longer
@@ -55,10 +48,10 @@ const PAGE_LIMIT = 25; // must match CustomersPage.tsx PAGE_LIMIT
 const TOTAL_CONTACTS = 30; // enough to require 2 pages
 
 // ── Mock HubSpot server ───────────────────────────────────────────────────────
-// Returns TOTAL_CONTACTS fake contacts for both the contacts/search endpoint
-// (used by /api/contacts-all via getSharedContactsCache) and the open-leads
-// endpoint. All contacts carry hw_test_user=true (dev-filter) and
-// hs_lead_status=OPEN_DEAL (Active view filter).
+// Returns TOTAL_CONTACTS fake contacts for the contacts/search endpoint
+// (used by /api/contacts-all via getSharedContactsCache).
+// All contacts carry hw_test_user=true (dev-filter) and
+// hs_lead_status=OPEN_DEAL.
 
 function makeContacts(n) {
   const out = [];
@@ -279,18 +272,9 @@ async function writeReport(runId, findings) {
     '',
     '- **[A] All view server-side paging**: 30 contacts → pagination control',
     '  appears; page-2 click sends `?page=2` to `/api/contacts-all`.',
-    '- **[B] Active view in-memory slicing**: 30 open leads → pagination',
-    '  control appears; page-2 click re-slices without a second `/api/open-leads`',
-    '  request.',
-    '- **[C] Showing X–Y of Z count**: visible on page 1 for both All and',
-    '  Active views.',
+    '- **[C] Showing X–Y of Z count**: visible on page 1.',
     '- **[D] Filter resets page**: navigating to page 2 then changing sort /',
     '  search resets the URL back to page 1.',
-    '- **[D.3] Active view sort reset**: navigating to `?page=2&view=active`',
-    '  confirms exactly 5 results (page-2 slice) and pagination, then changes',
-    '  the sort order and verifies the URL drops `page=2`. The lead-status',
-    '  MUI Select is disabled in Active view (viewMode !== "all"), so sort is',
-    '  the correct filter to exercise `setPage(1)` in this context.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
@@ -385,14 +369,9 @@ async function main() {
     '[A.1] All view — pagination control appears with 30 contacts',
     '[A.2] All view — page-2 click sends ?page=2 to /api/contacts-all',
     '[A.3] All view — page-2 results differ from page-1 results',
-    '[B.1] Active view — pagination control appears with 30 open leads',
-    '[B.2] Active view — page-2 click does NOT make a second /api/open-leads request',
-    '[B.3] Active view — page-2 results differ from page-1 results',
     '[C.1] All view — "Showing X–Y of Z" count visible on page 1',
-    '[C.2] Active view — "Showing X–Y of Z" count visible on page 1',
     '[D.1] Filter change (sort) resets from page 2 to page 1',
     '[D.2] Filter change (search) resets from page 2 to page 1',
-    '[D.3] Active view — sort change resets from page 2 to page 1',
   ];
 
   if (!puppeteer) {
@@ -501,84 +480,6 @@ async function main() {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // Probe B — Active view: in-memory slicing (no second /api/open-leads)
-    // ════════════════════════════════════════════════════════════════════════
-    console.log('\n  [B] Active view — in-memory pagination');
-    {
-      const page = await newPage(browser, memberClient.cookie);
-
-      // Passively monitor open-leads requests (no interception)
-      const ctrl = monitorRequests(page, '/api/open-leads');
-
-      // Load the Active view directly
-      await page.goto(`${BASE}/customers?view=active`, { waitUntil: 'domcontentloaded', timeout: 25000 });
-
-      const loaded = await waitForResults(page);
-      if (!loaded) {
-        const diag = await getDiagnostics(page).catch(() => ({}));
-        console.log('  Diag B (no results):', JSON.stringify(diag));
-        for (const l of UI_LABELS.slice(3, 6)) record(l, false, 'page did not load results');
-        await closePage(page);
-      } else {
-        const diag = await getDiagnostics(page);
-        console.log('  Diag B (page 1):', JSON.stringify(diag));
-        console.log('  Open-leads calls so far:', ctrl.calls.length);
-
-        // [B.1] Pagination control visible
-        const pag = await waitForPagination(page, 8000);
-        record(UI_LABELS[3], pag === 'ok',
-          pag === 'ok' ? `pagination nav present (diag: ${JSON.stringify(diag)})` : `absent (diag: ${JSON.stringify(diag)})`);
-
-        // Capture page-1 first contact name
-        const page1Name = await page.evaluate(() => {
-          const first = document.querySelector('#customers-results .MuiCard-root');
-          return first ? (first.textContent || '').slice(0, 50) : '';
-        });
-
-        // Record open-leads call count after page 1 load; reset for page 2
-        const callsAfterLoad = ctrl.calls.length;
-        ctrl.calls = [];
-
-        const clicked = await page.evaluate(() => {
-          const btn = document.querySelector('button[aria-label="Go to page 2"]');
-          if (!btn) return false;
-          btn.click();
-          return true;
-        });
-
-        if (!clicked) {
-          record(UI_LABELS[4], false, 'page-2 button not found in pagination nav');
-          record(UI_LABELS[5], false, 'skipped — page-2 button absent');
-        } else {
-          // Wait for URL to reflect page=2 (in-memory re-slice; no network request)
-          await waitForUrl(page, 'page=2');
-          await new Promise(r => setTimeout(r, 600)); // settle
-
-          const page2Diag = await getDiagnostics(page);
-          console.log('  Diag B (page 2):', JSON.stringify(page2Diag));
-
-          // [B.2] No second /api/open-leads call
-          const newOpenLeadsCalls = ctrl.calls.filter(u => u.includes('/api/open-leads'));
-          record(UI_LABELS[4], newOpenLeadsCalls.length === 0,
-            `open-leads calls after page-2 click: ${newOpenLeadsCalls.length} (load-time calls: ${callsAfterLoad})`);
-
-          // [B.3] Page-2 results differ
-          const page2Name = await page.evaluate(() => {
-            const first = document.querySelector('#customers-results .MuiCard-root');
-            return first ? (first.textContent || '').slice(0, 50) : '';
-          });
-          const differ = page1Name !== '' && page2Name !== '' && page1Name !== page2Name;
-          record(UI_LABELS[5], differ,
-            `p1="${page1Name.slice(0, 30)}" p2="${page2Name.slice(0, 30)}"`);
-        }
-
-        if (page.__logs.some(l => l.includes('[pageerror]')))
-          console.log('  Page errors (probe B):', page.__logs.filter(l => l.includes('[pageerror]')));
-        await closePage(page);
-      }
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
     // Probe C — "Showing X–Y of Z" count visible on page 1
     // ════════════════════════════════════════════════════════════════════════
     console.log('\n  [C] Showing X–Y of Z count visible');
@@ -593,22 +494,7 @@ async function main() {
       const txt = await getShowingText(page);
       const diag = await getDiagnostics(page);
       const ok = txt !== null && /\d+/.test(txt);
-      record(UI_LABELS[6], ok,
-        ok ? `found: "${txt}"` : `not found (diag: ${JSON.stringify(diag)})`);
-      await closePage(page);
-    }
-
-    // C.2 — Active view
-    {
-      const page = await newPage(browser, memberClient.cookie);
-      await page.goto(`${BASE}/customers?view=active`, { waitUntil: 'domcontentloaded', timeout: 25000 });
-      await waitForResults(page);
-      await new Promise(r => setTimeout(r, 300));
-
-      const txt = await getShowingText(page);
-      const diag = await getDiagnostics(page);
-      const ok = txt !== null && /\d+/.test(txt);
-      record(UI_LABELS[7], ok,
+      record(UI_LABELS[3], ok,
         ok ? `found: "${txt}"` : `not found (diag: ${JSON.stringify(diag)})`);
       await closePage(page);
     }
@@ -629,14 +515,14 @@ async function main() {
       const onPage2 = await page.evaluate(() => location.search.includes('page=2'));
       if (!onPage2) {
         // Page might have had fewer than 25 contacts — skip if no page 2 exists
-        record(UI_LABELS[8], true, 'skip — server reset page to 1 (only 1 page of results available); reset confirmed');
+        record(UI_LABELS[4], true, 'skip — server reset page to 1 (only 1 page of results available); reset confirmed');
       } else {
         // Wait for the sort MUI Select to be visible
         const sortReady = await pollPage(page, () =>
           document.getElementById('customers-sort-select') ? 'ok' : null, null, 8000);
 
         if (!sortReady) {
-          record(UI_LABELS[8], false, 'sort select not found');
+          record(UI_LABELS[4], false, 'sort select not found');
         } else {
           // Open the MUI Select dropdown
           await page.evaluate(() => {
@@ -654,13 +540,13 @@ async function main() {
           });
 
           if (!picked) {
-            record(UI_LABELS[8], false, 'could not find "Name A-Z" option in sort dropdown');
+            record(UI_LABELS[4], false, 'could not find "Name A-Z" option in sort dropdown');
           } else {
             // Sort change calls setPage(1) — wait for URL to drop page=2
             const reset = await waitForUrlGone(page, 'page=2');
             await waitForResults(page, 8000);
             const urlStr = await page.evaluate(() => location.search);
-            record(UI_LABELS[8], reset === 'ok',
+            record(UI_LABELS[4], reset === 'ok',
               `URL after sort change: "${urlStr}" — page=2 ${!reset ? 'still present (bad)' : 'gone (good)'}`);
           }
         }
@@ -679,17 +565,17 @@ async function main() {
 
       const onPage2 = await page.evaluate(() => location.search.includes('page=2'));
       if (!onPage2) {
-        record(UI_LABELS[9], true, 'skip — server reset page to 1 (only 1 page); reset confirmed');
+        record(UI_LABELS[5], true, 'skip — server reset page to 1 (only 1 page); reset confirmed');
       } else {
         const searchInput = await page.$('input[aria-label="Search customers"]');
         if (!searchInput) {
-          record(UI_LABELS[9], false, 'search input not found');
+          record(UI_LABELS[5], false, 'search input not found');
         } else {
           await searchInput.type('paginee1', { delay: 30 });
           // Debounce is 250 ms; wait for the URL to change (setPage(1) fires in debounce handler)
           const reset = await waitForUrlGone(page, 'page=2');
           const urlStr = await page.evaluate(() => location.search);
-          record(UI_LABELS[9], reset === 'ok',
+          record(UI_LABELS[5], reset === 'ok',
             `URL after search: "${urlStr}" — page=2 ${!reset ? 'still present (bad)' : 'gone (good)'}`);
         }
       }
@@ -697,99 +583,6 @@ async function main() {
       if (page.__logs.some(l => l.includes('[pageerror]')))
         console.log('  Page errors (probe D.2):', page.__logs.filter(l => l.includes('[pageerror]')));
       await closePage(page);
-    }
-
-    // D.3 — Sort change resets page in the Active view (in-memory slicing)
-    //
-    // D.1 covers setPage(1) via sort in the All view (server-side paging).
-    // D.3 covers the same call in the Active view, where results are held
-    // in memory. The lead-status MUI Select is disabled when viewMode !== 'all'
-    // (CustomersPage.tsx line 1319), so sort is the correct filter to use here.
-    {
-      const page = await newPage(browser, memberClient.cookie);
-      // Navigate directly to page 2 of the Active view
-      await page.goto(`${BASE}/customers?page=2&view=active`, { waitUntil: 'domcontentloaded', timeout: 25000 });
-
-      const loaded = await waitForResults(page);
-      if (!loaded) {
-        const diag = await getDiagnostics(page).catch(() => ({}));
-        console.log('  Diag D.3 (no results):', JSON.stringify(diag));
-        record(UI_LABELS[10], false, 'page did not load results');
-        await closePage(page);
-      } else {
-        const onPage2 = await page.evaluate(() => location.search.includes('page=2'));
-        const pag     = await waitForPagination(page, 8000);
-        const diag    = await getDiagnostics(page);
-        console.log('  Diag D.3 (Active page 2):', JSON.stringify(diag));
-
-        if (!onPage2) {
-          // Fewer than PAGE_LIMIT results; the Active view reset to page 1 — confirmed
-          record(UI_LABELS[10], true,
-            'skip — view reset page to 1 (fewer than 25 results in Active view); reset confirmed');
-        } else {
-          // Pre-conditions: exactly (TOTAL_CONTACTS - PAGE_LIMIT) results on page 2
-          // (contacts 26–30 from the mock) and the pagination nav present.
-          const expectedPage2Count = TOTAL_CONTACTS - PAGE_LIMIT; // 30 - 25 = 5
-          const resultsOk = diag.resultsCount === expectedPage2Count;
-          const pagOk     = pag === 'ok';
-          if (!resultsOk || !pagOk) {
-            record(UI_LABELS[10], false,
-              `pre-condition failed — expected ${expectedPage2Count} results on page 2, `
-              + `got ${diag.resultsCount}; pagination: ${pagOk} (diag: ${JSON.stringify(diag)})`);
-          } else {
-            // Open the sort MUI Select and pick a different option.
-            // id="customers-sort-select" is on the underlying hidden input;
-            // we find its MuiInputBase-root parent to target only this control.
-            const sortReady = await pollPage(page, () =>
-              document.getElementById('customers-sort-select') ? 'ok' : null, null, 8000);
-
-            if (!sortReady) {
-              record(UI_LABELS[10], false, 'sort select not found in Active view');
-            } else {
-              await page.evaluate(() => {
-                const input = document.getElementById('customers-sort-select');
-                const root  = input && input.closest('.MuiInputBase-root');
-                const combo = root && root.querySelector('[role="combobox"]');
-                if (combo) combo.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-              });
-              await new Promise(r => setTimeout(r, 300));
-
-              // Pick "Name A-Z" (or any option that differs from the current sort)
-              const picked = await page.evaluate(() => {
-                const items = Array.from(document.querySelectorAll('[role="option"]'));
-                const target = items.find(el =>
-                  (el.textContent || '').includes('Name A')
-                  && el.getAttribute('aria-selected') !== 'true',
-                ) || items.find(el => el.getAttribute('aria-selected') !== 'true');
-                if (target) {
-                  const label = (target.textContent || '').trim();
-                  target.click();
-                  return label;
-                }
-                return '';
-              });
-
-              if (!picked) {
-                record(UI_LABELS[10], false,
-                  'could not find an unselected sort option in Active view dropdown');
-              } else {
-                // Sort change fires setPage(1) — wait for page=2 to disappear
-                const reset = await waitForUrlGone(page, 'page=2');
-                await waitForResults(page, 8000);
-                const urlStr = await page.evaluate(() => location.search);
-                record(UI_LABELS[10], reset === 'ok',
-                  `sort option "${picked}" — URL after change: "${urlStr}" — page=2 `
-                  + `${reset !== 'ok' ? 'still present (bad)' : 'gone (good)'} `
-                  + `(page-2 count confirmed: ${diag.resultsCount} = ${expectedPage2Count})`);
-              }
-            }
-          }
-        }
-
-        if (page.__logs.some(l => l.includes('[pageerror]')))
-          console.log('  Page errors (probe D.3):', page.__logs.filter(l => l.includes('[pageerror]')));
-        await closePage(page);
-      }
     }
 
   } catch (e) {

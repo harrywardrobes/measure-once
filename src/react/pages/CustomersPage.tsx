@@ -130,7 +130,6 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'newest', label: 'Newest first' },
   { value: 'name-asc', label: 'Name A–Z' },
   { value: 'name-desc', label: 'Name Z–A' },
-  { value: 'stage', label: 'Stage order' },
 ];
 
 function readUrlState() {
@@ -142,7 +141,6 @@ function readUrlState() {
     sort: p.get('sort') || 'newest',
     q: p.get('q') || '',
     stage: p.get('stage') || '',
-    view: (p.get('view') === 'active' ? 'active' : 'all') as 'all' | 'active',
     archived: p.get('archived') === '1',
   };
 }
@@ -154,7 +152,6 @@ function writeUrlState(s: {
   sort: string;
   q: string;
   stage: string;
-  view: 'all' | 'active';
   archived: boolean;
 }) {
   const qs = new URLSearchParams();
@@ -164,7 +161,6 @@ function writeUrlState(s: {
   if (s.sort && s.sort !== 'newest') qs.set('sort', s.sort);
   if (s.q) qs.set('q', s.q);
   if (s.stage) qs.set('stage', s.stage);
-  if (s.view === 'active') qs.set('view', 'active');
   if (s.archived) qs.set('archived', '1');
   const str = qs.toString();
   history.replaceState(null, '', str ? '?' + str : location.pathname);
@@ -601,7 +597,6 @@ export function CustomersPage(): React.ReactElement {
   const [sortBy, setSortBy] = React.useState<string>(initial.sort);
   const [searchInput, setSearchInput] = React.useState<string>(initial.q);
   const [search, setSearch] = React.useState<string>(initial.q);
-  const [viewMode, setViewMode] = React.useState<'all' | 'active'>(initial.view);
   const [stageFilter, setStageFilter] = React.useState<string>(initial.stage);
   const [showArchived, setShowArchived] = React.useState<boolean>(initial.archived);
 
@@ -616,18 +611,9 @@ export function CustomersPage(): React.ReactElement {
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
-  const [openLeadsCacheAge, setOpenLeadsCacheAge] = React.useState<number | null>(null);
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
-  const fullOpenLeadsListRef = React.useRef<Contact[]>([]);
-  // Tracks the refreshNonce that was in effect when the last full open-leads
-  // fetch completed. When page changes but this nonce still matches, we can
-  // re-slice the cached list instead of making another network request.
-  const openLeadsNonceRef = React.useRef<number>(-1);
-  // Always-current page ref so async timer callbacks (e.g. background refresh)
-  // can slice to the correct page without capturing a stale closure value.
-  const pageRef = React.useRef<number>(initial.page);
   // autoHideDuration is set to null while the document is hidden so the MUI
-  // Snackbar timer is paused (Page Visibility API).  Restored to 8 s when the
+  // Snackbar timer is paused (Page Visibility API). Restored to 8 s when the
   // tab returns to the foreground.
   const [snackbarHideDuration, setSnackbarHideDuration] = React.useState<number | null>(8000);
   const bgRefreshFailedRef = React.useRef(false);
@@ -740,10 +726,6 @@ export function CustomersPage(): React.ReactElement {
 
   useLeadStatusSync(refreshDropdown);
 
-  // Keep pageRef in sync so async callbacks can read the current page without
-  // capturing a stale closure value.
-  React.useEffect(() => { pageRef.current = page; }, [page]);
-
   // Scroll to the top of the page when the user navigates to a new page.
   // Skip on the initial mount to avoid disrupting the scroll-position restore.
   const pageScrollInitialRef = React.useRef(true);
@@ -773,10 +755,9 @@ export function CustomersPage(): React.ReactElement {
       sort: sortBy,
       q: search,
       stage: stageFilter,
-      view: viewMode,
       archived: showArchived,
     });
-  }, [page, leadStatus, substatus, sortBy, search, stageFilter, viewMode, showArchived]);
+  }, [page, leadStatus, substatus, sortBy, search, stageFilter, showArchived]);
 
   // Load lead statuses + counts + substatuses on mount, then re-populate
   // the native select once the DOM element has been mounted.
@@ -903,69 +884,7 @@ export function CustomersPage(): React.ReactElement {
     setError(null);
     setContactsStale(false);
 
-    if (viewMode === 'active') {
-      // If the full list was already loaded for this refreshNonce, re-slice it
-      // for the new page without making another network request.
-      if (openLeadsNonceRef.current === refreshNonce && fullOpenLeadsListRef.current.length > 0) {
-        const fullList = fullOpenLeadsListRef.current;
-        const fullTotal = fullList.length;
-        const calcTotalPages = Math.max(1, Math.ceil(fullTotal / PAGE_LIMIT));
-        const sliced = fullList.slice((page - 1) * PAGE_LIMIT, page * PAGE_LIMIT);
-        setContacts(sliced);
-        setTotal(fullTotal);
-        setTotalPages(calcTotalPages);
-        setLoading(false);
-        return;
-      }
-
-      // Use raw fetch for open-leads so we can read response headers (X-Cache-Age).
-      (async () => {
-        try {
-          const r = await fetch('/api/open-leads', { headers: { Accept: 'application/json' } });
-          if (r.status === 401) { location.href = '/login'; return; }
-          const data = await r.json().catch(() => ({})) as ContactsResponse;
-          if (!r.ok) {
-            const err = new Error((data as { error?: string }).error || `HTTP ${r.status}`);
-            (err as { code?: string }).code = (data as { code?: string }).code;
-            throw err;
-          }
-          const cacheStatus = r.headers.get('X-Cache-Status');
-          const ageHeader = r.headers.get('X-Cache-Age');
-          const cacheAge = ageHeader !== null ? Number(ageHeader) : NaN;
-          if (cancelled) return;
-          // Show hint only when the response was served from cache (X-Cache-Status
-          // is 'fresh' AND X-Cache-Age is present) and the age is close to the
-          // server TTL (≥ 45 s out of a 60 s window).
-          const NEAR_TTL_THRESHOLD_S = 45;
-          const isCached =
-            cacheStatus === 'fresh' &&
-            Number.isFinite(cacheAge) &&
-            cacheAge >= NEAR_TTL_THRESHOLD_S;
-          setOpenLeadsCacheAge(isCached ? cacheAge : null);
-          const fullList = data.results || [];
-          fullOpenLeadsListRef.current = fullList;
-          openLeadsNonceRef.current = refreshNonce;
-          const fullTotal = data.total != null ? data.total : fullList.length;
-          const calcTotalPages = Math.max(1, Math.ceil(fullTotal / PAGE_LIMIT));
-          const sliced = fullList.slice((page - 1) * PAGE_LIMIT, page * PAGE_LIMIT);
-          setContacts(sliced);
-          setTotal(fullTotal);
-          setTotalPages(calcTotalPages);
-          setLoading(false);
-        } catch (e) {
-          if (cancelled) return;
-          setOpenLeadsCacheAge(null);
-          setError(humaniseError(e as Error & { code?: string }));
-          fullOpenLeadsListRef.current = [];
-          openLeadsNonceRef.current = -1;
-          setContacts([]);
-          setTotal(0);
-          setTotalPages(1);
-          setLoading(false);
-        }
-      })();
-    } else {
-      setOpenLeadsCacheAge(null);
+    {
       const qs = new URLSearchParams({ page: String(page), limit: String(PAGE_LIMIT) });
       if (leadStatus) qs.set('leadStatus', leadStatus);
       if (sortBy && sortBy !== 'newest') qs.set('sort', sortBy);
@@ -996,8 +915,7 @@ export function CustomersPage(): React.ReactElement {
           setTotalPages(data.totalPages || 1);
           setLoading(false);
           // Background counts refresh with retry: up to MAX_RETRIES retries at
-          // RETRY_DELAY_MS apart. On final failure surface the same Snackbar
-          // used by the open-leads background refresh.
+          // RETRY_DELAY_MS apart. On final failure surface a Snackbar.
           const MAX_COUNTS_RETRIES = 2;
           const COUNTS_RETRY_DELAY_MS = 30_000;
           function scheduleCountsAttempt(retryCount: number, waitMs: number) {
@@ -1040,72 +958,7 @@ export function CustomersPage(): React.ReactElement {
       cancelled = true;
       countsRetryTimers.forEach(clearTimeout);
     };
-  }, [page, leadStatus, sortBy, search, viewMode, refreshNonce]);
-
-  // Background re-fetch: when open-leads was served from stale cache, wait
-  // until the server's 60 s TTL has elapsed then silently swap in fresh data.
-  // No loading spinner is shown; the "Data may be up to 1 min old" hint
-  // disappears once fresh results arrive.
-  // On failure: retry up to MAX_RETRIES times (30 s apart). If all attempts
-  // fail, show a brief Snackbar so the user knows the hint is stale.
-  React.useEffect(() => {
-    if (openLeadsCacheAge === null || viewMode !== 'active') return;
-
-    // Delay = time left until server TTL expires + 5 s for the HubSpot fetch.
-    const OPEN_LEADS_TTL_S = 60;
-    const initialDelay = Math.max(5_000, (OPEN_LEADS_TTL_S - openLeadsCacheAge) * 1_000 + 5_000);
-    const MAX_RETRIES = 2;
-    const RETRY_DELAY_MS = 30_000;
-
-    let cancelled = false;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-
-    function scheduleAttempt(retryCount: number, waitMs: number) {
-      const t = setTimeout(async () => {
-        if (cancelled) return;
-        try {
-          const r = await fetch('/api/open-leads', { headers: { Accept: 'application/json' } });
-          if (cancelled) return;
-          if (r.status === 401) { location.href = '/login'; return; }
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          const data = await r.json().catch(() => null) as ContactsResponse | null;
-          if (cancelled || !data) return;
-          const cacheStatus = r.headers.get('X-Cache-Status');
-          const ageHeader = r.headers.get('X-Cache-Age');
-          const newAge = ageHeader !== null ? Number(ageHeader) : NaN;
-          const NEAR_TTL_THRESHOLD_S = 45;
-          const isStillCached =
-            cacheStatus === 'fresh' &&
-            Number.isFinite(newAge) &&
-            newAge >= NEAR_TTL_THRESHOLD_S;
-          const fullList = data.results || [];
-          fullOpenLeadsListRef.current = fullList;
-          const fullTotal = data.total != null ? data.total : fullList.length;
-          const calcTotalPages = Math.max(1, Math.ceil(fullTotal / PAGE_LIMIT));
-          const currentPage = pageRef.current;
-          setContacts(fullList.slice((currentPage - 1) * PAGE_LIMIT, currentPage * PAGE_LIMIT));
-          setTotal(fullTotal);
-          setTotalPages(calcTotalPages);
-          setOpenLeadsCacheAge(isStillCached ? newAge : null);
-        } catch {
-          if (cancelled) return;
-          if (retryCount < MAX_RETRIES) {
-            scheduleAttempt(retryCount + 1, RETRY_DELAY_MS);
-          } else {
-            setBgRefreshFailed(true);
-          }
-        }
-      }, waitMs);
-      timers.push(t);
-    }
-
-    scheduleAttempt(0, initialDelay);
-
-    return () => {
-      cancelled = true;
-      timers.forEach(clearTimeout);
-    };
-  }, [openLeadsCacheAge, viewMode]);
+  }, [page, leadStatus, sortBy, search, refreshNonce]);
 
   // Resolve rooms for a contact, applying the stage + archived filters from
   // the legacy `buildListItems` (public/workflow.js lines 140-202).
@@ -1129,7 +982,9 @@ export function CustomersPage(): React.ReactElement {
         if (stageFilter && filtered.length === 0) return null;
         return filtered;
       }
-      // No cached rooms — always show contact with a sensible fallback.
+      // No cached rooms — show contact when no stage filter is active;
+      // hide it under any specific stage tab (stageFilter is set).
+      if (stageFilter) return null;
       return [{ room: 'Main', stageKey: 'sales', roomStatus: 'active' }];
     },
     [roomsByContact, stageFilter, showArchived],
@@ -1169,10 +1024,9 @@ export function CustomersPage(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadStatus, store.subsLoaded]);
 
-  // Build the stage tab list: Active, All, then one button per workflow stage.
+  // Build the stage tab list: All, then one button per workflow stage.
   const stageTabs = React.useMemo(() => {
     const tabs: Array<{ key: string; label: string }> = [
-      { key: '__active__', label: 'Active' },
       { key: '__all__', label: 'All' },
     ];
     const stages = workflow?.stages || {};
@@ -1182,25 +1036,14 @@ export function CustomersPage(): React.ReactElement {
     return tabs;
   }, [workflow]);
 
-  const currentTab: string = stageFilter
-    ? stageFilter
-    : viewMode === 'active'
-      ? '__active__'
-      : '__all__';
+  const currentTab: string = stageFilter ? stageFilter : '__all__';
 
   const onTabChange = (key: string) => {
     setPage(1);
     setSubstatus('');
-    if (key === '__active__') {
-      setViewMode('active');
-      setStageFilter('');
-      setLeadStatus('');
-      setShowArchived(false);
-    } else if (key === '__all__') {
-      setViewMode('all');
+    if (key === '__all__') {
       setStageFilter('');
     } else {
-      setViewMode('all');
       setStageFilter(key);
     }
   };
@@ -1236,7 +1079,7 @@ export function CustomersPage(): React.ReactElement {
             sx={{ flexWrap: 'wrap' }}
           >
             {stageTabs.map((t) => {
-              const isStage = t.key !== '__active__' && t.key !== '__all__';
+              const isStage = t.key !== '__all__';
               const colour = isStage ? stageColour(t.key) : null;
               const selected = currentTab === t.key;
               return (
@@ -1316,7 +1159,6 @@ export function CustomersPage(): React.ReactElement {
                 width: '100%',
                 visibility: store.loaded ? 'visible' : 'hidden',
               }}
-              disabled={viewMode !== 'all'}
             >
               <InputLabel htmlFor="lead-status-filter" shrink>
                 Lead status
@@ -1372,15 +1214,8 @@ export function CustomersPage(): React.ReactElement {
               const next = !showArchived;
               setShowArchived(next);
               setPage(1);
-              // Match legacy: switching archived ON forces "All" mode so the
-              // full HubSpot list is loaded; switching it OFF returns to the
-              // open-leads "Active" view.
-              if (next) {
-                setViewMode('all');
-                setStageFilter('');
-              } else {
-                setViewMode('active');
-                setStageFilter('');
+              setStageFilter('');
+              if (!next) {
                 setLeadStatus('');
                 setSubstatus('');
               }
@@ -1435,12 +1270,6 @@ export function CustomersPage(): React.ReactElement {
         {!loading && contactsStale ? (
           <Alert severity="warning" sx={{ py: 0 }} id="contacts-stale-banner">
             Contact list may be out of date — HubSpot is temporarily unavailable.
-          </Alert>
-        ) : null}
-
-        {!loading && viewMode === 'active' && openLeadsCacheAge !== null ? (
-          <Alert severity="info" sx={{ py: 0 }}>
-            Data may be up to 1 min old.
           </Alert>
         ) : null}
 
