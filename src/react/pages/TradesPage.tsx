@@ -281,6 +281,8 @@ function PhoneConflictNotice({
         <Box
           component="a"
           href="#"
+          className="trades-phone-notice-link"
+          data-trade-id={conflict.company.id}
           onClick={(e) => { e.preventDefault(); onJump?.(conflict.company.id); }}
           sx={{ color: 'inherit', fontWeight: 700 }}
         >
@@ -744,12 +746,11 @@ function RenderedContactSlot({
             fullWidth
             size="small"
             type="tel"
+            slotProps={{ input: { inputProps: { id: `tf-cphone-${index}` } } }}
           />
-          {phoneConflict && (
-            <Box sx={{ mt: 0.75 }}>
-              <PhoneConflictNotice conflict={phoneConflict} onJump={onEditingIdJump} />
-            </Box>
-          )}
+          <Box id={`tf-cphone-notice-${index}`} className={phoneConflict ? undefined : 'hidden'} sx={phoneConflict ? { mt: 0.75 } : {}}>
+            {phoneConflict && <PhoneConflictNotice conflict={phoneConflict} onJump={onEditingIdJump} />}
+          </Box>
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <TextField
@@ -1021,9 +1022,10 @@ function TradeFormDialog({
       fullWidth
       maxWidth="sm"
       scroll="paper"
+      slotProps={{ paper: { id: 'trades-modal', className: 'trades-modal-open' } }}
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1 }}>
-        <span>{dialogTitle}</span>
+        <span id="trades-modal-title">{dialogTitle}</span>
         <IconButton onClick={onClose} disabled={saving} aria-label="Close" size="small">
           <CloseIcon />
         </IconButton>
@@ -1031,11 +1033,13 @@ function TradeFormDialog({
 
       <DialogContent dividers>
         <Box component="form" id="trade-form" onSubmit={handleSubmit} noValidate>
+          {editingTrade && <input type="hidden" id="trades-edit-id" value={editingTrade.id} readOnly />}
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 1.5 }}>
             <TextField
               label="Company name *"
               value={form.company_name}
               onChange={(e) => setForm(prev => ({ ...prev, company_name: e.target.value }))}
+              slotProps={{ input: { inputProps: { id: 'tf-company' } } }}
               placeholder="e.g. Cheshire Electrical"
               required
               fullWidth
@@ -1096,12 +1100,11 @@ function TradeFormDialog({
                 fullWidth
                 size="small"
                 type="tel"
+                slotProps={{ input: { inputProps: { id: 'tf-company-phone' } } }}
               />
-              {companyPhoneConflict && (
-                <Box sx={{ mt: 0.75 }}>
-                  <PhoneConflictNotice conflict={companyPhoneConflict} onJump={onJumpToTrade} />
-                </Box>
-              )}
+              <Box id="tf-company-phone-notice" className={companyPhoneConflict ? undefined : 'hidden'} sx={companyPhoneConflict ? { mt: 0.75 } : {}}>
+                {companyPhoneConflict && <PhoneConflictNotice conflict={companyPhoneConflict} onJump={onJumpToTrade} />}
+              </Box>
             </Box>
           </Stack>
 
@@ -1217,11 +1220,12 @@ function TradeFormDialog({
           Cancel
         </Button>
         <Button
+          id="trades-submit-btn"
           type="submit"
           form="trade-form"
           variant="contained"
           disabled={saving || hasAnyConflict}
-          title={hasAnyConflict ? 'One or more phone numbers or emails are already in use' : undefined}
+          title={hasAnyConflict ? 'One or more phone numbers or emails are already in use — please update them before saving' : undefined}
         >
           {submitLabel}
         </Button>
@@ -1356,6 +1360,27 @@ export function TradesPage() {
   React.useEffect(() => {
     (window as unknown as { _cpGetTradeContacts?: () => Trade[] })._cpGetTradeContacts = () => trades;
   }, [trades]);
+
+  const tradesRef = React.useRef(trades);
+  tradesRef.current = trades;
+
+  React.useEffect(() => {
+    (window as unknown as { openTradesModal?: (id?: number) => void }).openTradesModal = (id?: number) => {
+      if (id == null) {
+        setEditingTrade(null);
+        setFormOpen(true);
+      } else {
+        const trade = tradesRef.current.find(t => t.id === id);
+        if (trade) {
+          setEditingTrade(trade);
+          setFormOpen(true);
+        }
+      }
+    };
+    return () => {
+      delete (window as unknown as { openTradesModal?: unknown }).openTradesModal;
+    };
+  }, []);
 
   const types = React.useMemo(
     () => [...new Set(trades.map(c => c.trade_type).filter(Boolean))].sort() as string[],
