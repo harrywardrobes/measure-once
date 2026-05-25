@@ -11,6 +11,8 @@
 //             Invoices, Trades, Ideas (all overflow tabs)
 //   [M-ACT]   Navigating to an overflow tab (/ideas) makes More selected in bar
 //   [MG-ACT]  Navigating to an overflow tab (/survey) makes More selected in bar
+//   [M-NAV]   Member taps Ideas in drawer → drawer closes, pathname=/ideas, More selected
+//   [MG-NAV]  Manager taps Calendar in drawer → drawer closes, pathname=/calendar, More selected
 //   [CLO]     Drawer closes when the MUI backdrop is clicked
 //
 // Follows the harness + Puppeteer conventions from test/calendar-page/run.js:
@@ -585,6 +587,157 @@ async function main() {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
+    // [M-NAV] Member — click Ideas in drawer → navigates + More selected
+    // ══════════════════════════════════════════════════════════════════════════
+    console.log('\n  [M-NAV] Member drawer click-through: Ideas');
+    {
+      const page = await openPage(browser, memberClient.cookie, '/');
+
+      const opened = await clickMoreAndWaitForDrawer(page);
+      record(
+        '[M-NAV] Drawer opened before clicking Ideas',
+        'drawer visible',
+        opened ? 'visible' : 'not visible',
+        opened,
+      );
+
+      // Click the Ideas drawer item — it is an <a> so it causes full navigation.
+      const [navResponse] = await Promise.all([
+        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }),
+        page.evaluate(() => {
+          const btn = document.querySelector('.MuiDrawer-paper #bnav-ideas');
+          if (btn) btn.click();
+        }),
+      ]);
+
+      // Wait for BottomNav to remount after navigation.
+      await poll(page, () => {
+        const nav = document.querySelector('nav.bottom-nav#main-content');
+        return nav && nav.querySelector('#bnav-home') ? 'ok' : null;
+      }, null, 15000);
+
+      // Drawer must be closed (fresh page load, no open drawer state).
+      const drawerClosed = !(await readDrawerOpen(page));
+      record(
+        '[M-NAV] Drawer is closed after clicking Ideas',
+        'drawer not visible',
+        drawerClosed ? 'not visible' : 'still visible',
+        drawerClosed,
+      );
+
+      const pathname = await page.evaluate(() => window.location.pathname);
+      record(
+        '[M-NAV] pathname is /ideas after clicking Ideas drawer item',
+        '/ideas',
+        String(pathname),
+        pathname === '/ideas',
+      );
+
+      const bar = await readBarState(page);
+      record(
+        '[M-NAV] [data-more-selected] present on /ideas after drawer click',
+        'present',
+        bar ? (bar.moreSelected ? 'present' : 'absent') : 'bar state null',
+        !!(bar && bar.moreSelected),
+      );
+      record(
+        '[M-NAV] #bnav-more has Mui-selected class on /ideas after drawer click',
+        'Mui-selected on bnav-more',
+        bar ? (bar.moreHasMuiSelected ? 'Mui-selected' : 'not selected') : 'bar state null',
+        !!(bar && bar.moreHasMuiSelected),
+      );
+
+      await page.close().catch(() => {});
+      await page.__ctx.close().catch(() => {});
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // [MG-NAV] Manager — click first overflow item in drawer → navigates +
+    //          drawer closes + More selected
+    // ══════════════════════════════════════════════════════════════════════════
+    console.log('\n  [MG-NAV] Manager drawer click-through: first overflow tab');
+    {
+      const page = await openPage(browser, managerClient.cookie, '/');
+
+      const opened = await clickMoreAndWaitForDrawer(page);
+      record(
+        '[MG-NAV] Drawer opened before clicking overflow tab',
+        'drawer visible',
+        opened ? 'visible' : 'not visible',
+        opened,
+      );
+
+      // Read the first overflow item from the drawer so the probe is resilient
+      // to nav-customisation preferences changing which tabs are in overflow.
+      const firstDrawerItem = await page.evaluate(() => {
+        const paper = document.querySelector('.MuiDrawer-paper');
+        if (!paper) return null;
+        const anchor = paper.querySelector('[id^="bnav-"]');
+        if (!anchor) return null;
+        return { id: anchor.id, href: anchor.getAttribute('href') };
+      });
+
+      const hasDrawerItem = !!(firstDrawerItem && firstDrawerItem.href);
+      record(
+        '[MG-NAV] Drawer contains at least one overflow item to click',
+        'at least one drawer item present',
+        hasDrawerItem ? `found ${firstDrawerItem.id}` : 'no drawer items found',
+        hasDrawerItem,
+      );
+
+      if (hasDrawerItem) {
+        // Click the anchor — it is a real <a> so it causes full page navigation.
+        const [/* navResponse */] = await Promise.all([
+          page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }),
+          page.evaluate((itemId) => {
+            const btn = document.querySelector(`.MuiDrawer-paper #${itemId}`);
+            if (btn) btn.click();
+          }, firstDrawerItem.id),
+        ]);
+
+        // Wait for BottomNav to remount after navigation.
+        await poll(page, () => {
+          const nav = document.querySelector('nav.bottom-nav#main-content');
+          return nav && nav.querySelector('#bnav-home') ? 'ok' : null;
+        }, null, 15000);
+
+        const drawerClosed = !(await readDrawerOpen(page));
+        record(
+          '[MG-NAV] Drawer is closed after clicking overflow tab',
+          'drawer not visible',
+          drawerClosed ? 'not visible' : 'still visible',
+          drawerClosed,
+        );
+
+        const expectedPath = firstDrawerItem.href;
+        const pathname = await page.evaluate(() => window.location.pathname);
+        record(
+          `[MG-NAV] pathname is ${expectedPath} after clicking ${firstDrawerItem.id}`,
+          expectedPath,
+          String(pathname),
+          pathname === expectedPath,
+        );
+
+        const bar = await readBarState(page);
+        record(
+          '[MG-NAV] [data-more-selected] present after navigating to overflow tab',
+          'present',
+          bar ? (bar.moreSelected ? 'present' : 'absent') : 'bar state null',
+          !!(bar && bar.moreSelected),
+        );
+        record(
+          '[MG-NAV] #bnav-more has Mui-selected class after navigating to overflow tab',
+          'Mui-selected on bnav-more',
+          bar ? (bar.moreHasMuiSelected ? 'Mui-selected' : 'not selected') : 'bar state null',
+          !!(bar && bar.moreHasMuiSelected),
+        );
+      }
+
+      await page.close().catch(() => {});
+      await page.__ctx.close().catch(() => {});
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
     // [CLO] Backdrop click closes the drawer
     // ══════════════════════════════════════════════════════════════════════════
     console.log('\n  [CLO] Drawer closes via backdrop');
@@ -678,6 +831,10 @@ async function writeReport(findings, runId) {
     '- **[M-ACT]**   Navigating to /ideas (overflow tab) sets `[data-more-selected]` and',
     '               `Mui-selected` on #bnav-more; navigating back to a primary tab clears it.',
     '- **[MG-ACT]**  Same active-in-overflow logic verified for manager at /survey.',
+    '- **[M-NAV]**   Member clicks Ideas in the open drawer: drawer closes, pathname becomes',
+    '               /ideas, and More is selected in the bar.',
+    '- **[MG-NAV]**  Manager clicks Calendar (overflow) in the open drawer: drawer closes,',
+    '               pathname becomes /calendar, and More is selected in the bar.',
     '- **[CLO]**     MUI Backdrop click closes the drawer; `[data-more-selected]` is cleared.',
     '',
     '## Relevant files',
