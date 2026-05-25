@@ -24,3 +24,4 @@ public/react/
 public/storybook/
 storybook-static/
 test-results/
+!test-results/new-customer-counts-retry.md
