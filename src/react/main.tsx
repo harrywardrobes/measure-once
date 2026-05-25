@@ -8,6 +8,7 @@ import { WorkshopSettingsPage } from './pages/WorkshopSettingsPage';
 import { CustomersPage } from './pages/CustomersPage';
 import { HomePage } from './pages/HomePage';
 import { CalendarPage } from './pages/CalendarPage';
+import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/admin/SettingsPage';
 import { CardActionsPage } from './pages/admin/CardActionsPage';
 import { ActionHandlersPage } from './pages/admin/ActionHandlersPage';
@@ -54,6 +55,7 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement }> = [
   { id: 'app-bottom-nav-mount', render: () => <BottomNav /> },
   { id: 'home-view',            render: () => <HomePage /> },
   { id: 'tab-calendar',         render: () => <CalendarPage /> },
+  { id: 'profile-view',         render: () => <ProfilePage /> },
   { id: 'admin-mui-tabs-mount', render: () => <AdminTabsBar /> },
   { id: 'tab-designsystem',     render: () => <DesignSystemPage /> },
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },

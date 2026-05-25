@@ -2935,113 +2935,18 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
    moved to the React MUI GlobalHeader island — see
    src/react/components/GlobalHeader.tsx. */
 
-/* ── Profile Tab ─────────────────────────────────────────────────────────────── */
-.profile-tab {
-  position: fixed;
-  top: var(--header-h);
-  bottom: calc(60px + env(safe-area-inset-bottom));
-  left: 0; right: 0;
-  overflow-y: auto;
-  background: var(--paper);
-  -webkit-overflow-scrolling: touch;
-}
-.profile-tab.hidden { display: none; }
-.profile-inner {
-  max-width: 540px;
-  margin: 0 auto;
-  padding: 20px 14px 32px;
-}
-.profile-loading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 32px 16px;
-  color: var(--ink-4);
-  font-size: 0.875rem;
-}
-.profile-card {
-  background: var(--paper);
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-xl);
-  padding: 16px;
-  margin-bottom: 12px;
-}
-.profile-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-.profile-section-title {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-4);
-}
-.profile-identity {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.profile-avatar-img {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-  border: 2px solid var(--stone);
-}
-.profile-avatar-placeholder {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--plum);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  flex-shrink: 0;
-}
-.profile-identity-info { min-width: 0; }
-.profile-name {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--ink-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.profile-email {
-  font-size: 0.8rem;
-  color: var(--ink-4);
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.profile-field {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--paper-deep);
-}
-.profile-field:last-child { border-bottom: none; }
-.profile-field-label {
-  font-size: 0.78rem;
-  color: var(--ink-3);
-  font-weight: 600;
-  flex-shrink: 0;
-}
-.profile-field-value {
-  font-size: 0.85rem;
-  color: var(--ink-1);
-  text-align: right;
-}
+/* ── Profile page ────────────────────────────────────────────────────────────
+   The profile page is now a React MUI island — see
+   src/react/pages/ProfilePage.tsx. The .profile-tab / .profile-inner /
+   .profile-card / .profile-identity* / .profile-name / .profile-email /
+   .profile-field* / .profile-section-title / .profile-card-header /
+   .profile-back-btn / .profile-save-btn / .profile-cancel-btn /
+   .profile-edit-actions / .profile-error / .profile-loading /
+   .profile-action-* / .profile-avatar-* / .photo-preview-* /
+   .photo-pending-badge / .photo-upload-prompt rules that used to live
+   here are gone. The remaining .profile-level-* / .profile-edit-btn /
+   .profile-input / .profile-integration-* rules below are kept for
+   admin / other surfaces. */
 .profile-level-badge {
   font-size: 0.72rem;
   font-weight: 700;
@@ -3077,46 +2982,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   transition: border-color 0.15s;
 }
 .profile-input:focus { border-color: var(--orchid); }
-.profile-edit-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 14px;
-  justify-content: flex-end;
-}
-.profile-save-btn {
-  background: var(--plum);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 8px 16px;
-  font-size: .88rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.profile-save-btn:hover { background: #3a0a6e; }
-.profile-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.profile-cancel-btn {
-  background: var(--paper);
-  color: var(--ink-2);
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-md);
-  padding: 8px 16px;
-  font-size: .88rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-}
-.profile-error {
-  font-size: 0.8rem;
-  color: #b91c1c;
-  background: #fef2f2;
-  border: 1px solid #fca5a5;
-  border-radius: var(--radius-md);
-  padding: 6px 10px;
-  margin-top: 10px;
-}
 .profile-integration-row {
   display: flex;
   align-items: center;
@@ -3151,38 +3016,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .profile-int-action:hover { color: var(--orchid-deep); }
 .profile-int-connect { color: #16a34a; }
 .profile-int-connect:hover { color: #15803d; }
-.profile-action-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--paper-deep);
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  text-decoration: none;
-  transition: color 0.15s;
-}
-.profile-action-row:last-child { border-bottom: none; }
-.profile-action-admin { color: var(--orchid); }
-.profile-action-admin:hover { color: var(--orchid-deep); }
-.profile-action-signout { color: #dc2626; }
-.profile-action-signout:hover { color: #b91c1c; }
-.profile-back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: none;
-  border: none;
-  padding: 0;
-  margin-bottom: 14px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  font-family: inherit;
-  color: var(--orchid);
-  cursor: pointer;
-}
-.profile-back-btn:hover { color: var(--orchid-deep); }
 
 
 /* ── Skip link ───────────────────────────────────────────────────────────────── */
@@ -3361,63 +3194,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .sales-goto-customers-btn:hover { background: #3d0f7a; }
 #stage-filter        { font-size: 13px; }
-
-/* ── Profile photo upload ──────────────────────────────────────────────────── */
-.profile-avatar-wrap {
-  position: relative;
-  flex-shrink: 0;
-}
-.profile-avatar-change-btn {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--plum);
-  color: #fff;
-  border: 2px solid var(--paper);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  transition: background 0.15s;
-}
-.profile-avatar-change-btn:hover { background: var(--orchid); }
-.photo-pending-badge {
-  display: inline-block;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: #b45309;
-  background: #fef3c7;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  margin-top: 5px;
-}
-.photo-upload-prompt {
-  display: block;
-  font-size: 0.775rem;
-  color: var(--ink-4);
-  margin-top: 5px;
-  line-height: 1.4;
-}
-.photo-preview-section {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--paper-deep);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-.photo-preview-img {
-  width: 110px;
-  height: 110px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid var(--stone);
-}
 
 /* ── Admin photo approval ───────────────────────────────────────────────────── */
 .photo-approval-grid {
