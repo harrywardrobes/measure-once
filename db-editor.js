@@ -479,13 +479,14 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
 
       const setSql = setCols.map((n, i) => `${quoteIdent(n)} = $${i + 1}`).join(', ');
       const where = pkWhereClause(table, setCols.length + 1);
+      const whereBefore = pkWhereClause(table); // starts at $1 — for the SELECT below
       const params = [...setVals, ...pkValues];
 
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
         const beforeR = await client.query(
-          `SELECT * FROM ${quoteIdent(table)} WHERE ${where.sql} LIMIT 1`,
+          `SELECT * FROM ${quoteIdent(table)} WHERE ${whereBefore.sql} LIMIT 1`,
           pkValues
         );
         if (!beforeR.rows.length) {
