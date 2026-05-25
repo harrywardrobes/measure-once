@@ -12,9 +12,16 @@ import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import Checkbox from '@mui/material/Checkbox';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import FormControl from '@mui/material/FormControl';
+import FormLabel from '@mui/material/FormLabel';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import Chip from '@mui/material/Chip';
+import Badge from '@mui/material/Badge';
+import MailIcon from '@mui/icons-material/Mail';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 import Avatar from '@mui/material/Avatar';
 
 import Table from '@mui/material/Table';
@@ -80,7 +87,11 @@ import AttachFileIcon from '@mui/icons-material/AttachFile';
 import DescriptionIcon from '@mui/icons-material/Description';
 import ImageIcon from '@mui/icons-material/Image';
 
+import { useTheme } from '@mui/material/styles';
+
 import { ComponentShowcase } from '../components/mui/ComponentShowcase';
+import { Pill } from '../components/Pill';
+import { BRAND_COLORS, STAGE_COLORS, RADIUS } from '../theme';
 
 /**
  * <DesignSystemPage/> — MUI-first docs showcase of the components we
@@ -94,8 +105,266 @@ import { ComponentShowcase } from '../components/mui/ComponentShowcase';
  * paste-ready — this page is a recipe book, not exhaustive API docs.
  */
 
-const CATEGORIES = ['Inputs', 'Data Display', 'Feedback', 'Navigation', 'Surfaces', 'Layout', 'Icons'] as const;
+const CATEGORIES = ['Tokens', 'Inputs', 'Data Display', 'Feedback', 'Navigation', 'Surfaces', 'Layout', 'Icons'] as const;
 type Category = typeof CATEGORIES[number];
+
+// ── Token card helpers ───────────────────────────────────────────────────
+
+function CodeRef({ children }: { children: React.ReactNode }) {
+  return (
+    <Box
+      component="code"
+      sx={{
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        fontSize: 11.5,
+        bgcolor: 'grey.100',
+        color: 'text.primary',
+        px: 0.75,
+        py: 0.25,
+        borderRadius: 0.5,
+        border: '1px solid',
+        borderColor: 'divider',
+        wordBreak: 'break-all',
+      }}
+    >
+      {children}
+    </Box>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <>
+      <Tooltip title={copied ? 'Copied' : 'Copy'}>
+        <IconButton
+          size="small"
+          onClick={async () => {
+            try { await navigator.clipboard.writeText(text); setCopied(true); } catch { /* ignore */ }
+          }}
+          aria-label={`Copy ${text}`}
+        >
+          <ContentCopyIcon fontSize="inherit" />
+        </IconButton>
+      </Tooltip>
+      <Snackbar
+        open={copied}
+        autoHideDuration={1200}
+        onClose={() => setCopied(false)}
+        message="Copied to clipboard"
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
+    </>
+  );
+}
+
+interface SwatchCardProps {
+  name: string;
+  hex: string;
+  themePath: string;
+  cssVar: string;
+}
+
+function SwatchCard({ name, hex, themePath, cssVar }: SwatchCardProps) {
+  return (
+    <Paper variant="outlined" sx={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ height: 72, bgcolor: hex, borderBottom: '1px solid', borderColor: 'divider' }} />
+      <Box sx={{ p: 1.25, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{name}</Typography>
+          <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace', color: 'text.secondary' }}>
+            {hex.toUpperCase()}
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <CodeRef>{themePath}</CodeRef>
+          <CopyButton text={themePath} />
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <CodeRef>var({cssVar})</CodeRef>
+          <CopyButton text={`var(${cssVar})`} />
+        </Box>
+      </Box>
+    </Paper>
+  );
+}
+
+function TokenCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Paper variant="outlined" sx={{ p: 2.5, mb: 2 }}>
+      <Typography variant="h6" component="h3" sx={{ fontWeight: 700, mb: 1.5 }}>{title}</Typography>
+      {children}
+    </Paper>
+  );
+}
+
+// ── Token data ──────────────────────────────────────────────────────────
+
+const BRAND_SWATCHES: SwatchCardProps[] = [
+  { name: 'paper',       hex: BRAND_COLORS.paper,      themePath: 'palette.brand.paper',      cssVar: '--paper' },
+  { name: 'paperDeep',   hex: BRAND_COLORS.paperDeep,  themePath: 'palette.brand.paperDeep',  cssVar: '--paper-deep' },
+  { name: 'chalk',       hex: BRAND_COLORS.chalk,      themePath: 'palette.brand.chalk',      cssVar: '--chalk' },
+  { name: 'stone',       hex: BRAND_COLORS.stone,      themePath: 'palette.brand.stone',      cssVar: '--stone' },
+  { name: 'stoneLight',  hex: BRAND_COLORS.stoneLight, themePath: 'palette.brand.stoneLight', cssVar: '--stone-light' },
+  { name: 'stoneSoft',   hex: BRAND_COLORS.stoneSoft,  themePath: 'palette.brand.stoneSoft',  cssVar: '--stone-soft' },
+  { name: 'stoneDeep',   hex: BRAND_COLORS.stoneDeep,  themePath: 'palette.brand.stoneDeep',  cssVar: '--stone-deep' },
+  { name: 'orchid',      hex: BRAND_COLORS.orchid,     themePath: 'palette.brand.orchid',     cssVar: '--orchid' },
+  { name: 'orchidDeep',  hex: BRAND_COLORS.orchidDeep, themePath: 'palette.brand.orchidDeep', cssVar: '--orchid-deep' },
+  { name: 'orchidSoft',  hex: BRAND_COLORS.orchidSoft, themePath: 'palette.brand.orchidSoft', cssVar: '--orchid-soft' },
+  { name: 'orchidTint',  hex: BRAND_COLORS.orchidTint, themePath: 'palette.brand.orchidTint', cssVar: '--orchid-tint' },
+  { name: 'plum',        hex: BRAND_COLORS.plum,       themePath: 'palette.brand.plum',       cssVar: '--plum' },
+  { name: 'walnut',      hex: BRAND_COLORS.walnut,     themePath: 'palette.brand.walnut',     cssVar: '--walnut' },
+  { name: 'ink1',        hex: BRAND_COLORS.ink1,       themePath: 'palette.brand.ink1',       cssVar: '--ink-1' },
+  { name: 'ink2',        hex: BRAND_COLORS.ink2,       themePath: 'palette.brand.ink2',       cssVar: '--ink-2' },
+  { name: 'ink3',        hex: BRAND_COLORS.ink3,       themePath: 'palette.brand.ink3',       cssVar: '--ink-3' },
+  { name: 'ink4',        hex: BRAND_COLORS.ink4,       themePath: 'palette.brand.ink4',       cssVar: '--ink-4' },
+];
+
+const SPACING_STEPS = [0.5, 1, 1.5, 2, 3, 4, 6] as const;
+
+const RADIUS_ENTRIES: Array<{ key: keyof typeof RADIUS; cssVar: string }> = [
+  { key: 'xs',   cssVar: '--radius-xs' },
+  { key: 'sm',   cssVar: '--radius-sm' },
+  { key: 'md',   cssVar: '--radius-md' },
+  { key: 'lg',   cssVar: '--radius-lg' },
+  { key: 'xl',   cssVar: '--radius-xl' },
+  { key: '2xl',  cssVar: '--radius-2xl' },
+  { key: '3xl',  cssVar: '--radius-3xl' },
+  { key: 'pill', cssVar: '--radius-pill' },
+];
+
+const TYPOGRAPHY_VARIANTS = [
+  'h1','h2','h3','h4','h5','h6',
+  'subtitle1','subtitle2',
+  'body1','body2',
+  'button','caption','overline',
+] as const;
+
+function TokensTab() {
+  const theme = useTheme();
+  return (
+    <>
+      <TokenCard title="Brand colours">
+        <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+          The neutral paper / stone / ink scales and the orchid / plum / walnut
+          accents. Reference via <CodeRef>theme.palette.brand.&lt;name&gt;</CodeRef> in
+          MUI components, or <CodeRef>var(--name)</CodeRef> in legacy CSS.
+        </Typography>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 1.5 }}>
+          {BRAND_SWATCHES.map((s) => <SwatchCard key={s.name} {...s} />)}
+        </Box>
+      </TokenCard>
+
+      <TokenCard title="Stage colours">
+        <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+          Three tokens per stage — solid <code>bg</code>, tinted <code>light</code>,
+          dark <code>text</code> — used on lead-status pills, stage badges, and
+          the bottom nav. Reference via <CodeRef>theme.palette.stage.&lt;key&gt;.&lt;bg|light|text&gt;</CodeRef>
+          {' '}or <CodeRef>var(--stage-&lt;key&gt;-&lt;bg|light|text&gt;)</CodeRef>.
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {Object.entries(STAGE_COLORS).map(([key, c]) => (
+            <Paper key={key} variant="outlined" sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+              <Box sx={{ minWidth: 140 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, textTransform: 'capitalize' }}>{key}</Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'ui-monospace, monospace' }}>
+                  palette.stage.{key}
+                </Typography>
+              </Box>
+              <Chip
+                size="small"
+                label="Sample pill"
+                sx={{ bgcolor: c.light, color: c.text, fontWeight: 600 }}
+              />
+              {(['bg','light','text'] as const).map((slot) => (
+                <Box key={slot} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <Box sx={{ width: 22, height: 22, bgcolor: c[slot], border: '1px solid', borderColor: 'divider', borderRadius: 0.5 }} />
+                  <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                    <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace' }}>
+                      .{slot} · {c[slot].toUpperCase()}
+                    </Typography>
+                    <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace', color: 'text.secondary' }}>
+                      var(--stage-{key}-{slot})
+                    </Typography>
+                  </Box>
+                </Box>
+              ))}
+            </Paper>
+          ))}
+        </Box>
+      </TokenCard>
+
+      <TokenCard title="Typography">
+        <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+          Every MUI typography variant, themed with Open Sans. Reference via
+          {' '}<CodeRef>{`<Typography variant="h3">`}</CodeRef>.
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', divider: 1 }}>
+          {TYPOGRAPHY_VARIANTS.map((v) => {
+            const spec = theme.typography[v] as { fontSize?: string | number; fontWeight?: number | string; lineHeight?: number | string };
+            return (
+              <Box key={v} sx={{ py: 1.25, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'baseline', gap: 2, flexWrap: 'wrap' }}>
+                <Box sx={{ minWidth: 140 }}>
+                  <Typography variant="subtitle2" sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{v}</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'ui-monospace, monospace' }}>
+                    {String(spec.fontSize || '')} · w{String(spec.fontWeight || '')} · lh{String(spec.lineHeight || '')}
+                  </Typography>
+                </Box>
+                <Typography variant={v} sx={{ flex: 1, minWidth: 200 }}>
+                  The quick brown fox jumps over the lazy dog
+                </Typography>
+              </Box>
+            );
+          })}
+        </Box>
+      </TokenCard>
+
+      <TokenCard title="Spacing">
+        <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+          MUI's 8&nbsp;px spacing scale. Reference via <CodeRef>theme.spacing(n)</CodeRef> or
+          the shorthand <CodeRef>{`sx={{ p: 2 }}`}</CodeRef> (= 16&nbsp;px).
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {SPACING_STEPS.map((n) => {
+            const px = Number(theme.spacing(n).toString().replace('px',''));
+            return (
+              <Box key={n} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Box sx={{ minWidth: 120 }}>
+                  <CodeRef>theme.spacing({n})</CodeRef>
+                </Box>
+                <Box sx={{ width: px, height: 16, bgcolor: 'primary.main', borderRadius: 0.5 }} />
+                <Typography variant="caption" sx={{ fontFamily: 'ui-monospace, monospace', color: 'text.secondary' }}>
+                  {px}px
+                </Typography>
+              </Box>
+            );
+          })}
+        </Box>
+      </TokenCard>
+
+      <TokenCard title="Radii">
+        <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+          Corner radii used on surfaces and pills. Reference via
+          {' '}<CodeRef>theme.radius.&lt;key&gt;</CodeRef> or <CodeRef>var(--radius-&lt;key&gt;)</CodeRef>.
+        </Typography>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 1.5 }}>
+          {RADIUS_ENTRIES.map(({ key, cssVar }) => {
+            const px = RADIUS[key];
+            return (
+              <Paper key={key} variant="outlined" sx={{ p: 1.5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ width: 80, height: 50, bgcolor: 'primary.light', borderRadius: `${px}px` }} />
+                <Typography variant="subtitle2" sx={{ fontFamily: 'ui-monospace, monospace' }}>radius.{key}</Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'ui-monospace, monospace' }}>
+                  {px}px · {cssVar}
+                </Typography>
+              </Paper>
+            );
+          })}
+        </Box>
+      </TokenCard>
+    </>
+  );
+}
 
 function StorybookLink() {
   const [available, setAvailable] = useState(false);
@@ -248,7 +517,7 @@ function IconShowcase({ name, description, icons }: { name: string; description:
 // --- Page ---------------------------------------------------------------
 
 export function DesignSystemPage() {
-  const [tab, setTab] = useState<Category>('Inputs');
+  const [tab, setTab] = useState<Category>('Tokens');
 
   return (
     <Container maxWidth="lg" sx={{ py: 3 }}>
@@ -272,24 +541,47 @@ export function DesignSystemPage() {
         {CATEGORIES.map((c) => <Tab key={c} value={c} label={c} />)}
       </Tabs>
 
+      {tab === 'Tokens' && <TokensTab />}
+
       {tab === 'Inputs' && (
         <>
           <ComponentShowcase
             name="Button"
-            description="Primary call-to-action. Use `variant=contained` for the main action, `outlined` for secondary, `text` for tertiary."
+            description="Primary call-to-action. Use `variant=contained` for the main action, `outlined` for secondary, `text` for tertiary. Sizes (`small`/`medium`/`large`) and colours (`primary`/`secondary`/`error`/`warning`/`info`/`success`) all shown below."
             demo={
-              <>
-                <Button variant="contained">Save</Button>
-                <Button variant="outlined">Cancel</Button>
-                <Button variant="text">Skip</Button>
-                <Button variant="contained" color="error">Delete</Button>
-                <Button variant="contained" disabled>Disabled</Button>
-              </>
+              <Stack spacing={1.5} sx={{ width: '100%' }}>
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  <Button variant="contained">Contained</Button>
+                  <Button variant="outlined">Outlined</Button>
+                  <Button variant="text">Text</Button>
+                  <Button variant="contained" disabled>Disabled</Button>
+                </Stack>
+                <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
+                  <Button variant="contained" size="small">Small</Button>
+                  <Button variant="contained" size="medium">Medium</Button>
+                  <Button variant="contained" size="large">Large</Button>
+                </Stack>
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  <Button variant="contained" color="primary">Primary</Button>
+                  <Button variant="contained" color="secondary">Secondary</Button>
+                  <Button variant="contained" color="success">Success</Button>
+                  <Button variant="contained" color="warning">Warning</Button>
+                  <Button variant="contained" color="error">Error</Button>
+                  <Button variant="contained" color="info">Info</Button>
+                </Stack>
+              </Stack>
             }
-            code={`<Button variant="contained">Save</Button>
-<Button variant="outlined">Cancel</Button>
-<Button variant="text">Skip</Button>
-<Button variant="contained" color="error">Delete</Button>`}
+            code={`<Button variant="contained">Contained</Button>
+<Button variant="outlined">Outlined</Button>
+<Button variant="text">Text</Button>
+
+<Button size="small">Small</Button>
+<Button size="medium">Medium</Button>
+<Button size="large">Large</Button>
+
+<Button color="primary">Primary</Button>
+<Button color="secondary">Secondary</Button>
+<Button color="error">Error</Button>`}
           />
           <ComponentShowcase
             name="IconButton"
@@ -333,6 +625,28 @@ export function DesignSystemPage() {
   <MenuItem value="design">Design visit</MenuItem>
   <MenuItem value="workshop">Workshop</MenuItem>
 </TextField>`}
+          />
+          <ComponentShowcase
+            name="Radio"
+            description="Mutually exclusive choice. Group with `RadioGroup` so only one can be selected at a time."
+            demo={
+              <FormControl>
+                <FormLabel id="ds-radio-demo">Stage</FormLabel>
+                <RadioGroup row defaultValue="sales" aria-labelledby="ds-radio-demo" name="ds-radio-demo">
+                  <FormControlLabel value="sales" control={<Radio />} label="Sales" />
+                  <FormControlLabel value="survey" control={<Radio />} label="Survey" />
+                  <FormControlLabel value="workshop" control={<Radio />} label="Workshop" />
+                </RadioGroup>
+              </FormControl>
+            }
+            code={`<FormControl>
+  <FormLabel>Stage</FormLabel>
+  <RadioGroup row defaultValue="sales" name="stage">
+    <FormControlLabel value="sales"    control={<Radio />} label="Sales" />
+    <FormControlLabel value="survey"   control={<Radio />} label="Survey" />
+    <FormControlLabel value="workshop" control={<Radio />} label="Workshop" />
+  </RadioGroup>
+</FormControl>`}
           />
           <ComponentShowcase
             name="Checkbox"
@@ -381,6 +695,35 @@ export function DesignSystemPage() {
             }
             code={`<Chip label="Active" color="success" />
 <Chip label="Removable" onDelete={handleDelete} />`}
+          />
+          <ComponentShowcase
+            name="Badge"
+            description="Small count or dot overlay on another element — unread counts, notification dots, status indicators."
+            demo={
+              <>
+                <Badge badgeContent={4} color="primary"><MailIcon /></Badge>
+                <Badge badgeContent={12} color="error"><NotificationsIcon /></Badge>
+                <Badge badgeContent={99} color="warning" max={99}><MailIcon /></Badge>
+                <Badge variant="dot" color="success"><MailIcon /></Badge>
+              </>
+            }
+            code={`<Badge badgeContent={4} color="primary"><MailIcon /></Badge>
+<Badge badgeContent={99} color="error" max={99}><MailIcon /></Badge>
+<Badge variant="dot" color="success"><MailIcon /></Badge>`}
+          />
+          <ComponentShowcase
+            name="Pill (lead status)"
+            description="MUI Chip themed with the stage colours from `theme.palette.stage`. Replaces the legacy `.ui-pill` / `.stage-chip` HTML. Pass `stage` for a stage-coloured pill, or `variant` for a semantic one."
+            demo={
+              <>
+                {Object.keys(STAGE_COLORS).map((k) => (
+                  <Pill key={k} stage={k} label={k.charAt(0).toUpperCase() + k.slice(1)} />
+                ))}
+              </>
+            }
+            code={`<Pill stage="sales" label="Sales" />
+<Pill stage="workshop" label="Workshop" />
+<Pill variant="warn" label="Pending" />`}
           />
           <ComponentShowcase
             name="Avatar"

@@ -14,7 +14,12 @@
   font-display: swap;
 }
 
-/* ── Brand Tokens ────────────────────────────────────────────────────────────── */
+/* ── Brand Tokens ──────────────────────────────────────────────────────────────
+   Canonical source: src/react/theme.ts (BRAND_COLORS, STAGE_COLORS, RADIUS).
+   The hex / radius values below are mirrored from that file so legacy
+   non-React pages stay in lockstep with MUI components. When changing a
+   token, update *both* files.
+─────────────────────────────────────────────────────────────────────────── */
 :root {
   color-scheme: light;
   --header-h: calc(52px + env(safe-area-inset-top));
