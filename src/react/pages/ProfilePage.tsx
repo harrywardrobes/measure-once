@@ -7,6 +7,10 @@ import {
   Card,
   CardContent,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   IconButton,
   LinearProgress,
   Stack,
@@ -445,6 +449,7 @@ function StrengthMeter({ value, userInputs }: { value: string; userInputs: strin
 }
 
 function ChangePasswordCard({ profile }: { profile: Profile }) {
+  const [open, setOpen] = React.useState(false);
   const [current, setCurrent] = React.useState('');
   const [next, setNext] = React.useState('');
   const [confirm, setConfirm] = React.useState('');
@@ -459,9 +464,19 @@ function ChangePasswordCard({ profile }: { profile: Profile }) {
             'measure once', 'measureonce'].filter(Boolean);
   }, [profile.email, profile.first_name, profile.last_name]);
 
+  React.useEffect(() => {
+    if (open) loadZxcvbn();
+  }, [open]);
+
+  const resetFields = () => {
+    setCurrent(''); setNext(''); setConfirm(''); setErrors({});
+  };
+
+  const handleOpen = () => { setSuccess(null); resetFields(); setOpen(true); };
+  const handleClose = () => { if (submitting) return; resetFields(); setOpen(false); };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSuccess(null);
     const next_errors: typeof errors = {};
     if (!current) next_errors.current = 'Enter your current password.';
     if (!next) next_errors.next = 'Enter a new password.';
@@ -479,12 +494,13 @@ function ChangePasswordCard({ profile }: { profile: Profile }) {
       const data = await jpost<{ otherSessionsCleared?: number }>('/api/change-password', {
         currentPassword: current, newPassword: next,
       });
-      setCurrent(''); setNext(''); setConfirm('');
       const cleared = data?.otherSessionsCleared || 0;
       const note = cleared > 0
         ? `Password updated. Signed out of ${cleared} other session${cleared === 1 ? '' : 's'}.`
         : 'Password updated.';
       showToast(note);
+      resetFields();
+      setOpen(false);
       setSuccess(note);
     } catch (err) {
       setErrors({ form: (err as Error).message || 'Could not change password.' });
@@ -494,63 +510,75 @@ function ChangePasswordCard({ profile }: { profile: Profile }) {
   };
 
   return (
-    <Card variant="outlined" sx={{ mb: 1.5 }}>
-      <CardContent>
-        <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-          Change password
-        </Typography>
+    <>
+      <Card variant="outlined" sx={{ mb: 1.5 }}>
+        <CardContent>
+          <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            Password
+          </Typography>
+          {success && <Alert severity="success" sx={{ mb: 1.5 }}>{success}</Alert>}
+          <Button variant="outlined" size="small" onClick={handleOpen}>
+            Change password
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+        <DialogTitle>Change password</DialogTitle>
         <Box component="form" onSubmit={onSubmit} autoComplete="off">
-          <Stack spacing={1.5}>
-            <TextField
-              label="Current password"
-              type="password"
-              size="small"
-              fullWidth
-              autoComplete="current-password"
-              value={current}
-              onChange={(e) => { setCurrent(e.target.value); if (errors.current) setErrors({ ...errors, current: undefined }); }}
-              error={!!errors.current}
-              helperText={errors.current || ' '}
-            />
-            <Box>
+          <DialogContent sx={{ pt: 1 }}>
+            <Stack spacing={1.5}>
               <TextField
-                label="New password"
+                label="Current password"
+                type="password"
+                size="small"
+                fullWidth
+                autoComplete="current-password"
+                value={current}
+                onChange={(e) => { setCurrent(e.target.value); if (errors.current) setErrors({ ...errors, current: undefined }); }}
+                error={!!errors.current}
+                helperText={errors.current || ' '}
+              />
+              <Box>
+                <TextField
+                  label="New password"
+                  type="password"
+                  size="small"
+                  fullWidth
+                  autoComplete="new-password"
+                  value={next}
+                  onChange={(e) => { setNext(e.target.value); if (errors.next) setErrors({ ...errors, next: undefined }); }}
+                  error={!!errors.next}
+                  helperText={errors.next || 'At least 8 characters, with letters and numbers.'}
+                />
+                <StrengthMeter value={next} userInputs={userInputs} />
+              </Box>
+              <TextField
+                label="Confirm new password"
                 type="password"
                 size="small"
                 fullWidth
                 autoComplete="new-password"
-                value={next}
-                onChange={(e) => { setNext(e.target.value); if (errors.next) setErrors({ ...errors, next: undefined }); }}
-                error={!!errors.next}
-                helperText={errors.next || 'At least 8 characters, with letters and numbers.'}
+                value={confirm}
+                onChange={(e) => { setConfirm(e.target.value); if (errors.confirm) setErrors({ ...errors, confirm: undefined }); }}
+                error={!!errors.confirm}
+                helperText={errors.confirm || ' '}
               />
-              <StrengthMeter value={next} userInputs={userInputs} />
-            </Box>
-            <TextField
-              label="Confirm new password"
-              type="password"
-              size="small"
-              fullWidth
-              autoComplete="new-password"
-              value={confirm}
-              onChange={(e) => { setConfirm(e.target.value); if (errors.confirm) setErrors({ ...errors, confirm: undefined }); }}
-              error={!!errors.confirm}
-              helperText={errors.confirm || ' '}
-            />
-            {errors.form && <Alert severity="error">{errors.form}</Alert>}
-            {success && <Alert severity="success">{success}</Alert>}
-            <Box>
-              <Button type="submit" variant="contained" disabled={submitting}>
-                {submitting ? 'Updating…' : 'Update password'}
-              </Button>
-            </Box>
-            <Typography variant="caption" color="text.secondary">
-              You'll be signed out of any other devices.
-            </Typography>
-          </Stack>
+              {errors.form && <Alert severity="error">{errors.form}</Alert>}
+              <Typography variant="caption" color="text.secondary">
+                You'll be signed out of any other devices.
+              </Typography>
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button onClick={handleClose} disabled={submitting}>Cancel</Button>
+            <Button type="submit" variant="contained" disabled={submitting}>
+              {submitting ? 'Updating…' : 'Update password'}
+            </Button>
+          </DialogActions>
         </Box>
-      </CardContent>
-    </Card>
+      </Dialog>
+    </>
   );
 }
 
