@@ -28,6 +28,7 @@ import { AdminTabsBar } from './components/AdminTabsBar';
  *
  * New pages: add a React.lazy() entry here and a matching row in MOUNTS.
  */
+const TradesPage         = React.lazy(() => import('./pages/TradesPage').then(m => ({ default: m.TradesPage })));
 const DesignSystemPage   = React.lazy(() => import('./pages/DesignSystemPage').then(m => ({ default: m.DesignSystemPage })));
 const SearchSettingsPage = React.lazy(() => import('./pages/SearchSettingsPage').then(m => ({ default: m.SearchSettingsPage })));
 const WorkshopSettingsPage = React.lazy(() => import('./pages/WorkshopSettingsPage').then(m => ({ default: m.WorkshopSettingsPage })));
@@ -85,6 +86,7 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'app-header-mount',     render: () => <GlobalHeader /> },
   { id: 'page-heading-mount',   render: () => <PageHeadingPanel /> },
   { id: 'app-bottom-nav-mount', render: () => <BottomNav /> },
+  { id: 'trades-view',          render: () => <TradesPage /> },
   { id: 'home-view',            render: () => <HomePage />,     fallback: <HomePageSkeleton /> },
   { id: 'tab-calendar',         render: () => <CalendarPage />, fallback: <CalendarPageSkeleton /> },
   { id: 'profile-view',         render: () => <ProfilePage />,  fallback: <ProfilePageSkeleton /> },
