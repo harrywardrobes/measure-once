@@ -97,6 +97,8 @@ import {
   CustomersPageSkeleton,
   CalendarPageSkeleton,
   HomePageSkeleton,
+  ProfilePageSkeleton,
+  AdminTeamPageSkeleton,
 } from '../components/PageLoadingSkeleton';
 
 /**
@@ -1174,6 +1176,28 @@ export function DesignSystemPage() {
 
 <Suspense fallback={<HomePageSkeleton />}>
   <HomePage />
+</Suspense>`}
+          />
+
+          <ComponentShowcase
+            name="ProfilePageSkeleton"
+            description="Shape-matched skeleton for the Profile page: back button, identity card with avatar, role card, change-password card, and account-actions card."
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><ProfilePageSkeleton forceVisible /></Box>}
+            code={`import { ProfilePageSkeleton } from '../components/PageLoadingSkeleton';
+
+<Suspense fallback={<ProfilePageSkeleton />}>
+  <ProfilePage />
+</Suspense>`}
+          />
+
+          <ComponentShowcase
+            name="AdminTeamPageSkeleton"
+            description="Shape-matched skeleton for the Admin Team tab: team table card with heading, chip, header row, and four member rows; add-team-member card with fields."
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><AdminTeamPageSkeleton forceVisible /></Box>}
+            code={`import { AdminTeamPageSkeleton } from '../components/PageLoadingSkeleton';
+
+<Suspense fallback={<AdminTeamPageSkeleton />}>
+  <AdminTeamPage />
 </Suspense>`}
           />
         </>
