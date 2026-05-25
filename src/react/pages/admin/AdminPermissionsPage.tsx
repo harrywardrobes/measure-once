@@ -237,6 +237,7 @@ export function AdminPermissionsPage() {
         onClose={() => setNavEditTarget(null)}
         availableItems={NAV.filter(n => !n.adminOnly)}
         currentKeys={editingNavKeys}
+        defaultKeys={defaultNavKeys}
         onSave={(keys) => {
           if (navEditTarget) saveNavConfig(navEditTarget, keys);
           setNavEditTarget(null);

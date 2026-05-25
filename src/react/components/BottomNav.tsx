@@ -349,20 +349,6 @@ export function BottomNav() {
         </List>
       </Drawer>
 
-<<<<<<< HEAD
-      {isManager && (
-        <NavCustomiseDialog
-          open={customiseOpen}
-          onClose={() => setCustomiseOpen(false)}
-          availableItems={visibleNav}
-          currentKeys={resolvedPrimaryKeys}
-          defaultKeys={defaultPrimaryKeys}
-          onSave={handleSavePref}
-        />
-      )}
-
-=======
->>>>>>> bc741d1 (feat: admin-only nav customisation with per-job-role defaults (#968))
       {moreSelected && (
         <Box sx={{ display: 'none' }} aria-hidden="true" data-more-selected />
       )}
