@@ -15,6 +15,7 @@ import { AdminTeamPage } from './pages/admin/AdminTeamPage';
 import { AdminPermissionsPage } from './pages/admin/AdminPermissionsPage';
 import { AdminRequestsPage } from './pages/admin/AdminRequestsPage';
 import { AdminAuditLogPage } from './pages/admin/AdminAuditLogPage';
+import { GlobalHeader } from './components/GlobalHeader';
 
 /**
  * Every React mount goes through `AppThemeProvider` so the shared MUI
@@ -39,6 +40,7 @@ function withTheme(node: React.ReactElement): React.ReactElement {
  * element so `npm run dev:react` still gives a standalone preview.
  */
 const MOUNTS: Array<{ id: string; render: () => React.ReactElement }> = [
+  { id: 'app-header-mount',     render: () => <GlobalHeader /> },
   { id: 'admin-mui-tabs-mount', render: () => <AdminTabsBar /> },
   { id: 'tab-designsystem',     render: () => <DesignSystemPage /> },
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },

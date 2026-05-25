@@ -476,88 +476,27 @@ function openProject(contactId, roomIdx) {
 }
 
 // ── Auth Status ───────────────────────────────────────────────────────────────
-let _pendingCountInterval = null;
-
-function _updatePendingDot() {
-  const el = document.getElementById('auth-status');
-  if (!el) return;
-  fetch('/api/admin/pending-count')
-    .then(r => r.ok ? r.json() : null)
-    .then(data => {
-      const btn = el.querySelector('.header-avatar-btn');
-      if (!btn) return;
-      let dot = btn.querySelector('.header-avatar-dot');
-      if (data && data.count > 0) {
-        if (!dot) {
-          dot = document.createElement('span');
-          dot.className = 'header-avatar-dot';
-          dot.setAttribute('aria-label', 'Pending access requests');
-          btn.appendChild(dot);
-        }
-      } else {
-        if (dot) dot.remove();
-      }
-    })
-    .catch(() => {});
-}
+// The pending-access-request dot is now owned by the React GlobalHeader
+// (src/react/components/GlobalHeader.tsx); it polls /api/admin/pending-count
+// itself when the current user is an admin. This module only publishes
+// state.user changes via the `mo:user` window event below.
 
 function renderAuthStatus() {
-  const el = document.getElementById('auth-status');
-  if (!el) return;
-  const user = state.user;
-  if (!user) { el.innerHTML = ''; return; }
-  const initials = [user.first_name, user.last_name]
-    .filter(Boolean).map(s => s[0]).join('').toUpperCase() || '?';
-  let photoSrc = user.has_custom_photo
-    ? `/api/users/${encodeURIComponent(user.id)}/photo`
-    : (user.profile_image_url || null);
-  if (photoSrc && user.photo_v) {
-    photoSrc += (photoSrc.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(user.photo_v);
-  }
-  const currentPath = window.location.pathname;
-  const adminActive = (currentPath === '/admin' || currentPath.startsWith('/admin/')) ? ' header-icon-btn--active' : '';
-  const profileActive = (currentPath === '/profile' || currentPath.startsWith('/profile/')) ? ' header-icon-btn--active' : '';
-  const adminIconHtml = user.privilege_level === 'admin'
-    ? `<a href="/admin" class="header-icon-btn${adminActive}" aria-label="Admin panel" title="Admin panel">
-         <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0 1 12 2.944a11.955 11.955 0 0 1-8.618 3.04A12.02 12.02 0 0 0 3 9c0 5.591 3.824 10.29 9 11.622C17.176 19.29 21 14.591 21 9c0-1.052-.122-2.077-.354-3.057z"/>
-         </svg>
-       </a>`
-    : '';
-  el.innerHTML = adminIconHtml + (photoSrc
-    ? `<a href="/profile" class="header-avatar-btn${profileActive}" title="Profile" aria-label="Open profile">
-         <img src="${escHtml(photoSrc)}" alt="" class="header-avatar-img">
-       </a>`
-    : `<a href="/profile" class="header-avatar-btn header-avatar-initials${profileActive}" title="Profile" aria-label="Open profile">
-         ${escHtml(initials)}
-       </a>`);
-
-  if (_pendingCountInterval !== null) {
-    clearInterval(_pendingCountInterval);
-    _pendingCountInterval = null;
+  // The top app bar is rendered by the React GlobalHeader island
+  // (src/react/components/GlobalHeader.tsx) mounted into #app-header-mount.
+  // Publish the current user via a window event so the island can update
+  // its admin icon / avatar in lockstep with state.user changes here.
+  const user = state.user || null;
+  window.__moHeaderUser = user;
+  try {
+    window.dispatchEvent(new CustomEvent('mo:user', { detail: user }));
+  } catch {
+    // CustomEvent unavailable (very old browser) — header will fall back
+    // to its own `/api/auth/user` read when it mounts. No-op here.
   }
 
-  if (user.privilege_level === 'admin') {
-    if (document.visibilityState !== 'hidden') {
-      _updatePendingDot();
-      _pendingCountInterval = setInterval(_updatePendingDot, 60_000);
-    }
-    document.removeEventListener('visibilitychange', _onPendingVisibility);
-    document.addEventListener('visibilitychange', _onPendingVisibility);
-    window.addEventListener('beforeunload', () => {
-      clearInterval(_pendingCountInterval);
-      _pendingCountInterval = null;
-      document.removeEventListener('visibilitychange', _onPendingVisibility);
-    }, { once: true });
-  }
-}
-
-function _onPendingVisibility() {
-  if (document.visibilityState === 'hidden') {
-    clearInterval(_pendingCountInterval);
-    _pendingCountInterval = null;
-  } else if (_pendingCountInterval === null) {
-    _updatePendingDot();
-    _pendingCountInterval = setInterval(_updatePendingDot, 60_000);
-  }
+  // Legacy fallback: if a page still ships an #auth-status element, clear
+  // it so stale markup doesn't leak through while the React island mounts.
+  const legacy = document.getElementById('auth-status');
+  if (legacy) legacy.innerHTML = '';
 }

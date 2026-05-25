@@ -152,11 +152,6 @@
 /* Mirrors Tailwind's .hidden so non-Tailwind pages (e.g. admin.html) honour it. */
 .hidden { display: none; }
 
-/* auth-status is injected by chrome.js into every page (including non-Tailwind
-   pages such as admin.html), so its layout must come from style.css rather than
-   Tailwind utility classes. */
-#auth-status { display: flex; align-items: center; gap: 0.375rem; }
-
 body {
   font-family: 'Open Sans', system-ui, sans-serif;
   background: var(--paper);
@@ -167,61 +162,11 @@ body {
 body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
 
 /* ── App Shell ───────────────────────────────────────────────────────────────── */
-.app-header {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  min-height: var(--header-h);
-  background: var(--plum);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  padding-top: env(safe-area-inset-top);
-  z-index: var(--z-header);
-}
-.header-inner {
-  height: 52px;
-  display: flex;
-  align-items: center;
-  padding: 0 12px;
-  gap: 8px;
-}
-@media (min-width: 640px) {
-  .header-inner {
-    max-width: 640px;
-    width: 100%;
-    margin: 0 auto;
-  }
-}
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-}
-.header-logo-link {
-  display: flex;
-  align-items: center;
-  text-decoration: none;
-  flex-shrink: 0;
-}
-.header-page-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
+/* The top app bar (logo, page title, search, customers/admin/avatar icons) is
+   now a React MUI island — see src/react/components/GlobalHeader.tsx mounted
+   into #app-header-mount by chrome.js. The body's --header-h padding-top above
+   reserves space for the fixed MUI AppBar. */
+
 /* ── Command Palette Hint Bar ────────────────────────────────────────────────── */
 .cp-hint-bar {
   height: 44px;
@@ -359,51 +304,9 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
   align-items: center;
   z-index: var(--z-base);
 }
-.header-back-btn {
-  display: flex;
-  align-items: center;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: rgba(255,255,255,0.7);
-  padding: 6px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
-  -webkit-tap-highlight-color: transparent;
-}
-.header-back-btn:hover { background: rgba(255,255,255,0.14); }
-.header-back-btn:active { background: rgba(255,255,255,0.2); }
-.header-icon-btn {
-  display: flex;
-  align-items: center;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: rgba(255,255,255,0.7);
-  padding: 6px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
-  text-decoration: none;
-  -webkit-tap-highlight-color: transparent;
-}
-.header-icon-btn:hover { background: rgba(255,255,255,0.14); }
-.header-icon-btn:active { background: rgba(255,255,255,0.2); }
-.header-icon-btn--active { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.35); color: #fff; }
-.search-kbd-hint {
-  display: none;
-  font-size: 11px;
-  font-weight: 500;
-  opacity: 0.65;
-  letter-spacing: 0.03em;
-  margin-left: 5px;
-  line-height: 1;
-}
-@media (min-width: 640px) {
-  .search-kbd-hint { display: inline; }
-  .header-search-btn { padding: 6px 9px; }
-}
+/* .header-back-btn, .header-icon-btn[--active], .search-kbd-hint were the
+   styles for the legacy chrome.js header. They were retired when the top
+   app bar moved to MUI — see src/react/components/GlobalHeader.tsx. */
 
 /* ── Bottom Navigation ───────────────────────────────────────────────────────── */
 .bottom-nav {
@@ -3202,45 +3105,9 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .inv-msg-ok  { color: #16a34a; }
 .inv-msg-err { color: #dc2626; }
 
-/* ── Header Avatar ───────────────────────────────────────────────────────────── */
-.header-avatar-btn {
-  position: relative;
-  background: rgba(255,255,255,0.15);
-  border: none;
-  border-radius: 50%;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  padding: 0;
-  transition: background 0.15s;
-  flex-shrink: 0;
-  color: #fff;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-}
-.header-avatar-btn:hover { background: rgba(255,255,255,0.25); }
-.header-avatar-dot {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #ef4444;
-  border: 1.5px solid #200842;
-  pointer-events: none;
-}
-.header-avatar-img {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  object-fit: cover;
-  display: block;
-}
+/* The header avatar (.header-avatar-btn / .header-avatar-dot / .header-avatar-img)
+   moved to the React MUI GlobalHeader island — see
+   src/react/components/GlobalHeader.tsx. */
 
 /* ── Profile Tab ─────────────────────────────────────────────────────────────── */
 .profile-tab {
@@ -6393,8 +6260,10 @@ body.dv-signoff-page {
        Search-Settings rows, etc.).
    Z-index values use the ladder tokens defined on :root.
 ─────────────────────────────────────────────────────────────────────────── */
-.admin-page .header-icon-btn,
 .admin-page .cp-hint-bar { display: none !important; }
+/* Hide the search-shortcut hint inside the MUI GlobalHeader on /admin so the
+   admin-tab bar doesn't compete with the search affordance. */
+.admin-page #app-header-mount [aria-label^="Search ("] > span:last-child { display: none; }
 
 .admin-page { min-height: 100vh; }
 
@@ -6596,7 +6465,6 @@ body.dv-signoff-page {
 .admin-page .opt { font-weight: 400; color: var(--ink-4); text-transform: none; letter-spacing: 0; }
 .admin-page .form-actions { margin-top: 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .admin-page .invite-err { font-size: .8rem; color: var(--status-danger-text); }
-.admin-page .app-header .nav-btn { font-size: .8rem; }
 
 /* Offline checklist reminder */
 .admin-page .checklist-box {

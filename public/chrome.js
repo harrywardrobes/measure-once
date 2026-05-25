@@ -18,22 +18,15 @@ window.getShortcut = function (key) {
 (function () {
   const path = location.pathname;
 
-  const PAGE_TITLES = {
+  // PAGE_TITLES is exposed on window so the React GlobalHeader (mounted into
+  // #app-header-mount by /react/main.js) can resolve the current page name
+  // without duplicating the map.
+  window.PAGE_TITLES = {
     '/': 'Home', '/customers': 'Customers', '/sales': 'Sales',
     '/survey': 'Survey', '/projects': 'Projects', '/calendar': 'Calendar',
     '/invoices': 'Invoices', '/trades': 'Trades', '/ideas': 'Ideas',
     '/admin': 'Admin', '/profile': 'Profile',
   };
-  const pageTitle = PAGE_TITLES[path] || (path.startsWith('/customers/') ? 'Customer' : 'Measure Once');
-
-  const HEADER_ICONS = [
-    {
-      href: '/customers',
-      activePrefix: '/customers/',
-      label: 'Customers',
-      svg: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
-    },
-  ];
 
   const NAV = [
     { key: 'home',     href: '/',         label: 'Home',
@@ -116,45 +109,10 @@ window.getShortcut = function (key) {
       </div>
     </div>`;
 
-  const kbdHint = getShortcut('K');
-
-  const backBtn = path !== '/' ? `
-    <button onclick="history.length > 1 ? history.back() : location.href = '/'" class="header-back-btn" aria-label="Go back" title="Back">
-      <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"/>
-      </svg>
-    </button>` : '';
-
-  const header = `
-    <header class="app-header">
-      <div class="header-inner">
-        <div class="header-left">
-          ${backBtn}
-          <a href="/" class="header-logo-link" title="Home" aria-label="Go to home">
-            <img src="/assets/logo-mark-paper.png" alt="Harry Wardrobes" width="26" height="26" style="height:26px;width:auto;">
-          </a>
-          <span class="header-page-title">${pageTitle}</span>
-        </div>
-        <div class="header-right">
-          <button onclick="openCommandPalette()" class="header-icon-btn header-search-btn" aria-label="Search (${kbdHint})" title="Search (${kbdHint})">
-            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
-            </svg>
-            <span class="search-kbd-hint" aria-hidden="true">${kbdHint}</span>
-          </button>
-          ${HEADER_ICONS.map(icon => {
-            const active = path === icon.href || path.startsWith(icon.activePrefix || (icon.href + '/')) ? ' header-icon-btn--active' : '';
-            const adminAttr = icon.adminOnly ? ' data-admin-only' : '';
-            return `<a href="${icon.href}" class="header-icon-btn${active}" aria-label="${icon.label}" title="${icon.label}"${adminAttr}>
-            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="${icon.svg}"/>
-            </svg>
-          </a>`;
-          }).join('')}
-          <div id="auth-status"></div>
-        </div>
-      </div>
-    </header>`;
+  // The top app bar is a React island (src/react/components/GlobalHeader.tsx)
+  // mounted into #app-header-mount by /react/main.js. We still insert the
+  // placeholder synchronously so the layout reserves space immediately.
+  const header = `<div id="app-header-mount"></div>`;
 
   const bottomNav = `
     <nav class="bottom-nav" id="main-content">

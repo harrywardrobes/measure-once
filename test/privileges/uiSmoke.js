@@ -146,31 +146,36 @@ async function runUiSmoke({ users, runId, clients }) {
           'high', hasHeading && /\/admin(\?|#|$)/.test(finalUrl));
 
         // ── Shared chrome assertions ─────────────────────────────────────────
-        // Verify chrome.js rendered its header elements and that the old
-        // bespoke "← Home" / "Sign out" nav buttons are gone.
+        // The top app bar is now a React MUI island
+        // (src/react/components/GlobalHeader.tsx) mounted into
+        // #app-header-mount by /react/main.js. Wait briefly for the React
+        // bundle to mount before inspecting.
+        await page.waitForFunction(
+          () => !!document.querySelector('#app-header-mount header.MuiAppBar-root'),
+          { timeout: 5000 },
+        ).catch(() => {});
         const chromeInfo = await page.evaluate(() => {
-          const header = document.querySelector('.app-header');
-          const titleEl = document.querySelector('.header-page-title');
-          // Legacy bespoke buttons that must not exist now that chrome.js owns the header
+          const mount = document.querySelector('#app-header-mount');
+          const muiHeader = mount?.querySelector('header.MuiAppBar-root');
+          const titleEl = muiHeader?.querySelector('.MuiToolbar-root .MuiTypography-root');
           const legacySignOut = Array.from(document.querySelectorAll('.nav-btn'))
             .find(el => /sign\s*out/i.test(el.textContent));
-          // Auth avatar rendered by core.js into #auth-status
-          const avatarBtn = document.querySelector('#auth-status .header-avatar-btn');
+          const avatarLink = muiHeader?.querySelector('a[href="/profile"]');
           return {
-            hasAppHeader: !!header,
+            hasAppHeader: !!muiHeader,
             pageTitleText: titleEl ? titleEl.textContent.trim() : '',
             hasLegacySignOut: !!legacySignOut,
-            hasAuthAvatar: !!avatarBtn,
+            hasAuthAvatar: !!avatarLink,
           };
         });
 
-        record('admin /admin renders .app-header (shared chrome)',
-          '.app-header element present in DOM',
+        record('admin /admin renders the MUI GlobalHeader island',
+          '#app-header-mount header.MuiAppBar-root element present in DOM',
           `hasAppHeader=${chromeInfo.hasAppHeader}`,
           'high', chromeInfo.hasAppHeader);
 
-        record('admin /admin .header-page-title contains "Admin"',
-          '.header-page-title text includes "Admin"',
+        record('admin /admin GlobalHeader page title contains "Admin"',
+          'header title text includes "Admin"',
           `pageTitleText="${chromeInfo.pageTitleText}"`,
           'high', /Admin/i.test(chromeInfo.pageTitleText));
 
@@ -179,8 +184,8 @@ async function runUiSmoke({ users, runId, clients }) {
           `hasLegacySignOut=${chromeInfo.hasLegacySignOut}`,
           'medium', !chromeInfo.hasLegacySignOut);
 
-        record('admin /admin renders auth avatar (.header-avatar-btn) in #auth-status',
-          '#auth-status .header-avatar-btn element present in DOM',
+        record('admin /admin renders the profile avatar link in the MUI header',
+          '#app-header-mount a[href="/profile"] element present in DOM',
           `hasAuthAvatar=${chromeInfo.hasAuthAvatar}`,
           'high', chromeInfo.hasAuthAvatar);
       } else {

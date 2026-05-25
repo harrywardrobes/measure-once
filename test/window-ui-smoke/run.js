@@ -8,7 +8,8 @@
 // `<script src="/components.js">` tag after `/chrome.js` on every dashboard
 // HTML page. public/chrome.js attaches `window.getShortcut` and
 // `window.handleAccessRequestSubmit`, and synchronously injects the top-nav
-// header (`header.app-header`) plus — on non-admin pages — the bottom-nav
+// header mount (`#app-header-mount`, populated by the React GlobalHeader
+// island in /react/main.js) plus — on non-admin pages — the bottom-nav
 // mount (`nav.bottom-nav#main-content`). If a new page is added in the
 // future and the maintainer forgets either `<script src="/chrome.js">` or
 // `<script src="/components.js">`, anything that calls those helpers /
@@ -18,7 +19,7 @@
 //   - `typeof window.UI === 'object'` with all four helpers
 //   - `typeof window.getShortcut === 'function'`
 //   - `typeof window.handleAccessRequestSubmit === 'function'`
-//   - `header.app-header` exists in the DOM
+//   - `#app-header-mount` exists in the DOM
 //   - `nav.bottom-nav#main-content` exists on every non-admin route
 //
 // Usage:
@@ -184,7 +185,7 @@ async function main() {
             }
             if (typeof window.getShortcut !== 'function') return false;
             if (typeof window.handleAccessRequestSubmit !== 'function') return false;
-            if (!document.querySelector('header.app-header')) return false;
+            if (!document.querySelector('#app-header-mount')) return false;
             if (!adminPage && !document.querySelector('nav.bottom-nav#main-content')) return false;
             return true;
           },
@@ -200,7 +201,7 @@ async function main() {
             uiMissing: [],
             getShortcut: typeof window.getShortcut,
             handleAccessRequestSubmit: typeof window.handleAccessRequestSubmit,
-            hasHeader: !!document.querySelector('header.app-header'),
+            hasHeader: !!document.querySelector('#app-header-mount'),
             hasBottomNav: !!document.querySelector('nav.bottom-nav#main-content'),
           };
           if (out.typeofUI === 'object' && window.UI) {
@@ -241,11 +242,11 @@ async function main() {
 
         const headerOk = observed && observed.hasHeader;
         record(
-          `${route} — header.app-header mounted`,
+          `${route} — #app-header-mount mounted`,
           'present',
           headerOk ? 'present' : 'missing',
           !!headerOk,
-          headerOk ? '' : 'chrome.js did not inject the top-nav header — likely missing <script src="/chrome.js">.',
+          headerOk ? '' : 'chrome.js did not inject the #app-header-mount placeholder — likely missing <script src="/chrome.js">.',
         );
 
         if (!adminPage) {
@@ -320,7 +321,8 @@ async function writeReport(findings) {
     '  `renderEmptyState`, `renderTabBar` (from `public/components.js`)',
     '- `window.getShortcut` is a function (from `public/chrome.js`)',
     '- `window.handleAccessRequestSubmit` is a function (from `public/chrome.js`)',
-    '- `header.app-header` is mounted (injected by `public/chrome.js`)',
+    '- `#app-header-mount` is mounted (injected by `public/chrome.js`,',
+    '  populated by the React GlobalHeader island in `/react/main.js`)',
     '- `nav.bottom-nav#main-content` is mounted on every non-admin route',
     '  (also injected by `public/chrome.js`)',
     '',
