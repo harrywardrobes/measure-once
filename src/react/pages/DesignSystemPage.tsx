@@ -92,6 +92,12 @@ import { useTheme } from '@mui/material/styles';
 import { ComponentShowcase } from '../components/mui/ComponentShowcase';
 import { Pill } from '../components/Pill';
 import { BRAND_COLORS, STAGE_COLORS, RADIUS } from '../theme';
+import {
+  PageLoadingSkeleton,
+  CustomersPageSkeleton,
+  CalendarPageSkeleton,
+  HomePageSkeleton,
+} from '../components/PageLoadingSkeleton';
 
 /**
  * <DesignSystemPage/> — MUI-first docs showcase of the components we
@@ -105,7 +111,7 @@ import { BRAND_COLORS, STAGE_COLORS, RADIUS } from '../theme';
  * paste-ready — this page is a recipe book, not exhaustive API docs.
  */
 
-const CATEGORIES = ['Tokens', 'Inputs', 'Data Display', 'Feedback', 'Navigation', 'Surfaces', 'Layout', 'Icons'] as const;
+const CATEGORIES = ['Tokens', 'Inputs', 'Data Display', 'Feedback', 'Navigation', 'Surfaces', 'Layout', 'Icons', 'Skeletons'] as const;
 type Category = typeof CATEGORIES[number];
 
 // ── Token card helpers ───────────────────────────────────────────────────
@@ -1111,6 +1117,64 @@ export function DesignSystemPage() {
               { Icon: ImageIcon, name: 'Image' },
               { Icon: SettingsIcon, name: 'Settings' },
             ]}
+          />
+        </>
+      )}
+
+      {tab === 'Skeletons' && (
+        <>
+          <Paper variant="outlined" sx={{ p: 2.5, mb: 2 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Loading skeletons are shown via React <code>Suspense</code> fallbacks while a page
+              chunk is fetching. Each variant is shape-matched to its real page so the layout
+              does not jump when content arrives. Import from{' '}
+              <code>components/PageLoadingSkeleton</code>.
+            </Typography>
+          </Paper>
+
+          <ComponentShowcase
+            name="PageLoadingSkeleton"
+            description="Generic fallback — a few grey bars that work for any panel or admin tab."
+            demo={<Box sx={{ width: '100%' }}><PageLoadingSkeleton /></Box>}
+            code={`import { PageLoadingSkeleton } from '../components/PageLoadingSkeleton';
+
+// Inside a Suspense boundary:
+<Suspense fallback={<PageLoadingSkeleton />}>
+  <LazyAdminTab />
+</Suspense>`}
+          />
+
+          <ComponentShowcase
+            name="CustomersPageSkeleton"
+            description="Shape-matched skeleton for the Customers list: stage filter tabs, search + dropdowns, four customer card outlines, and a pagination row."
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><CustomersPageSkeleton /></Box>}
+            code={`import { CustomersPageSkeleton } from '../components/PageLoadingSkeleton';
+
+<Suspense fallback={<CustomersPageSkeleton />}>
+  <CustomersPage />
+</Suspense>`}
+          />
+
+          <ComponentShowcase
+            name="CalendarPageSkeleton"
+            description="Shape-matched skeleton for the Calendar: toolbar with nav buttons, two mini month grids, and three agenda day rows with event cards."
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><CalendarPageSkeleton /></Box>}
+            code={`import { CalendarPageSkeleton } from '../components/PageLoadingSkeleton';
+
+<Suspense fallback={<CalendarPageSkeleton />}>
+  <CalendarPage />
+</Suspense>`}
+          />
+
+          <ComponentShowcase
+            name="HomePageSkeleton"
+            description="Shape-matched skeleton for the Home page: big date header, My Tasks section, Upcoming section, and Active Projects section."
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><HomePageSkeleton /></Box>}
+            code={`import { HomePageSkeleton } from '../components/PageLoadingSkeleton';
+
+<Suspense fallback={<HomePageSkeleton />}>
+  <HomePage />
+</Suspense>`}
           />
         </>
       )}
