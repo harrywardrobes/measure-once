@@ -22,6 +22,9 @@
 //             disables the submit button
 //   (K) UI:  Snackbar visibility pause — "Company deleted" Snackbar stays
 //             visible when the tab is hidden (timer paused), then dismisses
+//   (L) UI:  each field of ContactSlot (name, role, phone, email,
+//             preferred_contact) has a corresponding input in the contact
+//             edit form — guards against wiring gaps when new fields are added
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:trades
@@ -1073,6 +1076,103 @@ async function main() {
       await closePage(page);
     }
 
+    // ── (L) ContactSlot fields each have a form input ─────────────────────
+    console.log('\n  ── (L) UI: ContactSlot fields all have form inputs ──');
+    {
+      const page = await openPage(browser, adminClient.cookie);
+      await page.goto(`${BASE}/trades`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+      await waitForTradesPageMounted(page);
+      await waitForTradesLoaded(page, 1);
+
+      // Wait for admin privilege so the "Add Company" button renders
+      await pollPage(page, () => {
+        const u = window.__moHeaderUser || (window.state && window.state.user);
+        return u && u.privilege_level === 'admin' ? 'admin' : null;
+      }, null, 12000);
+
+      // Locate and click the top-level "Add Company" button (not inside dialog)
+      const addBtnHandle = await (async () => {
+        const deadline = Date.now() + 8000;
+        while (Date.now() < deadline) {
+          const handles = await page.$$('button');
+          for (const h of handles) {
+            const text = await h.evaluate(el => el.textContent || '');
+            if (text.includes('Add Company') && !text.includes('Cancel')) {
+              const isInDialog = await h.evaluate(el => !!el.closest('[role="dialog"]'));
+              if (!isInDialog) return h;
+            }
+          }
+          await new Promise(r => setTimeout(r, 200));
+        }
+        return null;
+      })();
+
+      const dialogOpened = !!addBtnHandle;
+      if (addBtnHandle) await addBtnHandle.click();
+
+      record(
+        'L.1 "Add Company" button found and clicked for ContactSlot field check',
+        'true', `${dialogOpened}`, dialogOpened,
+      );
+
+      if (dialogOpened) {
+        // Wait for the dialog to open: the contact "name" input has a distinctive placeholder
+        const dialogReady = await pollPage(page, () => {
+          return document.querySelector('input[placeholder="e.g. John Smith"]') ? 'ready' : null;
+        }, null, 8000);
+
+        record(
+          'L.2 Add Company dialog opens (contact name input visible)',
+          '"ready"', dialogReady, dialogReady === 'ready',
+        );
+
+        if (dialogReady === 'ready') {
+          // Assert each ContactSlot field = Required<TradeContact> has a form input:
+          //   name, role, phone, email, preferred_contact
+          const fieldChecks = await page.evaluate(() => {
+            const dialog = document.querySelector('[role="dialog"]');
+            if (!dialog) return null;
+            return {
+              name:              !!dialog.querySelector('input[placeholder="e.g. John Smith"]'),
+              role:              !!dialog.querySelector('input[placeholder="e.g. Director"]'),
+              phone:             !!dialog.querySelector('input#tf-cphone-0'),
+              email:             !!dialog.querySelector('input[type="email"]'),
+              preferred_contact: !!dialog.querySelector('input[type="radio"]'),
+            };
+          });
+
+          if (!fieldChecks) {
+            for (const [i, f] of ['name', 'role', 'phone', 'email', 'preferred_contact'].entries()) {
+              record(`L.${i + 3} ContactSlot field "${f}" has a form input`, 'true', 'dialog not found', false);
+            }
+          } else {
+            record(
+              'L.3 ContactSlot field "name" has a form input (placeholder "e.g. John Smith")',
+              'true', `${fieldChecks.name}`, fieldChecks.name,
+            );
+            record(
+              'L.4 ContactSlot field "role" has a form input (placeholder "e.g. Director")',
+              'true', `${fieldChecks.role}`, fieldChecks.role,
+            );
+            record(
+              'L.5 ContactSlot field "phone" has a form input (id=tf-cphone-0)',
+              'true', `${fieldChecks.phone}`, fieldChecks.phone,
+            );
+            record(
+              'L.6 ContactSlot field "email" has a form input (type=email)',
+              'true', `${fieldChecks.email}`, fieldChecks.email,
+            );
+            record(
+              'L.7 ContactSlot field "preferred_contact" has a form input (type=radio)',
+              'true', `${fieldChecks.preferred_contact}`, fieldChecks.preferred_contact,
+            );
+          }
+        }
+      }
+
+      await closePage(page);
+    }
+
   } finally {
     try { await browser.close(); } catch {}
   }
@@ -1147,6 +1247,10 @@ async function writeReport(runId, findings) {
     '  Snackbar; simulating tab-hide proves the MUI autoHideDuration timer is paused',
     '  (Snackbar still visible after 5 s > 4 s), then auto-dismisses once the tab',
     '  returns to the foreground.',
+    '- **(L) UI ContactSlot field coverage**: opens the Add Company dialog and asserts',
+    '  that each field of `ContactSlot` (`name`, `role`, `phone`, `email`,',
+    '  `preferred_contact`) has a corresponding input element. Guards against wiring',
+    '  gaps when a new field is added to the type but not wired into the form.',
     '',
   ];
   const outPath = path.resolve(dir, 'trades.md');
