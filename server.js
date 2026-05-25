@@ -625,8 +625,7 @@ app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireMan
 });
 
 app.get('/api/localdata/all', isAuthenticated, async (req, res) => {
-  try {
-    const { contacts } = await getSharedContactsCache();
+  function buildRoomMap(contacts) {
     const result = {};
     for (const contact of contacts) {
       const roomsJson = contact.properties?.measure_once_rooms;
@@ -642,8 +641,19 @@ app.get('/api/localdata/all', isAuthenticated, async (req, res) => {
         }
       } catch {}
     }
-    res.json(result);
+    return result;
+  }
+
+  try {
+    const { contacts } = await getSharedContactsCache();
+    res.json(buildRoomMap(contacts));
   } catch {
+    // getSharedContactsCache threw — no usable stale snapshot within the cap.
+    // Fall back to _allContactsLastGood so room assignments remain visible
+    // during a prolonged HubSpot outage rather than hiding all data.
+    if (_allContactsLastGood) {
+      return res.json(buildRoomMap(_allContactsLastGood.contacts));
+    }
     res.json({});
   }
 });

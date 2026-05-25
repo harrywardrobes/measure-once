@@ -3,9 +3,10 @@
 //
 // Focused integration test confirming that GET /api/contacts-all and
 // GET /api/open-leads recover from a transient HubSpot 429 via
-// hubspotSearchWithRetry, and that contacts-all behaves correctly when all
+// hubspotSearchWithRetry, that contacts-all behaves correctly when all
 // retries are exhausted (both the no-cache error path and the stale-cache
-// fallback path).
+// fallback path), and that GET /api/localdata/all serves stale room data
+// from the catch-block fallback when the stale cap has expired.
 //
 //   (CA) contacts-all retry — GET /api/contacts-all: first call to
 //        /crm/v3/objects/contacts/search returns 429 + Retry-After: 0;
@@ -22,6 +23,13 @@
 //          cached, a sustained HubSpot outage (all retries 429) causes the
 //          endpoint to serve the stale cache with X-Cache-Status: stale
 //          instead of returning an error.
+//
+//   (LD) localdata/all catch-block stale fallback — after _allContactsLastGood
+//        is populated with rooms data and the stale cap has expired (via
+//        ALL_CONTACTS_STALE_MAX_MS_OVERRIDE=1), a sustained HubSpot outage
+//        causes getSharedContactsCache() to throw; the catch block in
+//        GET /api/localdata/all falls back to _allContactsLastGood and returns
+//        the room map instead of {}.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:hubspot-429-retry-contacts
@@ -43,6 +51,27 @@ function record(id, ok, detail) {
 }
 
 // ── Shared response fixtures ──────────────────────────────────────────────────
+
+const CONTACTS_WITH_ROOMS_SUCCESS = {
+  results: [
+    {
+      id: '77',
+      properties: {
+        firstname: 'Room',
+        lastname: 'Contact',
+        email: 'rooms@example.com',
+        phone: '555-0300',
+        hs_lead_status: 'OPEN_DEAL',
+        createdate: '2024-01-01T00:00:00.000Z',
+        hw_test_user: 'true',
+        measure_once_rooms: JSON.stringify([
+          { room: 'Kitchen', stageKey: 'measure', assignedFitterId: null, installStart: null },
+        ]),
+      },
+    },
+  ],
+  paging: null,
+};
 
 const CONTACTS_SEARCH_SUCCESS = {
   results: [
@@ -239,11 +268,21 @@ async function main() {
   const BASE2 = 'http://127.0.0.1:5051';
   const { child: child2, logBuf: logBuf2 } = spawnServer({ extraEnv: { PORT: '5051' } });
 
+  // ── Server 3 (port 5052): localdata/all catch-block stale fallback (LD) ──
+  // ALL_CONTACTS_STALE_MAX_MS_OVERRIDE=1 makes the stale cap expire in 1 ms,
+  // so getSharedContactsCache() throws instead of returning stale contacts.
+  // This exercises the new catch block in GET /api/localdata/all.
+  const BASE3 = 'http://127.0.0.1:5052';
+  const { child: child3, logBuf: logBuf3 } = spawnServer({
+    extraEnv: { PORT: '5052', ALL_CONTACTS_STALE_MAX_MS_OVERRIDE: '1' },
+  });
+
   let exitCode = 1;
 
   const cleanup = async () => {
     try { child1.kill('SIGTERM'); } catch {}
     try { child2.kill('SIGTERM'); } catch {}
+    try { child3.kill('SIGTERM'); } catch {}
     try { await cleanupTestData(pool); } catch {}
     await pool.end().catch(() => {});
     try { mock.server.close(); } catch {}
@@ -252,14 +291,16 @@ async function main() {
   process.on('SIGTERM', () => cleanup().then(() => process.exit(130)));
 
   try {
-    // Both servers start in parallel to save time.
+    // All servers start in parallel to save time.
     await Promise.all([
       harnessWait(),
       waitForServer(BASE2),
+      waitForServer(BASE3),
     ]);
     await resetRateLimitStore(pool);
     console.log(`  test server 1 up at ${BASE}`);
-    console.log(`  test server 2 up at ${BASE2}\n`);
+    console.log(`  test server 2 up at ${BASE2}`);
+    console.log(`  test server 3 up at ${BASE3}\n`);
 
     const client = await login(users.member.email, PASSWORD);
     const cookie = client.cookie;
@@ -432,6 +473,64 @@ async function main() {
       casSearchCalls.length === 4 && casSearchCalls.every(c => c.status === 429),
       `search calls=${casSearchCalls.length} statuses=${casSearchCalls.map(c => c.status).join(',')}`);
 
+    // ── (LD) localdata/all: catch-block stale fallback ────────────────────────
+    // Server 3 has ALL_CONTACTS_STALE_MAX_MS_OVERRIDE=1 so the stale cap
+    // expires in 1 ms.  The sequence is:
+    //   1. Warm _allContactsCache + _allContactsLastGood with rooms data.
+    //   2. Bust the fresh cache so the next request triggers a re-fetch.
+    //   3. Wait 2 ms so _allContactsLastGood is beyond the 1 ms cap.
+    //   4. Set mock to alwaysFail → getSharedContactsCache() throws.
+    //   5. The catch block in /api/localdata/all falls back to
+    //      _allContactsLastGood and returns the room map instead of {}.
+    console.log('\n  [LD] localdata/all: catch-block stale fallback → room map returned');
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint(
+      '/crm/v3/objects/contacts/search',
+      'ok',
+      CONTACTS_WITH_ROOMS_SUCCESS,
+    );
+
+    const ldWarm = await httpGet(BASE3, '/api/contacts-all', cookie);
+    record('LD.1 warm-up request succeeds',
+      ldWarm.status === 200,
+      `status=${ldWarm.status}`);
+    record('LD.2 warm-up returns the rooms contact',
+      ldWarm.json && Array.isArray(ldWarm.json.results) && ldWarm.json.results.length >= 1,
+      `count=${ldWarm.json?.results?.length}`);
+
+    const ldBust = await httpPost(BASE3, '/api/admin/test/bust-contacts-cache', {}, adminCookie);
+    record('LD.3 bust-contacts-cache succeeds',
+      ldBust.status === 200 && ldBust.json?.ok === true,
+      `status=${ldBust.status} body=${ldBust.body.slice(0, 120)}`);
+
+    // Wait long enough for the 1 ms stale cap to expire so
+    // getSharedContactsCache() throws rather than returning stale contacts.
+    await new Promise(r => setTimeout(r, 10));
+
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint(
+      '/crm/v3/objects/contacts/search',
+      'alwaysFail',
+      null,
+    );
+
+    const ld = await httpGet(BASE3, '/api/localdata/all', cookie);
+
+    record('LD.4 endpoint returns 200 (catch-block fallback)',
+      ld.status === 200,
+      `status=${ld.status}`);
+    record('LD.5 response is a non-empty object (not {})',
+      ld.json && typeof ld.json === 'object' && Object.keys(ld.json).length > 0,
+      `keys=${JSON.stringify(Object.keys(ld.json || {}))}`);
+    record('LD.6 rooms contact (id=77) appears in the map',
+      ld.json && Array.isArray(ld.json['77']),
+      `entry=${JSON.stringify(ld.json?.['77'])}`);
+    record('LD.7 room name is Kitchen',
+      ld.json?.['77']?.[0]?.room === 'Kitchen',
+      `room=${ld.json?.['77']?.[0]?.room}`);
+
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
@@ -439,6 +538,7 @@ async function main() {
     console.error('Test crashed:', e);
     console.error(logBuf1.join('').slice(-2000));
     console.error(logBuf2.join('').slice(-2000));
+    console.error(logBuf3.join('').slice(-2000));
   } finally {
     await writeReport(runId);
     await cleanup();
@@ -484,6 +584,12 @@ async function writeReport(runId) {
     '  populates `_allContactsLastGood`, a sustained HubSpot outage (all 4 retries',
     '  returning 429) causes the endpoint to serve the stale contacts list with',
     '  `X-Cache-Status: stale` instead of surfacing an error.',
+    '- **(LD) localdata/all catch-block stale fallback**: with',
+    '  `ALL_CONTACTS_STALE_MAX_MS_OVERRIDE=1` the stale cap expires immediately.',
+    '  After warming `_allContactsLastGood` with rooms data, busting the fresh',
+    '  cache, and switching HubSpot to always-429, `getSharedContactsCache()`',
+    '  throws (cap exceeded). The catch block in `GET /api/localdata/all` falls',
+    '  back to `_allContactsLastGood` and returns the room map instead of `{}`.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
