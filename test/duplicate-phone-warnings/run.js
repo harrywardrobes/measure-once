@@ -595,6 +595,117 @@ async function main() {
       await page.close();
     }
 
+    // ── (TRADES ADD – company-phone) add new company → company-phone duplicate ─
+    {
+      const page = await browser.newPage();
+      await page.setCacheEnabled(false);
+      page.on('pageerror', (e) => console.log('    [trades-add-cophone pageerror]', String(e).slice(0, 200)));
+      await injectSession(page, adminClient.cookie);
+      await page.goto(`${BASE}/trades`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+
+      // Wait for trades to load (_tradeContacts populated by loadTradesContacts).
+      const loaded = await pollPage(page, () => {
+        const list = window._cpGetTradeContacts && window._cpGetTradeContacts();
+        return Array.isArray(list) && list.length >= 2;
+      }, null, 8000);
+      record(
+        'TRADES ADD CO-PHONE: /trades page loads at least the seeded companies',
+        '_cpGetTradeContacts() returns >=2 entries',
+        `loaded=${!!loaded}`,
+        !!loaded,
+      );
+
+      // Open the modal in "Add Company" mode (no id).
+      await page.evaluate(() => { window.openTradesModal(); });
+      const modalOpen = await pollPage(page, () => {
+        const m     = document.getElementById('trades-modal');
+        const input = document.getElementById('tf-company-phone');
+        return !!(m && m.classList.contains('trades-modal-open') && input);
+      }, null, 2000);
+      record(
+        'TRADES ADD CO-PHONE: openTradesModal() opens the modal with #tf-company-phone',
+        '#trades-modal.trades-modal-open and #tf-company-phone present',
+        `ready=${modalOpen}`,
+        modalOpen,
+      );
+
+      // Type Company A's company_phone into the company-phone field.
+      // onTradeCompanyPhoneInput fires via the 'input' event dispatched below.
+      await setNativeInputValue(page, '#tf-company-phone', TRADES_CO_PHONE);
+
+      // Allow the 300ms debounce to resolve.
+      const noticeShownAdd = await pollPage(page, () => {
+        const n = document.getElementById('tf-company-phone-notice');
+        if (!n || n.classList.contains('hidden')) return null;
+        const link = n.querySelector('.trades-phone-notice-link');
+        return {
+          text:   (n.textContent || '').trim(),
+          linkId: link ? link.getAttribute('data-trade-id') : null,
+        };
+      }, null, 3000);
+      const noticeAddOk = !!noticeShownAdd
+        && /phone number is already in use/i.test(noticeShownAdd.text)
+        && new RegExp(TRADES_COMPANY_A.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(noticeShownAdd.text)
+        && String(noticeShownAdd.linkId) === String(tradeA.id);
+      record(
+        'TRADES ADD CO-PHONE: #tf-company-phone-notice shows the duplicate warning naming Company A',
+        `text mentions "${TRADES_COMPANY_A}" and "phone number is already in use", link data-trade-id=${tradeA.id}`,
+        noticeShownAdd
+          ? `text=${JSON.stringify(noticeShownAdd.text.slice(0, 180))} linkId=${noticeShownAdd.linkId}`
+          : 'no notice',
+        noticeAddOk,
+      );
+
+      // Submit button must be disabled while the company-phone duplicate stands.
+      const submitStateAdd = await page.evaluate(() => {
+        const btn = document.getElementById('trades-submit-btn');
+        return btn ? { disabled: btn.disabled, title: btn.title || '' } : null;
+      });
+      record(
+        'TRADES ADD CO-PHONE: #trades-submit-btn is disabled while company-phone duplicate stands',
+        'submit-btn disabled with a phone-conflict title',
+        submitStateAdd
+          ? `disabled=${submitStateAdd.disabled} title=${JSON.stringify(submitStateAdd.title)}`
+          : 'no button',
+        !!(submitStateAdd && submitStateAdd.disabled === true && /phone/i.test(submitStateAdd.title)),
+      );
+
+      // Clear the duplicate number — use a unique value so there is no conflict.
+      await setNativeInputValue(page, '#tf-company-phone', '555-000-6666');
+
+      // Notice must hide and submit button must re-enable.
+      const noticeClearedCo = await pollPage(page, () => {
+        const n = document.getElementById('tf-company-phone-notice');
+        return n ? n.classList.contains('hidden') : true;
+      }, false, 3000);
+      record(
+        'TRADES ADD CO-PHONE: #tf-company-phone-notice hides after duplicate number is cleared',
+        '#tf-company-phone-notice has class "hidden"',
+        noticeClearedCo ? 'notice hidden' : 'notice still visible',
+        noticeClearedCo === true,
+      );
+
+      const submitReenabledCo = await page.evaluate(() => {
+        const btn = document.getElementById('trades-submit-btn');
+        return btn ? !btn.disabled : null;
+      });
+      record(
+        'TRADES ADD CO-PHONE: #trades-submit-btn re-enables after duplicate company-phone is cleared',
+        'submit-btn not disabled',
+        submitReenabledCo === null ? 'no button' : `disabled=${!submitReenabledCo}`,
+        submitReenabledCo === true,
+      );
+
+      // Restore the duplicate before closing so subsequent tests still work.
+      await setNativeInputValue(page, '#tf-company-phone', TRADES_CO_PHONE);
+      await pollPage(page, () => {
+        const n = document.getElementById('tf-company-phone-notice');
+        return n && !n.classList.contains('hidden');
+      }, false, 3000);
+
+      await page.close();
+    }
+
     // ── (TRADES EDIT) edit existing company → contact-phone duplicate ────────
     {
       const page = await browser.newPage();
@@ -920,12 +1031,17 @@ async function writeReport(runId, findings) {
     '  MUI Alert appears, the Add-team-member button disables, and the alert',
     '  action highlights the existing approved-list row',
     '  (`.admin-row-flash`).',
-    '- **(TRADES – Add mode)** Seeds two trade companies via `POST /api/trades`, opens',
+    '- **(TRADES – Add mode, contact-phone)** Seeds two trade companies via `POST /api/trades`, opens',
     '  the Trades modal in Add mode, types the duplicated contact phone into',
     '  `#tf-cphone-0`, and asserts `#tf-cphone-notice-0` shows the warning',
     '  with a link to the existing company, `#trades-submit-btn` disables,',
-    '  and clicking the link re-opens the modal in Edit mode for the original',
-    '  company.',
+    '  clearing the field hides the notice and re-enables submit, and clicking',
+    '  the restored link re-opens the modal in Edit mode for the original company.',
+    '- **(TRADES – Add mode, company-phone)** Opens the Trades modal in Add mode, types',
+    "  Company A's `company_phone` into `#tf-company-phone`, asserts",
+    '  `#tf-company-phone-notice` shows the warning naming Company A,',
+    '  `#trades-submit-btn` is disabled, clearing the field hides the notice',
+    '  and re-enables submit.',
     '- **(TRADES – Edit mode, contact-row)** Opens Company B in Edit mode, types the same',
     '  duplicated phone into its contact-row slot (`#tf-cphone-0`), and',
     '  asserts `#tf-cphone-notice-0` appears naming the existing contact,',
