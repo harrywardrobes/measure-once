@@ -502,7 +502,7 @@ async function fetchAllContactsShared() {
       limit: 100
     };
     if (after) body.after = after;
-    const r = await axios.post(`${HS}/crm/v3/objects/contacts/search`, body, { headers: hsHeaders() });
+    const r = await hubspotSearchWithRetry(body);
     allResults.push(...(r.data.results || []));
     after = r.data.paging?.next?.after;
   } while (after);
@@ -1059,6 +1059,7 @@ app.get('/api/open-leads', async (req, res) => {
         _openLeadsCache = { results: allResults, total: allResults.length, fetchedAt: Date.now() };
         return { ok: true, results: allResults, total: allResults.length };
       } catch (err) {
+        console.error('[open-leads] HubSpot fetch error (status=%s): %s', err.response?.status || 'network', err.message);
         return { ok: false, err };
       } finally {
         setImmediate(() => { _openLeadsInFlight = null; });
