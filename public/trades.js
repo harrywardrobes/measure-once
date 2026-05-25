@@ -27,6 +27,10 @@ window._cpGetTradeContacts = function () { return _tradeContacts; };
 let _tradeDeleteId = null;
 const _tradeEmailDebounce = {};
 const _tradeEmailConflicts = {};
+const _tradePhoneDebounce = {};
+const _tradePhoneConflicts = {};
+let _tradeCompanyPhoneDebounce = null;
+let _tradeCompanyPhoneConflict = null;
 let _tradeTypeFilter = (() => { try { return localStorage.getItem('tradesTypeFilter') || ''; } catch (_) { return ''; } })();
 let _tradeAreaFilter = '';
 let _tradeSearch = '';
@@ -318,7 +322,8 @@ function contactSlotHtml(index, data) {
       <div class="trades-form-row trades-form-row-2">
         <div class="trades-field">
           <label class="trades-label" for="tf-cphone-${index}">Phone number</label>
-          <input class="trades-input" id="tf-cphone-${index}" type="tel" placeholder="e.g. 07700 900123" value="${phone}">
+          <input class="trades-input" id="tf-cphone-${index}" type="tel" placeholder="e.g. 07700 900123" value="${phone}" oninput="onTradePhoneInput(${index})">
+          <div class="trades-phone-notice hidden" id="tf-cphone-notice-${index}" data-slot-phone-notice="${index}" style="margin-top:6px;padding:8px 10px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:12px;line-height:1.4;"></div>
         </div>
         <div class="trades-field">
           <label class="trades-label" for="tf-cemail-${index}">Email address</label>
@@ -389,17 +394,152 @@ function renderTradeEmailNotice(index) {
   }
 }
 
+// ── Duplicate-phone check for company + contact rows ─────────────────────────
+function normalizeTradePhone(s) {
+  return String(s || '').replace(/\D+/g, '');
+}
+
+// Two numbers match if their digit-only forms share the same last 9 digits
+// (UK mobile/landline length). This makes "+44 7700 900123" and "07700 900123"
+// match the same physical number, while skipping anything too short to mean
+// much.
+function phoneKey(s) {
+  const digits = normalizeTradePhone(s);
+  if (digits.length < 7) return '';
+  return digits.length > 9 ? digits.slice(-9) : digits;
+}
+
+function describePhoneMatch(co, label) {
+  const linkLabel = escHtml(co.company_name || 'this company');
+  const safeLabel = escHtml(label);
+  return `<strong>This phone number is already in use</strong> as the ${safeLabel} of <a href="#" class="trades-phone-notice-link" data-trade-id="${escHtml(String(co.id))}" style="color:inherit;text-decoration:underline;font-weight:600">${linkLabel}</a>. Pick a different number or open the existing record.`;
+}
+
+function describeContactPhoneMatch(co, contactName) {
+  const who = contactName ? `${escHtml(contactName)} at ` : '';
+  const linkLabel = escHtml(co.company_name || 'this company');
+  return `<strong>This phone number is already in use</strong> by ${who}<a href="#" class="trades-phone-notice-link" data-trade-id="${escHtml(String(co.id))}" style="color:inherit;text-decoration:underline;font-weight:600">${linkLabel}</a>. Pick a different number or open the existing record.`;
+}
+
+function findTradePhoneConflict(phone) {
+  const needle = phoneKey(phone);
+  if (!needle) return null;
+  const editingId = (document.getElementById('trades-edit-id') || {}).value || '';
+  for (const co of (_tradeContacts || [])) {
+    if (String(co.id) === String(editingId)) continue;
+    if (phoneKey(co.company_phone) === needle) {
+      return { company: co, kind: 'company' };
+    }
+    const contacts = Array.isArray(co.contacts) ? co.contacts : [];
+    for (const c of contacts) {
+      if (phoneKey(c && c.phone) === needle) {
+        return { company: co, kind: 'contact', contactName: (c && c.name) || '' };
+      }
+    }
+  }
+  return null;
+}
+
+function attachPhoneNoticeLink(notice) {
+  const link = notice.querySelector('.trades-phone-notice-link');
+  if (!link) return;
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const id = link.getAttribute('data-trade-id');
+    closeTradesModal();
+    openTradesModal(id);
+  });
+}
+
+function renderTradePhoneNotice(index) {
+  const notice = document.getElementById(`tf-cphone-notice-${index}`);
+  if (!notice) return;
+  const conflict = _tradePhoneConflicts[index];
+  if (!conflict) {
+    notice.classList.add('hidden');
+    notice.innerHTML = '';
+    return;
+  }
+  const co = conflict.company;
+  notice.classList.remove('hidden');
+  notice.innerHTML = conflict.kind === 'company'
+    ? describePhoneMatch(co, 'company phone')
+    : describeContactPhoneMatch(co, conflict.contactName);
+  attachPhoneNoticeLink(notice);
+}
+
+function renderTradeCompanyPhoneNotice() {
+  const notice = document.getElementById('tf-company-phone-notice');
+  if (!notice) return;
+  const conflict = _tradeCompanyPhoneConflict;
+  if (!conflict) {
+    notice.classList.add('hidden');
+    notice.innerHTML = '';
+    return;
+  }
+  const co = conflict.company;
+  notice.classList.remove('hidden');
+  notice.innerHTML = conflict.kind === 'company'
+    ? describePhoneMatch(co, 'company phone')
+    : describeContactPhoneMatch(co, conflict.contactName);
+  attachPhoneNoticeLink(notice);
+}
+
 function updateTradesSubmitDisabled() {
   const btn = document.getElementById('trades-submit-btn');
   if (!btn) return;
-  const hasConflict = Object.values(_tradeEmailConflicts).some(Boolean);
-  if (hasConflict) {
+  const hasEmailConflict = Object.values(_tradeEmailConflicts).some(Boolean);
+  const hasContactPhoneConflict = Object.values(_tradePhoneConflicts).some(Boolean);
+  const hasCompanyPhoneConflict = !!_tradeCompanyPhoneConflict;
+  if (hasEmailConflict) {
     btn.disabled = true;
     btn.title = 'One or more contact emails are already in use';
+  } else if (hasContactPhoneConflict || hasCompanyPhoneConflict) {
+    btn.disabled = true;
+    btn.title = 'One or more phone numbers are already in use';
   } else {
     btn.disabled = false;
     btn.removeAttribute('title');
   }
+}
+
+function onTradePhoneInput(index) {
+  if (_tradePhoneDebounce[index]) clearTimeout(_tradePhoneDebounce[index]);
+  _tradePhoneDebounce[index] = setTimeout(() => {
+    const input = document.getElementById(`tf-cphone-${index}`);
+    if (!input) return;
+    _tradePhoneConflicts[index] = findTradePhoneConflict(input.value);
+    renderTradePhoneNotice(index);
+    updateTradesSubmitDisabled();
+  }, 300);
+}
+window.onTradePhoneInput = onTradePhoneInput;
+
+function onTradeCompanyPhoneInput() {
+  if (_tradeCompanyPhoneDebounce) clearTimeout(_tradeCompanyPhoneDebounce);
+  _tradeCompanyPhoneDebounce = setTimeout(() => {
+    const input = document.getElementById('tf-company-phone');
+    if (!input) return;
+    _tradeCompanyPhoneConflict = findTradePhoneConflict(input.value);
+    renderTradeCompanyPhoneNotice();
+    updateTradesSubmitDisabled();
+  }, 300);
+}
+window.onTradeCompanyPhoneInput = onTradeCompanyPhoneInput;
+
+function recheckAllTradePhones() {
+  Object.keys(_tradePhoneConflicts).forEach(k => delete _tradePhoneConflicts[k]);
+  const slots = document.querySelectorAll('#trades-contacts-list .trades-contact-slot');
+  slots.forEach((_, i) => {
+    const input = document.getElementById(`tf-cphone-${i}`);
+    if (!input) return;
+    _tradePhoneConflicts[i] = findTradePhoneConflict(input.value);
+    renderTradePhoneNotice(i);
+  });
+  const companyInput = document.getElementById('tf-company-phone');
+  _tradeCompanyPhoneConflict = companyInput ? findTradePhoneConflict(companyInput.value) : null;
+  renderTradeCompanyPhoneNotice();
+  updateTradesSubmitDisabled();
 }
 
 function onTradeEmailInput(index) {
@@ -436,6 +576,7 @@ function addContactSlot(data) {
   list.insertAdjacentHTML('beforeend', contactSlotHtml(index, data || {}));
   if (getSlotCount() >= MAX_CONTACTS) btn.style.display = 'none';
   recheckAllTradeEmails();
+  recheckAllTradePhones();
 }
 
 function removeContactSlot(index) {
@@ -454,6 +595,7 @@ function rebuildContactSlots(dataArr) {
   dataArr.slice(0, MAX_CONTACTS).forEach((d, i) => list.insertAdjacentHTML('beforeend', contactSlotHtml(i, d)));
   btn.style.display = getSlotCount() >= MAX_CONTACTS ? 'none' : '';
   recheckAllTradeEmails();
+  recheckAllTradePhones();
 }
 
 function collectContactSlots() {
@@ -556,6 +698,8 @@ function resetTradesForm() {
   document.getElementById('trades-form').reset();
   document.getElementById('trades-edit-id').value = '';
   Object.keys(_tradeEmailConflicts).forEach(k => delete _tradeEmailConflicts[k]);
+  Object.keys(_tradePhoneConflicts).forEach(k => delete _tradePhoneConflicts[k]);
+  _tradeCompanyPhoneConflict = null;
   const submitBtn = document.getElementById('trades-submit-btn');
   if (submitBtn) {
     const isAdmin = (window.state?.user?.privilege_level === 'admin');
@@ -619,6 +763,11 @@ async function saveTradeContact(e) {
 
   if (Object.values(_tradeEmailConflicts).some(Boolean)) {
     showToast('One or more contact emails are already in use — please update them before saving', true);
+    return;
+  }
+
+  if (_tradeCompanyPhoneConflict || Object.values(_tradePhoneConflicts).some(Boolean)) {
+    showToast('One or more phone numbers are already in use — please update them before saving', true);
     return;
   }
 

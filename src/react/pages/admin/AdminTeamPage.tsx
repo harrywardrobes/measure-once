@@ -50,8 +50,30 @@ type DuplicateMatch =
   | { kind: 'allowed'; allowed: Allowed; label: string }
   | { kind: 'request'; request: AccessRequest; label: string };
 
+type PhoneField = 'mobile_number' | 'ec_phone';
+
+type PhoneDuplicateMatch =
+  | { kind: 'user'; user: User; label: string; field: PhoneField; value: string }
+  | { kind: 'allowed'; allowed: Allowed; label: string; field: PhoneField; value: string };
+
 function normalizeEmail(e: string): string {
   return (e || '').trim().toLowerCase();
+}
+
+function phoneDigits(s: string | undefined): string {
+  return String(s || '').replace(/\D+/g, '');
+}
+
+// Match two phone numbers if their digit-only forms share the same last 9
+// digits (UK mobile/landline length). Skip anything too short to be meaningful.
+function phoneKey(s: string | undefined): string {
+  const d = phoneDigits(s);
+  if (d.length < 7) return '';
+  return d.length > 9 ? d.slice(-9) : d;
+}
+
+function phoneFieldLabel(field: PhoneField): string {
+  return field === 'mobile_number' ? 'mobile number' : 'emergency contact phone';
 }
 
 function fullName(u: User): string {
@@ -97,6 +119,8 @@ export function AdminTeamPage() {
   const [inviteErr, setInviteErr] = useState<string | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [debouncedInviteEmail, setDebouncedInviteEmail] = useState('');
+  const [debouncedMobile, setDebouncedMobile] = useState('');
+  const [debouncedEcPhone, setDebouncedEcPhone] = useState('');
   const mountedRef = useRef(true);
 
   async function load() {
@@ -218,6 +242,23 @@ export function AdminTeamPage() {
     return () => clearTimeout(t);
   }, [invite.email]);
 
+  // Debounce the phone fields too.
+  useEffect(() => {
+    const value = invite.mobile_number;
+    const t = setTimeout(() => {
+      if (mountedRef.current) setDebouncedMobile(value);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [invite.mobile_number]);
+
+  useEffect(() => {
+    const value = invite.ec_phone;
+    const t = setTimeout(() => {
+      if (mountedRef.current) setDebouncedEcPhone(value);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [invite.ec_phone]);
+
   const inviteDuplicate: DuplicateMatch | null = useMemo(() => {
     const needle = normalizeEmail(debouncedInviteEmail);
     if (!needle) return null;
@@ -240,6 +281,63 @@ export function AdminTeamPage() {
     }
     return null;
   }, [debouncedInviteEmail, users, allowed, requests]);
+
+  function findPhoneDuplicate(raw: string): PhoneDuplicateMatch | null {
+    const needle = phoneKey(raw);
+    if (!needle) return null;
+    for (const u of users) {
+      const m = u.metadata || {};
+      for (const f of ['mobile_number', 'ec_phone'] as PhoneField[]) {
+        if (phoneKey(m[f]) === needle) {
+          const name = fullName(u) || u.email || '—';
+          return { kind: 'user', user: u, label: name, field: f, value: m[f] || '' };
+        }
+      }
+    }
+    for (const a of allowed) {
+      const m = a.metadata || {};
+      for (const f of ['mobile_number', 'ec_phone'] as PhoneField[]) {
+        if (phoneKey(m[f]) === needle) {
+          const name = [m.first_name, m.last_name].filter(Boolean).join(' ') || a.email;
+          return { kind: 'allowed', allowed: a, label: name, field: f, value: m[f] || '' };
+        }
+      }
+    }
+    return null;
+  }
+
+  const mobileDuplicate: PhoneDuplicateMatch | null = useMemo(
+    () => findPhoneDuplicate(debouncedMobile),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [debouncedMobile, users, allowed],
+  );
+
+  const ecPhoneDuplicate: PhoneDuplicateMatch | null = useMemo(
+    () => findPhoneDuplicate(debouncedEcPhone),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [debouncedEcPhone, users, allowed],
+  );
+
+  function describePhoneDuplicate(match: PhoneDuplicateMatch): { title: string; body: string; cta: string } {
+    const where = phoneFieldLabel(match.field);
+    if (match.kind === 'user') {
+      return {
+        title: 'This phone number is already in use',
+        body: `${match.label} (${match.user.email || '—'}) already has this number as their ${where}.`,
+        cta: 'Open team member',
+      };
+    }
+    return {
+      title: 'This phone number is already in use',
+      body: `${match.label} (${match.allowed.email}) already has this number as their ${where} on the allow-list.`,
+      cta: 'View approved entry',
+    };
+  }
+
+  function viewPhoneDuplicate(match: PhoneDuplicateMatch) {
+    if (match.kind === 'user') openEdit(match.user);
+    else if (match.kind === 'allowed') jumpToAllowedRow(match.allowed.email);
+  }
 
   function jumpToAllowedRow(email: string) {
     const key = normalizeEmail(email);
@@ -292,6 +390,10 @@ export function AdminTeamPage() {
     }
     if (inviteDuplicate) {
       setInviteErr('This email is already in use — see the notice above.');
+      return;
+    }
+    if (mobileDuplicate || ecPhoneDuplicate) {
+      setInviteErr('A phone number is already in use — see the notice above.');
       return;
     }
     setInviteBusy(true);
@@ -440,6 +542,20 @@ export function AdminTeamPage() {
               <TextField fullWidth label="Mobile number" type="tel" value={invite.mobile_number}
                 onChange={(e) => setInvite({ ...invite, mobile_number: e.target.value })}
                 placeholder="+44 7700 900000" inputProps={{ maxLength: 30 }} />
+              {mobileDuplicate && (() => {
+                const d = describePhoneDuplicate(mobileDuplicate);
+                return (
+                  <Alert severity="warning" sx={{ mt: 1 }}
+                    action={
+                      <Button color="inherit" size="small" onClick={() => viewPhoneDuplicate(mobileDuplicate)}>
+                        {d.cta}
+                      </Button>
+                    }>
+                    <AlertTitle>{d.title}</AlertTitle>
+                    {d.body}
+                  </Alert>
+                );
+              })()}
             </Grid>
           </Grid>
 
@@ -459,6 +575,20 @@ export function AdminTeamPage() {
               <TextField fullWidth label="Mobile number" type="tel" value={invite.ec_phone}
                 onChange={(e) => setInvite({ ...invite, ec_phone: e.target.value })}
                 placeholder="+44 7700 900000" inputProps={{ maxLength: 30 }} />
+              {ecPhoneDuplicate && (() => {
+                const d = describePhoneDuplicate(ecPhoneDuplicate);
+                return (
+                  <Alert severity="warning" sx={{ mt: 1 }}
+                    action={
+                      <Button color="inherit" size="small" onClick={() => viewPhoneDuplicate(ecPhoneDuplicate)}>
+                        {d.cta}
+                      </Button>
+                    }>
+                    <AlertTitle>{d.title}</AlertTitle>
+                    {d.body}
+                  </Alert>
+                );
+              })()}
             </Grid>
           </Grid>
 
@@ -508,9 +638,13 @@ export function AdminTeamPage() {
           <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 2 }}>
             <Button
               variant="contained"
-              disabled={inviteBusy || !!inviteDuplicate}
+              disabled={inviteBusy || !!inviteDuplicate || !!mobileDuplicate || !!ecPhoneDuplicate}
               onClick={submitInvite}
-              title={inviteDuplicate ? 'This email is already in use' : undefined}
+              title={
+                inviteDuplicate ? 'This email is already in use'
+                : (mobileDuplicate || ecPhoneDuplicate) ? 'A phone number is already in use'
+                : undefined
+              }
             >
               {inviteBusy ? 'Adding…' : 'Add team member'}
             </Button>

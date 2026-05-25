@@ -103,7 +103,8 @@
         </div>
         <div class="trades-field">
           <label class="trades-label" for="tf-company-phone">Company phone</label>
-          <input class="trades-input" id="tf-company-phone" type="tel" placeholder="e.g. 01244 123456">
+          <input class="trades-input" id="tf-company-phone" type="tel" placeholder="e.g. 01244 123456" oninput="onTradeCompanyPhoneInput()">
+          <div class="trades-phone-notice hidden" id="tf-company-phone-notice" style="margin-top:6px;padding:8px 10px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:12px;line-height:1.4;"></div>
         </div>
       </div>
 
