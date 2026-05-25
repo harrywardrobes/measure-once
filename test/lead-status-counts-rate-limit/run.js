@@ -17,6 +17,11 @@
 //       must set state.leadStatusCountsError, which populateLeadStatusFilter
 //       turns into a .ls-counts-error-notice banner. Dismissing the banner
 //       clears the flag. A subsequent successful load removes the notice.
+//   (E) Pill-bar notice (Puppeteer) — the second rendering path for the same
+//       error: _renderCustomerListImpl in workflow.js inserts
+//       #ls-counts-error-notice-pills when state.leadStatusCountsError is true.
+//       Dismissing it removes the element and clears the flag. A re-render
+//       with the flag cleared must leave the notice absent.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:lead-status-counts-rate-limit
@@ -487,6 +492,143 @@ async function main() {
       }
     }
 
+    // ── (E) Pill-bar notice — Puppeteer browser test ─────────────────────────
+    // Verifies the second rendering path for the counts error: the pill-bar
+    // renderer in workflow.js (_renderCustomerListImpl) inserts an element with
+    // id="ls-counts-error-notice-pills" when state.leadStatusCountsError is true.
+    // Confirms the inline dismiss button removes it and clears the flag, and
+    // that a subsequent renderCustomerList() call with the flag cleared does NOT
+    // re-insert the notice.
+    console.log('\n  [E] Pill-bar counts-error notice (Puppeteer)');
+    if (!puppeteer) {
+      record('E0 puppeteer available', false, 'puppeteer not installed — browser probes skipped');
+    } else {
+      const { findChromium } = require('../shared/find-chromium');
+      const executablePath = findChromium() || undefined;
+      let browserE;
+      try {
+        browserE = await puppeteer.launch({
+          headless: true,
+          executablePath,
+          defaultViewport: { width: 1280, height: 800 },
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        });
+        record('E0 headless chromium launches', true, 'browser started');
+      } catch (e) {
+        record('E0 headless chromium launches', false, `error: ${e.message}`);
+      }
+
+      if (browserE) {
+        let pageE;
+        try {
+          pageE = await browserE.newPage();
+          await pageE.setCacheEnabled(false);
+
+          const kv = parseCookieKV(cookie);
+          if (kv) {
+            const { hostname } = new URL(BASE);
+            await pageE.setCookie({
+              name: kv.name, value: kv.value,
+              domain: hostname, path: '/', httpOnly: true,
+            });
+          }
+
+          // Navigate to /projects so workflow.js + _renderCustomerListImpl load.
+          await pageE.goto(`${BASE}/projects`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+
+          const landedUrl = pageE.url();
+          if (!landedUrl.includes('/projects')) {
+            record('E1 pill-bar notice appears when state.leadStatusCountsError is true', false,
+              `navigated away from /projects to ${landedUrl} — skipping pill-bar probes`);
+            record('E2 notice removed after dismiss click', false, 'skipped');
+            record('E2b state.leadStatusCountsError false after dismiss', false, 'skipped');
+            record('E3 notice absent after re-render with error cleared', false, 'skipped');
+          } else {
+            // Wait for the page's own initialization to settle so a background
+            // loadLeadStatusCounts success doesn't race with our state mutation.
+            await pageE.waitForFunction(
+              () => {
+                try {
+                  return _llscInFlight === null && _llscLastSettledAt !== 0;
+                } catch { return true; }
+              },
+              { timeout: 10000 },
+            ).catch(() => {});
+
+            // Inject #customers-view if not already present.  The /projects
+            // page renders into #projects-view; #customers-view is the element
+            // that _renderCustomerListImpl (workflow.js) writes into.  We seed
+            // it manually — the same way section D seeds #lead-status-filter —
+            // so the pill-bar render path can run without navigating to a
+            // different page.
+            await pageE.evaluate(() => {
+              if (!document.getElementById('customers-view')) {
+                const div = document.createElement('div');
+                div.id = 'customers-view';
+                document.body.appendChild(div);
+              }
+            });
+
+            {
+              // ── E1: set state.leadStatusCountsError → re-render → notice appears
+              // Directly mutate the shared state object and call renderCustomerList()
+              // so the pill-bar renderer (_renderCustomerListImpl) produces the notice
+              // element.  We do NOT go through loadLeadStatusCounts() here — this
+              // probe is specifically about the rendering path, not the fetch path.
+              await pageE.evaluate(() => {
+                if (typeof state !== 'undefined') state.leadStatusCountsError = true;
+                if (typeof renderCustomerList === 'function') renderCustomerList();
+              });
+
+              const noticeEl     = await pageE.$('#ls-counts-error-notice-pills');
+              const errorFlagSet = await pageE.evaluate(
+                () => typeof state !== 'undefined' && state.leadStatusCountsError === true,
+              );
+              record('E1 pill-bar notice appears when state.leadStatusCountsError is true',
+                !!noticeEl && errorFlagSet,
+                `found=${!!noticeEl} errorFlag=${errorFlagSet}`);
+
+              // ── E2: inline dismiss onclick removes the element + clears the flag
+              // The dismiss button uses an inline onclick:
+              //   state.leadStatusCountsError=false;
+              //   document.getElementById('ls-counts-error-notice-pills')?.remove()
+              // so it executes synchronously — we can read the result immediately.
+              const [noticeAfterDismiss, errorStateCleared] = await pageE.evaluate(() => {
+                const btn = document.querySelector('#ls-counts-error-notice-pills .ls-counts-error-dismiss');
+                if (btn) btn.click();
+                return [
+                  !!document.getElementById('ls-counts-error-notice-pills'),
+                  typeof state !== 'undefined' && state.leadStatusCountsError === false,
+                ];
+              });
+              record('E2 notice removed after dismiss click',
+                !noticeAfterDismiss,
+                `present=${noticeAfterDismiss}`);
+              record('E2b state.leadStatusCountsError false after dismiss',
+                errorStateCleared,
+                `cleared=${errorStateCleared}`);
+
+              // ── E3: re-render with error cleared — notice must not reappear
+              await pageE.evaluate(() => {
+                if (typeof state !== 'undefined') state.leadStatusCountsError = false;
+                if (typeof renderCustomerList === 'function') renderCustomerList();
+              });
+
+              const noticeAfterClear = await pageE.$('#ls-counts-error-notice-pills');
+              record('E3 notice absent after re-render with error cleared',
+                !noticeAfterClear,
+                `present=${!!noticeAfterClear}`);
+            }
+          }
+        } catch (e) {
+          record('E browser probe', false, `crashed: ${e.message}`);
+        } finally {
+          if (pageE) await pageE.close().catch(() => {});
+          await browserE.close().catch(() => {});
+        }
+      }
+    }
+
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
@@ -538,6 +680,12 @@ async function writeReport(runId) {
     '  and verifies `.ls-counts-error-notice` appears in the DOM. Clicking the dismiss',
     '  button must remove the notice and set `state.leadStatusCountsError = false`. A',
     '  subsequent successful load must leave the notice absent.',
+    '- **(E) Pill-bar notice (Puppeteer)**: navigates `/projects` and directly sets',
+    '  `state.leadStatusCountsError = true`, then calls `renderCustomerList()` to trigger',
+    '  the pill-bar renderer (`_renderCustomerListImpl` in `workflow.js`). Verifies that',
+    '  `#ls-counts-error-notice-pills` appears in the DOM. Clicking the inline dismiss',
+    '  button must remove the element and set `state.leadStatusCountsError = false`.',
+    '  A subsequent `renderCustomerList()` with the flag cleared must leave the notice absent.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
