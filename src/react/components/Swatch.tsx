@@ -13,7 +13,7 @@ import { Skeleton } from './Skeleton';
  *   - empty:   a muted "—" when the token resolves to an empty string
  *
  * Sizing, radii, borders, and the chip background all come from existing
- * `.ds-swatch*` tokens in `public/style.css`, so this component carries no
+ * `.ds-swatch*` tokens in `public/app-styles.css`, so this component carries no
  * literal colours of its own.
  */
 export interface SwatchProps {

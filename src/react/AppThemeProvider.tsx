@@ -9,7 +9,7 @@ import { theme } from './theme';
  * We deliberately use `ScopedCssBaseline` rather than the global
  * `CssBaseline` because the React island co-exists with legacy vanilla
  * pages (`admin.html`, `customers.html`, …) that depend on their own
- * `public/style.css` baseline. Scoping keeps MUI normalisation contained
+ * `public/app-styles.css` baseline. Scoping keeps MUI normalisation contained
  * to React-mounted subtrees so we don't reset typography or margins on
  * the surrounding page.
  *

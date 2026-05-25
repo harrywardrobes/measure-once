@@ -16,7 +16,7 @@ server serves it as static assets.
 - `AppThemeProvider.tsx` — combines `ThemeProvider` and
   `ScopedCssBaseline`. The baseline is scoped (not global) because the
   legacy vanilla pages around the React island depend on their own
-  `public/style.css` baseline.
+  `public/app-styles.css` baseline.
 - `pages/` — one file per mounted page (e.g. `DesignSystemPage.tsx`).
 - `components/mui/` — thin wrappers around MUI primitives that we re-use
   across pages. Add a wrapper only when we genuinely need shared

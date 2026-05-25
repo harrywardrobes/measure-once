@@ -4,7 +4,7 @@ import React from 'react';
  * <Skeleton/> — React equivalent of `UI.skeletonLine` in `public/components.js`.
  *
  * Renders the same `.skeleton-line` markup so it reuses the existing CSS in
- * `public/style.css`. When the legacy helper is finally retired, this
+ * `public/app-styles.css`. When the legacy helper is finally retired, this
  * component is the drop-in replacement.
  */
 export interface SkeletonProps {

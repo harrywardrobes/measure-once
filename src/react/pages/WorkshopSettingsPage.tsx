@@ -8,7 +8,7 @@ import { WorkshopSettingsList, type WorkshopSetting } from '../components/Worksh
  * Renders the admin Workshop tab (#tab-workshop): a single "Lead Times" card
  * with one editable row per setting from `/api/admin/workshop-settings`.
  * Reuses the existing `.card`, `.field`, `.btn`, and `.admin-msg` classes in
- * `public/style.css`, so all colour / radius / spacing values come from the
+ * `public/app-styles.css`, so all colour / radius / spacing values come from the
  * design token set — no literals live in this file.
  */
 

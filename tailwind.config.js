@@ -4,8 +4,8 @@
  * `public/` AND the React component library under `src/react/`.
  *
  * Every colour / radius / shadow / z-index here resolves to a CSS custom
- * property already defined on `:root` in `public/style.css`, so the two
- * worlds stay in lock-step: rename a token in `style.css` and Tailwind
+ * property already defined on `:root` in `public/app-styles.css`, so the two
+ * worlds stay in lock-step: rename a token in `app-styles.css` and Tailwind
  * utilities pick it up automatically.
  */
 module.exports = {

@@ -8,7 +8,7 @@ import { SearchActionList, type SearchAction } from '../components/SearchActionL
  * Renders the admin Search tab (#tab-search): a hint-placeholder input and a
  * drag-to-reorder list of quick actions with per-row toggles. Reuses the
  * existing `.ss-*`, `.card`, `.btn`, and `.field` classes in
- * `public/style.css`, so all colour / radius / spacing values come from the
+ * `public/app-styles.css`, so all colour / radius / spacing values come from the
  * design token set — no literals live in this file.
  */
 

@@ -6,7 +6,7 @@ import { Button } from './Button';
 /**
  * <WorkshopSettingsList/> — list of editable lead-time rows used by the
  * admin Workshop settings tab. Reuses the existing `.field` / `.btn` CSS
- * in `public/style.css` and the shared CSS custom-properties for colour /
+ * in `public/app-styles.css` and the shared CSS custom-properties for colour /
  * spacing so no literal tokens live here.
  */
 export interface WorkshopSetting {

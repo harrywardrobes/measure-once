@@ -6,7 +6,7 @@ import { EmptyState } from './EmptyState';
 /**
  * <SearchActionList/> — drag-to-reorder + per-row toggle list used by the
  * admin Search settings tab. Reuses the existing `.ss-action-row` /
- * `.ss-toggle` CSS in `public/style.css`, so all colours and radii come
+ * `.ss-toggle` CSS in `public/app-styles.css`, so all colours and radii come
  * from the token set.
  */
 export interface SearchAction {

@@ -4,7 +4,7 @@ import React from 'react';
  * <TabBar/> — React equivalent of `UI.renderTabBar` in `public/components.js`.
  *
  * Renders the same `.ui-tabbar` markup with `.ui-tabbar-btn` buttons and the
- * `.tab-badge` badge span so it reuses the existing CSS in `public/style.css`.
+ * `.tab-badge` badge span so it reuses the existing CSS in `public/app-styles.css`.
  * When the legacy helper is finally retired, this component is the drop-in
  * replacement. Unlike the vanilla helper (which takes a global function name
  * so it can survive an `innerHTML` round-trip), the React version takes a

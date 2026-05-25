@@ -36,7 +36,7 @@ import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
  * Integration points preserved from the previous implementation:
  *
  * - Outer element is `<nav class="bottom-nav" id="main-content">` so
- *   `public/style.css` keeps finding it and the window-ui-smoke test
+ *   `public/app-styles.css` keeps finding it and the window-ui-smoke test
  *   selector (`nav.bottom-nav#main-content`) still matches.
  * - Each rendered action's root element keeps `id="bnav-<key>"` so the
  *   imperative capability gating in `public/core.js` and

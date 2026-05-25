@@ -5,7 +5,7 @@ import React from 'react';
  * `public/components.js`.
  *
  * Renders the same `.ui-empty` markup (with optional `--compact` modifier) so
- * it reuses the existing CSS in `public/style.css`. When the legacy helper is
+ * it reuses the existing CSS in `public/app-styles.css`. When the legacy helper is
  * finally retired, this component is the drop-in replacement.
  */
 export interface EmptyStateProps {

@@ -3,7 +3,7 @@ import React from 'react';
 /**
  * <Toggle/> — React component for the small switch used throughout the admin
  * panel (the `.ss-toggle` markup). Reuses the existing CSS in
- * `public/style.css` so the visuals stay in sync with the design tokens.
+ * `public/app-styles.css` so the visuals stay in sync with the design tokens.
  */
 export interface ToggleProps {
   checked: boolean;

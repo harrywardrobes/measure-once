@@ -4,11 +4,10 @@ import { createTheme, type Theme } from '@mui/material/styles';
  * Shared MUI theme for the React island.
  *
  * This file is the canonical definition of Measure Once's design tokens.
- * The hex values in `public/style.css` `:root` are currently kept in
- * lockstep with the constants below so legacy (non-React) pages stay
- * visually consistent with MUI components. If you change a token here,
- * mirror it manually in the `:root` block of `public/style.css` until
- * style.css is deleted (tracked: task #787).
+ * The hex values in `public/app-styles.css` `:root` are kept in lockstep
+ * with the constants below so legacy (non-React) pages stay visually
+ * consistent with MUI components. If you change a token here, mirror it
+ * manually in the `:root` block of `public/app-styles.css`.
  *
  * The Design System tab on the admin page introspects this object to
  * render its swatches / typography / radius cards, so anything added to
@@ -51,7 +50,7 @@ export const STAGE_COLORS: Record<string, StageColor> = {
   customerservice: { bg: '#475569', light: '#f1f5f9', text: '#1e293b' },
 };
 
-// ── Radius scale (matches --radius-* in public/style.css) ──────────────
+// ── Radius scale (matches --radius-* in public/app-styles.css) ──────────────
 export const RADIUS = {
   xs:   2,
   sm:   4,

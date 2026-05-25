@@ -2,7 +2,7 @@ import React from 'react';
 
 /**
  * <Button/> — React wrapper around the existing `.btn` CSS in
- * `public/style.css`. Variants map directly onto the existing modifier
+ * `public/app-styles.css`. Variants map directly onto the existing modifier
  * classes (`.btn-primary`, `.btn-ghost`, `.btn-approve`) so the rendered
  * markup is interchangeable with hand-rolled `<button class="btn …">`
  * elements during the React port.
