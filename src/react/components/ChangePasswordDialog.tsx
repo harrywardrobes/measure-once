@@ -121,7 +121,19 @@ function StrengthMeter({ value, userInputs }: { value: string; userInputs: strin
     return null;
   }
 
-  const score = r.score as 0 | 1 | 2 | 3 | 4;
+  // zxcvbn guarantees score is 0–4, but clamp defensively here because
+  // an out-of-range value (e.g. undefined from an unexpected zxcvbn build)
+  // makes ((score + 1) / 5) * 100 evaluate to NaN, and MUI v9 LinearProgress
+  // throws a prop-validation error on NaN `value` during React render — after
+  // the try/catch has already exited, so the try/catch cannot catch it.
+  // Clamping to a valid integer ensures LinearProgress always receives a
+  // well-formed number, so the error boundary is only a last-resort backstop
+  // rather than the primary defence.
+  const rawScore = r?.score;
+  const score: 0 | 1 | 2 | 3 | 4 =
+    typeof rawScore === 'number' && rawScore >= 0 && rawScore <= 4
+      ? (rawScore as 0 | 1 | 2 | 3 | 4)
+      : 0;
   const crack = r.crack_times_display?.offline_slow_hashing_1e4_per_second || '';
   const suggestion = score < MIN_SCORE
     ? (r.feedback?.warning || 'Too easy to guess — try a longer or less common password.')
