@@ -450,7 +450,7 @@ function enquiryRowHtml(entry) {
 
   // Filled stage-name pill (clickable for managers when the contact has a real
   // room — roomIdx is undefined for lead-status-only fallback entries).
-  const _editable = canEditPipeline();
+  const _editable = (() => { const p = window.__moHeaderUser?.privilege_level ?? 'member'; return p === 'manager' || p === 'admin'; })();
   const hasRoom   = Number.isInteger(entry.roomIdx);
   // Stage pill is non-interactive — stage is derived from lead status /
   // sub-status, never set manually.

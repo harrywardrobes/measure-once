@@ -185,14 +185,14 @@ const DELETE_REQ = path      => api('DELETE', path);
 // authoritative source in core.js.  All callers run after await bootstrap()
 // so the 'member' fallback fires only during early initialisation.
 //
-// AUDIT (task-857) — remaining vanilla-JS consumers (accepted legacy):
+// AUDIT (task-857, task-861) — remaining vanilla-JS consumers (accepted legacy):
 //   • core.js            isViewerOnly()               — ensurePrefs() early-exit
 //   • customer-detail.js isViewerOnly(), canEditPipeline() — many renderers
 //   • invoices-core.js   isAdminMode()                — edit-section + send-btn
-//   • sales.js           canEditPipeline()            — substage pill affordance
-//   • survey.js          canEditPipeline()            — substage pill affordance
 //   • workflow.js        isViewerOnly(), canEditPipeline() — card renderers,
 //                        picker guards, new-customer modal
+// Ported off canEditPipeline() (task-861): sales.js, survey.js now read
+//   window.__moHeaderUser?.privilege_level directly.
 //
 // React components MUST use usePrivilege() (src/react/hooks/usePrivilege.ts)
 // and MUST NOT call these helpers directly.
