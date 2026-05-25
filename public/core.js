@@ -278,6 +278,7 @@ const NAV_PATH_MAP = {
   '/calendar': 'calendar',
   '/invoices': 'invoices',
   '/ideas': 'ideas',
+  '/trades': 'trades',
 };
 
 function highlightActiveNav() {
@@ -320,19 +321,6 @@ async function bootstrap() {
 
   if (priv === 'viewer') {
     showViewerBanner();
-  }
-
-  // Show the Trades and Ideas nav links for all authenticated users
-  const bnavTrades = document.getElementById('bnav-trades');
-  if (bnavTrades) bnavTrades.style.display = '';
-  const bnavIdeas = document.getElementById('bnav-ideas');
-  if (bnavIdeas) bnavIdeas.style.display = '';
-
-  if (priv === 'manager' || priv === 'admin') {
-    ['bnav-sales', 'bnav-survey', 'bnav-projects', 'bnav-invoices'].forEach(id => {
-      const btn = document.getElementById(id);
-      if (btn) btn.style.display = '';
-    });
   }
 
   try {
