@@ -111,6 +111,7 @@ below except `test:hw-test-user:live`.
 | `test:card-action-handlers` | Admin handler create → cross-tab BC refresh, modal dispatch for bound `.eq-card-action` strips, and substatus-binding-wins-over-label precedence. |
 | `test:duplicate-phone-warnings` | Admin "Add team member" form and Trades modal duplicate-phone alerts (notice copy, disabled submit, jump-to-record link). |
 | `test:lead-status-counts-rate-limit` | Single-flight + stale-cache + retry behaviour of `/api/contacts-lead-status-counts` against a mock HubSpot HTTP server. |
+| `test:phone-directory-customers` | Mock-HubSpot coverage for the customers section of `GET /api/admin/phone-directory`: phone/mobilephone field mapping, two-entry split for contacts with both fields, name-fallback to email, and zero-entry guarantee for contacts with no phone data. |
 | `test:hw-test-user:live` | **Opt-in live HubSpot smoke** for `/api/open-leads` and `/api/contacts-lead-status-counts`. Pre-flights the token; briefly toggles `app_settings.dev_filter_enabled` (restored on exit, may stay OFF on crash). Not in `test:ci`. Requires a HubSpot **private-app token** scoped for CRM contact reads, stored as the `HUBSPOT_TOKEN` secret. |
 
 **Privileges harness behaviour:** strips `TURNSTILE_SECRET_KEY`,

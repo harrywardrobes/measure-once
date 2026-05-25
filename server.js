@@ -491,7 +491,7 @@ let _allContactsLastGood = null;  // { contacts: [...], fetchedAt } — survives
 let _allContactsInflight = null;  // Promise while a scan is running
 
 const ALL_CONTACTS_PROPERTIES = [
-  'firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'hw_lead_substatus',
+  'firstname', 'lastname', 'email', 'phone', 'mobilephone', 'hs_lead_status', 'hw_lead_substatus',
   'address', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate',
   'measure_once_rooms',
   ...(process.env.NODE_ENV !== 'production' ? ['hw_test_user'] : []),
