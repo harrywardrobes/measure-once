@@ -31,6 +31,20 @@
 //        to /crm/v3/objects/contacts/:id returns 429; retry succeeds → endpoint
 //        returns 200 (not 502 HUBSPOT_RATE_LIMIT).
 //
+//   (LD2) localdata PATCH permanent failure — POST /api/contacts/:id/localdata
+//         with PATCH /crm/v3/objects/contacts/:id always returning 500. All 4
+//         retry attempts are exhausted; the inner non-fatal try/catch swallows the
+//         error. The endpoint still returns 200 and does not surface the failure.
+//
+//   (RA1) room-assignments fitter PATCH retry — PATCH /api/contacts/:id/rooms/:roomIdx/fitter:
+//         first PATCH to /crm/v3/objects/contacts/:id returns 429; retry succeeds →
+//         endpoint returns 200.
+//
+//   (RA2) room-assignments fitter PATCH permanent failure — PATCH /api/contacts/:id/rooms/:roomIdx/fitter
+//         with PATCH /crm/v3/objects/contacts/:id always returning 500. All 4 retry
+//         attempts are exhausted; the inner non-fatal try/catch swallows the error.
+//         The endpoint still returns 200 and no uncaught exception surfaces to the client.
+//
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:design-visit-hubspot-retry
 //   PRIVTEST_ALLOW_SHARED_DB=1 npm run test:design-visit-hubspot-retry
@@ -271,8 +285,9 @@ async function main() {
     // Wait for design_visits table (created asynchronously on server boot)
     await waitForTable(pool, 'design_visits');
 
-    const users  = await seedUsers(pool, runId);
-    const client = await login(users.member.email, users.member.password);
+    const users   = await seedUsers(pool, runId);
+    const client  = await login(users.member.email, users.member.password);
+    const manager = await login(users.manager.email, users.manager.password);
 
     const visitId = await seedVisit(pool, runId);
 
@@ -475,6 +490,71 @@ async function main() {
       ld2ContactPatches.every(c => c.status === 500),
       `statuses=${ld2ContactPatches.map(c => c.status).join(',')}`);
 
+    // ── (RA1) room-assignments fitter PATCH retry: PATCH /crm/v3/objects/contacts/:id → 429 retry
+    // PATCH /api/contacts/:id/rooms/:roomIdx/fitter issues a GET (plain axios) to
+    // fetch current rooms, then uses hubspotRequestWithRetry for the PATCH.
+    // Method-specific rules let us fire 429 only on PATCH while GET returns 200.
+    console.log('\n  [RA1] room-assignments fitter PATCH: 429 → retry → success');
+    mock.resetHits();
+    mock.calls.length = 0;
+
+    const RA_ROOMS = JSON.stringify([
+      { room: 'Kitchen', stageKey: 'sales', assignedFitterId: null },
+    ]);
+    mock.configEndpoint('/crm/v3/objects/contacts/', 'ok',
+      { id: CONTACT_ID, properties: { measure_once_rooms: RA_ROOMS } }, 'GET');
+    mock.configEndpoint('/crm/v3/objects/contacts/', 'retryOnce',
+      { id: CONTACT_ID, properties: {} }, 'PATCH');
+
+    const ra1 = await manager.patch(
+      `/api/contacts/${CONTACT_ID}/rooms/0/fitter`, { fitterId: null }
+    );
+
+    const ra1ContactPatches = mock.calls.filter(
+      c => c.url.startsWith('/crm/v3/objects/contacts/') && c.method === 'PATCH'
+    );
+    record('RA1.1 fitter PATCH returns 200',
+      ra1.status === 200,
+      `status=${ra1.status} body=${ra1.text.slice(0, 120)}`);
+    record('RA1.2 contacts PATCH called twice (429 + retry)',
+      ra1ContactPatches.length === 2,
+      `calls=${ra1ContactPatches.length} statuses=${ra1ContactPatches.map(c => c.status).join(',')}`);
+    record('RA1.3 first contacts PATCH was 429',
+      ra1ContactPatches[0]?.status === 429,
+      `first status=${ra1ContactPatches[0]?.status}`);
+    record('RA1.4 second contacts PATCH succeeded (200)',
+      ra1ContactPatches[1]?.status === 200,
+      `second status=${ra1ContactPatches[1]?.status}`);
+
+    // ── (RA2) room-assignments fitter PATCH permanent failure: PATCH always 500
+    // hubspotRequestWithRetry exhausts all maxAttempts (4), then the inner
+    // non-fatal try/catch in the route handler swallows the error. The endpoint
+    // must still return 200 and not surface the failure to the client.
+    console.log('\n  [RA2] room-assignments fitter PATCH: permanent 500 → endpoint still returns 200');
+    mock.resetHits();
+    mock.calls.length = 0;
+
+    mock.configEndpoint('/crm/v3/objects/contacts/', 'ok',
+      { id: CONTACT_ID, properties: { measure_once_rooms: RA_ROOMS } }, 'GET');
+    mock.configEndpoint('/crm/v3/objects/contacts/', 'alwaysFail', null, 'PATCH');
+
+    const ra2 = await manager.patch(
+      `/api/contacts/${CONTACT_ID}/rooms/0/fitter`, { fitterId: null }
+    );
+
+    const ra2ContactPatches = mock.calls.filter(
+      c => c.url.startsWith('/crm/v3/objects/contacts/') && c.method === 'PATCH'
+    );
+    record('RA2.1 fitter PATCH returns 200 despite permanent failure',
+      ra2.status === 200,
+      `status=${ra2.status} body=${ra2.text.slice(0, 120)}`);
+    record('RA2.2 contacts PATCH exhausted all 4 attempts',
+      ra2ContactPatches.length === 4,
+      `calls=${ra2ContactPatches.length} statuses=${ra2ContactPatches.map(c => c.status).join(',')}`);
+    record('RA2.3 all PATCH attempts returned 500',
+      ra2ContactPatches.every(c => c.status === 500),
+      `statuses=${ra2ContactPatches.map(c => c.status).join(',')}`);
+
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
@@ -532,6 +612,13 @@ async function writeReport(runId) {
     '  `PATCH /crm/v3/objects/contacts/:id` returning 429 on the first attempt.',
     '  Recovers via `hubspotRequestWithRetry` and the endpoint returns 200 (not 502).',
     '- **(LD2) localdata PATCH permanent failure**: `POST /api/contacts/:id/localdata`',
+    '  with `PATCH /crm/v3/objects/contacts/:id` always returning 500. All 4 retry',
+    '  attempts are exhausted; the inner non-fatal `try/catch` in the route handler',
+    '  swallows the error. The endpoint still returns 200 and does not surface the failure.',
+    '- **(RA1) room-assignments fitter PATCH retry**: `PATCH /api/contacts/:id/rooms/:roomIdx/fitter`',
+    '  with `PATCH /crm/v3/objects/contacts/:id` returning 429 on the first attempt.',
+    '  Recovers via `hubspotRequestWithRetry` and the endpoint returns 200.',
+    '- **(RA2) room-assignments fitter PATCH permanent failure**: `PATCH /api/contacts/:id/rooms/:roomIdx/fitter`',
     '  with `PATCH /crm/v3/objects/contacts/:id` always returning 500. All 4 retry',
     '  attempts are exhausted; the inner non-fatal `try/catch` in the route handler',
     '  swallows the error. The endpoint still returns 200 and does not surface the failure.',

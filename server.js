@@ -599,11 +599,14 @@ app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireMan
       delete rooms[roomIdx].assignedFitterId;
     }
 
-    await axios.patch(
-      `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
-      { properties: { measure_once_rooms: JSON.stringify(rooms) } },
-      { headers: hsHeaders() }
-    );
+    try {
+      await hubspotRequestWithRetry('patch',
+        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+        { properties: { measure_once_rooms: JSON.stringify(rooms) } }
+      );
+    } catch (hsErr) {
+      console.error('[rooms-fitter] HubSpot PATCH failed after retries (non-fatal):', hsErr.message);
+    }
 
     // Bust shared cache so next /api/localdata/all and /api/contacts-all reflect the new assignment
     bustSharedCache();
