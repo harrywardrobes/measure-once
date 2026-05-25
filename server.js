@@ -645,9 +645,24 @@ app.get('/api/localdata/all', isAuthenticated, async (req, res) => {
     const { contacts } = await getSharedContactsCache();
     res.json(buildRoomMap(contacts));
   } catch {
-    // getSharedContactsCache threw — no usable stale snapshot within the cap.
-    // Fall back to _allContactsLastGood so room assignments remain visible
-    // during a prolonged HubSpot outage rather than hiding all data.
+    // getSharedContactsCache threw because either (a) no snapshot exists yet,
+    // or (b) the last-good snapshot has aged past ALL_CONTACTS_STALE_MAX_MS
+    // (default 1 h) and HubSpot is still unreachable.
+    //
+    // Deliberate deviation from the 1-hour hard cap enforced by
+    // getSharedContactsCache / /api/contacts-all:
+    //
+    //   /api/contacts-all drives the main customer list and lead-status
+    //   counts where stale data could mislead business decisions, so it
+    //   returns a hard 502 once the snapshot is older than
+    //   ALL_CONTACTS_STALE_MAX_MS.
+    //
+    //   /api/localdata/all drives the room-assignments view.  Showing a
+    //   >1-hour-old room map is far less harmful than showing a blank
+    //   board, so we fall through to _allContactsLastGood with no cap.
+    //   If there is no snapshot at all (server just started, or the very
+    //   first fetch failed) we return an empty object so the UI renders
+    //   cleanly rather than 502-ing.
     if (_allContactsLastGood) {
       return res.json(buildRoomMap(_allContactsLastGood.contacts));
     }
