@@ -314,7 +314,9 @@ async function loadLeadStatusCounts() {
         state.leadStatusCounts = data;
         // Track whether the server is serving cached (stale) counts so the UI
         // can show a subtle hint without alarming the user.
-        state.leadStatusCountsStale = r.headers.get('X-Cache-Status') === 'stale';
+        const cacheStatus = r.headers.get('X-Cache-Status');
+        if (cacheStatus === 'fresh') state.leadStatusCountsStale = false;
+        else if (cacheStatus === 'stale') state.leadStatusCountsStale = true;
       }
     } catch (e) {
       // Surface only hard failures; the server falls back to stale counts
