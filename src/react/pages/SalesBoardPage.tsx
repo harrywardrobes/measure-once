@@ -793,6 +793,18 @@ export function SalesBoardPage() {
     return () => document.removeEventListener(DATA_READY_EVENT, forceUpdate);
   }, [forceUpdate]);
 
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const bc = new BroadcastChannel('lead_statuses_changed');
+    const subBc = new BroadcastChannel('lead_substatuses_changed');
+    bc.addEventListener('message', forceUpdate);
+    subBc.addEventListener('message', forceUpdate);
+    return () => {
+      bc.close();
+      subBc.close();
+    };
+  }, [forceUpdate]);
+
   const byStage = useMemo(() => computeBoardData(), [tick]);
   const workflow = (window as unknown as WindowGlobals).state?.workflow;
 
