@@ -65,6 +65,63 @@ type ContactsResponse = {
   total?: number;
 };
 
+type Room = {
+  room?: string;
+  stageKey?: string;
+  roomStatus?: string;
+};
+
+type WorkflowDef = {
+  stages?: Record<string, { label?: string }>;
+};
+
+type QBInvoice = {
+  id: string;
+  customerName?: string;
+  email?: string;
+  balance: number;
+};
+
+type Urgency = 'red' | 'orange' | null;
+
+// Fallback stage palette (matches STAGE_COLOURS in workflow-core.js — kept
+// in sync intentionally; if workflow-core.js is loaded on the page we
+// prefer the live globals).
+const DEFAULT_STAGE_LABELS: Record<string, string> = {
+  sales: 'Sales',
+  designvisit: 'Design Visit',
+  survey: 'Survey',
+  order: 'Order',
+  workshop: 'Workshop',
+  packing: 'Packing',
+  delivery: 'Delivery',
+  installation: 'Installation',
+  aftercare: 'Aftercare',
+};
+const DEFAULT_STAGE_COLOURS: Record<string, { bg: string; light: string; text: string }> = {
+  sales:        { bg: '#8B2BFF', light: '#F3EAFF', text: '#6A12D9' },
+  designvisit:  { bg: '#0d9488', light: '#ccfbf1', text: '#0f766e' },
+  survey:       { bg: '#d97706', light: '#fef3c7', text: '#b45309' },
+  order:        { bg: '#2563eb', light: '#dbeafe', text: '#1d4ed8' },
+  workshop:     { bg: '#dc2626', light: '#fee2e2', text: '#b91c1c' },
+  packing:      { bg: '#059669', light: '#d1fae5', text: '#047857' },
+  delivery:     { bg: '#0891b2', light: '#cffafe', text: '#0e7490' },
+  installation: { bg: '#8A5A3B', light: '#fdf6ee', text: '#5c3820' },
+  aftercare:    { bg: '#200842', light: '#ede0ff', text: '#3d0f7a' },
+};
+
+function stageColour(stageKey: string): { bg: string; light: string; text: string } {
+  const w = (window as unknown as { stageColour?: (k: string) => { bg: string; light: string; text: string } }).stageColour;
+  if (typeof w === 'function') {
+    try {
+      return w(stageKey);
+    } catch {
+      /* fall through */
+    }
+  }
+  return DEFAULT_STAGE_COLOURS[stageKey] || DEFAULT_STAGE_COLOURS.sales;
+}
+
 const PAGE_LIMIT = 25;
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'newest', label: 'Newest first' },
@@ -317,7 +374,154 @@ function useLeadStatusSync(onChange: () => void) {
   }, [onChange]);
 }
 
-function CustomerCard({ contact, statusMap }: { contact: Contact; statusMap: Map<string, LeadStatus> }) {
+function StagePill({ stageKey, label, archived }: { stageKey: string; label: string; archived: boolean }) {
+  const c = stageColour(stageKey);
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-block',
+        px: 1,
+        py: 0.25,
+        borderRadius: 1,
+        fontSize: 12,
+        fontWeight: 600,
+        bgcolor: c.light,
+        color: c.text,
+        opacity: archived ? 0.55 : 1,
+        lineHeight: 1.4,
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
+
+function UrgencyDot({ urgency }: { urgency: Urgency }) {
+  if (!urgency) return null;
+  const bg = urgency === 'red' ? '#dc2626' : '#f59e0b';
+  const title =
+    urgency === 'red' ? 'Urgent: task due within 1 working day' : 'Task due within 2 working days';
+  return (
+    <Box
+      component="span"
+      title={title}
+      aria-label={urgency === 'red' ? 'Urgent' : 'Task due soon'}
+      sx={{
+        display: 'inline-block',
+        width: 9,
+        height: 9,
+        borderRadius: '50%',
+        bgcolor: bg,
+        mr: 0.75,
+        verticalAlign: 'middle',
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
+function matchInvoicesForContact(contact: Contact, invoices: QBInvoice[]): QBInvoice[] {
+  if (!invoices.length) return [];
+  const email = (contact.properties?.email || '').toLowerCase().trim();
+  const name = contactName(contact).toLowerCase().trim();
+  return invoices.filter((inv) => {
+    const custName = (inv.customerName || '').toLowerCase().trim();
+    const custEmail = (inv.email || '').toLowerCase().trim();
+    if (email && custEmail && email === custEmail) return true;
+    if (name && custName && custName === name) return true;
+    return false;
+  });
+}
+
+function workingDayDeadline(n: number): number {
+  const d = new Date();
+  let added = 0;
+  while (added < n) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) added++;
+  }
+  d.setHours(23, 59, 59, 999);
+  return d.getTime();
+}
+
+function computeUrgency(tasks: Array<{ properties?: Record<string, string | undefined> }>): Urgency {
+  const one = workingDayDeadline(1);
+  const two = workingDayDeadline(2);
+  let urgency: Urgency = null;
+  for (const t of tasks) {
+    if (t.properties?.hs_task_status === 'COMPLETED') continue;
+    const due = parseInt(t.properties?.hs_timestamp || '0', 10);
+    if (!due) continue;
+    if (due <= one) {
+      return 'red';
+    }
+    if (due <= two && urgency !== 'red') urgency = 'orange';
+  }
+  return urgency;
+}
+
+function fmtGBP(n: number): string {
+  return (
+    '£' +
+    Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  );
+}
+
+function QBBadge({ invoices }: { invoices: QBInvoice[] }) {
+  if (!invoices.length) return null;
+  const total = invoices.reduce((s, i) => s + (i.balance || 0), 0);
+  const ids = JSON.stringify(invoices.map((i) => i.id));
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const opener = (
+      window as unknown as { openInvoicePanelFromBadge?: (btn: HTMLElement) => void }
+    ).openInvoicePanelFromBadge;
+    if (typeof opener === 'function') opener(e.currentTarget);
+  };
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={handleClick}
+      data-inv-ids={ids}
+      title={`${invoices.length} outstanding invoice${invoices.length !== 1 ? 's' : ''}`}
+      sx={{
+        appearance: 'none',
+        border: '1px solid #fecaca',
+        bgcolor: '#fef2f2',
+        color: '#b91c1c',
+        px: 1,
+        py: 0.25,
+        borderRadius: 1,
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: 'pointer',
+        lineHeight: 1.4,
+        '&:hover': { bgcolor: '#fee2e2' },
+      }}
+    >
+      {fmtGBP(total)}
+    </Box>
+  );
+}
+
+function CustomerCard({
+  contact,
+  statusMap,
+  rooms,
+  workflow,
+  invoices,
+  urgency,
+}: {
+  contact: Contact;
+  statusMap: Map<string, LeadStatus>;
+  rooms: Room[];
+  workflow: WorkflowDef | null;
+  invoices: QBInvoice[];
+  urgency: Urgency;
+}) {
   const name = contactName(contact);
   const email = contact.properties?.email || '';
   const phone = contact.properties?.phone || '';
@@ -325,22 +529,54 @@ function CustomerCard({ contact, statusMap }: { contact: Contact; statusMap: Map
   const rawLs = contact.properties?.hs_lead_status || '';
   const lsLabel = rawLs ? statusMap.get(rawLs)?.label || rawLs : '';
 
+  const effectiveRooms: Room[] = rooms.length
+    ? rooms
+    : [{ room: 'Main', stageKey: 'sales', roomStatus: 'active' }];
+  const multiRoom = effectiveRooms.length > 1;
+  const allArchived = effectiveRooms.every((r) => (r.roomStatus || 'active') !== 'active');
+
   return (
-    <Card variant="outlined" sx={{ width: '100%' }}>
+    <Card variant="outlined" sx={{ width: '100%', opacity: allArchived ? 0.7 : 1 }}>
       <CardActionArea
         component="a"
         href={`/customers/${encodeURIComponent(contact.id)}`}
         sx={{ p: 2, display: 'block' }}
       >
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-          <Typography variant="subtitle1" fontWeight={600} noWrap>
-            {name}
+          <Typography
+            variant="subtitle1"
+            fontWeight={600}
+            noWrap
+            sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
+          >
+            <UrgencyDot urgency={urgency} />
+            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {name}
+            </Box>
           </Typography>
           {lsLabel ? <Chip label={lsLabel} size="small" color="primary" variant="outlined" /> : null}
+        </Stack>
+        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+          {effectiveRooms.map((r, idx) => {
+            const sk = r.stageKey || 'sales';
+            const lbl =
+              workflow?.stages?.[sk]?.label || DEFAULT_STAGE_LABELS[sk] || sk;
+            const pillText =
+              multiRoom && r.room && r.room !== 'Main' ? `${lbl} — ${r.room}` : lbl;
+            return (
+              <StagePill
+                key={`${sk}-${r.room || 'Main'}-${idx}`}
+                stageKey={sk}
+                label={pillText}
+                archived={(r.roomStatus || 'active') !== 'active'}
+              />
+            );
+          })}
         </Stack>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
           {email ? <Chip label={email} size="small" variant="outlined" /> : null}
           {phone ? <Chip label={phone} size="small" variant="outlined" /> : null}
+          <QBBadge invoices={invoices} />
           {customerNum ? (
             <Chip label={customerNum} size="small" color="secondary" variant="outlined" />
           ) : null}
@@ -434,6 +670,101 @@ export function CustomersPage(): React.ReactElement {
       cancelled = true;
     };
   }, []);
+
+  // Per-contact room/stage data (legacy `state.contactStageCache` equivalent).
+  const [roomsMap, setRoomsMap] = React.useState<Record<string, Room[]>>({});
+  const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
+  const [qbInvoices, setQbInvoices] = React.useState<QBInvoice[]>([]);
+  const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
+
+  // Load workflow definition (for stage labels) and rooms-per-contact.
+  React.useEffect(() => {
+    let cancelled = false;
+    apiGet<WorkflowDef>('/api/workflow')
+      .then((wf) => {
+        if (!cancelled) setWorkflow(wf || null);
+      })
+      .catch(() => {});
+    apiGet<Record<string, Room[]>>('/api/localdata/all')
+      .then((data) => {
+        if (cancelled) return;
+        setRoomsMap(data || {});
+        // Mirror into the legacy global cache so any shared helper that
+        // reads `state.contactStageCache` (e.g. urgency calculation in
+        // workflow-core.js) sees the same data.
+        const legacy = (window as unknown as { state?: { contactStageCache?: Record<string, Room[]> } })
+          .state;
+        if (legacy && legacy.contactStageCache) {
+          for (const [id, rooms] of Object.entries(data || {})) {
+            legacy.contactStageCache[id] = rooms;
+          }
+        }
+      })
+      .catch(() => {});
+
+    // QB invoices: only attempt when QuickBooks is connected. Mirror into
+    // `state.qb` so the legacy `openInvoicePanelFromBadge` panel works.
+    (async () => {
+      try {
+        const status = await apiGet<{ connected?: boolean }>('/api/quickbooks/status');
+        if (!status.connected || cancelled) return;
+        const data = await apiGet<{ invoices?: QBInvoice[] }>('/api/quickbooks/invoices');
+        if (cancelled) return;
+        const invs = data.invoices || [];
+        setQbInvoices(invs);
+        const legacy = (
+          window as unknown as { state?: { qb?: { invoices?: QBInvoice[]; loaded?: boolean; connected?: boolean } } }
+        ).state;
+        if (legacy && legacy.qb) {
+          legacy.qb.invoices = invs;
+          legacy.qb.loaded = true;
+          legacy.qb.connected = true;
+        }
+      } catch {
+        /* QB not configured / not connected — leave badges hidden */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Best-effort urgency calculation for the visible page. Mirrors the
+  // legacy `state.contactUrgencyCache` semantics (only populated for
+  // contacts we've actually inspected — here, all contacts on the
+  // current page).
+  React.useEffect(() => {
+    if (!contacts.length) return;
+    let cancelled = false;
+    const ids = contacts.map((c) => c.id).filter((id) => !(id in urgencyMap));
+    if (!ids.length) return;
+    (async () => {
+      const results = await Promise.all(
+        ids.map((id) =>
+          apiGet<{ results?: Array<{ properties?: Record<string, string | undefined> }> }>(
+            `/api/contacts/${encodeURIComponent(id)}/tasks`,
+          )
+            .then((d) => ({ id, tasks: d.results || [] }))
+            .catch(() => ({ id, tasks: [] as Array<{ properties?: Record<string, string | undefined> }> })),
+        ),
+      );
+      if (cancelled) return;
+      const getUrgency = (
+        window as unknown as { getTaskUrgency?: (tasks: unknown[]) => Urgency }
+      ).getTaskUrgency;
+      setUrgencyMap((prev) => {
+        const next = { ...prev };
+        for (const { id, tasks } of results) {
+          next[id] = typeof getUrgency === 'function' ? getUrgency(tasks) || null : computeUrgency(tasks);
+        }
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [contacts]);
 
   // Fetch the current page of contacts whenever the relevant filters change.
   React.useEffect(() => {
@@ -663,7 +994,15 @@ export function CustomersPage(): React.ReactElement {
         ) : (
           <Stack spacing={1.5} id="customers-results">
             {visibleContacts.map((c) => (
-              <CustomerCard key={c.id} contact={c} statusMap={statusMap} />
+              <CustomerCard
+                key={c.id}
+                contact={c}
+                statusMap={statusMap}
+                rooms={roomsMap[c.id] || []}
+                workflow={workflow}
+                invoices={matchInvoicesForContact(c, qbInvoices)}
+                urgency={urgencyMap[c.id] || null}
+              />
             ))}
           </Stack>
         )}
