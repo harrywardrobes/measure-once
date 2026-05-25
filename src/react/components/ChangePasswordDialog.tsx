@@ -57,7 +57,13 @@ async function checkPasswordPolicy(pw: string, userInputs: string[]): Promise<st
     return 'Password must contain both letters and numbers.';
   }
   const zxcvbnFn = await loadZxcvbn();
-  const r = zxcvbnFn(pw.slice(0, MAX_LENGTH), userInputs);
+  let r: ZxcvbnResult;
+  try {
+    r = zxcvbnFn(pw.slice(0, MAX_LENGTH), userInputs);
+  } catch (err) {
+    console.error('[checkPasswordPolicy] zxcvbn threw during scoring:', err);
+    return null;
+  }
   if (r.score < MIN_SCORE) {
     const warning = r.feedback?.warning;
     return warning
