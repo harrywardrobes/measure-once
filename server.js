@@ -143,7 +143,8 @@ async function hubspotSearchWithRetry(body, { maxAttempts = 4, baseDelayMs = 300
       );
     } catch (err) {
       lastErr = err;
-      if (attempt === maxAttempts - 1 || !isTransient(err)) throw err;
+      if (!isTransient(err)) throw err;
+      if (attempt === maxAttempts - 1) break;
       const hinted = retryAfterMs(err);
       const backoff = hinted != null
         ? hinted
@@ -155,6 +156,8 @@ async function hubspotSearchWithRetry(body, { maxAttempts = 4, baseDelayMs = 300
       await sleep(backoff);
     }
   }
+  console.error('[hubspot-retry] all %d attempts exhausted endpoint=POST /crm/v3/objects/contacts/search finalStatus=%s',
+    maxAttempts, lastErr?.response?.status || 'network');
   throw lastErr;
 }
 
