@@ -6094,7 +6094,8 @@ body.dv-signoff-page {
 .js-modal-scrim--below { z-index: calc(var(--z-tooltip) - 1); }
 
 /* ── Design System admin tab ────────────────────────────────────────────────
-   Read-only documentation panel rendered by design-system.js.
+   Read-only documentation panel rendered by the React island at
+   src/react/pages/DesignSystemPage.tsx (built to /react/main.js).
 ─────────────────────────────────────────────────────────────────────────────── */
 .ds-section { margin-bottom: 28px; }
 .ds-section h3 {

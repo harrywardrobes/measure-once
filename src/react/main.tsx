@@ -1,28 +1,37 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { Pill } from './components/Pill';
+import { DesignSystemPage } from './pages/DesignSystemPage';
 
-function App() {
-  return (
-    <main style={{ padding: 24, fontFamily: 'Open Sans, system-ui, sans-serif' }}>
-      <h1 style={{ marginTop: 0 }}>React island</h1>
-      <p>
-        This entry point exists so future React components have a place to
-        live alongside the legacy <code>public/</code> pages. See Storybook
-        for the component catalogue.
-      </p>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <Pill label="neutral" />
-        <Pill label="success" variant="success" />
-        <Pill label="danger" variant="danger" />
-        <Pill label="warn" variant="warn" />
-        <Pill label="info" variant="info" />
-      </div>
-    </main>
-  );
+/**
+ * Entry point for the React island that co-exists with the legacy static
+ * `public/` pages. Built by Vite into `public/react/main.js` with a stable
+ * filename so admin.html can `<script>` it directly without a manifest.
+ *
+ * Mount strategy: we look for known mount points in priority order and
+ * render whichever exists. Today only the admin Design System tab is on
+ * React (`#tab-designsystem`); future ports add their own `#tab-…` ids
+ * here.
+ *
+ * The vite-dev playground (`src/react/index.html`) provides a `#root`
+ * element so `npm run dev:react` still gives a standalone preview.
+ */
+function mount() {
+  const designSystem = document.getElementById('tab-designsystem');
+  if (designSystem) {
+    if (designSystem.dataset.dsRendered === '1') return;
+    designSystem.dataset.dsRendered = '1';
+    createRoot(designSystem).render(<DesignSystemPage />);
+    return;
+  }
+
+  const root = document.getElementById('root');
+  if (root) {
+    createRoot(root).render(<DesignSystemPage />);
+  }
 }
 
-const mount = document.getElementById('root');
-if (mount) {
-  createRoot(mount).render(<App />);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', mount, { once: true });
+} else {
+  mount();
 }

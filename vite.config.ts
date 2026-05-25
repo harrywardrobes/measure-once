@@ -26,5 +26,16 @@ export default defineConfig({
     outDir: resolve(__dirname, 'public/react'),
     emptyOutDir: true,
     sourcemap: true,
+    /*
+     * Stable filenames so `admin.html` can reference `/react/main.js`
+     * directly — no manifest indirection in the Express server.
+     */
+    rollupOptions: {
+      output: {
+        entryFileNames: 'main.js',
+        chunkFileNames: 'chunks/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
+      },
+    },
   },
 });

@@ -129,7 +129,13 @@
 <script src="/command-palette.js"></script>
 <script src="/components.js"></script>
 <script src="/core.js"></script>
-<script src="/design-system.js"></script>
+<!--
+  Design System tab is now a React island (src/react/pages/DesignSystemPage.tsx)
+  built by `npm run build:react` into /react/main.js. The script self-mounts
+  into #tab-designsystem when it loads, so switchTab('designsystem') no longer
+  needs a render call.
+-->
+<script type="module" src="/react/main.js"></script>
 <script>
   const $ = s => document.querySelector(s);
   const esc = s => (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -3047,7 +3053,7 @@
         <button class="tab-btn"        data-tab="designvisit"   onclick="switchTab('designvisit');loadDvCatalogue()">Design visit</button>
         <button class="tab-btn"        data-tab="search"        onclick="switchTab('search');loadSearchSettings()">Search</button>
         <button class="tab-btn"        data-tab="workshop"    onclick="switchTab('workshop');loadWorkshopSettings()">Workshop</button>
-        <button class="tab-btn"        data-tab="designsystem" onclick="switchTab('designsystem');renderDesignSystemTab()">Design system</button>
+        <button class="tab-btn"        data-tab="designsystem" onclick="switchTab('designsystem')">Design system</button>
         <a class="tab-btn" href="/admin/database" style="text-decoration:none;">Database</a>
         <button class="tab-btn"        data-tab="devenv"      onclick="switchTab('devenv')" id="tab-btn-devenv" style="display:none;">Dev environment</button>
       </div>
@@ -3543,7 +3549,7 @@
       else if (savedTab === 'designvisit') { switchTab('designvisit'); loadDvCatalogue(); }
       else if (savedTab === 'search') { switchTab('search'); loadSearchSettings(); }
       else if (savedTab === 'workshop') { switchTab('workshop'); loadWorkshopSettings(); }
-      else if (savedTab === 'designsystem') { switchTab('designsystem'); renderDesignSystemTab(); }
+      else if (savedTab === 'designsystem') { switchTab('designsystem'); }
       else { switchTab(savedTab); }
     }
 
