@@ -80,6 +80,20 @@
 //        still return 200 (non-fatal catch path) and the exhaustion log line must
 //        appear in the server output.
 //
+//   (DV11) sign-off re-open (PUT): lead-status PATCH 429 → retry → success
+//        — seeds a visit in submitted status then re-opens it via
+//        PUT /api/design-visits/:id with handlerConfig.submittedLeadStatus set.
+//        runSubmitSideEffects re-runs and section 2 fires the contacts PATCH.
+//        The mock returns 429 on the first PATCH and 200 on the second.  PUT
+//        must return 200 with exactly 2 PATCH calls observed.
+//
+//   (DV12) sign-off re-open (PUT): lead-status PATCH exhaustion → non-fatal
+//        — same submitted + submittedLeadStatus setup but the mock always
+//        returns 500 for the contacts PATCH.  After all 4 attempts
+//        dvHubspotRequestWithRetry logs "all 4 attempts exhausted".  PUT must
+//        still return 200 (non-fatal try/catch wrapping runSubmitSideEffects on
+//        the PUT path) and the exhaustion log line must appear in server output.
+//
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:hubspot-429-retry
 //   PRIVTEST_ALLOW_SHARED_DB=1 npm run test:hubspot-429-retry
@@ -918,6 +932,91 @@ async function main() {
         ? `found "${exhaustionMarker}" in server log`
         : `exhaustion line not found; last 500 chars of new log: ${logAfterDV10.slice(-500)}`);
 
+    // ── (DV11) sign-off re-open (PUT): lead-status PATCH 429 → retry → success ─
+    // Seeds a visit in submitted status to simulate a visit already sent to the
+    // customer.  The designer corrects it via PUT /api/design-visits/:id with
+    // handlerConfig.submittedLeadStatus set, which re-runs runSubmitSideEffects
+    // and fires section 2 (the contacts PATCH).  The mock returns 429 on the
+    // first PATCH and 200 on the second.  PUT must return 200 with exactly 2
+    // PATCH calls observed.
+    console.log('\n  [DV11] sign-off re-open (PUT): lead-status PATCH 429 → retry → success');
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint('/crm/v3/objects/contacts/', 'retryOnce', CONTACT_PATCH_SUCCESS);
+    mock.configEndpoint('/crm/v3/objects/notes', 'ok', NOTE_CREATE_SUCCESS);
+
+    const dv11Id = await seedDesignVisit(pool, 'submitted');
+    const dv11 = await httpPut(
+      BASE,
+      `/api/design-visits/${dv11Id}`,
+      cookie,
+      { ...PUT_BODY, handlerConfig: { submittedLeadStatus: 'PRIVTEST_LS_STATUS' } },
+    );
+
+    const dv11ContactCalls = mock.calls.filter(c =>
+      c.url.startsWith('/crm/v3/objects/contacts/'),
+    );
+
+    record('DV11.1 PUT returns 200',
+      dv11.status === 200,
+      `status=${dv11.status} body=${dv11.body.slice(0, 200)}`);
+    record('DV11.2 contacts PATCH called twice (429 + retry)',
+      dv11ContactCalls.length === 2,
+      `contact calls=${dv11ContactCalls.length} statuses=${dv11ContactCalls.map(c => c.status).join(',')}`);
+    record('DV11.3 first contacts PATCH returned 429',
+      dv11ContactCalls[0]?.status === 429,
+      `first status=${dv11ContactCalls[0]?.status}`);
+    record('DV11.4 second contacts PATCH returned 200',
+      dv11ContactCalls[1]?.status === 200,
+      `second status=${dv11ContactCalls[1]?.status}`);
+
+    // ── (DV12) sign-off re-open (PUT): lead-status PATCH exhaustion → non-fatal ─
+    // Same submitted + submittedLeadStatus setup but the mock always returns 500
+    // for the contacts PATCH.  After all 4 attempts dvHubspotRequestWithRetry
+    // logs the exhaustion line; the try/catch wrapping runSubmitSideEffects on
+    // the PUT path treats it as non-fatal so PUT still returns 200.
+    console.log('\n  [DV12] sign-off re-open (PUT): lead-status PATCH always 500 → exhaustion + non-fatal 200');
+    mock.resetHits();
+    mock.calls.length = 0;
+    mock.configEndpoint('/crm/v3/objects/contacts/', 'alwaysFail', null);
+    mock.configEndpoint('/crm/v3/objects/notes', 'ok', NOTE_CREATE_SUCCESS);
+
+    const logBeforeDV12 = logBuf.join('');
+
+    const dv12Id = await seedDesignVisit(pool, 'submitted');
+    const dv12 = await httpPut(
+      BASE,
+      `/api/design-visits/${dv12Id}`,
+      cookie,
+      { ...PUT_BODY, handlerConfig: { submittedLeadStatus: 'PRIVTEST_LS_STATUS' } },
+    );
+
+    const logDeadline12 = Date.now() + 1000;
+    while (Date.now() < logDeadline12 &&
+           !logBuf.join('').slice(logBeforeDV12.length).includes(exhaustionMarker)) {
+      await new Promise(res => setTimeout(res, 50));
+    }
+
+    const dv12ContactCalls = mock.calls.filter(c =>
+      c.url.startsWith('/crm/v3/objects/contacts/'),
+    );
+    const logAfterDV12 = logBuf.join('').slice(logBeforeDV12.length);
+
+    record('DV12.1 PUT still returns 200 (non-fatal)',
+      dv12.status === 200,
+      `status=${dv12.status} body=${dv12.body.slice(0, 200)}`);
+    record('DV12.2 contacts PATCH called 4 times (all attempts)',
+      dv12ContactCalls.length === 4,
+      `contact calls=${dv12ContactCalls.length} statuses=${dv12ContactCalls.map(c => c.status).join(',')}`);
+    record('DV12.3 all contacts PATCH calls returned 500',
+      dv12ContactCalls.every(c => c.status === 500),
+      `statuses=${dv12ContactCalls.map(c => c.status).join(',')}`);
+    record('DV12.4 exhaustion log line emitted',
+      logAfterDV12.includes(exhaustionMarker),
+      logAfterDV12.includes(exhaustionMarker)
+        ? `found "${exhaustionMarker}" in server log`
+        : `exhaustion line not found; last 500 chars of new log: ${logAfterDV12.slice(-500)}`);
+
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
@@ -1009,6 +1108,18 @@ async function writeReport(runId) {
     '  same `revision_requested` + `submittedLeadStatus` setup but the mock always',
     '  returns 500 for the contacts PATCH.  After all 4 attempts the exhaustion log',
     '  line is emitted and submit still returns 200 (non-fatal catch path).',
+    '- **(DV11) sign-off re-open (PUT): lead-status PATCH 429 → retry → success**:',
+    '  seeds a visit in `submitted` status then re-opens it via',
+    '  `PUT /api/design-visits/:id` with `handlerConfig.submittedLeadStatus` set.',
+    '  `runSubmitSideEffects` re-runs; the mock returns 429 on the first PATCH to',
+    '  `/crm/v3/objects/contacts/:id` and 200 on the second.',
+    '  `dvHubspotRequestWithRetry` retries automatically and PUT returns 200 with',
+    '  exactly two PATCH calls observed.',
+    '- **(DV12) sign-off re-open (PUT): lead-status PATCH exhaustion → non-fatal**:',
+    '  same `submitted` + `submittedLeadStatus` setup but the mock always returns',
+    '  500 for the contacts PATCH.  After all 4 attempts the exhaustion log line',
+    '  is emitted and PUT still returns 200 (the `try/catch` wrapping',
+    '  `runSubmitSideEffects` on the PUT path).',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
