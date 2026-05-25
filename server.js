@@ -161,6 +161,63 @@ async function hubspotSearchWithRetry(body, { maxAttempts = 4, baseDelayMs = 300
   throw lastErr;
 }
 
+// General HubSpot request retry helper. Wraps any HubSpot axios call with the
+// same bounded exponential backoff + Retry-After honouring used by
+// hubspotSearchWithRetry. Logs at console.error level when all attempts are
+// exhausted so non-search endpoint failures are visible in server logs.
+// method: 'get' | 'post' | 'patch' | 'put' | 'delete'
+// data:   request body (null / undefined for GET and DELETE).
+async function hubspotRequestWithRetry(method, url, data, { timeout = 15000, maxAttempts = 4, baseDelayMs = 300, maxDelayMs = 4000 } = {}) {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const isTransient = err => {
+    const s = err.response?.status;
+    if (s === 429) return true;
+    if (s && s >= 500 && s < 600) return true;
+    if (!err.response) return true; // network / timeout
+    return false;
+  };
+  const retryAfterMs = (err) => {
+    const h = err.response?.headers?.['retry-after'];
+    if (!h) return null;
+    const asInt = parseInt(h, 10);
+    if (!Number.isNaN(asInt) && asInt >= 0) return Math.min(asInt * 1000, maxDelayMs);
+    const asDate = Date.parse(h);
+    if (!Number.isNaN(asDate)) {
+      const ms = asDate - Date.now();
+      return ms > 0 ? Math.min(ms, maxDelayMs) : 0;
+    }
+    return null;
+  };
+
+  const cfg = { headers: hsHeaders(), timeout };
+  let lastErr;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      if (method === 'get' || method === 'delete') {
+        return await axios[method](url, cfg);
+      }
+      return await axios[method](url, data, cfg);
+    } catch (err) {
+      lastErr = err;
+      if (!isTransient(err)) throw err;
+      if (attempt === maxAttempts - 1) break;
+      const hinted = retryAfterMs(err);
+      const backoff = hinted != null
+        ? hinted
+        : Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
+      if (process.env.DEBUG_HUBSPOT) {
+        console.warn('[hubspot-retry] attempt=%d status=%s backoff=%dms endpoint=%s %s',
+          attempt + 1, err.response?.status || 'network', backoff, method.toUpperCase(), url);
+      }
+      await sleep(backoff);
+    }
+  }
+  const shortUrl = url.startsWith(HS) ? url.slice(HS.length) : url;
+  console.error('[hubspot-retry] all %d attempts exhausted endpoint=%s %s finalStatus=%s',
+    maxAttempts, method.toUpperCase(), shortUrl, lastErr?.response?.status || 'network');
+  throw lastErr;
+}
+
 // Guard: return a clear error if no token is set
 function requireHubspotToken(req, res, next) {
   if (!process.env.HUBSPOT_ACCESS_TOKEN) {
@@ -766,10 +823,9 @@ app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), require
     if (Object.keys(properties).length === 0) {
       return res.status(400).json({ error: 'No valid properties to update.' });
     }
-    const r = await axios.patch(
+    const r = await hubspotRequestWithRetry('patch',
       `${HS}/crm/v3/objects/deals/${safeDealId}`,
-      { properties },
-      { headers: hsHeaders() }
+      { properties }
     );
     res.json(r.data);
   } catch (e) {
@@ -780,6 +836,7 @@ app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), require
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
+    console.error('PATCH /api/deals/:id HubSpot error:', e.response?.data || e.message);
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -1276,6 +1333,7 @@ app.get('/api/deals/:id/notes', requireHubspotToken, async (req, res) => {
     );
     res.json(noteR.data);
   } catch (e) {
+    console.error('GET /api/deals/:id/notes HubSpot error:', e.response?.data || e.message);
     res.json({ results: [] });
   }
 });
@@ -1334,24 +1392,21 @@ app.post('/api/deals/:id/checklist', isAuthenticated, requirePrivilege('member')
         return res.status(403).json({ error: 'Note is not associated with this deal.' });
       }
 
-      const r = await axios.patch(
+      const r = await hubspotRequestWithRetry('patch',
         `${HS}/crm/v3/objects/notes/${validatedExistingNoteId}`,
-        { properties: { hs_note_body: noteBody } },
-        { headers: hsHeaders() }
+        { properties: { hs_note_body: noteBody } }
       );
       return res.json(r.data);
     }
 
     // Create note then associate
-    const noteR = await axios.post(
+    const noteR = await hubspotRequestWithRetry('post',
       `${HS}/crm/v3/objects/notes`,
-      { properties: { hs_note_body: noteBody, hs_timestamp: new Date().toISOString() } },
-      { headers: hsHeaders() }
+      { properties: { hs_note_body: noteBody, hs_timestamp: new Date().toISOString() } }
     );
-    await axios.put(
+    await hubspotRequestWithRetry('put',
       `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/deals/${dealId}/note_to_deal`,
-      {},
-      { headers: hsHeaders() }
+      {}
     );
     res.json(noteR.data);
   } catch (e) {
@@ -1362,6 +1417,7 @@ app.post('/api/deals/:id/checklist', isAuthenticated, requirePrivilege('member')
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
+    console.error('POST /api/deals/:id/checklist HubSpot error:', e.response?.data || e.message);
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -1508,6 +1564,7 @@ app.get('/api/contacts/:id/notes', requireHubspotToken, async (req, res) => {
     );
     res.json(noteR.data);
   } catch (e) {
+    console.error('GET /api/contacts/:id/notes HubSpot error:', e.response?.data || e.message);
     res.json({ results: [] });
   }
 });
@@ -1528,23 +1585,20 @@ app.post('/api/contacts/:id/workflow', isAuthenticated, requirePrivilege('member
       if (!associated) {
         return res.status(403).json({ error: 'Note is not associated with this contact.' });
       }
-      const r = await axios.patch(
+      const r = await hubspotRequestWithRetry('patch',
         `${HS}/crm/v3/objects/notes/${safeExistingNoteId}`,
-        { properties: { hs_note_body: noteBody } },
-        { headers: hsHeaders() }
+        { properties: { hs_note_body: noteBody } }
       );
       return res.json(r.data);
     }
 
-    const noteR = await axios.post(
+    const noteR = await hubspotRequestWithRetry('post',
       `${HS}/crm/v3/objects/notes`,
-      { properties: { hs_note_body: noteBody, hs_timestamp: new Date().toISOString() } },
-      { headers: hsHeaders() }
+      { properties: { hs_note_body: noteBody, hs_timestamp: new Date().toISOString() } }
     );
-    await axios.put(
+    await hubspotRequestWithRetry('put',
       `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/contacts/${encodeURIComponent(contactId)}/note_to_contact`,
-      {},
-      { headers: hsHeaders() }
+      {}
     );
     res.json(noteR.data);
   } catch (e) {
@@ -1555,6 +1609,7 @@ app.post('/api/contacts/:id/workflow', isAuthenticated, requirePrivilege('member
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
+    console.error('POST /api/contacts/:id/workflow HubSpot error:', e.response?.data || e.message);
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -1572,23 +1627,20 @@ app.post('/api/deals/:id/workflow', isAuthenticated, requirePrivilege('member'),
       if (!associated) {
         return res.status(403).json({ error: 'Note is not associated with this deal.' });
       }
-      const r = await axios.patch(
+      const r = await hubspotRequestWithRetry('patch',
         `${HS}/crm/v3/objects/notes/${safeExistingNoteId}`,
-        { properties: { hs_note_body: noteBody } },
-        { headers: hsHeaders() }
+        { properties: { hs_note_body: noteBody } }
       );
       return res.json(r.data);
     }
 
-    const noteR = await axios.post(
+    const noteR = await hubspotRequestWithRetry('post',
       `${HS}/crm/v3/objects/notes`,
-      { properties: { hs_note_body: noteBody, hs_timestamp: new Date().toISOString() } },
-      { headers: hsHeaders() }
+      { properties: { hs_note_body: noteBody, hs_timestamp: new Date().toISOString() } }
     );
-    await axios.put(
+    await hubspotRequestWithRetry('put',
       `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/deals/${safeDealId}/note_to_deal`,
-      {},
-      { headers: hsHeaders() }
+      {}
     );
     res.json(noteR.data);
   } catch (e) {
@@ -1599,6 +1651,7 @@ app.post('/api/deals/:id/workflow', isAuthenticated, requirePrivilege('member'),
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
+    console.error('POST /api/deals/:id/workflow HubSpot error:', e.response?.data || e.message);
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -1628,6 +1681,7 @@ app.get('/api/contacts/:id/tasks', requireHubspotToken, async (req, res) => {
     );
     res.json(taskR.data);
   } catch (e) {
+    console.error('GET /api/contacts/:id/tasks HubSpot error:', e.response?.data || e.message);
     res.json({ results: [] });
   }
 });
@@ -1737,15 +1791,13 @@ app.post('/api/contacts/:id/tasks', isAuthenticated, requirePrivilege('member'),
     if (dueDate) properties.hs_timestamp = new Date(dueDate + 'T12:00:00').toISOString();
     if (stageKey) properties.hs_task_body = `TASK_STAGE:${stageKey}`;
 
-    const taskR = await axios.post(
+    const taskR = await hubspotRequestWithRetry('post',
       `${HS}/crm/v3/objects/tasks`,
-      { properties },
-      { headers: hsHeaders() }
+      { properties }
     );
-    await axios.put(
+    await hubspotRequestWithRetry('put',
       `${HS}/crm/v3/objects/tasks/${taskR.data.id}/associations/contacts/${contactId}/task_to_contact`,
-      {},
-      { headers: hsHeaders() }
+      {}
     );
     res.json(taskR.data);
   } catch (e) {
@@ -1756,6 +1808,7 @@ app.post('/api/contacts/:id/tasks', isAuthenticated, requirePrivilege('member'),
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
+    console.error('POST /api/contacts/:id/tasks HubSpot error:', e.response?.data || e.message);
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -1789,10 +1842,9 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), require
       return res.status(400).json({ error: 'No valid properties to update.' });
     }
 
-    const r = await axios.patch(
+    const r = await hubspotRequestWithRetry('patch',
       `${HS}/crm/v3/objects/tasks/${taskId}`,
-      { properties },
-      { headers: hsHeaders() }
+      { properties }
     );
     res.json(r.data);
   } catch (e) {
@@ -1803,6 +1855,7 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), require
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
+    console.error('PATCH /api/tasks/:id HubSpot error:', e.response?.data || e.message);
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -1825,9 +1878,9 @@ app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), requir
       return res.status(403).json({ error: 'Task is not associated with this contact.' });
     }
 
-    await axios.delete(
+    await hubspotRequestWithRetry('delete',
       `${HS}/crm/v3/objects/tasks/${taskId}`,
-      { headers: hsHeaders() }
+      null
     );
     res.json({ success: true });
   } catch (e) {
@@ -1838,6 +1891,7 @@ app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), requir
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
+    console.error('DELETE /api/tasks/:id HubSpot error:', e.response?.data || e.message);
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -1917,6 +1971,7 @@ app.get('/api/workflow-stages', isAuthenticated, async (req, res) => {
     _workflowStagesCache = { data, expiresAt: Date.now() + WORKFLOW_STAGES_CACHE_TTL_MS };
     res.json(data);
   } catch (e) {
+    console.error('GET /api/workflow-stages HubSpot error:', e.response?.data || e.message);
     res.json({});
   }
 });
@@ -4638,15 +4693,13 @@ app.post('/api/card-actions/phone-call-summary',
     const prefix = String(req.body?.notePrefix || '').slice(0, 120);
     const body = prefix ? `${prefix}\n\n${summary}` : summary;
     try {
-      const noteR = await axios.post(
+      const noteR = await hubspotRequestWithRetry('post',
         `${HS}/crm/v3/objects/notes`,
-        { properties: { hs_note_body: body, hs_timestamp: new Date().toISOString() } },
-        { headers: hsHeaders() }
+        { properties: { hs_note_body: body, hs_timestamp: new Date().toISOString() } }
       );
-      await axios.put(
+      await hubspotRequestWithRetry('put',
         `${HS}/crm/v3/objects/notes/${noteR.data.id}/associations/contacts/${encodeURIComponent(contactId)}/note_to_contact`,
-        {},
-        { headers: hsHeaders() }
+        {}
       );
       res.json({ ok: true, noteId: noteR.data.id });
     } catch (e) {
