@@ -8,6 +8,10 @@ import {
   Chip,
   CircularProgress,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   InputAdornment,
   InputLabel,
@@ -23,6 +27,7 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
+import AddIcon from '@mui/icons-material/Add';
 
 type LeadStatus = {
   key: string;
@@ -117,6 +122,48 @@ async function apiGet<T = unknown>(path: string): Promise<T> {
     throw err;
   }
   return data as T;
+}
+
+async function apiPost<T = unknown>(path: string, body: unknown): Promise<T> {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (r.status === 401) {
+    location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err = new Error((data as { error?: string }).error || `HTTP ${r.status}`);
+    (err as { code?: string }).code = (data as { code?: string }).code;
+    throw err;
+  }
+  return data as T;
+}
+
+function useIsViewer(): boolean {
+  const [isViewer, setIsViewer] = React.useState<boolean>(() =>
+    typeof document !== 'undefined' && document.body.classList.contains('viewer-mode'),
+  );
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const sync = () => setIsViewer(document.body.classList.contains('viewer-mode'));
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    // chrome.js fetches /api/auth/user asynchronously; fall back to a direct
+    // check so the New customer button can show even before that completes.
+    fetch('/api/auth/user', { headers: { Accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u: { privilege_level?: string } | null) => {
+        if (u && u.privilege_level === 'viewer') setIsViewer(true);
+      })
+      .catch(() => {});
+    return () => obs.disconnect();
+  }, []);
+  return isViewer;
 }
 
 /**
@@ -318,6 +365,31 @@ export function CustomersPage(): React.ReactElement {
   const [totalPages, setTotalPages] = React.useState<number>(1);
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
+
+  const isViewer = useIsViewer();
+  const [newOpen, setNewOpen] = React.useState<boolean>(() => {
+    const p = new URLSearchParams(location.search);
+    return p.get('new') === '1';
+  });
+
+  // If the page is opened with `?new=1`, strip the flag from the URL so a
+  // refresh doesn't keep re-opening the dialog. (Matches the legacy
+  // workflow.js deep-link behaviour, which only triggered once.)
+  React.useEffect(() => {
+    const p = new URLSearchParams(location.search);
+    if (p.get('new') === '1') {
+      p.delete('new');
+      const qs = p.toString();
+      history.replaceState(null, '', qs ? '?' + qs : location.pathname);
+    }
+  }, []);
+
+  // Viewers cannot create contacts; close any auto-opened dialog if the
+  // role resolves to viewer after mount.
+  React.useEffect(() => {
+    if (isViewer && newOpen) setNewOpen(false);
+  }, [isViewer, newOpen]);
 
   // Force re-render whenever the module store mutates.
   const [, forceRender] = React.useReducer((x: number) => x + 1, 0);
@@ -400,7 +472,7 @@ export function CustomersPage(): React.ReactElement {
     return () => {
       cancelled = true;
     };
-  }, [page, leadStatus, sortBy, search, viewMode]);
+  }, [page, leadStatus, sortBy, search, viewMode, refreshNonce]);
 
   // Local client-side sub-status filter on top of the fetched page.
   const visibleContacts = React.useMemo(() => {
@@ -437,22 +509,42 @@ export function CustomersPage(): React.ReactElement {
           <Typography variant="h5" component="h1" fontWeight={700}>
             Customers
           </Typography>
-          <ToggleButtonGroup
-            size="small"
-            exclusive
-            value={viewMode}
-            onChange={(_, v: 'all' | 'active' | null) => {
-              if (!v) return;
-              setViewMode(v);
-              setPage(1);
-              setLeadStatus('');
-              setSubstatus('');
-            }}
-            aria-label="Contacts view mode"
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            justifyContent={{ xs: 'flex-start', sm: 'flex-end' }}
+            flexWrap="wrap"
+            useFlexGap
           >
-            <ToggleButton value="all">All contacts</ToggleButton>
-            <ToggleButton value="active">Active leads</ToggleButton>
-          </ToggleButtonGroup>
+            {isViewer ? null : (
+              <Button
+                id="new-customer-btn"
+                variant="contained"
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={() => setNewOpen(true)}
+              >
+                New customer
+              </Button>
+            )}
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={viewMode}
+              onChange={(_, v: 'all' | 'active' | null) => {
+                if (!v) return;
+                setViewMode(v);
+                setPage(1);
+                setLeadStatus('');
+                setSubstatus('');
+              }}
+              aria-label="Contacts view mode"
+            >
+              <ToggleButton value="all">All contacts</ToggleButton>
+              <ToggleButton value="active">Active leads</ToggleButton>
+            </ToggleButtonGroup>
+          </Stack>
         </Stack>
 
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
@@ -598,9 +690,203 @@ export function CustomersPage(): React.ReactElement {
           </Box>
         ) : null}
       </Stack>
+
+      <NewCustomerDialog
+        open={newOpen && !isViewer}
+        onClose={() => setNewOpen(false)}
+        onCreated={(c) => {
+          setNewOpen(false);
+          // Prepend the freshly-created contact so it shows immediately,
+          // then trigger a refetch in the background so the list returns
+          // to the canonical server-side order.
+          setContacts((prev) => [c, ...prev]);
+          setTotal((t) => t + 1);
+          setRefreshNonce((n) => n + 1);
+          loadLeadStatusCounts().then(populateLeadStatusFilter).catch(() => {});
+        }}
+      />
     </Container>
   );
 }
+
+type NewContactBody = {
+  firstname: string;
+  lastname: string;
+  email: string;
+  phone: string;
+  postcode: string;
+};
+
+function NewCustomerDialog({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (c: Contact) => void;
+}): React.ReactElement {
+  const [firstname, setFirstname] = React.useState('');
+  const [lastname, setLastname] = React.useState('');
+  const [email, setEmail] = React.useState('');
+  const [phone, setPhone] = React.useState('');
+  const [postcode, setPostcode] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!open) {
+      setFirstname('');
+      setLastname('');
+      setEmail('');
+      setPhone('');
+      setPostcode('');
+      setErr(null);
+      setSubmitting(false);
+    }
+  }, [open]);
+
+  const handleSubmit = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    const fn = firstname.trim();
+    const ln = lastname.trim();
+    const em = email.trim();
+    const ph = phone.trim();
+    const pc = postcode.trim();
+    if (!fn) {
+      setErr('First name is required.');
+      return;
+    }
+    if (!em) {
+      setErr('Email is required.');
+      return;
+    }
+    if (!pc) {
+      setErr('Postcode is required.');
+      return;
+    }
+    setErr(null);
+    setSubmitting(true);
+    try {
+      const contact = await apiPost<Contact>('/api/contacts', {
+        firstname: fn,
+        lastname: ln,
+        email: em,
+        phone: ph,
+        postcode: pc,
+      });
+      onCreated(contact);
+    } catch (e) {
+      const er = e as Error & { code?: string };
+      if (er.code === 'HUBSPOT_AUTH') {
+        setErr('HubSpot token is invalid or expired — ask an admin to update the token.');
+      } else if (er.code === 'HUBSPOT_RATE_LIMIT') {
+        setErr('HubSpot rate limit reached — please wait a moment and try again.');
+      } else {
+        setErr(er.message || 'Failed to create customer.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={() => {
+        if (submitting) return;
+        onClose();
+      }}
+      fullWidth
+      maxWidth="sm"
+      aria-labelledby="new-customer-dialog-title"
+    >
+      <DialogTitle id="new-customer-dialog-title">New customer</DialogTitle>
+      <Box
+        component="form"
+        id="new-customer-form"
+        onSubmit={handleSubmit}
+        noValidate
+      >
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            {err ? <Alert severity="error">{err}</Alert> : null}
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                id="nc-firstname"
+                label="First name"
+                value={firstname}
+                onChange={(e) => setFirstname(e.target.value)}
+                required
+                autoFocus
+                fullWidth
+                size="small"
+                disabled={submitting}
+              />
+              <TextField
+                id="nc-lastname"
+                label="Last name"
+                value={lastname}
+                onChange={(e) => setLastname(e.target.value)}
+                fullWidth
+                size="small"
+                disabled={submitting}
+              />
+            </Stack>
+            <TextField
+              id="nc-email"
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              fullWidth
+              size="small"
+              disabled={submitting}
+            />
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                id="nc-phone"
+                label="Phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                fullWidth
+                size="small"
+                disabled={submitting}
+              />
+              <TextField
+                id="nc-postcode"
+                label="Postcode"
+                value={postcode}
+                onChange={(e) => setPostcode(e.target.value)}
+                required
+                fullWidth
+                size="small"
+                disabled={submitting}
+              />
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} disabled={submitting} id="nc-cancel-btn">
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            id="nc-submit"
+            disabled={submitting}
+          >
+            {submitting ? 'Creating…' : 'Create customer'}
+          </Button>
+        </DialogActions>
+      </Box>
+    </Dialog>
+  );
+}
+
+// (NewContactBody type kept for future request-shape reference.)
+export type { NewContactBody };
 
 function humaniseError(e: Error & { code?: string }): string {
   if (e.code === 'HUBSPOT_AUTH') {
