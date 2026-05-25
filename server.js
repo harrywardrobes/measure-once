@@ -1014,6 +1014,15 @@ app.get('/api/open-leads', async (req, res) => {
     return res.json({ results: outcome.results, total: outcome.total });
   }
 
+  // Fetch failed — serve stale cache if available rather than surfacing an error.
+  if (_openLeadsCache) {
+    if (process.env.DEBUG_HUBSPOT) {
+      console.warn('[open-leads] HubSpot fetch failed; serving stale cache age=%dms', Date.now() - _openLeadsCache.fetchedAt);
+    }
+    res.setHeader('X-Cache-Status', 'stale');
+    return res.json({ results: _openLeadsCache.results, total: _openLeadsCache.total });
+  }
+
   const e = outcome.err;
   const status = e.response?.status;
   if (status === 401 || status === 403) {

@@ -185,7 +185,15 @@ function _mergeContactIntoState(freshContact) {
 }
 
 async function _loadOpenLeadsImpl() {
-  const data = await GET('/api/open-leads');
+  const r = await fetch('/api/open-leads', { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+  if (r.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err = new Error(data.error || `HTTP ${r.status}`);
+    if (data.code) err.code = data.code;
+    throw err;
+  }
+  state.openLeadsStale = r.headers.get('X-Cache-Status') === 'stale';
   state.contacts = data.results || [];
   _reapplyPendingLeadStatuses();
   state.filteredContacts = [...state.contacts];

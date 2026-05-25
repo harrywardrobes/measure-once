@@ -296,6 +296,10 @@ function _renderCustomerListImpl() {
       style="${style}" data-tab-key="${escHtml(key)}">${escHtml(label)}</button>`;
   }).join('');
 
+  const openLeadsStaleHint = (viewMode === 'active' && state.openLeadsStale)
+    ? `<span class="ls-stale-hint" title="Counts may be slightly out of date" aria-label="Using cached data">•</span>`
+    : '';
+
   // ── Sort bar ────────────────────────────────────────────────────────────────
   const sortOptions = [
     { value: 'newest',    label: 'Newest first' },
@@ -537,7 +541,7 @@ function _renderCustomerListImpl() {
     : '';
 
   view.innerHTML = `
-    <div class="project-stage-tabs-bar">${stageTabs}</div>
+    <div class="project-stage-tabs-bar">${stageTabs}${openLeadsStaleHint}</div>
     ${lsPillBar}
     ${subPillBar}
     ${sortBar}
