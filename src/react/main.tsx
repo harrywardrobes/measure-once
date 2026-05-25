@@ -1,8 +1,18 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { AppThemeProvider } from './AppThemeProvider';
 import { DesignSystemPage } from './pages/DesignSystemPage';
 import { SearchSettingsPage } from './pages/SearchSettingsPage';
 import { WorkshopSettingsPage } from './pages/WorkshopSettingsPage';
+
+/**
+ * Every React mount goes through `AppThemeProvider` so the shared MUI
+ * theme + `ScopedCssBaseline` apply everywhere. New mount points only
+ * need to add an entry to `MOUNTS` below — the wrapper is automatic.
+ */
+function withTheme(node: React.ReactElement): React.ReactElement {
+  return <AppThemeProvider>{node}</AppThemeProvider>;
+}
 
 /**
  * Entry point for the React island that co-exists with the legacy static
@@ -30,7 +40,7 @@ function mountKnown(): number {
     if (!el) continue;
     if (el.dataset.dsRendered === '1') { count++; continue; }
     el.dataset.dsRendered = '1';
-    createRoot(el).render(m.render());
+    createRoot(el).render(withTheme(m.render()));
     count++;
   }
   return count;
@@ -43,7 +53,7 @@ function mount() {
   // Vite dev-only standalone playground.
   const root = document.getElementById('root');
   if (root) {
-    createRoot(root).render(<DesignSystemPage />);
+    createRoot(root).render(withTheme(<DesignSystemPage />));
     return;
   }
 

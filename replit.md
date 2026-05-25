@@ -19,7 +19,9 @@ Project management dashboard (HubSpot CRM integration).
     `npm run build:react` after editing anything under `src/react/` so the
     Express server picks up the new bundle. `npm run dev:react` runs Vite
     on port 5173 with `/api` proxied to the Express server for standalone
-    iteration.
+    iteration. Material UI is the standard component framework; every
+    mount is wrapped in `AppThemeProvider` (see `src/react/README.md`
+    for the conventions on adding components and page mounts).
   - `build:storybook` writes the static Storybook bundle to
     `public/storybook/`. The Express server serves it as static assets so
     the "Open Storybook →" link on the Design System tab is live on every
