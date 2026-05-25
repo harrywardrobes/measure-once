@@ -185,14 +185,11 @@ function _svCardHtml(entry) {
   //   1. HubSpot hw_lead_substatus → matching sub-status action label.
   //   2. Stage/substage default mapping.
   //   3. '' → action strip omitted entirely.
-  let actionLabel = '';
-  if (typeof substatusActionLabelLookup === 'function') {
-    actionLabel = substatusActionLabelLookup(
-      contact.properties?.hs_lead_status,
-      contact.properties?.hw_lead_substatus,
-    );
-  }
-  if (!actionLabel && typeof stageOrLeadStatusActionLabel === 'function') {
+  let actionLabel = substatusActionLabelLookup(
+    contact.properties?.hs_lead_status,
+    contact.properties?.hw_lead_substatus,
+  );
+  if (!actionLabel) {
     // Prefer lead-status over local workflow substageId for the same reason as
     // the Sales board — stage_action_labels is keyed by LS, not by local
     // workflow IDs.
@@ -201,16 +198,12 @@ function _svCardHtml(entry) {
       contact.properties?.hs_lead_status,
       substageId,
     );
-  } else if (!actionLabel && typeof stageActionLabelLookup === 'function') {
-    actionLabel = stageActionLabelLookup(SURVEY_STAGE_KEY, substageId);
   }
-  const handlerAttrs = (typeof cardActionHandlerAttrs === 'function')
-    ? cardActionHandlerAttrs(SURVEY_STAGE_KEY, contact.properties?.hs_lead_status, contact.properties?.hw_lead_substatus, {
-        contactId:    contact.id,
-        contactName:  (typeof contactName === 'function' ? contactName(contact) : ''),
-        contactEmail: contact.properties?.email || '',
-      })
-    : '';
+  const handlerAttrs = cardActionHandlerAttrs(SURVEY_STAGE_KEY, contact.properties?.hs_lead_status, contact.properties?.hw_lead_substatus, {
+    contactId:    contact.id,
+    contactName:  contactName(contact),
+    contactEmail: contact.properties?.email || '',
+  });
   const hasHandler = !!handlerAttrs;
   const _cahNameMatch = hasHandler && handlerAttrs.match(/data-card-action-name="([^"]*)"/);
   const _cahName = _cahNameMatch ? _cahNameMatch[1].replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '';

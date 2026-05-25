@@ -179,8 +179,7 @@
   }
 
   function _toast(msg, isErr) {
-    if (typeof showToast === 'function') return showToast(msg, !!isErr);
-    if (isErr) console.warn(msg); else console.log(msg);
+    return showToast(msg, !!isErr);
   }
 
   // ── Handler: add_design_visit_to_calendar ──────────────────────────────────
@@ -942,9 +941,9 @@
     const ch = new BroadcastChannel('card_action_handlers_changed');
     ch.addEventListener('message', () => {
       loadCardActionHandlers().then(() => {
-        if (typeof renderCustomerList === 'function') renderCustomerList();
-        if (typeof renderEnquiryList   === 'function') renderEnquiryList();
-        if (typeof renderSurveyList    === 'function') renderSurveyList();
+        renderCustomerList();
+        if (typeof renderEnquiryList === 'function') renderEnquiryList();
+        if (typeof renderSurveyList  === 'function') renderSurveyList();
       });
     });
   }

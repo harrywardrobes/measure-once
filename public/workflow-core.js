@@ -462,10 +462,10 @@ async function loadLeadStatuses() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   Promise.all([loadLeadStatuses(), loadLeadStatusCounts(), loadLeadSubstatuses()]).then(() => {
-    if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
-    if (typeof renderCustomerList === 'function') renderCustomerList();
+    populateLeadStatusFilter();
+    renderCustomerList();
     if (typeof renderEnquiryList === 'function') renderEnquiryList();
-    if (typeof renderWorkflowStages === 'function' && document.getElementById('workflow-stages')) {
+    if (document.getElementById('workflow-stages')) {
       renderWorkflowStages();
     }
   });
@@ -477,7 +477,7 @@ document.addEventListener('visibilitychange', () => {
 // without requiring the user to leave and return to the tab.
 if (typeof BroadcastChannel !== 'undefined') {
   const _maybeRenderStages = () => {
-    if (typeof renderWorkflowStages === 'function' && document.getElementById('workflow-stages')) {
+    if (document.getElementById('workflow-stages')) {
       renderWorkflowStages();
     }
   };
@@ -485,8 +485,8 @@ if (typeof BroadcastChannel !== 'undefined') {
   const _lsChannel = new BroadcastChannel('lead_statuses_changed');
   _lsChannel.addEventListener('message', () => {
     Promise.all([loadLeadStatuses(), loadLeadStatusCounts()]).then(() => {
-      if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
-      if (typeof renderCustomerList === 'function') renderCustomerList();
+      populateLeadStatusFilter();
+      renderCustomerList();
       if (typeof renderEnquiryList === 'function') renderEnquiryList();
       _maybeRenderStages();
     });
@@ -495,9 +495,9 @@ if (typeof BroadcastChannel !== 'undefined') {
   const _sacChannel = new BroadcastChannel('stage_action_labels_changed');
   _sacChannel.addEventListener('message', () => {
     loadStageActionLabels().then(() => {
-      if (typeof renderCustomerList === 'function') renderCustomerList();
-      if (typeof renderEnquiryList   === 'function') renderEnquiryList();
-      if (typeof renderSurveyList    === 'function') renderSurveyList();
+      renderCustomerList();
+      if (typeof renderEnquiryList === 'function') renderEnquiryList();
+      if (typeof renderSurveyList  === 'function') renderSurveyList();
       _maybeRenderStages();
     });
   });
@@ -505,10 +505,10 @@ if (typeof BroadcastChannel !== 'undefined') {
   const _subChannel = new BroadcastChannel('lead_substatuses_changed');
   _subChannel.addEventListener('message', () => {
     loadLeadSubstatuses().then(() => {
-      if (typeof renderCustomerList   === 'function') renderCustomerList();
-      if (typeof renderEnquiryList    === 'function') renderEnquiryList();
-      if (typeof renderSurveyList     === 'function') renderSurveyList();
-      if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+      renderCustomerList();
+      if (typeof renderEnquiryList === 'function') renderEnquiryList();
+      if (typeof renderSurveyList  === 'function') renderSurveyList();
+      renderWorkflowHeader();
       _maybeRenderStages();
     });
   });

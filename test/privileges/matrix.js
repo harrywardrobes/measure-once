@@ -199,6 +199,7 @@ const ROUTES = [
   // test-users PATCH falls through to requireHubspotToken (the harness strips
   // HUBSPOT_TOKEN, hence needsHubspot to accept the 503).
   { method: 'POST',   path: '/api/admin/test/seed-contacts-cache',             level: 'admin', body: {} },
+  { method: 'POST',   path: '/api/admin/test/bust-contacts-cache',             level: 'admin', body: {} },
   { method: 'PATCH',  path: '/api/admin/hubspot/test-users/0',                 level: 'admin', body: { enabled: true }, needsHubspot: true },
   { method: 'POST',   path: '/api/admin/card-action-handlers',                 level: 'admin', body: { name: '__noop__', type: 'summarise_phone_call' } },
   { method: 'PATCH',  path: '/api/admin/card-action-handlers/0',               level: 'admin', body: {} },

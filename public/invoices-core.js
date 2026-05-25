@@ -118,7 +118,7 @@ async function openInvoicePanel(invId, allInvIds) {
       const discardBtn = document.getElementById('inv-discard-btn');
       if (discardBtn) discardBtn.classList.remove('hidden');
     }
-    if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+    _updateBeforeUnloadGuard();
   } catch (e) {
     body.innerHTML = `<div class="inv-panel-error">Failed to load invoice: ${escHtml(e.message)}</div>`;
   }
@@ -171,7 +171,7 @@ function _invMarkDirty(sendDirty) {
   if (sendDirty) window._invSendDirty = true;
   const discardBtn = document.getElementById('inv-discard-btn');
   if (discardBtn) discardBtn.classList.remove('hidden');
-  if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+  _updateBeforeUnloadGuard();
 }
 
 function _restoreInvFields(snapshot) {
@@ -197,7 +197,7 @@ function discardInvoiceDraft() {
   _invClearAllFieldDirty();
   window._invMemoDirty = false;
   window._invSendDirty = false;
-  if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+  _updateBeforeUnloadGuard();
   const discardBtn = document.getElementById('inv-discard-btn');
   if (discardBtn) discardBtn.classList.add('hidden');
   const msg = document.getElementById('inv-save-msg');
@@ -219,7 +219,7 @@ async function navigateInvoicePanel(delta) {
     if (!confirm(msg)) { _restoreInvFields(snapshot); return; }
     window._invMemoDirty = false;
     window._invSendDirty = false;
-    if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+    _updateBeforeUnloadGuard();
   }
   ctx.index = newIdx;
   const ids = ctx.ids;
@@ -241,7 +241,7 @@ async function jumpToInvoice(idx) {
     if (!confirm(msg)) { _restoreInvFields(snapshot); return; }
     window._invMemoDirty = false;
     window._invSendDirty = false;
-    if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+    _updateBeforeUnloadGuard();
   }
   ctx.index = i;
   await openInvoicePanel(ctx.ids[i], ctx.ids);
@@ -287,7 +287,7 @@ function closeInvoicePanel() {
   document.getElementById('inv-overlay').classList.add('hidden');
   window._invMemoDirty = false;
   window._invSendDirty = false;
-  if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+  _updateBeforeUnloadGuard();
   state.qb.panel = null;
   state.qb.panelContext = null;
 }
@@ -314,7 +314,7 @@ const _INV_PILL_COLORS = {
 function _invStatusPill(label, variantOrKey, isKey) {
   const variant = isKey ? _invStatusVariant(variantOrKey) : variantOrKey;
   const colors = _INV_PILL_COLORS[variant] || _INV_PILL_COLORS.neutral;
-  const safe = (typeof escHtml === 'function') ? escHtml(label) : String(label);
+  const safe = escHtml(label);
   return `<span style="${_INV_PILL_BASE};${colors}">${safe}</span>`;
 }
 
@@ -506,7 +506,7 @@ async function saveInvoiceChanges() {
     window._invMemoDirty = false;
     window._invSendDirty = false;
     if (state.qb.draft && inv.id) delete state.qb.draft[inv.id];
-    if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+    _updateBeforeUnloadGuard();
     const discardBtn = document.getElementById('inv-discard-btn');
     if (discardBtn) discardBtn.classList.add('hidden');
   } catch (e) {
@@ -544,7 +544,7 @@ async function sendInvoice() {
     msg.textContent = `Sent to ${email || inv.email}`;
     msg.className = 'inv-action-msg inv-msg-ok';
     window._invSendDirty = false;
-    if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+    _updateBeforeUnloadGuard();
   } catch (e) {
     msg.textContent = e.message;
     msg.className = 'inv-action-msg inv-msg-err';

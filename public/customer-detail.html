@@ -121,7 +121,7 @@
   <script>
     // Override goBack so the back button in the workflow returns to the customers list.
     async function goBack() {
-      if (typeof closeContactEditIfPristine === 'function') closeContactEditIfPristine();
+      closeContactEditIfPristine();
       if (hasUnsavedChanges()) {
         showUnsavedChangesBar(
           async () => {

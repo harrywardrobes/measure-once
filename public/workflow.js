@@ -117,7 +117,7 @@ async function submitNewCustomer(ev) {
     const customerNum = contact.properties?.customer_number;
     showToast(`Customer created${customerNum ? ` — ${customerNum}` : ''}`);
     // Background refresh to pick up server sort order (respect current view mode)
-    if (state.contactsViewMode === 'all' && typeof loadContactsPage === 'function') {
+    if (state.contactsViewMode === 'all') {
       _customersLoadAndRender({ page: 1, fetchCounts: true });
     } else {
       const refreshLoader = (state.contactsViewMode === 'all') ? loadAllContacts() : loadOpenLeads();
@@ -715,7 +715,7 @@ function _customersLoadAndRender({ page, fetchCounts = false } = {}) {
   const pageLoader = loadContactsPage({ page: targetPage, leadStatus, sort });
   // Only fetch counts when explicitly requested (initial "All" load or after
   // a status change) — page turns reuse the cached state.leadStatusCounts.
-  const needCounts = fetchCounts && typeof loadLeadStatusCounts === 'function';
+  const needCounts = fetchCounts;
   const countsLoader = needCounts ? loadLeadStatusCounts() : Promise.resolve();
   Promise.all([pageLoader, countsLoader])
     .then(() => renderCustomerList())
@@ -827,12 +827,10 @@ async function openLeadStatusPicker(event, contactId, { showSubstatuses = false 
     if (!pending) {
       if (freshStatus !== stalePrevStatus) driftedTo = freshStatus;
       currentLeadStatus = freshStatus;
-      if (typeof _mergeContactIntoState === 'function') {
-        _mergeContactIntoState(fresh);
-      }
+      _mergeContactIntoState(fresh);
       populateLeadStatusFilter();
       renderCustomerList();
-      if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+      renderWorkflowHeader();
     }
   } catch (e) {
     showToast('Could not refresh lead status from HubSpot — showing last known value.', true);
@@ -1197,7 +1195,7 @@ async function openContactEdit() {
     _fillContactEditForm(newProps);
     if (!wasDirty) _captureContactEditOriginal();
 
-    if (typeof _mergeContactIntoState === 'function') _mergeContactIntoState(fresh);
+    _mergeContactIntoState(fresh);
 
     if (driftedLabels.length > 0) {
       const summary = driftedLabels.length === 1
@@ -1219,7 +1217,7 @@ function closeContactEdit() {
   const host = document.getElementById('contact-edit-inline');
   if (host) { host.innerHTML = ''; host.classList.add('hidden'); }
   _editContactOriginal = null;
-  if (typeof _updateBeforeUnloadGuard === 'function') _updateBeforeUnloadGuard();
+  _updateBeforeUnloadGuard();
 }
 
 // Guarded close used by the overlay click and the X / Cancel buttons. If the
@@ -1270,7 +1268,7 @@ async function submitContactEdit(ev) {
       if (state.selectedContactId === contactId) state.selectedContact = contact;
     }
     renderCustomerList();
-    if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+    renderWorkflowHeader();
   }
 
   const prevTitle = document.title;
@@ -1377,8 +1375,8 @@ async function quickSetLeadStatus(contactId, newStatus) {
     state.pendingLeadStatus[contactId] = status;
     populateLeadStatusFilter();
     renderCustomerList();
-    if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
-    if (typeof renderWorkflowStages === 'function') renderWorkflowStages();
+    renderWorkflowHeader();
+    renderWorkflowStages();
   }
 
   // Optimistic update (also clears stale sub-status locally if applicable).
@@ -1392,9 +1390,7 @@ async function quickSetLeadStatus(contactId, newStatus) {
     // PATCH succeeded — server now has the new value, so no longer pending.
     if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
     // Refresh counts in the background so dropdown totals stay accurate.
-    if (typeof loadLeadStatusCounts === 'function') {
-      loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
-    }
+    loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
     const _nullLbl3 = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
     const newLabel = newStatus ? (LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)?.label || newStatus) : null;
     showBottomUndo(newLabel ? `Lead status set to ${newLabel}` : `Lead status set to ${_nullLbl3}`, async () => {
@@ -1406,9 +1402,7 @@ async function quickSetLeadStatus(contactId, newStatus) {
         .catch(() => {})
         .finally(() => {
           if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
-          if (typeof loadLeadStatusCounts === 'function') {
-            loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
-          }
+          loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
         });
     });
   } catch (e) {
@@ -1461,8 +1455,8 @@ async function _quickSetLeadStatusWithSub(contactId, statusKey, substatusKey) {
     state.pendingLeadStatus[contactId] = status;
     populateLeadStatusFilter();
     renderCustomerList();
-    if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
-    if (typeof renderWorkflowStages === 'function') renderWorkflowStages();
+    renderWorkflowHeader();
+    renderWorkflowStages();
   }
 
   _apply(statusKey, newHw);
@@ -1470,9 +1464,7 @@ async function _quickSetLeadStatusWithSub(contactId, statusKey, substatusKey) {
   try {
     await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: statusKey, hw_lead_substatus: newHw });
     if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
-    if (typeof loadLeadStatusCounts === 'function') {
-      loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
-    }
+    loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
     const subs = _substatusesForStatus(statusKey);
     const subLabel = subs.find(s =>
       String(s.substatus_key).toUpperCase() === String(substatusKey).toUpperCase()
@@ -1484,9 +1476,7 @@ async function _quickSetLeadStatusWithSub(contactId, statusKey, substatusKey) {
         hw_lead_substatus: prevSubstatus || '',
       }).catch(() => {}).finally(() => {
         if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
-        if (typeof loadLeadStatusCounts === 'function') {
-          loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
-        }
+        loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
       });
     });
   } catch (e) {
@@ -1635,7 +1625,7 @@ async function quickSetLeadSubstatus(contactId, newSubKey) {
       if (fresh) state.selectedContact = fresh;
     }
     renderCustomerList();
-    if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+    renderWorkflowHeader();
   }
 
   _applySubstatus(newHw);
@@ -1646,12 +1636,10 @@ async function quickSetLeadSubstatus(contactId, newSubKey) {
     const newLabel = newSubKey
       ? (subs.find(s => String(s.substatus_key).toUpperCase() === String(newSubKey).toUpperCase())?.label || newSubKey)
       : null;
-    if (typeof showBottomUndo === 'function') {
-      showBottomUndo(newLabel ? `Sub-status set to ${newLabel}` : `Sub-status cleared`, async () => {
-        _applySubstatus(prevHw);
-        await PATCH_REQ(`/api/contacts/${contactId}`, { hw_lead_substatus: prevHw }).catch(() => {});
-      });
-    }
+    showBottomUndo(newLabel ? `Sub-status set to ${newLabel}` : `Sub-status cleared`, async () => {
+      _applySubstatus(prevHw);
+      await PATCH_REQ(`/api/contacts/${contactId}`, { hw_lead_substatus: prevHw }).catch(() => {});
+    });
   } catch (e) {
     _applySubstatus(prevHw);
     if (e.code === 'HUBSPOT_AUTH') {

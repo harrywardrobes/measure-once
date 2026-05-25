@@ -31,7 +31,7 @@ async function _commitActiveInlineEdit() {
   if (document.getElementById('task-subject')?.value.trim()) {
     await saveNewTask();
   }
-  if (typeof isContactEditDirty === 'function' && isContactEditDirty()) {
+  if (isContactEditDirty()) {
     const ok = await submitContactEdit({ preventDefault(){} });
     // If the edit-contact form couldn't be saved (e.g. required field missing)
     // throw so the caller aborts navigation and the user can fix the form.
@@ -48,14 +48,14 @@ function _discardActiveInlineEdit() {
     state.showAddTask = false;
     renderTasks();
   }
-  if (typeof isContactEditOpen === 'function' && isContactEditOpen()) {
+  if (isContactEditOpen()) {
     closeContactEdit();
   }
 }
 
 async function goBack() {
   captureNotes();
-  if (typeof closeContactEditIfPristine === 'function') closeContactEditIfPristine();
+  closeContactEditIfPristine();
 
   if (hasUnsavedChanges()) {
     showUnsavedChangesBar(
@@ -137,8 +137,7 @@ function syncRoomFromHubSpot(room, leadStatus) {
 // ── Contact Selection ─────────────────────────────────────────────────────────
 async function selectContact(contactId, roomIdx = 0) {
   // Close a pristine open edit-contact modal so it doesn't get stranded.
-  if (state.selectedContactId && state.selectedContactId !== contactId
-      && typeof closeContactEditIfPristine === 'function') {
+  if (state.selectedContactId && state.selectedContactId !== contactId) {
     closeContactEditIfPristine();
   }
   // Guard for unsaved changes when switching to a different contact
@@ -348,7 +347,7 @@ async function _doSelectContact(contactId, roomIdx) {
 async function switchRoom(idx) {
   if (idx === state.selectedRoomIdx) return;
   captureNotes();
-  if (typeof closeContactEditIfPristine === 'function') closeContactEditIfPristine();
+  closeContactEditIfPristine();
 
   if (hasUnsavedChanges()) {
     showUnsavedChangesBar(
@@ -821,7 +820,7 @@ function _renderWorkflowHeaderImpl() {
         : `<span class="lead-status-badge lsb-empty">${escHtml(nullLabel)}</span>`;
     } else {
       const cls = CSS_CLASS_MAP[raw] || '';
-      const currentSub = (typeof _currentSubstatusFor === 'function') ? _currentSubstatusFor(contact) : null;
+      const currentSub = _currentSubstatusFor(contact);
       let displayLabel;
       let titleText;
       if (currentSub) {
@@ -1034,22 +1033,18 @@ function _renderWorkflowStagesImpl() {
     const hwSubVal = isFocusedCurrent ? currentSub : '';
     const stageKeyForAction = (focusedEntry?.stage && LS_STAGE_TO_KEY[focusedEntry.stage]) || '';
     let label = '';
-    if (typeof substatusActionLabelLookup === 'function') {
-      label = substatusActionLabelLookup(leadKey, hwSubVal) || '';
-    }
-    if (!label && stageKeyForAction && typeof stageOrLeadStatusActionLabel === 'function') {
+    label = substatusActionLabelLookup(leadKey, hwSubVal) || '';
+    if (!label && stageKeyForAction) {
       label = stageOrLeadStatusActionLabel(stageKeyForAction, leadKey, '') || '';
     }
     if (label) {
       const actionTint = focusedColour.light || '#f3f4f6';
       const actionText = focusedColour.text  || '#374151';
-      const handlerAttrs = (typeof cardActionHandlerAttrs === 'function')
-        ? cardActionHandlerAttrs(stageKeyForAction, leadKey, hwSubVal, {
-            contactId:    contact?.id,
-            contactName:  (typeof contactName === 'function' ? contactName(contact || {}) : ''),
-            contactEmail: props.email || '',
-          })
-        : '';
+      const handlerAttrs = cardActionHandlerAttrs(stageKeyForAction, leadKey, hwSubVal, {
+        contactId:    contact?.id,
+        contactName:  contactName(contact || {}),
+        contactEmail: props.email || '',
+      });
       const _cahNameMatch = handlerAttrs && handlerAttrs.match(/data-card-action-name="([^"]*)"/);
       const _cahName = _cahNameMatch ? _cahNameMatch[1].replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '';
       const _stripLabel = _cahName || label;
@@ -1135,14 +1130,14 @@ function setLeadSubstatusChecked(statusValue, substatusKey, checked) {
 
   if (changeLs) state.focusedLeadStatus = newLs;
   renderWorkflowStages();
-  if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
-  if (typeof renderCustomerList   === 'function') renderCustomerList();
+  renderWorkflowHeader();
+  renderCustomerList();
 
   PATCH_REQ(`/api/contacts/${contactId}`, body)
     .then(() => {
-      if (typeof loadLeadStatusCounts === 'function' && changeLs) {
+      if (changeLs) {
         loadLeadStatusCounts()
-          .then(() => { if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter(); })
+          .then(() => populateLeadStatusFilter())
           .catch(() => {});
       }
     })
@@ -1151,8 +1146,8 @@ function setLeadSubstatusChecked(statusValue, substatusKey, checked) {
       if (state.selectedContact) state.selectedContact.properties = prevProps;
       if (listEntry) listEntry.properties = prevProps;
       renderWorkflowStages();
-      if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
-      if (typeof renderCustomerList   === 'function') renderCustomerList();
+      renderWorkflowHeader();
+      renderCustomerList();
       if (err?.code === 'HUBSPOT_AUTH') {
         showToast('Could not update — HubSpot token is invalid or expired.', true);
       } else if (err?.code === 'HUBSPOT_RATE_LIMIT') {
