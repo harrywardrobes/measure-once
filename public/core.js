@@ -178,7 +178,6 @@ const POST       = (path, b) => api('POST',   path, b);
 const PATCH_REQ  = (path, b) => api('PATCH',  path, b);
 const DELETE_REQ = path      => api('DELETE', path);
 
-
 function showViewerBanner() {
   if (sessionStorage.getItem('viewerBannerDismissed') === '1') return;
   const banner = document.getElementById('viewer-banner');
