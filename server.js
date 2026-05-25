@@ -3369,6 +3369,36 @@ app.post('/api/ideas/:id/comments', async (req, res) => {
   }
 });
 
+app.delete('/api/ideas/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const ideaId = parseInt(req.params.id, 10);
+  if (isNaN(ideaId)) return res.status(400).json({ error: 'Invalid idea id.' });
+  try {
+    const result = await pool.query('DELETE FROM ideas WHERE id = $1', [ideaId]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Idea not found.' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /api/ideas/:id error:', e.message);
+    res.status(500).json({ error: 'Could not delete idea.' });
+  }
+});
+
+app.delete('/api/ideas/:id/comments/:commentId', isAuthenticated, requireAdmin, async (req, res) => {
+  const ideaId    = parseInt(req.params.id, 10);
+  const commentId = parseInt(req.params.commentId, 10);
+  if (isNaN(ideaId) || isNaN(commentId)) return res.status(400).json({ error: 'Invalid id.' });
+  try {
+    const result = await pool.query(
+      'DELETE FROM idea_comments WHERE id = $1 AND idea_id = $2',
+      [commentId, ideaId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Comment not found.' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /api/ideas/:id/comments/:commentId error:', e.message);
+    res.status(500).json({ error: 'Could not delete comment.' });
+  }
+});
+
 // ── Lead Status Config ─────────────────────────────────────────────────────────
 
 // Push the full lead_status_config table to HubSpot as hs_lead_status options.

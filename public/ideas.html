@@ -16,54 +16,16 @@
 </head>
 <body>
 
-  <div id="ideas-view" class="ideas-page-wrap">
-
-    <div class="ideas-header-bar">
-      <div>
-        <h1 class="ideas-page-title">Ideas &amp; Feedback</h1>
-        <p class="ideas-page-subtitle">Share suggestions and discuss ideas with your team.</p>
-      </div>
-    </div>
-
-    <div class="ideas-submit-card" id="ideas-submit-card">
-      <form id="ideas-form" onsubmit="submitIdea(event)">
-        <textarea
-          id="ideas-input"
-          class="ideas-textarea"
-          placeholder="Share an idea or piece of feedback…"
-          rows="3"
-          required
-        ></textarea>
-        <div class="ideas-form-footer">
-          <button type="submit" class="ideas-submit-btn" id="ideas-submit-btn">
-            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
-            </svg>
-            Post idea
-          </button>
-        </div>
-      </form>
-    </div>
-
-    <div id="ideas-list" class="ideas-list">
-      <div class="ideas-loading">
-        <div class="spinner"></div>
-        Loading…
-      </div>
-    </div>
-
-  </div>
+  <div id="ideas-page-mount"></div>
 
   <script src="/chrome.js"></script>
   <script src="/components.js"></script>
   <script type="module" src="/react/main.js"></script>
   <script src="/command-palette.js"></script>
   <script src="/core.js"></script>
-  <script src="/ideas.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
-      if (!await bootstrap()) return;
-      loadIdeas();
+      await bootstrap();
     });
   </script>
 </body>
