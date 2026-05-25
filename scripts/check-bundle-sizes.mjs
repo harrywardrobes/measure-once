@@ -28,10 +28,11 @@
  */
 
 import { gzipSync } from 'zlib';
-import { readFileSync, readdirSync, statSync, mkdirSync, writeFileSync } from 'fs';
+import { readFileSync, readdirSync, statSync, mkdirSync, writeFileSync, appendFileSync, existsSync } from 'fs';
 import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
+import { execSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REACT_DIR = resolve(__dirname, '..', 'public', 'react');
@@ -256,6 +257,61 @@ ${mdRows}
 `;
 
 writeFileSync(resolve(reportDir, 'bundle-sizes.md'), mdContent);
+
+// ── History log ──────────────────────────────────────────────────────────────
+// Append one JSONL line per run: { ts, sha, totalAlwaysGzBytes, chunks: {name: gzBytes} }
+
+let gitSha = 'unknown';
+try {
+  gitSha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+    .toString()
+    .trim();
+} catch {
+  // not a git repo or git not available — leave as 'unknown'
+}
+
+const historyEntry = {
+  ts: now,
+  sha: gitSha,
+  totalAlwaysGzBytes: totalAlwaysGz,
+  result: failures > 0 ? 'FAIL' : 'PASS',
+  chunks: Object.fromEntries(
+    alwaysRows.map(r => [r.name, r.gz])
+  ),
+};
+
+const historyPath = resolve(reportDir, 'bundle-sizes-history.jsonl');
+appendFileSync(historyPath, JSON.stringify(historyEntry) + '\n');
+
+// ── Trend section in the markdown report ─────────────────────────────────────
+// Read the last N entries from the history file and append a trend table.
+
+const TREND_ENTRIES = 10;
+const historyLines = readFileSync(historyPath, 'utf8')
+  .split('\n')
+  .filter(l => l.trim().length > 0);
+const recentLines = historyLines.slice(-TREND_ENTRIES);
+const recentEntries = recentLines.map(l => JSON.parse(l));
+
+const trendRows = recentEntries.map(e => {
+  const total = kbStr(e.totalAlwaysGzBytes);
+  const chunkCols = alwaysRows.map(r => {
+    const gz = e.chunks?.[r.name];
+    return gz != null ? kbStr(gz) : '—';
+  }).join(' | ');
+  return `| ${e.ts.replace('T', ' ').replace(/\.\d+Z$/, ' UTC')} | ${e.sha} | ${total} | ${chunkCols} | ${e.result} |`;
+}).join('\n');
+
+const alwaysHeaders = alwaysRows.map(r => r.name).join(' | ');
+const alwaysSeps = alwaysRows.map(() => '---').join('|');
+
+const trendSection = `\n## Trend (last ${recentEntries.length} run${recentEntries.length === 1 ? '' : 's'})\n\n` +
+  `| Date (UTC) | SHA | Total always-loaded | ${alwaysHeaders} | Result |\n` +
+  `|---|---|---|${alwaysSeps}|---|\n` +
+  trendRows + '\n';
+
+const mdWithTrend = mdContent + trendSection;
+writeFileSync(resolve(reportDir, 'bundle-sizes.md'), mdWithTrend);
 
 // ── Exit ─────────────────────────────────────────────────────────────────────
 
