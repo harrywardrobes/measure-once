@@ -169,26 +169,33 @@ function resolveCssVar(cssVar: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
 }
 
+function useLiveCssVar(cssVar: string, fallback: string): string {
+  const [value, setValue] = useState<string>(() => resolveCssVar(cssVar) || fallback);
+
+  useEffect(() => {
+    const update = () => {
+      const live = resolveCssVar(cssVar);
+      setValue(live || fallback);
+    };
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [cssVar, fallback]);
+
+  return value;
+}
+
 interface StageColorRowProps {
   stageKey: string;
   fallback: Record<'bg' | 'light' | 'text', string>;
 }
 
 function StageColorRow({ stageKey, fallback }: StageColorRowProps) {
-  const [liveColors, setLiveColors] = React.useState<Record<'bg' | 'light' | 'text', string>>(fallback);
-
-  React.useEffect(() => {
-    const resolved = (['bg', 'light', 'text'] as const).reduce((acc, slot) => {
-      const live = resolveCssVar(`--stage-${stageKey}-${slot}`);
-      acc[slot] = live || fallback[slot];
-      return acc;
-    }, {} as Record<'bg' | 'light' | 'text', string>);
-    setLiveColors((prev) =>
-      prev.bg === resolved.bg && prev.light === resolved.light && prev.text === resolved.text
-        ? prev
-        : resolved
-    );
-  });
+  const bg   = useLiveCssVar(`--stage-${stageKey}-bg`,    fallback.bg);
+  const light = useLiveCssVar(`--stage-${stageKey}-light`, fallback.light);
+  const text  = useLiveCssVar(`--stage-${stageKey}-text`,  fallback.text);
+  const liveColors = { bg, light, text };
 
   return (
     <Paper variant="outlined" sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
@@ -221,14 +228,7 @@ function StageColorRow({ stageKey, fallback }: StageColorRowProps) {
 }
 
 function SwatchCard({ name, hex, themePath, cssVar }: SwatchCardProps) {
-  const [resolvedColor, setResolvedColor] = React.useState<string>(hex);
-
-  React.useEffect(() => {
-    const live = resolveCssVar(cssVar);
-    setResolvedColor(live || hex);
-  }, [cssVar, hex]);
-
-  const displayHex = resolvedColor || hex;
+  const displayHex = useLiveCssVar(cssVar, hex);
 
   return (
     <Paper variant="outlined" sx={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
