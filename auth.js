@@ -336,6 +336,10 @@ async function ensureAuthTables() {
   `);
 
   await pool.query(`
+    ALTER TABLE allowed_emails ADD COLUMN IF NOT EXISTS pending_profile_updates JSONB;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_settings (
       key VARCHAR PRIMARY KEY,
       value JSONB NOT NULL,
@@ -1290,11 +1294,31 @@ async function setupAuth(app) {
         date_of_birth, ni_number, mobile_number,
         ec_first_name, ec_last_name, ec_phone,
       };
+
+      // Detect conflicts: fields where admin pre-filled a non-empty value that
+      // differs from what the user submitted during onboarding.
+      const conflictFields = {
+        first_name, last_name,
+        date_of_birth, ni_number, mobile_number,
+        ec_first_name, ec_last_name, ec_phone,
+      };
+      const pendingUpdates = {};
+      for (const [field, userVal] of Object.entries(conflictFields)) {
+        const adminVal = (existingMeta[field] || '').trim();
+        const uVal = (userVal || '').trim();
+        if (adminVal && uVal && adminVal.toLowerCase() !== uVal.toLowerCase()) {
+          pendingUpdates[field] = { admin: adminVal, user: uVal };
+        }
+      }
+      const pendingJson = Object.keys(pendingUpdates).length
+        ? JSON.stringify(pendingUpdates)
+        : null;
+
       await client.query(
-        `INSERT INTO allowed_emails (email, metadata)
-         VALUES ($1, $2::jsonb)
-         ON CONFLICT (email) DO UPDATE SET metadata = $2::jsonb`,
-        [email, JSON.stringify(newMeta)]
+        `INSERT INTO allowed_emails (email, metadata, pending_profile_updates)
+         VALUES ($1, $2::jsonb, $3::jsonb)
+         ON CONFLICT (email) DO UPDATE SET metadata = $2::jsonb, pending_profile_updates = $3::jsonb`,
+        [email, JSON.stringify(newMeta), pendingJson]
       );
 
       await client.query('COMMIT');
@@ -1626,6 +1650,105 @@ async function setupAuth(app) {
     }
   });
 
+  // Admin: resolve onboarding profile discrepancies for a team member.
+  // Clears pending_profile_updates and optionally applies chosen field values.
+  // Accepts: { resolutions: { [field]: chosenValue } }
+  app.post('/api/admin/users/:id/resolve-profile-conflicts', isAuthenticated, requireAdmin, async (req, res) => {
+    const userId = req.params.id;
+    const resolutions = (req.body && typeof req.body.resolutions === 'object' && !Array.isArray(req.body.resolutions))
+      ? req.body.resolutions
+      : {};
+
+    const ALLOWED_FIELDS = ['first_name', 'last_name', 'date_of_birth', 'ni_number',
+      'mobile_number', 'ec_first_name', 'ec_last_name', 'ec_phone'];
+    const safeResolutions = {};
+    for (const f of ALLOWED_FIELDS) {
+      if (resolutions[f] !== undefined) safeResolutions[f] = (resolutions[f] || '').trim().slice(0, 200);
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const curR = await client.query(
+        `SELECT u.email FROM users u WHERE u.id = $1`, [userId]
+      );
+      if (curR.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'User not found' });
+      }
+      const email = (curR.rows[0].email || '').toLowerCase();
+
+      // Apply any field values specified in resolutions.
+      const userFields = ['first_name', 'last_name'];
+      const userCols = [];
+      const userVals = [];
+      for (const f of userFields) {
+        if (safeResolutions[f] !== undefined) {
+          const raw = safeResolutions[f];
+          const tokens = raw.split(/\s+/).filter(Boolean);
+          const tok = f === 'first_name' ? (tokens[0] || '') : (tokens[tokens.length - 1] || '');
+          const normalised = tok ? tok.charAt(0).toUpperCase() + tok.slice(1).toLowerCase() : null;
+          userCols.push(`${f} = $${userCols.length + 1}`);
+          userVals.push(normalised);
+        }
+      }
+      if (userCols.length > 0) {
+        userVals.push(userId);
+        await client.query(
+          `UPDATE users SET ${userCols.join(', ')}, updated_at = NOW() WHERE id = $${userVals.length}`,
+          userVals
+        );
+      }
+
+      const metaFields = ['date_of_birth', 'ni_number', 'mobile_number', 'ec_first_name', 'ec_last_name', 'ec_phone'];
+      const hasMetaResolutions = metaFields.some(f => safeResolutions[f] !== undefined)
+        || (safeResolutions.first_name !== undefined) || (safeResolutions.last_name !== undefined);
+
+      if (hasMetaResolutions) {
+        const existingR = await client.query(
+          `SELECT metadata FROM allowed_emails WHERE email = $1`, [email]
+        );
+        const existingMeta = existingR.rows[0]?.metadata || {};
+        const newMeta = { ...existingMeta };
+        for (const f of metaFields) {
+          if (safeResolutions[f] !== undefined) {
+            const v = safeResolutions[f];
+            if (v) newMeta[f] = v; else delete newMeta[f];
+          }
+        }
+        if (safeResolutions.first_name !== undefined) newMeta.first_name = safeResolutions.first_name || undefined;
+        if (safeResolutions.last_name  !== undefined) newMeta.last_name  = safeResolutions.last_name  || undefined;
+        await client.query(
+          `INSERT INTO allowed_emails (email, metadata, pending_profile_updates)
+           VALUES ($1, $2::jsonb, NULL)
+           ON CONFLICT (email) DO UPDATE SET metadata = $2::jsonb, pending_profile_updates = NULL`,
+          [email, JSON.stringify(newMeta)]
+        );
+      } else {
+        await client.query(
+          `UPDATE allowed_emails SET pending_profile_updates = NULL WHERE email = $1`,
+          [email]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      const adminEmail = req.user?.claims?.email || req.user?.email || null;
+      const fieldList = Object.keys(safeResolutions).join(', ') || 'none';
+      await logAdminAction(adminEmail, 'resolve_profile_conflicts', email,
+        `Resolved onboarding discrepancies; fields: ${fieldList}`);
+
+      res.json({ ok: true });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      console.error('resolve-profile-conflicts failed:', e.message);
+      res.status(500).json({ error: 'Could not resolve conflicts. Please try again.' });
+    } finally {
+      client.release();
+    }
+  });
+
   // ── User Profile ─────────────────────────────────────────────────────────────
   app.get('/api/users/:id/profile', isAuthenticated, async (req, res) => {
     const requestingId    = req.user?.claims?.sub;
@@ -1687,7 +1810,7 @@ async function setupAuth(app) {
                 (u.password_hash IS NOT NULL) AS has_password,
                 (u.custom_photo  IS NOT NULL) AS has_custom_photo,
                 (u.pending_photo IS NOT NULL) AS has_pending_photo,
-                ae.note, ae.metadata
+                ae.note, ae.metadata, ae.pending_profile_updates
          FROM users u
          LEFT JOIN allowed_emails ae ON LOWER(u.email) = ae.email
          ORDER BY u.created_at DESC LIMIT 500`

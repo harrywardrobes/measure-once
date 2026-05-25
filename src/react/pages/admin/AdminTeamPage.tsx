@@ -3,14 +3,17 @@ import {
   Alert, AlertTitle, Avatar, Box, Button, Card, CardContent, Chip, CircularProgress,
   Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl,
   Grid, InputLabel, Link, MenuItem, Select, Skeleton, Stack, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, TextField, Typography,
+  TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import DifferenceIcon from '@mui/icons-material/Difference';
 import {
   api, toast, fmtDate, fmtDateShort, emitAdminChange, onAdminChange,
   setTeamCount, PRIVILEGE_LEVELS, PRIVILEGE_LABEL,
 } from './adminApi';
 import { phoneKey, phoneFieldLabel } from './adminPhoneHelpers';
+type ProfileConflict = { admin: string; user: string };
+
 type User = {
   id: string;
   email?: string;
@@ -25,6 +28,7 @@ type User = {
   created_at?: string;
   metadata?: Record<string, string>;
   note?: string;
+  pending_profile_updates?: Record<string, ProfileConflict> | null;
 };
 
 type Allowed = {
@@ -125,6 +129,7 @@ export function AdminTeamPage() {
   const [editForm, setEditForm] = useState<Record<string, string>>({});
   const [editErr, setEditErr] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+  const [conflictChoices, setConflictChoices] = useState<Record<string, 'admin' | 'user'>>({});
   const [invite, setInvite] = useState({ ...EMPTY_INVITE });
   const [inviteErr, setInviteErr] = useState<string | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
@@ -223,6 +228,7 @@ export function AdminTeamPage() {
     const m = u.metadata || {};
     setEditing(u);
     setEditErr(null);
+    setConflictChoices({});
     setEditForm({
       first_name: u.first_name || '',
       last_name: u.last_name || '',
@@ -239,12 +245,34 @@ export function AdminTeamPage() {
     });
   }
 
+  function applyConflictChoice(field: string, which: 'admin' | 'user', conflict: ProfileConflict) {
+    setConflictChoices((prev) => ({ ...prev, [field]: which }));
+    setEditForm((prev) => ({ ...prev, [field]: which === 'admin' ? conflict.admin : conflict.user }));
+  }
+
   async function saveEdit() {
     if (!editing) return;
     setEditSaving(true);
     setEditErr(null);
     try {
       await api('PATCH', `/api/users/${encodeURIComponent(editing.id)}/profile`, editForm);
+
+      // If there were pending conflicts, call the resolution endpoint to clear
+      // pending_profile_updates. The chosen field values were already saved via PATCH.
+      const conflicts = editing.pending_profile_updates;
+      if (conflicts && Object.keys(conflicts).length > 0) {
+        const resolutions: Record<string, string> = {};
+        for (const [field, conflict] of Object.entries(conflicts)) {
+          const chosen = conflictChoices[field];
+          resolutions[field] = chosen === 'user' ? conflict.user : conflict.admin;
+        }
+        try {
+          await api('POST', `/api/admin/users/${encodeURIComponent(editing.id)}/resolve-profile-conflicts`, { resolutions });
+        } catch (resolveErr: unknown) {
+          console.warn('resolve-profile-conflicts failed (non-fatal):', resolveErr);
+        }
+      }
+
       toast('Changes saved');
       setEditing(null);
       emitAdminChange('team');
@@ -519,6 +547,7 @@ export function AdminTeamPage() {
                   ) : users.map((u) => {
                     const name = fullName(u) || '—';
                     const needsInfo = u.onboarding_status === 'more_info_required';
+                    const hasConflicts = !!(u.pending_profile_updates && Object.keys(u.pending_profile_updates).length > 0);
                     return (
                       <TableRow key={u.id} hover>
                         <TableCell>
@@ -527,7 +556,14 @@ export function AdminTeamPage() {
                               {initials(name || u.email || '?')}
                             </Avatar>
                             <Box>
-                              <Typography variant="body2" sx={{ fontWeight: 600 }}>{name}</Typography>
+                              <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>{name}</Typography>
+                                {hasConflicts && (
+                                  <Tooltip title="This member changed details during onboarding that differ from what you entered. Click Edit to review.">
+                                    <DifferenceIcon color="warning" fontSize="small" />
+                                  </Tooltip>
+                                )}
+                              </Stack>
                               <Typography variant="caption" color="text.secondary">{u.email || ''}</Typography>
                             </Box>
                           </Stack>
@@ -801,6 +837,58 @@ export function AdminTeamPage() {
           </Typography>
         </DialogTitle>
         <DialogContent dividers>
+          {/* Conflict resolution section */}
+          {editing && editing.pending_profile_updates && Object.keys(editing.pending_profile_updates).length > 0 && (() => {
+            const conflicts = editing.pending_profile_updates!;
+            const FIELD_LABEL: Record<string, string> = {
+              first_name: 'First name',
+              last_name: 'Last name',
+              date_of_birth: 'Date of birth',
+              ni_number: 'National Insurance number',
+              mobile_number: 'Mobile number',
+              ec_first_name: 'Emergency contact first name',
+              ec_last_name: 'Emergency contact last name',
+              ec_phone: 'Emergency contact phone',
+            };
+            return (
+              <Alert severity="warning" icon={<DifferenceIcon />} sx={{ mb: 2 }}>
+                <AlertTitle>Onboarding discrepancies</AlertTitle>
+                <Typography variant="body2" sx={{ mb: 1.5 }}>
+                  This member changed the following details during onboarding. Choose which value to keep for each field — your choice will update the form below.
+                </Typography>
+                <Stack spacing={1.5}>
+                  {Object.entries(conflicts).map(([field, conflict]) => {
+                    const chosen = conflictChoices[field];
+                    return (
+                      <Box key={field}>
+                        <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                          {FIELD_LABEL[field] || field}
+                        </Typography>
+                        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+                          <Button
+                            size="small"
+                            variant={chosen === 'admin' ? 'contained' : 'outlined'}
+                            color="primary"
+                            onClick={() => applyConflictChoice(field, 'admin', conflict)}
+                          >
+                            Keep admin value: {conflict.admin}
+                          </Button>
+                          <Button
+                            size="small"
+                            variant={chosen === 'user' ? 'contained' : 'outlined'}
+                            color="secondary"
+                            onClick={() => applyConflictChoice(field, 'user', conflict)}
+                          >
+                            Keep user value: {conflict.user}
+                          </Button>
+                        </Stack>
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              </Alert>
+            );
+          })()}
           <Typography variant="overline">Personal details</Typography>
           <Grid container spacing={2} sx={{ mb: 2, mt: 0.5 }}>
             <Grid size={{ xs: 12, sm: 6 }}><TextField fullWidth label="First name" value={editForm.first_name || ''} onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })} /></Grid>
