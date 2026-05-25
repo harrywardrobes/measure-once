@@ -80,6 +80,17 @@ const PASSWORD_SET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h (admin-issued)
 const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;    // 1h  (self-service reset)
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
+// Escapes characters that have special meaning in HTML to prevent injection
+// into email bodies or other HTML contexts.
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Bootstrap admin password — hashed lazily from BOOTSTRAP_ADMIN_PASSWORD env var
 // so the hash is computed at most once per server process.
 let _bootstrapAdminHash = undefined; // undefined = not yet computed
@@ -153,9 +164,9 @@ async function notifyAdminsOfAccessRequest(name, email, timestamp) {
       html: `
         <p>A new access request has been submitted.</p>
         <table cellpadding="4" cellspacing="0">
-          <tr><td><strong>Name</strong></td><td>${name}</td></tr>
-          <tr><td><strong>Email</strong></td><td>${email}</td></tr>
-          <tr><td><strong>Requested</strong></td><td>${ts}</td></tr>
+          <tr><td><strong>Name</strong></td><td>${escapeHtml(name)}</td></tr>
+          <tr><td><strong>Email</strong></td><td>${escapeHtml(email)}</td></tr>
+          <tr><td><strong>Requested</strong></td><td>${escapeHtml(ts)}</td></tr>
         </table>
         <p>Log in to the admin panel to approve or reject the request.</p>
       `,
@@ -483,8 +494,15 @@ async function cleanupExpiredSessions() {
 
 async function cleanupExpiredPasswordTokens() {
   try {
-    const r = await pool.query(`DELETE FROM password_set_tokens WHERE expires_at < NOW() - INTERVAL '7 days'`);
-    if (r.rowCount > 0) console.log(`[password-token cleanup] Removed ${r.rowCount} expired token(s).`);
+    // Only delete tokens that were never consumed. Consumed tokens (used_at IS NOT NULL)
+    // are kept permanently as proof that an admin account has completed a real
+    // set-password flow, which permanently blocks the bootstrap admin password path.
+    // Deleting consumed tokens would erase that proof and re-open the bootstrap
+    // backdoor after each cleanup cycle.
+    const r = await pool.query(
+      `DELETE FROM password_set_tokens WHERE expires_at < NOW() - INTERVAL '7 days' AND used_at IS NULL`
+    );
+    if (r.rowCount > 0) console.log(`[password-token cleanup] Removed ${r.rowCount} expired unconsumed token(s).`);
   } catch (err) {
     console.error('[password-token cleanup] Failed:', err.message);
   }
