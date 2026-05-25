@@ -794,14 +794,25 @@ export function SalesBoardPage() {
   }, [forceUpdate]);
 
   useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    const bc = new BroadcastChannel('lead_statuses_changed');
-    const subBc = new BroadcastChannel('lead_substatuses_changed');
-    bc.addEventListener('message', forceUpdate);
-    subBc.addEventListener('message', forceUpdate);
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      forceUpdate();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    let bc: BroadcastChannel | null = null;
+    let subBc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      bc = new BroadcastChannel('lead_statuses_changed');
+      bc.addEventListener('message', forceUpdate);
+      subBc = new BroadcastChannel('lead_substatuses_changed');
+      subBc.addEventListener('message', forceUpdate);
+    }
+
     return () => {
-      bc.close();
-      subBc.close();
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (bc) bc.close();
+      if (subBc) subBc.close();
     };
   }, [forceUpdate]);
 
