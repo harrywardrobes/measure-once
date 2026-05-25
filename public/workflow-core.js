@@ -254,6 +254,15 @@ function setContactsViewMode(mode) {
   }).catch(() => {});
 }
 
+// Visibility-gated stale-banner state for the room assignments panel.
+// When /api/localdata/all returns X-Cache-Status: stale or fresh while the tab
+// is hidden we defer the banner update so the user sees it only when they look
+// at the tab again (matches the contacts-page pattern).  null = no pending update.
+// A test hook (window.__setTestPendingRoomStale) lets integration tests drive
+// the pending ref directly without a network round-trip.
+let _pendingRoomAssignmentsStale = null;
+window.__setTestPendingRoomStale = (v) => { _pendingRoomAssignmentsStale = v; };
+
 async function _loadWorkflowStagesImpl() {
   const r = await fetch('/api/localdata/all', { method: 'GET', headers: { 'Content-Type': 'application/json' } });
   if (r.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
@@ -264,8 +273,15 @@ async function _loadWorkflowStagesImpl() {
     throw err;
   }
   const cacheStatus = r.headers.get('X-Cache-Status');
-  if (cacheStatus === 'fresh') state.roomAssignmentsStale = false;
-  else if (cacheStatus === 'stale') state.roomAssignmentsStale = true;
+  if (cacheStatus === 'fresh' || cacheStatus === 'stale') {
+    const nextStale = cacheStatus === 'stale';
+    if (document.hidden) {
+      _pendingRoomAssignmentsStale = nextStale;
+    } else {
+      state.roomAssignmentsStale = nextStale;
+      _pendingRoomAssignmentsStale = null;
+    }
+  }
   for (const [contactId, rooms] of Object.entries(data || {})) {
     state.contactStageCache[contactId] = rooms;
   }
@@ -471,6 +487,13 @@ async function loadLeadStatuses() {
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
+  // Apply any deferred room-stale-banner update from a fetch that arrived
+  // while the tab was hidden, then re-render the projects view.
+  if (_pendingRoomAssignmentsStale !== null) {
+    state.roomAssignmentsStale = _pendingRoomAssignmentsStale;
+    _pendingRoomAssignmentsStale = null;
+    renderProjectsView();
+  }
   Promise.all([loadLeadStatuses(), loadLeadStatusCounts(), loadLeadSubstatuses()]).then(() => {
     populateLeadStatusFilter();
     renderCustomerList();
