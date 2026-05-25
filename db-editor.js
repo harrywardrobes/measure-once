@@ -272,6 +272,104 @@ function formatPgError(e) {
   return out;
 }
 
+// Introspect every foreign-key constraint that points AT `targetTable`, then
+// for each referencing table run a small sample query to find the actual rows
+// that are blocking a delete. Returns `[]` if nothing blocks.
+//
+// Each entry shape:
+//   { table, allowed, pkCols, labelCol, refCols, targetCols, total,
+//     rows: [{ pk, label, row }, ...] }
+//
+// `allowed` reflects whether the referencing table is in our allow-list
+// (only allow-listed tables get a deep-link / editor URL on the frontend).
+async function findBlockingRows(targetTable, beforeRow, limitPerTable = 5) {
+  if (!isAllowed(targetTable) || !beforeRow) return [];
+  let fks;
+  try {
+    const r = await pool.query(
+      `SELECT con.conname AS constraint_name,
+              cl.relname  AS ref_table,
+              (SELECT array_agg(a.attname ORDER BY u.ord)
+                 FROM unnest(con.conkey) WITH ORDINALITY u(attnum, ord)
+                 JOIN pg_attribute a
+                   ON a.attrelid = con.conrelid AND a.attnum = u.attnum) AS ref_cols,
+              (SELECT array_agg(a.attname ORDER BY u.ord)
+                 FROM unnest(con.confkey) WITH ORDINALITY u(attnum, ord)
+                 JOIN pg_attribute a
+                   ON a.attrelid = con.confrelid AND a.attnum = u.attnum) AS target_cols
+         FROM pg_constraint con
+         JOIN pg_class cl     ON cl.oid = con.conrelid
+         JOIN pg_class ct     ON ct.oid = con.confrelid
+         JOIN pg_namespace ns ON ns.oid = ct.relnamespace
+        WHERE con.contype = 'f'
+          AND ct.relname  = $1
+          AND ns.nspname  = 'public'`,
+      [targetTable]
+    );
+    fks = r.rows;
+  } catch (_) { return []; }
+
+  const out = [];
+  for (const fk of fks) {
+    const refTable   = fk.ref_table;
+    const refCols    = fk.ref_cols    || [];
+    const targetCols = fk.target_cols || [];
+    if (!refCols.length || refCols.length !== targetCols.length) continue;
+    const vals = targetCols.map(c => beforeRow[c]);
+    if (vals.some(v => v === null || v === undefined)) continue;
+
+    let whereSql;
+    try {
+      whereSql = refCols.map((c, i) => `${quoteIdent(c)} = $${i + 1}`).join(' AND ');
+    } catch (_) { continue; }
+
+    let countR, sampleR;
+    try {
+      countR  = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM ${quoteIdent(refTable)} WHERE ${whereSql}`,
+        vals
+      );
+      sampleR = await pool.query(
+        `SELECT * FROM ${quoteIdent(refTable)} WHERE ${whereSql} LIMIT ${limitPerTable}`,
+        vals
+      );
+    } catch (_) { continue; }
+
+    const total = countR.rows[0]?.n || 0;
+    if (!total) continue;
+
+    const allowed = isAllowed(refTable);
+    let pkCols   = allowed ? TABLES[refTable].pk : [];
+    let labelCol = null;
+    if (allowed) {
+      try {
+        const cols = await getColumns(refTable);
+        const names = new Set(cols.map(c => c.name));
+        for (const cand of ['label', 'name', 'title', 'description', 'email', 'key']) {
+          if (names.has(cand) && !pkCols.includes(cand)) { labelCol = cand; break; }
+        }
+        if (!labelCol && pkCols.length === 1) labelCol = pkCols[0];
+      } catch (_) {}
+    }
+
+    out.push({
+      table:     refTable,
+      allowed,
+      pkCols,
+      labelCol,
+      refCols,
+      targetCols,
+      total,
+      rows: sampleR.rows.map(row => ({
+        pk:    allowed ? pkCols.map(c => row[c]).join('|') : null,
+        label: labelCol ? (row[labelCol] == null ? null : String(row[labelCol])) : null,
+        row,
+      })),
+    });
+  }
+  return out;
+}
+
 function coerceValue(value, dataType) {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -353,14 +451,30 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
       const offset   = (page - 1) * pageSize;
 
       const params = [];
-      let where = '';
+      const whereClauses = [];
       if (search && textCols.length) {
         const clauses = textCols.map(c => {
           params.push('%' + search + '%');
           return `${quoteIdent(c)}::text ILIKE $${params.length}`;
         });
-        where = 'WHERE ' + clauses.join(' OR ');
+        whereClauses.push('(' + clauses.join(' OR ') + ')');
       }
+      // Exact-match column filters (used by the "Open in editor" deep-link
+      // from the delete drawer's blocking-rows preview). Accept repeated
+      // ?fcol=…&fval=… pairs or single string values; only allow columns that
+      // actually exist on this table.
+      const toArr = v => (Array.isArray(v) ? v : (v === undefined ? [] : [v]));
+      const fcols = toArr(req.query.fcol).map(String);
+      const fvals = toArr(req.query.fval).map(String);
+      const activeFilters = [];
+      for (let i = 0; i < fcols.length && i < fvals.length; i++) {
+        const c = fcols[i];
+        if (!colNames.has(c)) continue;
+        params.push(fvals[i]);
+        whereClauses.push(`${quoteIdent(c)}::text = $${params.length}`);
+        activeFilters.push({ column: c, value: fvals[i] });
+      }
+      const where = whereClauses.length ? 'WHERE ' + whereClauses.join(' AND ') : '';
 
       const countR = await pool.query(
         `SELECT COUNT(*)::int AS n FROM ${quoteIdent(table)} ${where}`,
@@ -407,6 +521,7 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
         page,
         pageSize,
         fkResolved,
+        activeFilters,
       });
     } catch (e) {
       console.error(`GET /api/admin/db/${table}/rows error:`, e.message);
@@ -534,6 +649,7 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
     if (confirm !== req.params.pk) {
       return res.status(400).json({ error: 'PK confirmation header missing or does not match.' });
     }
+    let beforeRow = null;
     try {
       const pkValues = parsePkParam(table, req.params.pk);
       const where = pkWhereClause(table);
@@ -548,7 +664,7 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
           await client.query('ROLLBACK');
           return res.status(404).json({ error: 'Row not found.' });
         }
-        const before = beforeR.rows[0];
+        beforeRow = beforeR.rows[0];
         await client.query(
           `DELETE FROM ${quoteIdent(table)} WHERE ${where.sql}`,
           pkValues
@@ -556,7 +672,7 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
         await client.query(
           `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
            VALUES ($1, $2, $3, 'delete', $4::jsonb, NULL)`,
-          [adminEmailOf(req), table, pkOf(table, before), JSON.stringify(before)]
+          [adminEmailOf(req), table, pkOf(table, beforeRow), JSON.stringify(beforeRow)]
         );
         await client.query('COMMIT');
         res.json({ ok: true });
@@ -569,7 +685,15 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
     } catch (e) {
       console.error(`DELETE /api/admin/db/${table}/rows error:`, e.message);
       const status = e.status || (e.code === '23503' ? 409 : (e.code && e.code.startsWith('23') ? 400 : 500));
-      res.status(status).json(formatPgError(e));
+      const payload = formatPgError(e);
+      // On still-referenced FK violations, surface a sample of blocking rows
+      // so the admin can jump straight to them in the editor.
+      if (e.code === '23503' && payload.kind === 'still_referenced' && beforeRow) {
+        try {
+          payload.blockingSample = await findBlockingRows(table, beforeRow);
+        } catch (_) { /* non-fatal */ }
+      }
+      res.status(status).json(payload);
     }
   });
 

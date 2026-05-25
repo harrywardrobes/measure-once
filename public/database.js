@@ -6,7 +6,7 @@
   let TABLES = [];           // [{name, group, pk, columns, fkLabels, readOnlyTable}]
   let currentTable = null;   // table descriptor
   let currentRows = [];
-  let currentMeta = { page: 1, pageSize: 50, total: 0, sort: null, dir: 'asc', search: '' };
+  let currentMeta = { page: 1, pageSize: 50, total: 0, sort: null, dir: 'asc', search: '', filters: [] };
   let currentFkResolved = {};
 
   // ── Boot ───────────────────────────────────────────────────────────────────
@@ -121,11 +121,12 @@
     });
   }
 
-  function selectTable(name) {
+  function selectTable(name, opts) {
     const t = TABLES.find(x => x.name === name);
     if (!t) return;
     currentTable = t;
-    currentMeta = { page: 1, pageSize: 50, total: 0, sort: t.pk[0], dir: 'asc', search: '' };
+    const filters = (opts && Array.isArray(opts.filters)) ? opts.filters : [];
+    currentMeta = { page: 1, pageSize: 50, total: 0, sort: t.pk[0], dir: 'asc', search: '', filters };
     renderSidebar();
     loadRows();
   }
@@ -141,6 +142,11 @@
       page: String(currentMeta.page),
       pageSize: String(currentMeta.pageSize),
     });
+    for (const f of (currentMeta.filters || [])) {
+      if (!f || !f.column) continue;
+      params.append('fcol', f.column);
+      params.append('fval', f.value == null ? '' : String(f.value));
+    }
     try {
       const r = await fetch(`/api/admin/db/${encodeURIComponent(currentTable.name)}/rows?${params}`, { credentials: 'include' });
       if (!r.ok) {
@@ -178,11 +184,22 @@
     }).join('') : `<tr><td colspan="${t.columns.length + (isReadOnlyTable ? 0 : 1)}" class="db-state">No rows.</td></tr>`;
 
     const pageCount = Math.max(1, Math.ceil(currentMeta.total / currentMeta.pageSize));
+    const filterPills = (currentMeta.filters || []).map((f, i) =>
+      `<span class="db-filter-pill">${escapeHtml(f.column)} = ${escapeHtml(String(f.value))}
+         <button class="db-filter-clear" data-fi="${i}" title="Remove filter" aria-label="Remove filter">×</button></span>`
+    ).join('');
+    const filtersHtml = filterPills
+      ? `<div class="db-filter-bar" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:.78rem;">
+           <span style="color:var(--ink-4);">Filtered to:</span>${filterPills}
+           <button class="db-btn db-btn-ghost" id="db-clear-filters" style="padding:2px 8px;font-size:.72rem;">Clear all</button>
+         </div>`
+      : '';
     $('#db-main').innerHTML = `
       <div class="db-main-header">
         <div>
           <h2 class="db-main-title">${escapeHtml(t.name)}${isReadOnlyTable ? ' <span class="col-type" style="font-size:.7rem;color:var(--ink-4);">(read-only)</span>' : ''}</h2>
           <div class="db-main-meta">${currentMeta.total} row${currentMeta.total === 1 ? '' : 's'} · PK: ${t.pk.join(', ')}</div>
+          ${filtersHtml}
         </div>
         <div class="db-toolbar">
           <input type="text" class="field" id="db-row-search" placeholder="Search text columns…" value="${escapeHtml(currentMeta.search)}" style="border:1px solid var(--stone);border-radius:var(--radius-sm);padding:6px 10px;font-family:inherit;">
@@ -221,6 +238,21 @@
     if (add) add.addEventListener('click', () => openInsertDrawer());
     $('#pg-prev')?.addEventListener('click', () => { if (currentMeta.page > 1) { currentMeta.page--; loadRows(); } });
     $('#pg-next')?.addEventListener('click', () => { currentMeta.page++; loadRows(); });
+    $('#db-main').querySelectorAll('.db-filter-clear').forEach(b => {
+      b.addEventListener('click', () => {
+        const i = parseInt(b.dataset.fi, 10);
+        if (!isNaN(i)) {
+          currentMeta.filters.splice(i, 1);
+          currentMeta.page = 1;
+          loadRows();
+        }
+      });
+    });
+    $('#db-clear-filters')?.addEventListener('click', () => {
+      currentMeta.filters = [];
+      currentMeta.page = 1;
+      loadRows();
+    });
     $('#db-main').querySelectorAll('button[data-act]').forEach(b => {
       b.addEventListener('click', () => {
         const pk = b.dataset.pk;
@@ -602,12 +634,96 @@
         const j = await r.json().catch(() => ({}));
         if (!r.ok) {
           applyServerError('del-', j, 'HTTP ' + r.status);
+          renderBlockingSample(j && j.blockingSample, row);
           return;
         }
         toast('Row deleted.');
         closeDrawer();
         loadRows();
       } catch (e) { showFieldError('del-', null, e.message); }
+    });
+  }
+
+  // Render a small preview of the rows that are blocking the delete, with
+  // "Open in editor" deep-links per row (and a "View all" link when the
+  // referencing table has more matches than we sampled). The referencing
+  // table must be in the editor's allow-list for the link to appear.
+  function renderBlockingSample(sample, deletedRow) {
+    const drawer = document.getElementById('db-drawer');
+    if (!drawer) return;
+    const prev = document.getElementById('del-blocking');
+    if (prev) prev.remove();
+    if (!Array.isArray(sample) || !sample.length) return;
+
+    const sections = sample.map((entry, gi) => {
+      const total = entry.total || 0;
+      const shown = (entry.rows || []).length;
+      const more  = total - shown;
+      const tableLabel = escapeHtml(entry.table) +
+        (entry.allowed ? '' : ' <span style="color:var(--ink-4);font-size:.72rem;">(not editable here)</span>');
+      const rowsHtml = (entry.rows || []).map((r, ri) => {
+        const label = r.label ? escapeHtml(r.label) : '<span style="color:var(--ink-4);">(no label)</span>';
+        const pkBadge = r.pk ? `<span style="color:var(--ink-4);font-size:.72rem;">pk=${escapeHtml(r.pk)}</span>` : '';
+        const openBtn = (entry.allowed && r.pk)
+          ? `<button class="db-btn db-btn-ghost del-blocking-open" data-gi="${gi}" data-ri="${ri}" style="padding:2px 8px;font-size:.72rem;">Open in editor</button>`
+          : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;border-top:1px solid var(--stone);">
+                  <div style="min-width:0;flex:1;">${label} ${pkBadge}</div>
+                  ${openBtn}
+                </div>`;
+      }).join('');
+      const viewAll = entry.allowed
+        ? `<button class="db-btn db-btn-ghost del-blocking-viewall" data-gi="${gi}" style="padding:2px 8px;font-size:.72rem;margin-top:6px;">${
+            more > 0
+              ? `View all ${total} in “${escapeHtml(entry.table)}”`
+              : `Open “${escapeHtml(entry.table)}” filtered`
+          }</button>`
+        : '';
+      return `<div style="margin-top:10px;padding:10px;background:var(--paper-2,#fafaf7);border:1px solid var(--stone);border-radius:8px;">
+                <div style="font-weight:600;font-size:.85rem;">${tableLabel}
+                  <span style="color:var(--ink-4);font-weight:400;font-size:.72rem;">· ${total} row${total === 1 ? '' : 's'}</span>
+                </div>
+                ${rowsHtml || '<div style="color:var(--ink-4);font-size:.78rem;">(no sample rows)</div>'}
+                ${viewAll}
+              </div>`;
+    }).join('');
+
+    const wrap = document.createElement('div');
+    wrap.id = 'del-blocking';
+    wrap.style.marginTop = '14px';
+    wrap.innerHTML = `
+      <div style="font-size:.8rem;color:var(--ink-3);margin-bottom:4px;">
+        Blocking rows — remove or reassign these first, then try again:
+      </div>
+      ${sections}
+    `;
+    drawer.appendChild(wrap);
+
+    const filtersFor = (entry, row) => (entry.refCols || []).map((col, i) => {
+      const targetCol = (entry.targetCols || [])[i];
+      const val = row ? row[col] : (deletedRow && targetCol ? deletedRow[targetCol] : null);
+      return { column: col, value: val == null ? '' : String(val) };
+    });
+
+    wrap.querySelectorAll('.del-blocking-open').forEach(b => {
+      b.addEventListener('click', () => {
+        const gi = parseInt(b.dataset.gi, 10);
+        const ri = parseInt(b.dataset.ri, 10);
+        const entry = sample[gi];
+        const item  = entry && entry.rows[ri];
+        if (!entry || !item) return;
+        closeDrawer();
+        selectTable(entry.table, { filters: filtersFor(entry, item.row) });
+      });
+    });
+    wrap.querySelectorAll('.del-blocking-viewall').forEach(b => {
+      b.addEventListener('click', () => {
+        const gi = parseInt(b.dataset.gi, 10);
+        const entry = sample[gi];
+        if (!entry) return;
+        closeDrawer();
+        selectTable(entry.table, { filters: filtersFor(entry, null) });
+      });
     });
   }
 
