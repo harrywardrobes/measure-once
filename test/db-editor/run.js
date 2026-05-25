@@ -545,17 +545,434 @@ async function main() {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // (e) Per-table smoke matrix — walk every entry in TABLES.
+  //
+  // For each allow-listed table:
+  //   - GET /api/admin/db/<table>/rows must 200.
+  //   - For non-readOnlyTable entries with a fixture defined here, attempt a
+  //     minimal insert (deriving values from the column metadata + fixture
+  //     hints, satisfying NOT NULL / FK constraints) and a delete with the
+  //     matching X-Confirm-Pk header. Composite-PK tables are exercised via
+  //     the `pk1|pk2` URL segment helper.
+  //   - Any new table added to the allow-list without a fixture here surfaces
+  //     as an explicit failure so schema drift is caught immediately.
+  //
+  // Parent rows for FK-bearing tables (e.g. design_visit_rooms →
+  // design_visits) are created via the editor API in the same pass and torn
+  // down in reverse after the child fixture is deleted.
+  // ─────────────────────────────────────────────────────────────────────────
+  console.log('\n  [e] Per-table smoke matrix (every allow-listed table)');
+
+  const tablesListR = await adminClient.get('/api/admin/db/tables');
+  const tableMeta = {};
+  for (const t of (tablesListR.json?.tables || [])) tableMeta[t.name] = t;
+
+  // ── fixtures ───────────────────────────────────────────────────────────
+  // Each entry:
+  //   readOnly?: true            → GET only (matches readOnlyTable in TABLES)
+  //   fixture(ctx): {body}       → minimal POST body
+  //   parents?: [{ table, captureAs, fixture(ctx) }]
+  //                              → created first (and torn down last)
+  // ctx carries: { runId, users, parents } so child fixtures can reference
+  // parent rows.
+  const FIXTURES = {
+    lead_status_config: {
+      fixture: c => ({
+        key: `PRIVTEST_LSC_${c.runId}`,
+        label: 'privtest lsc',
+        sort_order: 9999,
+      }),
+    },
+    lead_substatuses: {
+      // status_key is a free-text reference here (no DB-level FK), so we can
+      // use a synthetic key without seeding lead_status_config first.
+      fixture: c => ({
+        status_key:    `PRIVTEST_LSC_${c.runId}_E`,
+        substatus_key: `PRIVTEST_SUB_${c.runId}`,
+        label:         'privtest sub',
+        sort_order:    9999,
+      }),
+    },
+    stage_action_labels: {
+      fixture: c => ({
+        stage_key:  `PRIVTEST_STG_${c.runId}`,
+        status_key: `PRIVTEST_STA_${c.runId}`,
+        label:      'privtest stage action',
+      }),
+    },
+    card_action_handlers: {
+      fixture: () => ({ name: 'privtest handler', type: 'noop', config: {} }),
+    },
+    card_action_handler_bindings: {
+      parents: [
+        {
+          table: 'card_action_handlers',
+          captureAs: 'handler',
+          fixture: () => ({ name: 'privtest handler parent', type: 'noop', config: {} }),
+        },
+      ],
+      // CHECK constraint requires (stage_key,status_key) XOR substatus_id.
+      // cahb_label_uniq covers (stage_key,status_key) so we use a unique key.
+      fixture: c => ({
+        handler_id: c.parents.handler.id,
+        stage_key:  `PRIVTEST_STG_${c.runId}`,
+        status_key: `PRIVTEST_STA_${c.runId}`,
+      }),
+    },
+    trade_contacts: {
+      fixture: () => ({ name: 'privtest trade', trade_type: 'PRIVTEST' }),
+    },
+    trade_companies: {
+      fixture: () => ({ company_name: 'privtest co', trade_type: 'PRIVTEST' }),
+    },
+    trade_company_contacts: {
+      parents: [
+        {
+          table: 'trade_companies',
+          captureAs: 'company',
+          fixture: () => ({ company_name: 'privtest co (parent)', trade_type: 'PRIVTEST' }),
+        },
+      ],
+      fixture: c => ({ company_id: c.parents.company.id, name: 'privtest contact' }),
+    },
+    trade_company_submissions: {
+      fixture: () => ({ company_name: 'privtest sub', trade_type: 'PRIVTEST' }),
+    },
+    trade_audit_log: { readOnly: true },
+    design_visit_handles: {
+      fixture: () => ({ name: 'privtest handle' }),
+    },
+    design_visit_furniture_ranges: {
+      fixture: () => ({ name: 'privtest range' }),
+    },
+    design_visit_door_styles: {
+      fixture: () => ({ name: 'privtest door' }),
+    },
+    terms_conditions_versions: {
+      // version_number has no unique index but use a high sentinel anyway.
+      fixture: () => ({ version_number: 999999, terms_text: 'privtest terms' }),
+    },
+    design_visits: {
+      fixture: () => ({ contact_id: 'PRIVTEST', created_by: 'privtest' }),
+    },
+    design_visit_rooms: {
+      parents: [
+        {
+          table: 'design_visits',
+          captureAs: 'visit',
+          fixture: () => ({ contact_id: 'PRIVTEST', created_by: 'privtest' }),
+        },
+      ],
+      fixture: c => ({ design_visit_id: c.parents.visit.id, room_name: 'privtest room' }),
+    },
+    design_visit_room_images: {
+      // Two-level parent chain: design_visit → design_visit_room → image.
+      parents: [
+        {
+          table: 'design_visits',
+          captureAs: 'visit',
+          fixture: () => ({ contact_id: 'PRIVTEST', created_by: 'privtest' }),
+        },
+        {
+          table: 'design_visit_rooms',
+          captureAs: 'room',
+          fixture: c => ({ design_visit_id: c.parents.visit.id, room_name: 'privtest room (parent)' }),
+        },
+      ],
+      fixture: c => ({ room_id: c.parents.room.id, storage_key: 'privtest/storage/key' }),
+    },
+    visits: {
+      fixture: () => ({
+        created_by: 'privtest',
+        type:       'other',
+        start_at:   '2099-01-01T00:00:00Z',
+        end_at:     '2099-01-01T01:00:00Z',
+      }),
+    },
+    ideas: {
+      fixture: () => ({ author_user_id: 'privtest', body: 'privtest idea' }),
+    },
+    idea_comments: {
+      parents: [
+        {
+          table: 'ideas',
+          captureAs: 'idea',
+          fixture: () => ({ author_user_id: 'privtest', body: 'privtest idea (parent)' }),
+        },
+      ],
+      fixture: c => ({ idea_id: c.parents.idea.id, author_user_id: 'privtest', body: 'privtest comment' }),
+    },
+    app_settings: {
+      fixture: c => ({ key: `PRIVTEST_APP_${c.runId}`, value: 'x' }),
+    },
+    workshop_settings: {
+      // value is NOT NULL but the editor coerces '' → NULL, so send a real
+      // value to satisfy the constraint.
+      fixture: c => ({ key: `PRIVTEST_WS_${c.runId}`, label: 'privtest ws', value: 'x' }),
+    },
+    search_settings: {
+      // pk id INTEGER DEFAULT 1; row id=1 is seeded on boot. Use a sentinel id
+      // so we don't collide.
+      fixture: () => ({ id: 999999 }),
+    },
+    whatsapp_messages: {
+      // sender_user_id is a real FK to users(id). Use the seeded admin user.
+      fixture: c => ({
+        contact_id:     'PRIVTEST',
+        sender_user_id: c.users.admin.id,
+        mode:           'freeform',
+        message_text:   'privtest msg',
+      }),
+    },
+    job_roles: {
+      fixture: c => ({ name: `privtest_role_${c.runId}` }),
+    },
+  };
+
+  // Helper: build a "pk1|pk2…" URL segment from a row + pk columns.
+  function pkSegment(meta, row) {
+    return meta.pk.map(c => String(row[c])).join('|');
+  }
+
+  // Helper: create a row via the editor API, returning {ok, row, status, body}.
+  async function createRow(table, body) {
+    const r = await adminClient.post(`/api/admin/db/${table}/rows`, body);
+    return { ok: r.status === 201, row: r.json?.row, status: r.status, body: r.json };
+  }
+
+  // Helper: delete a row by composite PK using the X-Confirm-Pk header.
+  async function deleteRow(table, pkSeg) {
+    const r = await adminClient.delete(
+      `/api/admin/db/${table}/rows/${encodeURIComponent(pkSeg)}`,
+      { headers: { 'X-Confirm-Pk': pkSeg } },
+    );
+    return { ok: r.status === 200 && r.json?.ok === true, status: r.status, body: r.json };
+  }
+
+  // Track per-table outcomes for the matrix in the report.
+  const tableMatrix = [];
+
+  const allowList = Object.keys(tableMeta).sort();
+  // Surface any table that has no fixture defined here, so adding to the
+  // allow-list without extending the test is loud.
+  for (const t of allowList) {
+    if (!Object.prototype.hasOwnProperty.call(FIXTURES, t)) {
+      record(
+        `[matrix] ${t}: smoke fixture defined`,
+        'fixture present in test/db-editor/run.js FIXTURES',
+        'missing — add a fixture so schema drift is caught',
+        false,
+      );
+      tableMatrix.push({ table: t, get: '–', insert: '–', delete: '–', note: 'no fixture' });
+    }
+  }
+
+  for (const table of allowList) {
+    const meta = tableMeta[table];
+    const cfg  = FIXTURES[table];
+    if (!cfg) continue; // already reported above
+    const row = { table, get: '–', insert: '–', delete: '–', note: '' };
+
+    // (1) GET /rows must 200.
+    {
+      const r = await adminClient.get(`/api/admin/db/${table}/rows`);
+      const ok = r.status === 200 && Array.isArray(r.json?.rows);
+      row.get = ok ? 'PASS' : `FAIL (${r.status})`;
+      record(
+        `[matrix] ${table}: GET /api/admin/db/${table}/rows → 200`,
+        'status=200 with rows[] array',
+        `status=${r.status} rows=${Array.isArray(r.json?.rows) ? r.json.rows.length : 'none'}`,
+        ok,
+      );
+    }
+
+    // Skip insert/delete for read-only tables.
+    if (cfg.readOnly || meta.readOnlyTable) {
+      row.insert = 'skip (read-only)';
+      row.delete = 'skip (read-only)';
+      tableMatrix.push(row);
+      continue;
+    }
+
+    // (2) Parent chain (created top-down).
+    const ctx = { runId, users, parents: {} };
+    const createdParents = []; // {table, pkSeg} torn down in reverse
+    let parentSetupOk = true;
+    if (cfg.parents) {
+      for (const p of cfg.parents) {
+        const parentMeta = tableMeta[p.table];
+        if (!parentMeta) {
+          record(
+            `[matrix] ${table}: parent ${p.table} present in allow-list`,
+            `tableMeta has ${p.table}`,
+            'parent not in /api/admin/db/tables response',
+            false,
+          );
+          parentSetupOk = false;
+          break;
+        }
+        const body = p.fixture(ctx);
+        const r = await createRow(p.table, body);
+        if (!r.ok) {
+          record(
+            `[matrix] ${table}: parent insert into ${p.table}`,
+            'status=201',
+            `status=${r.status} body=${JSON.stringify(r.body)}`,
+            false,
+          );
+          parentSetupOk = false;
+          break;
+        }
+        ctx.parents[p.captureAs] = r.row;
+        createdParents.unshift({ table: p.table, pkSeg: pkSegment(parentMeta, r.row) });
+      }
+    }
+    if (!parentSetupOk) {
+      row.insert = 'blocked (parent failed)';
+      row.delete = 'skip';
+      row.note   = 'parent setup failed';
+      // Best-effort teardown of any parents that were created.
+      for (const p of createdParents) await deleteRow(p.table, p.pkSeg).catch(() => {});
+      tableMatrix.push(row);
+      continue;
+    }
+
+    // (3) Minimal insert.
+    let insertedRow = null;
+    {
+      const body = cfg.fixture(ctx);
+      const r = await createRow(table, body);
+      const ok = r.ok && r.row && meta.pk.every(c => r.row[c] !== undefined && r.row[c] !== null);
+      row.insert = ok ? 'PASS' : `FAIL (${r.status})`;
+      record(
+        `[matrix] ${table}: POST insert minimal row → 201 with pk`,
+        `status=201 and row has pk columns (${meta.pk.join(', ')})`,
+        `status=${r.status} body=${JSON.stringify(r.body).slice(0, 240)}`,
+        ok,
+      );
+      if (ok) insertedRow = r.row;
+    }
+
+    // (4) Delete the inserted row (skip if insert failed).
+    if (insertedRow) {
+      const pkSeg = pkSegment(meta, insertedRow);
+      const r = await deleteRow(table, pkSeg);
+      row.delete = r.ok ? 'PASS' : `FAIL (${r.status})`;
+      record(
+        `[matrix] ${table}: DELETE /api/admin/db/${table}/rows/${pkSeg} → 200`,
+        'status=200 and body.ok=true',
+        `status=${r.status} body=${JSON.stringify(r.body)}`,
+        r.ok,
+      );
+      // Confirm the row is gone via a follow-up GET filter.
+      if (r.ok) {
+        const cols = meta.columns || [];
+        // Build a ?fcol/?fval pair on the first pk column to verify the row is gone.
+        const filterCol = meta.pk[0];
+        if (filterCol && cols.some(c => c.name === filterCol)) {
+          const filterVal = String(insertedRow[filterCol]);
+          const check = await adminClient.get(
+            `/api/admin/db/${table}/rows?fcol=${encodeURIComponent(filterCol)}&fval=${encodeURIComponent(filterVal)}`,
+          );
+          const gone = check.status === 200
+            && Array.isArray(check.json?.rows)
+            && check.json.rows.length === 0;
+          record(
+            `[matrix] ${table}: row is gone after DELETE (filtered GET)`,
+            'rows[].length=0 for the deleted pk',
+            `status=${check.status} matched=${Array.isArray(check.json?.rows) ? check.json.rows.length : 'n/a'}`,
+            gone,
+          );
+        }
+      }
+    } else {
+      row.delete = 'skip (insert failed)';
+    }
+
+    // (5) Tear down parents in reverse.
+    for (const p of createdParents) {
+      const dr = await deleteRow(p.table, p.pkSeg);
+      if (!dr.ok) {
+        row.note = (row.note ? row.note + '; ' : '')
+          + `parent cleanup ${p.table}=${dr.status}`;
+        // Don't record a finding for parent cleanup — best-effort. The DB-wide
+        // purge below catches anything that survives.
+      }
+    }
+
+    tableMatrix.push(row);
+  }
+
+  // ── final DB-level purge of synthetic rows from the matrix ────────────────
+  // Best-effort: each table's matrix probe cleans up after itself, but a
+  // failed delete or interrupted run could leave fixtures behind. Wipe
+  // anything that still matches a known sentinel.
+  try {
+    await pool.query(`DELETE FROM card_action_handler_bindings WHERE stage_key LIKE 'PRIVTEST_%' OR status_key LIKE 'PRIVTEST_%'`);
+    await pool.query(`DELETE FROM card_action_handlers WHERE name LIKE 'privtest%'`);
+    await pool.query(`DELETE FROM lead_status_config WHERE key LIKE 'PRIVTEST_%'`);
+    await pool.query(`DELETE FROM lead_substatuses WHERE status_key LIKE 'PRIVTEST_%'`);
+    await pool.query(`DELETE FROM stage_action_labels WHERE stage_key LIKE 'PRIVTEST_%'`);
+    await pool.query(`DELETE FROM trade_company_contacts WHERE name LIKE 'privtest%'`);
+    await pool.query(`DELETE FROM trade_companies WHERE company_name LIKE 'privtest%'`);
+    await pool.query(`DELETE FROM trade_contacts WHERE name LIKE 'privtest%'`);
+    await pool.query(`DELETE FROM trade_company_submissions WHERE company_name LIKE 'privtest%'`);
+    await pool.query(`DELETE FROM design_visit_room_images WHERE storage_key LIKE 'privtest/%'`);
+    await pool.query(`DELETE FROM design_visit_rooms WHERE room_name LIKE 'privtest%'`);
+    await pool.query(`DELETE FROM design_visits WHERE contact_id = 'PRIVTEST' AND created_by = 'privtest'`);
+    await pool.query(`DELETE FROM design_visit_handles WHERE name LIKE 'privtest%'`);
+    await pool.query(`DELETE FROM design_visit_furniture_ranges WHERE name LIKE 'privtest%'`);
+    await pool.query(`DELETE FROM design_visit_door_styles WHERE name LIKE 'privtest%'`);
+    await pool.query(`DELETE FROM terms_conditions_versions WHERE version_number = 999999`);
+    await pool.query(`DELETE FROM visits WHERE created_by = 'privtest' AND type = 'other'`);
+    await pool.query(`DELETE FROM idea_comments WHERE author_user_id = 'privtest'`);
+    await pool.query(`DELETE FROM ideas WHERE author_user_id = 'privtest'`);
+    await pool.query(`DELETE FROM app_settings WHERE key LIKE 'PRIVTEST_%'`);
+    await pool.query(`DELETE FROM workshop_settings WHERE key LIKE 'PRIVTEST_%'`);
+    await pool.query(`DELETE FROM search_settings WHERE id = 999999`);
+    await pool.query(`DELETE FROM whatsapp_messages WHERE contact_id = 'PRIVTEST'`);
+    await pool.query(`DELETE FROM job_roles WHERE name LIKE 'privtest_role_%'`);
+    await pool.query(
+      `DELETE FROM db_editor_audit
+        WHERE (after_data->>'contact_id'  = 'PRIVTEST')
+           OR (before_data->>'contact_id' = 'PRIVTEST')
+           OR table_name IN (
+             'card_action_handlers','card_action_handler_bindings',
+             'lead_status_config','lead_substatuses','stage_action_labels',
+             'trade_contacts','trade_companies','trade_company_contacts','trade_company_submissions',
+             'design_visits','design_visit_rooms','design_visit_room_images',
+             'design_visit_handles','design_visit_furniture_ranges','design_visit_door_styles',
+             'terms_conditions_versions','visits','ideas','idea_comments',
+             'app_settings','workshop_settings','search_settings','whatsapp_messages','job_roles')
+          AND (
+               (after_data->>'name' LIKE 'privtest%')
+            OR (before_data->>'name' LIKE 'privtest%')
+            OR (after_data->>'key' LIKE 'PRIVTEST_%')
+            OR (before_data->>'key' LIKE 'PRIVTEST_%')
+            OR (after_data->>'stage_key' LIKE 'PRIVTEST_%')
+            OR (before_data->>'stage_key' LIKE 'PRIVTEST_%')
+            OR (after_data->>'status_key' LIKE 'PRIVTEST_%')
+            OR (before_data->>'status_key' LIKE 'PRIVTEST_%')
+            OR (after_data->>'created_by' = 'privtest')
+            OR (before_data->>'created_by' = 'privtest')
+          )`
+    );
+  } catch (e) {
+    console.log(`  (matrix DB purge encountered: ${e.message})`);
+  }
+
   // ── summary & report ──────────────────────────────────────────────────────
   const pass = findings.filter(f => f.ok).length;
   const fail = findings.filter(f => !f.ok).length;
   console.log(`\n  Results: ${pass} passed, ${fail} failed`);
 
-  await writeReport(runId, findings);
+  await writeReport(runId, findings, tableMatrix);
   await cleanupAndExit(fail > 0 ? 1 : 0);
 }
 
 // ── report writer ─────────────────────────────────────────────────────────────
-async function writeReport(runId, findings) {
+async function writeReport(runId, findings, tableMatrix = []) {
   const dir = path.resolve(__dirname, '..', '..', 'test-results');
   fs.mkdirSync(dir, { recursive: true });
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
@@ -600,6 +1017,22 @@ async function writeReport(runId, findings) {
     '  rejected with 400, DELETE with a mismatched header is rejected with 400,',
     '  the row stays in the database, no delete audit row is written, and the',
     '  matching-header DELETE then succeeds.',
+    '- **(e) Per-table smoke matrix**: walks every entry in `db-editor.js`',
+    '  `TABLES`. For each allow-listed table the suite issues',
+    '  `GET /api/admin/db/<table>/rows` and asserts 200. For non-read-only',
+    '  tables it also performs a minimal insert and the corresponding',
+    '  delete (including parent-row chains for FK-bearing children and the',
+    '  `pk1|pk2` segment for composite primary keys), then verifies the row',
+    '  is gone via a filtered GET. New tables added to the allow-list without',
+    '  a fixture surface as an explicit failure so schema drift is caught.',
+    '',
+    '## Per-table matrix',
+    '',
+    '| Table | GET rows | Insert | Delete | Notes |',
+    '|---|---|---|---|---|',
+    ...tableMatrix.map(r =>
+      `| \`${esc(r.table)}\` | ${esc(r.get)} | ${esc(r.insert)} | ${esc(r.delete)} | ${esc(r.note || '')} |`,
+    ),
     '',
     '## Notes',
     '',
