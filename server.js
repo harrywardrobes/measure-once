@@ -1701,13 +1701,14 @@ app.post('/api/contacts/urgency', isAuthenticated, requireHubspotToken, async (r
     // Batch read contact→task associations.
     let assocResults = [];
     try {
-      const assocR = await axios.post(
+      const assocR = await hubspotRequestWithRetry(
+        'post',
         `${HS}/crm/v4/associations/contacts/tasks/batch/read`,
-        { inputs: ids.map(id => ({ id })) },
-        { headers: hsHeaders() }
+        { inputs: ids.map(id => ({ id })) }
       );
       assocResults = assocR.data?.results || [];
-    } catch (_e) {
+    } catch (e) {
+      console.error('POST /api/contacts/urgency assoc batch error:', e.response?.data || e.message);
       return res.json({ urgency });
     }
 
@@ -1729,16 +1730,18 @@ app.post('/api/contacts/urgency', isAuthenticated, requireHubspotToken, async (r
     for (let i = 0; i < allTaskIdList.length; i += 100) {
       const chunk = allTaskIdList.slice(i, i + 100);
       try {
-        const taskR = await axios.post(
+        const taskR = await hubspotRequestWithRetry(
+          'post',
           `${HS}/crm/v3/objects/tasks/batch/read`,
           {
             properties: ['hs_task_status', 'hs_timestamp'],
             inputs: chunk.map(id => ({ id })),
-          },
-          { headers: hsHeaders() }
+          }
         );
         for (const t of (taskR.data?.results || [])) tasksById.set(String(t.id), t);
-      } catch (_e) { /* skip chunk on failure; leave those urgencies null */ }
+      } catch (e) {
+        console.error('POST /api/contacts/urgency task batch error (chunk skipped):', e.response?.data || e.message);
+      }
     }
 
     // Compute urgency using the same working-day window as the client's
@@ -1903,14 +1906,14 @@ let _workflowStagesInflight = null; // Promise while a scan is running
 
 async function fetchWorkflowStagesFromHubspot() {
   // Search for all notes that store workflow data
-  const searchR = await axios.post(
+  const searchR = await hubspotRequestWithRetry(
+    'post',
     `${HS}/crm/v3/objects/notes/search`,
     {
       filterGroups: [{ filters: [{ propertyName: 'hs_note_body', operator: 'CONTAINS_TOKEN', value: 'WORKFLOW_DATA' }] }],
       properties: ['hs_note_body'],
       limit: 200
-    },
-    { headers: hsHeaders() }
+    }
   );
 
   const notes = (searchR.data.results || []).filter(n =>
@@ -1919,10 +1922,10 @@ async function fetchWorkflowStagesFromHubspot() {
   if (!notes.length) return {};
 
   // Batch read note → contact associations
-  const assocR = await axios.post(
+  const assocR = await hubspotRequestWithRetry(
+    'post',
     `${HS}/crm/v4/associations/notes/contacts/batch/read`,
-    { inputs: notes.map(n => ({ id: n.id })) },
-    { headers: hsHeaders() }
+    { inputs: notes.map(n => ({ id: n.id })) }
   );
 
   // Parse each note into rooms array
