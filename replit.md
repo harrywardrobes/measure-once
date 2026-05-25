@@ -196,6 +196,14 @@ fallback for inspecting and fixing data that has no dedicated admin UI.
   and the `before` / `after` JSON snapshot. Audit rows are append-only and
   visible via the **Audit log** tab on the same page (filterable by table
   and admin).
+- Each audit entry on the **Audit log** tab has a one-click revert button
+  (Restore row / Undo insert / Revert change). Reverts go through
+  `POST /api/admin/db/audit/:id/revert`, are gated by the same allow-list
+  and `isAuthenticated + requireAdmin` checks, and run inside a single
+  transaction that also writes a new `db_editor_audit` row describing the
+  revert. Conflicts (PK already re-used by a later insert, original row no
+  longer exists, etc.) return a 4xx with a friendly message that renders
+  inline under the audit entry.
 
 ## Dev-only admin features
 

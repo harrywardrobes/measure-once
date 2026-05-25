@@ -193,6 +193,19 @@
       background: none; border: none; color: var(--orchid); cursor: pointer;
       font-size: .72rem; font-family: inherit; padding: 0;
     }
+    .db-audit-row .a-actions {
+      display: flex; align-items: center; gap: 12px; margin-top: 4px;
+    }
+    .db-audit-row .a-actions .db-btn { font-size: .72rem; padding: 3px 10px; }
+    .db-audit-row .a-revert-na {
+      font-size: .72rem; color: var(--ink-4); font-style: italic;
+    }
+    .db-audit-row .a-err {
+      display: none; margin-top: 6px; font-size: .75rem;
+      color: #991b1b; background: #fef2f2; border: 1px solid #fecaca;
+      border-radius: var(--radius-sm); padding: 6px 9px;
+    }
+    .db-audit-row .a-err.show { display: block; }
   </style>
 </head>
 <body>

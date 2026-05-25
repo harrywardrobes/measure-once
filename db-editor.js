@@ -567,6 +567,166 @@ function installDbEditorRoutes(app, { isAuthenticated, requireAdmin }) {
     }
   });
 
+  // Revert a previous audit entry.
+  //   delete  → re-insert before_data
+  //   update  → re-apply before_data to the current row
+  //   insert  → delete the inserted row (matched by PK)
+  // The revert itself is recorded as its own audit row inside the same
+  // transaction. Conflicts (PK already re-used, row no longer exists, etc.)
+  // are surfaced with a clear status + message so the UI can show them inline.
+  app.post('/api/admin/db/audit/:id/revert', isAuthenticated, requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid audit id.' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const auditR = await client.query(
+        `SELECT id, table_name, pk, op, before_data, after_data
+         FROM db_editor_audit WHERE id = $1 LIMIT 1`,
+        [id]
+      );
+      if (!auditR.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Audit entry not found.' });
+      }
+      const audit = auditR.rows[0];
+      const table = audit.table_name;
+      if (!isAllowed(table)) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'Table not in allow-list.' });
+      }
+      if (TABLES[table].readOnlyTable) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'This table is read-only.' });
+      }
+
+      const cols = await getColumns(table);
+      const adminEmail = adminEmailOf(req);
+
+      if (audit.op === 'insert') {
+        // Revert an insert by deleting the row at the recorded PK.
+        const pkValues = parsePkParam(table, audit.pk);
+        const where = pkWhereClause(table);
+        const beforeR = await client.query(
+          `SELECT * FROM ${quoteIdent(table)} WHERE ${where.sql} LIMIT 1`,
+          pkValues
+        );
+        if (!beforeR.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            error: 'Cannot revert: the row no longer exists (already deleted or PK changed).',
+          });
+        }
+        const before = beforeR.rows[0];
+        await client.query(
+          `DELETE FROM ${quoteIdent(table)} WHERE ${where.sql}`,
+          pkValues
+        );
+        await client.query(
+          `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
+           VALUES ($1, $2, $3, 'delete', $4::jsonb, NULL)`,
+          [adminEmail, table, pkOf(table, before), JSON.stringify(before)]
+        );
+        await client.query('COMMIT');
+        return res.json({ ok: true, revertedOp: 'insert', newOp: 'delete' });
+      }
+
+      if (audit.op === 'update') {
+        // Revert an update by restoring the before_data values onto the current row.
+        const before = audit.before_data || {};
+        const pkValues = TABLES[table].pk.map(c => before[c]);
+        if (pkValues.some(v => v === undefined || v === null)) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Cannot revert: original PK missing from audit data.' });
+        }
+        const where = pkWhereClause(table);
+        const curR = await client.query(
+          `SELECT * FROM ${quoteIdent(table)} WHERE ${where.sql} LIMIT 1`,
+          pkValues
+        );
+        if (!curR.rows.length) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            error: 'Cannot revert: the original row no longer exists.',
+          });
+        }
+        const cur = curR.rows[0];
+        // Only restore columns that still exist on the table and are not PKs.
+        const setCols = [];
+        const setVals = [];
+        for (const c of cols) {
+          if (c.is_pk) continue;
+          if (!Object.prototype.hasOwnProperty.call(before, c.name)) continue;
+          setCols.push(c.name);
+          setVals.push(coerceValue(before[c.name], c.data_type));
+        }
+        if (!setCols.length) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Nothing to revert (no editable columns recorded).' });
+        }
+        const setSql = setCols.map((n, i) => `${quoteIdent(n)} = $${i + 1}`).join(', ');
+        const w2 = pkWhereClause(table, setCols.length + 1);
+        const updR = await client.query(
+          `UPDATE ${quoteIdent(table)} SET ${setSql} WHERE ${w2.sql} RETURNING *`,
+          [...setVals, ...pkValues]
+        );
+        const after = updR.rows[0];
+        await client.query(
+          `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
+           VALUES ($1, $2, $3, 'update', $4::jsonb, $5::jsonb)`,
+          [adminEmail, table, pkOf(table, after), JSON.stringify(cur), JSON.stringify(after)]
+        );
+        await client.query('COMMIT');
+        return res.json({ ok: true, revertedOp: 'update', newOp: 'update' });
+      }
+
+      if (audit.op === 'delete') {
+        // Revert a delete by re-inserting the row from before_data.
+        const before = audit.before_data || {};
+        const insertCols = [];
+        const insertVals = [];
+        for (const c of cols) {
+          if (!Object.prototype.hasOwnProperty.call(before, c.name)) continue;
+          insertCols.push(c.name);
+          insertVals.push(coerceValue(before[c.name], c.data_type));
+        }
+        if (!insertCols.length) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Nothing to restore (no columns recorded).' });
+        }
+        const placeholders = insertVals.map((_, i) => `$${i + 1}`).join(', ');
+        const colsSql = insertCols.map(quoteIdent).join(', ');
+        const r = await client.query(
+          `INSERT INTO ${quoteIdent(table)} (${colsSql}) VALUES (${placeholders}) RETURNING *`,
+          insertVals
+        );
+        const inserted = r.rows[0];
+        await client.query(
+          `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
+           VALUES ($1, $2, $3, 'insert', NULL, $4::jsonb)`,
+          [adminEmail, table, pkOf(table, inserted), JSON.stringify(inserted)]
+        );
+        await client.query('COMMIT');
+        return res.json({ ok: true, revertedOp: 'delete', newOp: 'insert', row: inserted });
+      }
+
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Unknown audit op: ' + audit.op });
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      console.error(`POST /api/admin/db/audit/${id}/revert error:`, e.message);
+      const status = e.status || (e.code === '23505' ? 409 : (e.code && e.code.startsWith('23') ? 400 : 500));
+      const payload = formatPgError(e);
+      if (e.code === '23505') {
+        payload.message = 'Cannot restore this row: another row already uses its primary key. ' +
+          'Delete or rename the conflicting row first.';
+      }
+      res.status(status).json(payload);
+    } finally {
+      client.release();
+    }
+  });
+
   // Audit log.
   app.get('/api/admin/db/audit', isAuthenticated, requireAdmin, async (req, res) => {
     try {

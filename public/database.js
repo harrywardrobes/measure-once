@@ -657,10 +657,19 @@
       $('#audit-pager').innerHTML = '';
       return;
     }
+    const tablesByName = new Map(TABLES.map(t => [t.name, t]));
     $('#audit-list').innerHTML = j.rows.map((row, i) => {
       const diff = diffHtml(row.before_data, row.after_data);
+      const meta = tablesByName.get(row.table_name);
+      const canRevert = !!meta && !meta.readOnlyTable;
+      const revertLabel = row.op === 'delete' ? 'Restore row'
+        : row.op === 'insert' ? 'Undo insert'
+        : 'Revert change';
+      const revertBtn = canRevert
+        ? `<button class="db-btn db-btn-ghost a-revert" data-audit-id="${row.id}" data-op="${escapeHtml(row.op)}" data-table="${escapeHtml(row.table_name)}" data-pk="${escapeHtml(row.pk || '')}">${revertLabel}</button>`
+        : `<span class="a-revert-na" title="Table is not editable">Revert unavailable</span>`;
       return `
-        <div class="db-audit-row" data-i="${i}">
+        <div class="db-audit-row" data-i="${i}" data-audit-id="${row.id}">
           <div>
             <div class="a-time">${escapeHtml(fmtDate(row.acted_at))}</div>
             <div style="font-size:.75rem;color:var(--ink-3);">${escapeHtml(row.admin_email)}</div>
@@ -668,7 +677,11 @@
           <div><span class="a-op ${escapeHtml(row.op)}">${escapeHtml(row.op)}</span></div>
           <div>
             <div><strong>${escapeHtml(row.table_name)}</strong> <span style="color:var(--ink-4);font-size:.75rem;">pk=${escapeHtml(row.pk || '')}</span></div>
-            <button class="a-expand" data-i="${i}">Show diff</button>
+            <div class="a-actions">
+              <button class="a-expand" data-i="${i}">Show diff</button>
+              ${revertBtn}
+            </div>
+            <div class="a-err" id="audit-err-${row.id}"></div>
             <div class="a-diff" id="audit-diff-${i}">${diff}</div>
           </div>
         </div>`;
@@ -680,6 +693,9 @@
         b.textContent = row.classList.contains('expanded') ? 'Hide diff' : 'Show diff';
       });
     });
+    $('#audit-list').querySelectorAll('button.a-revert').forEach(b => {
+      b.addEventListener('click', () => revertAuditEntry(b));
+    });
     const pageCount = Math.max(1, Math.ceil(j.total / j.pageSize));
     $('#audit-pager').innerHTML = `
       <button class="db-btn db-btn-ghost" id="ap-prev" ${auditPage <= 1 ? 'disabled' : ''}>Prev</button>
@@ -688,5 +704,48 @@
     `;
     $('#ap-prev')?.addEventListener('click', () => { if (auditPage > 1) { auditPage--; fetchAudit(); } });
     $('#ap-next')?.addEventListener('click', () => { auditPage++; fetchAudit(); });
+  }
+
+  async function revertAuditEntry(btn) {
+    const id    = btn.dataset.auditId;
+    const op    = btn.dataset.op;
+    const table = btn.dataset.table;
+    const pk    = btn.dataset.pk;
+    const errEl = document.getElementById('audit-err-' + id);
+    if (errEl) { errEl.textContent = ''; errEl.classList.remove('show'); }
+    const prompt = op === 'delete'
+      ? `Restore the previously-deleted row in "${table}" (pk=${pk})?`
+      : op === 'insert'
+        ? `Delete the row that was inserted into "${table}" (pk=${pk})?`
+        : `Revert this update to "${table}" (pk=${pk}) by re-applying the original values?`;
+    if (!window.confirm(prompt)) return;
+    btn.disabled = true;
+    const origText = btn.textContent;
+    btn.textContent = 'Working…';
+    try {
+      const r = await fetch('/api/admin/db/audit/' + encodeURIComponent(id) + '/revert', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg = (j && (j.message || j.error)) || ('HTTP ' + r.status);
+        if (errEl) { errEl.textContent = msg; errEl.classList.add('show'); }
+        else toast(msg, true);
+        btn.disabled = false;
+        btn.textContent = origText;
+        return;
+      }
+      toast('Reverted. A new audit entry has been recorded.');
+      // Reload the audit list so the new entry appears at the top, and refresh
+      // the current data tab if it's showing the affected table.
+      fetchAudit();
+      if (currentTable && currentTable.name === table) loadRows();
+    } catch (e) {
+      if (errEl) { errEl.textContent = e.message; errEl.classList.add('show'); }
+      else toast(e.message, true);
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
   }
 })();
