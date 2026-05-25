@@ -451,28 +451,25 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
       }
     }
 
-    await hubspotRequestWithRetry('patch',
-      `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
-      {
-        properties: {
-          measure_once_rooms:    JSON.stringify(rooms),
-          measure_once_notes:    notes    || '',
-          measure_once_stage:    stage    || '',
-          measure_once_substage: substage || '',
+    try {
+      await hubspotRequestWithRetry('patch',
+        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+        {
+          properties: {
+            measure_once_rooms:    JSON.stringify(rooms),
+            measure_once_notes:    notes    || '',
+            measure_once_stage:    stage    || '',
+            measure_once_substage: substage || '',
+          }
         }
-      }
-    );
+      );
+    } catch (hsErr) {
+      console.error('[localdata] HubSpot PATCH failed after retries (non-fatal):', hsErr.message);
+    }
     bustSharedCache();
     res.json({ success: true });
   } catch (e) {
-    const status = e.response?.status;
-    if (status === 401 || status === 403) {
-      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
-    }
-    if (status === 429) {
-      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
-    }
-    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    res.status(500).json({ error: e.message || 'Unexpected error.' });
   }
 });
 

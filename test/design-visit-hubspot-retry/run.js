@@ -443,6 +443,38 @@ async function main() {
       ldContactPatches[1]?.status === 200,
       `second status=${ldContactPatches[1]?.status}`);
 
+    // ── (LD2) localdata PATCH permanent failure: PATCH /crm/v3/objects/contacts/:id always 500
+    // hubspotRequestWithRetry exhausts all maxAttempts (4), then the inner
+    // non-fatal try/catch in POST /api/contacts/:id/localdata swallows the
+    // error. The endpoint must still return 200 and not surface the failure.
+    console.log('\n  [LD2] localdata PATCH: permanent 500 → endpoint still returns 200');
+    mock.resetHits();
+    mock.calls.length = 0;
+
+    mock.configEndpoint('/crm/v3/objects/contacts/', 'ok',
+      { id: CONTACT_ID, properties: { measure_once_rooms: null } }, 'GET');
+    mock.configEndpoint('/crm/v3/objects/contacts/', 'alwaysFail', null, 'PATCH');
+
+    const ld2 = await client.post(`/api/contacts/${CONTACT_ID}/localdata`, {
+      rooms:    [{ room: 'Main', stageKey: 'sales' }],
+      notes:    '',
+      stage:    '',
+      substage: '',
+    });
+
+    const ld2ContactPatches = mock.calls.filter(
+      c => c.url.startsWith('/crm/v3/objects/contacts/') && c.method === 'PATCH'
+    );
+    record('LD2.1 localdata returns 200 despite permanent PATCH failure',
+      ld2.status === 200,
+      `status=${ld2.status} body=${ld2.text.slice(0, 120)}`);
+    record('LD2.2 contacts PATCH exhausted all 4 attempts',
+      ld2ContactPatches.length === 4,
+      `calls=${ld2ContactPatches.length} statuses=${ld2ContactPatches.map(c => c.status).join(',')}`);
+    record('LD2.3 all PATCH attempts returned 500',
+      ld2ContactPatches.every(c => c.status === 500),
+      `statuses=${ld2ContactPatches.map(c => c.status).join(',')}`);
+
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
@@ -499,6 +531,10 @@ async function writeReport(runId) {
     '- **(LD) localdata PATCH retry**: `POST /api/contacts/:id/localdata` with the',
     '  `PATCH /crm/v3/objects/contacts/:id` returning 429 on the first attempt.',
     '  Recovers via `hubspotRequestWithRetry` and the endpoint returns 200 (not 502).',
+    '- **(LD2) localdata PATCH permanent failure**: `POST /api/contacts/:id/localdata`',
+    '  with `PATCH /crm/v3/objects/contacts/:id` always returning 500. All 4 retry',
+    '  attempts are exhausted; the inner non-fatal `try/catch` in the route handler',
+    '  swallows the error. The endpoint still returns 200 and does not surface the failure.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
