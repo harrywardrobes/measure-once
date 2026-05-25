@@ -31,6 +31,7 @@ const _tradePhoneDebounce = {};
 const _tradePhoneConflicts = {};
 let _tradeCompanyPhoneDebounce = null;
 let _tradeCompanyPhoneConflict = null;
+let _phoneDirectory = { team: [], trades: [], customers: [] };
 let _tradeTypeFilter = (() => { try { return localStorage.getItem('tradesTypeFilter') || ''; } catch (_) { return ''; } })();
 let _tradeAreaFilter = '';
 let _tradeSearch = '';
@@ -91,6 +92,16 @@ async function loadTradeContacts() {
     _tradeContacts = await GET('/api/trades');
     populateTradeFilters();
     applyTradeFilters();
+    // Fire-and-forget cross-surface phone directory load.
+    GET('/api/admin/phone-directory').then(d => {
+      if (d && typeof d === 'object') {
+        _phoneDirectory = {
+          team:      Array.isArray(d.team)      ? d.team      : [],
+          trades:    Array.isArray(d.trades)    ? d.trades    : [],
+          customers: Array.isArray(d.customers) ? d.customers : [],
+        };
+      }
+    }).catch(() => { /* non-fatal */ });
   } catch (e) {
     const isDbError = e.code === 'DB_ERROR';
     const msg = isDbError
@@ -421,23 +432,65 @@ function describeContactPhoneMatch(co, contactName) {
   return `<strong>This phone number is already in use</strong> by ${who}<a href="#" class="trades-phone-notice-link" data-trade-id="${escHtml(String(co.id))}" style="color:inherit;text-decoration:underline;font-weight:600">${linkLabel}</a>. Pick a different number or open the existing record.`;
 }
 
+function describeCustomerPhoneMatch(contactId, label, field) {
+  const where = field === 'mobilephone' ? 'mobile' : 'phone';
+  const safeLabel = escHtml(label || 'a customer');
+  const href = `/customers/${encodeURIComponent(String(contactId))}`;
+  return `<strong>This phone number is already in use</strong> as the ${where} of customer <a href="${escHtml(href)}" style="color:inherit;text-decoration:underline;font-weight:600">${safeLabel}</a>. Pick a different number or open the existing record.`;
+}
+
+function describeTeamPhoneMatch(entry) {
+  const where = entry.field === 'ec_phone' ? 'emergency contact phone' : 'mobile number';
+  const safeLabel = escHtml(entry.label || entry.email || 'a team member');
+  return `<strong>This phone number is already in use</strong> as the ${where} of team member <a href="/admin" style="color:inherit;text-decoration:underline;font-weight:600">${safeLabel}</a>. Pick a different number or open the existing record.`;
+}
+
 function findTradePhoneConflict(phone) {
   const needle = phoneKey(phone);
   if (!needle) return null;
   const editingId = (document.getElementById('trades-edit-id') || {}).value || '';
+  // 1. Other trade companies (rich object, supports in-page modal reopen).
   for (const co of (_tradeContacts || [])) {
     if (String(co.id) === String(editingId)) continue;
     if (phoneKey(co.company_phone) === needle) {
-      return { company: co, kind: 'company' };
+      return { surface: 'trade', company: co, kind: 'company' };
     }
     const contacts = Array.isArray(co.contacts) ? co.contacts : [];
     for (const c of contacts) {
       if (phoneKey(c && c.phone) === needle) {
-        return { company: co, kind: 'contact', contactName: (c && c.name) || '' };
+        return { surface: 'trade', company: co, kind: 'contact', contactName: (c && c.name) || '' };
       }
     }
   }
+  // 2. Team members.
+  for (const t of (_phoneDirectory.team || [])) {
+    if (phoneKey(t.phone) === needle) {
+      return { surface: 'team', entry: t };
+    }
+  }
+  // 3. HubSpot customer contacts.
+  for (const c of (_phoneDirectory.customers || [])) {
+    if (phoneKey(c.phone) === needle) {
+      return { surface: 'customer', contactId: c.contactId, label: c.label, field: c.field };
+    }
+  }
   return null;
+}
+
+function renderPhoneConflictHtml(conflict) {
+  if (!conflict) return '';
+  if (conflict.surface === 'trade' || conflict.company) {
+    return conflict.kind === 'company'
+      ? describePhoneMatch(conflict.company, 'company phone')
+      : describeContactPhoneMatch(conflict.company, conflict.contactName);
+  }
+  if (conflict.surface === 'team') {
+    return describeTeamPhoneMatch(conflict.entry);
+  }
+  if (conflict.surface === 'customer') {
+    return describeCustomerPhoneMatch(conflict.contactId, conflict.label, conflict.field);
+  }
+  return '';
 }
 
 function attachPhoneNoticeLink(notice) {
@@ -460,11 +513,8 @@ function renderTradePhoneNotice(index) {
     notice.innerHTML = '';
     return;
   }
-  const co = conflict.company;
   notice.classList.remove('hidden');
-  notice.innerHTML = conflict.kind === 'company'
-    ? describePhoneMatch(co, 'company phone')
-    : describeContactPhoneMatch(co, conflict.contactName);
+  notice.innerHTML = renderPhoneConflictHtml(conflict);
   attachPhoneNoticeLink(notice);
 }
 
@@ -477,11 +527,8 @@ function renderTradeCompanyPhoneNotice() {
     notice.innerHTML = '';
     return;
   }
-  const co = conflict.company;
   notice.classList.remove('hidden');
-  notice.innerHTML = conflict.kind === 'company'
-    ? describePhoneMatch(co, 'company phone')
-    : describeContactPhoneMatch(co, conflict.contactName);
+  notice.innerHTML = renderPhoneConflictHtml(conflict);
   attachPhoneNoticeLink(notice);
 }
 

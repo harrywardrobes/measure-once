@@ -2392,6 +2392,111 @@ app.delete('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req
   }
 });
 
+// ── Cross-surface phone-number directory ─────────────────────────────────────
+// Used by the admin Team page and the Trades modal to flag a phone number that
+// is already in use somewhere else (team metadata, trade-company contacts, or
+// HubSpot customer contacts). Gated to manager+admin because trades surfaces
+// require that level, and team-side callers are already admin-only.
+app.get('/api/admin/phone-directory', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+  try {
+    const out = { team: [], trades: [], customers: [] };
+
+    // Team: users joined with allowed_emails metadata.
+    try {
+      const r = await pool.query(
+        `SELECT u.id, u.email, u.first_name, u.last_name, ae.metadata
+           FROM users u
+           LEFT JOIN allowed_emails ae ON LOWER(u.email) = ae.email
+           ORDER BY u.created_at DESC LIMIT 500`
+      );
+      for (const row of r.rows) {
+        const m = row.metadata || {};
+        const label = [row.first_name, row.last_name].filter(Boolean).join(' ') || row.email || '—';
+        if (m.mobile_number) {
+          out.team.push({ kind: 'user', userId: row.id, email: row.email, label, field: 'mobile_number', phone: m.mobile_number });
+        }
+        if (m.ec_phone) {
+          out.team.push({ kind: 'user', userId: row.id, email: row.email, label, field: 'ec_phone', phone: m.ec_phone });
+        }
+      }
+      // Approved allow-list rows that don't yet have a corresponding users row
+      // (rare, but possible). Include them under `kind: 'allowed'`.
+      const a = await pool.query(
+        `SELECT ae.email, ae.metadata
+           FROM allowed_emails ae
+           LEFT JOIN users u ON LOWER(u.email) = ae.email
+          WHERE u.id IS NULL`
+      );
+      for (const row of a.rows) {
+        const m = row.metadata || {};
+        const label = [m.first_name, m.last_name].filter(Boolean).join(' ') || row.email;
+        if (m.mobile_number) {
+          out.team.push({ kind: 'allowed', email: row.email, label, field: 'mobile_number', phone: m.mobile_number });
+        }
+        if (m.ec_phone) {
+          out.team.push({ kind: 'allowed', email: row.email, label, field: 'ec_phone', phone: m.ec_phone });
+        }
+      }
+    } catch (e) {
+      console.error('phone-directory: team lookup failed:', e.message);
+    }
+
+    // Trades: company_phone + each contact phone.
+    try {
+      const { rows: companies } = await _tradesPool.query(
+        `SELECT id, company_name, company_phone FROM trade_companies`
+      );
+      const { rows: contacts } = await _tradesPool.query(
+        `SELECT company_id, name, phone FROM trade_company_contacts`
+      );
+      const byId = new Map(companies.map(c => [c.id, c]));
+      for (const co of companies) {
+        if (co.company_phone) {
+          out.trades.push({ tradeId: co.id, companyName: co.company_name || '', kind: 'company', phone: co.company_phone });
+        }
+      }
+      for (const c of contacts) {
+        if (!c.phone) continue;
+        const co = byId.get(c.company_id);
+        out.trades.push({
+          tradeId: c.company_id,
+          companyName: co ? (co.company_name || '') : '',
+          kind: 'contact',
+          contactName: c.name || '',
+          phone: c.phone,
+        });
+      }
+    } catch (e) {
+      console.error('phone-directory: trades lookup failed:', e.message);
+    }
+
+    // Customers: HubSpot contacts (phone + mobilephone). If HubSpot is not
+    // configured, return an empty list rather than failing the whole call.
+    if (process.env.HUBSPOT_TOKEN) {
+      try {
+        const contacts = await getSharedContactsCache();
+        for (const c of contacts) {
+          const p = c.properties || {};
+          const label = [p.firstname, p.lastname].filter(Boolean).join(' ').trim()
+            || p.email || `Contact ${c.id}`;
+          if (p.phone) {
+            out.customers.push({ contactId: c.id, label, field: 'phone', phone: p.phone });
+          }
+          if (p.mobilephone) {
+            out.customers.push({ contactId: c.id, label, field: 'mobilephone', phone: p.mobilephone });
+          }
+        }
+      } catch (e) {
+        console.error('phone-directory: customer lookup failed:', e.message);
+      }
+    }
+
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Trade Company Submissions ─────────────────────────────────────────────────
 
 app.post('/api/trades/submissions', isAuthenticated, requireManagerOrAdmin, tradesCreateLimiter, async (req, res) => {

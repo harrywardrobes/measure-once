@@ -52,9 +52,35 @@ type DuplicateMatch =
 
 type PhoneField = 'mobile_number' | 'ec_phone';
 
+type PhoneDirectory = {
+  team: Array<{
+    kind: 'user' | 'allowed';
+    userId?: string;
+    email?: string;
+    label: string;
+    field: PhoneField;
+    phone: string;
+  }>;
+  trades: Array<{
+    tradeId: number;
+    companyName: string;
+    kind: 'company' | 'contact';
+    contactName?: string;
+    phone: string;
+  }>;
+  customers: Array<{
+    contactId: string;
+    label: string;
+    field: 'phone' | 'mobilephone';
+    phone: string;
+  }>;
+};
+
 type PhoneDuplicateMatch =
   | { kind: 'user'; user: User; label: string; field: PhoneField; value: string }
-  | { kind: 'allowed'; allowed: Allowed; label: string; field: PhoneField; value: string };
+  | { kind: 'allowed'; allowed: Allowed; label: string; field: PhoneField; value: string }
+  | { kind: 'trade'; tradeId: number; companyName: string; contactName?: string; tradeKind: 'company' | 'contact'; value: string }
+  | { kind: 'customer'; contactId: string; label: string; field: 'phone' | 'mobilephone'; value: string };
 
 function normalizeEmail(e: string): string {
   return (e || '').trim().toLowerCase();
@@ -121,6 +147,7 @@ export function AdminTeamPage() {
   const [debouncedInviteEmail, setDebouncedInviteEmail] = useState('');
   const [debouncedMobile, setDebouncedMobile] = useState('');
   const [debouncedEcPhone, setDebouncedEcPhone] = useState('');
+  const [phoneDirectory, setPhoneDirectory] = useState<PhoneDirectory>({ team: [], trades: [], customers: [] });
   const mountedRef = useRef(true);
 
   async function load() {
@@ -141,6 +168,17 @@ export function AdminTeamPage() {
       toast(e instanceof Error ? e.message : String(e), true);
     } finally {
       if (mountedRef.current) setLoading(false);
+    }
+    try {
+      const dir = await api<PhoneDirectory>('GET', '/api/admin/phone-directory');
+      if (!mountedRef.current) return;
+      setPhoneDirectory({
+        team: Array.isArray(dir?.team) ? dir.team : [],
+        trades: Array.isArray(dir?.trades) ? dir.trades : [],
+        customers: Array.isArray(dir?.customers) ? dir.customers : [],
+      });
+    } catch {
+      // Non-fatal: cross-surface duplicate hints are best-effort.
     }
   }
 
@@ -285,6 +323,7 @@ export function AdminTeamPage() {
   function findPhoneDuplicate(raw: string): PhoneDuplicateMatch | null {
     const needle = phoneKey(raw);
     if (!needle) return null;
+    // 1. Team members already loaded in this page (richer User object).
     for (const u of users) {
       const m = u.metadata || {};
       for (const f of ['mobile_number', 'ec_phone'] as PhoneField[]) {
@@ -303,40 +342,87 @@ export function AdminTeamPage() {
         }
       }
     }
+    // 2. Trade companies + their contacts.
+    for (const t of phoneDirectory.trades) {
+      if (phoneKey(t.phone) === needle) {
+        return {
+          kind: 'trade',
+          tradeId: t.tradeId,
+          companyName: t.companyName,
+          contactName: t.contactName,
+          tradeKind: t.kind,
+          value: t.phone,
+        };
+      }
+    }
+    // 3. HubSpot customer contacts.
+    for (const c of phoneDirectory.customers) {
+      if (phoneKey(c.phone) === needle) {
+        return {
+          kind: 'customer',
+          contactId: c.contactId,
+          label: c.label,
+          field: c.field,
+          value: c.phone,
+        };
+      }
+    }
     return null;
   }
 
   const mobileDuplicate: PhoneDuplicateMatch | null = useMemo(
     () => findPhoneDuplicate(debouncedMobile),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [debouncedMobile, users, allowed],
+    [debouncedMobile, users, allowed, phoneDirectory],
   );
 
   const ecPhoneDuplicate: PhoneDuplicateMatch | null = useMemo(
     () => findPhoneDuplicate(debouncedEcPhone),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [debouncedEcPhone, users, allowed],
+    [debouncedEcPhone, users, allowed, phoneDirectory],
   );
 
   function describePhoneDuplicate(match: PhoneDuplicateMatch): { title: string; body: string; cta: string } {
-    const where = phoneFieldLabel(match.field);
     if (match.kind === 'user') {
+      const where = phoneFieldLabel(match.field);
       return {
         title: 'This phone number is already in use',
-        body: `${match.label} (${match.user.email || '—'}) already has this number as their ${where}.`,
+        body: `${match.label} (${match.user.email || '—'}) already has this number as their ${where} on the team.`,
         cta: 'Open team member',
       };
     }
+    if (match.kind === 'allowed') {
+      const where = phoneFieldLabel(match.field);
+      return {
+        title: 'This phone number is already in use',
+        body: `${match.label} (${match.allowed.email}) already has this number as their ${where} on the allow-list.`,
+        cta: 'View approved entry',
+      };
+    }
+    if (match.kind === 'trade') {
+      const co = match.companyName || 'a trade company';
+      const body = match.tradeKind === 'company'
+        ? `This number is already saved as the company phone for ${co} on the Trades page.`
+        : `${match.contactName ? `${match.contactName} at ${co}` : `A contact at ${co}`} already has this number on the Trades page.`;
+      return {
+        title: 'This phone number is already in use',
+        body,
+        cta: 'Open trade company',
+      };
+    }
+    const where = match.field === 'mobilephone' ? 'mobile' : 'phone';
     return {
       title: 'This phone number is already in use',
-      body: `${match.label} (${match.allowed.email}) already has this number as their ${where} on the allow-list.`,
-      cta: 'View approved entry',
+      body: `${match.label} already has this number as their ${where} on their customer contact record.`,
+      cta: 'Open customer',
     };
   }
 
   function viewPhoneDuplicate(match: PhoneDuplicateMatch) {
     if (match.kind === 'user') openEdit(match.user);
     else if (match.kind === 'allowed') jumpToAllowedRow(match.allowed.email);
+    else if (match.kind === 'trade') window.location.href = `/trades?id=${encodeURIComponent(String(match.tradeId))}`;
+    else if (match.kind === 'customer') window.location.href = `/customers/${encodeURIComponent(match.contactId)}`;
   }
 
   function jumpToAllowedRow(email: string) {
