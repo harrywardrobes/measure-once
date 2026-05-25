@@ -339,7 +339,7 @@ async function bootstrap() {
       GET('/api/whatsapp/config').then(cfg => { state.whatsappEnabled = !!cfg.enabled; }).catch(() => {}),
     ]);
     populateStageFilter();
-    if (document.getElementById('customers-view') || document.getElementById('sales-view')) renderCustomerList();
+    if (document.getElementById('customers-view') || document.getElementById('sales-view') || document.getElementById('survey-view')) renderCustomerList();
     if (priv === 'manager' || priv === 'admin') loadQBInvoices();
   } catch (e) {
     console.error('Bootstrap failed', e);

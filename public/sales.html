@@ -30,10 +30,16 @@
   <script>
     // Paint a lightweight loading skeleton into the mount point so the board
     // isn't blank during the initial bootstrap()/data fetch.
+    // Uses inline styles only — no legacy CSS class dependencies.
     (function paintSalesBoardSkeleton() {
       const mount = document.getElementById('sales-board-mount');
       if (!mount || !window.UI || typeof UI.skeletonLine !== 'function') return;
       const line = UI.skeletonLine;
+      const cardStyle = 'background:#F6F1E7;border-radius:8px;border:1px solid #D9D2C2;box-shadow:0 1px 3px rgba(0,0,0,0.07);overflow:hidden;margin-bottom:12px;pointer-events:none';
+      const bodyStyle = 'padding:10px 12px 8px';
+      const nameRowStyle = 'display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px';
+      const metaStyle = 'display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:6px';
+      const actionStyle = 'display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:#F3EAFF;border-top:1px solid rgba(0,0,0,0.06);opacity:0.4';
       const cards = [
         { name: '60%', cnt: '38px', pills: [76, 52], action: '58%' },
         { name: '48%', cnt: '44px', pills: [92] },
@@ -46,25 +52,29 @@
           line(w + 'px', null, { className: 'skeleton-pill' })
         ).join('');
         const action = c.action
-          ? `<div class="eq-card-action" style="pointer-events:none;opacity:0.4">${line(c.action, 11)}</div>`
+          ? `<div style="${actionStyle}">${line(c.action, 11)}</div>`
           : '';
-        return `<div class="eq-card" style="pointer-events:none">
+        return `<div style="${cardStyle}">
           ${line('100%', 3, { style: 'border-radius:0;margin:0' })}
-          <div class="eq-card-body">
-            <div class="eq-card-name-row">${line(c.name, 13)}${line(c.cnt, 11)}</div>
-            <div class="eq-card-meta">${pills}</div>
+          <div style="${bodyStyle}">
+            <div style="${nameRowStyle}">${line(c.name, 13)}${line(c.cnt, 11)}</div>
+            <div style="${metaStyle}">${pills}</div>
           </div>
           ${action}
         </div>`;
       }).join('');
+      const headerStyle = 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 14px 13px;flex-shrink:0;background:#F6F1E7;border-bottom:1px solid #D9D2C2;border-top:3px solid #e2e8f0';
+      const listStyle = 'display:flex;flex-direction:column;gap:12px;padding:12px;background:#F6F1E7';
+      const colStyle = 'display:flex;flex-direction:column;flex:1;min-width:0';
+      const boardStyle = 'display:flex;flex-direction:column;flex:1;min-height:0';
       mount.innerHTML =
-        `<div class="sales-board">
-          <div class="eq-col eq-col-active">
-            <div class="eq-col-header" style="border-top:3px solid #e2e8f0">
+        `<div style="${boardStyle}">
+          <div style="${colStyle}">
+            <div style="${headerStyle}">
               ${line('60px', 13)}
               ${line('26px', null, { className: 'skeleton-pill' })}
             </div>
-            <div class="enquiry-list">${cards}</div>
+            <div style="${listStyle}">${cards}</div>
           </div>
         </div>`;
     })();
