@@ -190,7 +190,7 @@ function initials(name: string): string {
 }
 
 function blankContact(): ContactSlot {
-  return { name: '', role: '', phone: '', email: '', preferred_contact: '' };
+  return { name: '', role: '', phone: '', email: '', preferred_contact: '' } satisfies ContactSlot;
 }
 
 // ── API helpers ────────────────────────────────────────────────────────────────
