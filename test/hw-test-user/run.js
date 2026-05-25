@@ -30,6 +30,15 @@
 //   # Opt-in: also run the [REAL-HS] phase against the live HubSpot account
 //   PRIVTEST_USE_HUBSPOT_TOKEN=1 HUBSPOT_TOKEN=… \
 //     DATABASE_URL_TEST=<isolated-db> npm run test:hw-test-user
+//
+//   # The [REAL-HS] probes REAL-HS-03 and REAL-HS-06 only assert anything
+//   # meaningful when the connected HubSpot account has at least one contact
+//   # tagged hw_test_user=true. If yours has none, bootstrap one before the
+//   # run with the helper script, then tear it down afterwards:
+//   #
+//   #   HUBSPOT_TOKEN=… node scripts/hw-test-user/seed-live-contact.js
+//   #     → prints the new contact id
+//   #   HUBSPOT_TOKEN=… node scripts/hw-test-user/seed-live-contact.js --delete <id>
 
 const fs   = require('fs');
 const path = require('path');
