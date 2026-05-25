@@ -1321,7 +1321,26 @@ export function CustomersPage(): React.ReactElement {
           setContacts((prev) => [c, ...prev]);
           setTotal((t) => t + 1);
           setRefreshNonce((n) => n + 1);
-          loadLeadStatusCounts().then(populateLeadStatusFilter).catch(() => {});
+          // Retry counts refresh up to 2 times (30 s apart) so a transient
+          // failure here doesn't leave counts permanently stale after adding
+          // a new customer. On final failure surface the bgRefreshFailed Snackbar.
+          const MAX_CREATED_RETRIES = 2;
+          const CREATED_RETRY_DELAY_MS = 30_000;
+          function attemptCreatedCounts(retryCount: number, waitMs: number) {
+            setTimeout(async () => {
+              try {
+                await loadLeadStatusCounts();
+                populateLeadStatusFilter();
+              } catch {
+                if (retryCount < MAX_CREATED_RETRIES) {
+                  attemptCreatedCounts(retryCount + 1, CREATED_RETRY_DELAY_MS);
+                } else {
+                  setBgRefreshFailed(true);
+                }
+              }
+            }, waitMs);
+          }
+          attemptCreatedCounts(0, 0);
         }}
       />
       <Snackbar
