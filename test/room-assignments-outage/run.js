@@ -346,6 +346,61 @@ async function main() {
       gMockCalls.length >= 1,
       `mock 200 calls=${gMockCalls.length}`);
 
+    // ── (H) Empty snapshot: first server start with HubSpot already down ────────
+    // Strategy:
+    //   1. HubSpot mock is already in 'always503' mode (from step 4 above).
+    //   2. Spawn a second server on port 5051 — _allContactsLastGood starts null.
+    //   3. GET /api/localdata/all must return 200 with {} (not 502).
+    //   4. X-Cache-Status must NOT be 'stale' (no snapshot was served).
+
+    console.log('\n  [H] Empty snapshot: first server start with HubSpot already down');
+    mock.state.mode = 'always503';
+    mock.state.calls = [];
+
+    const H_PORT = '5051';
+    const H_BASE = `http://127.0.0.1:${H_PORT}`;
+
+    const { child: hChild, logBuf: hLogBuf } = spawnServer({
+      extraEnv: {
+        PORT: H_PORT,
+        ALL_CONTACTS_STALE_MAX_MS_OVERRIDE: '200',
+      },
+    });
+
+    try {
+      await waitForServer(H_BASE);
+      console.log(`  second server up at ${H_BASE}`);
+
+      // Both servers share the same PostgreSQL session store and SESSION_SECRET,
+      // so the session cookie obtained from the first server is valid here too.
+      // Verify that the second server accepts it before proceeding.
+      const hAuthCheck = await httpGet(H_BASE, '/api/auth/user', memberCookie);
+      record('H.1 second server accepts shared session cookie',
+        hAuthCheck.status === 200 && !!hAuthCheck.json?.email,
+        `status=${hAuthCheck.status} email=${hAuthCheck.json?.email ?? '(none)'}`);
+
+      // _allContactsLastGood is null — HubSpot was never reachable.
+      const hRooms = await httpGet(H_BASE, '/api/localdata/all', memberCookie);
+      record('H.2 /api/localdata/all returns 200 (not 502) when no snapshot exists',
+        hRooms.status === 200,
+        `status=${hRooms.status} body=${hRooms.body.slice(0, 160)}`);
+      record('H.3 /api/localdata/all body is empty object {}',
+        hRooms.json !== null
+          && typeof hRooms.json === 'object'
+          && Object.keys(hRooms.json).length === 0,
+        `body=${hRooms.body.slice(0, 80)}`);
+      record('H.4 /api/localdata/all X-Cache-Status is not stale (no snapshot)',
+        hRooms.headers['x-cache-status'] !== 'stale',
+        `x-cache-status=${hRooms.headers['x-cache-status'] ?? '(absent)'}`);
+    } catch (hErr) {
+      console.error('  [H] scenario crashed:', hErr.message);
+      console.error('  --- second server log (last 1000 chars) ---');
+      console.error(hLogBuf.join('').slice(-1000));
+      record('H.0 scenario H did not crash', false, String(hErr.message));
+    } finally {
+      try { hChild.kill('SIGTERM'); } catch {}
+    }
+
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
@@ -399,6 +454,12 @@ async function writeReport(runId) {
     '  `X-Cache-Status: fresh` (not `stale`) and the mock must record at least',
     '  one successful HubSpot call, proving the view recovers rather than staying',
     '  stuck on the old stale snapshot.',
+    '- **(H) Empty snapshot — first server start with HubSpot already down**: a',
+    '  fresh server is spawned on a second port with HubSpot already returning',
+    '  503 on every request, so `_allContactsLastGood` is never populated.',
+    '  `GET /api/localdata/all` must return 200 with an empty object `{}`',
+    '  (not 502), and `X-Cache-Status` must not be `stale` (no snapshot was',
+    '  served). Covers the `if (_allContactsLastGood)` false-branch in `server.js`.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
