@@ -112,7 +112,7 @@ below except `test:hw-test-user:live`.
 | Script | Covers |
 | --- | --- |
 | `test:privileges` | 5-actor × 123-route capability matrix, the adversarial probe checklist, and a headless `/login → / → /admin` UI smoke. Required Turnstile-tampering probes fail closed unless opted in via `PRIVTEST_USE_TURNSTILE_SECRET_KEY=1`. |
-| `test:lead-status-sync` | Customers-page filter dropdown updates via BroadcastChannel + `visibilitychange` after admin renames, and count-suffix format. |
+| `test:lead-status-sync` | Customers-page filter dropdown updates via BroadcastChannel + `visibilitychange` after admin renames, count-suffix format, skeleton load/clear cycle, and sub-status chip live-rename via BC and visibilitychange. |
 | `test:lead-status-sync-customer-detail` | Per-contact tracker on customer-detail (rail order, current marker, sub-status panel) re-renders via BC + `visibilitychange` without full reload. |
 | `test:lead-status-sync-customer-detail-viewer` | **Isolated** viewer-role pill check: boots a fresh browser (no prior admin pages or request-interception), navigates to `/customers/:id` as a viewer, and asserts the `.lead-status-badge` pill lacks `lsb-clickable`, has no onclick, and clicking it never opens `#card-picker-popup`. Regression guard for the `canEditPipeline()` gate in `_renderWorkflowHeaderImpl`. |
 | `test:design-visit-list` | `GET /api/design-visits?contactId=…` scoping + customer-detail "Design visits" rail (status pills, totals, admin Request-revision/Delete actions, member gating). |

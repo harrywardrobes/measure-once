@@ -50,9 +50,11 @@ const LABEL_ORIG  = 'PrivTest Sync Label';
 const LABEL_BC    = 'PrivTest Renamed BC';
 const LABEL_VIS   = 'PrivTest Renamed Vis';
 
-// Sub-status fixture used by section (E).
-const SS_KEY   = 'PRIVTEST_SS_SYNC';
-const SS_LABEL = 'PrivTest Sub Sync';
+// Sub-status fixture used by section (E) and chip-rename sections (F)/(G).
+const SS_KEY       = 'PRIVTEST_SS_SYNC';
+const SS_LABEL     = 'PrivTest Sub Sync';
+const SS_LABEL_BC  = 'PrivTest Sub Renamed BC';
+const SS_LABEL_VIS = 'PrivTest Sub Renamed Vis';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function parseCookieKV(jar) {
@@ -105,6 +107,38 @@ async function getFilterOptions(page) {
     if (!sel) return [];
     return Array.from(sel.options).map(o => o.textContent.trim());
   });
+}
+
+// Poll .MuiChip-label elements until one whose text includes `label` is
+// found, or until `timeoutMs` elapses.
+async function waitForChipLabel(page, label, timeoutMs = 7000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const found = await page.evaluate((lbl) => {
+      const chips = document.querySelectorAll('.MuiChip-label');
+      return Array.from(chips).some(c => c.textContent.includes(lbl));
+    }, label);
+    if (found) return true;
+    await new Promise(r => setTimeout(r, 150));
+  }
+  return false;
+}
+
+// Populate the lead-status dropdown then programmatically select `lsKey` so
+// React picks up the change event and renders sub-status chips.
+async function bootstrapFilterAndSelect(page, lsKey) {
+  await page.evaluate(async (key) => {
+    if (typeof loadLeadStatuses === 'function') await loadLeadStatuses();
+    if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
+    const sel = document.getElementById('lead-status-filter');
+    if (!sel) return;
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLSelectElement.prototype, 'value',
+    )?.set;
+    if (nativeSetter) nativeSetter.call(sel, key);
+    else sel.value = key;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }, lsKey);
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -755,6 +789,190 @@ async function main() {
 
     await subSkelTab.close();
 
+    // ── (F) sub-status chip rename — BroadcastChannel path ───────────────────
+    // Open a customers tab, select the test lead status so sub-status chips
+    // render, PATCH the sub-status label via the admin API, then post a
+    // `lead_substatuses_changed` BroadcastChannel message from a second tab.
+    // Asserts the chip text updates without a full page reload.
+    console.log('\n  [F] sub-status chip rename — BroadcastChannel path');
+
+    // Look up the numeric id of the test sub-status so we can PATCH it.
+    const ssListRes = await adminClient.get('/api/admin/lead-substatuses');
+    const ssRow = Array.isArray(ssListRes.json)
+      && ssListRes.json.find(s => s.substatus_key === SS_KEY && s.status_key === LS_KEY);
+    record(
+      '[F] GET /api/admin/lead-substatuses returns the test sub-status',
+      `status=200 and substatus_key "${SS_KEY}" present`,
+      `status=${ssListRes.status} found=${!!ssRow}`,
+      ssListRes.status === 200 && !!ssRow,
+    );
+
+    if (ssRow) {
+      const chipBcTab = await browser.newPage();
+      await chipBcTab.setCacheEnabled(false);
+      await injectSession(chipBcTab, adminClient.cookie);
+
+      const chipAdminTab = await browser.newPage();
+      await chipAdminTab.setCacheEnabled(false);
+      await injectSession(chipAdminTab, adminClient.cookie);
+
+      await chipBcTab.goto(`${BASE}/customers`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000,
+      });
+      // Wait for the React mount + initial /api/lead-substatuses to resolve.
+      await new Promise(r => setTimeout(r, 800));
+
+      // Bootstrap the filter and select the test lead status so chips appear.
+      await bootstrapFilterAndSelect(chipBcTab, LS_KEY);
+      await new Promise(r => setTimeout(r, 400));
+
+      // Assert the initial chip is visible with the original SS_LABEL.
+      const chipFInit = await waitForChipLabel(chipBcTab, SS_LABEL, 5000);
+      record(
+        '[F] initial sub-status chip shows SS_LABEL after lead-status selected',
+        `MuiChip with label "${SS_LABEL}" visible within 5 s`,
+        `visible=${chipFInit}`,
+        chipFInit,
+      );
+
+      // Rename the sub-status label via the admin API.
+      const ssPatchF = await adminClient.patch(
+        `/api/admin/lead-substatuses/${ssRow.id}`,
+        { label: SS_LABEL_BC },
+      );
+      record(
+        '[F] PATCH /api/admin/lead-substatuses/:id renames the sub-status label',
+        `status=200 label="${SS_LABEL_BC}"`,
+        `status=${ssPatchF.status} label="${ssPatchF.json?.label}"`,
+        ssPatchF.status === 200 && ssPatchF.json?.label === SS_LABEL_BC,
+      );
+
+      // Load a page in adminTab so a BroadcastChannel is available, then post.
+      await chipAdminTab.goto(`${BASE}/customers`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 15000,
+      });
+      await new Promise(r => setTimeout(r, 300));
+      await chipAdminTab.evaluate(() => {
+        new BroadcastChannel('lead_substatuses_changed').postMessage('changed');
+      });
+
+      // The listener on chipBcTab calls loadLeadSubstatuses() → notify() →
+      // React re-renders the sub-status chips with the new label.
+      const chipFBcUpdated = await waitForChipLabel(chipBcTab, SS_LABEL_BC, 7000);
+      record(
+        '[F] BroadcastChannel message updates sub-status chip to renamed label',
+        `MuiChip with label "${SS_LABEL_BC}" within 7 s`,
+        `found=${chipFBcUpdated}`,
+        chipFBcUpdated,
+      );
+
+      // Original label must be gone from the chip list.
+      const chipFBcStale = await chipBcTab.evaluate((lbl) => {
+        const chips = document.querySelectorAll('.MuiChip-label');
+        return Array.from(chips).some(c => c.textContent.includes(lbl));
+      }, SS_LABEL);
+      record(
+        '[F] original sub-status chip label is absent after BroadcastChannel rename',
+        `no MuiChip with label "${SS_LABEL}"`,
+        `stalePresent=${chipFBcStale}`,
+        !chipFBcStale,
+      );
+
+      await chipBcTab.close();
+      await chipAdminTab.close();
+    }
+
+    // ── (G) sub-status chip rename — visibilitychange path ────────────────────
+    // Open a fresh customers tab, select the test lead status, then rename the
+    // sub-status server-side and synthesise a hidden→visible visibilitychange.
+    // Asserts the chip updates to the new label without a full page reload.
+    console.log('\n  [G] sub-status chip rename — visibilitychange path');
+
+    // Re-fetch ssRow in case the id changed (it won't, but keeps (G) independent).
+    const ssListRes2 = await adminClient.get('/api/admin/lead-substatuses');
+    const ssRow2 = Array.isArray(ssListRes2.json)
+      && ssListRes2.json.find(s => s.substatus_key === SS_KEY && s.status_key === LS_KEY);
+
+    if (ssRow2) {
+      const chipVisTab = await browser.newPage();
+      await chipVisTab.setCacheEnabled(false);
+      await injectSession(chipVisTab, adminClient.cookie);
+
+      await chipVisTab.goto(`${BASE}/customers`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000,
+      });
+      await new Promise(r => setTimeout(r, 800));
+
+      await bootstrapFilterAndSelect(chipVisTab, LS_KEY);
+      await new Promise(r => setTimeout(r, 400));
+
+      // Confirm the chip now shows SS_LABEL_BC (the state left by section F).
+      const chipGInit = await waitForChipLabel(chipVisTab, SS_LABEL_BC, 5000);
+      record(
+        '[G] sub-status chip shows BC-renamed label before visibilitychange rename',
+        `MuiChip with label "${SS_LABEL_BC}" visible within 5 s`,
+        `visible=${chipGInit}`,
+        chipGInit,
+      );
+
+      // Rename server-side so the next /api/lead-substatuses returns SS_LABEL_VIS.
+      const ssPatchG = await adminClient.patch(
+        `/api/admin/lead-substatuses/${ssRow2.id}`,
+        { label: SS_LABEL_VIS },
+      );
+      record(
+        '[G] second PATCH renames sub-status label for visibilitychange test',
+        `status=200 label="${SS_LABEL_VIS}"`,
+        `status=${ssPatchG.status} label="${ssPatchG.json?.label}"`,
+        ssPatchG.status === 200 && ssPatchG.json?.label === SS_LABEL_VIS,
+      );
+
+      // Synthesise the hidden → visible transition (mirrors section B).
+      await chipVisTab.evaluate(() => {
+        const proto   = Document.prototype;
+        const ownDesc = Object.getOwnPropertyDescriptor(proto, 'visibilityState')
+                     || Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+        Object.defineProperty(document, 'visibilityState',
+          { get: () => 'hidden', configurable: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+
+        if (ownDesc) {
+          Object.defineProperty(document, 'visibilityState', ownDesc);
+        } else {
+          Object.defineProperty(document, 'visibilityState',
+            { get: () => 'visible', configurable: true });
+        }
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+
+      // The visibilitychange handler calls loadLeadSubstatuses() → notify() →
+      // React re-renders with the updated label.
+      const chipGVisUpdated = await waitForChipLabel(chipVisTab, SS_LABEL_VIS, 7000);
+      record(
+        '[G] visibilitychange updates sub-status chip to renamed label',
+        `MuiChip with label "${SS_LABEL_VIS}" within 7 s`,
+        `found=${chipGVisUpdated}`,
+        chipGVisUpdated,
+      );
+
+      const chipGVisStale = await chipVisTab.evaluate((lbl) => {
+        const chips = document.querySelectorAll('.MuiChip-label');
+        return Array.from(chips).some(c => c.textContent.includes(lbl));
+      }, SS_LABEL_BC);
+      record(
+        '[G] BC-renamed sub-status chip label is absent after visibilitychange refresh',
+        `no MuiChip with label "${SS_LABEL_BC}"`,
+        `stalePresent=${chipGVisStale}`,
+        !chipGVisStale,
+      );
+
+      await chipVisTab.close();
+    }
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -830,6 +1048,22 @@ async function writeReport(runId, findings) {
     '  sub-status chip (`SS_LABEL`) appears within 5 s.',
     '  Exercises the `{!store.subsLoaded && leadStatus && … <Skeleton …/>}` branch',
     '  in `src/react/pages/CustomersPage.tsx`.',
+    '- **(F) sub-status chip rename — BroadcastChannel path**: looks up the numeric',
+    '  id of the test sub-status via `GET /api/admin/lead-substatuses`, opens a',
+    '  customers tab, selects the test lead status so sub-status chips are visible,',
+    '  then renames the sub-status label via `PATCH /api/admin/lead-substatuses/:id`.',
+    '  Posts a `lead_substatuses_changed` BroadcastChannel message from a second',
+    '  tab and asserts the chip text updates to the new label without a full reload.',
+    '  Also asserts the old label is absent. Exercises the `subBc.addEventListener`',
+    '  → `refresh()` → `loadLeadSubstatuses()` → `notify()` path in',
+    '  `src/react/pages/CustomersPage.tsx`.',
+    '- **(G) sub-status chip rename — visibilitychange path**: opens a fresh',
+    '  customers tab, selects the test lead status (chips show BC-renamed label',
+    '  from section F), renames the sub-status again via the admin API, then',
+    '  synthesises a hidden→visible `visibilitychange` sequence. Asserts the chip',
+    '  updates to the new label and the prior label is absent. Exercises the',
+    '  `document.addEventListener("visibilitychange", onVisibility)` → `refresh()`',
+    '  → `loadLeadSubstatuses()` → `notify()` path for sub-status chip re-renders.',
     '',
     '## Notes',
     '',
