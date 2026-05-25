@@ -76,7 +76,7 @@ function substageLabel(stageKey, substageId) {
 // ── Sub-stage pill colour ─────────────────────────────────────────────────────
 function substagePillColour(stageKey, substageId) {
   if (TERMINAL_SUBSTAGES.has(substageId)) {
-    return { bg: 'var(--stone-soft)', text: 'var(--ink-4)' };
+    return { bg: 'var(--paper)', text: 'var(--ink-4)' };
   }
   if (stageKey === 'designvisit' && substageId === 'open_deal') {
     return { bg: '#dbeafe', text: '#1d4ed8' };

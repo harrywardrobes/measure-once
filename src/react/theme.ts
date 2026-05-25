@@ -19,10 +19,8 @@ import { createTheme, type Theme } from '@mui/material/styles';
 export const BRAND_COLORS = {
   paper:      '#F6F1E7',
   paperDeep:  '#EDE5D4',
-  chalk:      '#FBFAF5',
   stone:      '#D9D2C2',
   stoneLight: '#E8E3D8',
-  stoneSoft:  '#F5F2EB',
   stoneDeep:  '#B8AE99',
   orchid:     '#8B2BFF',
   orchidDeep: '#6A12D9',

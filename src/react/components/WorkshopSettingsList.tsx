@@ -48,7 +48,7 @@ export function WorkshopSettingsList({
           <div
             key={i}
             className="ws-row"
-            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--stone-soft)' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--paper)' }}
           >
             <div style={{ flex: 1 }}>
               <Skeleton width={160} height={14} />
@@ -79,7 +79,7 @@ export function WorkshopSettingsList({
             key={row.key}
             className="ws-row"
             data-ws-key={row.key}
-            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--stone-soft)' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--paper)' }}
           >
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600, fontSize: '.875rem', color: 'var(--ink-1)' }}>{row.label}</div>

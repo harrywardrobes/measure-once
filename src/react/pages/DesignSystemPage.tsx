@@ -203,10 +203,8 @@ function TokenCard({ title, children }: { title: string; children: React.ReactNo
 const BRAND_SWATCHES: SwatchCardProps[] = [
   { name: 'paper',       hex: BRAND_COLORS.paper,      themePath: 'palette.brand.paper',      cssVar: '--paper' },
   { name: 'paperDeep',   hex: BRAND_COLORS.paperDeep,  themePath: 'palette.brand.paperDeep',  cssVar: '--paper-deep' },
-  { name: 'chalk',       hex: BRAND_COLORS.chalk,      themePath: 'palette.brand.chalk',      cssVar: '--chalk' },
   { name: 'stone',       hex: BRAND_COLORS.stone,      themePath: 'palette.brand.stone',      cssVar: '--stone' },
   { name: 'stoneLight',  hex: BRAND_COLORS.stoneLight, themePath: 'palette.brand.stoneLight', cssVar: '--stone-light' },
-  { name: 'stoneSoft',   hex: BRAND_COLORS.stoneSoft,  themePath: 'palette.brand.stoneSoft',  cssVar: '--stone-soft' },
   { name: 'stoneDeep',   hex: BRAND_COLORS.stoneDeep,  themePath: 'palette.brand.stoneDeep',  cssVar: '--stone-deep' },
   { name: 'orchid',      hex: BRAND_COLORS.orchid,     themePath: 'palette.brand.orchid',     cssVar: '--orchid' },
   { name: 'orchidDeep',  hex: BRAND_COLORS.orchidDeep, themePath: 'palette.brand.orchidDeep', cssVar: '--orchid-deep' },

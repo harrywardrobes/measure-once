@@ -20,10 +20,8 @@ module.exports = {
       colors: {
         paper:        'var(--paper)',
         'paper-deep': 'var(--paper-deep)',
-        chalk:        'var(--chalk)',
         stone:        'var(--stone)',
         'stone-light':'var(--stone-light)',
-        'stone-soft': 'var(--stone-soft)',
         'stone-deep': 'var(--stone-deep)',
         orchid:       'var(--orchid)',
         'orchid-deep':'var(--orchid-deep)',

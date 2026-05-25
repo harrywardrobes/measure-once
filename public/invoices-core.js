@@ -309,7 +309,7 @@ const _INV_PILL_COLORS = {
   danger:  'background:var(--status-danger-bg);color:var(--status-danger-text)',
   warn:    'background:var(--status-warn-bg);color:var(--status-warn-text)',
   info:    'background:var(--orchid-tint);color:var(--orchid-deep)',
-  neutral: 'background:var(--stone-soft);color:var(--ink-2)',
+  neutral: 'background:var(--paper);color:var(--ink-2)',
 };
 function _invStatusPill(label, variantOrKey, isKey) {
   const variant = isKey ? _invStatusVariant(variantOrKey) : variantOrKey;
