@@ -5,6 +5,7 @@ import { DesignSystemPage } from './pages/DesignSystemPage';
 import { SearchSettingsPage } from './pages/SearchSettingsPage';
 import { WorkshopSettingsPage } from './pages/WorkshopSettingsPage';
 import { CustomersPage } from './pages/CustomersPage';
+import { AdminTabsBar } from './components/AdminTabsBar';
 
 /**
  * Every React mount goes through `AppThemeProvider` so the shared MUI
@@ -29,10 +30,11 @@ function withTheme(node: React.ReactElement): React.ReactElement {
  * element so `npm run dev:react` still gives a standalone preview.
  */
 const MOUNTS: Array<{ id: string; render: () => React.ReactElement }> = [
-  { id: 'tab-designsystem', render: () => <DesignSystemPage /> },
-  { id: 'tab-search',       render: () => <SearchSettingsPage /> },
-  { id: 'tab-workshop',     render: () => <WorkshopSettingsPage /> },
-  { id: 'tab-customers',    render: () => <CustomersPage /> },
+  { id: 'admin-mui-tabs-mount', render: () => <AdminTabsBar /> },
+  { id: 'tab-designsystem',     render: () => <DesignSystemPage /> },
+  { id: 'tab-search',           render: () => <SearchSettingsPage /> },
+  { id: 'tab-workshop',         render: () => <WorkshopSettingsPage /> },
+  { id: 'tab-customers',        render: () => <CustomersPage /> },
 ];
 
 function mountKnown(): number {

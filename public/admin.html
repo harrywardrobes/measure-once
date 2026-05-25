@@ -3016,6 +3016,12 @@
       <h1 class="page-title">Admin Panel</h1>
       <p class="page-sub">Manage the team, permissions, and access requests.</p>
 
+      <!-- React + MUI tab bar (AdminTabsBar.tsx) mounts here and hides the
+           legacy .tabs strip below. The legacy strip stays in the DOM so
+           switchTab(), inline onclick handlers, and existing tests still
+           work — see src/react/components/AdminTabsBar.tsx for details. -->
+      <div id="admin-mui-tabs-mount"></div>
+
       <div class="tabs">
         <button class="tab-btn active" data-tab="team"        onclick="switchTab('team')">Team <span id="team-count" class="count-muted">${_users.length}</span></button>
         <button class="tab-btn"        data-tab="permissions" onclick="switchTab('permissions')">Permissions &amp; roles</button>
