@@ -89,6 +89,16 @@ function withTheme(
  * The vite-dev playground (`src/react/index.html`) provides a `#root`
  * element so `npm run dev:react` still gives a standalone preview.
  */
+/**
+ * IMPORTANT: every `id` in this table must be unique across *all* HTML pages
+ * that load `main.js`. If a page's own wrapper div reuses an id that is also
+ * a mount target here (e.g. a page body div with `id="tab-customers"`),
+ * `mountKnown` will render a React island into that wrapper — replacing its
+ * children, including any nested mount points — before those nested mounts
+ * can be reached. The nested components then render into a detached DOM node
+ * and are invisible to users. Keep page-level structural ids (app-body,
+ * *-page-body, etc.) distinct from the React mount ids listed below.
+ */
 const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: React.ReactElement }> = [
   { id: 'app-header-mount',     render: () => <GlobalHeader /> },
   { id: 'page-heading-mount',   render: () => <PageHeadingPanel /> },
