@@ -26,7 +26,7 @@
  */
 
 import { gzipSync } from 'zlib';
-import { readFileSync, readdirSync, statSync } from 'fs';
+import { readFileSync, readdirSync, statSync, mkdirSync, writeFileSync } from 'fs';
 import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
@@ -201,6 +201,52 @@ if (warnings.length > 0) {
   console.log(`\n⚠  Soft-limit warnings:`);
   for (const w of warnings) console.log(`   ${w}`);
 }
+
+// ── Markdown report ──────────────────────────────────────────────────────────
+
+const reportDir = resolve(__dirname, '..', 'test-results');
+mkdirSync(reportDir, { recursive: true });
+
+const now = new Date().toISOString();
+const passed = rows.filter(r => r.threshold?.alwaysLoaded && r.gz <= r.threshold.threshold).length;
+const checked = rows.filter(r => r.threshold?.alwaysLoaded).length;
+
+const mdRows = rows.map(({ name, gz, raw, threshold: t }) => {
+  let status = 'lazy';
+  if (t?.alwaysLoaded && t.threshold) {
+    const pct = Math.round((gz / t.threshold) * 100);
+    status = gz > t.threshold
+      ? `FAIL — ${kbStr(gz)} > ${kbStr(t.threshold)} limit (${pct}%)`
+      : `ok — ${kbStr(gz)} / ${kbStr(t.threshold)} (${pct}%)`;
+  } else if (t?.warnAt && gz > t.warnAt) {
+    status = `WARN — ${kbStr(gz)} > soft ${kbStr(t.warnAt)}`;
+  }
+  return `| ${name} | ${kbStr(gz)} | ${kbStr(raw)} | ${status} |`;
+}).join('\n');
+
+const mdContent = `# Bundle Sizes
+
+- Date: ${now}
+- Command: \`npm run test:bundle-sizes\`
+
+## Summary
+
+- Checked: ${checked} always-loaded chunk(s)
+- Passed: ${passed} / ${checked}
+- Failed: ${failures} / ${checked}
+- Total always-loaded: ${kbStr(totalAlwaysGz)} gzip
+- Result: ${failures > 0 ? `FAIL — ${failures} chunk(s) exceed threshold` : 'PASS — all chunks within threshold'}
+
+## Results
+
+| Chunk | gz size | raw size | Status |
+|---|---|---|---|
+${mdRows}
+`;
+
+writeFileSync(resolve(reportDir, 'bundle-sizes.md'), mdContent);
+
+// ── Exit ─────────────────────────────────────────────────────────────────────
 
 if (failures > 0) {
   console.error(
