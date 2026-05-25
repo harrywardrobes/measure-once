@@ -10,6 +10,7 @@ const path      = require('path');
 const fs        = require('fs');
 const multer    = require('multer');
 const { isAuthenticated, requireAdmin, requirePrivilege } = require('./auth');
+const dvUploads = require('./design-visit-uploads');
 
 const HANDLES_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'handles');
 if (!fs.existsSync(HANDLES_UPLOAD_DIR)) fs.mkdirSync(HANDLES_UPLOAD_DIR, { recursive: true });
@@ -314,7 +315,14 @@ async function loadVisitWithRooms(id) {
   const imagesByRoom = {};
   for (const img of images.rows) {
     if (!imagesByRoom[img.room_id]) imagesByRoom[img.room_id] = [];
-    imagesByRoom[img.room_id].push({ storageKey: img.storage_key, mimeType: img.mime_type });
+    // `storageKey` keeps the opaque DB key so the client can round-trip it
+    // back on PUT; `viewUrl` is a short-lived signed URL the browser can
+    // load directly (or the legacy URL/data URI for older rows).
+    imagesByRoom[img.room_id].push({
+      storageKey: img.storage_key,
+      mimeType:   img.mime_type,
+      viewUrl:    dvUploads.signImageUrl(img.storage_key),
+    });
   }
   visit.rooms = rooms.rows.map(r => ({
     ...r,
@@ -1182,13 +1190,15 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
       for (const img of images) {
         const raw = String(img.storageKey || img.storage_key || img.url || '');
         if (!raw) continue;
-        // Only accept safe sources: data:image/* base64, http(s) URLs, or
-        // server-relative paths. Reject e.g. javascript: URIs that a malicious
-        // designer could otherwise smuggle into the public sign-off page.
+        // Accept (a) opaque cloud-storage keys minted by
+        // POST /api/design-visits/uploads, (b) legacy data:image/* base64
+        // URIs, (c) http(s) URLs, or (d) server-relative paths. Reject
+        // anything else (e.g. javascript: URIs).
+        const isOpaque    = dvUploads.isOpaqueKey(raw);
         const isDataImage = /^data:image\/(png|jpe?g|gif|webp|bmp);base64,/i.test(raw);
         const isHttpUrl   = /^https?:\/\//i.test(raw);
         const isAppPath   = raw.startsWith('/');
-        if (!isDataImage && !isHttpUrl && !isAppPath) continue;
+        if (!isOpaque && !isDataImage && !isHttpUrl && !isAppPath) continue;
         if (raw.length > MAX_IMG_BYTES) continue;
         await client.query(
           `INSERT INTO design_visit_room_images (room_id, storage_key, mime_type) VALUES ($1,$2,$3)`,
@@ -1366,10 +1376,11 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
       for (const img of images) {
         const raw = String(img.storageKey || img.storage_key || img.url || '');
         if (!raw) continue;
+        const isOpaque    = dvUploads.isOpaqueKey(raw);
         const isDataImage = /^data:image\/(png|jpe?g|gif|webp|bmp);base64,/i.test(raw);
         const isHttpUrl   = /^https?:\/\//i.test(raw);
         const isAppPath   = raw.startsWith('/');
-        if (!isDataImage && !isHttpUrl && !isAppPath) continue;
+        if (!isOpaque && !isDataImage && !isHttpUrl && !isAppPath) continue;
         if (raw.length > MAX_IMG_BYTES) continue;
         await client.query(
           `INSERT INTO design_visit_room_images (room_id, storage_key, mime_type) VALUES ($1,$2,$3)`,
@@ -1439,8 +1450,16 @@ function _bestEffortDeleteDesignVisitStorageObject(storageKey) {
       });
       return;
     }
-    // Opaque key — treat as a cloud storage object id we don't recognise.
-    // We still log it so external cleanup tooling has a trail to follow.
+    if (dvUploads.isOpaqueKey(storageKey)) {
+      // Cloud-storage key — fire-and-forget delete from the bucket. Failures
+      // are logged but never block DB cleanup.
+      dvUploads.deleteOpaqueKey(storageKey).then(
+        () => console.log(`[design-visits] storage delete ok (cloud) key=${keyPreview}`),
+        err => console.warn(`[design-visits] storage delete fail (cloud) key=${keyPreview} err=${err.message}`)
+      );
+      return;
+    }
+    // Anything else — log so external cleanup tooling has a trail to follow.
     console.log(`[design-visits] storage delete skip (unrecognised key shape) key=${keyPreview}`);
   } catch (e) {
     console.warn(`[design-visits] storage delete fail key=${keyPreview} err=${e.message}`);
@@ -1589,7 +1608,13 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
     const imagesByRoom = {};
     for (const img of imagesRes.rows) {
       if (!imagesByRoom[img.room_id]) imagesByRoom[img.room_id] = [];
-      imagesByRoom[img.room_id].push({ storageKey: img.storage_key, mimeType: img.mime_type });
+      // For sign-off we hand the browser a short-lived signed URL (or the
+      // legacy URL / data URI for rows pre-dating the cloud bucket) — never
+      // the opaque DB key.
+      imagesByRoom[img.room_id].push({
+        storageKey: dvUploads.signImageUrl(img.storage_key),
+        mimeType:   img.mime_type,
+      });
     }
     // Load T&C: prefer pinned version from visit row, fall back to latest, then admin_settings
     let terms = '';
@@ -1747,6 +1772,60 @@ router.post('/api/design-visits/sign-off/:token', async (req, res) => {
   } catch (e) {
     console.error('[design-visits] POST sign-off error:', e.message);
     res.status(500).json({ error: 'Could not process sign-off.' });
+  }
+});
+
+// ── Cloud-storage image upload & serving ─────────────────────────────────────
+// POST /api/design-visits/uploads — authenticated. Designers POST a data URL
+// (the wizard reads files with FileReader as data URLs to avoid wiring up a
+// second multipart form-data path) and we hand back the opaque cloud key
+// they'll round-trip into the design-visit submission payload.
+router.post('/api/design-visits/uploads', isAuthenticated, requirePrivilege('member'), express.json({ limit: '15mb' }), async (req, res) => {
+  try {
+    const dataUrl = String(req.body?.dataUrl || '');
+    if (!dataUrl) return res.status(400).json({ error: 'dataUrl is required' });
+    const out = await dvUploads.uploadFromDataUrl(dataUrl);
+    return res.json({
+      storageKey: out.storageKey,
+      mimeType:   out.mimeType,
+      byteLength: out.byteLength,
+      viewUrl:    dvUploads.signImageUrl(out.storageKey),
+    });
+  } catch (e) {
+    const status = e.statusCode || 500;
+    console.warn('[design-visits] upload failed:', e.message);
+    return res.status(status).json({ error: e.message || 'Upload failed' });
+  }
+});
+
+// GET /api/design-visit-images/:key?exp=&sig= — public, gated by HMAC.
+// Streams bytes for opaque cloud-storage keys. The signature is minted by
+// `signImageUrl` for both authenticated admin previews and the public
+// sign-off page; it always carries a short expiry (default 1h) so a leaked
+// URL stops working quickly.
+router.get('/api/design-visit-images/:key', async (req, res) => {
+  const key = String(req.params.key || '');
+  const exp = req.query.exp;
+  const sig = String(req.query.sig || '');
+  if (!dvUploads.verifySignedUrl(key, exp, sig)) {
+    return res.status(403).send('Forbidden');
+  }
+  try {
+    const buf = await dvUploads.downloadOpaqueKey(key);
+    if (!buf) return res.status(404).send('Not found');
+    // Infer content-type from the key's extension (jpg/png/etc).
+    const m = key.match(/\.([a-z0-9]{1,8})$/i);
+    const ext = (m && m[1].toLowerCase()) || 'bin';
+    const contentType = ({
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+      gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp',
+    })[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    return res.send(buf);
+  } catch (e) {
+    console.warn('[design-visits] image fetch failed:', e.message);
+    return res.status(500).send('Error');
   }
 });
 

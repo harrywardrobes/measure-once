@@ -427,6 +427,10 @@
         images:         Array.isArray(r.images) ? r.images.map(i => ({
           storageKey: i.storageKey || i.storage_key || '',
           mimeType:   i.mimeType   || i.mime_type   || null,
+          // Server hands us a short-lived signed URL (or the legacy URL /
+          // data URI for old rows) so the thumbnail can render without
+          // ever inlining base64 bytes here.
+          viewUrl:    i.viewUrl    || i.view_url    || '',
         })) : [],
       }));
     } else {
@@ -657,9 +661,13 @@
 
     function renderStep2() {
       function renderRoomCard(room, idx) {
-        const prevPhotos = (room.images || []).map(img =>
-          `<img class="dv-photo-thumb" src="${_esc(img.storageKey)}" alt="Room photo">`
-        ).join('');
+        const prevPhotos = (room.images || []).map(img => {
+          // Prefer the signed viewUrl handed back by the server / upload
+          // endpoint; legacy rows fall back to whatever's in `storageKey`
+          // (data URI or http URL).
+          const src = img.viewUrl || img.storageKey || '';
+          return `<img class="dv-photo-thumb" src="${_esc(src)}" alt="Room photo">`;
+        }).join('');
         return `
           <div class="dv-room-card" data-ridx="${idx}">
             <div class="dv-room-header">
@@ -771,21 +779,45 @@
         const priceStr           = card.querySelector('.dv-up')?.value.trim() || '0';
         rooms[idx].unitPricePence = Math.round(parseFloat(priceStr) * 100) || 0;
         rooms[idx].notes          = card.querySelector('.dv-rnotes')?.value || '';
-        // Read new photos from file input
+        // Read new photos from file input and upload each to the cloud
+        // bucket; the DB only ever stores the opaque key the server returns.
         const fileInput = card.querySelector('.dv-photo-input');
         if (fileInput && fileInput.files && fileInput.files.length > 0) {
           for (const file of fileInput.files) {
             reads.push(new Promise(resolve => {
               const fr = new FileReader();
-              fr.onload = () => {
-                if (!rooms[idx].images) rooms[idx].images = [];
-                rooms[idx].images.push({ storageKey: fr.result, mimeType: file.type });
+              fr.onload = async () => {
+                try {
+                  const resp = await fetch('/api/design-visits/uploads', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dataUrl: fr.result }),
+                  });
+                  const data = await resp.json();
+                  if (!resp.ok || !data.storageKey) throw new Error(data.error || 'Upload failed');
+                  if (!rooms[idx].images) rooms[idx].images = [];
+                  rooms[idx].images.push({
+                    storageKey: data.storageKey,
+                    mimeType:   data.mimeType || file.type,
+                    viewUrl:    data.viewUrl || '',
+                  });
+                } catch (err) {
+                  console.warn('[design-visit] photo upload failed:', err.message);
+                  // Surface a clean alert so the designer notices; the rest
+                  // of the wizard keeps working with whatever did upload.
+                  if (typeof window.toast === 'function') {
+                    window.toast('Photo upload failed: ' + (err.message || 'unknown'));
+                  }
+                }
                 resolve();
               };
               fr.onerror = resolve;
               fr.readAsDataURL(file);
             }));
           }
+          // Clear the input so the same files aren't re-uploaded on the next
+          // _saveRoomsFromDom pass (e.g. when moving between rooms).
+          try { fileInput.value = ''; } catch {}
         }
       });
       if (reads.length) await Promise.all(reads);
