@@ -542,9 +542,11 @@ function populateLeadStatusFilter() {
   if (prevValue) sel.value = prevValue;
 
   // Stale-counts hint: show a subtle dot next to the select when the server
-  // is serving cached counts (X-Cache-Status: stale). Clears on a fresh response.
+  // is serving cached counts (X-Cache-Status: stale), or while a background
+  // refresh is in flight (the displayed counts are still from the last response).
+  // Clears only once a fresh response lands with no pending refresh.
   const existingHint = document.getElementById('ls-counts-stale-hint');
-  if (state.leadStatusCountsStale) {
+  if (state.leadStatusCountsStale || _llscInFlight) {
     if (!existingHint) {
       const hint = document.createElement('span');
       hint.id = 'ls-counts-stale-hint';
