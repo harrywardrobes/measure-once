@@ -520,7 +520,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
                   qb_estimate_id:      priorId,
                   qb_estimate_doc_num: visit.qb_estimate_doc_num || null,
                   replaced_at:         new Date().toISOString(),
-                  replaced_by:         submitterUser?.email || null,
+                  replaced_by:         submitterUser?.claims?.email || submitterUser?.email || null,
                   reason:              'prior_estimate_not_updatable',
                 }]),
                 visitId,

@@ -340,15 +340,11 @@ async function main() {
           : `qb_estimate_id unexpectedly ${state.qb_estimate_id}`);
 
       const hist = Array.isArray(state.qb_estimate_history) ? state.qb_estimate_history : [];
-      // Note: `replaced_by` ends up null because design-visits.js reads
-      // `submitterUser?.email` but the local Passport session stores email
-      // on `req.user.claims.email`, not `req.user.email`. Tracked separately —
-      // we just assert the key is present here.
       const histOk = hist.length === 1
         && hist[0].qb_estimate_id === PRIOR_B
         && hist[0].reason === 'prior_estimate_not_updatable'
         && typeof hist[0].replaced_at === 'string'
-        && 'replaced_by' in hist[0];
+        && hist[0].replaced_by === member.email;
       record('B.history-appended', histOk,
         histOk
           ? `history has 1 entry for ${PRIOR_B} with reason prior_estimate_not_updatable`
