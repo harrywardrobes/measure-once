@@ -322,6 +322,30 @@ async function main() {
       eContacts.json?.code === 'HUBSPOT_ERROR' || eContacts.json?.code === 'HUBSPOT_RATE_LIMIT',
       `code=${eContacts.json?.code}`);
 
+    // ── (G) Recovery: HubSpot comes back online ───────────────────────────────
+    // After the prolonged-outage scenario, switch the mock back to 'ok'.
+    // The next GET /api/localdata/all must:
+    //   (G.1) return 200
+    //   (G.2) carry X-Cache-Status: fresh (not stale — data came from HubSpot)
+    //   (G.3) hit the mock HubSpot at least once (cache was not short-circuited
+    //         to the old snapshot)
+
+    console.log('\n  [G] Recovery: /api/localdata/all refreshes once HubSpot is back online');
+    mock.state.mode  = 'ok';
+    mock.state.calls = [];
+
+    const gRecover = await httpGet(BASE, '/api/localdata/all', memberCookie);
+    record('G.1 /api/localdata/all returns 200 after HubSpot recovery',
+      gRecover.status === 200,
+      `status=${gRecover.status} body=${gRecover.body.slice(0, 160)}`);
+    record('G.2 /api/localdata/all X-Cache-Status is fresh (not stale) after recovery',
+      gRecover.headers['x-cache-status'] === 'fresh',
+      `x-cache-status=${gRecover.headers['x-cache-status']}`);
+    const gMockCalls = mock.state.calls.filter(c => c.status === 200);
+    record('G.3 mock HubSpot was called during recovery (cache actually refreshed)',
+      gMockCalls.length >= 1,
+      `mock 200 calls=${gMockCalls.length}`);
+
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
@@ -370,6 +394,11 @@ async function writeReport(runId) {
     '  conditions (stale cap exceeded + HubSpot unreachable), the main customer-',
     '  list endpoint must return 502. This confirms the divergence is intentional',
     '  and that the no-cap exception is scoped only to the room-assignments view.',
+    '- **(G) Recovery after prolonged outage**: after the outage, the mock is',
+    '  switched back to `ok`. `GET /api/localdata/all` must return 200 with',
+    '  `X-Cache-Status: fresh` (not `stale`) and the mock must record at least',
+    '  one successful HubSpot call, proving the view recovers rather than staying',
+    '  stuck on the old stale snapshot.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
