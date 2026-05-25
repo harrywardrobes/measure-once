@@ -42,8 +42,16 @@ function loadZxcvbn(): Promise<ZxcvbnFn> {
   if (_zxcvbnCache) return Promise.resolve(_zxcvbnCache);
   if (!_zxcvbnPromise) {
     _zxcvbnPromise = import('zxcvbn').then((m) => {
-      _zxcvbnCache = m.default as unknown as ZxcvbnFn;
-      return _zxcvbnCache;
+      let fn: ZxcvbnFn | null = null;
+      if (typeof m.default === 'function') {
+        fn = m.default as unknown as ZxcvbnFn;
+      } else if (typeof (m as unknown as ZxcvbnFn) === 'function') {
+        fn = m as unknown as ZxcvbnFn;
+      } else {
+        console.warn('[loadZxcvbn] Could not resolve zxcvbn as a function; strength meter will be unavailable.');
+      }
+      if (fn !== null) _zxcvbnCache = fn;
+      return fn as ZxcvbnFn;
     });
   }
   return _zxcvbnPromise;
@@ -106,9 +114,10 @@ function StrengthMeter({ value, userInputs }: { value: string; userInputs: strin
 
   React.useEffect(() => {
     if (!value || zxcvbnFn) return;
-    loadZxcvbn().then(setZxcvbnFn);
+    loadZxcvbn().then((fn) => { if (fn) setZxcvbnFn(() => fn); });
   }, [value, zxcvbnFn]);
 
+  if (typeof value !== 'string') return null;
   if (!value) return null;
 
   if (!zxcvbnFn) {
@@ -119,58 +128,57 @@ function StrengthMeter({ value, userInputs }: { value: string; userInputs: strin
     );
   }
 
-  let r: ZxcvbnResult;
   try {
-    r = zxcvbnFn(value.slice(0, MAX_LENGTH), userInputs);
+    // zxcvbn guarantees score is 0–4, but clamp defensively here because
+    // an out-of-range value (e.g. undefined from an unexpected zxcvbn build)
+    // makes ((score + 1) / 5) * 100 evaluate to NaN, and MUI v9 LinearProgress
+    // throws a prop-validation error on NaN `value` during React render — after
+    // the try/catch has already exited, so the try/catch cannot catch it.
+    // Clamping to a valid integer ensures LinearProgress always receives a
+    // well-formed number, so the error boundary is only a last-resort backstop
+    // rather than the primary defence.
+    const r = zxcvbnFn(value.slice(0, MAX_LENGTH), userInputs);
+    const rawScore = r?.score;
+    const score: 0 | 1 | 2 | 3 | 4 =
+      typeof rawScore === 'number' && rawScore >= 0 && rawScore <= 4
+        ? (rawScore as 0 | 1 | 2 | 3 | 4)
+        : 0;
+    const crack = r?.crack_times_display?.offline_slow_hashing_1e4_per_second || '';
+    const suggestion = score < MIN_SCORE
+      ? (r?.feedback?.warning || 'Too easy to guess — try a longer or less common password.')
+      : (r?.feedback?.suggestions?.[0] || '');
+    return (
+      <Box sx={{ mt: 1 }}>
+        <LinearProgress
+          variant="determinate"
+          value={((score + 1) / 5) * 100}
+          color={STRENGTH_COLORS[score]}
+          sx={{ height: 6, borderRadius: 999 }}
+        />
+        <Stack direction="row" sx={{ mt: 0.5, justifyContent: 'space-between' }}>
+          <Typography variant="caption" color="text.secondary">
+            Strength: <Box component="strong" sx={{ color: 'text.primary' }}>{STRENGTH_LABELS[score]}</Box>
+          </Typography>
+          {crack && (
+            <Typography variant="caption" color="text.secondary">Crack time: {crack}</Typography>
+          )}
+        </Stack>
+        {suggestion && (
+          <Typography variant="caption" sx={{ display: 'block', mt: 0.25, color: 'warning.dark' }}>
+            {suggestion}
+          </Typography>
+        )}
+      </Box>
+    );
   } catch (err) {
-    console.error('[StrengthMeter] zxcvbn threw during scoring:', err);
+    console.error('[StrengthMeter] threw during render:', err);
     return null;
   }
-
-  // zxcvbn guarantees score is 0–4, but clamp defensively here because
-  // an out-of-range value (e.g. undefined from an unexpected zxcvbn build)
-  // makes ((score + 1) / 5) * 100 evaluate to NaN, and MUI v9 LinearProgress
-  // throws a prop-validation error on NaN `value` during React render — after
-  // the try/catch has already exited, so the try/catch cannot catch it.
-  // Clamping to a valid integer ensures LinearProgress always receives a
-  // well-formed number, so the error boundary is only a last-resort backstop
-  // rather than the primary defence.
-  const rawScore = r?.score;
-  const score: 0 | 1 | 2 | 3 | 4 =
-    typeof rawScore === 'number' && rawScore >= 0 && rawScore <= 4
-      ? (rawScore as 0 | 1 | 2 | 3 | 4)
-      : 0;
-  const crack = r.crack_times_display?.offline_slow_hashing_1e4_per_second || '';
-  const suggestion = score < MIN_SCORE
-    ? (r.feedback?.warning || 'Too easy to guess — try a longer or less common password.')
-    : (r.feedback?.suggestions?.[0] || '');
-  return (
-    <Box sx={{ mt: 1 }}>
-      <LinearProgress
-        variant="determinate"
-        value={((score + 1) / 5) * 100}
-        color={STRENGTH_COLORS[score]}
-        sx={{ height: 6, borderRadius: 999 }}
-      />
-      <Stack direction="row" sx={{ mt: 0.5, justifyContent: 'space-between' }}>
-        <Typography variant="caption" color="text.secondary">
-          Strength: <Box component="strong" sx={{ color: 'text.primary' }}>{STRENGTH_LABELS[score]}</Box>
-        </Typography>
-        {crack && (
-          <Typography variant="caption" color="text.secondary">Crack time: {crack}</Typography>
-        )}
-      </Stack>
-      {suggestion && (
-        <Typography variant="caption" sx={{ display: 'block', mt: 0.25, color: 'warning.dark' }}>
-          {suggestion}
-        </Typography>
-      )}
-    </Box>
-  );
 }
 
 export function ChangePasswordCard({ profile }: { profile: Profile }) {
   const [open, setOpen] = React.useState(false);
+  const [openNonce, setOpenNonce] = React.useState(0);
   const [current, setCurrent] = React.useState('');
   const [next, setNext] = React.useState('');
   const [confirm, setConfirm] = React.useState('');
@@ -179,10 +187,10 @@ export function ChangePasswordCard({ profile }: { profile: Profile }) {
   const [submitting, setSubmitting] = React.useState(false);
 
   const userInputs = React.useMemo(() => {
-    const email = (profile.email || '').toLowerCase();
+    const email = String(profile.email ?? '').toLowerCase();
     const local = email.split('@')[0] || '';
-    return [email, local, profile.first_name || '', profile.last_name || '',
-            'measure once', 'measureonce'].filter(Boolean);
+    return [email, local, String(profile.first_name ?? ''), String(profile.last_name ?? ''),
+            'measure once', 'measureonce'].filter((s): s is string => typeof s === 'string' && s.length > 0);
   }, [profile.email, profile.first_name, profile.last_name]);
 
   React.useEffect(() => {
@@ -193,7 +201,7 @@ export function ChangePasswordCard({ profile }: { profile: Profile }) {
     setCurrent(''); setNext(''); setConfirm(''); setErrors({});
   };
 
-  const handleOpen = () => { setSuccess(null); resetFields(); setOpen(true); };
+  const handleOpen = () => { setSuccess(null); resetFields(); setOpenNonce((n) => n + 1); setOpen(true); };
   const handleClose = () => { if (submitting) return; resetFields(); setOpen(false); };
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -272,7 +280,7 @@ export function ChangePasswordCard({ profile }: { profile: Profile }) {
                   error={!!errors.next}
                   helperText={errors.next || 'At least 8 characters, with letters and numbers.'}
                 />
-                <StrengthMeterErrorBoundary>
+                <StrengthMeterErrorBoundary key={openNonce}>
                   <StrengthMeter value={next} userInputs={userInputs} />
                 </StrengthMeterErrorBoundary>
               </Box>
