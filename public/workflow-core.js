@@ -310,8 +310,8 @@ let LEAD_STATUS_OPTIONS = [
 let NULL_LEAD_STATUS_LABEL = 'No status';
 
 // Single-flight + min-interval debounce so bursts of triggers (bootstrap +
-// visibilitychange + BroadcastChannel listeners + populateLeadStatusFilter
-// refreshes) collapse into one HubSpot fan-out. Server-side caching alone
+// visibilitychange + BroadcastChannel listeners) collapse into one HubSpot
+// fan-out. Server-side caching alone
 // isn't enough: a cold-cache burst would still hit the per-second budget.
 let _llscInFlight = null;
 let _llscLastSettledAt = 0;
@@ -501,8 +501,7 @@ document.addEventListener('visibilitychange', () => {
     if (typeof renderWorkflowStages === 'function') renderWorkflowStages();
   }
   Promise.all([loadLeadStatuses(), loadLeadStatusCounts(), loadLeadSubstatuses()]).then(() => {
-    populateLeadStatusFilter();
-    document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
+    renderCustomerList();
     if (typeof renderEnquiryList === 'function') renderEnquiryList();
     if (document.getElementById('workflow-stages')) {
       renderWorkflowStages();
@@ -524,8 +523,7 @@ if (typeof BroadcastChannel !== 'undefined') {
   const _lsChannel = new BroadcastChannel('lead_statuses_changed');
   _lsChannel.addEventListener('message', () => {
     Promise.all([loadLeadStatuses(), loadLeadStatusCounts()]).then(() => {
-      populateLeadStatusFilter();
-      document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
+      renderCustomerList();
       if (typeof renderEnquiryList === 'function') renderEnquiryList();
       _maybeRenderStages();
     });
@@ -551,87 +549,6 @@ if (typeof BroadcastChannel !== 'undefined') {
       _maybeRenderStages();
     });
   });
-}
-
-function populateLeadStatusFilter() {
-  const sel = document.getElementById('lead-status-filter');
-  if (!sel) return;
-
-  const serverCounts = state.leadStatusCounts && Object.keys(state.leadStatusCounts).length > 0;
-
-  let counts, nullCount;
-  if (serverCounts) {
-    counts = state.leadStatusCounts;
-    nullCount = counts['__no_status__'] || 0;
-  } else {
-    counts = {};
-    nullCount = 0;
-    for (const c of state.contacts) {
-      const s = c.properties?.hs_lead_status || '';
-      if (s) counts[s] = (counts[s] || 0) + 1;
-      else nullCount++;
-    }
-  }
-
-  const nullLabel = (typeof NULL_LEAD_STATUS_LABEL !== 'undefined' ? NULL_LEAD_STATUS_LABEL : null) || 'No status';
-  const nullAttrs = nullCount === 0 ? ' disabled style="color:#cbd5e1"' : '';
-
-  const prevValue = sel.value;
-  sel.innerHTML = `<option value="">All statuses</option>` +
-    `<option value="__no_status__"${nullAttrs}>${escHtml(nullLabel)} (${nullCount})</option>` +
-    LEAD_STATUS_OPTIONS.filter(o => !o.excluded_from_sales).map(({ value, label }) => {
-      const n = counts[value] || 0;
-      const attrs = n === 0 ? ' disabled style="color:#cbd5e1"' : '';
-      return `<option value="${escHtml(value)}"${attrs}>${escHtml(label)} (${n})</option>`;
-    }).join('');
-
-  if (prevValue) sel.value = prevValue;
-
-  // Stale-counts hint: show a subtle dot next to the select when the server
-  // is serving cached counts (X-Cache-Status: stale), or while a background
-  // refresh is in flight (the displayed counts are still from the last response).
-  // Clears only once a fresh response lands with no pending refresh.
-  const existingHint = document.getElementById('ls-counts-stale-hint');
-  if (state.leadStatusCountsStale || _llscInFlight) {
-    if (!existingHint) {
-      const hint = document.createElement('span');
-      hint.id = 'ls-counts-stale-hint';
-      hint.className = 'ls-stale-hint';
-      hint.title = 'Counts may be slightly out of date';
-      hint.setAttribute('aria-label', 'Using cached data');
-      hint.textContent = '•';
-      sel.insertAdjacentElement('afterend', hint);
-    }
-  } else if (existingHint) {
-    existingHint.remove();
-  }
-
-  // Error notice: dismissible inline banner shown only on hard failures (network
-  // error, 5xx). Auto-clears when the next successful load arrives.
-  const existingErrorNotice = document.getElementById('ls-counts-error-notice');
-  if (state.leadStatusCountsError) {
-    if (!existingErrorNotice) {
-      const notice = document.createElement('div');
-      notice.id = 'ls-counts-error-notice';
-      notice.className = 'ls-counts-error-notice';
-      notice.setAttribute('role', 'alert');
-      const msg = document.createElement('span');
-      msg.textContent = "Counts couldn\u2019t refresh \u2014 showing last cached values";
-      const btn = document.createElement('button');
-      btn.className = 'ls-counts-error-dismiss';
-      btn.setAttribute('aria-label', 'Dismiss');
-      btn.textContent = '\u00d7';
-      btn.addEventListener('click', () => {
-        state.leadStatusCountsError = false;
-        notice.remove();
-      });
-      notice.append(msg, btn);
-      const lsRow = document.getElementById('lead-status-filter-row');
-      (lsRow || sel).insertAdjacentElement('afterend', notice);
-    }
-  } else if (existingErrorNotice) {
-    existingErrorNotice.remove();
-  }
 }
 
 // ── Filters ───────────────────────────────────────────────────────────────────
@@ -1063,8 +980,7 @@ async function openLeadStatusPicker(event, contactId, { showSubstatuses = false 
       if (freshStatus !== stalePrevStatus) driftedTo = freshStatus;
       currentLeadStatus = freshStatus;
       _mergeContactIntoState(fresh);
-      populateLeadStatusFilter();
-      document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
+      renderCustomerList();
       renderWorkflowHeader();
     }
   } catch (e) {
@@ -1298,8 +1214,7 @@ async function quickSetLeadStatus(contactId, newStatus) {
     }
     state.pendingLeadStatus = state.pendingLeadStatus || {};
     state.pendingLeadStatus[contactId] = status;
-    populateLeadStatusFilter();
-    document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
+    renderCustomerList();
     renderWorkflowHeader();
     renderWorkflowStages();
   }
@@ -1312,7 +1227,7 @@ async function quickSetLeadStatus(contactId, newStatus) {
       : { hs_lead_status: newStatus };
     await PATCH_REQ(`/api/contacts/${contactId}`, patchBody);
     if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
-    loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
+    loadLeadStatusCounts().catch(() => {});
     const _nullLbl3 = NULL_LEAD_STATUS_LABEL || 'No status';
     const newLabel = newStatus ? (LEAD_STATUS_OPTIONS.find(o => o.value === newStatus)?.label || newStatus) : null;
     showBottomUndo(newLabel ? `Lead status set to ${newLabel}` : `Lead status set to ${_nullLbl3}`, async () => {
@@ -1324,7 +1239,7 @@ async function quickSetLeadStatus(contactId, newStatus) {
         .catch(() => {})
         .finally(() => {
           if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
-          loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
+          loadLeadStatusCounts().catch(() => {});
         });
     });
   } catch (e) {
@@ -1370,8 +1285,7 @@ async function _quickSetLeadStatusWithSub(contactId, statusKey, substatusKey) {
     }
     state.pendingLeadStatus = state.pendingLeadStatus || {};
     state.pendingLeadStatus[contactId] = status;
-    populateLeadStatusFilter();
-    document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
+    renderCustomerList();
     renderWorkflowHeader();
     renderWorkflowStages();
   }
@@ -1381,7 +1295,7 @@ async function _quickSetLeadStatusWithSub(contactId, statusKey, substatusKey) {
   try {
     await PATCH_REQ(`/api/contacts/${contactId}`, { hs_lead_status: statusKey, hw_lead_substatus: newHw });
     if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
-    loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
+    loadLeadStatusCounts().catch(() => {});
     const subs = _substatusesForStatus(statusKey);
     const subLabel = subs.find(s =>
       String(s.substatus_key).toUpperCase() === String(substatusKey).toUpperCase()
@@ -1393,7 +1307,7 @@ async function _quickSetLeadStatusWithSub(contactId, statusKey, substatusKey) {
         hw_lead_substatus: prevSubstatus || '',
       }).catch(() => {}).finally(() => {
         if (state.pendingLeadStatus) delete state.pendingLeadStatus[contactId];
-        loadLeadStatusCounts().then(() => populateLeadStatusFilter()).catch(() => {});
+        loadLeadStatusCounts().catch(() => {});
       });
     });
   } catch (e) {
