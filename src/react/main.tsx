@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client';
 import { AppThemeProvider } from './AppThemeProvider';
 import { IslandErrorBoundary } from './components/IslandErrorBoundary';
 import {
+  DesignVisitRoomsStep,
+  type DesignVisitRoomsStepProps,
+} from './components/DesignVisitRoomsStep';
+import {
   PageLoadingSkeleton,
   CustomersPageSkeleton,
   CalendarPageSkeleton,
@@ -201,3 +205,44 @@ if (document.readyState === 'loading') {
 } else {
   mount();
 }
+
+/**
+ * Imperative mounting function exposed for the vanilla-JS design-visit wizard.
+ * Called from card-action-handlers.js when the wizard reaches Step 2 (Rooms).
+ *
+ * Returns a handle with:
+ *   update(newProps)  — re-render with updated props (e.g. fresh doorStyles
+ *                       after a BroadcastChannel catalogue change)
+ *   unmount()         — tear down the React tree when leaving Step 2
+ */
+(window as unknown as {
+  mountDesignVisitRoomsStep: (
+    container: HTMLElement,
+    props: DesignVisitRoomsStepProps,
+  ) => { update: (p: Partial<DesignVisitRoomsStepProps>) => void; unmount: () => void };
+}).mountDesignVisitRoomsStep = (container, props) => {
+  const root = createRoot(container);
+  let current: DesignVisitRoomsStepProps = { ...props };
+
+  function doRender() {
+    root.render(
+      <AppThemeProvider>
+        <IslandErrorBoundary islandId="dv-rooms-step">
+          <DesignVisitRoomsStep {...current} />
+        </IslandErrorBoundary>
+      </AppThemeProvider>,
+    );
+  }
+
+  doRender();
+
+  return {
+    update(newProps: Partial<DesignVisitRoomsStepProps>) {
+      current = { ...current, ...newProps };
+      doRender();
+    },
+    unmount() {
+      root.unmount();
+    },
+  };
+};

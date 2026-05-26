@@ -457,6 +457,10 @@
 
     // Wizard state — pre-populated from existingVisit when in edit mode
     let step = 1;
+    // Handle for the React root mounted at Step 2 (Rooms)
+    let _step2Handle = null;
+    // Whether any room photo is currently uploading (reported by the React step)
+    let _step2Uploading = false;
     let rooms;
     if (editMode && Array.isArray(existingVisit.rooms) && existingVisit.rooms.length) {
       rooms = existingVisit.rooms.map(r => ({
@@ -580,7 +584,10 @@
     document.body.appendChild(backdrop);
     const inner  = backdrop.querySelector('#dv-wiz-inner');
     const footer = backdrop.querySelector('#dv-wiz-footer');
-    backdrop.querySelector('#dv-close-x').addEventListener('click', () => backdrop.remove());
+    backdrop.querySelector('#dv-close-x').addEventListener('click', () => {
+      if (_step2Handle) { _step2Handle.unmount(); _step2Handle = null; }
+      backdrop.remove();
+    });
 
     // Live catalogue refresh while wizard is open
     const _dvChans = [];
@@ -597,7 +604,16 @@
           } catch {}
           // Re-render current step with fresh data
           if (step === 1) renderStep1();
-          else if (step === 2) { _saveRoomsFromDom(); renderStep2(); }
+          else if (step === 2) {
+            if (_step2Handle) {
+              // Update doorStyles in the live React component — no full re-mount
+              // needed, so room form state (including partially-typed fields) is
+              // preserved.
+              _step2Handle.update({ doorStyles: doorStyles });
+            } else {
+              renderStep2();
+            }
+          }
         });
         _dvChans.push(ch);
       } catch {}
@@ -716,136 +732,60 @@
     }
 
     function renderStep2() {
-      function renderRoomCard(room, idx) {
-        const prevPhotos = (room.images || []).map(img => {
-          // Prefer the signed viewUrl handed back by the server / upload
-          // endpoint; legacy rows fall back to whatever's in `storageKey`
-          // (data URI or http URL).
-          const src = img.viewUrl || img.storageKey || '';
-          return `<img class="dv-photo-thumb" src="${_esc(src)}" alt="Room photo">`;
-        }).join('');
-        return `
-          <div class="dv-room-card" data-ridx="${idx}">
-            <div class="dv-room-header">
-              <button class="dv-ord-btn dv-mv-up" data-ridx="${idx}" title="Move up" ${idx === 0 ? 'disabled' : ''}>↑</button>
-              <button class="dv-ord-btn dv-mv-dn" data-ridx="${idx}" title="Move down" ${idx === rooms.length - 1 ? 'disabled' : ''}>↓</button>
-              <span class="dv-room-title">Room ${idx + 1}</span>
-              ${rooms.length > 1 ? `<button class="dv-rm-btn dv-rm-room" data-ridx="${idx}">Remove</button>` : ''}
-            </div>
-            <label class="dv-label">Room name <span style="color:#991b1b;">*</span></label>
-            <input type="text" class="dv-rn" data-ridx="${idx}" maxlength="200" placeholder="e.g. Kitchen" value="${_esc(room.roomName)}">
-            ${doorStyles.length ? `
-              <label class="dv-label">Door style</label>
-              <select class="dv-ds" data-ridx="${idx}">${_dsOptions(room.doorStyleId)}</select>
-            ` : ''}
-            <div class="dv-grid3" style="margin-top:10px;">
-              <div>
-                <label class="dv-label">Width (mm)</label>
-                <input type="number" class="dv-wm" data-ridx="${idx}" min="0" placeholder="e.g. 3500" value="${room.widthMm || ''}">
-              </div>
-              <div>
-                <label class="dv-label">Height (mm)</label>
-                <input type="number" class="dv-hm" data-ridx="${idx}" min="0" placeholder="e.g. 2400" value="${room.heightMm || ''}">
-              </div>
-              <div>
-                <label class="dv-label">Depth (mm)</label>
-                <input type="number" class="dv-dm" data-ridx="${idx}" min="0" placeholder="e.g. 600" value="${room.depthMm || ''}">
-              </div>
-            </div>
-            <div class="dv-grid2" style="margin-top:10px;">
-              <div>
-                <label class="dv-label">Unit count <span style="color:#991b1b;">*</span></label>
-                <input type="number" class="dv-uc" data-ridx="${idx}" min="1" value="${room.unitCount || 1}">
-              </div>
-              <div>
-                <label class="dv-label">Unit price (£)</label>
-                <input type="number" class="dv-up" data-ridx="${idx}" min="0" step="0.01" placeholder="0.00" value="${room.unitPricePence ? (room.unitPricePence / 100).toFixed(2) : ''}">
-              </div>
-            </div>
-            <label class="dv-label">Room notes</label>
-            <textarea class="dv-rnotes" data-ridx="${idx}" rows="2" maxlength="2000" placeholder="Any additional notes for this room…">${_esc(room.notes || '')}</textarea>
-            <label class="dv-label">Photos (optional)</label>
-            <div class="dv-file-upload-wrap">
-              <input type="file" class="dv-photo-input" data-ridx="${idx}" accept="image/*" multiple>
-              <div class="dv-file-upload-field" data-for-ridx="${idx}">
-                <span class="dv-file-upload-name">No files chosen</span>
-                <span class="dv-file-upload-btn">Browse</span>
-              </div>
-            </div>
-            ${prevPhotos ? `<div class="dv-photo-list">${prevPhotos}</div>` : ''}
-          </div>`;
+      // Unmount any existing React root from a prior renderStep2() call before
+      // re-building the container (e.g. navigating Back → Next again).
+      if (_step2Handle) { _step2Handle.unmount(); _step2Handle = null; }
+      _step2Uploading = false;
+
+      inner.innerHTML = '';
+
+      // Step indicator and subtitle (vanilla, matches Steps 1 & 3 visually)
+      const headerEl = document.createElement('div');
+      headerEl.innerHTML = renderStepIndicator() +
+        '<p style="font-size:.82rem;color:#6b7280;margin:0 0 16px;">Step 2 of 3 — Rooms</p>';
+      inner.appendChild(headerEl);
+
+      // Container for the React island
+      const reactContainer = document.createElement('div');
+      reactContainer.id = 'dv-rooms-react';
+      inner.appendChild(reactContainer);
+
+      // Validation error (set by footer button handlers below)
+      const errDiv = document.createElement('div');
+      errDiv.className = 'dv-err';
+      errDiv.id = 'dv-s2-err';
+      inner.appendChild(errDiv);
+
+      if (typeof window.mountDesignVisitRoomsStep === 'function') {
+        _step2Handle = window.mountDesignVisitRoomsStep(reactContainer, {
+          initialRooms: rooms,
+          doorStyles: doorStyles,
+          onRoomsChange: function(updatedRooms) { rooms = updatedRooms; },
+          onUploadingChange: function(uploading) { _step2Uploading = uploading; },
+        });
+      } else {
+        console.error('[design-visit] mountDesignVisitRoomsStep not available — React bundle not loaded?');
       }
 
-      inner.innerHTML = `
-        ${renderStepIndicator()}
-        <p style="font-size:.82rem;color:#6b7280;margin:0 0 16px;">Step 2 of 3 — Rooms</p>
-        <div id="dv-rooms-list">${rooms.map((r, i) => renderRoomCard(r, i)).join('')}</div>
-        <button class="dv-add-room" id="dv-add-room">+ Add room</button>
-        <div class="dv-err" id="dv-s2-err"></div>`;
-
       _renderFooter(null, [
-        { cls: 'dv-btn-back', label: '← Back', fn: () => { step = 1; renderStep1(); }},
-        { cls: 'dv-btn-next', label: 'Review →', fn: async () => {
-          await _saveRoomsFromDom();
+        { cls: 'dv-btn-back', label: '← Back', fn: function() {
+          if (_step2Handle) { _step2Handle.unmount(); _step2Handle = null; }
+          step = 1; renderStep1();
+        }},
+        { cls: 'dv-btn-next', label: 'Review →', fn: function() {
           const errEl = inner.querySelector('#dv-s2-err');
-          const emptyRooms = rooms.filter(r => !r.roomName.trim());
+          if (_step2Uploading) {
+            errEl.textContent = 'Please wait for photos to finish uploading.';
+            return;
+          }
+          const emptyRooms = rooms.filter(function(r) { return !r.roomName.trim(); });
           if (emptyRooms.length) { errEl.textContent = 'Every room needs a name.'; return; }
           if (!rooms.length) { errEl.textContent = 'Add at least one room.'; return; }
           errEl.textContent = '';
+          if (_step2Handle) { _step2Handle.unmount(); _step2Handle = null; }
           step = 3; renderStep3();
         }},
       ]);
-
-      // Wire the styled file-upload fields: clicking the visible field/btn opens
-      // the hidden native input; selecting files updates the filename display.
-      inner.querySelectorAll('.dv-file-upload-field').forEach(field => {
-        const ridx = field.dataset.forRidx;
-        const fileInput = inner.querySelector(`.dv-photo-input[data-ridx="${ridx}"]`);
-        if (!fileInput) return;
-        field.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', () => {
-          const nameEl = field.querySelector('.dv-file-upload-name');
-          if (!nameEl) return;
-          const files = fileInput.files;
-          if (!files || !files.length) {
-            nameEl.textContent = 'No files chosen';
-            nameEl.classList.remove('has-files');
-          } else {
-            const names = Array.from(files).map(f => f.name).join(', ');
-            nameEl.textContent = names;
-            nameEl.classList.add('has-files');
-          }
-        });
-      });
-
-      inner.querySelector('#dv-add-room').addEventListener('click', async () => {
-        await _saveRoomsFromDom(); rooms.push(_makeRoom()); renderStep2();
-      });
-      if (!inner.__step2ClickBound) {
-        inner.__step2ClickBound = true;
-        inner.addEventListener('click', async e => {
-          if (step !== 2) return;
-          const rmBtn = e.target.closest('.dv-rm-room');
-          if (rmBtn) {
-            const idx = parseInt(rmBtn.dataset.ridx, 10);
-            await _saveRoomsFromDom(); rooms.splice(idx, 1); renderStep2(); return;
-          }
-          const upBtn = e.target.closest('.dv-mv-up');
-          if (upBtn) {
-            const idx = parseInt(upBtn.dataset.ridx, 10);
-            if (idx === 0) return;
-            await _saveRoomsFromDom();
-            [rooms[idx-1], rooms[idx]] = [rooms[idx], rooms[idx-1]]; renderStep2(); return;
-          }
-          const dnBtn = e.target.closest('.dv-mv-dn');
-          if (dnBtn) {
-            const idx = parseInt(dnBtn.dataset.ridx, 10);
-            if (idx >= rooms.length - 1) return;
-            await _saveRoomsFromDom();
-            [rooms[idx], rooms[idx+1]] = [rooms[idx+1], rooms[idx]]; renderStep2(); return;
-          }
-        });
-      }
     }
 
     async function _saveRoomsFromDom() {
