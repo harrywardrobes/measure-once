@@ -363,6 +363,38 @@ async function loadLeadStatusCounts() {
   return _llscInFlight;
 }
 
+// ── Pill-bar counts-error notice ──────────────────────────────────────────────
+// Renders (or removes) the #ls-counts-error-notice-pills element inside
+// #customers-view whenever mo:contacts-changed fires.  The notice appears when
+// state.leadStatusCountsError is true and disappears once the flag is cleared
+// (either by the dismiss button or by a subsequent successful
+// loadLeadStatusCounts call).  The element is inserted just before
+// #customers-view so it sits above the card list without disrupting layout.
+function _renderCountsErrorNoticePills() {
+  const existing = document.getElementById('ls-counts-error-notice-pills');
+  if (!state.leadStatusCountsError) {
+    if (existing) existing.remove();
+    return;
+  }
+  const view = document.getElementById('customers-view');
+  if (!view) return; // no pill-bar target on this page
+  if (existing) return; // already shown — avoid duplicates
+  const notice = document.createElement('div');
+  notice.id = 'ls-counts-error-notice-pills';
+  notice.className = 'ls-counts-error-notice';
+  const span = document.createElement('span');
+  span.textContent = 'Could not load lead status counts \u2014 some totals may be out of date.';
+  const btn = document.createElement('button');
+  btn.className = 'ls-counts-error-dismiss';
+  btn.textContent = '\u00d7';
+  btn.setAttribute('onclick',
+    "state.leadStatusCountsError=false;document.getElementById('ls-counts-error-notice-pills')?.remove()");
+  notice.appendChild(span);
+  notice.appendChild(btn);
+  view.insertAdjacentElement('beforebegin', notice);
+}
+document.addEventListener('mo:contacts-changed', _renderCountsErrorNoticePills);
+
 // ── Stage action labels ──────────────────────────────────────────────────────
 // Map of `${stage_key}|${status_key}` → label. Populated from
 // /api/stage-action-labels at bootstrap and refreshed when the admin panel
