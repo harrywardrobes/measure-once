@@ -423,6 +423,22 @@ export function CustomerDetailPage() {
     };
   }, [fetchLeadStatuses, fetchLeadSubstatuses]);
 
+  // ── Re-fetch emails when Google connects mid-session ───────────────────────
+
+  const contactEmailRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    contactEmailRef.current = contact?.properties.email;
+  }, [contact]);
+
+  useEffect(() => {
+    const handler = () => {
+      const email = contactEmailRef.current;
+      if (email) void fetchGoogleEmails(email);
+    };
+    window.addEventListener('mo:google-auth-connected', handler);
+    return () => window.removeEventListener('mo:google-auth-connected', handler);
+  }, [fetchGoogleEmails]);
+
   // ── Boot ───────────────────────────────────────────────────────────────────
 
   useEffect(() => {

@@ -398,8 +398,9 @@ async function checkAuthStatus() {
   state.authStatus = status;
   state.user = user;
   renderAuthStatus();
-  if (!prevGoogle && state.authStatus.google && state.selectedContact) {
-    renderGoogleEmailSection();
+  if (!prevGoogle && state.authStatus.google) {
+    window.dispatchEvent(new CustomEvent('mo:google-auth-connected'));
+    if (state.selectedContact) renderGoogleEmailSection();
   }
 }
 
