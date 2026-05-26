@@ -4134,9 +4134,13 @@ body.dv-signoff-page {
      - the .btn-primary (plum) and .toast overrides below (they would collide
        with the global versions if unscoped),
      - bare element selectors (table/th/td) we don't want leaking globally,
-     - layout chrome and admin-only widgets (matrix, audit feed, perm-toggle,
-       Search-Settings rows, etc.).
+     - layout chrome and Search-Settings rows still rendered by vanilla JS.
    Z-index values use the ladder tokens defined on :root.
+
+   All admin tabs are now React MUI islands. Dead rules for the old vanilla-JS
+   rendering (permissions matrix, audit-feed chip badges, job-roles manager,
+   add-member form, perm-toggle, checklist, avatar/user-cell, etc.) were
+   removed. The surviving rules below are annotated with their consumers.
 ─────────────────────────────────────────────────────────────────────────── */
 .admin-page .cp-hint-bar { display: none !important; }
 /* Hide the search-shortcut hint inside the MUI GlobalHeader on /admin so the
@@ -4163,28 +4167,7 @@ body.dv-signoff-page {
   vertical-align: middle;
 }
 .admin-page tr:last-child td { border-bottom: none; }
-.admin-page .table-empty {
-  text-align: center; padding: 28px;
-  color: var(--ink-4); font-style: italic; font-size: .875rem;
-}
-.admin-page .table-empty--padded { padding: 28px 0; }
 
-/* Avatar */
-.admin-page .avatar {
-  width: 28px; height: 28px; border-radius: 50%;
-  object-fit: cover; flex-shrink: 0;
-}
-.admin-page .avatar-placeholder {
-  width: 28px; height: 28px; border-radius: 50%;
-  background: var(--stone);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: .68rem; font-weight: 700; color: var(--ink-3);
-  flex-shrink: 0;
-}
-.admin-page .user-cell { display: flex; align-items: center; gap: 10px; }
-.admin-page .user-cell-name { font-weight: 600; font-size: .875rem; }
-.admin-page .user-cell-role { font-size: .72rem; color: var(--ink-4); margin-top: 1px; }
-.admin-page .actions-nowrap { white-space: nowrap; }
 
 /* Admin's plum .btn-primary overrides the global orchid one. The shared .btn
    base lives in the "Shared button base" block earlier in this file; admin's
@@ -4192,70 +4175,6 @@ body.dv-signoff-page {
 .admin-page .btn-primary { background: var(--plum); color: #fff; }
 .admin-page .btn-primary:hover:not(:disabled) { background: #2e0f5a; }
 
-/* Inline edit row */
-.admin-page .edit-row td { background: var(--paper); padding: 10px 12px; }
-.admin-page .edit-form  { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.admin-page .edit-label { font-size: .72rem; font-weight: 700; color: var(--ink-3); white-space: nowrap; }
-
-.admin-page .actions { display: flex; gap: 6px; justify-content: flex-end; }
-
-/* Permissions matrix */
-.admin-page .matrix-wrap { overflow-x: auto; }
-.admin-page .matrix { width: 100%; border-collapse: collapse; font-size: .82rem; }
-.admin-page .matrix th {
-  text-align: center; padding: 10px 14px;
-  font-size: .72rem; white-space: nowrap;
-}
-.admin-page .matrix th.feat-col {
-  text-align: left; color: var(--ink-2);
-  font-weight: 600; text-transform: none; letter-spacing: 0;
-  font-size: .875rem; min-width: 220px;
-}
-.admin-page .matrix td {
-  text-align: center; padding: 10px 14px;
-  border-bottom: 1px solid var(--paper);
-}
-.admin-page .matrix td.feat-name { text-align: left; font-weight: 500; color: var(--ink-2); }
-.admin-page .matrix td.feat-desc {
-  font-weight: 400; font-size: .78rem; color: var(--ink-4);
-  display: block; margin-top: 1px;
-}
-.admin-page .matrix-head { background: var(--paper); }
-.admin-page .matrix tr:last-child td { border-bottom: none; }
-.admin-page .tick  { color: #059669; font-size: 1rem; }
-.admin-page .cross { color: var(--stone-deep); font-size: 1rem; }
-.admin-page .matrix-group td,
-.admin-page .matrix-group th {
-  background: var(--paper);
-  font-size: .68rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .07em;
-  color: var(--ink-4);
-  padding: 6px 14px; text-align: left;
-}
-
-/* Job roles manager */
-.admin-page .roles-add-form { display: flex; gap: 8px; margin-bottom: 14px; }
-.admin-page .roles-add-form .field { flex: 1; }
-.admin-page .roles-add-form select.field { flex: 0 0 auto; width: 130px; }
-.admin-page .roles-list  { display: flex; flex-direction: column; min-height: 32px; }
-.admin-page .roles-empty { color: var(--ink-4); font-style: italic; font-size: .875rem; padding: 6px 0; }
-.admin-page .role-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--stone);
-}
-.admin-page .role-row:last-child   { border-bottom: none; }
-.admin-page .role-row-name {
-  flex: 1; font-size: .88rem; font-weight: 600; color: var(--ink-1);
-}
-.admin-page .role-row-select { width: 130px; flex-shrink: 0; }
-.admin-page .role-del {
-  background: none; border: none; color: var(--ink-4);
-  cursor: pointer; padding: 0; line-height: 1;
-  font-size: .9rem; font-weight: 700;
-  transition: color .1s; font-family: inherit;
-}
-.admin-page .role-del:hover { color: var(--status-danger-text); }
 
 /* Toast */
 .admin-page .toast {
@@ -4274,132 +4193,6 @@ body.dv-signoff-page {
 .admin-page .toast.show { opacity: 1; }
 .admin-page .toast.err  { background: var(--status-danger-text); }
 
-/* Audit feed */
-.admin-page .audit-feed { display: flex; flex-direction: column; gap: 0; }
-.admin-page .audit-entry {
-  display: grid;
-  grid-template-columns: 160px 1fr;
-  gap: 0 16px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--paper);
-  font-size: .82rem;
-  align-items: start;
-}
-.admin-page .audit-entry:last-child { border-bottom: none; }
-.admin-page .audit-time {
-  color: var(--ink-4); font-size: .75rem;
-  white-space: nowrap; padding-top: 1px;
-}
-.admin-page .audit-body   { display: flex; flex-direction: column; gap: 2px; }
-.admin-page .audit-action { font-weight: 600; color: var(--ink-1); }
-.admin-page .audit-meta   { font-size: .75rem; color: var(--ink-3); }
-.admin-page .audit-chip {
-  display: inline-block;
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
-  font-size: .68rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .04em;
-  margin-right: 4px;
-}
-.admin-page .chip-approve_request      { background: var(--status-success-bg); color: #166534; }
-.admin-page .chip-reject_request       { background: var(--status-danger-bg);  color: var(--status-danger-text); }
-.admin-page .chip-add_allowed_email    { background: #dbeafe; color: #1e40af; }
-.admin-page .chip-revoke_allowed_email { background: var(--status-warn-bg); color: #92400e; }
-.admin-page .chip-edit_user_profile    { background: var(--orchid-tint); color: var(--brand-accent); }
-.admin-page .chip-add_job_role         { background: var(--status-success-bg); color: #166534; }
-.admin-page .chip-delete_job_role      { background: #fff7ed; color: #9a3412; }
-.admin-page .chip-edit_permissions     { background: var(--orchid-tint); color: var(--brand-accent); }
-
-/* Trades audit badge */
-.admin-page .trades-audit-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--plum-soft, var(--orchid-tint));
-  color: var(--plum, var(--brand-accent));
-  font-size: .72rem; font-weight: 600; white-space: nowrap;
-}
-
-/* Add member form */
-.admin-page .form-section-label {
-  font-size: .72rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .06em;
-  color: var(--ink-4);
-  margin: 18px 0 10px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--stone);
-}
-.admin-page .form-section-label--tight { margin-top: 16px; }
-.admin-page .form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 10px;
-}
-.admin-page .form-field-wrap { display: flex; flex-direction: column; gap: 4px; }
-.admin-page .form-field-wrap label { font-size: .72rem; font-weight: 600; color: var(--ink-3); }
-.admin-page .form-helper {
-  font-size: .72rem; font-weight: 600; color: var(--ink-3);
-}
-.admin-page .opt { font-weight: 400; color: var(--ink-4); text-transform: none; letter-spacing: 0; }
-.admin-page .form-actions { margin-top: 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.admin-page .invite-err { font-size: .8rem; color: var(--status-danger-text); }
-
-/* Offline checklist reminder */
-.admin-page .checklist-box {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: var(--radius-lg);
-  padding: 16px 18px;
-  margin-top: 22px;
-}
-.admin-page .checklist-box-title {
-  font-size: .78rem; font-weight: 700;
-  color: #92400e; margin: 0 0 12px;
-  display: flex; align-items: center; gap: 6px;
-}
-.admin-page .checklist-cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px 20px;
-}
-.admin-page .checklist-group-title {
-  font-size: .72rem; font-weight: 700;
-  color: #78350f; margin: 0 0 5px;
-}
-.admin-page .checklist-items {
-  list-style: none; padding: 0; margin: 0;
-  display: flex; flex-direction: column; gap: 3px;
-}
-.admin-page .checklist-items li {
-  font-size: .78rem; color: #92400e;
-  padding-left: 14px; position: relative; line-height: 1.4;
-}
-.admin-page .checklist-items li::before { content: '•'; position: absolute; left: 0; color: #d97706; }
-.admin-page .checklist-items li span {
-  color: #78350f; font-weight: 400; display: block;
-  font-size: .72rem; opacity: .85;
-}
-
-/* Edit user modal styling is now globally available — see .modal-overlay /
-   .modal rules at the top of the shared admin-derived block above. */
-
-/* Permissions toggle */
-.admin-page .perm-toggle {
-  width: 30px; height: 30px;
-  border-radius: var(--radius-md);
-  border: 1.5px solid var(--stone);
-  background: var(--paper);
-  cursor: pointer;
-  font-size: .85rem;
-  display: inline-flex; align-items: center; justify-content: center;
-  transition: background .12s, border-color .12s, color .12s;
-  font-family: inherit;
-}
-.admin-page .perm-toggle.on  { background: var(--status-success-bg); border-color: #86efac; color: #166534; }
-.admin-page .perm-toggle.off { background: #f3f4f6; border-color: #9ca3af; color: var(--stone-deep); }
-.admin-page .perm-toggle:hover { border-color: var(--orchid-soft); }
-.admin-page .perm-save-row { display: flex; align-items: center; gap: 10px; padding-top: 12px; }
-.admin-page .perm-unsaved  { font-size: .75rem; color: var(--orchid); font-style: italic; }
 
 /* Loading / forbidden */
 .admin-page .loading-state {
@@ -4407,17 +4200,6 @@ body.dv-signoff-page {
   height: 200px;
   color: var(--ink-4); font-size: .9rem;
 }
-.admin-page .loading-state--error { color: var(--status-danger-text); }
-.admin-page .forbidden-card {
-  background: var(--paper);
-  border: 1px solid #fecaca;
-  border-radius: var(--radius-lg);
-  padding: 32px;
-  text-align: center;
-  margin-top: 32px;
-}
-.admin-page .forbidden-card h2 { color: var(--status-danger-text); margin: 0 0 8px; }
-.admin-page .forbidden-card p  { color: var(--ink-3); margin: 0; font-size: .9rem; }
 
 /* Search Settings tab */
 .admin-page .ss-action-row {
@@ -4479,11 +4261,16 @@ body.dv-signoff-page {
 .admin-page .admin-msg--error { color: var(--status-danger-text); }
 
 /* ── Admin template-literal helpers ─────────────────────────────────────────
-   Token-backed equivalents of the compound inline-style attributes that
-   used to live inside admin.html's template literals (lead-status table,
-   card-action stages, audit/dev-env lists, trade-submission cards,
-   design-visit catalogue + modals, Settings header rows). Naming uses
-   the `adm-` prefix so it doesn't collide with other modules.
+   `adm-` prefixed classes used by the vanilla-JS template literals in
+   admin.html (lead-status table, card-action stages, design-visit catalogue
+   and modals, Dev-test-users list) and by React admin islands that embed
+   legacy mount divs (SettingsPage.tsx, ActionHandlersPage.tsx,
+   CardActionsPage.tsx, DesignVisitPage.tsx, DevEnvironmentPage.tsx).
+
+   Dead classes (trade-submission cards, dev-env list items, section-head /
+   divider / mini-form helpers, integration-row, handler-fix badge, most
+   adm-dtu-* and adm-devenv-* variants) were removed when those tabs
+   completed their React migration.
 ─────────────────────────────────────────────────────────────────────────── */
 
 /* Compact data table chrome */
@@ -4520,8 +4307,6 @@ body.dv-signoff-page {
 .admin-page .adm-btn-xs       { padding: 3px 8px; font-size: .75rem; }
 .admin-page .adm-btn-xs--danger { color: #991b1b; }
 
-/* Save / action buttons in section headers (nowrap, compact) */
-.admin-page .adm-btn-save { white-space: nowrap; padding: 6px 14px; font-size: .8rem; }
 
 /* Form-style inputs used inside admin data tables */
 .admin-page .adm-input-shorthand {
@@ -4541,37 +4326,6 @@ body.dv-signoff-page {
 }
 .admin-page .adm-input-excl { width: 16px; height: 16px; cursor: pointer; }
 
-/* Settings-tab section header rows (title + Save / Add) */
-.admin-page .adm-section-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; margin-bottom: 12px;
-}
-.admin-page .adm-section-head--tight  { margin-bottom: 6px; flex-wrap: wrap; }
-.admin-page .adm-divider {
-  border-top: 1px solid var(--border); margin: 20px 0 16px;
-}
-
-/* "Add new …" mini-form panel under the lead-status table */
-.admin-page .adm-mini-form {
-  margin-top: 12px; padding: 10px 12px;
-  background: var(--paper);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-}
-.admin-page .adm-mini-form-title {
-  font-size: .75rem; font-weight: 600; color: var(--ink-3);
-  margin-bottom: 8px; text-transform: uppercase; letter-spacing: .05em;
-}
-.admin-page .adm-mini-form-row {
-  display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;
-}
-.admin-page .adm-mini-field      { flex: 1; min-width: 120px; }
-.admin-page .adm-mini-field--md  { flex: 1; min-width: 140px; }
-.admin-page .adm-mini-field--wide{ flex: 2; min-width: 150px; }
-.admin-page .adm-mini-label {
-  font-size: .75rem; color: var(--ink-3);
-  display: block; margin-bottom: 3px;
-}
 
 /* Modal labels (Action handler dialog, DV item editor, etc.) */
 .admin-page .adm-modal-label {
@@ -4586,11 +4340,17 @@ body.dv-signoff-page {
 .admin-page .adm-err-line {
   color: #b91c1c; font-size: .82rem; margin-top: 8px; min-height: 18px;
 }
-.admin-page .adm-err-line--shorter { min-height: 16px; }
 .admin-page .adm-err-line--sm {
   color: #b91c1c; font-size: .78rem; margin-top: 3px;
 }
-.admin-page .adm-msg-err-sm { color: #991b1b; font-size: .82rem; }
+
+/* Typography helpers used in admin template literals and React islands */
+.admin-page .adm-text-muted-xs { font-size: .72rem; color: var(--ink-4); }
+.admin-page .adm-text-muted-sm { font-size: .78rem; color: var(--ink-4); }
+.admin-page .adm-text-faint-mono {
+  font-family: monospace; font-size: .7rem; color: var(--ink-4);
+}
+
 .admin-page .adm-msg-err-xs {
   font-size: .78rem; color: #991b1b; margin-top: 6px;
 }
@@ -4610,7 +4370,6 @@ body.dv-signoff-page {
 .admin-page .adm-modal-sub {
   margin: 0 0 14px; font-size: .78rem; color: var(--ink-4);
 }
-.admin-page .adm-modal-sub--narrow { line-height: 1.5; font-size: .8rem; }
 .admin-page .adm-modal-actions {
   display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px;
 }
@@ -4618,91 +4377,11 @@ body.dv-signoff-page {
   display: flex; flex-direction: column; gap: 8px;
 }
 
-/* Dev-environment list (each suppressed feature is one row) */
-.admin-page .adm-devenv-list { display: flex; flex-direction: column; gap: 0; }
-.admin-page .adm-devenv-item {
-  padding: 14px 0; border-bottom: 1px solid var(--paper);
-}
-.admin-page .adm-devenv-item:last-child { border-bottom: none; }
-.admin-page .adm-devenv-head {
-  display: flex; align-items: baseline; gap: 10px;
-  margin-bottom: 4px; flex-wrap: wrap;
-}
-.admin-page .adm-devenv-name {
-  font-weight: 700; font-size: .875rem; color: var(--ink-1);
-}
-.admin-page .adm-devenv-loc {
-  font-size: .72rem; font-weight: 600;
-  background: var(--stone); color: var(--ink-4);
-  padding: 2px 8px; border-radius: var(--radius-pill);
-}
-.admin-page .adm-devenv-desc {
-  margin: 0; font-size: .82rem; color: var(--ink-3); line-height: 1.5;
-}
 .admin-page .adm-inline-code {
   background: var(--paper);
   padding: 1px 4px; border-radius: 3px;
 }
 
-/* Trade-submission cards */
-.admin-page .adm-tsub-row {
-  display: flex; align-items: flex-start;
-  justify-content: space-between; gap: 12px; flex-wrap: wrap;
-}
-.admin-page .adm-tsub-body { flex: 1; min-width: 0; }
-.admin-page .adm-tsub-name {
-  font-size: 1rem; font-weight: 700; color: var(--ink-1); margin-bottom: 4px;
-}
-.admin-page .adm-tsub-meta {
-  display: flex; gap: 8px; align-items: center;
-  flex-wrap: wrap; margin-bottom: 8px;
-}
-.admin-page .adm-tsub-details {
-  font-size: .8rem; color: var(--ink-3); margin-bottom: 6px;
-}
-.admin-page .adm-tsub-links {
-  font-size: .82rem; color: var(--ink-2);
-  margin-bottom: 6px; display: flex; gap: 16px; flex-wrap: wrap;
-}
-.admin-page .adm-tsub-notes {
-  font-size: .82rem; color: var(--ink-3);
-  margin-bottom: 8px; font-style: italic;
-}
-.admin-page .adm-tsub-contacts { margin-bottom: 8px; }
-.admin-page .adm-tsub-contacts-title {
-  font-size: .72rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .04em;
-  color: var(--ink-4); margin-bottom: 4px;
-}
-.admin-page .adm-tsub-contact-row {
-  font-size: .82rem; color: var(--ink-2); padding: 2px 0;
-}
-.admin-page .adm-tsub-prefchip {
-  background: var(--surface-2, #f1f5f9);
-  border-radius: 3px; padding: 0 5px; font-size: .75rem;
-}
-.admin-page .adm-tsub-submitter {
-  font-size: .75rem; color: var(--ink-4); margin-top: 4px;
-}
-.admin-page .adm-tsub-link-web {
-  color: var(--accent, #3b82f6); text-decoration: none;
-}
-.admin-page .adm-tsub-link-tel { color: inherit; text-decoration: none; }
-.admin-page .adm-tsub-pill { font-size: .8rem; color: var(--ink-3); }
-
-/* Generic typography helpers used inside admin templates */
-.admin-page .adm-text-strong-sm {
-  font-weight: 600; font-size: .875rem; color: var(--ink-1);
-}
-.admin-page .adm-text-strong-md {
-  font-weight: 700; font-size: .875rem; color: var(--ink-1);
-}
-.admin-page .adm-text-muted-xs { font-size: .72rem; color: var(--ink-4); }
-.admin-page .adm-text-muted-sm { font-size: .78rem; color: var(--ink-4); }
-.admin-page .adm-text-muted-mt { font-size: .72rem; color: var(--ink-4); margin-top: 2px; }
-.admin-page .adm-text-faint-mono {
-  font-family: monospace; font-size: .7rem; color: var(--ink-4);
-}
 
 /* Card-action stages renderer (admin Card-actions tab) */
 .admin-page .adm-ca-stage {
@@ -4795,15 +4474,6 @@ body.dv-signoff-page {
   font-size: .7rem; font-weight: 600;
   line-height: 1.5; white-space: nowrap; vertical-align: middle;
 }
-.admin-page .adm-handler-fix {
-  display: inline-flex; align-items: center; gap: 3px;
-  padding: 1px 8px; margin-left: 4px;
-  background: #fef3c7; color: #92400e;
-  border: 1px solid #fbbf24; border-radius: 999px;
-  font-size: .7rem; font-weight: 700;
-  line-height: 1.5; white-space: nowrap;
-  vertical-align: middle; cursor: pointer;
-}
 
 /* Conflict-resolution modal rows (admin Action handlers tab) */
 .admin-page .adm-conflict-row {
@@ -4879,18 +4549,8 @@ body.dv-signoff-page {
 /* Audit log + misc admin helpers */
 .admin-page .adm-mb-12 { margin-bottom: 12px; }
 .admin-page .adm-mb-14 { margin-bottom: 14px; }
-.admin-page .adm-mb-16 { margin-bottom: 16px; }
 .admin-page .adm-mt-8  { margin-top: 8px; }
-.admin-page .adm-audit-loadmore-wrap { text-align: center; margin-top: 16px; }
 
-/* Settings — Integrations row */
-.admin-page .adm-card-desc--intro { margin: 0 0 18px; }
-.admin-page .adm-integration-row {
-  display: flex; align-items: center; gap: 14px;
-}
-.admin-page .adm-integration-row-label {
-  display: flex; align-items: center; gap: 8px; flex: 1;
-}
 .admin-page .adm-status-badge {
   font-size: .72rem; font-weight: 600;
   padding: 3px 10px; border-radius: var(--radius-pill);
@@ -4901,36 +4561,15 @@ body.dv-signoff-page {
 .admin-page .adm-key-input {
   font-family: monospace; font-size: .8rem; text-transform: uppercase;
 }
-.admin-page .adm-fs-80 { font-size: .8rem; }
-.admin-page .adm-add-status-btn { white-space: nowrap; align-self: flex-end; }
 
-/* Dev test users section */
-.admin-page .adm-dtu-header {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 12px; margin-bottom: 14px;
-}
-.admin-page .adm-dtu-title { margin: 0 0 4px; }
-.admin-page .adm-dtu-toggle-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 14px; margin-bottom: 14px;
-  background: var(--surface-2, #f8f9fa);
-  border: 1px solid var(--border); border-radius: 8px; gap: 12px;
-}
 .admin-page .adm-dtu-status-badge {
   font-size: .78rem; font-weight: 600;
   margin-bottom: 14px; padding: 2px 8px;
   display: inline-block; border-radius: 4px;
   background: #dcfce7; color: #166534;
 }
-.admin-page .adm-dtu-backfill-row {
-  display: flex; align-items: center; gap: 10px;
-  margin-bottom: 16px; flex-wrap: wrap;
-}
-.admin-page .adm-dtu-backfill-btn { font-size: .8rem; padding: 5px 14px; }
 .admin-page .adm-dtu-list { max-height: 480px; overflow-y: auto; }
 
-/* card-desc tight margin (used across section heads) */
-.admin-page .adm-card-desc--tight { margin: 2px 0 0; }
 
 /* DV Terms inline publish editor */
 .admin-page .adm-terms-editor {
@@ -5063,19 +4702,8 @@ body.dv-signoff-page {
    Generic admin spacing / text utilities and section-specific helpers used
    only after the bulk extraction. Add new admin-only inline-style
    replacements here so they stay grouped. */
-.admin-page .adm-mt-6  { margin-top: 6px; }
 .admin-page .adm-mt-10 { margin-top: 10px; }
-.admin-page .adm-mt-18 { margin-top: 18px; }
-.admin-page .adm-mb-4  { margin-bottom: 4px; }
-.admin-page .adm-card-flush  { padding: 0; overflow: hidden; }
-.admin-page .adm-card-mb-16  { margin-bottom: 16px; }
-.admin-page .adm-card-mb-4   { margin-bottom: 4px; }
-.admin-page .adm-input-upper { text-transform: uppercase; }
-.admin-page .adm-loading-err { color: #991b1b; }
 .admin-page .adm-tab-link    { text-decoration: none; }
-.admin-page .adm-help-label  {
-  font-size: .72rem; font-weight: 600; color: var(--ink-3);
-}
 
 /* Card-action-handler modal inputs (small, mono variants) */
 .admin-page .adm-field-sm      { font-size: .85rem; }
@@ -5130,20 +4758,7 @@ body.dv-signoff-page {
   border: none; border-radius: 6px; cursor: pointer; white-space: nowrap;
 }
 
-/* Dev-environment tab banner */
-.admin-page .adm-devenv-banner {
-  background: #fef9c3; border: 1px solid #fde047;
-  border-radius: var(--radius-lg); padding: 16px 20px;
-  margin-bottom: 20px;
-  display: flex; align-items: flex-start; gap: 12px;
-}
-.admin-page .adm-devenv-banner-icon { flex-shrink: 0; margin-top: 1px; }
-.admin-page .adm-devenv-banner-title {
-  font-weight: 700; font-size: .875rem; color: #713f12; margin-bottom: 3px;
-}
-.admin-page .adm-devenv-banner-text {
-  font-size: .82rem; color: #854d0e; line-height: 1.5;
-}
+/* Dev-environment banner inline code (DevEnvironmentPage.tsx) */
 .admin-page .adm-devenv-banner-code {
   background: #fef08a; padding: 1px 4px; border-radius: 3px;
 }
