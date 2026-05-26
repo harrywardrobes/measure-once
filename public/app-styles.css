@@ -45,35 +45,6 @@ body {
 }
 body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
 
-/* ── App Shell ───────────────────────────────────────────────────────────────── */
-/* The top app bar (logo, search, customers/admin/avatar icons) is now a React
-   MUI island — see src/react/components/GlobalHeader.tsx mounted into
-   #app-header-mount by chrome.js. The body's --header-h padding-top above
-   reserves space for the fixed MUI AppBar. The per-page heading panel
-   (title + optional action slot) immediately below the AppBar is also a
-   React MUI island — see src/react/components/PageHeadingPanel.tsx mounted
-   into #page-heading-mount by chrome.js. Pages that need to append a header
-   button portal a node into the stable #page-heading-action slot exposed
-   by that component. */
-
-/* ── Command Palette Hint Bar ────────────────────────────────────────────────── */
-
-
-/* ── Header Search ───────────────────────────────────────────────────────────── */
-/* The top app bar (including search/navigation) is fully migrated to React MUI —
-   see src/react/components/GlobalHeader.tsx. All .header-search-* /
-   .header-new-customer-btn / .header-search-customers rules were removed once
-   the GlobalHeader island took ownership. */
-
-/* ── Bottom Navigation ───────────────────────────────────────────────────────── */
-/* The bottom nav is fully migrated to React MUI — see
-   src/react/components/BottomNav.tsx (mount id "app-bottom-nav-mount").
-   All CSS rules (.bottom-nav, .bottom-nav-btn, .bottom-nav-inner,
-   .bottom-nav-active, per-tab overrides) have been removed; MUI's sx props
-   handle all layout and colour. The .bottom-nav class name is still applied
-   to the nav element in BottomNav.tsx as a stable test/integration selector,
-   but requires no CSS backing. */
-
 /* ── Viewer read-only banner ─────────────────────────────────────────────────── */
 .viewer-banner {
   position: fixed;
@@ -118,12 +89,6 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
 }
 body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h)); }
 .app-body.hidden { display: none; }
-
-/* ── Nav Button ──────────────────────────────────────────────────────────────── */
-
-
-/* ── Auth status ─────────────────────────────────────────────────────────────── */
-
 
 /* ── List Panel ──────────────────────────────────────────────────────────────── */
 .list-panel {
@@ -207,9 +172,6 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--stone); border-radius: var(--radius-pill); }
 ::-webkit-scrollbar-thumb:hover { background: var(--stone-deep); }
-
-/* ── Stage Pills ─────────────────────────────────────────────────────────────── */
-
 
 /* ── Admin Lead Statuses table — Stage select coloured left border ───────────
    data-stage is set by JS on render and oninput so CSS always reflects current
@@ -309,15 +271,6 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
   flex-shrink: 0;
 }
 
-/* ── Invoice list skeleton ───────────────────────────────────────────────────── */
-
-
-/* ── Stage pill button ───────────────────────────────────────────────────────── */
-
-
-/* ── Status mini badge ───────────────────────────────────────────────────────── */
-
-
 /* ── Card picker popup (stage / status) ──────────────────────────────────────── */
 .card-picker-popup {
   position: fixed;
@@ -358,15 +311,6 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 .card-picker-opt--sub:hover { color: var(--ink-2); }
 .card-picker-opt--sub.card-picker-opt--active { color: var(--ink-2); font-weight: 600; }
 .ls-pill-parent { font-size: 0.7em; opacity: 0.65; font-weight: 400; margin-left: 3px; }
-
-
-/* ── Archived card ───────────────────────────────────────────────────────────── */
-
-
-/* ── Urgency dots ────────────────────────────────────────────────────────────── */
-
-
-/* ── List filter controls ────────────────────────────────────────────────────── */
 
 
 /* ── Room tabs ───────────────────────────────────────────────────────────────── */
@@ -575,9 +519,6 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 }
 
 
-/* ── Stage Stepper + Panel (legacy fallback layout) ─────────────────────────── */
-
-
 /* ── Stage Panel ─────────────────────────────────────────────────────────────── */
 
 
@@ -638,15 +579,6 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 .stage-nav-btn:hover:not(:disabled) { background: var(--paper-deep); border-color: var(--stone-deep); }
 .stage-nav-btn:active:not(:disabled) { background: var(--paper-deep); }
 .stage-nav-btn:disabled { opacity: 0.3; cursor: default; }
-
-/* ── Stage progress bar ───────────────────────────────────────────────────────── */
-
-
-/* ── Stage advance button ─────────────────────────────────────────────────────── */
-
-
-/* ── Lead status row inside Sales stage panel ────────────────────────────────── */
-
 
 /* ── Notes / Comments ───────────────────────────────────────────────────────── */
 .notes-header {
@@ -848,12 +780,6 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 
 
 
-/* ── Customer notes ──────────────────────────────────────────────────────────── */
-
-
-/* ── Installation dates ──────────────────────────────────────────────────────── */
-
-
 /* ── Utility ─────────────────────────────────────────────────────────────────── */
 
 
@@ -952,12 +878,6 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
   font-family: inherit;
 }
 .lead-substatus-add:hover { background: var(--paper-deep); color: var(--ink-2); }
-
-/* ── Tasks tab panel ─────────────────────────────────────────────────────────── */
-
-
-/* ── Task groups ─────────────────────────────────────────────────────────────── */
-
 
 /* ── Tailwind colour overrides ───────────────────────────────────────────────── */
 /* Override Tailwind blue utilities used throughout app.js HTML strings */
@@ -1116,12 +1036,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
    moved to the React MUI GlobalHeader island — see
    src/react/components/GlobalHeader.tsx. */
 
-/* ── Profile page ────────────────────────────────────────────────────────────
-   The profile page is fully migrated to React MUI — see
-   src/react/pages/ProfilePage.tsx. All .profile-* CSS rules were removed
-   once the React island took ownership of all profile UI. */
-
-
 /* ── Skip link ───────────────────────────────────────────────────────────────── */
 .skip-link {
   position: absolute;
@@ -1172,16 +1086,10 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .contact-edit-btn:hover { color: var(--orchid); }
 
-/* ── Inline contact edit (customer detail) ───────────────────────────────────── */
-
-
 /* ── Empty state (sales workflow panel) ──────────────────────────────────────── */
 
 
 #stage-filter        { font-size: 13px; }
-
-/* ── Admin photo approval ───────────────────────────────────────────────────── */
-
 
 /* ── Sales tab: projects-style layout with overlay workflow panel ─────────────── */
 
@@ -1303,23 +1211,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .ls-counts-error-dismiss:hover {
   opacity: 1;
 }
-
-
-/* ── Customers page — project-card layout ─────────────────────────────────── */
-/* .list-panel-fw > #customers-view removed — list-panel-fw is no longer used
-   now that the customers page is a React island (#tab-customers). */
-
-
-/* .customer-list-secondary / .customer-list-email removed — no longer used
-   after the customers page migrated to React (#tab-customers). */
-
-/* ── Customer list card (redesign: one card per contact) ─────────────────────── */
-
-
-/* ── Customer list pagination ─────────────────────────────────────────────────── */
-
-
-/* ── Ideas & Feedback ─────────────────────────────────────────────────────────── */
 
 
 /* ── Command Palette ─────────────────────────────────────────────────────────── */
