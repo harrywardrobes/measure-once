@@ -173,6 +173,8 @@ body.auth-page--top {
 }
 .auth-card .auth-invalid a { color: var(--brand-accent); font-weight: 600; }
 .auth-loading { color: var(--ink-3); font-size: .9rem; }
+.auth-topbar .auth-sub { margin-bottom: 0; }
+#submit-btn { width: auto; }
   </style>
 </head>
 <body class="auth-page auth-page--top">
@@ -183,7 +185,7 @@ body.auth-page--top {
     <div class="auth-topbar">
       <div>
         <h1>Complete your profile</h1>
-        <p class="auth-sub" style="margin-bottom:0;">Before you can use Measure Once, please fill in your details below.</p>
+        <p class="auth-sub">Before you can use Measure Once, please fill in your details below.</p>
       </div>
       <button class="auth-btn-ghost" id="signout-btn" type="button">Sign out</button>
     </div>
@@ -209,7 +211,7 @@ body.auth-page--top {
 
       <div class="auth-actions">
         <span class="auth-actions-hint">All fields are required.</span>
-        <button id="submit-btn" class="auth-submit auth-submit--compact" type="submit" style="width:auto;">Save &amp; continue</button>
+        <button id="submit-btn" class="auth-submit auth-submit--compact" type="submit">Save &amp; continue</button>
       </div>
     </form>
   </div>

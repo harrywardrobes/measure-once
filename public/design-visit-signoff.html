@@ -110,6 +110,15 @@
       border-radius: 8px; border: 1px solid #e5e7eb;
       background: #f3f4f6; cursor: zoom-in;
     }
+    .dv-signoff-page .dv-initially-hidden { display: none; }
+    .dv-signoff-page #superseded-banner {
+      display: none;
+      background: #FEF3C7; border: 1px solid #FDE68A;
+      color: #92400E; padding: 16px; border-radius: 8px; margin-bottom: 16px;
+    }
+    .dv-signoff-page #superseded-banner .dv-state-title {
+      font-size: 1.05rem; margin-bottom: 4px;
+    }
   </style>
 </head>
 <body class="dv-signoff-page">
@@ -118,7 +127,7 @@
 
     <div id="loading-state" class="dv-loading">Loading your design visit…</div>
 
-    <div id="error-state" style="display:none;">
+    <div id="error-state" class="dv-initially-hidden">
       <div class="dv-state-block">
         <div class="dv-state-icon">❌</div>
         <div class="dv-state-title" id="error-title">Link not valid</div>
@@ -126,7 +135,7 @@
       </div>
     </div>
 
-    <div id="expired-state" style="display:none;">
+    <div id="expired-state" class="dv-initially-hidden">
       <div class="dv-state-block">
         <div class="dv-state-icon">⌛</div>
         <div class="dv-state-title">This sign-off link has expired</div>
@@ -139,7 +148,7 @@
       </div>
     </div>
 
-    <div id="success-state" style="display:none;">
+    <div id="success-state" class="dv-initially-hidden">
       <div class="dv-state-block">
         <div class="dv-state-icon">✅</div>
         <div class="dv-state-title" id="success-title">Thank you!</div>
@@ -147,8 +156,8 @@
       </div>
     </div>
 
-    <div id="superseded-banner" class="dv-state-block" style="display:none;background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;padding:16px;border-radius:8px;margin-bottom:16px;">
-      <div class="dv-state-title" style="font-size:1.05rem;margin-bottom:4px;">Changes in progress</div>
+    <div id="superseded-banner" class="dv-state-block">
+      <div class="dv-state-title">Changes in progress</div>
       <div class="dv-state-sub">
         Your designer is currently making changes to this visit.
         A new link will be sent when it's ready for your approval.
@@ -156,7 +165,7 @@
       </div>
     </div>
 
-    <div id="main-content" style="display:none;">
+    <div id="main-content" class="dv-initially-hidden">
       <h1>Your Design Visit Summary</h1>
       <p class="dv-subtitle" id="visit-subtitle"></p>
 
@@ -186,12 +195,12 @@
         </table>
       </div>
 
-      <div class="dv-card" id="photos-card" style="display:none;">
+      <div class="dv-card dv-initially-hidden" id="photos-card">
         <div class="dv-card-title">Room Photos</div>
         <div id="photos-list"></div>
       </div>
 
-      <div class="dv-card" id="terms-card" style="display:none;">
+      <div class="dv-card dv-initially-hidden" id="terms-card">
         <div class="dv-card-title">Terms &amp; Conditions</div>
         <details>
           <summary>Read the terms and conditions</summary>
@@ -213,10 +222,10 @@
             Please describe the changes you'd like:
           </label>
           <textarea id="revision-note" placeholder="E.g. I'd prefer the kitchen in grey rather than white…" maxlength="2000"></textarea>
-          <div class="dv-error-msg" id="revision-err" style="display:none;"></div>
+          <div class="dv-error-msg dv-initially-hidden" id="revision-err"></div>
           <button class="dv-submit-revision" id="btn-submit-revision">Send request</button>
         </div>
-        <div class="dv-error-msg" id="action-err" style="display:none;"></div>
+        <div class="dv-error-msg dv-initially-hidden" id="action-err"></div>
       </div>
     </div>
   </div>
@@ -227,7 +236,7 @@
 
       function show(id) {
         ['loading-state','error-state','expired-state','success-state','main-content'].forEach(i => {
-          document.getElementById(i).style.display = (i === id) ? '' : 'none';
+          document.getElementById(i).style.display = (i === id) ? 'block' : 'none';
         });
       }
 
@@ -317,7 +326,7 @@
                 </div>
               </div>
             `).join('');
-            document.getElementById('photos-card').style.display = '';
+            document.getElementById('photos-card').style.display = 'block';
           }
 
           if (data.terms) {
@@ -329,7 +338,7 @@
               vBadge.textContent = 'v' + data.termsVersionNumber;
               termsCard.querySelector('.dv-card-title').appendChild(vBadge);
             }
-            termsCard.style.display = '';
+            termsCard.style.display = 'block';
           }
 
           show('main-content');
@@ -338,7 +347,7 @@
           // was sent. Show the summary as a reference but block sign-off — a
           // fresh link will be emailed when the new version is ready.
           if (data.status === 'superseded') {
-            document.getElementById('superseded-banner').style.display = '';
+            document.getElementById('superseded-banner').style.display = 'block';
             const actionCard = document.getElementById('action-card');
             if (actionCard) actionCard.style.display = 'none';
             return;
@@ -367,7 +376,7 @@
             } catch (e) {
               btnApprove.disabled = false; btnApprove.textContent = 'Looks great — sign off';
               btnRevision.disabled = false;
-              actionErr.textContent = e.message; actionErr.style.display = '';
+              actionErr.textContent = e.message; actionErr.style.display = 'block';
             }
           });
 
@@ -379,7 +388,7 @@
             const note    = document.getElementById('revision-note').value.trim();
             const revErr  = document.getElementById('revision-err');
             revErr.style.display = 'none';
-            if (!note) { revErr.textContent = 'Please describe the changes you\'d like.'; revErr.style.display = ''; return; }
+            if (!note) { revErr.textContent = 'Please describe the changes you\'d like.'; revErr.style.display = 'block'; return; }
             const btn = document.getElementById('btn-submit-revision');
             btn.disabled = true; btn.textContent = 'Sending…';
             try {
@@ -395,7 +404,7 @@
               document.getElementById('success-sub').textContent = 'We\'ve received your feedback and will be in touch to discuss the changes.';
             } catch (e) {
               btn.disabled = false; btn.textContent = 'Send request';
-              revErr.textContent = e.message; revErr.style.display = '';
+              revErr.textContent = e.message; revErr.style.display = 'block';
             }
           });
         })

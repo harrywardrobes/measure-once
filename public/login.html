@@ -146,6 +146,8 @@ body.auth-page--top {
 }
 .auth-hidden { display: none !important; }
 .turnstile-widget { margin: 4px 0 14px; min-height: 65px; }
+#forgot-confirm .auth-alert--ok { display: flex; }
+#forgot-retry { margin-top: 14px; }
 .auth-topbar {
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;
 }
@@ -252,13 +254,13 @@ body.auth-page--top {
         <button id="forgot-submit" type="submit" class="auth-submit">Send reset link</button>
       </form>
       <div id="forgot-confirm" class="auth-hidden">
-        <div class="auth-alert auth-alert--ok" style="display:flex">
+        <div class="auth-alert auth-alert--ok">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <polyline points="20 6 9 17 4 12"/>
           </svg>
           <span>An email has been sent to <strong id="forgot-confirm-email"></strong>. Please check your inbox and follow the link to reset your password.</span>
         </div>
-        <button id="forgot-retry" type="button" class="auth-submit auth-submit--compact" style="margin-top:14px;">Try a different email</button>
+        <button id="forgot-retry" type="button" class="auth-submit auth-submit--compact">Try a different email</button>
       </div>
       <div class="auth-footer">
         <button class="auth-toggle" type="button" onclick="showView('login')">Back to sign in</button>
