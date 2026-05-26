@@ -89,7 +89,7 @@
     // Overrides the open-leads loader so bootstrap fetches ALL contacts.
     registerOpenLeadsLoader(loadAllContacts);
     // Notify the React SalesBoardPage whenever fresh data is available.
-    registerCustomerListRenderer(function salesBoardNotifyReact() {
+    document.addEventListener('mo:contacts-changed', function salesBoardNotifyReact() {
       document.dispatchEvent(new CustomEvent('sales-board-data-ready'));
     });
     registerProjectsViewRenderer(function salesProjectsViewNotifyReact() {

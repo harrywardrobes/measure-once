@@ -986,7 +986,7 @@
     const ch = new BroadcastChannel('card_action_handlers_changed');
     ch.addEventListener('message', () => {
       loadCardActionHandlers().then(() => {
-        renderCustomerList();
+        document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
         if (typeof renderEnquiryList === 'function') renderEnquiryList();
         if (typeof renderSurveyList  === 'function') renderSurveyList();
       });

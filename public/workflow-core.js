@@ -501,7 +501,7 @@ document.addEventListener('visibilitychange', () => {
   }
   Promise.all([loadLeadStatuses(), loadLeadStatusCounts(), loadLeadSubstatuses()]).then(() => {
     populateLeadStatusFilter();
-    renderCustomerList();
+    document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
     if (typeof renderEnquiryList === 'function') renderEnquiryList();
     if (document.getElementById('workflow-stages')) {
       renderWorkflowStages();
@@ -524,7 +524,7 @@ if (typeof BroadcastChannel !== 'undefined') {
   _lsChannel.addEventListener('message', () => {
     Promise.all([loadLeadStatuses(), loadLeadStatusCounts()]).then(() => {
       populateLeadStatusFilter();
-      renderCustomerList();
+      document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
       if (typeof renderEnquiryList === 'function') renderEnquiryList();
       _maybeRenderStages();
     });
@@ -533,7 +533,7 @@ if (typeof BroadcastChannel !== 'undefined') {
   const _sacChannel = new BroadcastChannel('stage_action_labels_changed');
   _sacChannel.addEventListener('message', () => {
     loadStageActionLabels().then(() => {
-      renderCustomerList();
+      document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
       if (typeof renderEnquiryList === 'function') renderEnquiryList();
       if (typeof renderSurveyList  === 'function') renderSurveyList();
       _maybeRenderStages();
@@ -543,7 +543,7 @@ if (typeof BroadcastChannel !== 'undefined') {
   const _subChannel = new BroadcastChannel('lead_substatuses_changed');
   _subChannel.addEventListener('message', () => {
     loadLeadSubstatuses().then(() => {
-      renderCustomerList();
+      document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
       if (typeof renderEnquiryList === 'function') renderEnquiryList();
       if (typeof renderSurveyList  === 'function') renderSurveyList();
       renderWorkflowHeader();
@@ -647,7 +647,7 @@ function _filterDealsImpl(query) {
   state.searchQuery = query || '';
   state.filteredContacts = applySearchFilter(state.contacts);
   state.currentPage = 1;
-  renderCustomerList();
+  document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
 }
 
 // ── Bottom action bar ─────────────────────────────────────────────────────────
@@ -692,7 +692,7 @@ async function flushDeferredSave() {
         // (e.g. user clicked through to another contact while this was in flight).
         if (freshContact && mySeq === _contactRefetchSeq) {
           _mergeContactIntoState(freshContact);
-          renderCustomerList();
+          document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
         }
       }
     } catch (e) {
@@ -737,7 +737,7 @@ function scheduleSave(undoMessage, snapshotRooms) {
         // Drop the response if a newer re-fetch has been started in the meantime.
         if (freshContact && mySeq === _contactRefetchSeq) {
           _mergeContactIntoState(freshContact);
-          renderCustomerList();
+          document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
         }
       }
     } catch (e) {
@@ -779,7 +779,7 @@ async function undoLastChange() {
   state.workflowData = state.allRooms[state.selectedRoomIdx] || null;
   state.expandedStages = new Set();
   updateRoomCache();
-  renderCustomerList();
+  document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
   if (state.workflowData) {
     renderWorkflowStages();
     renderWorkflowHeader();
@@ -976,7 +976,7 @@ async function _checkLeadStatusDrift() {
         }
         // Update state.contacts (and state.selectedContact if selected).
         _mergeContactIntoState(fresh);
-        // Also sync the same entry in state.filteredContacts so renderCustomerList
+        // Also sync the same entry in state.filteredContacts so the board re-render
         // sees the updated status — _mergeContactIntoState only touches state.contacts.
         if (state.filteredContacts) {
           const fi = state.filteredContacts.findIndex(c => c.id === fresh.id);
@@ -987,7 +987,7 @@ async function _checkLeadStatusDrift() {
     }
 
     if (anyChanged) {
-      renderCustomerList();
+      document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
     }
 
     if (selectedContactDrifted) {
@@ -1063,7 +1063,7 @@ async function openLeadStatusPicker(event, contactId, { showSubstatuses = false 
       currentLeadStatus = freshStatus;
       _mergeContactIntoState(fresh);
       populateLeadStatusFilter();
-      renderCustomerList();
+      document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
       renderWorkflowHeader();
     }
   } catch (e) {
@@ -1298,7 +1298,7 @@ async function quickSetLeadStatus(contactId, newStatus) {
     state.pendingLeadStatus = state.pendingLeadStatus || {};
     state.pendingLeadStatus[contactId] = status;
     populateLeadStatusFilter();
-    renderCustomerList();
+    document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
     renderWorkflowHeader();
     renderWorkflowStages();
   }
@@ -1370,7 +1370,7 @@ async function _quickSetLeadStatusWithSub(contactId, statusKey, substatusKey) {
     state.pendingLeadStatus = state.pendingLeadStatus || {};
     state.pendingLeadStatus[contactId] = status;
     populateLeadStatusFilter();
-    renderCustomerList();
+    document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
     renderWorkflowHeader();
     renderWorkflowStages();
   }

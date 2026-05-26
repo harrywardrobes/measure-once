@@ -37,7 +37,7 @@
     // Overrides the open-leads loader so bootstrap fetches ALL contacts.
     registerOpenLeadsLoader(loadAllContacts);
     // Notify the React SurveyBoardPage whenever fresh data is available.
-    registerCustomerListRenderer(function surveyBoardNotifyReact() {
+    document.addEventListener('mo:contacts-changed', function surveyBoardNotifyReact() {
       document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
     });
     // Reload contacts and workflow on background data changes, then notify React.

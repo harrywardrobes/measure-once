@@ -24,10 +24,6 @@ let _workflowDataSaver = async function() {};
 async function saveWorkflowData() { return _workflowDataSaver(); }
 function registerWorkflowDataSaver(fn) { _workflowDataSaver = fn; }
 
-// Renderer registry for customer/projects views.
-let _customerListRenderer = function() {};
-function renderCustomerList() { _customerListRenderer(); }
-function registerCustomerListRenderer(fn) { _customerListRenderer = fn; }
 
 let _projectsViewRenderer = function() {};
 function renderProjectsView() { _projectsViewRenderer(); }
@@ -316,7 +312,7 @@ async function bootstrap() {
       GET('/api/whatsapp/config').then(cfg => { state.whatsappEnabled = !!cfg.enabled; }).catch(() => {}),
     ]);
     populateStageFilter();
-    if (document.getElementById('customers-view') || document.getElementById('sales-view') || document.getElementById('survey-view')) renderCustomerList();
+    if (document.getElementById('sales-view') || document.getElementById('survey-view')) document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
     if (priv === 'manager' || priv === 'admin') loadQBInvoices();
   } catch (e) {
     console.error('Bootstrap failed', e);

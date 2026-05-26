@@ -11,7 +11,7 @@ async function _loadQBInvoicesImpl() {
   state.qb.errorCode  = null;
 
   function _refreshInvoiceViews() {
-    renderCustomerList();
+    document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
     const homeEl  = document.getElementById('home-view');
     if (homeEl) renderHomeTab();
     const invEl   = document.getElementById('invoices-view');

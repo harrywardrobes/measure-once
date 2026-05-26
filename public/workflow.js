@@ -113,7 +113,7 @@ async function submitNewCustomer(ev) {
     state.contacts.unshift(contact);
     state.filteredContacts = [...state.contacts];
     closeNewCustomerModal();
-    renderCustomerList();
+    document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
     const customerNum = contact.properties?.customer_number;
     showToast(`Customer created${customerNum ? ` — ${customerNum}` : ''}`);
     // Background refresh to pick up server sort order (respect current view mode)
@@ -123,10 +123,10 @@ async function submitNewCustomer(ev) {
       Promise.all([
         loadContactsPage({ page: 1, leadStatus, sort }),
         loadLeadStatusCounts(),
-      ]).then(() => renderCustomerList()).catch(() => {});
+      ]).then(() => document.dispatchEvent(new CustomEvent('mo:contacts-changed'))).catch(() => {});
     } else {
       loadOpenLeads()
-        .then(() => { state.filteredContacts = [...state.contacts]; renderCustomerList(); })
+        .then(() => { state.filteredContacts = [...state.contacts]; document.dispatchEvent(new CustomEvent('mo:contacts-changed')); })
         .catch(() => {});
     }
   } catch (e) {
@@ -160,7 +160,7 @@ async function quickLoadAndUpdate(contactId, roomIdx, updater) {
       }
       return;
     }
-    renderCustomerList();
+    document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
     if (state.selectedRoomIdx === roomIdx) {
       renderWorkflowHeader();
       renderRoomTabs();
@@ -204,7 +204,7 @@ async function quickLoadAndUpdate(contactId, roomIdx, updater) {
     sourceId: r.sourceId || null,
     stageDates: r.stageDates || null,
   }));
-  renderCustomerList();
+  document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
 }
 
 // ── Contact Detail Edit ───────────────────────────────────────────────────────
@@ -308,7 +308,7 @@ async function quickSetLeadSubstatus(contactId, newSubKey) {
       const fresh = state.contacts.find(c => c.id === state.selectedContactId);
       if (fresh) state.selectedContact = fresh;
     }
-    renderCustomerList();
+    document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
     renderWorkflowHeader();
   }
 

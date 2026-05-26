@@ -624,7 +624,7 @@ async function runUiSmoke({ users, runId, clients }) {
               sel.value = 'OPEN_DEAL';
             }
             // Fire the change event — triggers setLeadStatusFilter() which resets
-            // state.currentPage to 1 and calls renderCustomerList().
+            // state.currentPage to 1 and dispatches mo:contacts-changed.
             sel.dispatchEvent(new Event('change', { bubbles: true }));
             return true;
           }).catch(() => false);

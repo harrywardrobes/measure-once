@@ -18,10 +18,10 @@
 //       turns into a .ls-counts-error-notice banner. Dismissing the banner
 //       clears the flag. A subsequent successful load removes the notice.
 //   (E) Pill-bar notice (Puppeteer) — the second rendering path for the same
-//       error: _renderCustomerListImpl in workflow.js inserts
-//       #ls-counts-error-notice-pills when state.leadStatusCountsError is true.
-//       Dismissing it removes the element and clears the flag. A re-render
-//       with the flag cleared must leave the notice absent.
+//       error: the pill-bar renderer inserts #ls-counts-error-notice-pills when
+//       state.leadStatusCountsError is true. Dismissing it removes the element
+//       and clears the flag. A re-render with the flag cleared must leave the
+//       notice absent.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:lead-status-counts-rate-limit
@@ -498,11 +498,10 @@ async function main() {
 
     // ── (E) Pill-bar notice — Puppeteer browser test ─────────────────────────
     // Verifies the second rendering path for the counts error: the pill-bar
-    // renderer in workflow.js (_renderCustomerListImpl) inserts an element with
-    // id="ls-counts-error-notice-pills" when state.leadStatusCountsError is true.
-    // Confirms the inline dismiss button removes it and clears the flag, and
-    // that a subsequent renderCustomerList() call with the flag cleared does NOT
-    // re-insert the notice.
+    // renderer inserts an element with id="ls-counts-error-notice-pills" when
+    // state.leadStatusCountsError is true. Confirms the inline dismiss button
+    // removes it and clears the flag, and that a subsequent re-render with the
+    // flag cleared does NOT re-insert the notice.
     console.log('\n  [E] Pill-bar counts-error notice (Puppeteer)');
     if (!puppeteer) {
       record('E0 puppeteer available', false, 'puppeteer not installed — browser probes skipped');
@@ -537,7 +536,7 @@ async function main() {
             });
           }
 
-          // Navigate to /projects so workflow.js + _renderCustomerListImpl load.
+          // Navigate to /projects so workflow-core.js + state globals load.
           await pageE.goto(`${BASE}/projects`, { waitUntil: 'domcontentloaded', timeout: 20000 });
 
           const landedUrl = pageE.url();
@@ -561,10 +560,9 @@ async function main() {
 
             // Inject #customers-view if not already present.  The /projects
             // page renders into #projects-view; #customers-view is the element
-            // that _renderCustomerListImpl (workflow.js) writes into.  We seed
-            // it manually — the same way section D seeds #lead-status-filter —
-            // so the pill-bar render path can run without navigating to a
-            // different page.
+            // the pill-bar renderer writes into.  We seed it manually — the
+            // same way section D seeds #lead-status-filter — so the pill-bar
+            // render path can run without navigating to a different page.
             await pageE.evaluate(() => {
               if (!document.getElementById('customers-view')) {
                 const div = document.createElement('div');
@@ -575,13 +573,13 @@ async function main() {
 
             {
               // ── E1: set state.leadStatusCountsError → re-render → notice appears
-              // Directly mutate the shared state object and call renderCustomerList()
-              // so the pill-bar renderer (_renderCustomerListImpl) produces the notice
-              // element.  We do NOT go through loadLeadStatusCounts() here — this
-              // probe is specifically about the rendering path, not the fetch path.
+              // Directly mutate the shared state object and fire mo:contacts-changed
+              // so the pill-bar renderer produces the notice element.  We do NOT go
+              // through loadLeadStatusCounts() here — this probe is specifically about
+              // the rendering path, not the fetch path.
               await pageE.evaluate(() => {
                 if (typeof state !== 'undefined') state.leadStatusCountsError = true;
-                if (typeof renderCustomerList === 'function') renderCustomerList();
+                document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
               });
 
               const noticeEl     = await pageE.$('#ls-counts-error-notice-pills');
@@ -615,7 +613,7 @@ async function main() {
               // ── E3: re-render with error cleared — notice must not reappear
               await pageE.evaluate(() => {
                 if (typeof state !== 'undefined') state.leadStatusCountsError = false;
-                if (typeof renderCustomerList === 'function') renderCustomerList();
+                document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
               });
 
               const noticeAfterClear = await pageE.$('#ls-counts-error-notice-pills');
@@ -685,11 +683,11 @@ async function writeReport(runId) {
     '  button must remove the notice and set `state.leadStatusCountsError = false`. A',
     '  subsequent successful load must leave the notice absent.',
     '- **(E) Pill-bar notice (Puppeteer)**: navigates `/projects` and directly sets',
-    '  `state.leadStatusCountsError = true`, then calls `renderCustomerList()` to trigger',
-    '  the pill-bar renderer (`_renderCustomerListImpl` in `workflow.js`). Verifies that',
-    '  `#ls-counts-error-notice-pills` appears in the DOM. Clicking the inline dismiss',
-    '  button must remove the element and set `state.leadStatusCountsError = false`.',
-    '  A subsequent `renderCustomerList()` with the flag cleared must leave the notice absent.',
+    '  `state.leadStatusCountsError = true`, then fires `mo:contacts-changed` to trigger',
+    '  the pill-bar renderer. Verifies that `#ls-counts-error-notice-pills` appears in',
+    '  the DOM. Clicking the inline dismiss button must remove the element and set',
+    '  `state.leadStatusCountsError = false`. A subsequent re-render with the flag',
+    '  cleared must leave the notice absent.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
