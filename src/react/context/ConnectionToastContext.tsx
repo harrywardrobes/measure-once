@@ -225,7 +225,10 @@ export function ConnectionToastProvider({ children }: { children: React.ReactNod
           }}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
           sx={{
-            bottom: { xs: `${16 + i * 64}px`, sm: `${24 + i * 64}px` },
+            bottom: {
+              xs: `calc(var(--nav-h, 0px) + ${16 + i * 64}px)`,
+              sm: `calc(var(--nav-h, 0px) + ${24 + i * 64}px)`,
+            },
             zIndex: 'var(--z-toast, 9500)',
           }}
         >
