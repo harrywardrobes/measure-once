@@ -5,7 +5,9 @@ Project management dashboard (HubSpot CRM integration).
 ## User preferences
 - **Tests:** Only create tests for crucial backend functionality — auth, data
   integrity, API error handling. Do NOT create tests for UI behaviour, CI
-  documentation, or test infrastructure.
+  documentation, or test infrastructure. Creating new testing tasks is not a
+  priority — only add tests when a specific feature task explicitly requires
+  them.
 
 ## Stack
 - Node.js 20 + Express; single `server.js` serves API and static assets.
