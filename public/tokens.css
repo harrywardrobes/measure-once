@@ -15,7 +15,6 @@
   /* ── Layout ─────────────────────────────────────────────────────────────── */
   --header-h: calc(52px + env(safe-area-inset-top));
   --banner-h: 37px;
-  --nav-h:    calc(64px + env(safe-area-inset-bottom));
 
   /* ── Brand colours ───────────────────────────────────────────────────────── */
   --paper:             #F6F1E7;
