@@ -4,15 +4,18 @@ import { createTheme, type Theme } from '@mui/material/styles';
  * Shared MUI theme for the React island.
  *
  * This file is the canonical definition of Measure Once's design tokens.
- * The hex values in `public/app-styles.css` `:root` are kept in lockstep
- * with the constants below so legacy (non-React) pages stay visually
- * consistent with MUI components. If you change a token here, mirror it
- * manually in the `:root` block of `public/app-styles.css`.
+ * `AppThemeProvider` (src/react/AppThemeProvider.tsx) derives a `GlobalStyles`
+ * `:root` injection from the constants below so every non-React page that uses
+ * `var(--orchid)`, `var(--paper)`, `var(--stage-sales-bg)`, etc. stays in sync
+ * automatically — no manual mirror in `public/app-styles.css` needed.
  *
  * The Design System tab on the admin page introspects this object to
  * render its swatches / typography / radius cards, so anything added to
  * `palette.brand`, `palette.stage`, or `shape.radius` automatically shows
  * up on the page without further wiring.
+ *
+ * When adding a new token: update BRAND_COLORS / STAGE_COLORS / RADIUS below
+ * AND add the matching `--<name>` entry to `rootTokens` in AppThemeProvider.tsx.
  */
 
 // ── Brand colour scales ────────────────────────────────────────────────
@@ -50,7 +53,7 @@ export const STAGE_COLORS: Record<string, StageColor> = {
   customerservice: { bg: '#475569', light: '#f1f5f9', text: '#1e293b' },
 };
 
-// ── Radius scale (matches --radius-* in public/app-styles.css) ──────────────
+// ── Radius scale (drives --radius-* CSS custom properties via AppThemeProvider) ─
 export const RADIUS = {
   xs:   2,
   sm:   4,
