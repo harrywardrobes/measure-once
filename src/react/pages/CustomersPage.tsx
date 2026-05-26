@@ -632,6 +632,18 @@ export function CustomersPage(): React.ReactElement {
   // the banner is never shown or cleared without the user actually seeing it.
   const pendingContactsStaleRef = React.useRef<boolean | null>(null);
 
+  // Expose a test hook so integration tests can drive the pending ref directly
+  // without triggering a full network round-trip (same pattern as
+  // window.__setTestPendingOpenLeadsStale in workflow-core.js).
+  React.useEffect(() => {
+    (window as typeof window & { __setTestPendingContactsStale?: (v: boolean) => void })
+      .__setTestPendingContactsStale = (v: boolean) => { pendingContactsStaleRef.current = v; };
+    return () => {
+      delete (window as typeof window & { __setTestPendingContactsStale?: (v: boolean) => void })
+        .__setTestPendingContactsStale;
+    };
+  }, []);
+
   const isViewer = useIsViewer();
   const [newOpen, setNewOpen] = React.useState<boolean>(() => {
     const p = new URLSearchParams(location.search);
