@@ -54,9 +54,10 @@ const AdminTeamPage      = React.lazy(() => import('./pages/admin/AdminTeamPage'
 const AdminPermissionsPage = React.lazy(() => import('./pages/admin/AdminPermissionsPage').then(m => ({ default: m.AdminPermissionsPage })));
 const AdminRequestsPage  = React.lazy(() => import('./pages/admin/AdminRequestsPage').then(m => ({ default: m.AdminRequestsPage })));
 const AdminAuditLogPage  = React.lazy(() => import('./pages/admin/AdminAuditLogPage').then(m => ({ default: m.AdminAuditLogPage })));
-const IdeasPage             = React.lazy(() => import('./pages/IdeasPage').then(m => ({ default: m.IdeasPage })));
-const CustomerDetailPage    = React.lazy(() => import('./pages/CustomerDetailPage').then(m => ({ default: m.CustomerDetailPage })));
+const IdeasPage              = React.lazy(() => import('./pages/IdeasPage').then(m => ({ default: m.IdeasPage })));
+const CustomerDetailPage     = React.lazy(() => import('./pages/CustomerDetailPage').then(m => ({ default: m.CustomerDetailPage })));
 const StandaloneInvoicesPage = React.lazy(() => import('./pages/StandaloneInvoicesPage').then(m => ({ default: m.StandaloneInvoicesPage })));
+const ProjectsPage           = React.lazy(() => import('./pages/ProjectsPage').then(m => ({ default: m.ProjectsPage })));
 
 /**
  * Every React mount goes through `AppThemeProvider` so the shared MUI
@@ -128,8 +129,9 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'tab-designvisit',      render: () => <DesignVisitPage /> },
   { id: 'tab-devenv',           render: () => <DevEnvironmentPage /> },
   { id: 'ideas-page-mount',         render: () => <IdeasPage /> },
-  { id: 'customer-detail-root',    render: () => <CustomerDetailPage /> },
-  { id: 'invoices-page-mount',     render: () => <StandaloneInvoicesPage /> },
+  { id: 'customer-detail-root',     render: () => <CustomerDetailPage /> },
+  { id: 'invoices-page-mount',      render: () => <StandaloneInvoicesPage /> },
+  { id: 'projects-view',            render: () => <ProjectsPage /> },
 ];
 
 function mountKnown(): number {
