@@ -104,6 +104,8 @@ window.getShortcut = function (key) {
   // #page-heading-action slot for pages that need a header button
   // (e.g. Customers' "+ New customer"). The placeholder is inserted
   // synchronously so layout reserves space immediately.
+  // Not inserted on /sales or /survey — those are full-bleed .app-body
+  // pages that never show a heading; skipping avoids a phantom in-flow div.
   const pageHeading = `<div id="page-heading-mount"></div>`;
 
   // The bottom navigation is a React island
@@ -139,7 +141,8 @@ window.getShortcut = function (key) {
   const commandPaletteMount = `<div id="command-palette-mount"></div>`;
 
   const isAdminPage = path === '/admin' || path.startsWith('/admin/');
-  document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner + pageHeading);
+  const isAppBodyPage = path === '/sales' || path === '/survey';
+  document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner + (isAppBodyPage ? '' : pageHeading));
   document.body.insertAdjacentHTML('beforeend', (isAdminPage ? '' : bottomNav) + bottomBar + commandPaletteMount);
 
 
