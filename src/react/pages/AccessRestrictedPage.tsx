@@ -4,13 +4,17 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import { BRAND_COLORS } from '../theme';
 
-export function AccessRestrictedPage() {
+interface AccessRestrictedPageProps {
+  embedded?: boolean;
+}
+
+export function AccessRestrictedPage({ embedded }: AccessRestrictedPageProps = {}) {
   return (
     <Box
       sx={{
         display: 'flex',
         flex: 1,
-        minHeight: '100vh',
+        ...(embedded ? { py: 4 } : { minHeight: '100vh' }),
         alignItems: 'center',
         justifyContent: 'center',
         bgcolor: BRAND_COLORS.paper,

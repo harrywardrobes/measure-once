@@ -4,11 +4,15 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import { BRAND_COLORS } from '../theme';
 
-export function NotFoundPage() {
+interface NotFoundPageProps {
+  embedded?: boolean;
+}
+
+export function NotFoundPage({ embedded }: NotFoundPageProps = {}) {
   return (
     <Box
       sx={{
-        minHeight: '100vh',
+        ...(embedded ? { py: 4 } : { minHeight: '100vh' }),
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

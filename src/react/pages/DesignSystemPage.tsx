@@ -1776,9 +1776,7 @@ if (!sessionChecked) return <LoginPageSkeleton />;`}
                   overflow: 'hidden',
                 }}
               >
-                <Box sx={{ transform: 'scale(1)', '& > *': { minHeight: 'unset !important' } }}>
-                  <NotFoundPage />
-                </Box>
+                <NotFoundPage embedded />
               </Box>
             }
             code={`import { NotFoundPage } from './NotFoundPage';
@@ -1802,9 +1800,7 @@ if (!sessionChecked) return <LoginPageSkeleton />;`}
                   overflow: 'hidden',
                 }}
               >
-                <Box sx={{ '& > *': { minHeight: 'unset !important' } }}>
-                  <AccessRestrictedPage />
-                </Box>
+                <AccessRestrictedPage embedded />
               </Box>
             }
             code={`import { AccessRestrictedPage } from './AccessRestrictedPage';
