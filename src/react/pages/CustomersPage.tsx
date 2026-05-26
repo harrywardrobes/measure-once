@@ -227,6 +227,7 @@ type Store = {
   nullLabel: string;
   loaded: boolean;
   subsLoaded: boolean;
+  subsVersion: number;
 };
 
 const store: Store = {
@@ -236,6 +237,7 @@ const store: Store = {
   nullLabel: 'No status',
   loaded: false,
   subsLoaded: false,
+  subsVersion: 0,
 };
 
 const subscribers = new Set<() => void>();
@@ -266,7 +268,10 @@ async function loadLeadStatusCounts(): Promise<void> {
 async function loadLeadSubstatuses(): Promise<void> {
   try {
     const rows = await apiGet<LeadSubstatus[]>('/api/lead-substatuses');
-    if (Array.isArray(rows)) store.substatuses = rows;
+    if (Array.isArray(rows)) {
+      store.substatuses = rows;
+      store.subsVersion += 1;
+    }
   } catch (e) {
     console.warn('loadLeadSubstatuses failed:', (e as Error).message);
   } finally {
@@ -939,11 +944,11 @@ export function CustomersPage(): React.ReactElement {
       .filter((r) => String(r.status_key).toUpperCase() === leadStatus.toUpperCase())
       .slice()
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    // store.subsLoaded is included so the memo recomputes when substatuses
-    // finish loading — forceRender (triggered by notify()) causes a re-render
-    // where store.subsLoaded has flipped to true, invalidating the cache.
+    // store.subsLoaded gates the initial load; store.subsVersion increments on
+    // every successful re-fetch (e.g. after a BC rename or visibilitychange),
+    // so the memo recomputes and shows updated labels without a page reload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadStatus, store.subsLoaded]);
+  }, [leadStatus, store.subsLoaded, store.subsVersion]);
 
   // Build the stage tab list: All, then one button per workflow stage.
   const stageTabs = React.useMemo(() => {
