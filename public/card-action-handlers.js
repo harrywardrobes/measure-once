@@ -731,7 +731,7 @@
       ]);
     }
 
-    function renderStep2() {
+    async function renderStep2() {
       // Unmount any existing React root from a prior renderStep2() call before
       // re-building the container (e.g. navigating Back → Next again).
       if (_step2Handle) { _step2Handle.unmount(); _step2Handle = null; }
@@ -757,7 +757,7 @@
       inner.appendChild(errDiv);
 
       if (typeof window.mountDesignVisitRoomsStep === 'function') {
-        _step2Handle = window.mountDesignVisitRoomsStep(reactContainer, {
+        _step2Handle = await window.mountDesignVisitRoomsStep(reactContainer, {
           initialRooms: rooms,
           doorStyles: doorStyles,
           onRoomsChange: function(updatedRooms) { rooms = updatedRooms; },

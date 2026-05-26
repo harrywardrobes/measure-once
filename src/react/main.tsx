@@ -3,10 +3,6 @@ import { createRoot } from 'react-dom/client';
 import { AppThemeProvider } from './AppThemeProvider';
 import { IslandErrorBoundary } from './components/IslandErrorBoundary';
 import {
-  DesignVisitRoomsStep,
-  type DesignVisitRoomsStepProps,
-} from './components/DesignVisitRoomsStep';
-import {
   PageLoadingSkeleton,
   CustomersPageSkeleton,
   CalendarPageSkeleton,
@@ -214,7 +210,10 @@ if (document.readyState === 'loading') {
  * Imperative mounting function exposed for the vanilla-JS design-visit wizard.
  * Called from card-action-handlers.js when the wizard reaches Step 2 (Rooms).
  *
- * Returns a handle with:
+ * Async: dynamically imports DesignVisitRoomsStep so it lands in its own
+ * lazy chunk and does not inflate the always-loaded main.js bundle.
+ *
+ * Returns a Promise that resolves to a handle with:
  *   update(newProps)  — re-render with updated props (e.g. fresh doorStyles
  *                       after a BroadcastChannel catalogue change)
  *   unmount()         — tear down the React tree when leaving Step 2
@@ -222,11 +221,15 @@ if (document.readyState === 'loading') {
 (window as unknown as {
   mountDesignVisitRoomsStep: (
     container: HTMLElement,
-    props: DesignVisitRoomsStepProps,
-  ) => { update: (p: Partial<DesignVisitRoomsStepProps>) => void; unmount: () => void };
-}).mountDesignVisitRoomsStep = (container, props) => {
+    props: import('./components/DesignVisitRoomsStep').DesignVisitRoomsStepProps,
+  ) => Promise<{
+    update: (p: Partial<import('./components/DesignVisitRoomsStep').DesignVisitRoomsStepProps>) => void;
+    unmount: () => void;
+  }>;
+}).mountDesignVisitRoomsStep = async (container, props) => {
+  const { DesignVisitRoomsStep } = await import('./components/DesignVisitRoomsStep');
   const root = createRoot(container);
-  let current: DesignVisitRoomsStepProps = { ...props };
+  let current = { ...props };
 
   function doRender() {
     root.render(
@@ -241,7 +244,7 @@ if (document.readyState === 'loading') {
   doRender();
 
   return {
-    update(newProps: Partial<DesignVisitRoomsStepProps>) {
+    update(newProps: Partial<typeof current>) {
       current = { ...current, ...newProps };
       doRender();
     },
