@@ -45,7 +45,7 @@ type Allowed = {
 
 type JobRole = { name: string; privilege_level?: string }; // privilege-read-ok: data field managed by admin
 
-const CONFLICT_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_CONFLICT_STALE_DAYS = 7;
 
 type AccessRequest = {
   id: number;
@@ -143,24 +143,29 @@ export function AdminTeamPage() {
   const [debouncedMobile, setDebouncedMobile] = useState('');
   const [debouncedEcPhone, setDebouncedEcPhone] = useState('');
   const [phoneDirectory, setPhoneDirectory] = useState<PhoneDirectory>({ team: [], trades: [], customers: [] });
+  const [conflictStaleDays, setConflictStaleDays] = useState(DEFAULT_CONFLICT_STALE_DAYS);
   const mountedRef = useRef(true);
 
   async function load() {
     try {
-      const [u, a, r, q] = await Promise.all([
+      const [u, a, r, q, digestSettings] = await Promise.all([
         api<User[]>('GET', '/api/admin/users'),
         api<Allowed[]>('GET', '/api/admin/allowed'),
         api<JobRole[]>('GET', '/api/admin/job-roles'),
         api<AccessRequest[]>('GET', '/api/admin/requests'),
+        api<{ staleDays?: number }>('GET', '/api/admin/conflict-digest-settings').catch(() => ({})),
       ]);
       if (!mountedRef.current) return;
+      const staleDays = (digestSettings as { staleDays?: number })?.staleDays ?? DEFAULT_CONFLICT_STALE_DAYS;
+      const resolvedStaleDays = (Number.isFinite(staleDays) && staleDays > 0) ? staleDays : DEFAULT_CONFLICT_STALE_DAYS;
+      setConflictStaleDays(resolvedStaleDays);
       const userList = Array.isArray(u) ? u : [];
       setUsers(userList);
       setAllowed(Array.isArray(a) ? a : []);
       setJobRoles(Array.isArray(r) ? r : []);
       setRequests(Array.isArray(q) ? q : []);
       setTeamCount(userList.length);
-      const staleThreshold = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const staleThreshold = Date.now() - resolvedStaleDays * 24 * 60 * 60 * 1000;
       const staleConflictCount = userList.filter(usr => {
         if (!usr.pending_profile_updates || !Object.keys(usr.pending_profile_updates).length) return false;
         const since = new Date(usr.conflict_created_at || usr.updated_at || usr.created_at || 0).getTime();
@@ -531,6 +536,7 @@ export function AdminTeamPage() {
   ), [jobRoles]);
 
   const now = Date.now();
+  const conflictStaleMs = conflictStaleDays * 24 * 60 * 60 * 1000;
 
   return (
     <Stack spacing={3}>
@@ -568,8 +574,8 @@ export function AdminTeamPage() {
                     if (aHasConflict && bHasConflict) {
                       const aSince = new Date(a.conflict_created_at || a.updated_at || a.created_at || 0).getTime();
                       const bSince = new Date(b.conflict_created_at || b.updated_at || b.created_at || 0).getTime();
-                      const aStale = now - aSince >= CONFLICT_STALE_MS;
-                      const bStale = now - bSince >= CONFLICT_STALE_MS;
+                      const aStale = now - aSince >= conflictStaleMs;
+                      const bStale = now - bSince >= conflictStaleMs;
                       if (aStale !== bStale) return aStale ? -1 : 1;
                       return aSince - bSince;
                     }
@@ -580,7 +586,7 @@ export function AdminTeamPage() {
                     const hasConflicts = !!(u.pending_profile_updates && Object.keys(u.pending_profile_updates).length > 0);
                     const conflictSince = hasConflicts ? (u.conflict_created_at || u.updated_at || u.created_at) : null;
                     const isStaleConflict = conflictSince
-                      ? Date.now() - new Date(conflictSince).getTime() >= 7 * 24 * 60 * 60 * 1000
+                      ? Date.now() - new Date(conflictSince).getTime() >= conflictStaleMs
                       : false;
                     return (
                       <TableRow key={u.id} hover>
@@ -838,7 +844,7 @@ export function AdminTeamPage() {
                     const hasConflicts = !!(a.pending_profile_updates && Object.keys(a.pending_profile_updates).length > 0);
                     const conflictSince = hasConflicts ? (a.conflict_created_at || a.approved_at) : null;
                     const isStaleConflict = conflictSince
-                      ? Date.now() - new Date(conflictSince).getTime() >= 7 * 24 * 60 * 60 * 1000
+                      ? Date.now() - new Date(conflictSince).getTime() >= conflictStaleMs
                       : false;
                     return (
                       <TableRow
