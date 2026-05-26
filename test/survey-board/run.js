@@ -15,6 +15,10 @@
 //   (F) Action strip renders when cardActionHandlerFor returns a handler
 //   (G) Snackbar visibility pause — refresh-failure Snackbar stays visible when
 //       the tab is hidden (timer paused), then dismisses after tab returns
+//   (H) Bootstrap-failure error state — dispatching 'survey-board-bootstrap-failed'
+//       shows the WarningAmberIcon, "HubSpot is currently unavailable" heading,
+//       and "Reload page" button; no survey cards are rendered.
+//       Firing 'survey-board-data-ready' clears the error and shows the board.
 //
 // React mount timing note: SurveyBoardPage is a React.lazy chunk.  The browser
 // loads the chunk asynchronously after the module entry point executes.
@@ -913,6 +917,189 @@ async function main() {
       }
     }
 
+    // ── (H) Bootstrap-failure error state ─────────────────────────────────────
+    // Probe H: set window.__surveyBoardBootstrapFailed via evaluateOnNewDocument
+    // so the React component initialises its state as failed (synchronous read
+    // in useState initialiser — no race with the event listener).
+    // Also intercept /api/contacts-all to return 503 so core.js bootstrap()
+    // fires 'survey-board-bootstrap-failed' through the normal code path.
+    // The component renders the WarningAmberIcon + heading + Reload button and
+    // suppresses the card list.  A follow-up DATA_READY dispatch clears the error.
+    console.log('\n  [H] Bootstrap-failure error state');
+    {
+      let page;
+      try {
+        page = await browser.newPage();
+        page.on('pageerror', () => {});
+        page.on('console',   () => {});
+
+        // Set the window flag before React mounts so useState(() => ...) picks
+        // it up synchronously as the initial value.  Also dispatch the event
+        // for completeness (covers the case where the chunk loads before the
+        // synchronous flag is read).
+        await page.evaluateOnNewDocument(() => {
+          window.__surveyBoardBootstrapFailed = { code: 'HUBSPOT_ERROR', message: 'Test outage' };
+        });
+
+        // Intercept API calls — /api/contacts-all returns 503 (simulating a
+        // HubSpot outage) so core.js bootstrap() dispatches the failure event
+        // through its normal catch path.  /api/localdata/all returns success so
+        // #survey-view is not replaced with non-React error HTML.
+        await page.setRequestInterception(true);
+        page.on('request', req => {
+          const u = req.url();
+          if (u.includes('/api/contacts-all')) {
+            req.respond({ status: 503, contentType: 'application/json',
+              body: JSON.stringify({ error: 'HUBSPOT_ERROR' }) });
+          } else if (u.includes('/api/localdata/all')) {
+            req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+          } else {
+            req.continue();
+          }
+        });
+
+        await injectSession(page, adminClient.cookie);
+        await page.goto(`${BASE}/survey`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+        // Poll for the error heading — the lazy chunk may take a moment to
+        // load.  In error state the component renders a single centered Box
+        // (not the normal 2-child header+list), so waitForReactMount() is not
+        // used here.
+        const headingAppeared = await pollPage(page, () => {
+          const mount = document.getElementById('survey-board-mount');
+          if (!mount) return false;
+          return (mount.textContent || '').includes('HubSpot is currently unavailable')
+            ? 'visible' : false;
+        }, null, 20000);
+
+        if (!headingAppeared) {
+          record('(H) SurveyBoardPage error UI appears (bootstrap-failure probe)',
+            '"HubSpot is currently unavailable" visible within 20 s', 'timed out', false,
+            'React.lazy chunk may not have loaded — rebuild with npm run build:react');
+          for (const sub of ['H.1','H.2','H.3','H.4','H.5','H.6']) {
+            record(`(${sub}) Bootstrap-failure`, 'error UI mounted first', 'skipped', false);
+          }
+        } else {
+          record('(H) SurveyBoardPage error UI appears (bootstrap-failure probe)',
+            '"HubSpot is currently unavailable" visible', 'visible', true);
+
+          // ── H.1–H.4: snapshot the error UI once heading is confirmed ──
+          const errorUI = await page.evaluate(() => {
+            const mount = document.getElementById('survey-board-mount');
+            if (!mount) return { error: 'no #survey-board-mount' };
+            const allText = mount.textContent || '';
+            const svgs = mount.querySelectorAll('svg');
+            const hasWarningIcon = svgs.length > 0;
+            const hasHeading = allText.includes('HubSpot is currently unavailable');
+            const btns = Array.from(mount.querySelectorAll('button'));
+            const hasReloadBtn = btns.some(b => (b.textContent || '').includes('Reload page'));
+            const surveyCards = mount.querySelectorAll('[data-contact-id]');
+            return {
+              hasWarningIcon,
+              hasHeading,
+              hasReloadBtn,
+              cardCount: surveyCards.length,
+            };
+          });
+
+          record(
+            '(H.1) Bootstrap-failure: warning icon (SVG) present in mount',
+            'at least one SVG element',
+            errorUI.error || `hasSvg=${errorUI.hasWarningIcon}`,
+            !errorUI.error && !!errorUI.hasWarningIcon,
+          );
+          record(
+            '(H.2) Bootstrap-failure: "HubSpot is currently unavailable" heading visible',
+            '"HubSpot is currently unavailable" in DOM text',
+            errorUI.error || `found=${errorUI.hasHeading}`,
+            !errorUI.error && !!errorUI.hasHeading,
+          );
+          record(
+            '(H.3) Bootstrap-failure: "Reload page" button present',
+            '"Reload page" button',
+            errorUI.error || `found=${errorUI.hasReloadBtn}`,
+            !errorUI.error && !!errorUI.hasReloadBtn,
+          );
+          record(
+            '(H.4) Bootstrap-failure: no [data-contact-id] survey cards rendered',
+            'cardCount=0',
+            errorUI.error || `cardCount=${errorUI.cardCount}`,
+            !errorUI.error && errorUI.cardCount === 0,
+          );
+
+          // ── H.5–H.6: recovery — dispatch DATA_READY to clear the error ──
+          // Seed state.filteredContacts with a survey-stage contact then fire
+          // 'survey-board-data-ready'.  The component must clear bootstrapFailed
+          // (heading disappears) and switch to the normal 2-child board structure
+          // (column header + card list).
+          await page.evaluate(
+            ({ contacts, cache, workflow, lsOptions }) => {
+              try { localStorage.removeItem('surveyHiddenSubstages'); } catch {}
+              window.state                   = window.state || {};
+              window.state.filteredContacts  = contacts;
+              window.state.contactStageCache = cache;
+              window.state.workflow          = workflow;
+              window.state.user              = { privilege_level: 'admin' };
+              window.LEAD_STATUS_OPTIONS     = lsOptions;
+              window.LEAD_SUBSTATUSES        = [];
+              window.cardActionHandlerFor         = () => null;
+              window.stageOrLeadStatusActionLabel = () => '';
+              window.substatusActionLabelLookup   = () => '';
+              document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
+            },
+            {
+              contacts: CONTACTS,
+              cache: CONTACT_STAGE_CACHE,
+              workflow: WORKFLOW,
+              lsOptions: LEAD_STATUS_OPTIONS,
+            },
+          );
+
+          // Poll up to 12 s for the error heading to disappear — proves
+          // setBootstrapFailed(false) was called by the onReady handler.
+          const headingGone = await pollPage(page, () => {
+            const mount = document.getElementById('survey-board-mount');
+            if (!mount) return false;
+            return !(mount.textContent || '').includes('HubSpot is currently unavailable')
+              ? 'gone' : false;
+          }, null, 12000);
+
+          record(
+            '(H.5) Recovery: firing survey-board-data-ready clears the error heading',
+            '"HubSpot is currently unavailable" absent within 12 s',
+            headingGone === 'gone' ? 'heading gone (good)' : 'heading still present after 12 s (bad)',
+            headingGone === 'gone',
+          );
+
+          // Confirm the board switched to the normal 2-child structure:
+          //   #survey-board-mount > MuiScopedCssBaseline > outer-Box
+          //     child[0] = column header
+          //     child[1] = card-list scroll box
+          // (In error state the outer-Box has only ONE child.)
+          const boardRestored = await pollPage(page, () => {
+            const mount = document.getElementById('survey-board-mount');
+            if (!mount) return false;
+            const themed = mount.firstElementChild;
+            if (!themed) return false;
+            const board = themed.firstElementChild;
+            if (!board) return false;
+            return board.children.length >= 2 ? 'restored' : false;
+          }, null, 5000);
+
+          record(
+            '(H.6) Recovery: board renders normal 2-child layout (header + card list)',
+            'outer Box has ≥ 2 children',
+            boardRestored === 'restored' ? 'board restored (good)' : 'board not restored within 5 s (bad)',
+            boardRestored === 'restored',
+          );
+        }
+      } catch (e) {
+        record('(H) Bootstrap-failure error state', 'no error', `error: ${e.message}`, false, e.stack || '');
+      } finally {
+        if (page) await page.close().catch(() => {});
+      }
+    }
+
   } finally {
     if (browser) await browser.close().catch(() => {});
   }
@@ -968,6 +1155,12 @@ async function writeReport(findings) {
     '  shows the warning Snackbar; simulating tab-hide proves the MUI',
     '  autoHideDuration timer is paused (Snackbar still visible after 9.5 s > 8 s),',
     '  then auto-dismisses once the tab returns to the foreground.',
+    '- **(H)** Bootstrap-failure error state: after dispatching',
+    '  `survey-board-bootstrap-failed`, the mount shows a warning icon (SVG),',
+    '  the "HubSpot is currently unavailable" heading, and the "Reload page"',
+    '  button, while no `[data-contact-id]` survey cards are rendered.',
+    '  Recovery: dispatching `survey-board-data-ready` clears the error and',
+    '  renders the board normally.',
     '',
     '## React mount timing',
     '',
