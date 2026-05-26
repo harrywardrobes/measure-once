@@ -182,11 +182,14 @@ async function openCustomerDetail(browser, jar, contactId) {
     }
   }, contactId);
   await page.evaluate(() => renderDesignVisits());
-  // Wait for either the rows or the empty-state to render (loading → done).
+  // Wait for actual .comment-item rows (not just non-loading) so we don't
+  // return early on the initial "No design visits yet." empty-state that the
+  // React component shows before the fetch completes.
   await pollPage(page, () => {
     const list = document.getElementById('design-visits-list');
     if (!list) return null;
     if (/Loading…/.test(list.textContent)) return null;
+    if (list.querySelectorAll('.comment-item').length === 0) return null;
     return 'ok';
   }, null, 8000);
   page.__logs = pageLogs;
@@ -475,18 +478,17 @@ async function main() {
           datesOk);
 
         // Admin buttons: every visit in submitted/signed_off must show
-        // Request-revision + Delete bound to the right id.
+        // Request-revision + Delete. React attaches handlers via addEventListener
+        // (not the onclick attribute), so we match by button text only.
         const adminButtonsOk = adminSnap.items?.length === 2
           && wantOrder.every((w, ix) => {
             const btns = adminSnap.items[ix].buttons || [];
-            const rev = btns.find(b => b.text === 'Request revision'
-              && b.onclick === `markDesignVisitRevision(${w.id})`);
-            const del = btns.find(b => b.text === 'Delete'
-              && b.onclick === `deleteDesignVisit(${w.id})`);
+            const rev = btns.find(b => b.text === 'Request revision');
+            const del = btns.find(b => b.text === 'Delete');
             return !!rev && !!del;
           });
         record(UI_LABELS[4],
-          'each item has Request-revision + Delete with onclick pointing at its id',
+          'each item has Request-revision + Delete buttons',
           `buttons=${JSON.stringify(adminSnap.items?.map(i => i.buttons))}`,
           adminButtonsOk);
 
@@ -507,16 +509,18 @@ async function main() {
         try { await memberPage.__ctx?.close(); } catch {}
 
         // ── Admin DELETE round-trip ─────────────────────────────────────────
-        // Click the actual Delete button so the page's onclick="..." path
-        // runs end-to-end; the confirm() prompt is accepted by the dialog
-        // handler below.
+        // Click the actual Delete button; the confirm() prompt is accepted by
+        // the dialog handler below. React buttons don't have onclick attrs so
+        // we locate each button via its closest [data-dv-id] ancestor.
         adminPage.on('dialog', d => {
           if (d.type() === 'prompt') d.accept('e2e revision note').catch(() => {});
           else d.accept().catch(() => {});
         });
         await adminPage.evaluate((id) => {
-          const btn = Array.from(document.querySelectorAll('#design-visits-list button'))
-            .find(b => (b.getAttribute('onclick') || '') === `deleteDesignVisit(${id})`);
+          const item = document.querySelector(`[data-dv-id="${id}"]`);
+          const btn = item
+            ? Array.from(item.querySelectorAll('button')).find(b => b.textContent.trim() === 'Delete')
+            : null;
           if (btn) btn.click();
         }, visitB.id);
         const deletedOk = await pollPage(adminPage, (id) => {
@@ -524,10 +528,8 @@ async function main() {
           if (!list) return null;
           const items = list.querySelectorAll('.comment-item');
           if (items.length !== 1) return null;
-          const onclicks = Array.from(items[0].querySelectorAll('button'))
-            .map(b => b.getAttribute('onclick') || '');
-          // The remaining item must NOT reference the deleted id.
-          if (onclicks.some(o => o.includes(`(${id})`))) return null;
+          // Confirm the deleted item's [data-dv-id] row is gone.
+          if (list.querySelector(`[data-dv-id="${id}"]`)) return null;
           return 'ok';
         }, visitB.id, 6000);
         const dbAfterDelete = await pool.query(
@@ -539,12 +541,14 @@ async function main() {
           deletePassed);
 
         // ── Admin Request-revision round-trip ───────────────────────────────
-        // Click the actual Request-revision button so the page's onclick=
-        // path runs end-to-end. markDesignVisitRevision uses prompt(); the
-        // dialog handler above already accepts both prompt and confirm.
+        // Click the actual Request-revision button. React buttons use
+        // addEventListener (not onclick attrs), so locate via [data-dv-id].
+        // The prompt() dialog handler above already accepts it.
         await adminPage.evaluate((id) => {
-          const btn = Array.from(document.querySelectorAll('#design-visits-list button'))
-            .find(b => (b.getAttribute('onclick') || '') === `markDesignVisitRevision(${id})`);
+          const item = document.querySelector(`[data-dv-id="${id}"]`);
+          const btn = item
+            ? Array.from(item.querySelectorAll('button')).find(b => b.textContent.trim() === 'Request revision')
+            : null;
           if (btn) btn.click();
         }, visitA.id);
         const revisionOk = await pollPage(adminPage, (id) => {
@@ -629,9 +633,9 @@ async function writeReport(runId, findings) {
     '  label (`Signed off` / `Submitted`), `Estimate: £N.NN` total, and the',
     '  visit date formatted as en-GB `d MMM yyyy`.',
     '- **[ADM] admin-only action buttons** — asserts each item shows',
-    '  `Request revision` and `Delete` buttons whose `onclick` references the',
-    '  correct visit id when viewed as admin, and that **neither** button',
-    '  appears when the same page is viewed as a member.',
+    '  `Request revision` and `Delete` buttons (matched by text; React attaches',
+    '  handlers via `addEventListener`, not the `onclick` attribute) when viewed',
+    '  as admin, and that **neither** button appears when viewed as a member.',
     '- **[ADM] Delete round-trip** — invokes `deleteDesignVisit(id)` (accepts',
     '  the `confirm()` dialog), then asserts the row disappears from the UI',
     '  *and* from the `design_visits` table.',

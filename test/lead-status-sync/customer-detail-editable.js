@@ -63,10 +63,9 @@ function parseCookieKV(jar) {
 // probe [G] in customer-detail.js.
 async function bootstrapHeader(page, lsKey, role) {
   return page.evaluate(async (currentLs, userRole) => {
-    const wv = document.getElementById('workflow-view');
-    if (wv) {
-      wv.innerHTML = '<div class="workflow-inner"><div id="workflow-stages" class="space-y-2"></div></div>';
-    }
+    // React manages its own DOM — do NOT wipe #workflow-view's innerHTML here.
+    // Just seed the globals and let renderWorkflowHeader() drive a React state
+    // update (flushSync) so the component re-renders with the new contact.
 
     if (typeof loadLeadStatuses === 'function')    await loadLeadStatuses();
     if (typeof loadLeadSubstatuses === 'function') await loadLeadSubstatuses();
@@ -84,18 +83,12 @@ async function bootstrapHeader(page, lsKey, role) {
     window.__moHeaderUser = { privilege_level: userRole };
     state.focusedLeadStatus = null;
 
-    if (wv && !document.getElementById('workflow-header')) {
-      const hdr = document.createElement('div');
-      hdr.id = 'workflow-header';
-      wv.insertBefore(hdr, wv.firstChild);
-    }
-
     if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
   }, lsKey, role);
 }
 
-// Assert that the pill for a given role is editable (lsb-clickable, onclick
-// present, and clicking it opens #card-picker-popup).
+// Assert that the pill for a given role is editable (lsb-clickable and
+// clicking it opens #card-picker-popup).
 async function probeEditableRole(page, role, lsKey, record) {
   // Re-bootstrap for the current role so state is clean.
   await bootstrapHeader(page, lsKey, role);
@@ -104,9 +97,8 @@ async function probeEditableRole(page, role, lsKey, record) {
   const pillInfo = await page.evaluate(() => {
     const pill = document.querySelector('#workflow-header .lead-status-badge');
     return {
-      present:    !!pill,
-      clickable:  !!pill && pill.classList.contains('lsb-clickable'),
-      hasOnclick: !!pill && !!pill.getAttribute('onclick'),
+      present:   !!pill,
+      clickable: !!pill && pill.classList.contains('lsb-clickable'),
     };
   });
 
@@ -121,12 +113,6 @@ async function probeEditableRole(page, role, lsKey, record) {
     'classList contains "lsb-clickable"',
     `clickable=${pillInfo.clickable}`,
     pillInfo.clickable,
-  );
-  record(
-    `[${role}] pill has onclick handler`,
-    'getAttribute("onclick") is non-empty',
-    `hasOnclick=${pillInfo.hasOnclick}`,
-    pillInfo.hasOnclick,
   );
 
   // Call openLeadStatusPicker directly and confirm the unified picker opens.

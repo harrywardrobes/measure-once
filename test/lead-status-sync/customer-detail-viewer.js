@@ -60,11 +60,9 @@ function parseCookieKV(jar) {
 // Mirrors the same technique used by probe [G] in customer-detail.js.
 async function bootstrapHeader(page, lsKey, role) {
   return page.evaluate(async (currentLs, userRole) => {
-    // Rebuild #workflow-view → #workflow-stages + #workflow-header.
-    const wv = document.getElementById('workflow-view');
-    if (wv) {
-      wv.innerHTML = '<div class="workflow-inner"><div id="workflow-stages" class="space-y-2"></div></div>';
-    }
+    // React manages its own DOM — do NOT wipe #workflow-view's innerHTML here.
+    // Just seed the globals and let renderWorkflowHeader() drive a React state
+    // update (flushSync) so the component re-renders with the new contact.
 
     if (typeof loadLeadStatuses === 'function')    await loadLeadStatuses();
     if (typeof loadLeadSubstatuses === 'function') await loadLeadSubstatuses();
@@ -81,13 +79,6 @@ async function bootstrapHeader(page, lsKey, role) {
     state.user = { privilege_level: userRole };
     window.__moHeaderUser = { privilege_level: userRole };
     state.focusedLeadStatus = null;
-
-    // Ensure a #workflow-header mount exists before calling the renderer.
-    if (wv && !document.getElementById('workflow-header')) {
-      const hdr = document.createElement('div');
-      hdr.id = 'workflow-header';
-      wv.insertBefore(hdr, wv.firstChild);
-    }
 
     if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
   }, lsKey, role);

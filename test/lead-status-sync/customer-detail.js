@@ -92,10 +92,8 @@ async function injectSession(page, jar) {
 // can prove the tracker re-rendered in place (no full page reload).
 async function bootstrapTracker(page, currentLs, currentSub = '', role = 'admin') {
   return page.evaluate(async (lsKey, subVal, userRole) => {
-    const wv = document.getElementById('workflow-view');
-    if (wv) {
-      wv.innerHTML = '<div class="workflow-inner"><div id="workflow-stages" class="space-y-2"></div></div>';
-    }
+    // React manages its own DOM — do NOT wipe #workflow-view's innerHTML here.
+    // Seed the globals and let renderWorkflowStages() drive a React re-render.
     if (typeof loadLeadStatuses === 'function')   await loadLeadStatuses();
     if (typeof loadLeadSubstatuses === 'function') await loadLeadSubstatuses();
     state.selectedContact = {

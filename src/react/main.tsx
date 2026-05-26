@@ -55,6 +55,7 @@ const AdminPermissionsPage = React.lazy(() => import('./pages/admin/AdminPermiss
 const AdminRequestsPage  = React.lazy(() => import('./pages/admin/AdminRequestsPage').then(m => ({ default: m.AdminRequestsPage })));
 const AdminAuditLogPage  = React.lazy(() => import('./pages/admin/AdminAuditLogPage').then(m => ({ default: m.AdminAuditLogPage })));
 const IdeasPage          = React.lazy(() => import('./pages/IdeasPage').then(m => ({ default: m.IdeasPage })));
+const CustomerDetailPage = React.lazy(() => import('./pages/CustomerDetailPage').then(m => ({ default: m.CustomerDetailPage })));
 
 /**
  * Every React mount goes through `AppThemeProvider` so the shared MUI
@@ -125,7 +126,8 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'tab-actionhandlers',   render: () => <ActionHandlersPage />,  fallback: <ActionHandlersPageSkeleton /> },
   { id: 'tab-designvisit',      render: () => <DesignVisitPage /> },
   { id: 'tab-devenv',           render: () => <DevEnvironmentPage /> },
-  { id: 'ideas-page-mount',    render: () => <IdeasPage /> },
+  { id: 'ideas-page-mount',       render: () => <IdeasPage /> },
+  { id: 'customer-detail-root',   render: () => <CustomerDetailPage /> },
 ];
 
 function mountKnown(): number {
