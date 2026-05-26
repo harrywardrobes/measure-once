@@ -1860,6 +1860,45 @@ async function setupAuth(app) {
     }
   });
 
+  app.get('/api/admin/conflict-digest-settings', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT value FROM admin_settings WHERE key = 'last_conflict_digest_sent_at'`
+      );
+      const lastSentAt = r.rowCount > 0 ? r.rows[0].value : null;
+      const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+      res.json({ lastSentAt, smtpConfigured });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/admin/conflict-digest/send-now', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        return res.status(400).json({ error: 'SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASS to enable email.' });
+      }
+      const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (adminEmails.length === 0) {
+        return res.status(400).json({ error: 'No admin email addresses configured (ADMIN_EMAILS).' });
+      }
+      const sent = await sendConflictDigest();
+      let lastSentAt = null;
+      if (sent) {
+        await pool.query(
+          `INSERT INTO admin_settings (key, value, updated_at)
+           VALUES ('last_conflict_digest_sent_at', to_jsonb(NOW()::text), NOW())
+           ON CONFLICT (key) DO UPDATE SET value = to_jsonb(NOW()::text), updated_at = NOW()`
+        );
+        const ts = await pool.query(`SELECT value FROM admin_settings WHERE key = 'last_conflict_digest_sent_at'`);
+        lastSentAt = ts.rowCount > 0 ? ts.rows[0].value : null;
+      }
+      res.json({ sent: !!sent, lastSentAt });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   const ALLOWED_PRIVILEGE_LEVELS = ['viewer', 'member', 'manager', 'admin'];
 
   app.patch('/api/users/:id/profile', isAuthenticated, requireAdmin, async (req, res) => {

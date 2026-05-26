@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Card,
@@ -10,6 +11,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import SendIcon from '@mui/icons-material/Send';
 
 const STAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: '—' },
@@ -156,6 +158,11 @@ function StatusRow({ status, index, total, onMove }: {
   );
 }
 
+interface DigestSettings {
+  lastSentAt: string | null;
+  smtpConfigured: boolean;
+}
+
 export function SettingsPage() {
   const [statuses, setStatuses] = useState<LeadStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -170,6 +177,8 @@ export function SettingsPage() {
   const [newStage, setNewStage] = useState('');
   const [newLabel, setNewLabel] = useState('');
   const [addErr, setAddErr] = useState('');
+  const [digestSettings, setDigestSettings] = useState<DigestSettings | null>(null);
+  const [digestSending, setDigestSending] = useState(false);
 
   const statusesRef = useRef<LeadStatus[]>([]);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -209,6 +218,30 @@ export function SettingsPage() {
     }
   }, []);
 
+  const fetchDigestSettings = useCallback(async () => {
+    try {
+      const data = await callApi('GET', '/api/admin/conflict-digest-settings') as DigestSettings;
+      setDigestSettings(data);
+    } catch {}
+  }, []);
+
+  const sendDigestNow = useCallback(async () => {
+    setDigestSending(true);
+    try {
+      const data = await callApi('POST', '/api/admin/conflict-digest/send-now') as { sent: boolean; lastSentAt: string | null };
+      if (data.sent) {
+        setDigestSettings(d => d ? { ...d, lastSentAt: data.lastSentAt } : d);
+        showToast('Digest sent — admins have been emailed.');
+      } else {
+        showToast('No stale conflicts to report — no email was sent.');
+      }
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to send digest.', true);
+    } finally {
+      setDigestSending(false);
+    }
+  }, []);
+
   const initDevSection = useCallback(async () => {
     let dm = false;
     try {
@@ -241,8 +274,9 @@ export function SettingsPage() {
     fetchHubStatus();
     fetchStatuses();
     initDevSection();
+    fetchDigestSettings();
     return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
-  }, [fetchHubStatus, fetchStatuses, initDevSection]);
+  }, [fetchHubStatus, fetchStatuses, initDevSection, fetchDigestSettings]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
@@ -515,6 +549,53 @@ export function SettingsPage() {
             {addErr && <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>{addErr}</Typography>}
             <div id="ls-add-error" style={{ display: 'none' }} />
           </Box>
+        </CardContent>
+      </Card>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 0.5 }}>Conflict digest</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            A weekly email is automatically sent to admins listing team members whose onboarding
+            conflicts have been unresolved for 7 or more days.
+          </Typography>
+
+          {digestSettings && !digestSettings.smtpConfigured && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              SMTP is not configured — email sending is disabled. Set{' '}
+              <Box component="code" sx={{ fontSize: '0.8em' }}>SMTP_HOST</Box>,{' '}
+              <Box component="code" sx={{ fontSize: '0.8em' }}>SMTP_USER</Box>, and{' '}
+              <Box component="code" sx={{ fontSize: '0.8em' }}>SMTP_PASS</Box>{' '}
+              in your environment secrets to enable digest emails.
+            </Alert>
+          )}
+
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+            <Box>
+              <Typography variant="body2" color="text.secondary" component="span">Last sent: </Typography>
+              <Typography variant="body2" component="span" sx={{ fontWeight: 500 }}>
+                {digestSettings === null
+                  ? 'Loading…'
+                  : digestSettings.lastSentAt
+                    ? new Date(digestSettings.lastSentAt).toLocaleString()
+                    : 'Never'}
+              </Typography>
+            </Box>
+            <Button
+              variant="outlined"
+              startIcon={digestSending ? <CircularProgress size={14} color="inherit" /> : <SendIcon />}
+              disabled={digestSending || digestSettings === null || !digestSettings.smtpConfigured}
+              onClick={sendDigestNow}
+              title={digestSettings && !digestSettings.smtpConfigured ? 'SMTP is not configured' : undefined}
+            >
+              {digestSending ? 'Sending…' : 'Send now'}
+            </Button>
+          </Box>
+          {digestSettings?.smtpConfigured && (
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+              "Send now" bypasses the 7-day gate and sends immediately if there are stale conflicts.
+            </Typography>
+          )}
         </CardContent>
       </Card>
 
