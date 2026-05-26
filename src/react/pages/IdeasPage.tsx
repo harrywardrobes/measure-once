@@ -18,6 +18,8 @@ import {
   Alert,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -27,6 +29,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import SendIcon from '@mui/icons-material/Send';
+import ThumbUpIcon from '@mui/icons-material/ThumbUp';
+import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined';
 import { usePrivilege } from '../hooks/usePrivilege';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -38,6 +42,8 @@ interface Idea {
   edited_at: string | null;
   author_name: string;
   comment_count: number;
+  vote_count: number;
+  user_voted: boolean;
 }
 
 interface Comment {
@@ -47,6 +53,8 @@ interface Comment {
   edited_at: string | null;
   author_name: string;
 }
+
+type SortMode = 'newest' | 'popular';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -108,7 +116,10 @@ function IdeaSkeleton() {
             <Skeleton variant="text" width="90%" height={14} />
             <Skeleton variant="text" width="75%" height={14} sx={{ mt: 0.5 }} />
             <Skeleton variant="text" width="55%" height={14} sx={{ mt: 0.5 }} />
-            <Skeleton variant="rounded" width={100} height={24} sx={{ mt: 1.25, borderRadius: 999 }} />
+            <Stack direction="row" spacing={1} sx={{ mt: 1.25 }}>
+              <Skeleton variant="rounded" width={64} height={24} sx={{ borderRadius: 999 }} />
+              <Skeleton variant="rounded" width={100} height={24} sx={{ borderRadius: 999 }} />
+            </Stack>
           </Box>
         </Stack>
       </CardContent>
@@ -283,12 +294,14 @@ function IdeaCard({
   onDeleted,
   onUpdated,
   onToast,
+  onVoteChanged,
 }: {
   idea: Idea;
   isAdmin: boolean;
   onDeleted: (id: number) => void;
   onUpdated: (updated: Idea) => void;
   onToast: (msg: string, error?: boolean) => void;
+  onVoteChanged: (id: number, vote_count: number, user_voted: boolean) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [comments, setComments] = useState<Comment[] | null>(null);
@@ -301,6 +314,7 @@ function IdeaCard({
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [voting, setVoting] = useState(false);
   const didFetch = useRef(false);
 
   const handleToggle = useCallback(async () => {
@@ -389,7 +403,24 @@ function IdeaCard({
     }
   }, [editText, idea, onUpdated, onToast, handleEditCancel]);
 
+  const handleVote = useCallback(async () => {
+    if (voting) return;
+    setVoting(true);
+    try {
+      const result = await apiFetch<{ vote_count: number; user_voted: boolean }>(
+        'POST',
+        `/api/ideas/${idea.id}/vote`,
+      );
+      onVoteChanged(idea.id, result.vote_count, result.user_voted);
+    } catch (err: unknown) {
+      onToast((err as Error).message || 'Could not update vote.', true);
+    } finally {
+      setVoting(false);
+    }
+  }, [idea.id, voting, onVoteChanged, onToast]);
+
   const commentLabel = commentCount === 1 ? '1 comment' : `${commentCount} comments`;
+  const voteLabel = idea.vote_count === 1 ? '1' : String(idea.vote_count);
   const remaining = MAX_IDEA_CHARS - editText.length;
 
   return (
@@ -490,16 +521,36 @@ function IdeaCard({
                 </Typography>
               )}
 
-              <Chip
-                icon={<ChatBubbleOutlinedIcon sx={{ fontSize: '14px !important' }} />}
-                label={commentLabel}
-                size="small"
-                onClick={handleToggle}
-                variant={expanded ? 'filled' : 'outlined'}
-                color={expanded ? 'primary' : 'default'}
-                sx={{ cursor: 'pointer', fontSize: '0.72rem' }}
-                aria-expanded={expanded}
-              />
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Tooltip title={idea.user_voted ? 'Remove upvote' : 'Upvote this idea'}>
+                  <Chip
+                    icon={
+                      idea.user_voted
+                        ? <ThumbUpIcon sx={{ fontSize: '14px !important' }} />
+                        : <ThumbUpOutlinedIcon sx={{ fontSize: '14px !important' }} />
+                    }
+                    label={voteLabel}
+                    size="small"
+                    onClick={handleVote}
+                    variant={idea.user_voted ? 'filled' : 'outlined'}
+                    color={idea.user_voted ? 'primary' : 'default'}
+                    disabled={voting}
+                    sx={{ cursor: 'pointer', fontSize: '0.72rem', minWidth: 52 }}
+                    aria-label={idea.user_voted ? 'Remove upvote' : 'Upvote'}
+                    aria-pressed={idea.user_voted}
+                  />
+                </Tooltip>
+                <Chip
+                  icon={<ChatBubbleOutlinedIcon sx={{ fontSize: '14px !important' }} />}
+                  label={commentLabel}
+                  size="small"
+                  onClick={handleToggle}
+                  variant={expanded ? 'filled' : 'outlined'}
+                  color={expanded ? 'primary' : 'default'}
+                  sx={{ cursor: 'pointer', fontSize: '0.72rem' }}
+                  aria-expanded={expanded}
+                />
+              </Stack>
 
               <Collapse in={expanded} unmountOnExit={false}>
                 <Box
@@ -686,6 +737,7 @@ export function IdeasPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [toast, setToast] = useState<{ msg: string; error: boolean } | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>('newest');
 
   const showToast = useCallback((msg: string, error = false) => {
     setToast({ msg, error });
@@ -719,6 +771,15 @@ export function IdeasPage() {
     setIdeas((prev) => prev.map((i) => i.id === updated.id ? updated : i));
   }, []);
 
+  const handleVoteChanged = useCallback((id: number, vote_count: number, user_voted: boolean) => {
+    setIdeas((prev) => prev.map((i) => i.id === id ? { ...i, vote_count, user_voted } : i));
+  }, []);
+
+  const sortedIdeas = sortMode === 'popular'
+    ? [...ideas].sort((a, b) => b.vote_count - a.vote_count || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    : ideas;
+
+
   return (
     <Box sx={{ maxWidth: 680, mx: 'auto', px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 3 } }}>
       <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', mb: 3 }}>
@@ -739,6 +800,25 @@ export function IdeasPage() {
           New Idea
         </Button>
       </Stack>
+
+      {!loading && !loadError && ideas.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          <ToggleButtonGroup
+            value={sortMode}
+            exclusive
+            onChange={(_e, val) => { if (val) setSortMode(val); }}
+            size="small"
+            aria-label="Sort ideas"
+          >
+            <ToggleButton value="newest" aria-label="Sort by newest">
+              Newest
+            </ToggleButton>
+            <ToggleButton value="popular" aria-label="Sort by most popular">
+              Most popular
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+      )}
 
       {loading && (
         <Box>
@@ -764,7 +844,7 @@ export function IdeasPage() {
         </Box>
       )}
 
-      {!loading && !loadError && ideas.map((idea) => (
+      {!loading && !loadError && sortedIdeas.map((idea) => (
         <IdeaCard
           key={idea.id}
           idea={idea}
@@ -772,6 +852,7 @@ export function IdeasPage() {
           onDeleted={handleDeleted}
           onUpdated={handleUpdated}
           onToast={showToast}
+          onVoteChanged={handleVoteChanged}
         />
       ))}
 

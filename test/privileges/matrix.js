@@ -82,6 +82,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/ideas',                      level: 'auth',  body: { body: '__privtest_noop__' } },
   { method: 'GET',    path: '/api/ideas/0/comments',           level: 'auth' },
   { method: 'POST',   path: '/api/ideas/0/comments',           level: 'auth',  body: { body: '__privtest_noop__' } },
+  { method: 'POST',   path: '/api/ideas/0/vote',               level: 'auth' },
   { method: 'DELETE', path: '/api/ideas/0',                    level: 'admin' },
   { method: 'PATCH',  path: '/api/ideas/0',                    level: 'admin',  body: { body: '__privtest_noop__' } },
   { method: 'DELETE', path: '/api/ideas/0/comments/0',         level: 'admin' },

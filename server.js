@@ -3304,20 +3304,31 @@ async function ensureIdeasTables() {
   `);
   await pool.query(`ALTER TABLE ideas ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP`);
   await pool.query(`ALTER TABLE idea_comments ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS idea_votes (
+      idea_id  INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+      user_id  VARCHAR NOT NULL,
+      CONSTRAINT idea_votes_pk PRIMARY KEY (idea_id, user_id)
+    );
+  `);
 }
 
 app.get('/api/ideas', async (req, res) => {
   try {
+    const userId = req.user?.id || null;
     const { rows } = await pool.query(`
       SELECT i.id, i.body, i.created_at, i.edited_at,
              u.first_name, u.last_name, u.email AS author_email,
-             COUNT(c.id)::int AS comment_count
+             COUNT(DISTINCT c.id)::int AS comment_count,
+             COUNT(DISTINCT v.user_id)::int AS vote_count,
+             MAX(CASE WHEN v.user_id = $1 THEN 1 ELSE 0 END)::int AS user_voted
       FROM ideas i
       LEFT JOIN users u ON u.id = i.author_user_id
       LEFT JOIN idea_comments c ON c.idea_id = i.id
+      LEFT JOIN idea_votes v ON v.idea_id = i.id
       GROUP BY i.id, u.first_name, u.last_name, u.email
       ORDER BY i.created_at DESC
-    `);
+    `, [userId]);
     res.json(rows.map(r => ({
       id:            r.id,
       body:          r.body,
@@ -3325,6 +3336,8 @@ app.get('/api/ideas', async (req, res) => {
       edited_at:     r.edited_at || null,
       author_name:   [r.first_name, r.last_name].filter(Boolean).join(' ') || r.author_email || 'Unknown',
       comment_count: r.comment_count,
+      vote_count:    r.vote_count,
+      user_voted:    r.user_voted === 1,
     })));
   } catch (e) {
     console.error('GET /api/ideas error:', e.message);
@@ -3348,10 +3361,51 @@ app.post('/api/ideas', async (req, res) => {
       created_at:    idea.created_at,
       author_name:   [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || 'Unknown',
       comment_count: 0,
+      vote_count:    0,
+      user_voted:    false,
     });
   } catch (e) {
     console.error('POST /api/ideas error:', e.message);
     res.status(500).json({ error: 'Could not save idea.' });
+  }
+});
+
+app.post('/api/ideas/:id/vote', isAuthenticated, async (req, res) => {
+  const ideaId = parseInt(req.params.id, 10);
+  if (isNaN(ideaId)) return res.status(400).json({ error: 'Invalid idea id.' });
+  const userId = req.user.id;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const ideaCheck = await client.query('SELECT id FROM ideas WHERE id = $1 FOR UPDATE', [ideaId]);
+    if (!ideaCheck.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Idea not found.' });
+    }
+    const existing = await client.query(
+      'SELECT 1 FROM idea_votes WHERE idea_id = $1 AND user_id = $2',
+      [ideaId, userId]
+    );
+    let user_voted;
+    if (existing.rows.length) {
+      await client.query('DELETE FROM idea_votes WHERE idea_id = $1 AND user_id = $2', [ideaId, userId]);
+      user_voted = false;
+    } else {
+      await client.query('INSERT INTO idea_votes (idea_id, user_id) VALUES ($1, $2)', [ideaId, userId]);
+      user_voted = true;
+    }
+    const { rows } = await client.query(
+      'SELECT COUNT(*)::int AS vote_count FROM idea_votes WHERE idea_id = $1',
+      [ideaId]
+    );
+    await client.query('COMMIT');
+    res.json({ vote_count: rows[0].vote_count, user_voted });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('POST /api/ideas/:id/vote error:', e.message);
+    res.status(500).json({ error: 'Could not update vote.' });
+  } finally {
+    client.release();
   }
 });
 
