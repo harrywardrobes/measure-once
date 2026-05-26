@@ -885,6 +885,11 @@ router.patch('/api/admin/design-visit-handles/:id', isAuthenticated, requireAdmi
   }
   const styleIsSet = style !== undefined;
   try {
+    const existing = image_url !== undefined
+      ? await pool.query(`SELECT image_url FROM design_visit_handles WHERE id=$1`, [id])
+      : null;
+    if (existing && !existing.rows.length) return res.status(404).json({ error: 'Not found' });
+    const oldImageUrl = existing?.rows[0]?.image_url ?? null;
     const r = await pool.query(
       `UPDATE design_visit_handles SET
         name        = COALESCE($1, name),
@@ -897,6 +902,9 @@ router.patch('/api/admin/design-visit-handles/:id', isAuthenticated, requireAdmi
       [name ?? null, description ?? null, image_url ?? null, sort_order ?? null, style ?? null, styleIsSet, id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    if (oldImageUrl && image_url && oldImageUrl !== image_url) {
+      _deleteLocalHandleImage(oldImageUrl);
+    }
     res.json(r.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1064,6 +1072,11 @@ router.patch('/api/admin/design-visit-door-styles/:id', isAuthenticated, require
   const sort_order = req.body?.sort_order !== undefined ? parseInt(req.body.sort_order, 10) || 0   : undefined;
   if (name !== undefined && !name) return res.status(400).json({ error: 'name cannot be empty' });
   try {
+    const existing = image_url !== undefined
+      ? await pool.query(`SELECT image_url FROM design_visit_door_styles WHERE id=$1`, [id])
+      : null;
+    if (existing && !existing.rows.length) return res.status(404).json({ error: 'Not found' });
+    const oldImageUrl = existing?.rows[0]?.image_url ?? null;
     const r = await pool.query(
       `UPDATE design_visit_door_styles SET
         name       = COALESCE($1, name),
@@ -1074,6 +1087,9 @@ router.patch('/api/admin/design-visit-door-styles/:id', isAuthenticated, require
       [name ?? null, image_url ?? null, sort_order ?? null, id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    if (oldImageUrl && image_url && oldImageUrl !== image_url) {
+      _deleteLocalDoorStyleImage(oldImageUrl);
+    }
     res.json(r.rows[0]);
   } catch (e) {
     res.status(500).json({ error: e.message });
