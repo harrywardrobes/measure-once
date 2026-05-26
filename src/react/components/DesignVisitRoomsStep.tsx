@@ -9,6 +9,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import CloseIcon from '@mui/icons-material/Close';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { FileUploadField } from './FileUploadField';
@@ -126,6 +127,16 @@ export function DesignVisitRoomsStep({
     setRooms(prev => prev.filter(r => r.clientId !== clientId));
     setUploadingById(prev => { const n = { ...prev }; delete n[clientId]; return n; });
     setFileKeyById(prev => { const n = { ...prev }; delete n[clientId]; return n; });
+  }
+
+  function removeImage(clientId: string, imgIdx: number) {
+    setRooms(prev =>
+      prev.map(r =>
+        r.clientId === clientId
+          ? { ...r, data: { ...r.data, images: r.data.images.filter((_, i) => i !== imgIdx) } }
+          : r
+      )
+    );
   }
 
   function moveRoom(clientId: string, dir: -1 | 1) {
@@ -442,17 +453,43 @@ export function DesignVisitRoomsStep({
                 {data.images.map((img, imgIdx) => (
                   <Box
                     key={imgIdx}
-                    component="img"
-                    src={img.viewUrl || img.storageKey || ''}
-                    alt="Room photo"
-                    sx={{
-                      width: 64,
-                      height: 64,
-                      objectFit: 'cover',
-                      borderRadius: '6px',
-                      border: '1px solid #e5e7eb',
-                    }}
-                  />
+                    sx={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}
+                  >
+                    <Box
+                      component="img"
+                      src={img.viewUrl || img.storageKey || ''}
+                      alt="Room photo"
+                      sx={{
+                        width: 64,
+                        height: 64,
+                        objectFit: 'cover',
+                        borderRadius: '6px',
+                        border: '1px solid #e5e7eb',
+                        display: 'block',
+                      }}
+                    />
+                    <IconButton
+                      size="small"
+                      title="Remove photo"
+                      onClick={() => removeImage(clientId, imgIdx)}
+                      sx={{
+                        position: 'absolute',
+                        top: -6,
+                        right: -6,
+                        width: 18,
+                        height: 18,
+                        p: 0,
+                        background: '#374151',
+                        color: '#fff',
+                        borderRadius: '50%',
+                        '&:hover': {
+                          background: '#dc2626',
+                        },
+                      }}
+                    >
+                      <CloseIcon sx={{ fontSize: '0.65rem' }} />
+                    </IconButton>
+                  </Box>
                 ))}
               </Box>
             )}
