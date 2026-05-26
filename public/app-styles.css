@@ -1155,9 +1155,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 
 
-/* On the sales page the back button should always be visible */
-
-
 /* ── Sales board: 3-column layout ────────────────────────────────────────── */
 
 
@@ -1177,9 +1174,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .room-stale-banner span {
   flex: 1;
 }
-
-
-/* Subtle stale-counts dot shown when X-Cache-Status: stale is received */
 
 
 /* Inline notice shown when counts fail to load (hard error / 5xx / network) */
@@ -1389,9 +1383,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .ds-swatch-value { color: var(--ink-3); }
 
 
-/* Demo helpers reused inside the Design System panel */
-
-
 /* Shared empty-state block (used by renderEmptyState helper) */
 .ui-empty {
   border: 1px dashed var(--stone-deep);
@@ -1492,9 +1483,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   font-size: .7rem; font-weight: 700;
   text-transform: capitalize; letter-spacing: .02em;
 }
-
-
-/* User-status pill variants (re-skinned .lvl badges used on the Team table). */
 
 
 /* Status badges */
