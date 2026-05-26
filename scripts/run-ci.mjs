@@ -65,6 +65,7 @@ const STEPS = [
   'test:room-assignments-outage:ci',
   'test:change-password:ci',
   'test:set-password:ci',
+  'test:login:ci',
   'test:invoice-admin-controls:ci',
   'test:bottom-nav:ci',
   'test:nav-active-tab:ci',
