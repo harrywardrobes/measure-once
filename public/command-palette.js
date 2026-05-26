@@ -78,8 +78,7 @@
   window._cpRun = {
     'new-customer': function () {
       closeCommandPalette();
-      if (typeof openNewCustomerModal === 'function') openNewCustomerModal();
-      else location.href = '/customers?new=1';
+      location.href = '/customers?new=1';
     },
     'sign-out': function () {
       fetch('/api/logout', { method: 'POST' })

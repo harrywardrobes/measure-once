@@ -426,11 +426,7 @@ function onHeaderSearchSubmit(val) {
 }
 
 function onHeaderPlusBtn() {
-  if (location.pathname === '/customers') {
-    if (typeof openNewCustomerModal === 'function') openNewCustomerModal();
-  } else {
-    location.href = '/customers?new=1';
-  }
+  location.href = '/customers?new=1';
 }
 
 function clearHeaderSearch() {
