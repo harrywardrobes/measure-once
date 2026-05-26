@@ -113,6 +113,46 @@ async function main() {
   }
 
   try {
+    // ── preflight: detect stale synthetic files from a prior crashed run ──────
+    //
+    // If the process was killed (e.g. SIGKILL) before the finally-block ran,
+    // a "test-asset-probe-*.css" file may have been left in public/react/assets/.
+    // The next run would silently pick it up as the assetsFile, hiding whether
+    // the ASSETS probe is exercising a real build artifact or a leftover.
+    //
+    // Chosen behaviour: WARN + auto-clean.  We delete every stale probe file
+    // and continue rather than exiting non-zero, because the leftover is a
+    // hygiene issue — not a code bug — and the test can still run correctly
+    // on a clean slate.  The loud warning makes the anomaly visible in CI logs.
+    // If you prefer fail-hard semantics, replace the unlinkSync block with:
+    //   console.error('[chunk-cache-headers] STALE synthetic file(s) found — aborting.');
+    //   process.exit(1);
+    {
+      let staleFiles = [];
+      try {
+        staleFiles = fs.readdirSync(ASSETS_DIR).filter(
+          f => /^test-asset-probe-[0-9a-f]+\.css$/.test(f)
+        );
+      } catch {
+        // assets dir may not exist yet — that is fine, handled below
+      }
+      if (staleFiles.length > 0) {
+        console.warn(
+          '[chunk-cache-headers] WARNING: stale synthetic probe file(s) found from a ' +
+          'prior crashed run — cleaning up before proceeding:'
+        );
+        for (const f of staleFiles) {
+          const stale = path.join(ASSETS_DIR, f);
+          try {
+            fs.unlinkSync(stale);
+            console.warn(`  deleted: ${stale}`);
+          } catch (err) {
+            console.warn(`  could not delete ${stale}: ${err.message}`);
+          }
+        }
+      }
+    }
+
     // ── preflight: verify build output exists ─────────────────────────────────
     const chunkFile  = firstFileByExt(CHUNKS_DIR, '.js');
     const cssFile    = firstFileByExt(ASSETS_DIR, '.css');
