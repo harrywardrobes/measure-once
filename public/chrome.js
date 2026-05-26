@@ -151,24 +151,13 @@ window.getShortcut = function (key) {
   document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner + pageHeading);
   document.body.insertAdjacentHTML('beforeend', invoicePanel + (isAdminPage ? '' : bottomNav));
 
-  // Styles for the invoice panel and the qb-badge trigger button.
+  // Styles for the invoice panel.
   // These are injected here (rather than living in app-styles.css) so they
   // are co-located with the panel HTML above.  Pages that use the panel
-  // (projects, customers, customer-detail) all load chrome.js, so this
+  // (customers, customer-detail) all load chrome.js, so this
   // single injection covers every consumer.
   const invStyle = document.createElement('style');
   invStyle.textContent = `
-.qb-badge {
-  display: inline-flex; align-items: center;
-  font-size: 0.68rem; font-weight: 700;
-  font-family: inherit;
-  padding: 2px 7px; border-radius: 999px;
-  background: #fef3c7; color: #92400e;
-  border: 1px solid #fde68a;
-  white-space: nowrap;
-  cursor: pointer;
-  line-height: 1.4;
-}
 .inv-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.35);
   z-index: var(--z-overlay); backdrop-filter: blur(2px);
