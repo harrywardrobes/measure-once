@@ -19,8 +19,8 @@
 // replaced by the admin-configured lead-status tracker (task #597), so the
 // hardcoded sub-tasks were just drifting from the live admin data — they are
 // intentionally omitted here. Runtime code that still touches
-// state.workflow.stages[k].statuses (e.g. sales / survey cards, workflow.js,
-// _saveWorkflowDataImpl) reads the live array loaded from workflow.json and
+// state.workflow.stages[k].statuses (e.g. sales / survey cards, workflow.js)
+// reads the live array loaded from workflow.json and
 // degrades gracefully when it's absent.
 const DEFAULT_WORKFLOW = {
   stages: {
@@ -599,7 +599,6 @@ async function flushDeferredSave() {
     _updateBeforeUnloadGuard();
     const cid = state.selectedContactId;
     try {
-      await saveWorkflowData();
       document.dispatchEvent(new CustomEvent('localdata-updated', { detail: { contactId: cid } }));
       // Re-fetch the contact so the list badge reflects the latest server state
       // after the flush (mirrors the same pattern in scheduleSave / Task 215).
@@ -642,7 +641,6 @@ function scheduleSave(undoMessage, snapshotRooms) {
     closeBottomBar();
     _updateBeforeUnloadGuard();
     try {
-      await saveWorkflowData();
       document.dispatchEvent(new CustomEvent('localdata-updated', { detail: { contactId: state.selectedContactId } }));
       // Re-fetch the contact so the list reflects the latest server state
       // (e.g. HubSpot last-activity timestamp after the PATCH).  Route through
@@ -701,11 +699,8 @@ async function undoLastChange() {
   if (state.workflowData) {
     renderWorkflowStages();
     renderWorkflowHeader();
-    renderRoomTabs();
   }
   renderProjectsView();
-  // Save the restored state so disk matches memory
-  try { await saveWorkflowData(); } catch { showToast('Failed to save', true); }
 }
 
 // Immediate-save undo bar — for card-list changes (saves right away, undo makes a second save)

@@ -16,15 +16,6 @@ let _workflowStagesRenderer = function() {};
 function renderWorkflowStages() { _workflowStagesRenderer(); }
 function registerWorkflowStagesRenderer(fn) { _workflowStagesRenderer = fn; }
 
-let _roomTabsRenderer = function() {};
-function renderRoomTabs() { _roomTabsRenderer(); }
-function registerRoomTabsRenderer(fn) { _roomTabsRenderer = fn; }
-
-let _workflowDataSaver = async function() {};
-async function saveWorkflowData() { return _workflowDataSaver(); }
-function registerWorkflowDataSaver(fn) { _workflowDataSaver = fn; }
-
-
 let _projectsViewRenderer = function() {};
 function renderProjectsView() { _projectsViewRenderer(); }
 function registerProjectsViewRenderer(fn) { _projectsViewRenderer = fn; }
@@ -50,9 +41,6 @@ function registerStageFilterPopulator(fn) { _stageFilterPopulator = fn; }
 let _dealsFilter = function() {};
 function filterDeals(query) { _dealsFilter(query); }
 function registerDealsFilter(fn) { _dealsFilter = fn; }
-
-// Stub — safe no-op on pages that don't register a real impl.
-function renderGoogleEmailSection() {}
 
 // invoices-core-owned loader. Pages that don't load invoices-core.js
 // (calendar, profile, trades) keep the no-op.
@@ -390,7 +378,6 @@ function showAccessGate(params) {
 }
 
 async function checkAuthStatus() {
-  const prevGoogle = state.authStatus.google;
   const [status, user] = await Promise.all([
     GET('/auth/status'),
     fetch('/api/auth/user').then(r => r.ok ? r.json() : null).catch(() => null),
@@ -400,7 +387,6 @@ async function checkAuthStatus() {
   renderAuthStatus();
   if (!prevGoogle && state.authStatus.google) {
     window.dispatchEvent(new CustomEvent('mo:google-auth-connected'));
-    if (state.selectedContact) renderGoogleEmailSection();
   }
 }
 

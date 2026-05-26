@@ -6,20 +6,9 @@ async function quickLoadAndUpdate(contactId, roomIdx, updater) {
     // Modify in-memory state directly
     updater(state.allRooms, roomIdx);
     updateRoomCache();
-    try { await saveWorkflowData(); } catch (e) {
-      if (e.code === 'HUBSPOT_AUTH') {
-        showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
-      } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
-        showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
-      } else {
-        showToast('Failed to save', true);
-      }
-      return;
-    }
     document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
     if (state.selectedRoomIdx === roomIdx) {
       renderWorkflowHeader();
-      renderRoomTabs();
       renderWorkflowStages();
     }
     return;
