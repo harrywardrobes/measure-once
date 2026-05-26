@@ -940,8 +940,6 @@ function hasActiveInlineEdit() {
   if (document.getElementById('task-subject') !== null) return true;
   if (window._invMemoDirty) return true;
   if (window._invSendDirty) return true;
-  // Edit-contact modal with in-progress changes
-  if (typeof isContactEditDirty === 'function' && isContactEditDirty()) return true;
   return false;
 }
 
