@@ -96,6 +96,30 @@ async function main() {
     process.exit(2);
   }
 
+  {
+    const bundleMtime = fs.statSync(bundlePath).mtimeMs;
+    const srcDir = path.resolve(__dirname, '..', '..', 'src', 'react');
+    let newestSrcMtime = 0;
+    const walkDir = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walkDir(full);
+        } else {
+          const mtime = fs.statSync(full).mtimeMs;
+          if (mtime > newestSrcMtime) newestSrcMtime = mtime;
+        }
+      }
+    };
+    walkDir(srcDir);
+    if (newestSrcMtime > bundleMtime) {
+      console.error(
+        '\n  ⚠ public/react/main.js is older than src/react/ source — run `npm run build:react`\n',
+      );
+      process.exit(2);
+    }
+  }
+
   const runId = Math.random().toString(36).slice(2, 8);
   console.log(`\n  react-admin-tabs smoke  run=${runId}`);
   console.log(`  Using ${hasTestDb ? 'DATABASE_URL_TEST (isolated)' : 'shared DATABASE_URL (PRIVTEST_ALLOW_SHARED_DB=1)'}`);
