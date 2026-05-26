@@ -100,6 +100,9 @@ import {
   HomePageSkeleton,
   ProfilePageSkeleton,
   AdminTeamPageSkeleton,
+  AdminPermissionsPageSkeleton,
+  AdminRequestsPageSkeleton,
+  AdminAuditLogPageSkeleton,
   AdminSettingsPageSkeleton,
   CardActionsPageSkeleton,
   ActionHandlersPageSkeleton,
@@ -1231,6 +1234,39 @@ export function DesignSystemPage() {
 
 <Suspense fallback={<AdminTeamPageSkeleton />}>
   <AdminTeamPage />
+</Suspense>`}
+          />
+
+          <ComponentShowcase
+            name="AdminPermissionsPageSkeleton"
+            description="Shape-matched skeleton for the Admin Permissions tab: manage job roles card with add-role form and role list rows, and permissions matrix card with feature rows and save button."
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><AdminPermissionsPageSkeleton forceVisible /></Box>}
+            code={`import { AdminPermissionsPageSkeleton } from '../components/PageLoadingSkeleton';
+
+<Suspense fallback={<AdminPermissionsPageSkeleton />}>
+  <AdminPermissionsPage />
+</Suspense>`}
+          />
+
+          <ComponentShowcase
+            name="AdminRequestsPageSkeleton"
+            description="Shape-matched skeleton for the Admin Requests tab: access requests card with table rows, photo approvals card, and trade submissions card."
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><AdminRequestsPageSkeleton forceVisible /></Box>}
+            code={`import { AdminRequestsPageSkeleton } from '../components/PageLoadingSkeleton';
+
+<Suspense fallback={<AdminRequestsPageSkeleton />}>
+  <AdminRequestsPage />
+</Suspense>`}
+          />
+
+          <ComponentShowcase
+            name="AdminAuditLogPageSkeleton"
+            description="Shape-matched skeleton for the Admin Audit Log tab: single card with heading, read-only chip, subtitle, and six audit entry rows."
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><AdminAuditLogPageSkeleton forceVisible /></Box>}
+            code={`import { AdminAuditLogPageSkeleton } from '../components/PageLoadingSkeleton';
+
+<Suspense fallback={<AdminAuditLogPageSkeleton />}>
+  <AdminAuditLogPage />
 </Suspense>`}
           />
 

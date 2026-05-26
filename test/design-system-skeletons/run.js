@@ -1,7 +1,7 @@
 'use strict';
 // test/design-system-skeletons/run.js
 //
-// End-to-end test that confirms all nine page skeletons are rendered in the
+// End-to-end test that confirms all twelve page skeletons are rendered in the
 // design system gallery (DesignSystemPage → Skeletons tab) when the page is
 // opened as an admin.
 //
@@ -17,9 +17,10 @@
 //   5. Click the MUI "Skeletons" tab within the design-system page.
 //   6. Assert that the ComponentShowcase entries for PageLoadingSkeleton,
 //      CustomersPageSkeleton, CalendarPageSkeleton, HomePageSkeleton,
-//      ProfilePageSkeleton, AdminTeamPageSkeleton, AdminSettingsPageSkeleton,
-//      CardActionsPageSkeleton, and ActionHandlersPageSkeleton each contain at
-//      least one .MuiSkeleton-root.
+//      ProfilePageSkeleton, AdminTeamPageSkeleton, AdminPermissionsPageSkeleton,
+//      AdminRequestsPageSkeleton, AdminAuditLogPageSkeleton,
+//      AdminSettingsPageSkeleton, CardActionsPageSkeleton, and
+//      ActionHandlersPageSkeleton each contain at least one .MuiSkeleton-root.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:design-system-skeletons
@@ -402,6 +403,39 @@ async function main() {
       adminTeamCount > 0,
     );
 
+    // ── AdminPermissionsPageSkeleton ──────────────────────────────────────
+    console.log('\n  [AdminPermissionsPageSkeleton]');
+
+    const adminPermissionsCount = await skeletonCountForComponent(page, 'AdminPermissionsPageSkeleton');
+    record(
+      'AdminPermissionsPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+      'count > 0 inside the AdminPermissionsPageSkeleton Paper wrapper',
+      `count=${adminPermissionsCount}`,
+      adminPermissionsCount > 0,
+    );
+
+    // ── AdminRequestsPageSkeleton ─────────────────────────────────────────
+    console.log('\n  [AdminRequestsPageSkeleton]');
+
+    const adminRequestsCount = await skeletonCountForComponent(page, 'AdminRequestsPageSkeleton');
+    record(
+      'AdminRequestsPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+      'count > 0 inside the AdminRequestsPageSkeleton Paper wrapper',
+      `count=${adminRequestsCount}`,
+      adminRequestsCount > 0,
+    );
+
+    // ── AdminAuditLogPageSkeleton ─────────────────────────────────────────
+    console.log('\n  [AdminAuditLogPageSkeleton]');
+
+    const adminAuditLogCount = await skeletonCountForComponent(page, 'AdminAuditLogPageSkeleton');
+    record(
+      'AdminAuditLogPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+      'count > 0 inside the AdminAuditLogPageSkeleton Paper wrapper',
+      `count=${adminAuditLogCount}`,
+      adminAuditLogCount > 0,
+    );
+
     // ── AdminSettingsPageSkeleton ─────────────────────────────────────────
     console.log('\n  [AdminSettingsPageSkeleton]');
 
@@ -497,6 +531,9 @@ async function writeReport(runId, findings) {
     '- **(HomePageSkeleton)** Same pattern for `HomePageSkeleton`.',
     '- **(ProfilePageSkeleton)** Same pattern for `ProfilePageSkeleton`.',
     '- **(AdminTeamPageSkeleton)** Same pattern for `AdminTeamPageSkeleton`.',
+    '- **(AdminPermissionsPageSkeleton)** Same pattern for `AdminPermissionsPageSkeleton`.',
+    '- **(AdminRequestsPageSkeleton)** Same pattern for `AdminRequestsPageSkeleton`.',
+    '- **(AdminAuditLogPageSkeleton)** Same pattern for `AdminAuditLogPageSkeleton`.',
     '- **(AdminSettingsPageSkeleton)** Same pattern for `AdminSettingsPageSkeleton`.',
     '- **(CardActionsPageSkeleton)** Same pattern for `CardActionsPageSkeleton`.',
     '- **(ActionHandlersPageSkeleton)** Same pattern for `ActionHandlersPageSkeleton`.',

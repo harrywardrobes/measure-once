@@ -334,8 +334,8 @@ export function AdminTeamPageSkeleton({ forceVisible }: { forceVisible?: boolean
  *   • "Permissions matrix" card — heading + table (feature column + 3 privilege columns)
  *     + save button row
  */
-export function AdminPermissionsPageSkeleton() {
-  const visible = useVisible();
+export function AdminPermissionsPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
   if (!visible) return null;
 
   return (
@@ -410,8 +410,8 @@ export function AdminPermissionsPageSkeleton() {
  *   • "Photo approvals" card — heading
  *   • "Trade submissions" card — heading
  */
-export function AdminRequestsPageSkeleton() {
-  const visible = useVisible();
+export function AdminRequestsPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
   if (!visible) return null;
 
   return (
@@ -470,8 +470,8 @@ export function AdminRequestsPageSkeleton() {
  *   • Single card — heading + "read-only" chip + subtitle
  *   • 6 audit entry rows (date label + action chip + label text + meta caption)
  */
-export function AdminAuditLogPageSkeleton() {
-  const visible = useVisible();
+export function AdminAuditLogPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
   if (!visible) return null;
 
   return (
