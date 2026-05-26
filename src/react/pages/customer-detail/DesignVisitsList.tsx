@@ -59,16 +59,22 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
     }
   }, [isAdmin, onRefresh]);
 
-  const handleDelete = useCallback(async (id: number) => {
+  const handleDelete = useCallback((id: number) => {
     if (!isAdmin) return;
-    if (!window.confirm('Delete this design visit? This cannot be undone.')) return;
-    try {
-      const r = await fetch(`/api/design-visits/${id}`, { method: 'DELETE' });
-      if (!r.ok) throw new Error(`${r.status}`);
-      onRefresh();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'error';
-      setActionError(`Could not delete: ${msg}`);
+    const doDelete = async () => {
+      try {
+        const r = await fetch(`/api/design-visits/${id}`, { method: 'DELETE' });
+        if (!r.ok) throw new Error(`${r.status}`);
+        onRefresh();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'error';
+        setActionError(`Could not delete: ${msg}`);
+      }
+    };
+    if (typeof window.showBottomConfirm === 'function') {
+      window.showBottomConfirm('Delete this design visit? This cannot be undone.', doDelete);
+    } else {
+      if (window.confirm('Delete this design visit? This cannot be undone.')) void doDelete();
     }
   }, [isAdmin, onRefresh]);
 
