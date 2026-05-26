@@ -68,6 +68,8 @@ const StandaloneInvoicesPage = React.lazy(() => import('./pages/StandaloneInvoic
 const ProjectsPage           = React.lazy(() => import('./pages/ProjectsPage').then(m => ({ default: m.ProjectsPage })));
 const DatabaseAdminPage          = React.lazy(() => import('./pages/admin/DatabaseAdminPage').then(m => ({ default: m.DatabaseAdminPage })));
 const DesignVisitSignOffPage     = React.lazy(() => import('./pages/DesignVisitSignOffPage').then(m => ({ default: m.DesignVisitSignOffPage })));
+const NotFoundPage               = React.lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
+const AccessRestrictedPage       = React.lazy(() => import('./pages/AccessRestrictedPage').then(m => ({ default: m.AccessRestrictedPage })));
 
 /**
  * Every React mount goes through `AppThemeProvider` so the shared MUI
@@ -148,6 +150,8 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'projects-view',          render: () => <ProjectsPage /> },
   { id: 'db-page-mount',              render: () => <DatabaseAdminPage /> },
   { id: 'dv-signoff-mount',           render: () => <DesignVisitSignOffPage /> },
+  { id: 'not-found-root',             render: () => <NotFoundPage /> },
+  { id: 'access-restricted-root',     render: () => <AccessRestrictedPage /> },
 ];
 
 function mountKnown(): number {

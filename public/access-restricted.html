@@ -11,74 +11,12 @@
   <link rel="stylesheet" href="/tailwind.css">
   <link rel="stylesheet" href="/tokens.css">
   <link rel="stylesheet" href="/app-styles.css">
-  <style>
-    body {
-      background: #f5f4f1; color: #1c1917;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-    .restricted-wrap {
-      display: flex;
-      flex: 1;
-      min-height: 100vh;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-    .restricted-card {
-      background: #fff;
-      border: 2px solid #d6d3d1;
-      border-radius: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,.06);
-      padding: 36px;
-      max-width: 440px;
-      width: 100%;
-      text-align: center;
-    }
-    .logo-wrap { text-align: center; margin-bottom: 28px; }
-    .logo-wrap img { max-width: 180px; width: 100%; height: auto; display: inline-block; }
-    .restricted-title {
-      font-size: 1.4rem;
-      font-weight: 700;
-      color: #0f0f0e;
-      letter-spacing: -.01em;
-      margin: 0 0 10px;
-    }
-    .restricted-body {
-      color: #44403c;
-      font-size: .95rem;
-      line-height: 1.5;
-      margin: 0 0 28px;
-    }
-    .restricted-home-btn {
-      display: inline-block;
-      background: #3d0f7a;
-      color: #fff;
-      text-decoration: none;
-      padding: 14px 28px;
-      border-radius: 8px;
-      font-weight: 700;
-      font-size: 1rem;
-      letter-spacing: .02em;
-      transition: background .15s ease;
-    }
-    .restricted-home-btn:hover { background: #5a1fad; }
-  </style>
 </head>
 <body>
 
   <div id="tab-restricted" class="app-body">
-    <div class="restricted-wrap" id="main-content">
-      <div class="restricted-card">
-        <div class="logo-wrap">
-          <img src="/harry-wardrobes-logo.png" alt="Harry Wardrobes">
-        </div>
-        <h1 class="restricted-title">Access restricted</h1>
-        <p class="restricted-body">
-          This page is only available to managers and admins.<br>
-          Contact your admin if you think you should have access.
-        </p>
-        <a href="/" class="restricted-home-btn">Back to home</a>
-      </div>
+    <div id="main-content">
+      <div id="access-restricted-root"></div>
     </div>
   </div>
 
