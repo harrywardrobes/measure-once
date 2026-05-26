@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert, Box, Button, Card, CardContent, Chip, FormControl, IconButton,
+  Alert, Box, Button, Card, CardContent, Chip, Divider, FormControl, IconButton,
   MenuItem, Select, Skeleton, Stack, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
@@ -147,10 +147,12 @@ export function AdminPermissionsPage() {
 
   const levels = caps.levels.length ? caps.levels : [...PRIVILEGE_LEVELS];
 
-  const defaultNavKeys = navConfigs['__default__'] || ['home', 'calendar', 'trades'];
+  const FALLBACK_NAV_KEYS = ['home', 'calendar', 'trades'];
+  const defaultNavKeys = navConfigs['__default__'] || FALLBACK_NAV_KEYS;
   const editingNavKeys = navEditTarget
     ? (navConfigs[navEditTarget] || defaultNavKeys)
     : defaultNavKeys;
+  const dialogDefaultKeys = navEditTarget === '__default__' ? FALLBACK_NAV_KEYS : defaultNavKeys;
 
   return (
     <Stack spacing={3}>
@@ -224,6 +226,34 @@ export function AdminPermissionsPage() {
             )}
           </Box>
 
+          {!loading && (
+            <>
+              <Divider sx={{ my: 1.5 }} />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                The row below is the fallback layout used for any user whose job role is not listed above (or who has no job role set).
+              </Typography>
+              <Stack direction="row" spacing={1.5}
+                sx={{ p: 1, border: 1, borderColor: 'divider', borderRadius: 1, flexWrap: 'wrap', gap: 1, alignItems: 'center', bgcolor: 'action.hover' }}>
+                <Typography variant="body2" sx={{ flex: 1, fontWeight: 600, minWidth: 100, fontStyle: 'italic' }}>
+                  Default (all other roles)
+                </Typography>
+                <Stack direction="row" spacing={0.5} sx={{ flex: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {defaultNavKeys.map(k => {
+                    const item = NAV.find(n => n.key === k);
+                    return item ? (
+                      <Chip key={k} label={item.label} size="small" variant="outlined" />
+                    ) : null;
+                  })}
+                  <Tooltip title="Edit default navigation layout">
+                    <IconButton size="small" onClick={() => setNavEditTarget('__default__')}>
+                      <TuneIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+              </Stack>
+            </>
+          )}
+
           <Alert severity="info" variant="outlined" sx={{ mt: 2 }}>
             The navigation chips show which tabs appear in the bottom bar for each role.
             Click the <strong>tune icon</strong> to change a role's primary tabs. Changes take effect the next time users with that role load the app.
@@ -237,7 +267,7 @@ export function AdminPermissionsPage() {
         onClose={() => setNavEditTarget(null)}
         availableItems={NAV.filter(n => !n.adminOnly)}
         currentKeys={editingNavKeys}
-        defaultKeys={defaultNavKeys}
+        defaultKeys={dialogDefaultKeys}
         onSave={(keys) => {
           if (navEditTarget) saveNavConfig(navEditTarget, keys);
           setNavEditTarget(null);
