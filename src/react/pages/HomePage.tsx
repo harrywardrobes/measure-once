@@ -308,11 +308,11 @@ function CalendarSection({
           icon={<WarningAmberIcon fontSize="inherit" />}
           action={
             authError ? (
-              <Button size="small" href="/profile">
+              <Button size="small" color="inherit" href="/profile">
                 Reconnect
               </Button>
             ) : (
-              <Button size="small" startIcon={<RefreshIcon />} onClick={onRetry}>
+              <Button size="small" color="inherit" startIcon={<RefreshIcon />} onClick={onRetry}>
                 Retry
               </Button>
             )
@@ -337,7 +337,7 @@ function CalendarSection({
         <Alert
           severity="info"
           action={
-            <Button size="small" href="/profile">
+            <Button size="small" color="inherit" href="/profile">
               Connect
             </Button>
           }
@@ -418,7 +418,7 @@ function InvoicesSection({
           severity="error"
           icon={<WarningAmberIcon fontSize="inherit" />}
           action={
-            <Button size="small" startIcon={<RefreshIcon />} onClick={onRetry}>
+            <Button size="small" color="inherit" startIcon={<RefreshIcon />} onClick={onRetry}>
               Retry
             </Button>
           }

@@ -953,6 +953,32 @@ export function DesignSystemPage() {
 <Alert severity="error">Could not load contacts.</Alert>`}
           />
           <ComponentShowcase
+            name="Alert with action"
+            description={`When an Alert includes an action button, always pass \`color="inherit"\` so the button text matches the alert's severity colour instead of falling back to primary blue.`}
+            demo={
+              <Stack spacing={1} sx={{ width: '100%' }}>
+                <Alert
+                  severity="error"
+                  action={<Button size="small" color="inherit" onClick={() => {}}>Retry</Button>}
+                >
+                  Could not load contacts.
+                </Alert>
+                <Alert
+                  severity="warning"
+                  action={<Button size="small" color="inherit" onClick={() => {}}>Dismiss</Button>}
+                >
+                  No HubSpot token configured.
+                </Alert>
+              </Stack>
+            }
+            code={`<Alert
+  severity="error"
+  action={<Button size="small" color="inherit" onClick={handleRetry}>Retry</Button>}
+>
+  Could not load contacts.
+</Alert>`}
+          />
+          <ComponentShowcase
             name="Dialog"
             description="Modal for confirmations and short forms. Pair with `DialogActions` for primary/secondary buttons."
             demo={<DialogDemo />}

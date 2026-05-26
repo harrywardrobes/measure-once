@@ -134,7 +134,7 @@ export function ProfilePage(): React.ReactElement {
       <Box sx={{ maxWidth: 720, mx: 'auto', px: 2, py: 3 }}>
         <Alert
           severity="error"
-          action={<Button size="small" onClick={() => setReloadNonce((n) => n + 1)}>Retry</Button>}
+          action={<Button size="small" color="inherit" onClick={() => setReloadNonce((n) => n + 1)}>Retry</Button>}
         >
           Failed to load profile.
         </Alert>
