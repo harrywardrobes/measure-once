@@ -41,6 +41,7 @@ function useTurnstile() {
         sitekey: key,
         theme: 'light',
         appearance: 'always',
+        size: 'flexible',
         callback: () => {
           setTokens((p) => ({ ...p, [name]: tw.getResponse(id) || '' }));
           setErrors((p) => ({ ...p, [name]: false }));
@@ -98,7 +99,7 @@ function useTurnstile() {
     return () => window.removeEventListener('pageshow', handlePageShow as EventListener);
   }, [handlePageShow]);
 
-  return { siteKey, getToken, hasError, resetWidget };
+  return { siteKey, getToken, hasError, resetWidget, renderWidgets };
 }
 
 function AuthCard({ children, maxWidth = 440, elevated = false }: {
@@ -171,7 +172,11 @@ export function LoginPage() {
   const [reqMsg, setReqMsg] = React.useState<{ text: string; ok: boolean } | null>(null);
   const [reqBusy, setReqBusy] = React.useState(false);
 
-  const { siteKey, getToken, hasError, resetWidget } = useTurnstile();
+  const { siteKey, getToken, hasError, resetWidget, renderWidgets } = useTurnstile();
+
+  React.useEffect(() => {
+    renderWidgets();
+  }, [view, renderWidgets]);
 
   function switchView(next: View) {
     if (next === 'login') {
