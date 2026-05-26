@@ -710,18 +710,29 @@ async function main() {
 
       if (pickerOpen) {
         // Assert sub-status rows are present and appear after their parent row.
+        // Scope sub-status detection to rows immediately after KEY_A's parent
+        // so real statuses in a shared DB don't shift the global index.
         const subRows = await detailTab.evaluate((key) => {
           const popup = document.getElementById('card-picker-popup');
           if (!popup) return { subCount: 0, parentIdx: -1, firstSubIdx: -1, subLabels: [] };
-          const opts       = Array.from(popup.querySelectorAll('.card-picker-opt'));
-          const parentIdx  = opts.findIndex(o => o.dataset.leadStatus === key);
-          const subOpts    = opts.filter(o => o.classList.contains('card-picker-opt--sub'));
-          const firstSubIdx = opts.findIndex(o => o.classList.contains('card-picker-opt--sub'));
+          const opts      = Array.from(popup.querySelectorAll('.card-picker-opt'));
+          const parentIdx = opts.findIndex(o => o.dataset.leadStatus === key);
+          // Collect sub-status rows that belong to KEY_A — they appear directly
+          // after the parent and before the next non-sub option.
+          const ownSubOpts = [];
+          let firstSubIdx  = -1;
+          if (parentIdx !== -1) {
+            for (let i = parentIdx + 1; i < opts.length; i++) {
+              if (!opts[i].classList.contains('card-picker-opt--sub')) break;
+              ownSubOpts.push(opts[i]);
+              if (firstSubIdx === -1) firstSubIdx = i;
+            }
+          }
           return {
-            subCount:     subOpts.length,
+            subCount:  ownSubOpts.length,
             parentIdx,
             firstSubIdx,
-            subLabels:    subOpts.map(o => o.textContent.trim()),
+            subLabels: ownSubOpts.map(o => o.textContent.trim()),
           };
         }, KEY_A);
 
@@ -744,15 +755,25 @@ async function main() {
 
         patchedBodies.length = 0;
 
-        // Capture the label of the first sub-status row before clicking so
+        // Capture the label of KEY_A's first sub-status row before clicking so
         // probe E can verify the pill reflects that exact label.
-        const clickedSubLabel = await detailTab.evaluate(() => {
-          const sub = document.querySelector('#card-picker-popup .card-picker-opt--sub');
-          if (!sub) return '';
-          const label = sub.textContent.trim();
-          sub.click();
-          return label;
-        });
+        // Scope to KEY_A's own sub-statuses (immediately after the parent row)
+        // to avoid clicking a sub-status belonging to a different real status.
+        const clickedSubLabel = await detailTab.evaluate((key) => {
+          const popup = document.getElementById('card-picker-popup');
+          if (!popup) return '';
+          const opts      = Array.from(popup.querySelectorAll('.card-picker-opt'));
+          const parentIdx = opts.findIndex(o => o.dataset.leadStatus === key);
+          if (parentIdx === -1) return '';
+          for (let i = parentIdx + 1; i < opts.length; i++) {
+            const o = opts[i];
+            if (!o.classList.contains('card-picker-opt--sub')) break;
+            const label = o.textContent.trim();
+            o.click();
+            return label;
+          }
+          return '';
+        }, KEY_A);
 
         // Allow the async PATCH (intercepted above) to fire.
         await new Promise(r => setTimeout(r, 1500));
