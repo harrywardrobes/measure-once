@@ -990,17 +990,6 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
 
     let contacts = rawContacts;
 
-    // Dev-only filter: hide contacts without hw_test_user = true in non-production,
-    // unless the global dev-filter toggle has been turned off by an admin.
-    // Admins may also pass ?all=1 to bypass (e.g. for the test-user management UI).
-    if (process.env.NODE_ENV !== 'production') {
-      const bypassForAdmin = req.query.all === '1' && getReqPrivilege(req) === 'admin';
-      const devFilterOn = await getDevFilterEnabled();
-      if (!bypassForAdmin && devFilterOn) {
-        contacts = contacts.filter(c => c.properties?.hw_test_user === 'true');
-      }
-    }
-
     if (leadStatus) {
       if (leadStatus === '__no_status__') {
         contacts = contacts.filter(c => !c.properties?.hs_lead_status);
@@ -1087,7 +1076,7 @@ function _invalidateLeadStatusCountsCache() {
 
 // ── Open-Leads in-memory cache (single-flight + 60 s TTL) ────────────────────
 // Mirrors the lead-status-counts cache pattern. Invalidated on any
-// hs_lead_status mutation or dev-filter toggle.
+// hs_lead_status mutation.
 const OPEN_LEADS_TTL_MS = 60_000;
 let _openLeadsCache    = null; // { results, total, fetchedAt }
 let _openLeadsInFlight = null;
@@ -1101,12 +1090,6 @@ async function _fetchLeadStatusCounts() {
   );
   const keys = statusRows.map(r => r.key);
 
-  // In dev mode, counts are scoped to hw_test_user contacts only so the
-  // filter-dropdown numbers stay consistent with what the contacts list shows.
-  // This is skipped when the global dev-filter toggle is OFF.
-  const devCountFilter = (process.env.NODE_ENV !== 'production' && await getDevFilterEnabled())
-    ? [{ propertyName: 'hw_test_user', operator: 'EQ', value: 'true' }]
-    : [];
 
   // Serialized searches — one at a time with a small inter-request pause so the
   // N+1 fan-out never bursts beyond HubSpot's 10 req/s limit. Using Promise.all
@@ -1116,8 +1099,8 @@ async function _fetchLeadStatusCounts() {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   const searchConfigs = [
-    { key: '__no_status__', body: { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'NOT_HAS_PROPERTY' }, ...devCountFilter] }], limit: 1 } },
-    ...keys.map(key => ({ key, body: { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: key }, ...devCountFilter] }], limit: 1 } })),
+    { key: '__no_status__', body: { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'NOT_HAS_PROPERTY' }] }], limit: 1 } },
+    ...keys.map(key => ({ key, body: { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: key }] }], limit: 1 } })),
   ];
 
   const entries = [];
@@ -1223,17 +1206,11 @@ app.get('/api/open-leads', async (req, res) => {
       try {
         const allResults = [];
         let after = undefined;
-        // In dev mode every listing endpoint is narrowed to hw_test_user contacts.
-        // This is skipped when the global dev-filter toggle is OFF.
-        const devFilters = (process.env.NODE_ENV !== 'production' && await getDevFilterEnabled())
-          ? [{ propertyName: 'hw_test_user', operator: 'EQ', value: 'true' }]
-          : [];
         do {
           const body = {
             filterGroups: [{
               filters: [
                 { propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' },
-                ...devFilters,
               ]
             }],
             properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
@@ -4299,123 +4276,6 @@ app.get('/api/admin/hubspot/dev-mode', isAuthenticated, requireAdmin, (req, res)
   res.json({ devMode: process.env.NODE_ENV !== 'production' });
 });
 
-// ── App settings table ────────────────────────────────────────────────────────
-// Generic key/value store for persistent server settings.
-async function ensureAppSettingsTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS app_settings (
-      key        TEXT PRIMARY KEY,
-      value      TEXT NOT NULL,
-      updated_at TIMESTAMP DEFAULT NOW()
-    )
-  `);
-  // Seed dev_filter_enabled = true so existing behaviour is preserved on upgrade.
-  await pool.query(
-    `INSERT INTO app_settings (key, value) VALUES ('dev_filter_enabled', 'true') ON CONFLICT (key) DO NOTHING`
-  );
-}
-
-// In-memory cache for dev_filter_enabled so the three filter sites don't each
-// hit the DB on every request.  Invalidated on PATCH.
-let _devFilterEnabledCache = null; // true | false | null (uncached)
-
-async function getDevFilterEnabled() {
-  if (process.env.NODE_ENV === 'production') return false;
-  if (_devFilterEnabledCache !== null) return _devFilterEnabledCache;
-  try {
-    const { rows } = await pool.query(`SELECT value FROM app_settings WHERE key = 'dev_filter_enabled'`);
-    _devFilterEnabledCache = rows.length > 0 ? rows[0].value === 'true' : true;
-  } catch {
-    _devFilterEnabledCache = true; // safe default
-  }
-  return _devFilterEnabledCache;
-}
-
-// ── Dev-only: get/set the global dev filter toggle ────────────────────────────
-app.get('/api/admin/hubspot/dev-filter', isAuthenticated, requireAdmin, async (req, res) => {
-  if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'Not found' });
-  try {
-    const enabled = await getDevFilterEnabled();
-    res.json({ enabled });
-  } catch (e) {
-    res.status(500).json({ error: 'Could not read dev filter setting.' });
-  }
-});
-
-app.patch('/api/admin/hubspot/dev-filter', isAuthenticated, requireAdmin, async (req, res) => {
-  if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'Not found' });
-  const { enabled } = req.body || {};
-  if (typeof enabled !== 'boolean') return res.status(400).json({ error: '`enabled` must be a boolean.' });
-  try {
-    await pool.query(
-      `INSERT INTO app_settings (key, value, updated_at) VALUES ('dev_filter_enabled', $1, NOW())
-       ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
-      [enabled ? 'true' : 'false']
-    );
-    _devFilterEnabledCache = enabled;
-    // Bust the contacts & lead-status-counts caches so the next request reflects
-    // the new filter setting immediately.
-    bustSharedCache();
-    _invalidateLeadStatusCountsCache();
-    _invalidateOpenLeadsCache();
-    res.json({ ok: true, enabled });
-  } catch (e) {
-    console.error('PATCH /api/admin/hubspot/dev-filter error:', e.message);
-    res.status(500).json({ error: 'Could not save dev filter setting.' });
-  }
-});
-
-// ── Dev-only: backfill hw_test_user = false on contacts that have no value ────
-app.post('/api/admin/hubspot/backfill-test-user-defaults',
-  isAuthenticated,
-  requireAdmin,
-  (req, res, next) => {
-    if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'Not found' });
-    next();
-  },
-  requireHubspotToken,
-  async (req, res) => {
-    try {
-      // Page through all contacts that have no hw_test_user value.
-      let after;
-      let patched = 0;
-      do {
-        const body = {
-          filterGroups: [{ filters: [{ propertyName: 'hw_test_user', operator: 'NOT_HAS_PROPERTY' }] }],
-          properties: ['id'],
-          limit: 100,
-        };
-        if (after) body.after = after;
-        const r = await axios.post(
-          `${HS}/crm/v3/objects/contacts/search`,
-          body,
-          { headers: hsHeaders() }
-        );
-        const results = r.data.results || [];
-        if (results.length) {
-          // Batch-update in groups of 100 (HubSpot batch limit).
-          await axios.post(
-            `${HS}/crm/v3/objects/contacts/batch/update`,
-            { inputs: results.map(c => ({ id: c.id, properties: { hw_test_user: false } })) },
-            { headers: hsHeaders() }
-          );
-          patched += results.length;
-        }
-        after = r.data.paging?.next?.after;
-      } while (after);
-
-      bustSharedCache();
-      res.json({ ok: true, patched });
-    } catch (e) {
-      const status = e.response?.status;
-      if (status === 401 || status === 403) return res.status(502).json({ error: 'HubSpot auth error.' });
-      if (status === 429) return res.status(502).json({ error: 'HubSpot rate limit — try again shortly.' });
-      console.error('POST /api/admin/hubspot/backfill-test-user-defaults error:', e.message);
-      res.status(502).json({ error: e.message || 'Backfill failed.' });
-    }
-  }
-);
-
 // ── Dev-only: seed the shared contacts cache for automated tests ──────────────
 // Accepts a JSON array of synthetic contact objects and injects them directly
 // into _allContactsCache so filter-behaviour tests can run without a real
@@ -4471,52 +4331,6 @@ app.post('/api/admin/test/reset-lead-status-counts-cooldown', isAuthenticated, r
   }
   _leadStatusCountsCooldownUntil = 0;
   res.json({ ok: true });
-});
-
-// ── Admin: toggle HW_test_user on a contact ───────────────────────────────────
-// The production guard runs as a middleware *before* requireHubspotToken so
-// the 404 is returned even when HUBSPOT_TOKEN is absent.
-app.patch('/api/admin/hubspot/test-users/:contactId',
-  isAuthenticated,
-  requireAdmin,
-  (req, res, next) => {
-    if (process.env.NODE_ENV === 'production') {
-      return res.status(404).json({ error: 'Not found' });
-    }
-    next();
-  },
-  requireHubspotToken,
-  async (req, res) => {
-
-  const contactId = String(req.params.contactId || '');
-  if (!/^\d+$/.test(contactId)) {
-    return res.status(400).json({ error: 'Invalid contact id.' });
-  }
-
-  const { enabled } = req.body;
-  if (typeof enabled !== 'boolean') {
-    return res.status(400).json({ error: '`enabled` must be a boolean.' });
-  }
-
-  try {
-    await axios.patch(
-      `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
-      { properties: { hw_test_user: enabled } },
-      { headers: hsHeaders() }
-    );
-    bustSharedCache();
-    res.json({ ok: true });
-  } catch (e) {
-    const status = e.response?.status;
-    if (status === 404) return res.status(404).json({ error: 'Contact not found in HubSpot.' });
-    if (status === 401 || status === 403) {
-      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
-    }
-    if (status === 429) {
-      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
-    }
-    res.status(502).json({ error: e.response?.data?.message || e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
-  }
 });
 
 async function ensureHwLeadSubstatusProperty() {
@@ -5633,8 +5447,6 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Search settings table setup failed:', e.message); }
     try { await ensureWorkshopSettingsTable(); console.log('  Workshop settings table ready'); }
     catch (e) { console.error('  Workshop settings table setup failed:', e.message); }
-    try { await ensureAppSettingsTable(); console.log('  App settings table ready'); }
-    catch (e) { console.error('  App settings table setup failed:', e.message); }
     try { await ensureWhatsAppMessagesTable(); console.log('  WhatsApp messages table ready'); }
     catch (e) { console.error('  WhatsApp messages table setup failed:', e.message); }
     try { await ensureDesignVisitTables(); console.log('  Design visit tables ready'); }

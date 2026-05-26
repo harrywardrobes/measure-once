@@ -210,12 +210,9 @@ const ROUTES = [
   { method: 'GET',    path: '/api/admin/card-action-handlers/conflicts',       level: 'admin' },
   // Dev-only admin endpoints (return 404 when NODE_ENV=production). The
   // requireAdmin gate runs first, so non-admin actors still get 403; admins
-  // hit the handler. seed-contacts-cache with an empty body 400s; the
-  // test-users PATCH falls through to requireHubspotToken (the harness strips
-  // HUBSPOT_TOKEN, hence needsHubspot to accept the 503).
+  // hit the handler. seed-contacts-cache with an empty body 400s.
   { method: 'POST',   path: '/api/admin/test/seed-contacts-cache',             level: 'admin', body: {} },
   { method: 'POST',   path: '/api/admin/test/bust-contacts-cache',             level: 'admin', body: {} },
-  { method: 'PATCH',  path: '/api/admin/hubspot/test-users/0',                 level: 'admin', body: { enabled: true }, needsHubspot: true },
   { method: 'POST',   path: '/api/admin/card-action-handlers',                 level: 'admin', body: { name: '__noop__', type: 'summarise_phone_call' } },
   { method: 'PATCH',  path: '/api/admin/card-action-handlers/0',               level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/card-action-handlers/0',               level: 'admin' },
@@ -225,7 +222,6 @@ const ROUTES = [
   { method: 'GET',    path: '/api/admin/lead-statuses',                        level: 'admin' },
   { method: 'GET',    path: '/api/admin/stage-action-labels',                  level: 'admin' },
   { method: 'GET',    path: '/api/admin/hubspot/dev-mode',                     level: 'admin' },
-  { method: 'GET',    path: '/api/admin/hubspot/dev-filter',                   level: 'admin' },
   { method: 'GET',    path: '/api/admin/lead-substatuses',                     level: 'admin' },
   { method: 'GET',    path: '/api/admin/workshop-settings',                    level: 'admin' },
   { method: 'PATCH',  path: '/api/admin/workshop-settings',                    level: 'admin', body: {} },
@@ -240,8 +236,6 @@ const ROUTES = [
   { method: 'DELETE', path: '/api/admin/lead-statuses/__noop__',               level: 'admin' },
   { method: 'PUT',    path: '/api/admin/stage-action-labels',                  level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/stage-action-labels/__noop__/__noop__', level: 'admin' },
-  { method: 'PATCH',  path: '/api/admin/hubspot/dev-filter',                   level: 'admin', body: {} },
-  { method: 'POST',   path: '/api/admin/hubspot/backfill-test-user-defaults',  level: 'admin', body: {}, needsHubspot: true },
   { method: 'POST',   path: '/api/admin/lead-substatuses',                     level: 'admin', body: {} },
   { method: 'PATCH',  path: '/api/admin/lead-substatuses/0',                   level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/pending-count',                        level: 'admin' },
