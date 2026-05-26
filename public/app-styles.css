@@ -148,7 +148,7 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
   display: flex;
   position: fixed;
   top: var(--header-h);
-  bottom: calc(60px + env(safe-area-inset-bottom));
+  bottom: var(--nav-h);
   left: 0; right: 0;
 }
 body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h)); }
@@ -1445,7 +1445,7 @@ body.showing-workflow .workflow-panel { display: flex; }
 .home-tab {
   position: fixed;
   top: var(--header-h);
-  bottom: calc(60px + env(safe-area-inset-bottom));
+  bottom: var(--nav-h);
   left: 0; right: 0;
   overflow-y: auto;
   background: var(--paper);
@@ -1526,7 +1526,7 @@ body.showing-workflow .workflow-panel { display: flex; }
 .tasks-tab {
   position: fixed;
   top: var(--header-h);
-  bottom: calc(60px + env(safe-area-inset-bottom));
+  bottom: var(--nav-h);
   left: 0; right: 0;
   overflow-y: auto;
   background: var(--paper);
