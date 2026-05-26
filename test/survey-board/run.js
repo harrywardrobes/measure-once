@@ -757,6 +757,108 @@ async function main() {
       }
     }
 
+    // ── (G) Snackbar visibility pause (tab-hide) ──────────────────────────────
+    // Probe G: dispatch the survey-board-bg-refresh-failed event to trigger the
+    // warning Snackbar, then simulate the document going hidden.  The MUI
+    // Snackbar must still be visible after the 8 s autoHideDuration has elapsed
+    // (proving the timer was paused), then auto-dismiss once the tab returns to
+    // the foreground.
+    console.log('\n  [G] Snackbar visibility pause');
+    {
+      let page;
+      try {
+        const opened = await openBoardPage(browser, adminClient.cookie, 'sv-test-001');
+        page = opened.page;
+
+        if (!opened.mounted) {
+          record('(G.1) Snackbar probe — board mounted', 'mounted', 'timed out', false);
+          record('(G.2) Snackbar paused while tab hidden (>8 s)', 'skipped', 'board not mounted', false);
+          record('(G.3) Snackbar dismisses after tab returns visible', 'skipped', 'board not mounted', false);
+        } else {
+          // Dispatch the refresh-failure event directly — mirrors what survey.html
+          // does when loadAllContacts() or loadWorkflowStages() throws inside the
+          // localdata-updated handler.
+          await page.evaluate(() => {
+            document.dispatchEvent(new CustomEvent('survey-board-bg-refresh-failed'));
+          });
+
+          // Step 1: Snackbar must appear.
+          const snackbarAppeared = await pollPage(page, () => {
+            const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+            return alerts.some(el =>
+              (el.textContent || '').includes("Couldn't refresh live data")
+            ) ? 'visible' : null;
+          }, null, 8000);
+
+          if (snackbarAppeared !== 'visible') {
+            record('(G.1) "Couldn\'t refresh live data" Snackbar appears', 'visible', `snackbar=${snackbarAppeared}`, false);
+            record('(G.2) Snackbar paused while tab hidden (>8 s)', 'skipped', 'snackbar never appeared', false);
+            record('(G.3) Snackbar dismisses after tab returns visible', 'skipped', 'snackbar never appeared', false);
+          } else {
+            record('(G.1) "Couldn\'t refresh live data" Snackbar appears', 'visible', 'visible', true);
+
+            // Step 2: Simulate the tab going hidden.
+            await page.evaluate(() => {
+              Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+              Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+              document.dispatchEvent(new Event('visibilitychange'));
+            });
+
+            // Step 3: Wait 9.5 s (> 8 s autoHideDuration). If the pause were
+            // broken the Snackbar would have dismissed by now.
+            await new Promise(r => setTimeout(r, 9500));
+
+            const stillVisible = await page.evaluate(() => {
+              const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+              return alerts.some(el =>
+                (el.textContent || '').includes("Couldn't refresh live data")
+              );
+            }).catch(() => false);
+
+            record(
+              '(G.2) Snackbar paused while tab hidden (>8 s)',
+              'still visible (timer paused)',
+              stillVisible ? 'still visible — timer paused (good)' : 'already dismissed — timer NOT paused (bad)',
+              stillVisible,
+            );
+
+            // Step 4: Restore the tab to visible.
+            await page.evaluate(() => {
+              Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+              Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+              document.dispatchEvent(new Event('visibilitychange'));
+            });
+
+            // Step 5: Snackbar must now auto-dismiss (8 s timer restarts).
+            // Allow up to 12 s (8 s autoHide + animation buffer).
+            const dismissDeadline = Date.now() + 12000;
+            let gone = false;
+            while (Date.now() < dismissDeadline) {
+              const still = await page.evaluate(() => {
+                const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+                return alerts.some(el =>
+                  (el.textContent || '').includes("Couldn't refresh live data")
+                );
+              }).catch(() => true);
+              if (!still) { gone = true; break; }
+              await new Promise(r => setTimeout(r, 100));
+            }
+
+            record(
+              '(G.3) Snackbar dismisses after tab returns visible',
+              'dismissed within 12 s of tab-show',
+              gone ? 'dismissed (good)' : 'still visible after 12 s (bad)',
+              gone,
+            );
+          }
+        }
+      } catch (e) {
+        record('(G) Snackbar visibility pause', 'no error', `error: ${e.message}`, false, e.stack || '');
+      } finally {
+        if (page) await page.close().catch(() => {});
+      }
+    }
+
   } finally {
     if (browser) await browser.close().catch(() => {});
   }
@@ -805,6 +907,10 @@ async function writeReport(findings) {
     '- **(D)** Card body click navigates to `/customers/:id`',
     '- **(E)** Substage filter: Filter button opens the MUI Popover; unchecking',
     '  "Bad Timing" hides matching cards; re-checking restores them',
+    '- **(G)** Snackbar visibility pause: dispatching `survey-board-bg-refresh-failed`',
+    '  shows the warning Snackbar; simulating tab-hide proves the MUI',
+    '  autoHideDuration timer is paused (Snackbar still visible after 9.5 s > 8 s),',
+    '  then auto-dismisses once the tab returns to the foreground.',
     '',
     '## React mount timing',
     '',
@@ -818,7 +924,8 @@ async function writeReport(findings) {
     '',
     '- `src/react/pages/SurveyBoardPage.tsx` — React component under test',
     '- `public/survey.html` — page that mounts the component and dispatches',
-    '  `survey-board-data-ready` after data load',
+    '  `survey-board-data-ready` after data load, and `survey-board-bg-refresh-failed`',
+    '  when the background refresh throws',
   ];
   const outPath = path.join(dir, 'survey-board.md');
   fs.writeFileSync(outPath, lines.join('\n'));

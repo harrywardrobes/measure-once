@@ -42,9 +42,13 @@
     });
     // Reload contacts and workflow on background data changes, then notify React.
     document.addEventListener('localdata-updated', async () => {
-      await Promise.all([loadAllContacts(), loadWorkflowStages()]);
-      state.filteredContacts = [...state.contacts];
-      document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
+      try {
+        await Promise.all([loadAllContacts(), loadWorkflowStages()]);
+        state.filteredContacts = [...state.contacts];
+        document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
+      } catch (_err) {
+        document.dispatchEvent(new CustomEvent('survey-board-bg-refresh-failed'));
+      }
     });
   </script>
   <script>

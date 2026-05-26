@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Card,
   Checkbox,
   FormControlLabel,
   Popover,
+  Snackbar,
   Typography,
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
@@ -714,6 +716,27 @@ export function SurveyBoardPage() {
     return () => document.removeEventListener(DATA_READY_EVENT, onReady);
   }, [forceUpdate]);
 
+  // Retry-failure Snackbar with Page Visibility pause — mirrors the pattern
+  // in SalesBoardPage.tsx.  autoHideDuration is set to null while the document
+  // is hidden so the MUI timer is paused; restored to 8 s on tab focus.
+  const [bgRefreshFailed, setBgRefreshFailed] = useState(false);
+  const [snackbarHideDuration, setSnackbarHideDuration] = useState<number | null>(8000);
+  const bgRefreshFailedRef = useRef(false);
+  useEffect(() => { bgRefreshFailedRef.current = bgRefreshFailed; }, [bgRefreshFailed]);
+  useEffect(() => {
+    const onVis = () => {
+      if (!bgRefreshFailedRef.current) return;
+      setSnackbarHideDuration(document.hidden ? null : 8000);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+  useEffect(() => {
+    const onFail = () => setBgRefreshFailed(true);
+    document.addEventListener('survey-board-bg-refresh-failed', onFail);
+    return () => document.removeEventListener('survey-board-bg-refresh-failed', onFail);
+  }, []);
+
   useEffect(() => {
     const refresh = () => {
       const w = window as unknown as WindowGlobals;
@@ -1005,6 +1028,22 @@ export function SurveyBoardPage() {
           ))
         )}
       </Box>
+
+      <Snackbar
+        open={bgRefreshFailed}
+        autoHideDuration={snackbarHideDuration}
+        onClose={() => setBgRefreshFailed(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity="warning"
+          onClose={() => setBgRefreshFailed(false)}
+          variant="filled"
+          sx={{ minWidth: 280 }}
+        >
+          Couldn&apos;t refresh live data — fresh results will load on your next visit
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
