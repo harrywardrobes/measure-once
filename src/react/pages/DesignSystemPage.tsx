@@ -88,6 +88,9 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import ImageIcon from '@mui/icons-material/Image';
 
 import { useTheme } from '@mui/material/styles';
+import { LeadStatusPicker } from '../components/pickers/LeadStatusPicker';
+import { SubstagePicker } from '../components/pickers/SubstagePicker';
+import { StagePicker } from '../components/pickers/StagePicker';
 
 import { ComponentShowcase } from '../components/mui/ComponentShowcase';
 import { FileUploadField } from '../components/FileUploadField';
@@ -751,6 +754,86 @@ function IconShowcase({ name, description, icons }: { name: string; description:
   );
 }
 
+// --- Picker demos --------------------------------------------------------
+
+function LeadStatusPickerDemo() {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  return (
+    <>
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={(e) => setAnchor(e.currentTarget)}
+      >
+        Open LeadStatusPicker
+      </Button>
+      <LeadStatusPicker
+        anchorEl={anchor}
+        open={Boolean(anchor)}
+        onClose={() => setAnchor(null)}
+        contactId="__design-system-demo__"
+        currentStatus=""
+        currentHwSubstatus=""
+      />
+    </>
+  );
+}
+
+const DEMO_SUBSTAGE_STATUSES = [
+  { id: 'first_contact', label: 'First Contact' },
+  { id: 'follow_up', label: 'Follow Up' },
+  { id: 'proposal_sent', label: 'Proposal Sent' },
+  { id: 'decision_pending', label: 'Decision Pending' },
+];
+
+function SubstagePickerDemo() {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  return (
+    <>
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={(e) => setAnchor(e.currentTarget)}
+      >
+        Open SubstagePicker
+      </Button>
+      <SubstagePicker
+        anchorEl={anchor}
+        open={Boolean(anchor)}
+        onClose={() => setAnchor(null)}
+        contactId="__design-system-demo__"
+        roomIdx={0}
+        stageKey="sales"
+        statuses={DEMO_SUBSTAGE_STATUSES}
+        currentSubId="follow_up"
+      />
+    </>
+  );
+}
+
+function StagePickerDemo() {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [selectedStage, setSelectedStage] = useState('sales');
+  return (
+    <>
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={(e) => setAnchor(e.currentTarget)}
+      >
+        Open StagePicker (current: {selectedStage})
+      </Button>
+      <StagePicker
+        anchorEl={anchor}
+        open={Boolean(anchor)}
+        onClose={() => setAnchor(null)}
+        currentStageKey={selectedStage}
+        onSelect={(key) => setSelectedStage(key)}
+      />
+    </>
+  );
+}
+
 // --- Page ---------------------------------------------------------------
 
 export function DesignSystemPage() {
@@ -1051,6 +1134,47 @@ export function DesignSystemPage() {
             }
             code={`<Skeleton variant="text" width="60%" />
 <Skeleton variant="rectangular" height={56} />`}
+          />
+          <ComponentShowcase
+            name="StagePicker"
+            description="MUI Popover for selecting one of the 10 pipeline stages. Each option is accompanied by its brand colour dot. Reads available stages from `window.state.workflow.stages` (falls back to the default stage order). Accepts `currentStageKey` to highlight the active stage and an `onSelect(stageKey)` callback — the caller is responsible for persisting the change (e.g. via `/api/contacts/:id/localdata`)."
+            demo={<StagePickerDemo />}
+            code={`<StagePicker
+  anchorEl={anchor}
+  open={Boolean(anchor)}
+  onClose={() => setAnchor(null)}
+  currentStageKey={room.stageKey}
+  onSelect={(key) => handleStageChange(key)}
+/>`}
+          />
+          <ComponentShowcase
+            name="LeadStatusPicker"
+            description="MUI Popover for selecting a lead status from the pipeline. Fetches the latest status from HubSpot on open and shows a drift toast if the value changed. On selection calls `window.quickSetLeadStatus` / `window._quickSetLeadStatusWithSub`. Pass `showSubstatuses` to show sub-status rows indented under each status. Use `currentStatus` and `currentHwSubstatus` to pre-highlight the current value."
+            demo={<LeadStatusPickerDemo />}
+            code={`<LeadStatusPicker
+  anchorEl={anchor}
+  open={Boolean(anchor)}
+  onClose={() => setAnchor(null)}
+  contactId={contact.id}
+  currentStatus={contact.properties.hs_lead_status ?? ''}
+  currentHwSubstatus={contact.properties.hw_lead_substatus ?? ''}
+  showSubstatuses // optional — indents sub-status rows
+/>`}
+          />
+          <ComponentShowcase
+            name="SubstagePicker"
+            description="MUI Popover for selecting a pipeline sub-stage within a given stage. Saves directly to `/api/contacts/:id/localdata` and dispatches a `localdata-updated` DOM event so other components re-render. The current sub-stage is highlighted; selecting the same value is a no-op. Pass the stage's `statuses` array from `window.state.workflow.stages[stageKey]`."
+            demo={<SubstagePickerDemo />}
+            code={`<SubstagePicker
+  anchorEl={anchor}
+  open={Boolean(anchor)}
+  onClose={() => setAnchor(null)}
+  contactId={contact.id}
+  roomIdx={0}
+  stageKey="sales"
+  statuses={workflow.stages.sales.statuses}
+  currentSubId={room.statusId ?? ''}
+/>`}
           />
         </>
       )}

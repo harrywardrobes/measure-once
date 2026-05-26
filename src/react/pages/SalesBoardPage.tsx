@@ -8,6 +8,8 @@ import { usePaginatedContacts, PaginatedContact, PAGINATED_CONTACTS_PAGE_LIMIT }
 import { ContactsPagination } from '../components/ContactsPagination';
 import { useCardActionHandlers, CardActionHandlerData } from '../hooks/useCardActionHandlers';
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
+import { LeadStatusPicker } from '../components/pickers/LeadStatusPicker';
+import { SubstagePicker } from '../components/pickers/SubstagePicker';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -74,8 +76,15 @@ interface WindowGlobals {
   LEAD_STATUS_OPTIONS?: LeadStatusOption[];
   loadWorkflow?: () => Promise<void>;
   loadLeadStatuses?: () => Promise<void>;
-  openCardSubstagePicker?: (evt: object, contactId: string, roomIdx: number) => void;
-  openLeadStatusPicker?: (evt: object, contactId: string) => void;
+  stageOrLeadStatusActionLabel?: (
+    stageKey: string,
+    leadStatusKey: string | undefined,
+    substageId: string | undefined,
+  ) => string;
+  substatusActionLabelLookup?: (
+    leadStatusKey: string | undefined,
+    hwSubstatusValue: string | undefined,
+  ) => string;
   __salesBoardBootstrapFailed?: { code: string | undefined; message: string } | undefined;
 }
 
@@ -467,6 +476,12 @@ function SalesCard({
   const leadStatusKey = contact.properties?.hs_lead_status;
   const hwSubstatusValue = contact.properties?.hw_lead_substatus;
 
+  const [lsAnchor, setLsAnchor] = useState<HTMLElement | null>(null);
+  const [subAnchor, setSubAnchor] = useState<HTMLElement | null>(null);
+
+  const stageStatuses: Array<{ id: string; label?: string }> =
+    (workflow?.stages?.[stageKey]?.statuses as Array<{ id: string; label?: string }>) || [];
+
   // Resolve action handler and label
   const w = window as unknown as WindowGlobals;
   const handler = cardActionHandlerFor(stageKey, leadStatusKey, hwSubstatusValue);
@@ -487,22 +502,15 @@ function SalesCard({
 
   const handleSubstagePillClick = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
-    if (isManager && hasRoom && typeof w.openCardSubstagePicker === 'function') {
-      w.openCardSubstagePicker(
-        { stopPropagation: () => {}, currentTarget: e.currentTarget },
-        contact.id,
-        roomIdx as number,
-      );
+    if (isManager && hasRoom && !isTerminal) {
+      setSubAnchor(e.currentTarget);
     }
   };
 
   const handleLeadStatusClick = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
-    if (isManager && typeof w.openLeadStatusPicker === 'function') {
-      w.openLeadStatusPicker(
-        { stopPropagation: () => {}, currentTarget: e.currentTarget },
-        contact.id,
-      );
+    if (isManager) {
+      setLsAnchor(e.currentTarget);
     }
   };
 
@@ -730,6 +738,24 @@ function SalesCard({
           <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
         </Box>
       )}
+      <LeadStatusPicker
+        anchorEl={lsAnchor}
+        open={Boolean(lsAnchor)}
+        onClose={() => setLsAnchor(null)}
+        contactId={contact.id}
+        currentStatus={leadStatusKey || ''}
+        currentHwSubstatus={hwSubstatusValue || ''}
+      />
+      <SubstagePicker
+        anchorEl={subAnchor}
+        open={Boolean(subAnchor)}
+        onClose={() => setSubAnchor(null)}
+        contactId={contact.id}
+        roomIdx={roomIdx as number}
+        stageKey={stageKey}
+        statuses={stageStatuses}
+        currentSubId={substageId}
+      />
     </Card>
   );
 }

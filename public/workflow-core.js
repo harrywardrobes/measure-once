@@ -772,100 +772,11 @@ function closeCardPicker() {
   document.removeEventListener('click', closeCardPicker);
 }
 
-async function openLeadStatusPicker(event, contactId, { showSubstatuses = false } = {}) {
-  event.stopPropagation();
-  { if (!canEditPrivilege()) return; }
-  closeCardPicker();
-  const rect = event.currentTarget.getBoundingClientRect();
-  const popup = document.createElement('div');
-  popup.id = 'card-picker-popup';
-  popup.className = 'card-picker-popup';
-  const top = Math.min(rect.bottom + 4, window.innerHeight - 300);
-  popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
-
-  const stalePrevStatus = state.contacts.find(c => c.id === contactId)?.properties?.hs_lead_status || '';
-
-  const loadingEl = document.createElement('div');
-  loadingEl.style.cssText = 'padding:12px 16px;color:#64748b;font-size:13px;';
-  loadingEl.textContent = 'Loading current status\u2026';
-  popup.appendChild(loadingEl);
-  document.body.appendChild(popup);
-
-  let currentLeadStatus = stalePrevStatus;
-  let driftedTo = null;
-  try {
-    const fresh = await GET(`/api/contacts/${contactId}`);
-    const freshStatus = fresh?.properties?.hs_lead_status || '';
-    const pending = state.pendingLeadStatus && Object.prototype.hasOwnProperty.call(state.pendingLeadStatus, contactId);
-    if (!pending) {
-      if (freshStatus !== stalePrevStatus) driftedTo = freshStatus;
-      currentLeadStatus = freshStatus;
-      _mergeContactIntoState(fresh);
-      renderCustomerList();
-      renderWorkflowHeader();
-    }
-  } catch (e) {
-    showToast('Could not refresh lead status from HubSpot \u2014 showing last known value.', true);
-  }
-
-  if (!document.body.contains(popup)) {
-    if (driftedTo !== null) {
-      const _nullLbl = NULL_LEAD_STATUS_LABEL || 'No status';
-      const newLabel = driftedTo ? (LEAD_STATUS_OPTIONS.find(o => o.value === driftedTo)?.label || driftedTo) : _nullLbl;
-      showToast(`Lead status was updated in HubSpot to ${newLabel}`);
-    }
-    return;
-  }
-
-  popup.innerHTML = '';
-  const clearBtn = document.createElement('button');
-  clearBtn.className = 'card-picker-opt card-picker-opt--clear' + (currentLeadStatus ? '' : ' card-picker-opt--disabled');
-  clearBtn.textContent = '\u2715 Clear status';
-  if (currentLeadStatus) {
-    clearBtn.addEventListener('click', () => quickSetLeadStatus(contactId, ''));
-  } else {
-    clearBtn.disabled = true;
-  }
-  popup.appendChild(clearBtn);
-
-  let _pickerContact = null;
-  let currentSub = null;
-  if (showSubstatuses) {
-    _pickerContact = state.contacts.find(c => c.id === contactId);
-    if (!_pickerContact && state.selectedContact?.id === contactId) _pickerContact = state.selectedContact;
-    currentSub = _currentSubstatusFor(_pickerContact);
-  }
-
-  LEAD_STATUS_OPTIONS.forEach(({ value, label }) => {
-    const parentIsActive = showSubstatuses
-      ? (value === currentLeadStatus && !currentSub)
-      : (value === currentLeadStatus);
-    const btn = document.createElement('button');
-    btn.className = 'card-picker-opt' + (parentIsActive ? ' card-picker-opt--active' : '');
-    btn.dataset.leadStatus = value;
-    btn.textContent = label;
-    btn.addEventListener('click', () => quickSetLeadStatus(contactId, value));
-    popup.appendChild(btn);
-
-    if (showSubstatuses) {
-      const subs = _substatusesForStatus(value);
-      subs.forEach(sub => {
-        const subBtn = document.createElement('button');
-        const subIsActive = value === currentLeadStatus && currentSub && currentSub.key === sub.substatus_key;
-        subBtn.className = 'card-picker-opt card-picker-opt--sub' + (subIsActive ? ' card-picker-opt--active' : '');
-        subBtn.textContent = sub.label || sub.substatus_key;
-        subBtn.addEventListener('click', () => _quickSetLeadStatusWithSub(contactId, value, sub.substatus_key));
-        popup.appendChild(subBtn);
-      });
-    }
-  });
-  setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
-
-  if (driftedTo !== null) {
-    const _nullLbl2 = NULL_LEAD_STATUS_LABEL || 'No status';
-    const newLabel = driftedTo ? (LEAD_STATUS_OPTIONS.find(o => o.value === driftedTo)?.label || driftedTo) : _nullLbl2;
-    showToast(`Lead status was updated in HubSpot to ${newLabel}`);
-  }
+// openLeadStatusPicker — replaced by the React LeadStatusPicker component in
+// src/react/components/pickers/LeadStatusPicker.tsx (task #1364).
+// Kept as a no-op shim so any remaining vanilla-JS call sites degrade gracefully.
+function openLeadStatusPicker(_event, _contactId, _opts) {
+  // No-op: picker is now rendered by React.
 }
 
 async function _fetchLocaldataForCard(contactId) {
@@ -920,79 +831,16 @@ async function _saveCardRoomMutation(contactId, mutateRoom) {
   return true;
 }
 
-async function openCardStagePicker(_event, _contactId, _roomIdx) {
+// openCardStagePicker — was already a no-op stub; kept as a no-op shim.
+function openCardStagePicker(_event, _contactId, _roomIdx) {
   closeCardPicker();
 }
 
-async function openCardSubstagePicker(event, contactId, roomIdx) {
-  event.stopPropagation();
-  { if (!canEditPrivilege()) return; }
-  closeCardPicker();
-
-  const cached = state.contactStageCache?.[contactId] || [];
-  const room = cached[roomIdx] || {};
-  const stageKey = room.stageKey || '';
-  const stage = state.workflow?.stages?.[stageKey];
-  if (!stage?.statuses?.length) {
-    showToast('No substages available for this stage', true);
-    return;
-  }
-
-  const rect = event.currentTarget.getBoundingClientRect();
-  const popup = document.createElement('div');
-  popup.id = 'card-picker-popup';
-  popup.className = 'card-picker-popup';
-  const top = Math.min(rect.bottom + 4, window.innerHeight - 320);
-  popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
-
-  const currentSubId = room.statusId || '';
-
-  const clearBtn = document.createElement('button');
-  clearBtn.className = 'card-picker-opt card-picker-opt--clear' + (currentSubId ? '' : ' card-picker-opt--disabled');
-  clearBtn.textContent = '\u2715 Clear substage';
-  if (currentSubId) {
-    clearBtn.addEventListener('click', async () => {
-      closeCardPicker();
-      await _saveCardRoomMutation(contactId, rooms => {
-        const r = rooms[roomIdx];
-        if (!r) { showToast('Room no longer exists', true); return false; }
-        r.statusId = '';
-        if (r.completedStatuses) r.completedStatuses[stageKey] = [];
-        return true;
-      });
-    });
-  } else {
-    clearBtn.disabled = true;
-  }
-  popup.appendChild(clearBtn);
-
-  stage.statuses.forEach(s => {
-    const btn = document.createElement('button');
-    const isActive = s.id === currentSubId;
-    btn.className = 'card-picker-opt' + (isActive ? ' card-picker-opt--active' : '');
-    btn.textContent = s.label || s.id;
-    btn.addEventListener('click', async () => {
-      closeCardPicker();
-      if (s.id === currentSubId) return;
-      await _saveCardRoomMutation(contactId, rooms => {
-        const r = rooms[roomIdx];
-        if (!r) { showToast('Room no longer exists', true); return false; }
-        const ids = (state.workflow?.stages?.[stageKey]?.statuses || []).map(x => x.id);
-        const cutoff = ids.indexOf(s.id);
-        const done = cutoff >= 0 ? ids.slice(0, cutoff + 1) : [s.id];
-        r.completedStatuses = r.completedStatuses || {};
-        r.completedStatuses[stageKey] = done;
-        r.statusId = s.id;
-        r.substateDates = r.substateDates || {};
-        r.substateDates[s.id] = r.substateDates[s.id] || todayISO();
-        return true;
-      });
-    });
-    popup.appendChild(btn);
-  });
-
-  document.body.appendChild(popup);
-  setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
+// openCardSubstagePicker — replaced by the React SubstagePicker component in
+// src/react/components/pickers/SubstagePicker.tsx (task #1364).
+// Kept as a no-op shim so any remaining vanilla-JS call sites degrade gracefully.
+function openCardSubstagePicker(_event, _contactId, _roomIdx) {
+  // No-op: picker is now rendered by React.
 }
 
 async function quickSetLeadStatus(contactId, newStatus) {

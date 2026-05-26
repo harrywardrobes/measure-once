@@ -18,6 +18,8 @@ import { STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useCardActionHandlers, CardActionHandlerData } from '../hooks/useCardActionHandlers';
 import { usePaginatedContacts, PaginatedContact, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
+import { LeadStatusPicker } from '../components/pickers/LeadStatusPicker';
+import { SubstagePicker } from '../components/pickers/SubstagePicker';
 import { ContactsPagination } from '../components/ContactsPagination';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -84,8 +86,6 @@ interface WindowGlobals {
   LEAD_SUBSTATUSES?: LeadSubstatus[];
   loadWorkflow?: () => Promise<void>;
   loadLeadStatuses?: () => Promise<void>;
-  openCardSubstagePicker?: (evt: object, contactId: string, roomIdx: number) => void;
-  openLeadStatusPicker?: (evt: object, contactId: string) => void;
   __surveyBoardBootstrapFailed?: { code: string | undefined; message: string } | undefined;
 }
 
@@ -392,6 +392,12 @@ function SurveyCard({
   const leadStatusKey = contact.properties?.hs_lead_status;
   const hwSubstatusValue = contact.properties?.hw_lead_substatus;
 
+  const [lsAnchor, setLsAnchor] = useState<HTMLElement | null>(null);
+  const [subAnchor, setSubAnchor] = useState<HTMLElement | null>(null);
+
+  const surveyStatuses: Array<{ id: string; label?: string }> =
+    (workflow?.stages?.[SURVEY_STAGE_KEY]?.statuses as Array<{ id: string; label?: string }>) || [];
+
   const w = window as unknown as WindowGlobals;
   const handler = cardActionHandlerFor(SURVEY_STAGE_KEY, leadStatusKey, hwSubstatusValue);
   const cahName = handler?.config?.action_name
@@ -413,22 +419,15 @@ function SurveyCard({
 
   const handleSubstagePillClick = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
-    if (isManager && hasRoom && !isTerminal && typeof w.openCardSubstagePicker === 'function') {
-      w.openCardSubstagePicker(
-        { stopPropagation: () => {}, currentTarget: e.currentTarget },
-        contact.id,
-        roomIdx as number,
-      );
+    if (isManager && hasRoom && !isTerminal) {
+      setSubAnchor(e.currentTarget);
     }
   };
 
   const handleLeadStatusClick = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
-    if (isManager && typeof w.openLeadStatusPicker === 'function') {
-      w.openLeadStatusPicker(
-        { stopPropagation: () => {}, currentTarget: e.currentTarget },
-        contact.id,
-      );
+    if (isManager) {
+      setLsAnchor(e.currentTarget);
     }
   };
 
@@ -637,6 +636,24 @@ function SurveyCard({
           <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
         </Box>
       )}
+      <LeadStatusPicker
+        anchorEl={lsAnchor}
+        open={Boolean(lsAnchor)}
+        onClose={() => setLsAnchor(null)}
+        contactId={contact.id}
+        currentStatus={leadStatusKey || ''}
+        currentHwSubstatus={hwSubstatusValue || ''}
+      />
+      <SubstagePicker
+        anchorEl={subAnchor}
+        open={Boolean(subAnchor)}
+        onClose={() => setSubAnchor(null)}
+        contactId={contact.id}
+        roomIdx={roomIdx as number}
+        stageKey={SURVEY_STAGE_KEY}
+        statuses={surveyStatuses}
+        currentSubId={substageId}
+      />
     </Card>
   );
 }
