@@ -98,6 +98,8 @@ import { Pill } from '../components/Pill';
 import { EmptyState } from '../components/EmptyState';
 import { BRAND_COLORS, STAGE_COLORS, RADIUS } from '../theme';
 import { DesignVisitSignOffPage } from './DesignVisitSignOffPage';
+import { NotFoundPage } from './NotFoundPage';
+import { AccessRestrictedPage } from './AccessRestrictedPage';
 import {
   PageLoadingSkeleton,
   CustomersPageSkeleton,
@@ -126,7 +128,7 @@ import {
  * paste-ready — this page is a recipe book, not exhaustive API docs.
  */
 
-const CATEGORIES = ['Tokens', 'Inputs', 'Data Display', 'Feedback', 'Navigation', 'Surfaces', 'Layout', 'Icons', 'Skeletons', 'Sign-off'] as const;
+const CATEGORIES = ['Tokens', 'Inputs', 'Data Display', 'Feedback', 'Navigation', 'Surfaces', 'Layout', 'Icons', 'Skeletons', 'Pages', 'Sign-off'] as const;
 type Category = typeof CATEGORIES[number];
 
 const SIGN_OFF_MOCK_DATA = {
@@ -1599,6 +1601,70 @@ window.closeBottomBar();`}
 
 // Rendered by LoginPage while GET /api/auth/user is in-flight.
 if (!sessionChecked) return <LoginPageSkeleton />;`}
+          />
+        </>
+      )}
+
+      {tab === 'Pages' && (
+        <>
+          <Paper variant="outlined" sx={{ p: 2.5, mb: 2 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Full-page error and boundary states. These pages are rendered stand-alone (no nav
+              chrome) and centred on screen. Each preview is shown in a constrained frame so it
+              does not fill the entire viewport.
+            </Typography>
+          </Paper>
+
+          <ComponentShowcase
+            name="NotFoundPage"
+            description="Shown when the router cannot match the current URL. Displays a 404 heading, a brand-voice message, and a 'Back to home' button."
+            demo={
+              <Box
+                sx={{
+                  width: '100%',
+                  maxWidth: 560,
+                  mx: 'auto',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                }}
+              >
+                <Box sx={{ transform: 'scale(1)', '& > *': { minHeight: 'unset !important' } }}>
+                  <NotFoundPage />
+                </Box>
+              </Box>
+            }
+            code={`import { NotFoundPage } from './NotFoundPage';
+
+// Used as the catch-all route in the React router:
+<Route path="*" element={<NotFoundPage />} />`}
+          />
+
+          <ComponentShowcase
+            name="AccessRestrictedPage"
+            description="Shown when an authenticated user navigates to a route that requires a higher privilege level (manager or admin). Displays an explanatory message and a 'Back to home' button."
+            demo={
+              <Box
+                sx={{
+                  width: '100%',
+                  maxWidth: 560,
+                  mx: 'auto',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                }}
+              >
+                <Box sx={{ '& > *': { minHeight: 'unset !important' } }}>
+                  <AccessRestrictedPage />
+                </Box>
+              </Box>
+            }
+            code={`import { AccessRestrictedPage } from './AccessRestrictedPage';
+
+// Rendered when the user's privilege level is below the route requirement:
+<Route path="/admin" element={isAdmin ? <AdminPage /> : <AccessRestrictedPage />} />`}
           />
         </>
       )}
