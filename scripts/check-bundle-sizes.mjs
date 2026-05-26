@@ -58,7 +58,7 @@ import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { execSync } from 'child_process';
-import { TREND_WINDOW, TREND_DRIFT_PCT, SPIKE_PCT, detectTrendWarning, detectChunkTrendWarnings, detectSpikeWarning } from './bundle-size-trend.mjs';
+import { TREND_WINDOW, TREND_DRIFT_PCT, SPIKE_PCT, detectTrendWarning, detectChunkTrendWarnings, detectSpikeWarning, detectChunkSpikeWarnings } from './bundle-size-trend.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -341,6 +341,12 @@ const chunkTrendWarnings = detectChunkTrendWarnings(recentEntries, TREND_DRIFT_P
 // more than SPIKE_PCT % relative to the immediately preceding history entry.
 const spikeWarning = detectSpikeWarning(recentEntries, SPIKE_PCT, kbStr);
 
+// ── Per-chunk spike check ─────────────────────────────────────────────────────
+// Warn (non-fatal) when any individual always-loaded chunk jumped by more than
+// SPIKE_PCT % in this single build.  A chunk can double in size while the
+// total stays under the threshold if another chunk shrank simultaneously.
+const chunkSpikeWarnings = detectChunkSpikeWarnings(recentEntries, SPIKE_PCT, kbStr);
+
 if (trendWarning) {
   console.log(`\n⚠  Trend warning: ${trendWarning}`);
 }
@@ -352,6 +358,11 @@ if (chunkTrendWarnings.length > 0) {
 
 if (spikeWarning) {
   console.log(`\n⚠  Spike warning: ${spikeWarning}`);
+}
+
+if (chunkSpikeWarnings.length > 0) {
+  console.log(`\n⚠  Per-chunk spike warning${chunkSpikeWarnings.length > 1 ? 's' : ''}:`);
+  for (const w of chunkSpikeWarnings) console.log(`   ${w}`);
 }
 
 const trendRows = recentEntries.map(e => {
@@ -378,8 +389,12 @@ const spikeWarnMd = spikeWarning
   ? `\n> ⚠ **Spike warning:** ${spikeWarning}\n`
   : '';
 
+const chunkSpikeWarnMd = chunkSpikeWarnings.length > 0
+  ? chunkSpikeWarnings.map(w => `\n> ⚠ **Per-chunk spike warning:** ${w}`).join('\n') + '\n'
+  : '';
+
 const trendSection = `\n## Trend (last ${recentEntries.length} run${recentEntries.length === 1 ? '' : 's'})` +
-  spikeWarnMd + trendWarnMd + chunkTrendWarnMd + '\n' +
+  spikeWarnMd + chunkSpikeWarnMd + trendWarnMd + chunkTrendWarnMd + '\n' +
   `| Date (UTC) | SHA | Total always-loaded | ${alwaysHeaders} | Result |\n` +
   `|---|---|---|${alwaysSeps}|---|\n` +
   trendRows + '\n';

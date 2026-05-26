@@ -21,7 +21,7 @@
  * Exits non-zero when any assertion fails.
  */
 
-import { detectSpikeWarning, SPIKE_PCT } from './bundle-size-trend.mjs';
+import { detectSpikeWarning, detectChunkSpikeWarnings, SPIKE_PCT } from './bundle-size-trend.mjs';
 import { gzipSync } from 'zlib';
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'fs';
 import { join, dirname, resolve } from 'path';
@@ -150,6 +150,110 @@ console.log('\nPart A — Unit tests for detectSpikeWarning()\n');
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Part A2 — Unit tests for detectChunkSpikeWarnings()
+// ════════════════════════════════════════════════════════════════════════════
+
+console.log('\nPart A2 — Unit tests for detectChunkSpikeWarnings()\n');
+
+function chunkEntry(chunks, totalAlwaysGzBytes = 100_000) {
+  return { totalAlwaysGzBytes, ts: new Date().toISOString(), sha: 'abc1234', result: 'PASS', chunks };
+}
+
+// ── A2-1. One chunk spikes → warning names the offending chunk ────────────────
+{
+  const base = 100_000;
+  const spiked = Math.round(base * (1 + (SPIKE_PCT + 2) / 100));
+  const entries = [
+    chunkEntry({ 'main.js': base, 'vendor-react-abc.js': 50_000 }),
+    chunkEntry({ 'main.js': spiked, 'vendor-react-abc.js': 50_000 }),
+  ];
+  const result = detectChunkSpikeWarnings(entries);
+  assert('A2-1: one spiking chunk produces one warning', result.length === 1);
+  assert('A2-1: warning names the offending chunk', result[0].includes('"main.js"'));
+  assert('A2-1: warning contains "jumped"', result[0].includes('jumped'));
+  assert('A2-1: warning contains threshold', result[0].includes(`>${SPIKE_PCT}%`));
+}
+
+// ── A2-2. All chunks stable → silent ─────────────────────────────────────────
+{
+  const entries = [
+    chunkEntry({ 'main.js': 100_000, 'vendor-react-abc.js': 50_000 }),
+    chunkEntry({ 'main.js': 101_000, 'vendor-react-abc.js': 50_500 }),
+  ];
+  const result = detectChunkSpikeWarnings(entries);
+  assert('A2-2: all stable chunks → no warnings', result.length === 0);
+}
+
+// ── A2-3. Multiple chunks spike → multiple warnings ───────────────────────────
+{
+  const base = 100_000;
+  const spiked = Math.round(base * (1 + (SPIKE_PCT + 3) / 100));
+  const entries = [
+    chunkEntry({ 'main.js': base, 'vendor-react-abc.js': base }),
+    chunkEntry({ 'main.js': spiked, 'vendor-react-abc.js': spiked }),
+  ];
+  const result = detectChunkSpikeWarnings(entries);
+  assert('A2-3: two spiking chunks → two warnings', result.length === 2);
+}
+
+// ── A2-4. New chunk (absent from previous entry) → silent ────────────────────
+{
+  const entries = [
+    chunkEntry({ 'main.js': 100_000 }),
+    chunkEntry({ 'main.js': 100_000, 'new-chunk-abc.js': 200_000 }),
+  ];
+  const result = detectChunkSpikeWarnings(entries);
+  assert('A2-4: newly added chunk with no baseline → silent', result.length === 0);
+}
+
+// ── A2-5. Chunk shrinks → silent ─────────────────────────────────────────────
+{
+  const entries = [
+    chunkEntry({ 'main.js': 100_000 }),
+    chunkEntry({ 'main.js': 80_000 }),
+  ];
+  const result = detectChunkSpikeWarnings(entries);
+  assert('A2-5: shrinking chunk → silent', result.length === 0);
+}
+
+// ── A2-6. Previous chunk size is zero → silent (avoids division by zero) ─────
+{
+  const entries = [
+    chunkEntry({ 'main.js': 0 }),
+    chunkEntry({ 'main.js': 100_000 }),
+  ];
+  const result = detectChunkSpikeWarnings(entries);
+  assert('A2-6: zero previous chunk size → silent', result.length === 0);
+}
+
+// ── A2-7. Single entry → silent ──────────────────────────────────────────────
+{
+  const result = detectChunkSpikeWarnings([chunkEntry({ 'main.js': 100_000 })]);
+  assert('A2-7: single entry → silent', result.length === 0);
+}
+
+// ── A2-8. Empty history → silent ─────────────────────────────────────────────
+{
+  const result = detectChunkSpikeWarnings([]);
+  assert('A2-8: empty history → silent', result.length === 0);
+}
+
+// ── A2-9. Only last two entries are compared ──────────────────────────────────
+{
+  const tiny  = 10_000;
+  const base  = 100_000;
+  const spiked = Math.round(base * (1 + (SPIKE_PCT + 2) / 100));
+  const entries = [
+    chunkEntry({ 'main.js': tiny }),
+    chunkEntry({ 'main.js': tiny }),
+    chunkEntry({ 'main.js': base }),
+    chunkEntry({ 'main.js': spiked }),
+  ];
+  const result = detectChunkSpikeWarnings(entries);
+  assert('A2-9: only the last two entries are compared (spike vs immediate predecessor)', result.length === 1);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Part B — Integration tests: run check-bundle-sizes.mjs end-to-end
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -252,6 +356,56 @@ function runScript(reactDir, reportDir) {
     assert('B-2: script exits 0', status === 0);
     assert('B-2: stdout does NOT contain "Spike warning:"', !stdout.includes('Spike warning:'));
     assert('B-2: markdown report does NOT contain "**Spike warning:**"', !mdReport.includes('**Spike warning:**'));
+  } finally {
+    cleanup();
+  }
+}
+
+// ── B-3. Per-chunk spike case: main.js was 7% smaller → chunk spike warning ───
+{
+  const { reactDir, reportDir, mainJsGzSize, cleanup } = setupTempWorkspace('chunkspike');
+  try {
+    const prevGzSize = Math.round(mainJsGzSize / 1.07);
+    // Seed a history entry with chunk-level data so detectChunkSpikeWarnings fires.
+    const prevEntry = {
+      totalAlwaysGzBytes: prevGzSize,
+      ts: new Date().toISOString(),
+      sha: 'abc1234',
+      result: 'PASS',
+      chunks: { 'main.js': prevGzSize },
+    };
+    writeFileSync(join(reportDir, 'bundle-sizes-history.jsonl'), JSON.stringify(prevEntry) + '\n');
+
+    const { stdout, status, mdReport } = runScript(reactDir, reportDir);
+
+    assert('B-3: script exits 0 (chunk spike is non-fatal)', status === 0);
+    assert('B-3: stdout contains "Per-chunk spike warning:"', stdout.includes('Per-chunk spike warning:'));
+    assert('B-3: stdout names the offending chunk', stdout.includes('"main.js"'));
+    assert('B-3: markdown report contains "**Per-chunk spike warning:**"', mdReport.includes('**Per-chunk spike warning:**'));
+  } finally {
+    cleanup();
+  }
+}
+
+// ── B-4. No chunk spike: main.js was 3% smaller → no chunk spike warning ──────
+{
+  const { reactDir, reportDir, mainJsGzSize, cleanup } = setupTempWorkspace('nochunkspike');
+  try {
+    const prevGzSize = Math.round(mainJsGzSize / 1.03);
+    const prevEntry = {
+      totalAlwaysGzBytes: prevGzSize,
+      ts: new Date().toISOString(),
+      sha: 'abc1234',
+      result: 'PASS',
+      chunks: { 'main.js': prevGzSize },
+    };
+    writeFileSync(join(reportDir, 'bundle-sizes-history.jsonl'), JSON.stringify(prevEntry) + '\n');
+
+    const { stdout, status, mdReport } = runScript(reactDir, reportDir);
+
+    assert('B-4: script exits 0', status === 0);
+    assert('B-4: stdout does NOT contain "Per-chunk spike warning:"', !stdout.includes('Per-chunk spike warning:'));
+    assert('B-4: markdown report does NOT contain "**Per-chunk spike warning:**"', !mdReport.includes('**Per-chunk spike warning:**'));
   } finally {
     cleanup();
   }

@@ -87,6 +87,50 @@ export function detectChunkTrendWarnings(recentEntries, driftPct = TREND_DRIFT_P
 }
 
 /**
+ * Compare the two most-recent history entries and return per-chunk warning
+ * strings for any individual chunk whose size jumped by more than spikePct %
+ * in a single build.
+ *
+ * A chunk is skipped when:
+ *   - it is absent from the previous entry (newly added — no baseline)
+ *   - its previous size is zero (avoids division by zero)
+ *
+ * @param {Array<{chunks: Object.<string,number>}>} recentEntries
+ *   Entries in chronological order (oldest first).  Only the last two matter.
+ *   Each entry's `chunks` map is { chunkName: gzBytes }.
+ * @param {number} [spikePct]   Override the spike threshold (defaults to SPIKE_PCT).
+ * @param {function} [kbStr]    Optional formatter used in warning messages.
+ * @returns {string[]}  Array of warning strings, one per offending chunk (empty when none).
+ */
+export function detectChunkSpikeWarnings(recentEntries, spikePct = SPIKE_PCT, kbStr = defaultKbStr) {
+  if (recentEntries.length < 2) return [];
+
+  const prev = recentEntries[recentEntries.length - 2];
+  const curr = recentEntries[recentEntries.length - 1];
+
+  const prevChunks = prev.chunks ?? {};
+  const currChunks = curr.chunks ?? {};
+
+  const warnings = [];
+
+  for (const [name, currBytes] of Object.entries(currChunks)) {
+    const prevBytes = prevChunks[name];
+    if (prevBytes == null || prevBytes <= 0) continue;
+
+    const deltaPct = ((currBytes - prevBytes) / prevBytes) * 100;
+    if (deltaPct > spikePct) {
+      warnings.push(
+        `Chunk "${name}" jumped ${deltaPct.toFixed(1)}% in this build ` +
+        `(${kbStr(prevBytes)} → ${kbStr(currBytes)}, ` +
+        `threshold: >${spikePct}%). A large dependency may have been added.`
+      );
+    }
+  }
+
+  return warnings;
+}
+
+/**
  * Compare the two most-recent history entries and return a warning string when
  * the always-loaded total jumped by more than spikePct % in a single build,
  * or null when everything is fine.
