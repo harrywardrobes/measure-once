@@ -81,7 +81,7 @@ export const NAV: NavItem[] = [
   { key: 'ideas',    href: '/ideas',    label: 'Ideas',    Icon: LightbulbIcon,     IconOutlined: LightbulbOutlinedIcon },
 ];
 
-const DEFAULT_PRIMARY_KEYS = ['home', 'customers', 'trades'];
+const DEFAULT_PRIMARY_KEYS = ['home', 'calendar', 'trades'];
 const BAR_SIZE = 3;
 
 function accentFor(key: string, theme: Theme): string {
@@ -104,7 +104,12 @@ async function loadRoleNavConfig(): Promise<string[] | null> {
   try {
     const r = await fetch('/api/nav-role-config', { headers: { Accept: 'application/json' } });
     if (!r.ok) return null;
-    const data = await r.json() as { primary_keys?: unknown };
+    const data = await r.json() as { primary_keys?: unknown; role?: string | null };
+    // When the user has no job_role the API falls back to the __default__
+    // config.  Treat that as "no saved pref" so the component can apply
+    // privilege-level-aware defaults (manager vs member) rather than the
+    // generic __default__ layout.
+    if (!data.role) return null;
     const keys = data.primary_keys;
     if (
       Array.isArray(keys) &&
@@ -139,17 +144,26 @@ export function BottomNav() {
     if (n.managerOnly) return isManager;
     return true;
   });
-  // Role-aware fallback used when the API returns no saved config.
-  // Managers see sales as a primary tab by default; non-managers see
+  // Role-aware fallback used when the API returns no saved config (or when
+  // the user has no job_role and the API fell back to the __default__ config).
+  // Managers see Home/Sales/Projects by default; non-managers see
   // DEFAULT_PRIMARY_KEYS. Filtered to actually-visible items.
   const defaultPrimaryKeys = (
-    isManager ? (['home', 'customers', 'sales'] as string[]) : DEFAULT_PRIMARY_KEYS
+    isManager ? (['home', 'sales', 'projects'] as string[]) : DEFAULT_PRIMARY_KEYS
   ).filter((k) => visibleNav.some((n) => n.key === k));
 
   // Always reflects the latest defaultPrimaryKeys so the prefs-load callback
   // can use it even if isManager resolved after the effect ran.
   const defaultPrimaryKeysRef = useRef(defaultPrimaryKeys);
   defaultPrimaryKeysRef.current = defaultPrimaryKeys;
+
+  // Tracks whether a real saved config came from the API (vs role-aware
+  // defaults). Used by the isManager-change effect below to decide whether
+  // to re-apply defaults when the privilege level resolves late.
+  const apiConfigFoundRef = useRef(false);
+  // Mirrors the configLoaded state in a ref so the isManager-change effect
+  // can read the latest value without being listed as a dependency.
+  const configLoadedRef = useRef(false);
 
   useEffect(() => {
     const sync = () => setValue(matchPath(window.location.pathname));
@@ -169,17 +183,33 @@ export function BottomNav() {
       if (cancelled) return;
       if (keys) {
         setPrimaryKeys(keys);
+        apiConfigFoundRef.current = true;
       } else {
         // No saved pref — use role-aware defaults. Reading from the ref
         // captures the current value of isManager even when it resolved
         // asynchronously after this effect started (e.g. bootstrap() races
         // the React mount and isManager was false at mount time).
         setPrimaryKeys(defaultPrimaryKeysRef.current);
+        apiConfigFoundRef.current = false;
       }
+      configLoadedRef.current = true;
       setConfigLoaded(true);
     });
     return () => { cancelled = true; };
   }, []);
+
+  // Re-apply role-aware defaults when the privilege level resolves after the
+  // initial config load.  This handles the common race: the config fetch
+  // completes while isManager is still false (bootstrap() hasn't fired yet),
+  // so the member defaults get written; when mo:user later fires and isManager
+  // becomes true we need to correct the primary keys — but only when no
+  // explicit saved config was returned by the API.
+  useEffect(() => {
+    if (configLoadedRef.current && !apiConfigFoundRef.current) {
+      setPrimaryKeys(defaultPrimaryKeysRef.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManager]);
 
   const resolvedPrimaryKeys = configLoaded
     ? primaryKeys.filter((k) => visibleNav.some((n) => n.key === k))
