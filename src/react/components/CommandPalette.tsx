@@ -344,14 +344,16 @@ export function CommandPalette() {
       open={open}
       onClose={doClose}
       maxWidth={false}
-      PaperProps={{
-        sx: {
-          width: '100%',
-          maxWidth: 560,
-          m: { xs: 1, sm: 2 },
-          borderRadius: '12px',
-          overflow: 'hidden',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+      slotProps={{
+        paper: {
+          sx: {
+            width: '100%',
+            maxWidth: 560,
+            m: { xs: 1, sm: 2 },
+            borderRadius: '12px',
+            overflow: 'hidden',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          },
         },
       }}
       sx={{
