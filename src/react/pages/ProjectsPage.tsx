@@ -1008,7 +1008,7 @@ export function ProjectsPage() {
       sx={{
         position: 'fixed',
         top: 'var(--header-h)',
-        bottom: 'calc(60px + env(safe-area-inset-bottom))',
+        bottom: 'var(--nav-h)',
         left: 0,
         right: 0,
         display: 'flex',
