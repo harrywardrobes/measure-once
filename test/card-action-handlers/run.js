@@ -171,8 +171,8 @@ async function purgeFixtures(pool) {
   // delete above so the FK doesn't block this DELETE.
   try {
     await pool.query(
-      `DELETE FROM lead_status_config WHERE key IN ($1, $2)`,
-      [LBL_KEY_CONFLICT_LS, SUB_STATUS_K]
+      `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3)`,
+      [LBL_KEY_CONFLICT_LS, SUB_STATUS_K, LBL_KEY_ANAME]
     );
   } catch (_) {}
   // Recreate the unique label-binding index if it was temporarily dropped
@@ -1294,9 +1294,28 @@ async function main() {
     });
     await new Promise(r => setTimeout(r, 400));
 
-    // Switch to the Card actions tab and trigger the data load.
+    // Switch to the Card actions tab so CardActionsPage mounts (needed so
+    // the slot-label DOM inputs exist for _buildActionSlotGroups), then switch
+    // to the Action handlers tab so ActionHandlersPage mounts and exposes
+    // window.loadCardActionHandlersAdmin.  Both React components auto-fetch
+    // on mount; after the page-function poll we also call the load helpers
+    // explicitly to guarantee fresh data before the banner check.
     await conflictAdminTab.evaluate(() => {
       if (typeof switchTab === 'function') switchTab('cardactions');
+    });
+    // Brief pause for CardActionsPage to mount before switching away.
+    await new Promise(r => setTimeout(r, 400));
+    await conflictAdminTab.evaluate(() => {
+      if (typeof switchTab === 'function') switchTab('actionhandlers');
+    });
+    // Wait for ActionHandlersPage to mount and expose loadCardActionHandlersAdmin.
+    await pollPage(
+      conflictAdminTab,
+      () => typeof window.loadCardActionHandlersAdmin === 'function',
+      null,
+      10000,
+    );
+    await conflictAdminTab.evaluate(async () => {
       const p1 = typeof loadCardActionsAdmin === 'function'
         ? loadCardActionsAdmin() : Promise.resolve();
       const p2 = typeof loadCardActionHandlersAdmin === 'function'
@@ -1554,6 +1573,20 @@ async function main() {
     //        produces "Send Quote" from the data-card-action-name value.
     console.log('\n  [E] action_name display (badge · data-attr · card-strip label)');
 
+    // Seed LBL_KEY_ANAME into lead_status_config so ActionHandlersPage
+    // renders a slot for that binding and HandlerSummary shows the badge.
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+       VALUES ($1, 'PrivTest ANAME Status', 9997, false, 'SALES')
+       ON CONFLICT (key) DO UPDATE
+         SET label               = EXCLUDED.label,
+             sort_order          = EXCLUDED.sort_order,
+             excluded_from_sales = EXCLUDED.excluded_from_sales,
+             stage               = EXCLUDED.stage`,
+      [LBL_KEY_ANAME],
+    );
+    console.log(`  Seeded lead_status_config key=${LBL_KEY_ANAME}`);
+
     const createAnameRes = await adminClient.post('/api/admin/card-action-handlers', {
       name:     HANDLER_NAME_ANAME,
       type:     'summarise_phone_call',
@@ -1581,6 +1614,18 @@ async function main() {
     });
     await anameAdminTab.evaluate(() => {
       if (typeof switchTab === 'function') switchTab('cardactions');
+    });
+    await new Promise(r => setTimeout(r, 400));
+    await anameAdminTab.evaluate(() => {
+      if (typeof switchTab === 'function') switchTab('actionhandlers');
+    });
+    await pollPage(
+      anameAdminTab,
+      () => typeof window.loadCardActionHandlersAdmin === 'function',
+      null,
+      10000,
+    );
+    await anameAdminTab.evaluate(() => {
       const p1 = typeof loadCardActionsAdmin === 'function'
         ? loadCardActionsAdmin() : Promise.resolve();
       const p2 = typeof loadCardActionHandlersAdmin === 'function'
@@ -1819,8 +1864,24 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
+    // Switch to cardactions so CardActionsPage mounts (needed for slot-label
+    // DOM inputs used by _buildActionSlotGroups), wait briefly, then switch to
+    // actionhandlers so ActionHandlersPage mounts and exposes openHandlerEditor.
     await namingAdminTab.evaluate(() => {
       if (typeof switchTab === 'function') switchTab('cardactions');
+    });
+    await new Promise(r => setTimeout(r, 400));
+    await namingAdminTab.evaluate(() => {
+      if (typeof switchTab === 'function') switchTab('actionhandlers');
+    });
+    // Wait for ActionHandlersPage to mount and expose openHandlerEditor.
+    await pollPage(
+      namingAdminTab,
+      () => typeof window.openHandlerEditor === 'function',
+      null,
+      10000,
+    );
+    await namingAdminTab.evaluate(async () => {
       const p1 = typeof loadCardActionsAdmin === 'function'
         ? loadCardActionsAdmin() : Promise.resolve();
       const p2 = typeof loadCardActionHandlersAdmin === 'function'
@@ -2109,13 +2170,12 @@ async function main() {
         ({ wrapId, ids }) => {
           const wrap = document.getElementById(wrapId);
           if (!wrap) return null;
-          const rowOnclicks = Array.from(wrap.querySelectorAll('tbody tr')).map(tr => {
-            const btn = tr.querySelector('button[onclick*="moveDvItem"]');
-            return btn ? btn.getAttribute('onclick') : '';
-          });
-          // Extract ordered ids from the up/down onclick attributes.
-          const orderedIds = rowOnclicks
-            .map(s => { const m = /moveDvItem\('[^']+',\s*(\d+),/.exec(s || ''); return m ? Number(m[1]) : null; })
+          // React renders onClick as a prop, not an onclick attribute — use data-move-id.
+          const orderedIds = Array.from(wrap.querySelectorAll('tbody tr'))
+            .map(tr => {
+              const btn = tr.querySelector('button[data-move-id][data-move-dir="up"]');
+              return btn ? Number(btn.getAttribute('data-move-id')) : null;
+            })
             .filter(v => v !== null);
           const seedRows = orderedIds.filter(id => ids.includes(id));
           if (seedRows.length !== 3) return null;
@@ -2140,17 +2200,15 @@ async function main() {
       const disabledState = await reorderTab.evaluate(({ wrapId, ids }) => {
         const wrap = document.getElementById(wrapId);
         const rows = Array.from(wrap.querySelectorAll('tbody tr')).filter(tr => {
-          const btn = tr.querySelector('button[onclick*="moveDvItem"]');
-          if (!btn) return false;
-          const m = /moveDvItem\('[^']+',\s*(\d+),/.exec(btn.getAttribute('onclick') || '');
-          return m && ids.includes(Number(m[1]));
+          const btn = tr.querySelector('button[data-move-id][data-move-dir="up"]');
+          return btn && ids.includes(Number(btn.getAttribute('data-move-id')));
         });
         const first = rows[0];
         const last  = rows[rows.length - 1];
-        const firstUp   = first.querySelector(`button[onclick*="'up'"]`);
-        const lastDown  = last .querySelector(`button[onclick*="'down'"]`);
-        const middleUp  = rows[1].querySelector(`button[onclick*="'up'"]`);
-        const middleDown= rows[1].querySelector(`button[onclick*="'down'"]`);
+        const firstUp   = first.querySelector('button[data-move-dir="up"]');
+        const lastDown  = last .querySelector('button[data-move-dir="down"]');
+        const middleUp  = rows[1].querySelector('button[data-move-dir="up"]');
+        const middleDown= rows[1].querySelector('button[data-move-dir="down"]');
         return {
           firstUpDisabled:  firstUp  ? firstUp.hasAttribute('disabled')  : null,
           lastDownDisabled: lastDown ? lastDown.hasAttribute('disabled') : null,
@@ -2179,7 +2237,7 @@ async function main() {
       await reorderTab.evaluate(({ wrapId, lastId }) => {
         const wrap = document.getElementById(wrapId);
         const btn = wrap.querySelector(
-          `button[onclick="moveDvItem('${wrap.id === 'dv-handles-wrap' ? 'handle' : (wrap.id === 'dv-furniture-wrap' ? 'furniture' : 'door-style')}', ${lastId}, 'up')"]`
+          `button[data-move-id="${lastId}"][data-move-dir="up"]`
         );
         if (btn) btn.click();
       }, { wrapId: cfg.wrapId, lastId: seedIds[2] });
@@ -2216,10 +2274,8 @@ async function main() {
           if (!wrap) return null;
           const orderedIds = Array.from(wrap.querySelectorAll('tbody tr'))
             .map(tr => {
-              const btn = tr.querySelector('button[onclick*="moveDvItem"]');
-              if (!btn) return null;
-              const m = /moveDvItem\('[^']+',\s*(\d+),/.exec(btn.getAttribute('onclick') || '');
-              return m ? Number(m[1]) : null;
+              const btn = tr.querySelector('button[data-move-id][data-move-dir="up"]');
+              return btn ? Number(btn.getAttribute('data-move-id')) : null;
             })
             .filter(v => v !== null)
             .filter(id => ids.includes(id));
