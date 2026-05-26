@@ -1,5 +1,7 @@
 import React from 'react';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { usePaginatedContacts, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
+import { ContactsPagination } from '../components/ContactsPagination';
 import { createPortal } from 'react-dom';
 import {
   Alert,
@@ -18,7 +20,6 @@ import {
   InputAdornment,
   InputLabel,
   MenuItem,
-  Pagination,
   Select,
   Skeleton,
   Snackbar,
@@ -125,7 +126,6 @@ function stageColour(stageKey: string): { bg: string; light: string; text: strin
   return DEFAULT_STAGE_COLOURS[stageKey] || DEFAULT_STAGE_COLOURS.sales;
 }
 
-const PAGE_LIMIT = 25;
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'newest', label: 'Newest first' },
   { value: 'name-asc', label: 'Name A–Z' },
@@ -591,7 +591,6 @@ function CustomerCard({
 
 export function CustomersPage(): React.ReactElement {
   const initial = React.useMemo(() => readUrlState(), []);
-  const [page, setPage] = React.useState<number>(initial.page);
   const [leadStatus, setLeadStatus] = React.useState<string>(initial.leadStatus);
   const [substatus, setSubstatus] = React.useState<string>(initial.substatus);
   const [sortBy, setSortBy] = React.useState<string>(initial.sort);
@@ -605,11 +604,6 @@ export function CustomersPage(): React.ReactElement {
   const [qbInvoices, setQbInvoices] = React.useState<QBInvoice[]>([]);
   const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
 
-  const [contacts, setContacts] = React.useState<Contact[]>([]);
-  const [total, setTotal] = React.useState<number>(0);
-  const [totalPages, setTotalPages] = React.useState<number>(1);
-  const [loading, setLoading] = React.useState<boolean>(true);
-  const [error, setError] = React.useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
   // autoHideDuration is set to null while the document is hidden so the MUI
@@ -626,23 +620,51 @@ export function CustomersPage(): React.ReactElement {
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
-  const [contactsStale, setContactsStale] = React.useState(false);
-  // Holds a deferred contactsStale value when the fetch completed while the
-  // tab was hidden. Applied on the next visibilitychange → visible event so
-  // the banner is never shown or cleared without the user actually seeing it.
-  const pendingContactsStaleRef = React.useRef<boolean | null>(null);
 
-  // Expose a test hook so integration tests can drive the pending ref directly
-  // without triggering a full network round-trip (same pattern as
-  // window.__setTestPendingOpenLeadsStale in workflow-core.js).
+  // Counts refresh with retry: scheduled after each successful contacts fetch.
+  // Timers are tracked in a ref so they can be cancelled if the component
+  // unmounts or a new fetch replaces the previous one.
+  const countsRetryTimersRef = React.useRef<ReturnType<typeof setTimeout>[]>([]);
   React.useEffect(() => {
-    (window as typeof window & { __setTestPendingContactsStale?: (v: boolean) => void })
-      .__setTestPendingContactsStale = (v: boolean) => { pendingContactsStaleRef.current = v; };
-    return () => {
-      delete (window as typeof window & { __setTestPendingContactsStale?: (v: boolean) => void })
-        .__setTestPendingContactsStale;
-    };
+    return () => { countsRetryTimersRef.current.forEach(clearTimeout); };
   }, []);
+
+  const scheduleCounts = React.useCallback(() => {
+    countsRetryTimersRef.current.forEach(clearTimeout);
+    countsRetryTimersRef.current = [];
+    const MAX_COUNTS_RETRIES = 2;
+    const COUNTS_RETRY_DELAY_MS = 30_000;
+    function scheduleCountsAttempt(retryCount: number, waitMs: number) {
+      const t = setTimeout(async () => {
+        try {
+          await loadLeadStatusCounts();
+          populateLeadStatusFilter();
+        } catch {
+          if (retryCount < MAX_COUNTS_RETRIES) {
+            scheduleCountsAttempt(retryCount + 1, COUNTS_RETRY_DELAY_MS);
+          } else {
+            setBgRefreshFailed(true);
+          }
+        }
+      }, waitMs);
+      countsRetryTimersRef.current.push(t);
+    }
+    scheduleCountsAttempt(0, 0);
+  }, []);
+
+  const {
+    contacts,
+    total,
+    totalPages,
+    loading,
+    error,
+    contactsStale,
+    page,
+    setPage,
+  } = usePaginatedContacts(
+    { initialPage: initial.page, leadStatus, substatus, stage: stageFilter, sortBy, search, showArchived, refreshNonce },
+    { onFetchSuccess: scheduleCounts },
+  );
 
   const isViewer = useIsViewer();
   const [newOpen, setNewOpen] = React.useState<boolean>(() => {
@@ -688,22 +710,6 @@ export function CustomersPage(): React.ReactElement {
       const qs = p.toString();
       history.replaceState(null, '', qs ? '?' + qs : location.pathname);
     }
-  }, []);
-
-  // Apply any deferred contactsStale update when the tab becomes visible.
-  // The fetch effect stores a pending value in pendingContactsStaleRef when
-  // the response arrives while the tab is hidden, so the banner is never
-  // shown or cleared without the user actually seeing the page.
-  React.useEffect(() => {
-    const onVisibility = () => {
-      if (document.hidden) return;
-      if (pendingContactsStaleRef.current !== null) {
-        setContactsStale(pendingContactsStaleRef.current);
-        pendingContactsStaleRef.current = null;
-      }
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
   // Viewers cannot create contacts; close any auto-opened dialog if the
@@ -877,129 +883,35 @@ export function CustomersPage(): React.ReactElement {
   }, [contacts]);
 
 
-  // Fetch the current page of contacts whenever the relevant filters change.
-  React.useEffect(() => {
-    let cancelled = false;
-    const countsRetryTimers: ReturnType<typeof setTimeout>[] = [];
-    setLoading(true);
-    setError(null);
-    // Defer the stale-clear when the tab is hidden so the banner is never
-    // dismissed without the user seeing the page — consistent with how the
-    // post-fetch stale update is deferred in the response callback below.
-    if (document.hidden) {
-      pendingContactsStaleRef.current = false;
-    } else {
-      setContactsStale(false);
-    }
-
-    {
-      const qs = new URLSearchParams({ page: String(page), limit: String(PAGE_LIMIT) });
-      if (leadStatus) qs.set('leadStatus', leadStatus);
-      if (sortBy && sortBy !== 'newest') qs.set('sort', sortBy);
-      if (search) qs.set('q', search);
-      // Use raw fetch so we can read the X-Cache-Status response header and
-      // show a stale-data warning banner when HubSpot is temporarily down.
-      (async () => {
-        try {
-          const r = await fetch(`/api/contacts-all?${qs}`, { headers: { Accept: 'application/json' } });
-          if (r.status === 401) { location.href = '/login'; return; }
-          const data = await r.json().catch(() => ({})) as ContactsResponse;
-          if (!r.ok) {
-            const err = new Error((data as { error?: string }).error || `HTTP ${r.status}`);
-            (err as { code?: string }).code = (data as { code?: string }).code;
-            throw err;
-          }
-          if (cancelled) return;
-          const isStale = r.headers.get('X-Cache-Status') === 'stale';
-          if (document.hidden) {
-            pendingContactsStaleRef.current = isStale;
-          } else {
-            pendingContactsStaleRef.current = null;
-            setContactsStale(isStale);
-          }
-          const list = data.results || [];
-          setContacts(list);
-          setTotal(data.total != null ? data.total : list.length);
-          setTotalPages(data.totalPages || 1);
-          setLoading(false);
-          // Background counts refresh with retry: up to MAX_RETRIES retries at
-          // RETRY_DELAY_MS apart. On final failure surface a Snackbar.
-          const MAX_COUNTS_RETRIES = 2;
-          const COUNTS_RETRY_DELAY_MS = 30_000;
-          function scheduleCountsAttempt(retryCount: number, waitMs: number) {
-            const t = setTimeout(async () => {
-              if (cancelled) return;
-              try {
-                await loadLeadStatusCounts();
-                if (cancelled) return;
-                populateLeadStatusFilter();
-              } catch {
-                if (cancelled) return;
-                if (retryCount < MAX_COUNTS_RETRIES) {
-                  scheduleCountsAttempt(retryCount + 1, COUNTS_RETRY_DELAY_MS);
-                } else {
-                  setBgRefreshFailed(true);
-                }
-              }
-            }, waitMs);
-            countsRetryTimers.push(t);
-          }
-          scheduleCountsAttempt(0, 0);
-        } catch (e) {
-          if (cancelled) return;
-          if (document.hidden) {
-            pendingContactsStaleRef.current = false;
-          } else {
-            pendingContactsStaleRef.current = null;
-            setContactsStale(false);
-          }
-          setError(humaniseError(e as Error & { code?: string }));
-          setContacts([]);
-          setTotal(0);
-          setTotalPages(1);
-          setLoading(false);
-        }
-      })();
-    }
-
-    return () => {
-      cancelled = true;
-      countsRetryTimers.forEach(clearTimeout);
-    };
-  }, [page, leadStatus, sortBy, search, refreshNonce]);
-
-  // Resolve rooms for a contact, applying the stage + archived filters from
-  // the legacy `buildListItems` (public/workflow.js lines 140-202).
+  // Resolve rooms for display on a contact card. Stage filtering is now
+  // server-side, so this function only handles archived-room display: when
+  // showArchived is false, archived rooms are omitted from the card pills
+  // (but the contact itself is still shown — the server already determined
+  // it should appear). If no rooms remain after filtering, fall back to the
+  // default sales room so cards always have at least one pill.
   const resolveRooms = React.useCallback(
-    (contactId: string): Room[] | null => {
+    (contactId: string): Room[] => {
       const cached = roomsByContact[contactId];
       if (cached && cached.length > 0) {
-        const filtered: Room[] = [];
-        for (const r of cached) {
-          const roomStatus = r.roomStatus || 'active';
-          if (stageFilter) {
-            if (roomStatus !== 'active' && !showArchived) continue;
-            if (r.stageKey !== stageFilter) continue;
-          }
-          filtered.push({
+        const filtered = cached
+          .filter(r => showArchived || (r.roomStatus || 'active') === 'active')
+          .map(r => ({
             room: r.room || 'Main',
             stageKey: r.stageKey || 'sales',
-            roomStatus,
-          });
-        }
-        if (stageFilter && filtered.length === 0) return null;
-        return filtered;
+            roomStatus: r.roomStatus || 'active',
+          }));
+        return filtered.length > 0
+          ? filtered
+          : [{ room: 'Main', stageKey: 'sales', roomStatus: 'active' }];
       }
-      // No cached rooms — show contact when no stage filter is active;
-      // hide it under any specific stage tab (stageFilter is set).
-      if (stageFilter) return null;
       return [{ room: 'Main', stageKey: 'sales', roomStatus: 'active' }];
     },
-    [roomsByContact, stageFilter, showArchived],
+    [roomsByContact, showArchived],
   );
 
-  // Local client-side sub-status + stage + archived filtering on top of the
-  // fetched page.
+  // Client-side sub-status filter on top of the server-fetched page.
+  // Stage and archived filtering are now server-side; resolveRooms handles
+  // room-pill display only.
   const visibleContacts = React.useMemo(() => {
     const out: Array<{ contact: Contact; rooms: Room[] }> = [];
     for (const c of contacts) {
@@ -1007,9 +919,7 @@ export function CustomersPage(): React.ReactElement {
         const v = String(c.properties?.hw_lead_substatus || '').toUpperCase();
         if (v !== substatus.toUpperCase()) continue;
       }
-      const rooms = resolveRooms(c.id);
-      if (!rooms || rooms.length === 0) continue;
-      out.push({ contact: c, rooms });
+      out.push({ contact: c, rooms: resolveRooms(c.id) });
     }
     return out;
   }, [contacts, substatus, resolveRooms]);
@@ -1267,12 +1177,6 @@ export function CustomersPage(): React.ReactElement {
           </Stack>
         ) : null}
 
-        {stageFilter ? (
-          <Typography variant="caption" color="text.secondary">
-            Stage filter applies to this page only. Switch pages to find more matches.
-          </Typography>
-        ) : null}
-
         {error ? <Alert severity="error">{error}</Alert> : null}
 
         {!loading && contactsStale ? (
@@ -1307,23 +1211,14 @@ export function CustomersPage(): React.ReactElement {
           </Stack>
         )}
 
-        {total > 0 ? (
-          <Stack direction="row" sx={{ pt: 1, alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography variant="body2" color="text.secondary">
-              Showing {Math.min(total, (page - 1) * PAGE_LIMIT + 1)}–
-              {Math.min(total, (page - 1) * PAGE_LIMIT + visibleContacts.length)} of {total}
-            </Typography>
-            {totalPages > 1 ? (
-              <Pagination
-                count={totalPages}
-                page={page}
-                onChange={(_, p) => setPage(p)}
-                size="small"
-                color="primary"
-              />
-            ) : null}
-          </Stack>
-        ) : null}
+        <ContactsPagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          visibleCount={visibleContacts.length}
+          pageLimit={PAGINATED_CONTACTS_PAGE_LIMIT}
+          onPageChange={setPage}
+        />
 
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
@@ -1335,34 +1230,11 @@ export function CustomersPage(): React.ReactElement {
       <NewCustomerDialog
         open={newOpen && !isViewer}
         onClose={() => setNewOpen(false)}
-        onCreated={(c) => {
+        onCreated={() => {
           setNewOpen(false);
-          // Prepend the freshly-created contact so it shows immediately,
-          // then trigger a refetch in the background so the list returns
-          // to the canonical server-side order.
-          setContacts((prev) => [c, ...prev]);
-          setTotal((t) => t + 1);
+          // Trigger a refetch so the newly created contact appears and the
+          // list returns to the canonical server-side order.
           setRefreshNonce((n) => n + 1);
-          // Retry counts refresh up to 2 times (30 s apart) so a transient
-          // failure here doesn't leave counts permanently stale after adding
-          // a new customer. On final failure surface the bgRefreshFailed Snackbar.
-          const MAX_CREATED_RETRIES = 2;
-          const CREATED_RETRY_DELAY_MS = 30_000;
-          function attemptCreatedCounts(retryCount: number, waitMs: number) {
-            setTimeout(async () => {
-              try {
-                await loadLeadStatusCounts();
-                populateLeadStatusFilter();
-              } catch {
-                if (retryCount < MAX_CREATED_RETRIES) {
-                  attemptCreatedCounts(retryCount + 1, CREATED_RETRY_DELAY_MS);
-                } else {
-                  setBgRefreshFailed(true);
-                }
-              }
-            }, waitMs);
-          }
-          attemptCreatedCounts(0, 0);
         }}
       />
       <Snackbar
@@ -1390,7 +1262,7 @@ function NewCustomerDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onCreated: (c: Contact) => void;
+  onCreated: () => void;
 }): React.ReactElement {
   const [firstname, setFirstname] = React.useState('');
   const [lastname, setLastname] = React.useState('');
@@ -1483,7 +1355,7 @@ function NewCustomerDialog({
         phone: ph,
         postcode: pc,
       });
-      onCreated(contact);
+      onCreated();
     } catch (e) {
       const er = e as Error & { code?: string };
       if (er.code === 'HUBSPOT_AUTH') {
@@ -1623,14 +1495,5 @@ function NewCustomerDialog({
 
 // (NewContactBody type kept for future request-shape reference.)
 export type { NewContactBody };
-
-function humaniseError(e: Error & { code?: string }): string {
-  if (e.code === 'HUBSPOT_AUTH') {
-    return 'Could not connect to HubSpot — the API token is invalid or expired.';
-  }
-  if (e.code === 'HUBSPOT_RATE_LIMIT') return 'HubSpot rate limit reached. Please retry shortly.';
-  if (e.code === 'HUBSPOT_ERROR') return 'Could not load contacts from HubSpot.';
-  return `Failed to load contacts: ${e.message}`;
-}
 
 export default CustomersPage;

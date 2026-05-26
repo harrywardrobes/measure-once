@@ -1009,6 +1009,22 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
       }
     }
 
+    const stageParam = (req.query.stage || '').trim();
+    if (stageParam) {
+      contacts = contacts.filter(c => {
+        const roomsJson = c.properties?.measure_once_rooms;
+        if (!roomsJson) return false;
+        try {
+          const rooms = JSON.parse(roomsJson);
+          // Normalise missing stageKey to 'sales' (the default used throughout
+          // the room-resolution layer in the client and localdata endpoint).
+          return Array.isArray(rooms) && rooms.some(r => (r.stageKey || 'sales') === stageParam);
+        } catch {
+          return false;
+        }
+      });
+    }
+
     if (q) {
       contacts = contacts.filter(c => {
         const first = (c.properties?.firstname || '').toLowerCase();
