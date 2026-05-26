@@ -842,6 +842,133 @@ export function LoginPageSkeleton({ forceVisible }: { forceVisible?: boolean } =
 }
 
 /**
+ * Shape-matched skeleton for ProjectsPage.
+ *
+ * Mirrors the real page structure:
+ *   • Stage filter tab strip (scrollable pill row)
+ *   • Sort selector + group-by toggle bar
+ *   • Grid of 6 project card outlines (name/id header + 1–2 room rows each)
+ */
+export function ProjectsPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
+  if (!visible) return null;
+
+  const CardSkeleton = ({ rooms }: { rooms: number }) => (
+    <Box
+      sx={{
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1.5,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Card header */}
+      <Box sx={{ p: '10px 14px', borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', mb: '3px' }}>
+          <MuiSkeleton variant="text" width="50%" height={18} sx={{ flex: 1 }} />
+          <MuiSkeleton variant="text" width={70} height={14} sx={{ flexShrink: 0 }} />
+        </Stack>
+        <MuiSkeleton variant="text" width={60} height={12} />
+      </Box>
+      {/* Room rows */}
+      {Array.from({ length: rooms }).map((_, i) => (
+        <Stack
+          key={i}
+          direction="row"
+          spacing={1}
+          sx={{
+            px: '14px',
+            py: '9px',
+            alignItems: 'center',
+            borderBottom: i < rooms - 1 ? '1px solid' : 'none',
+            borderBottomColor: 'divider',
+          }}
+        >
+          <MuiSkeleton variant="text" width="30%" height={16} sx={{ flex: 1 }} />
+          <MuiSkeleton variant="rounded" width={90} height={20} />
+          <MuiSkeleton variant="rounded" width={70} height={20} />
+        </Stack>
+      ))}
+    </Box>
+  );
+
+  return (
+    <Box
+      sx={{
+        position: 'fixed',
+        top: 'var(--header-h, 56px)',
+        bottom: 'var(--nav-h, 56px)',
+        left: 0,
+        right: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#F6F1E7',
+      }}
+    >
+      {/* Stage filter tab strip */}
+      <Stack
+        direction="row"
+        spacing={0.75}
+        sx={{
+          p: '12px 16px',
+          borderBottom: '1px solid',
+          borderBottomColor: 'divider',
+          flexShrink: 0,
+          overflow: 'hidden',
+        }}
+      >
+        {[40, 70, 36, 52, 42, 58, 48, 56, 50, 66, 72].map((w, i) => (
+          <MuiSkeleton key={i} variant="rounded" width={w} height={28} sx={{ borderRadius: '999px', flexShrink: 0 }} />
+        ))}
+      </Stack>
+
+      {/* Sort / group bar */}
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          p: '8px 16px',
+          borderBottom: '1px solid',
+          borderBottomColor: 'divider',
+          flexShrink: 0,
+          alignItems: 'center',
+        }}
+      >
+        <MuiSkeleton variant="text" width={44} height={16} />
+        <MuiSkeleton variant="rounded" width={100} height={30} sx={{ borderRadius: '999px' }} />
+        <MuiSkeleton variant="rounded" width={110} height={30} sx={{ borderRadius: '999px', ml: 'auto !important' }} />
+      </Stack>
+
+      {/* Card grid */}
+      <Box
+        sx={{
+          flex: 1,
+          overflowY: 'hidden',
+          p: '20px 16px',
+          display: 'grid',
+          gridTemplateColumns: '1fr',
+          gap: '10px',
+          alignContent: 'start',
+          '@media (min-width: 640px)': {
+            gridTemplateColumns: 'repeat(2, 1fr)',
+          },
+          '@media (min-width: 900px)': {
+            gridTemplateColumns: 'repeat(3, 1fr)',
+          },
+        }}
+      >
+        <CardSkeleton rooms={2} />
+        <CardSkeleton rooms={1} />
+        <CardSkeleton rooms={2} />
+        <CardSkeleton rooms={1} />
+        <CardSkeleton rooms={2} />
+        <CardSkeleton rooms={1} />
+      </Box>
+    </Box>
+  );
+}
+
+/**
  * Shape-matched skeleton for HomePage.
  *
  * Mirrors the real page structure:

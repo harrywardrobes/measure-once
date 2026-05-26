@@ -115,13 +115,18 @@ async function openProjectsPage(browser, cookie, cacheStatus) {
     timeout:   25000,
   });
 
-  // Wait for projects-view innerHTML to be set (renderProjectsView ran).
-  // The div starts empty; once renderProjectsView fires it gains either the
-  // stale banner or the stage-tabs-bar (or the empty-state message).
+  // Wait for the React ProjectsPage to finish loading.
+  // Step 1: wait for any content (React island mounts, skeleton appears).
   await pollPage(page, () => {
     const v = document.getElementById('projects-view');
     return v && v.innerHTML.trim().length > 0 ? 'ok' : null;
   }, null, 15000);
+  // Step 2: wait for the loading skeleton to disappear and real content to render.
+  // The sort-bar Select (.MuiSelect-root) is always present once loading=false.
+  await page.waitForSelector(
+    '#projects-view .MuiSelect-root, #projects-view #room-stale-banner',
+    { timeout: 12000 },
+  ).catch(() => {});
 
   return page;
 }

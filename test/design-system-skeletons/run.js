@@ -1,7 +1,7 @@
 'use strict';
 // test/design-system-skeletons/run.js
 //
-// End-to-end test that confirms all thirteen page skeletons are rendered in the
+// End-to-end test that confirms all fourteen page skeletons are rendered in the
 // design system gallery (DesignSystemPage → Skeletons tab) when the page is
 // opened as an admin.
 //
@@ -20,7 +20,7 @@
 //      ProfilePageSkeleton, AdminTeamPageSkeleton, AdminPermissionsPageSkeleton,
 //      AdminRequestsPageSkeleton, AdminAuditLogPageSkeleton,
 //      AdminSettingsPageSkeleton, CardActionsPageSkeleton,
-//      ActionHandlersPageSkeleton, and LoginPageSkeleton each contain at least
+//      ActionHandlersPageSkeleton, LoginPageSkeleton, and ProjectsPageSkeleton each contain at least
 //      one .MuiSkeleton-root.
 //
 // Usage:
@@ -481,6 +481,17 @@ async function main() {
       loginPageCount > 0,
     );
 
+    // ── ProjectsPageSkeleton ──────────────────────────────────────────────
+    console.log('\n  [ProjectsPageSkeleton]');
+
+    const projectsPageCount = await skeletonCountForComponent(page, 'ProjectsPageSkeleton');
+    record(
+      'ProjectsPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+      'count > 0 inside the ProjectsPageSkeleton Paper wrapper',
+      `count=${projectsPageCount}`,
+      projectsPageCount > 0,
+    );
+
     // ── Page errors ───────────────────────────────────────────────────────
     record(
       'no uncaught page errors during design-system skeleton rendering',
@@ -550,6 +561,7 @@ async function writeReport(runId, findings) {
     '- **(CardActionsPageSkeleton)** Same pattern for `CardActionsPageSkeleton`.',
     '- **(ActionHandlersPageSkeleton)** Same pattern for `ActionHandlersPageSkeleton`.',
     '- **(LoginPageSkeleton)** Same pattern for `LoginPageSkeleton`.',
+    '- **(ProjectsPageSkeleton)** Same pattern for `ProjectsPageSkeleton`.',
     '- **(runtime errors)** Asserts no `pageerror` or `console.error` events',
     '  during the design-system skeleton rendering.',
     '',

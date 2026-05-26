@@ -119,6 +119,7 @@ import {
   CardActionsPageSkeleton,
   ActionHandlersPageSkeleton,
   LoginPageSkeleton,
+  ProjectsPageSkeleton,
 } from '../components/PageLoadingSkeleton';
 
 /**
@@ -1735,6 +1736,17 @@ window.closeBottomBar();`}
 
 // Rendered by LoginPage while GET /api/auth/user is in-flight.
 if (!sessionChecked) return <LoginPageSkeleton />;`}
+          />
+
+          <ComponentShowcase
+            name="ProjectsPageSkeleton"
+            description="Shape-matched skeleton for the Projects page: stage filter tab strip, sort-selector + group-by toggle bar, and a responsive grid of six project card outlines each with a header and 1–2 room rows."
+            demo={<Box sx={{ width: '100%', height: 420, position: 'relative', overflow: 'hidden', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}><ProjectsPageSkeleton forceVisible /></Box>}
+            code={`import { ProjectsPageSkeleton } from '../components/PageLoadingSkeleton';
+
+<Suspense fallback={<ProjectsPageSkeleton />}>
+  <ProjectsPage />
+</Suspense>`}
           />
         </>
       )}

@@ -221,12 +221,20 @@ async function main() {
     await injectSession(page, adminClient.cookie, BASE);
     await page.goto(`${BASE}/projects`, { waitUntil: 'domcontentloaded', timeout: 25000 });
 
-    // Wait for bootstrap to complete: #projects-view receives content once
-    // renderProjectsView() has run after the Promise.all resolves.
+    // Wait for the React ProjectsPage fetch to start (skeleton appears) but
+    // NOT for loading to finish — when document.hidden=true the stale update
+    // is deferred, and we want to verify the banner is absent *before* the
+    // tab becomes visible.  Waiting for the skeleton to appear is sufficient:
+    // the skeleton renders as soon as the React island mounts (before the
+    // fetch resolves), so once it's present we know the page script has run
+    // and the fetch has been issued.  We then give it a brief extra wait so
+    // the Promise.all has time to complete and store the pending stale value.
     await pollPage(page, () => {
       const v = document.getElementById('projects-view');
       return v && v.innerHTML.trim().length > 0 ? 'ok' : null;
     }, 15000);
+    // Allow the in-flight fetch to complete and store pendingRoomStaleRef.
+    await new Promise(r => setTimeout(r, 1500));
 
     const f1HiddenConfirm = await page.evaluate(() => document.hidden);
     record('F1 document.hidden override active during load', f1HiddenConfirm === true,

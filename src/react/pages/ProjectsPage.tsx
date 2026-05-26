@@ -4,7 +4,6 @@ import {
   Avatar,
   Box,
   Button,
-  Chip,
   CircularProgress,
   Dialog,
   DialogContent,
@@ -30,6 +29,14 @@ import { PageFilterBar } from '../components/PageFilterBar';
 import { StageTabGroup } from '../components/StageTabGroup';
 import { SortSelect } from '../components/SortSelect';
 import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
+import { useProjectsData } from '../hooks/useProjectsData';
+import { ProjectsPageSkeleton } from '../components/PageLoadingSkeleton';
+import type {
+  ProjectContact,
+  ProjectRoom,
+  ProjectPlatformUser,
+  ProjectWorkflowDef,
+} from '../hooks/useProjectsData';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -54,41 +61,6 @@ const STAGE_LABEL_FALLBACK: Record<string, string> = {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-interface Contact {
-  id: string;
-  properties?: {
-    firstname?: string;
-    lastname?: string;
-    email?: string;
-    closedate?: string;
-  };
-}
-
-interface Room {
-  room?: string;
-  stageKey?: string;
-  roomStatus?: string;
-  assignedFitterId?: string | null;
-  installStart?: string | null;
-  roomIdx: number;
-}
-
-interface PlatformUser {
-  id: string;
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  profileImageUrl?: string;
-}
-
-interface WorkflowStage {
-  label?: string;
-}
-
-interface WorkflowDef {
-  stages?: Record<string, WorkflowStage>;
-}
-
 interface QBState {
   statusKnown?: boolean;
   loading?: boolean;
@@ -98,27 +70,15 @@ interface QBState {
 }
 
 interface WindowGlobals {
-  state?: {
-    contacts?: Contact[];
-    contactStageCache?: Record<string, Array<Omit<Room, 'roomIdx'>>>;
-    workflow?: WorkflowDef;
-    platformUsers?: PlatformUser[];
-    qb?: QBState;
-    roomAssignmentsStale?: boolean;
-    user?: { id?: string };
-  };
-  registerProjectsViewRenderer?: (fn: () => void) => void;
-  matchInvoicesForContact?: (contact: Contact) => Array<{ id: string; balance: number }>;
-  GET?: (path: string) => Promise<unknown>;
-  PATCH_REQ?: (path: string, body: unknown) => Promise<unknown>;
-  showToast?: (msg: string, isError?: boolean) => void;
+  state?: { qb?: QBState };
+  matchInvoicesForContact?: (contact: ProjectContact) => Array<{ id: string; balance: number }>;
 }
 
 type SortKey = 'stage' | 'name' | 'date' | 'install';
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
-function getContactName(c: Contact): string {
+function getContactName(c: ProjectContact): string {
   const first = c.properties?.firstname || '';
   const last = c.properties?.lastname || '';
   const both = `${first} ${last}`.trim();
@@ -126,7 +86,7 @@ function getContactName(c: Contact): string {
   return c.properties?.email || `Contact ${c.id}`;
 }
 
-function getStageLabel(stageKey: string, workflow: WorkflowDef | undefined): string {
+function getStageLabel(stageKey: string, workflow: ProjectWorkflowDef | undefined): string {
   return workflow?.stages?.[stageKey]?.label || STAGE_LABEL_FALLBACK[stageKey] || stageKey;
 }
 
@@ -134,7 +94,7 @@ function getStageColor(stageKey: string) {
   return STAGE_COLORS[stageKey] || { bg: BRAND_COLORS.ink3, light: BRAND_COLORS.paper, text: BRAND_COLORS.ink2 };
 }
 
-function getFitterInitials(user: PlatformUser | null | undefined): string {
+function getFitterInitials(user: ProjectPlatformUser | null | undefined): string {
   if (!user) return '+';
   const parts = [user.firstName, user.lastName].filter(Boolean);
   if (parts.length) return parts.map((s) => s![0]).join('').toUpperCase();
@@ -154,14 +114,18 @@ function fmtGBP(amount: number): string {
 
 // ── Row computation ────────────────────────────────────────────────────────────
 
+interface RoomWithIdx extends ProjectRoom {
+  roomIdx: number;
+}
+
 interface ProjectRow {
-  contact: Contact;
-  rooms: Room[];
+  contact: ProjectContact;
+  rooms: RoomWithIdx[];
 }
 
 function computeRows(
-  contacts: Contact[],
-  stageCache: Record<string, Array<Omit<Room, 'roomIdx'>>>,
+  contacts: ProjectContact[],
+  stageCache: Record<string, ProjectRoom[]>,
   filter: string,
   sortBy: SortKey,
   currentUserId: string | undefined,
@@ -175,7 +139,7 @@ function computeRows(
     const cached = stageCache[contact.id];
     if (!cached || cached.length === 0) continue;
 
-    const activeRooms: Room[] = cached
+    const activeRooms: RoomWithIdx[] = cached
       .map((r, idx) => ({ ...r, roomIdx: idx }))
       .filter((r) => (r.roomStatus || 'active') === 'active')
       .filter((r) => !stageKey || r.stageKey === stageKey)
@@ -235,8 +199,8 @@ function FitterChip({
   canAssign,
   onOpenPicker,
 }: {
-  room: Room;
-  platformUsers: PlatformUser[];
+  room: RoomWithIdx;
+  platformUsers: ProjectPlatformUser[];
   canAssign: boolean;
   onOpenPicker: (contactId: string, roomIdx: number, contactName: string) => void;
 }) {
@@ -347,11 +311,13 @@ function InvoiceBadge({
   qb,
   onOpen,
 }: {
-  contact: Contact;
+  contact: ProjectContact;
   qb: QBState | undefined;
   onOpen: (firstId: string, allIds: string[]) => void;
 }) {
-  if (!qb?.statusKnown || qb.loading || (qb.connected && !qb.loaded)) {
+  if (!qb) return null;
+
+  if (!qb.statusKnown || qb.loading || (qb.connected && !qb.loaded)) {
     return (
       <Box
         sx={{
@@ -418,12 +384,12 @@ function ProjectCard({
   onNavigate,
   onOpenInvoice,
 }: {
-  contact: Contact;
-  rooms: Room[];
-  platformUsers: PlatformUser[];
+  contact: ProjectContact;
+  rooms: RoomWithIdx[];
+  platformUsers: ProjectPlatformUser[];
   canAssign: boolean;
-  workflow: WorkflowDef | undefined;
-  qb: QBState | undefined;
+  workflow: ProjectWorkflowDef | undefined;
+  qb?: QBState;
   onOpenFitterPicker: (contactId: string, roomIdx: number) => void;
   onNavigate: (contactId: string, roomIdx: number) => void;
   onOpenInvoice: (firstId: string, allIds: string[]) => void;
@@ -569,7 +535,7 @@ function FitterPickerDialog({
   onClose: () => void;
   contactId: string;
   roomIdx: number;
-  platformUsers: PlatformUser[];
+  platformUsers: ProjectPlatformUser[];
   currentFitterId: string | null | undefined;
   onAssign: (contactId: string, roomIdx: number, fitterId: string | null) => void;
 }) {
@@ -690,12 +656,21 @@ export function ProjectsPage() {
   const { notifyApiError } = useConnectionToast();
   useConnectionCheck();
 
-  const [refreshKey, setRefreshKey] = useState(0);
+  const {
+    loading,
+    error,
+    contacts,
+    stageCache,
+    workflow,
+    platformUsers,
+    currentUserId,
+    roomAssignmentsStale,
+    updateRoomAssignment,
+  } = useProjectsData();
+
   const [filter, setFilter] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortKey>('stage');
   const [groupBy, setGroupBy] = useState(false);
-  const [platformUsers, setPlatformUsers] = useState<PlatformUser[]>([]);
-  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [staleDismissed, setStaleDismissed] = useState(false);
   const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null);
 
@@ -716,85 +691,26 @@ export function ProjectsPage() {
     setInvDrawerOpen(true);
   }, []);
 
-  // ── Register as the projects view renderer ─────────────────────────────────
-  useEffect(() => {
-    const w = window as unknown as WindowGlobals;
-    if (typeof w.registerProjectsViewRenderer === 'function') {
-      w.registerProjectsViewRenderer(() => setRefreshKey((k) => k + 1));
-    }
-    // Trigger an immediate refresh so that data already loaded by bootstrap()
-    // (before this effect ran) is displayed without waiting for the next
-    // renderProjectsView() call. This covers the edge case where bootstrap
-    // completes before the React component mounts.
-    setRefreshKey((k) => k + 1);
-
-    // Listen for localdata updates (fitter assignments from other sessions)
-    const onLocalData = () => setRefreshKey((k) => k + 1);
-    document.addEventListener('localdata-updated', onLocalData);
-    return () => {
-      document.removeEventListener('localdata-updated', onLocalData);
-    };
-  }, []);
+  // QB state — read from window globals (populated by invoices-core.js when loaded)
+  const qb = (window as unknown as WindowGlobals).state?.qb;
 
   // ── Load prefs ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    const w = window as unknown as WindowGlobals;
-    const s = w.state;
-    // If the vanilla bootstrap has already set prefs on state, read them now
-    if (s) {
-      const sort = (s as unknown as Record<string, unknown>)['projectSort'] as SortKey | undefined;
-      const group = (s as unknown as Record<string, unknown>)['projectGroupByStage'] as boolean | undefined;
-      if (sort) setSortBy(sort);
-      if (group != null) setGroupBy(!!group);
-    }
-    // Fetch from API in case state hasn't been populated yet
-    const fetchPrefs = async () => {
+    (async () => {
       try {
-        if (typeof w.GET === 'function') {
-          const prefs = (await w.GET('/api/users/me/prefs')) as Record<string, unknown>;
+        const r = await fetch('/api/users/me/prefs', { headers: { Accept: 'application/json' } });
+        if (r.ok) {
+          const prefs = (await r.json()) as Record<string, unknown>;
           if (prefs?.projectSort) setSortBy(prefs.projectSort as SortKey);
           if (prefs?.projectGroupByStage != null) setGroupBy(!!prefs.projectGroupByStage);
         }
       } catch {
         // ignore — default prefs are fine
-      } finally {
-        setPrefsLoaded(true);
       }
-    };
-    fetchPrefs();
+    })();
   }, []);
 
-  // ── Load platform users ────────────────────────────────────────────────────
-  useEffect(() => {
-    const w = window as unknown as WindowGlobals;
-    const existing = w.state?.platformUsers;
-    if (existing && existing.length > 0) {
-      setPlatformUsers(existing);
-      return;
-    }
-    const load = async () => {
-      try {
-        if (typeof w.GET === 'function') {
-          const users = (await w.GET('/api/platform-users')) as PlatformUser[];
-          setPlatformUsers(users || []);
-          if (w.state) (w.state as unknown as Record<string, unknown>)['platformUsers'] = users;
-        }
-      } catch {
-        // ignore — fitter chips just won't show names
-      }
-    };
-    load();
-  }, []);
-
-  // ── Derive data from window.state ──────────────────────────────────────────
-  const w = window as unknown as WindowGlobals;
-  const state = w.state;
-  const contacts = state?.contacts || [];
-  const stageCache = state?.contactStageCache || {};
-  const workflow = state?.workflow;
-  const qb = state?.qb;
-  const isStale = !!state?.roomAssignmentsStale && !staleDismissed;
-  const currentUserId = state?.user?.id;
+  const isStale = roomAssignmentsStale && !staleDismissed;
 
   const myRooms = filter === '__mine__';
   const stageKeyFilter = myRooms ? '' : filter;
@@ -802,8 +718,7 @@ export function ProjectsPage() {
 
   const rows = useMemo(
     () => computeRows(contacts, stageCache, filter, sortBy, currentUserId),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [refreshKey, contacts.length, filter, sortBy, currentUserId],
+    [contacts, stageCache, filter, sortBy, currentUserId],
   );
 
   // ── Stage tabs ─────────────────────────────────────────────────────────────
@@ -814,38 +729,34 @@ export function ProjectsPage() {
       ...STAGE_KEYS.map((k) => ({ key: k, label: getStageLabel(k, workflow) })),
     ];
     return tabs;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey, workflow]);
+  }, [workflow]);
 
   // ── Pref persistence helpers ───────────────────────────────────────────────
-  const persistPref = useCallback(
-    async (key: string, value: unknown) => {
-      try {
-        if (typeof w.PATCH_REQ === 'function') {
-          await w.PATCH_REQ('/api/users/me/prefs', { [key]: value });
-        }
-      } catch {
-        // ignore
-      }
-    },
-    [w],
-  );
+  const persistPref = useCallback(async (key: string, value: unknown) => {
+    try {
+      await fetch('/api/users/me/prefs', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ [key]: value }),
+      });
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const handleSortChange = useCallback(
     (val: SortKey) => {
       setSortBy(val);
-      if (w.state) (w.state as unknown as Record<string, unknown>)['projectSort'] = val;
       persistPref('projectSort', val);
     },
-    [w, persistPref],
+    [persistPref],
   );
 
   const handleGroupToggle = useCallback(() => {
     const next = !groupBy;
     setGroupBy(next);
-    if (w.state) (w.state as unknown as Record<string, unknown>)['projectGroupByStage'] = next;
     persistPref('projectGroupByStage', next);
-  }, [groupBy, w, persistPref]);
+  }, [groupBy, persistPref]);
 
   // ── Fitter picker ──────────────────────────────────────────────────────────
   const handleOpenPicker = useCallback((contactId: string, roomIdx: number) => {
@@ -863,18 +774,19 @@ export function ProjectsPage() {
       setPickerOpen(false);
       setPickerAssigning(true);
       try {
-        const result = (await w.PATCH_REQ?.(
-          `/api/contacts/${contactId}/rooms/${roomIdx}/fitter`,
-          { fitterId: fitterId || null },
-        )) as { syncFailed?: boolean } | undefined;
-
-        // Update local cache
-        const cached = w.state?.contactStageCache?.[contactId];
-        if (cached && cached[roomIdx] !== undefined) {
-          cached[roomIdx] = { ...cached[roomIdx], assignedFitterId: fitterId || null };
+        const r = await fetch(`/api/contacts/${contactId}/rooms/${roomIdx}/fitter`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ fitterId: fitterId || null }),
+        });
+        if (r.status === 401) { window.location.href = '/login'; return; }
+        const result = (await r.json().catch(() => ({}))) as { syncFailed?: boolean; error?: string; code?: string };
+        if (!r.ok) {
+          const err = Object.assign(new Error(result.error || `HTTP ${r.status}`), { code: result.code });
+          throw err;
         }
 
-        setRefreshKey((k) => k + 1);
+        updateRoomAssignment(contactId, roomIdx, fitterId);
 
         const baseMsg = fitterId ? 'Fitter assigned' : 'Assignment removed';
         if (result?.syncFailed) {
@@ -896,19 +808,40 @@ export function ProjectsPage() {
         setPickerAssigning(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [w, notifyApiError],
+    [updateRoomAssignment, notifyApiError],
   );
 
   // Current fitter for the open picker
   const pickerCurrentFitter =
-    (pickerContactId && w.state?.contactStageCache?.[pickerContactId]?.[pickerRoomIdx]?.assignedFitterId) ?? null;
+    (pickerContactId && stageCache[pickerContactId]?.[pickerRoomIdx]?.assignedFitterId) ?? null;
 
   // ── Navigate to project ────────────────────────────────────────────────────
   const handleNavigate = useCallback((contactId: string, roomIdx: number) => {
     const idx = roomIdx || 0;
     window.location.href = idx ? `/customers/${contactId}?room=${idx}` : `/customers/${contactId}`;
   }, []);
+
+  // ── Loading / error states ─────────────────────────────────────────────────
+  if (loading) {
+    return <ProjectsPageSkeleton />;
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" size="small" onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
+      </Box>
+    );
+  }
 
   // ── Render groups ──────────────────────────────────────────────────────────
   const renderCards = () => {
@@ -1037,7 +970,17 @@ export function ProjectsPage() {
         <Alert
           severity="warning"
           icon={<WarningAmberIcon fontSize="small" />}
-          onClose={() => setStaleDismissed(true)}
+          action={
+            <IconButton
+              className="room-stale-banner-dismiss"
+              aria-label="dismiss stale banner"
+              size="small"
+              onClick={() => setStaleDismissed(true)}
+              sx={{ color: 'inherit' }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          }
           id="room-stale-banner"
           role="alert"
           sx={{

@@ -17,6 +17,7 @@ import {
   AdminSettingsPageSkeleton,
   CardActionsPageSkeleton,
   ActionHandlersPageSkeleton,
+  ProjectsPageSkeleton,
 } from './components/PageLoadingSkeleton';
 
 /*
@@ -167,7 +168,7 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'ideas-page-mount',       render: () => <IdeasPage /> },
   { id: 'customer-detail-root',   render: () => <CustomerDetailPage /> },
   { id: 'invoices-page-mount',    render: () => <StandaloneInvoicesPage /> },
-  { id: 'projects-view',          render: () => <ProjectsPage /> },
+  { id: 'projects-view',          render: () => <ProjectsPage />, fallback: <ProjectsPageSkeleton /> },
   { id: 'db-page-mount',              render: () => <DatabaseAdminPage /> },
   { id: 'dv-signoff-mount',           render: () => <DesignVisitSignOffPage /> },
   { id: 'not-found-root',             render: () => <NotFoundPage /> },
