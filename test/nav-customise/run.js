@@ -17,6 +17,12 @@
 //                  the dialog is opened with a non-default selection active.
 //   [RST-SAVE]     Saving after reset calls PATCH /api/admin/nav-role-config
 //                  with the default primary_keys array.
+//   [DEF-OPEN]     __default__ row tune button opens NavCustomiseDialog and
+//                  pre-checks exactly the keys stored in nav_role_configs for
+//                  __default__.
+//   [DEF-SAVE]     Saving from the __default__ row dispatches
+//                  PATCH /api/admin/nav-role-config/__default__ with the
+//                  correct primary_keys body.
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:nav-customise
@@ -448,6 +454,66 @@ async function clickCancelButton(page) {
 }
 
 /**
+ * Wait for the __default__ row to appear inside the Permissions tab panel.
+ * The row is identified by a <p> element with exact text
+ * "Default (all other roles)" — it lives outside #roles-list, after the
+ * Divider that separates named roles from the fallback row.
+ */
+async function waitForDefaultRow(page) {
+  return poll(page, () => {
+    const panel = document.getElementById('tab-permissions');
+    if (!panel) return null;
+    const allPs = Array.from(panel.querySelectorAll('p'));
+    return allPs.some(p => p.textContent.trim() === 'Default (all other roles)') ? 'ok' : null;
+  }, null, 12000);
+}
+
+/**
+ * Click the tune icon button in the __default__ row and wait for the
+ * NavCustomiseDialog to open.  Returns true if the dialog appeared.
+ *
+ * Strategy: find the <p> whose text is "Default (all other roles)", walk up
+ * the DOM to the nearest ancestor that contains at least one <button>, then
+ * click the first button in that row (the tune button — the __default__ row
+ * has no "Remove role" button, so there is exactly one).
+ *
+ * Note: MUI <Tooltip title="…"> does NOT propagate the title attribute to
+ * the rendered <button>, so we cannot use button[title="…"] selectors.
+ */
+async function clickTuneForDefault(page) {
+  await page.evaluate(() => {
+    const panel = document.getElementById('tab-permissions');
+    if (!panel) return;
+
+    const allPs = Array.from(panel.querySelectorAll('p'));
+    let targetRow = null;
+    for (const p of allPs) {
+      if (p.textContent.trim() === 'Default (all other roles)') {
+        let node = p.parentElement;
+        for (let i = 0; i < 8; i++) {
+          if (!node) break;
+          const btns = node.querySelectorAll('button');
+          if (btns.length >= 1) { targetRow = node; break; }
+          node = node.parentElement;
+        }
+        if (targetRow) break;
+      }
+    }
+
+    if (!targetRow) return;
+    const btn = targetRow.querySelector('button');
+    if (btn) btn.click();
+  });
+
+  const opened = await poll(page, () => {
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+    return dialogs.some(d => d.textContent.includes('Customise navigation')) ? 'ok' : null;
+  }, null, 8000);
+
+  return opened === 'ok';
+}
+
+/**
  * HTTP helper for API calls using a session cookie string.
  */
 async function apiFetch(cookie, method, pathname, body) {
@@ -535,6 +601,10 @@ async function main() {
     // nav_role_configs has no FK cascade from job_roles; clean up directly.
     try {
       await pool.query(`DELETE FROM nav_role_configs WHERE role_name LIKE 'privtest-%'`);
+    } catch {}
+    // Remove any __default__ config written by [DEF-OPEN] / [DEF-SAVE] probes.
+    try {
+      await pool.query(`DELETE FROM nav_role_configs WHERE role_name = '__default__'`);
     } catch {}
     await pool.end().catch(() => {});
     process.exit(code);
@@ -1136,6 +1206,180 @@ async function main() {
       await page.__ctx.close().catch(() => {});
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // [DEF-OPEN] __default__ row tune button opens dialog with correct keys
+    // Pre-seed __default__ to a known non-fallback set so the expected checked
+    // labels are deterministic.
+    // ══════════════════════════════════════════════════════════════════════════
+    console.log('\n  [DEF-OPEN] __default__ tune button opens dialog with correct initial keys');
+    {
+      const DEF_PRESET_KEYS   = ['home', 'survey', 'calendar'];
+      const DEF_PRESET_LABELS = ['Home', 'Survey', 'Calendar'];
+
+      const seedRes = await apiFetch(
+        adminClient.cookie,
+        'PATCH',
+        '/api/admin/nav-role-config/__default__',
+        { primary_keys: DEF_PRESET_KEYS },
+      );
+      if (seedRes.status !== 200) {
+        console.warn(`  [DEF-OPEN] Could not pre-seed __default__ config (status ${seedRes.status}); initial-keys check may fail`);
+      }
+
+      const page = await openPermissionsTab(browser, adminClient.cookie, null);
+      await waitForDefaultRow(page);
+
+      const dialogOpened = await clickTuneForDefault(page);
+      record(
+        '[DEF-OPEN] __default__ tune button opens NavCustomiseDialog',
+        'dialog visible',
+        dialogOpened ? 'visible' : 'not visible',
+        dialogOpened,
+      );
+
+      if (dialogOpened) {
+        const state = await readDialogState(page);
+
+        record(
+          '[DEF-OPEN] Dialog is open (dialogOpen=true)',
+          'dialogOpen=true',
+          `dialogOpen=${state.dialogOpen}`,
+          state.dialogOpen,
+        );
+
+        const checkedSorted  = [...state.checkedKeys].sort();
+        const expectedSorted = [...DEF_PRESET_LABELS].sort();
+        record(
+          '[DEF-OPEN] Dialog pre-checks exactly the seeded __default__ keys (Home, Survey, Calendar)',
+          `checkedKeys=${JSON.stringify(expectedSorted)}`,
+          `checkedKeys=${JSON.stringify(checkedSorted)}`,
+          JSON.stringify(checkedSorted) === JSON.stringify(expectedSorted),
+        );
+
+        record(
+          '[DEF-OPEN] Exactly 3 keys are pre-checked',
+          'length=3',
+          `length=${state.checkedKeys.length}`,
+          state.checkedKeys.length === 3,
+        );
+
+        await page.evaluate(() => {
+          const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+          const dialog = dialogs.find(d => d.textContent.includes('Customise navigation')) || null;
+          if (!dialog) return;
+          const cancelBtn = Array.from(dialog.querySelectorAll('button'))
+            .find(b => b.textContent.trim() === 'Cancel');
+          if (cancelBtn) cancelBtn.click();
+        });
+      } else {
+        for (const skip of [
+          '[DEF-OPEN] Dialog is open (dialogOpen=true)',
+          '[DEF-OPEN] Dialog pre-checks exactly the seeded __default__ keys (Home, Survey, Calendar)',
+          '[DEF-OPEN] Exactly 3 keys are pre-checked',
+        ]) {
+          record(skip, 'dialog opened', 'dialog did not open (skipped)', false);
+        }
+      }
+
+      await page.close().catch(() => {});
+      await page.__ctx.close().catch(() => {});
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // [DEF-SAVE] Saving from the __default__ row dispatches
+    //            PATCH /api/admin/nav-role-config/__default__
+    // ══════════════════════════════════════════════════════════════════════════
+    console.log('\n  [DEF-SAVE] Saving from __default__ row dispatches PATCH /__default__');
+    {
+      const DEF_NEW_KEYS   = ['home', 'sales', 'calendar'];
+      const DEF_NEW_LABELS = ['Home', 'Sales', 'Calendar'];
+
+      const page = await openPermissionsTab(browser, adminClient.cookie, null);
+      await waitForDefaultRow(page);
+
+      const dialogOpened = await clickTuneForDefault(page);
+      record(
+        '[DEF-SAVE] __default__ dialog opens for save probe',
+        'dialog visible',
+        dialogOpened ? 'visible' : 'not visible',
+        dialogOpened,
+      );
+
+      if (dialogOpened) {
+        await selectNavItems(page, DEF_NEW_LABELS);
+
+        let capturedBody = null;
+        let capturedUrl  = null;
+
+        await page.setRequestInterception(true);
+        const handler = (req) => {
+          const url    = req.url();
+          const method = req.method();
+          if (method === 'PATCH' && url.includes('/api/admin/nav-role-config/')) {
+            capturedUrl = url;
+            try { capturedBody = JSON.parse(req.postData() || 'null'); } catch {}
+          }
+          req.continue();
+        };
+        page.on('request', handler);
+
+        await page.evaluate(() => {
+          const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+          const dialog = dialogs.find(d => d.textContent.includes('Customise navigation')) || null;
+          if (!dialog) return;
+          const saveBtn = Array.from(dialog.querySelectorAll('button'))
+            .find(b => b.textContent.trim() === 'Save');
+          if (saveBtn && !saveBtn.disabled) saveBtn.click();
+        });
+
+        await poll(page, () => {
+          const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+          return dialogs.every(d => !d.textContent.includes('Customise navigation')) ? 'closed' : null;
+        }, null, 8000);
+
+        page.off('request', handler);
+        await page.setRequestInterception(false);
+
+        record(
+          '[DEF-SAVE] PATCH /api/admin/nav-role-config/__default__ was called on save',
+          'request captured with URL containing __default__',
+          capturedUrl ? `url=${capturedUrl}` : 'no request captured',
+          capturedUrl !== null && capturedUrl.includes('__default__'),
+        );
+
+        if (capturedBody) {
+          const sentKeys = capturedBody.primary_keys;
+          const keysMatch =
+            Array.isArray(sentKeys) &&
+            sentKeys.length === DEF_NEW_KEYS.length &&
+            DEF_NEW_KEYS.every(k => sentKeys.includes(k));
+          record(
+            '[DEF-SAVE] PATCH body primary_keys matches new selection (home, sales, calendar)',
+            `primary_keys contains [${DEF_NEW_KEYS.join(',')}]`,
+            `primary_keys=${JSON.stringify(sentKeys)}`,
+            keysMatch,
+          );
+        } else {
+          record(
+            '[DEF-SAVE] PATCH body primary_keys matches new selection (home, sales, calendar)',
+            `primary_keys contains [${DEF_NEW_KEYS.join(',')}]`,
+            'no request body captured',
+            false,
+          );
+        }
+      } else {
+        for (const skip of [
+          '[DEF-SAVE] PATCH /api/admin/nav-role-config/__default__ was called on save',
+          '[DEF-SAVE] PATCH body primary_keys matches new selection (home, sales, calendar)',
+        ]) {
+          record(skip, 'dialog opened', 'dialog did not open (skipped)', false);
+        }
+      }
+
+      await page.close().catch(() => {});
+      await page.__ctx.close().catch(() => {});
+    }
+
   } catch (e) {
     record('test harness', 'no uncaught error', `error: ${e.message}`, false);
     console.error(e);
@@ -1206,6 +1450,11 @@ async function writeReport(findings, runId) {
     '  non-default ones (e.g. Sales). Exactly 3 items are selected.',
     '- **[RST-SAVE]** Saving after reset dispatches',
     '  `PATCH /api/admin/nav-role-config` with primary_keys equal to the default array.',
+    '- **[DEF-OPEN]** The `__default__` row in the Permissions tab has a tune button',
+    '  (title="Edit default navigation layout") that opens `NavCustomiseDialog` and',
+    '  pre-checks exactly the keys stored for `__default__` in `nav_role_configs`.',
+    '- **[DEF-SAVE]** Saving from the `__default__` dialog dispatches',
+    '  `PATCH /api/admin/nav-role-config/__default__` with the selected `primary_keys`.',
     '',
     '## Relevant files',
     '',
