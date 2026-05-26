@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   Alert,
   Box,
@@ -30,6 +30,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { ContactsPagination } from '../components/ContactsPagination';
 
 type _Icons = typeof ArrowBackIcon | typeof ArrowForwardIcon | typeof CloseIcon |
   typeof DownloadIcon | typeof EmailIcon | typeof RefreshIcon |
@@ -66,6 +67,23 @@ interface InvoiceDetail extends InvoiceSummary {
 interface QBStatus {
   connected: boolean;
   company?: string;
+}
+
+// ── Pagination ────────────────────────────────────────────────────────────────
+
+const PAGE_LIMIT = 25;
+const PAGE_KEY   = 'mo_invoice_page';
+
+function loadPage(): number {
+  try {
+    const raw = localStorage.getItem(PAGE_KEY);
+    const n = raw ? parseInt(raw, 10) : 1;
+    return Number.isFinite(n) && n >= 1 ? n : 1;
+  } catch { return 1; }
+}
+
+function savePage(page: number) {
+  try { localStorage.setItem(PAGE_KEY, String(page)); } catch { /* ignore */ }
 }
 
 // ── Draft persistence (localStorage) ──────────────────────────────────────────
@@ -583,6 +601,7 @@ export function StandaloneInvoicesPage() {
 
   const [filter, setFilter] = useState<'all' | 'overdue' | 'outstanding'>('all');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState<number>(() => loadPage());
 
   const [panelOpen, setPanelOpen]   = useState(false);
   const [panelInvId, setPanelInvId] = useState<string | null>(null);
@@ -652,20 +671,41 @@ export function StandaloneInvoicesPage() {
   }, []);
 
   // Sort by status priority, then build filtered list
-  const sorted = [...invoices].sort((a, b) => {
+  const sorted = useMemo(() => [...invoices].sort((a, b) => {
     const order: Record<string, number> = { overdue: 0, open: 1, partial: 2, paid: 3 };
     return (order[invoiceStatus(a)] ?? 4) - (order[invoiceStatus(b)] ?? 4);
-  });
+  }), [invoices]);
 
   const q = search.toLowerCase().trim();
-  let visible = sorted;
-  if (filter === 'overdue')     visible = visible.filter(inv => invoiceStatus(inv) === 'overdue');
-  if (filter === 'outstanding') visible = visible.filter(inv => ['overdue', 'open', 'partial'].includes(invoiceStatus(inv)));
-  if (q) visible = visible.filter(inv =>
-    (inv.customerName || '').toLowerCase().includes(q) ||
-    (inv.docNumber    || '').toLowerCase().includes(q) ||
-    (inv.email        || '').toLowerCase().includes(q),
-  );
+  const visible = useMemo(() => {
+    let list = sorted;
+    if (filter === 'overdue')     list = list.filter(inv => invoiceStatus(inv) === 'overdue');
+    if (filter === 'outstanding') list = list.filter(inv => ['overdue', 'open', 'partial'].includes(invoiceStatus(inv)));
+    if (q) list = list.filter(inv =>
+      (inv.customerName || '').toLowerCase().includes(q) ||
+      (inv.docNumber    || '').toLowerCase().includes(q) ||
+      (inv.email        || '').toLowerCase().includes(q),
+    );
+    return list;
+  }, [sorted, filter, q]);
+
+  // Reset to page 1 when filter/search changes
+  useEffect(() => {
+    setPage(1);
+    savePage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, q]);
+
+  const totalPages   = Math.max(1, Math.ceil(visible.length / PAGE_LIMIT));
+  const safePage     = Math.min(page, totalPages);
+  const pageStart    = (safePage - 1) * PAGE_LIMIT;
+  const pageSlice    = visible.slice(pageStart, pageStart + PAGE_LIMIT);
+
+  const handlePageChange = useCallback((p: number) => {
+    setPage(p);
+    savePage(p);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   const totalBalance = visible.reduce((s, inv) => s + (inv.balance ?? 0), 0);
   const overdueCount = sorted.filter(inv => invoiceStatus(inv) === 'overdue').length;
@@ -819,52 +859,64 @@ export function StandaloneInvoicesPage() {
           </Typography>
         </Box>
       ) : (
-        <Stack spacing={0.75}>
-          {visible.map(inv => {
-            const stat = invoiceStatus(inv);
-            return (
-              <Box
-                key={inv.id}
-                onClick={() => openPanel(inv.id)}
-                sx={{
-                  display: 'flex', alignItems: 'center', gap: 1.5,
-                  px: 1.75, py: 1.5,
-                  borderRadius: 2, border: '1px solid', borderColor: 'divider',
-                  bgcolor: 'background.paper',
-                  cursor: 'pointer',
-                  transition: 'background-color 0.15s',
-                  '&:hover': { bgcolor: 'action.hover' },
-                }}
-              >
-                {/* Customer name */}
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{inv.customerName || '—'}</Typography>
+        <>
+          <Stack spacing={0.75}>
+            {pageSlice.map(inv => {
+              const stat = invoiceStatus(inv);
+              return (
+                <Box
+                  key={inv.id}
+                  onClick={() => openPanel(inv.id)}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 1.5,
+                    px: 1.75, py: 1.5,
+                    borderRadius: 2, border: '1px solid', borderColor: 'divider',
+                    bgcolor: 'background.paper',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.15s',
+                    '&:hover': { bgcolor: 'action.hover' },
+                  }}
+                >
+                  {/* Customer name */}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{inv.customerName || '—'}</Typography>
+                  </Box>
+                  {/* Invoice number + due date */}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+                    <Typography variant="caption" color="text.secondary">Inv #{inv.docNumber || inv.id}</Typography>
+                    {inv.dueDate && (
+                      <Typography variant="caption" sx={{ color: stat === 'overdue' ? 'error.main' : 'text.secondary' }}>
+                        Due {fmtDate(inv.dueDate)}
+                      </Typography>
+                    )}
+                  </Box>
+                  {/* Status chip */}
+                  <StatusChip inv={inv} />
+                  {/* Balance */}
+                  <Typography variant="body2" sx={{ fontWeight: 700, minWidth: 80, textAlign: 'right', flexShrink: 0 }}>
+                    {fmtGBP(inv.balance)}
+                  </Typography>
+                  {/* Chevron */}
+                  <Box component="span" sx={{ color: 'text.disabled', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                  </Box>
                 </Box>
-                {/* Invoice number + due date */}
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
-                  <Typography variant="caption" color="text.secondary">Inv #{inv.docNumber || inv.id}</Typography>
-                  {inv.dueDate && (
-                    <Typography variant="caption" sx={{ color: stat === 'overdue' ? 'error.main' : 'text.secondary' }}>
-                      Due {fmtDate(inv.dueDate)}
-                    </Typography>
-                  )}
-                </Box>
-                {/* Status chip */}
-                <StatusChip inv={inv} />
-                {/* Balance */}
-                <Typography variant="body2" sx={{ fontWeight: 700, minWidth: 80, textAlign: 'right', flexShrink: 0 }}>
-                  {fmtGBP(inv.balance)}
-                </Typography>
-                {/* Chevron */}
-                <Box component="span" sx={{ color: 'text.disabled', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/>
-                  </svg>
-                </Box>
-              </Box>
-            );
-          })}
-        </Stack>
+              );
+            })}
+          </Stack>
+          <Box sx={{ mt: 2 }}>
+            <ContactsPagination
+              page={safePage}
+              totalPages={totalPages}
+              total={visible.length}
+              visibleCount={pageSlice.length}
+              pageLimit={PAGE_LIMIT}
+              onPageChange={handlePageChange}
+            />
+          </Box>
+        </>
       )}
 
       {/* Invoice detail drawer */}

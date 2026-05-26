@@ -39,6 +39,7 @@ body {
   color: var(--ink-1);
   overscroll-behavior: none;
   padding-top: var(--header-h);
+  padding-bottom: var(--nav-h);
 }
 body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
 
