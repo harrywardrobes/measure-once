@@ -24,6 +24,7 @@ const STEPS = [
   'test:bundle-spike-warning',
   'test:typo-vars',
   'test:color-radius-vars',
+  'test:auth-css-vars',
   'test:privilege-reads',
   'test:mount-ids',
   'test:inline-styles',

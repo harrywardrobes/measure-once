@@ -151,6 +151,7 @@
     "test:bundle-spike-warning": "node scripts/test-bundle-spike-warning.mjs",
     "test:typo-vars": "node scripts/check-typo-vars.mjs",
     "test:color-radius-vars": "node scripts/check-color-radius-vars.mjs",
+    "test:auth-css-vars": "node scripts/check-auth-css-vars.mjs",
     "test:mount-ids": "node scripts/check-mount-id-conflicts.mjs",
     "test:inline-styles": "node scripts/check-inline-styles.mjs",
     "test:privilege-reads": "node scripts/check-privilege-reads.mjs",
