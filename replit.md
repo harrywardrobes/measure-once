@@ -80,15 +80,15 @@ npm run watch:react  # rebuilds public/react/ on every src/react/ save
 Reload the browser manually after each rebuild. Useful when testing
 server-rendered pages or middleware that must run through Express.
 
-> **Note:** `npm start` (`prestart`) runs the full `build:react` (typecheck +
-> bundle + bundle-size check) before starting the server, so the bundle is
-> always fresh for production use.
+> **Note:** Both `npm start` (`prestart`) and `npm run dev` (`predev`) skip the
+> React build when `public/react/main.js` **already exists**, so Replit workflow
+> restarts and nodemon restarts are instant for server-side-only changes.
 >
-> `npm run dev` (`predev`) is intentionally lighter:
-> - If `public/react/main.js` **already exists**, the build is skipped entirely
->   so nodemon restarts are instant.
-> - If no bundle exists yet, only `vite build` runs (no typecheck, no
->   bundle-size check) to get the dev server up as fast as possible.
+> On a **clean checkout** (no bundle present) the two differ:
+> - `prestart` runs the full CI-quality build (typecheck + vite build +
+>   bundle-size check) so production always starts with a verified bundle.
+> - `predev` runs only `vite build` (no typecheck, no bundle-size check) to get
+>   the dev server up as fast as possible.
 >
 > To rebuild React manually during development use:
 > - `npm run build:react:dev` — fast Vite-only rebuild (no typecheck/size check)

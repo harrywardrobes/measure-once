@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "postinstall": "npx puppeteer browsers install chrome",
-    "prestart": "npm run build:react",
+    "prestart": "node scripts/start-prebuild.mjs",
     "start": "node server.js",
     "predev": "node scripts/dev-prebuild.mjs",
     "dev": "nodemon server.js",
