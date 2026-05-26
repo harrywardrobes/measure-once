@@ -1,7 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Box, Button, Card, CardContent, Divider, Stack, Typography,
+  Box, Button, Card, CardContent, CircularProgress, Divider, Stack, Typography,
 } from '@mui/material';
+import Alert from '@mui/material/Alert';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
+import TextField from '@mui/material/TextField';
+import { FileUploadField } from '../../components/FileUploadField';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -14,6 +25,7 @@ interface DvTerms     { id: number; version: number; text: string; published_at:
 
 const W = window as unknown as Record<string, unknown>;
 const _reloadRef: { fn: (() => Promise<void>) | null } = { fn: null };
+const _openEditorRef: { fn: ((type: string, existingId?: number) => void) | null } = { fn: null };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -50,111 +62,91 @@ function _broadcastDvCatalogueChange(type: string) {
   try { const ch = new BroadcastChannel(chanName); ch.postMessage({ ts: Date.now() }); ch.close(); } catch { /* ignore */ }
 }
 
-// ── Item editor modal (DOM-appended — handles file uploads and complex forms) ──
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 const DV_HANDLE_STYLES = ['Cup', 'Bar', 'Knob', 'Pull', 'Finger Pull', 'Other'];
 
-async function openDvItemEditor(type: string, existingId?: number) {
-  let item: Record<string, unknown> | null = null;
-  if (existingId) {
-    try {
-      const listUrl: Record<string, string> = {
-        handle:       '/api/admin/design-visit-handles',
-        furniture:    '/api/admin/design-visit-furniture-ranges',
-        'door-style': '/api/admin/design-visit-door-styles',
-      };
-      const list = await callApi('GET', listUrl[type]) as Array<Record<string, unknown>>;
-      item = (Array.isArray(list) ? list.find(x => x.id === existingId) : null) || null;
-    } catch { /* ignore */ }
-  }
+// ── DvItemEditorDialog component ───────────────────────────────────────────────
+
+interface DvItemEditorDialogProps {
+  open: boolean;
+  type: string;
+  existingId?: number;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}
+
+function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItemEditorDialogProps) {
+  const [loading, setLoading] = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [errMsg,  setErrMsg]  = useState('');
+
+  const [name,        setName]        = useState('');
+  const [style,       setStyle]       = useState('');
+  const [description, setDescription] = useState('');
+  const [imageUrl,    setImageUrl]     = useState('');
+  const [imageFile,   setImageFile]    = useState<File | null>(null);
+  const [previewSrc,  setPreviewSrc]   = useState('');
+
   const typeLabels: Record<string, string> = {
     handle: 'Handle', furniture: 'Furniture Range', 'door-style': 'Door Style',
   };
   const hasDescription = type === 'furniture';
   const hasStyleSelect = type === 'handle';
   const hasImageUrl    = type !== 'furniture';
+  const hasFileUpload  = type === 'handle';
 
-  const wrap = document.createElement('div');
-  wrap.className = 'js-modal-scrim js-modal-scrim--below';
-  wrap.innerHTML = `
-    <div class="adm-modal-card adm-modal-card--narrow">
-      <h3 class="adm-modal-title">${item ? 'Edit' : 'Add'} ${esc(typeLabels[type] || type)}</h3>
-      <label class="adm-modal-label adm-modal-label--first">Name <span class="adm-req">*</span></label>
-      <input id="dvie-name" type="text" class="field adm-field-name" maxlength="200" value="${esc(item?.name || '')}">
-      ${hasStyleSelect ? `
-        <label class="adm-modal-label">Style${item ? '' : ' <span class="adm-req">*</span>'}</label>
-        <select id="dvie-style" class="field adm-field-sm">
-          <option value="">— select —</option>
-          ${DV_HANDLE_STYLES.map(s => `<option value="${esc(s)}"${item?.style === s ? ' selected' : ''}>${esc(s)}</option>`).join('')}
-        </select>
-      ` : ''}
-      ${hasDescription ? `
-        <label class="adm-modal-label">Description</label>
-        <textarea id="dvie-desc" class="field adm-field-resize" rows="2" maxlength="500">${esc(item?.description || '')}</textarea>
-      ` : ''}
-      ${hasImageUrl ? `
-        <label class="adm-modal-label">Image${type === 'handle' ? '' : ' URL'}</label>
-        ${type === 'handle' ? `
-          <div id="dvie-img-preview-wrap" class="adm-dv-preview-wrap"${item?.image_url ? '' : ' hidden'}>
-            <img id="dvie-img-preview" src="${esc(item?.image_url || '')}" alt="Current image" class="adm-dv-preview">
-          </div>
-          <input id="dvie-img-file" type="file" accept="image/*" class="field adm-field-file">
-        ` : `<input id="dvie-img-url" type="url" class="field adm-field-name" maxlength="500" placeholder="https://…" value="${esc(item?.image_url || '')}">`}
-      ` : ''}
-      <div id="dvie-err" class="adm-err-line hidden"></div>
-      <div class="adm-modal-actions">
-        <button class="btn btn-ghost" id="dvie-cancel">Cancel</button>
-        <button class="btn btn-primary" id="dvie-save">${item ? 'Save' : 'Add'}</button>
-      </div>
-    </div>`;
-
-  document.body.appendChild(wrap);
-
-  if (type === 'handle') {
-    const fileInput   = wrap.querySelector<HTMLInputElement>('#dvie-img-file');
-    const previewWrap = wrap.querySelector<HTMLElement>('#dvie-img-preview-wrap');
-    const previewImg  = wrap.querySelector<HTMLImageElement>('#dvie-img-preview');
-    if (fileInput && previewWrap && previewImg) {
-      fileInput.addEventListener('change', () => {
-        const file = fileInput.files?.[0];
-        if (!file) return;
-        previewImg.src = URL.createObjectURL(file);
-        previewWrap.hidden = false;
-      });
+  useEffect(() => {
+    if (!open) {
+      setName(''); setStyle(''); setDescription(''); setImageUrl('');
+      setImageFile(null); setPreviewSrc(''); setErrMsg('');
+      return;
     }
-  }
+    if (!existingId) return;
 
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  wrap.querySelector('#dvie-cancel')!.addEventListener('click', () => wrap.remove());
-
-  wrap.querySelector('#dvie-save')!.addEventListener('click', async () => {
-    const errEl = wrap.querySelector<HTMLElement>('#dvie-err')!;
-    errEl.textContent = '';
-    const nameVal = (wrap.querySelector<HTMLInputElement>('#dvie-name')?.value || '').trim();
-    if (!nameVal) { errEl.textContent = 'Name is required.'; errEl.className = 'adm-err-line'; return; }
-
-    let imageUrl = item?.image_url as string | undefined;
-
-    if (type === 'handle') {
-      const fileInput = wrap.querySelector<HTMLInputElement>('#dvie-img-file');
-      const file = fileInput?.files?.[0];
-      if (file) {
-        const formData = new FormData();
-        formData.append('image', file);
-        try {
-          const res = await fetch('/api/admin/design-visit-handles/upload-image', { method: 'POST', body: formData });
-          if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as {error?: string}).error || res.statusText); }
-          const j = await res.json() as { url: string };
-          imageUrl = j.url;
-        } catch (e) {
-          errEl.textContent = 'Image upload failed: ' + (e as Error).message;
-          errEl.className = 'adm-err-line';
-          return;
+    setLoading(true);
+    const listUrl: Record<string, string> = {
+      handle:       '/api/admin/design-visit-handles',
+      furniture:    '/api/admin/design-visit-furniture-ranges',
+      'door-style': '/api/admin/design-visit-door-styles',
+    };
+    callApi('GET', listUrl[type])
+      .then((list) => {
+        const arr = Array.isArray(list) ? list as Array<Record<string, unknown>> : [];
+        const item = arr.find(x => x.id === existingId) ?? null;
+        if (item) {
+          setName(String(item.name ?? ''));
+          setStyle(String(item.style ?? ''));
+          setDescription(String(item.description ?? ''));
+          setImageUrl(String(item.image_url ?? ''));
+          if (item.image_url) setPreviewSrc(String(item.image_url));
         }
+      })
+      .catch(() => { /* ignore — fields stay blank */ })
+      .finally(() => setLoading(false));
+  }, [open, existingId, type]);
+
+  async function handleSave() {
+    setErrMsg('');
+    const nameVal = name.trim();
+    if (!nameVal) { setErrMsg('Name is required.'); return; }
+
+    let finalImageUrl: string | undefined = imageUrl || undefined;
+
+    if (hasFileUpload && imageFile) {
+      const formData = new FormData();
+      formData.append('image', imageFile);
+      setSaving(true);
+      try {
+        const res = await fetch('/api/admin/design-visit-handles/upload-image', { method: 'POST', body: formData });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as {error?: string}).error || res.statusText); }
+        const j = await res.json() as { url: string };
+        finalImageUrl = j.url;
+      } catch (e) {
+        setErrMsg('Image upload failed: ' + (e as Error).message);
+        setSaving(false);
+        return;
       }
-    } else if (hasImageUrl) {
-      const urlInput = wrap.querySelector<HTMLInputElement>('#dvie-img-url');
-      imageUrl = (urlInput?.value || '').trim() || undefined;
     }
 
     const urlMap: Record<string, string> = {
@@ -165,26 +157,130 @@ async function openDvItemEditor(type: string, existingId?: number) {
     const method = existingId ? 'PATCH' : 'POST';
     const body: Record<string, unknown> = { name: nameVal };
     if (hasStyleSelect) {
-      const styleVal = (wrap.querySelector<HTMLSelectElement>('#dvie-style')?.value || '').trim();
-      if (!existingId && !styleVal) { errEl.textContent = 'Style is required.'; errEl.className = 'adm-err-line'; return; }
-      if (styleVal) body.style = styleVal;
+      if (!existingId && !style) { setErrMsg('Style is required.'); setSaving(false); return; }
+      if (style) body.style = style;
     }
-    if (hasDescription) {
-      body.description = (wrap.querySelector<HTMLTextAreaElement>('#dvie-desc')?.value || '').trim();
-    }
-    if (hasImageUrl) body.image_url = imageUrl || null;
+    if (hasDescription) body.description = description.trim();
+    if (hasImageUrl) body.image_url = finalImageUrl || null;
 
+    setSaving(true);
     try {
       await callApi(method, urlMap[type], body);
-      wrap.remove();
       showToast(existingId ? 'Saved.' : 'Added.');
       _broadcastDvCatalogueChange(type);
-      if (_reloadRef.fn) await _reloadRef.fn();
+      await onSaved();
+      onClose();
     } catch (e) {
-      errEl.textContent = (e as Error).message || 'Save failed.';
-      errEl.className = 'adm-err-line';
+      setErrMsg((e as Error).message || 'Save failed.');
+    } finally {
+      setSaving(false);
     }
-  });
+  }
+
+  const title = `${existingId ? 'Edit' : 'Add'} ${typeLabels[type] ?? type}`;
+
+  return (
+    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+            <CircularProgress size={32} />
+          </Box>
+        ) : (
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            <TextField
+              label="Name"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              slotProps={{ htmlInput: { maxLength: 200 } }}
+              size="small"
+              fullWidth
+              autoFocus
+            />
+            {hasStyleSelect && (
+              <FormControl size="small" fullWidth required={!existingId}>
+                <InputLabel id="dvie-style-label">Style{existingId ? '' : ' *'}</InputLabel>
+                <Select
+                  labelId="dvie-style-label"
+                  label={`Style${existingId ? '' : ' *'}`}
+                  value={style}
+                  onChange={(e) => setStyle(e.target.value)}
+                >
+                  <MenuItem value=""><em>— select —</em></MenuItem>
+                  {DV_HANDLE_STYLES.map((s) => (
+                    <MenuItem key={s} value={s}>{s}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+            {hasDescription && (
+              <TextField
+                label="Description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                slotProps={{ htmlInput: { maxLength: 500 } }}
+                multiline
+                rows={2}
+                size="small"
+                fullWidth
+              />
+            )}
+            {hasFileUpload && (
+              <>
+                {previewSrc && !imageFile && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                      Current image
+                    </Typography>
+                    <Box
+                      component="img"
+                      src={previewSrc}
+                      alt="Current handle image"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                      sx={{ maxWidth: 120, maxHeight: 80, borderRadius: 1, border: '1px solid', borderColor: 'divider', display: 'block' }}
+                    />
+                  </Box>
+                )}
+                <FileUploadField
+                  label="Image (optional)"
+                  accept="image/*"
+                  onChange={(files) => {
+                    const file = files?.[0] ?? null;
+                    setImageFile(file);
+                  }}
+                  helperText="Replace the current image by selecting a new file"
+                />
+              </>
+            )}
+            {!hasFileUpload && hasImageUrl && (
+              <TextField
+                label="Image URL"
+                type="url"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                slotProps={{ htmlInput: { maxLength: 500 } }}
+                placeholder="https://…"
+                size="small"
+                fullWidth
+              />
+            )}
+            {errMsg && (
+              <Alert severity="error" sx={{ mt: 0.5 }}>{errMsg}</Alert>
+            )}
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button variant="contained" onClick={handleSave} disabled={loading || saving}>
+          {saving ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
+          {existingId ? 'Save' : 'Add'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
 }
 
 // ── CatalogueTable component ───────────────────────────────────────────────────
@@ -376,6 +472,14 @@ export function DesignVisitPage() {
   const [termsNewText,    setTermsNewText]    = useState('');
   const [termsErr,        setTermsErr]        = useState('');
 
+  const [dialogState, setDialogState] = useState<{
+    open: boolean; type: string; existingId?: number;
+  }>({ open: false, type: 'handle' });
+
+  const openEditor = useCallback((type: string, existingId?: number) => {
+    setDialogState({ open: true, type, existingId });
+  }, []);
+
   const fetchAll = useCallback(async () => {
     const [hR, fR, dR, tR] = await Promise.allSettled([
       callApi('GET', '/api/admin/design-visit-handles'),
@@ -395,19 +499,21 @@ export function DesignVisitPage() {
 
   useEffect(() => {
     _reloadRef.fn = fetchAll;
+    _openEditorRef.fn = openEditor;
     fetchAll();
 
     W.loadDvCatalogue       = fetchAll;
-    W.openDvHandleEditor    = (id?: number) => openDvItemEditor('handle', id);
-    W.openDvFurnitureEditor = (id?: number) => openDvItemEditor('furniture', id);
-    W.openDvDoorStyleEditor = (id?: number) => openDvItemEditor('door-style', id);
+    W.openDvHandleEditor    = (id?: number) => _openEditorRef.fn?.('handle', id);
+    W.openDvFurnitureEditor = (id?: number) => _openEditorRef.fn?.('furniture', id);
+    W.openDvDoorStyleEditor = (id?: number) => _openEditorRef.fn?.('door-style', id);
 
     return () => {
       _reloadRef.fn = null;
+      _openEditorRef.fn = null;
       ['loadDvCatalogue', 'openDvHandleEditor', 'openDvFurnitureEditor', 'openDvDoorStyleEditor']
         .forEach(k => delete W[k]);
     };
-  }, [fetchAll]);
+  }, [fetchAll, openEditor]);
 
   const endpointFor = (type: string) => ({
     handle:       '/api/admin/design-visit-handles',
@@ -524,139 +630,149 @@ export function DesignVisitPage() {
   ];
 
   return (
-    <Stack spacing={2}>
-      <Card variant="outlined">
-        <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
-            <Box>
-              <Typography variant="h6">Design Visit — Handles</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Handle options displayed in the design visit wizard for the customer to choose from.
-              </Typography>
-            </Box>
-            <Button variant="contained" onClick={() => openDvItemEditor('handle')} sx={{ flexShrink: 0 }}>
-              + Add handle
-            </Button>
-          </Box>
-          <div id="dv-handles-wrap">
-            <CatalogueTable
-              type="handle"
-              items={handles}
-              columns={handleCols}
-              showImage
-              onMove={moveItem}
-              onReorder={reorderItems}
-              onEdit={openDvItemEditor}
-              onDelete={deleteItem}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card variant="outlined">
-        <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
-            <Box>
-              <Typography variant="h6">Design Visit — Furniture Ranges</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Furniture ranges displayed in the design visit wizard.
-              </Typography>
-            </Box>
-            <Button variant="contained" onClick={() => openDvItemEditor('furniture')} sx={{ flexShrink: 0 }}>
-              + Add range
-            </Button>
-          </Box>
-          <div id="dv-furniture-wrap">
-            <CatalogueTable
-              type="furniture"
-              items={furniture}
-              columns={furnitureCols}
-              onMove={moveItem}
-              onReorder={reorderItems}
-              onEdit={openDvItemEditor}
-              onDelete={deleteItem}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card variant="outlined">
-        <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
-            <Box>
-              <Typography variant="h6">Design Visit — Door Styles</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Door styles the designer can select per room in the wizard.
-              </Typography>
-            </Box>
-            <Button variant="contained" onClick={() => openDvItemEditor('door-style')} sx={{ flexShrink: 0 }}>
-              + Add style
-            </Button>
-          </Box>
-          <div id="dv-door-styles-wrap">
-            <CatalogueTable
-              type="door-style"
-              items={doorStyles}
-              columns={doorStyleCols}
-              onMove={moveItem}
-              onReorder={reorderItems}
-              onEdit={openDvItemEditor}
-              onDelete={deleteItem}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card variant="outlined" id="dv-terms-card">
-        <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
-            <Box>
-              <Typography variant="h6">Design Visit — Terms &amp; Conditions</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Each published revision is versioned and stamped on the visit at submission time.
-                Customers always see the version that was active when their visit was submitted.
-              </Typography>
-            </Box>
-            {!termsEditorOpen && (
-              <Button variant="contained" onClick={() => { setTermsEditorOpen(true); setTermsNewText(''); setTermsErr(''); }} sx={{ flexShrink: 0 }}>
-                Publish new version
-              </Button>
-            )}
-          </Box>
-
-          <div id="dv-terms-current">
-            <TermsDisplay terms={terms} />
-          </div>
-
-          {termsEditorOpen && (
-            <>
-              <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                New terms text (will become the active version)
-              </Typography>
-              <textarea
-                className="field adm-terms-textarea"
-                rows={8}
-                maxLength={4000}
-                placeholder="Enter the full terms and conditions text…"
-                value={termsNewText}
-                onChange={e => setTermsNewText(e.target.value)}
-                style={{ width: '100%', marginBottom: 4 }}
-              />
-              {termsErr && (
-                <Typography variant="caption" color="error" sx={{ display: 'block', mb: 1 }}>
-                  {termsErr}
+    <>
+      <Stack spacing={2}>
+        <Card variant="outlined">
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
+              <Box>
+                <Typography variant="h6">Design Visit — Handles</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Handle options displayed in the design visit wizard for the customer to choose from.
                 </Typography>
-              )}
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1 }}>
-                <Button variant="text" onClick={() => { setTermsEditorOpen(false); setTermsErr(''); }}>Cancel</Button>
-                <Button variant="contained" onClick={publishTerms}>Publish</Button>
               </Box>
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </Stack>
+              <Button variant="contained" onClick={() => openEditor('handle')} sx={{ flexShrink: 0 }}>
+                + Add handle
+              </Button>
+            </Box>
+            <div id="dv-handles-wrap">
+              <CatalogueTable
+                type="handle"
+                items={handles}
+                columns={handleCols}
+                showImage
+                onMove={moveItem}
+                onReorder={reorderItems}
+                onEdit={openEditor}
+                onDelete={deleteItem}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined">
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
+              <Box>
+                <Typography variant="h6">Design Visit — Furniture Ranges</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Furniture ranges displayed in the design visit wizard.
+                </Typography>
+              </Box>
+              <Button variant="contained" onClick={() => openEditor('furniture')} sx={{ flexShrink: 0 }}>
+                + Add range
+              </Button>
+            </Box>
+            <div id="dv-furniture-wrap">
+              <CatalogueTable
+                type="furniture"
+                items={furniture}
+                columns={furnitureCols}
+                onMove={moveItem}
+                onReorder={reorderItems}
+                onEdit={openEditor}
+                onDelete={deleteItem}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined">
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
+              <Box>
+                <Typography variant="h6">Design Visit — Door Styles</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Door styles the designer can select per room in the wizard.
+                </Typography>
+              </Box>
+              <Button variant="contained" onClick={() => openEditor('door-style')} sx={{ flexShrink: 0 }}>
+                + Add style
+              </Button>
+            </Box>
+            <div id="dv-door-styles-wrap">
+              <CatalogueTable
+                type="door-style"
+                items={doorStyles}
+                columns={doorStyleCols}
+                onMove={moveItem}
+                onReorder={reorderItems}
+                onEdit={openEditor}
+                onDelete={deleteItem}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined" id="dv-terms-card">
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
+              <Box>
+                <Typography variant="h6">Design Visit — Terms &amp; Conditions</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Each published revision is versioned and stamped on the visit at submission time.
+                  Customers always see the version that was active when their visit was submitted.
+                </Typography>
+              </Box>
+              {!termsEditorOpen && (
+                <Button variant="contained" onClick={() => { setTermsEditorOpen(true); setTermsNewText(''); setTermsErr(''); }} sx={{ flexShrink: 0 }}>
+                  Publish new version
+                </Button>
+              )}
+            </Box>
+
+            <div id="dv-terms-current">
+              <TermsDisplay terms={terms} />
+            </div>
+
+            {termsEditorOpen && (
+              <>
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  New terms text (will become the active version)
+                </Typography>
+                <textarea
+                  className="field adm-terms-textarea"
+                  rows={8}
+                  maxLength={4000}
+                  placeholder="Enter the full terms and conditions text…"
+                  value={termsNewText}
+                  onChange={e => setTermsNewText(e.target.value)}
+                  style={{ width: '100%', marginBottom: 4 }}
+                />
+                {termsErr && (
+                  <Typography variant="caption" color="error" sx={{ display: 'block', mb: 1 }}>
+                    {termsErr}
+                  </Typography>
+                )}
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1 }}>
+                  <Button variant="text" onClick={() => { setTermsEditorOpen(false); setTermsErr(''); }}>Cancel</Button>
+                  <Button variant="contained" onClick={publishTerms}>Publish</Button>
+                </Box>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </Stack>
+
+      <DvItemEditorDialog
+        open={dialogState.open}
+        type={dialogState.type}
+        existingId={dialogState.existingId}
+        onClose={() => setDialogState(s => ({ ...s, open: false }))}
+        onSaved={fetchAll}
+      />
+    </>
   );
 }
 

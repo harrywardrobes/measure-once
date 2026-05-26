@@ -90,6 +90,7 @@ import ImageIcon from '@mui/icons-material/Image';
 import { useTheme } from '@mui/material/styles';
 
 import { ComponentShowcase } from '../components/mui/ComponentShowcase';
+import { FileUploadField } from '../components/FileUploadField';
 import { Pill } from '../components/Pill';
 import { EmptyState } from '../components/EmptyState';
 import { BRAND_COLORS, STAGE_COLORS, RADIUS } from '../theme';
@@ -612,6 +613,68 @@ function BottomActionBarDemo() {
   );
 }
 
+function FileUploadSingleDemo() {
+  const [files, setFiles] = useState<FileList | null>(null);
+  return (
+    <ComponentShowcase
+      name="File Upload Field (single image)"
+      description="Outlined upload control with a Browse button and inline image preview. Use for single-file image inputs such as handle photos or profile images."
+      demo={
+        <Box sx={{ width: '100%', maxWidth: 400 }}>
+          <FileUploadField
+            label="Handle image"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={setFiles}
+            helperText={files ? `${files.length} file selected` : 'Accepted: JPEG, PNG, WebP'}
+          />
+        </Box>
+      }
+      code={`import { FileUploadField } from '../components/FileUploadField';
+
+const [files, setFiles] = useState<FileList | null>(null);
+
+<FileUploadField
+  label="Handle image"
+  accept="image/jpeg,image/png,image/webp"
+  onChange={setFiles}
+  helperText="Accepted: JPEG, PNG, WebP"
+/>`}
+    />
+  );
+}
+
+function FileUploadMultiDemo() {
+  const [files, setFiles] = useState<FileList | null>(null);
+  return (
+    <ComponentShowcase
+      name="File Upload Field (multi-image)"
+      description="Same control with `multiple` enabled — shows thumbnails for every selected image and lists all filenames."
+      demo={
+        <Box sx={{ width: '100%', maxWidth: 400 }}>
+          <FileUploadField
+            label="Room photos"
+            accept="image/*"
+            multiple
+            onChange={setFiles}
+            helperText={files && files.length > 0 ? `${files.length} image${files.length !== 1 ? 's' : ''} selected` : 'Select one or more images'}
+          />
+        </Box>
+      }
+      code={`import { FileUploadField } from '../components/FileUploadField';
+
+const [files, setFiles] = useState<FileList | null>(null);
+
+<FileUploadField
+  label="Room photos"
+  accept="image/*"
+  multiple
+  onChange={setFiles}
+  helperText="Select one or more images"
+/>`}
+    />
+  );
+}
+
 function DrawerDemo() {
   const [open, setOpen] = useState(false);
   return (
@@ -850,6 +913,8 @@ export function DesignSystemPage() {
   label="Notifications"
 />`}
           />
+          <FileUploadSingleDemo />
+          <FileUploadMultiDemo />
         </>
       )}
 

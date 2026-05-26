@@ -524,6 +524,18 @@
       .dv-wizard .dv-photo-list { display:flex;flex-wrap:wrap;gap:8px;margin-top:6px; }
       .dv-wizard .dv-photo-thumb { width:64px;height:64px;object-fit:cover;
         border-radius:6px;border:1px solid #e5e7eb; }
+      .dv-wizard .dv-file-upload-wrap { position:relative; }
+      .dv-wizard .dv-photo-input { position:absolute;width:0;height:0;opacity:0;pointer-events:none; }
+      .dv-wizard .dv-file-upload-field { display:flex;align-items:stretch;border:1.5px solid #d1d5db;
+        border-radius:8px;overflow:hidden;background:#fff;cursor:pointer; }
+      .dv-wizard .dv-file-upload-field:focus-within { border-color:#8B2BFF; }
+      .dv-wizard .dv-file-upload-name { flex:1;padding:9px 11px;font-size:.82rem;color:#9ca3af;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none; }
+      .dv-wizard .dv-file-upload-name.has-files { color:#374151; }
+      .dv-wizard .dv-file-upload-btn { padding:9px 14px;background:#f3f4f6;border-left:1.5px solid #d1d5db;
+        font-size:.82rem;font-weight:600;color:#374151;white-space:nowrap;cursor:pointer;
+        display:flex;align-items:center;user-select:none; }
+      .dv-wizard .dv-file-upload-btn:hover { background:#e5e7eb; }
       .dv-wizard .dv-terms-box { background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;
         padding:10px 12px;font-size:.78rem;color:#4b5563;max-height:120px;overflow-y:auto;
         white-space:pre-wrap;margin-bottom:6px;line-height:1.5; }
@@ -753,7 +765,13 @@
             <label class="dv-label">Room notes</label>
             <textarea class="dv-rnotes" data-ridx="${idx}" rows="2" maxlength="2000" placeholder="Any additional notes for this room…">${_esc(room.notes || '')}</textarea>
             <label class="dv-label">Photos (optional)</label>
-            <input type="file" class="dv-photo-input" data-ridx="${idx}" accept="image/*" multiple style="font-size:.82rem;">
+            <div class="dv-file-upload-wrap">
+              <input type="file" class="dv-photo-input" data-ridx="${idx}" accept="image/*" multiple>
+              <div class="dv-file-upload-field" data-for-ridx="${idx}">
+                <span class="dv-file-upload-name">No files chosen</span>
+                <span class="dv-file-upload-btn">Browse</span>
+              </div>
+            </div>
             ${prevPhotos ? `<div class="dv-photo-list">${prevPhotos}</div>` : ''}
           </div>`;
       }
@@ -777,6 +795,28 @@
           step = 3; renderStep3();
         }},
       ]);
+
+      // Wire the styled file-upload fields: clicking the visible field/btn opens
+      // the hidden native input; selecting files updates the filename display.
+      inner.querySelectorAll('.dv-file-upload-field').forEach(field => {
+        const ridx = field.dataset.forRidx;
+        const fileInput = inner.querySelector(`.dv-photo-input[data-ridx="${ridx}"]`);
+        if (!fileInput) return;
+        field.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => {
+          const nameEl = field.querySelector('.dv-file-upload-name');
+          if (!nameEl) return;
+          const files = fileInput.files;
+          if (!files || !files.length) {
+            nameEl.textContent = 'No files chosen';
+            nameEl.classList.remove('has-files');
+          } else {
+            const names = Array.from(files).map(f => f.name).join(', ');
+            nameEl.textContent = names;
+            nameEl.classList.add('has-files');
+          }
+        });
+      });
 
       inner.querySelector('#dv-add-room').addEventListener('click', async () => {
         await _saveRoomsFromDom(); rooms.push(_makeRoom()); renderStep2();
