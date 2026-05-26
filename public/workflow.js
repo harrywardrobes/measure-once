@@ -142,22 +142,6 @@ async function submitNewCustomer(ev) {
   }
 }
 
-// ── Customer List ─────────────────────────────────────────────────────────────
-// NOTE: The Customers page (customers.html) is fully React-migrated to
-// CustomersPage.tsx. The vanilla-JS renderer and its helpers that previously
-// lived here have been removed. The registration below is kept as a no-op so
-// that renderCustomerList() calls from workflow-core.js on pages that load
-// workflow.js (customer-detail, projects) remain harmless.
-function _renderCustomerListImpl() {
-  const view = document.getElementById('customers-view');
-  if (!view) return;
-  // Customers page is fully React (CustomersPage.tsx). This stub is kept so
-  // renderCustomerList() calls from workflow-core.js on other pages remain harmless.
-}
-
-registerCustomerListRenderer(_renderCustomerListImpl);
-
-
 // ── Quick Card Actions ────────────────────────────────────────────────────────
 
 // Load, apply an updater fn, save, and refresh the list — without opening the workflow

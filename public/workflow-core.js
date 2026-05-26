@@ -673,18 +673,11 @@ function applySearchFilter(contacts) {
     : [...contacts];
 }
 
-let _customersReloader = null;
-function registerCustomersReloader(fn) { _customersReloader = fn; }
-
 function _filterDealsImpl(query) {
   state.searchQuery = query || '';
-  if (state.contactsViewMode === 'all' && _customersReloader) {
-    _customersReloader();
-  } else {
-    state.filteredContacts = applySearchFilter(state.contacts);
-    state.currentPage = 1;
-    renderCustomerList();
-  }
+  state.filteredContacts = applySearchFilter(state.contacts);
+  state.currentPage = 1;
+  renderCustomerList();
 }
 
 function setStageFilter(value) {
