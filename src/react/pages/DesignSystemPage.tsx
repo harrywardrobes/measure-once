@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useConnectionToast } from '../context/ConnectionToastContext';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
@@ -1426,6 +1427,7 @@ window.closeBottomBar();`}
 <EmptyState message="No results found" />
 <EmptyState message="No upcoming events" compact />`}
           />
+          <ConnectionToastsDemo />
         </>
       )}
 
@@ -1941,6 +1943,67 @@ if (!sessionChecked) return <LoginPageSkeleton />;`}
         </>
       )}
     </Container>
+  );
+}
+
+// ── Connection Toasts Demo ─────────────────────────────────────────────────────
+
+function ConnectionToastsDemo() {
+  const { notifyApiError, notifyReconnected } = useConnectionToast();
+  const SERVICES = ['hubspot', 'google', 'quickbooks', 'database'] as const;
+  return (
+    <ComponentShowcase
+      name="Connection Toasts"
+      description="Global bottom-right Snackbar toasts that fire when a service goes offline or recovers. Disconnected toasts are persistent (warning); reconnected toasts auto-dismiss after 5 s (success). Powered by ConnectionToastContext."
+      demo={
+        <Stack spacing={1}>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+            Trigger a disconnected or reconnected toast for each service:
+          </Typography>
+          {SERVICES.map((svc) => (
+            <Stack key={svc} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Typography variant="body2" sx={{ width: 100, textTransform: 'capitalize' }}>
+                {svc === 'quickbooks' ? 'QuickBooks' : svc.charAt(0).toUpperCase() + svc.slice(1)}
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                color="warning"
+                onClick={() => notifyApiError(svc, { code: svc === 'database' ? 'DB_ERROR' : 'HUBSPOT_UNAVAILABLE' })}
+              >
+                Disconnected
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                color="success"
+                onClick={() => notifyReconnected(svc)}
+              >
+                Reconnected
+              </Button>
+            </Stack>
+          ))}
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+            Toasts stack bottom-right. Disconnected stays until dismissed; reconnected auto-hides after 5 s.
+          </Typography>
+        </Stack>
+      }
+      code={`import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
+
+// In your page component:
+const { notifyApiError, notifyReconnected } = useConnectionToast();
+useConnectionCheck(); // probes /api/hubspot|google|quickbooks/status on mount
+
+// On a failed API call:
+try {
+  await saveData();
+} catch (e) {
+  notifyApiError('hubspot', e); // fires toast if error is connection-related
+}
+
+// On a successful retry after failure:
+notifyReconnected('hubspot');`}
+    />
   );
 }
 

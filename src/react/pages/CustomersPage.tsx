@@ -1,5 +1,6 @@
 import React from 'react';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 import { usePaginatedContacts, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
 import { ContactsPagination } from '../components/ContactsPagination';
 import { InvoiceDetailDrawer } from '../components/InvoiceDetailDrawer';
@@ -609,6 +610,8 @@ export function CustomersPage(): React.ReactElement {
   const [search, setSearch] = React.useState<string>(initial.q);
   const [stageFilter, setStageFilter] = React.useState<string>(initial.stage);
   const [showArchived, setShowArchived] = React.useState<boolean>(initial.archived);
+  const { notifyApiError } = useConnectionToast();
+  useConnectionCheck();
 
   const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
   const [roomsByContact, setRoomsByContact] = React.useState<Record<string, Room[]>>({});
@@ -652,6 +655,9 @@ export function CustomersPage(): React.ReactElement {
     return () => { countsRetryTimersRef.current.forEach(clearTimeout); };
   }, []);
 
+  const notifyApiErrorRef = React.useRef(notifyApiError);
+  React.useEffect(() => { notifyApiErrorRef.current = notifyApiError; }, [notifyApiError]);
+
   const scheduleCounts = React.useCallback(() => {
     countsRetryTimersRef.current.forEach(clearTimeout);
     countsRetryTimersRef.current = [];
@@ -662,11 +668,12 @@ export function CustomersPage(): React.ReactElement {
         try {
           await loadLeadStatusCounts();
           populateLeadStatusFilter();
-        } catch {
+        } catch (e) {
           if (retryCount < MAX_COUNTS_RETRIES) {
             scheduleCountsAttempt(retryCount + 1, COUNTS_RETRY_DELAY_MS);
           } else {
             setBgRefreshFailed(true);
+            notifyApiErrorRef.current('hubspot', e);
           }
         }
       }, waitMs);

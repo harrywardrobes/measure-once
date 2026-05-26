@@ -29,6 +29,7 @@ import { InvoiceDetailDrawer, fmtGBP as fmtGBPShared } from '../components/Invoi
 import { PageFilterBar } from '../components/PageFilterBar';
 import { StageTabGroup } from '../components/StageTabGroup';
 import { SortSelect } from '../components/SortSelect';
+import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -686,6 +687,8 @@ function EmptyState({ message }: { message: string }) {
 export function ProjectsPage() {
   const { isAdmin, isManager } = usePrivilege();
   const canAssign = isManager || isAdmin;
+  const { notifyApiError } = useConnectionToast();
+  useConnectionCheck();
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [filter, setFilter] = useState<string>('');
@@ -880,6 +883,7 @@ export function ProjectsPage() {
           setToast({ msg: baseMsg });
         }
       } catch (e: unknown) {
+        notifyApiError('hubspot', e);
         const code = (e as { code?: string }).code;
         if (code === 'HUBSPOT_AUTH') {
           setToast({ msg: 'Could not save assignment — HubSpot token is invalid or expired. Ask an admin to update the token.', error: true });
@@ -892,7 +896,8 @@ export function ProjectsPage() {
         setPickerAssigning(false);
       }
     },
-    [w],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [w, notifyApiError],
   );
 
   // Current fitter for the open picker

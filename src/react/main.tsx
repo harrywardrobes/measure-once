@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppThemeProvider } from './AppThemeProvider';
 import { IslandErrorBoundary } from './components/IslandErrorBoundary';
+import { ConnectionToastProvider } from './context/ConnectionToastContext';
 import {
   PageLoadingSkeleton,
   CustomersPageSkeleton,
@@ -70,22 +71,41 @@ const NotFoundPage               = React.lazy(() => import('./pages/NotFoundPage
 const AccessRestrictedPage       = React.lazy(() => import('./pages/AccessRestrictedPage').then(m => ({ default: m.AccessRestrictedPage })));
 
 /**
+ * Mounts that must NOT receive the ConnectionToastProvider:
+ * - Public auth pages (no session, status endpoints return 401)
+ * - Design-visit sign-off page (public, customer-facing)
+ */
+const CONN_TOAST_EXCLUDED = new Set([
+  'login-root',
+  'set-password-root',
+  'onboarding-root',
+  'dv-signoff-mount',
+]);
+
+/**
  * Every React mount goes through `AppThemeProvider` so the shared MUI
  * theme + `ScopedCssBaseline` apply everywhere. New mount points only
  * need to add an entry to `MOUNTS` below — the wrapper is automatic.
  *
  * Lazy page components are wrapped in `Suspense` (fallback: nothing) so
  * the rest of the page is never blocked while a chunk downloads.
+ *
+ * Authenticated mounts are also wrapped in `ConnectionToastProvider` so
+ * page components can call `useConnectionCheck()` / `useConnectionToast()`
+ * to surface HubSpot / Google / QuickBooks / DB connection toasts.
  */
 function withTheme(
   node: React.ReactElement,
   islandId: string,
   fallback: React.ReactElement = <PageLoadingSkeleton />,
 ): React.ReactElement {
+  const inner = CONN_TOAST_EXCLUDED.has(islandId)
+    ? node
+    : <ConnectionToastProvider>{node}</ConnectionToastProvider>;
   return (
     <AppThemeProvider>
       <IslandErrorBoundary islandId={islandId}>
-        <Suspense fallback={fallback}>{node}</Suspense>
+        <Suspense fallback={fallback}>{inner}</Suspense>
       </IslandErrorBoundary>
     </AppThemeProvider>
   );

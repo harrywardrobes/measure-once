@@ -4,6 +4,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 import { usePaginatedContacts, PaginatedContact, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
 import { ContactsPagination } from '../components/ContactsPagination';
 import { useCardActionHandlers, CardActionHandlerData } from '../hooks/useCardActionHandlers';
@@ -775,6 +776,8 @@ export function SalesBoardPage() {
   const { isManager } = usePrivilege();
   const { cardActionHandlerFor, resolveActionLabel } = useCardActionHandlers();
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
+  const { notifyApiError } = useConnectionToast();
+  useConnectionCheck();
 
   // Retry-failure Snackbar with Page Visibility pause — mirrors the pattern
   // in CustomersPage.tsx.  autoHideDuration is set to null while the document
@@ -792,9 +795,13 @@ export function SalesBoardPage() {
     return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
   useEffect(() => {
-    const onFail = () => setBgRefreshFailed(true);
+    const onFail = () => {
+      setBgRefreshFailed(true);
+      notifyApiError('hubspot', { code: 'HUBSPOT_UNAVAILABLE' });
+    };
     document.addEventListener('sales-board-bg-refresh-failed', onFail);
     return () => document.removeEventListener('sales-board-bg-refresh-failed', onFail);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Bootstrap-failure error state — fires when core.js bootstrap() throws and
