@@ -166,16 +166,26 @@ function SupersededBanner() {
   );
 }
 
+// ── Preview / gallery config ──────────────────────────────────────────────────
+
+export interface SignOffPreview {
+  state: PageState;
+  successKind?: SuccessKind;
+  data?: SignOffData;
+  errorTitle?: string;
+  errorSub?: string;
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function DesignVisitSignOffPage() {
-  const [pageState, setPageState] = useState<PageState>('loading');
-  const [data, setData] = useState<SignOffData | null>(null);
-  const [errorTitle, setErrorTitle] = useState('Link not valid');
+export function DesignVisitSignOffPage({ preview }: { preview?: SignOffPreview } = {}) {
+  const [pageState, setPageState] = useState<PageState>(preview?.state ?? 'loading');
+  const [data, setData] = useState<SignOffData | null>(preview?.data ?? null);
+  const [errorTitle, setErrorTitle] = useState(preview?.errorTitle ?? 'Link not valid');
   const [errorSub, setErrorSub] = useState(
-    'This link may have already been used. Please contact us if you need a new one.',
+    preview?.errorSub ?? 'This link may have already been used. Please contact us if you need a new one.',
   );
-  const [successKind, setSuccessKind] = useState<SuccessKind>('approved');
+  const [successKind, setSuccessKind] = useState<SuccessKind>(preview?.successKind ?? 'approved');
 
   const [approving, setApproving] = useState(false);
   const [approveErr, setApproveErr] = useState('');
@@ -190,6 +200,8 @@ export function DesignVisitSignOffPage() {
   const tokenRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (preview) return;
+
     const token = new URLSearchParams(window.location.search).get('token');
     tokenRef.current = token;
 

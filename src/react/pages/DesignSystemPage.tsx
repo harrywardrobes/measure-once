@@ -93,6 +93,7 @@ import { ComponentShowcase } from '../components/mui/ComponentShowcase';
 import { Pill } from '../components/Pill';
 import { EmptyState } from '../components/EmptyState';
 import { BRAND_COLORS, STAGE_COLORS, RADIUS } from '../theme';
+import { DesignVisitSignOffPage } from './DesignVisitSignOffPage';
 import {
   PageLoadingSkeleton,
   CustomersPageSkeleton,
@@ -120,8 +121,22 @@ import {
  * paste-ready — this page is a recipe book, not exhaustive API docs.
  */
 
-const CATEGORIES = ['Tokens', 'Inputs', 'Data Display', 'Feedback', 'Navigation', 'Surfaces', 'Layout', 'Icons', 'Skeletons'] as const;
+const CATEGORIES = ['Tokens', 'Inputs', 'Data Display', 'Feedback', 'Navigation', 'Surfaces', 'Layout', 'Icons', 'Skeletons', 'Sign-off'] as const;
 type Category = typeof CATEGORIES[number];
+
+const SIGN_OFF_MOCK_DATA = {
+  contactName: 'Jane Smith',
+  visitDate: '2026-03-15',
+  location: 'London',
+  handleName: 'Brushed Nickel',
+  furnitureRange: 'Shaker Classic',
+  rooms: [
+    { roomName: 'Kitchen', doorStyleName: 'Cream Gloss', unitCount: 12, totalPence: 1200000 },
+    { roomName: 'Master Bedroom', doorStyleName: 'White Matt', unitCount: 6, totalPence: 600000 },
+  ],
+  terms: 'By signing off this design visit summary you confirm that the room measurements, door styles, furniture ranges, and unit counts listed above are correct to the best of your knowledge. Final pricing is subject to a full survey and may vary. Measure Once Ltd reserves the right to adjust the estimate following survey findings.',
+  termsVersionNumber: 3,
+};
 
 // ── Icon catalogue ────────────────────────────────────────────────────────
 // Defined here — before any JSX text containing apostrophes — so that the
@@ -1328,6 +1343,88 @@ export function DesignSystemPage() {
   <ActionHandlersPage />
 </Suspense>`}
           />
+        </>
+      )}
+
+      {tab === 'Sign-off' && (
+        <>
+          <Paper variant="outlined" sx={{ p: 2.5, mb: 2 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              The customer-facing sign-off page (<code>DesignVisitSignOffPage</code>) has six
+              distinct states. Each is shown below using the <code>preview</code> prop so no
+              real token or API call is needed. The page renders inside a max-width frame that
+              matches its production layout.
+            </Typography>
+          </Paper>
+
+          {([
+            {
+              label: 'Loading',
+              description: 'Shown immediately after the page mounts while the sign-off data is being fetched.',
+              preview: { state: 'loading' as const },
+            },
+            {
+              label: 'Error',
+              description: 'Shown when the token is missing, unrecognised, or the request fails unexpectedly.',
+              preview: {
+                state: 'error' as const,
+                errorTitle: 'Link not valid',
+                errorSub: 'This link may have already been used. Please contact us if you need a new one.',
+              },
+            },
+            {
+              label: 'Expired',
+              description: 'Shown when the server returns HTTP 410 with status "expired" — the link is too old.',
+              preview: { state: 'expired' as const },
+            },
+            {
+              label: 'Signed off',
+              description: 'Shown after the customer clicks "Looks great — sign off" and the POST succeeds.',
+              preview: { state: 'success' as const, successKind: 'approved' as const },
+            },
+            {
+              label: 'Revision requested',
+              description: 'Shown after the customer submits a change request and the POST succeeds.',
+              preview: { state: 'success' as const, successKind: 'revision' as const },
+            },
+            {
+              label: 'Superseded',
+              description: 'Main content state with the "Changes in progress" warning banner — the designer has already issued a revised visit.',
+              preview: { state: 'main' as const, data: { ...SIGN_OFF_MOCK_DATA, status: 'superseded' } },
+            },
+            {
+              label: 'Main content',
+              description: 'Standard state: customer sees the visit summary with approve / request-changes actions.',
+              preview: { state: 'main' as const, data: SIGN_OFF_MOCK_DATA },
+            },
+          ] as const).map(({ label, description, preview }) => (
+            <ComponentShowcase
+              key={label}
+              name={label}
+              description={description}
+              demo={
+                <Box
+                  sx={{
+                    width: '100%',
+                    maxWidth: 680,
+                    mx: 'auto',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    bgcolor: '#f9fafb',
+                  }}
+                >
+                  <DesignVisitSignOffPage preview={preview} />
+                </Box>
+              }
+              code={`import { DesignVisitSignOffPage } from './DesignVisitSignOffPage';
+
+// In production the component reads the token from the URL and fetches data itself.
+// The preview prop is only used in the Design System gallery.
+<DesignVisitSignOffPage preview={{ state: '${preview.state}'${'successKind' in preview ? `, successKind: '${preview.successKind}'` : ''} }} />`}
+            />
+          ))}
         </>
       )}
 
