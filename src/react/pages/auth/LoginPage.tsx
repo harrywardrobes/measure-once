@@ -433,6 +433,22 @@ function LoginPageInner() {
   );
 }
 
+/**
+ * LoginPage is the outer shell responsible for the session-check guard.
+ * It renders the skeleton while the check is in-flight and redirects to "/"
+ * if the user is already authenticated.
+ *
+ * IMPORTANT: the session check runs here, *before* LoginPageInner is ever
+ * mounted. LoginPageInner reads window.location.hash to choose which view
+ * to display (login / forgot / request), so this single guard covers all
+ * three hash-based deep links:
+ *   /login          → login view
+ *   /login#forgot   → reset-password view
+ *   /login#request  → request-access view
+ *
+ * Do not move the session-check fetch inside LoginPageInner or branch it
+ * per-view — that would re-expose the form flicker for the hash variants.
+ */
 export function LoginPage() {
   const [sessionChecked, setSessionChecked] = React.useState(false);
 
