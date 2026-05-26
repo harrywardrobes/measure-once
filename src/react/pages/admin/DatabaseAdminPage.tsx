@@ -1,7 +1,7 @@
 /**
  * Admin → Database page (/admin/database)
  *
- * Full React migration of public/database.html + public/database.js.
+ * Full React migration of public/database.html (legacy vanilla-JS version retired).
  * Provides:
  *  - Searchable table sidebar with paginated/sortable/filterable row grid
  *  - Insert / Edit (with diff-review step) / Delete drawer
