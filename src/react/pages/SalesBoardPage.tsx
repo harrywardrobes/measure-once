@@ -831,7 +831,20 @@ export function SalesBoardPage() {
   // Stale-data Snackbar — shown when loadAllContacts detects X-Cache-Status: stale.
   // Clears automatically when the next load returns fresh data (detail.stale === false).
   // Auto-dismisses after 10 s and can also be closed manually.
+  // Mirrors the bgRefreshFailed visibility-pause pattern: autoHideDuration is null
+  // while the tab is hidden so the MUI timer is suspended; restored to 10 s on focus.
   const [staleData, setStaleData] = useState(false);
+  const [staleDataHideDuration, setStaleDataHideDuration] = useState<number | null>(10000);
+  const staleDataRef = useRef(false);
+  useEffect(() => { staleDataRef.current = staleData; }, [staleData]);
+  useEffect(() => {
+    const onVis = () => {
+      if (!staleDataRef.current) return;
+      setStaleDataHideDuration(document.hidden ? null : 10000);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
   useEffect(() => {
     const onCacheStatus = (e: Event) => {
       const detail = (e as CustomEvent<{ stale: boolean }>).detail;
@@ -1104,7 +1117,7 @@ export function SalesBoardPage() {
 
     <Snackbar
       open={staleData}
-      autoHideDuration={10000}
+      autoHideDuration={staleDataHideDuration}
       onClose={() => setStaleData(false)}
       anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
     >
