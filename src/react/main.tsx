@@ -28,6 +28,7 @@ import { BottomNav } from './components/BottomNav';
 import { AdminTabsBar } from './components/AdminTabsBar';
 import { BottomActionBar } from './components/BottomActionBar';
 import { CommandPalette } from './components/CommandPalette';
+import { AccessRequestGate } from './components/AccessRequestGate';
 
 /*
  * Page-level components are lazy-imported so Vite emits a separate chunk
@@ -117,6 +118,7 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'login-root',           render: () => <LoginPage /> },
   { id: 'set-password-root',    render: () => <SetPasswordPage /> },
   { id: 'onboarding-root',      render: () => <OnboardingPage /> },
+  { id: 'access-gate-mount',     render: () => <AccessRequestGate />, fallback: <></> },
   { id: 'app-header-mount',      render: () => <GlobalHeader /> },
   { id: 'page-heading-mount',    render: () => <PageHeadingPanel /> },
   { id: 'app-bottom-nav-mount',  render: () => <BottomNav /> },

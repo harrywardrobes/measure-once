@@ -379,22 +379,17 @@ async function bootstrap() {
 }
 
 function showAccessGate(params) {
-  const gate = document.getElementById('access-gate');
-  if (gate) gate.style.display = 'flex';
-
-  const isEmailConflict  = params.get('email_conflict')  === '1';
-  const isConfirmed      = params.get('access_requested') === '1'
-    || params.get('denied') === '1'
-    || params.has('error');
-
-  const signInEl            = document.getElementById('access-sign-in-state');
-  const confirmedEl         = document.getElementById('access-confirmed-state');
-  const emailConflictEl     = document.getElementById('access-email-conflict-state');
-
-  const anySpecial = isConfirmed || isEmailConflict;
-  if (signInEl)          signInEl.style.display          = !anySpecial ? '' : 'none';
-  if (confirmedEl)       confirmedEl.style.display       = (isConfirmed && !isEmailConflict) ? '' : 'none';
-  if (emailConflictEl)   emailConflictEl.style.display   = isEmailConflict ? '' : 'none';
+  let view = 'form';
+  if (params.get('email_conflict') === '1') {
+    view = 'email_conflict';
+  } else if (
+    params.get('access_requested') === '1' ||
+    params.get('denied') === '1' ||
+    params.has('error')
+  ) {
+    view = 'confirmed';
+  }
+  window.dispatchEvent(new CustomEvent('mo:show-access-gate', { detail: { view, urlParams: params } }));
 }
 
 async function checkAuthStatus() {

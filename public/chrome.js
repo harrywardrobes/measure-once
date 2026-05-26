@@ -32,64 +32,10 @@ window.getShortcut = function (key) {
   const skipLink = `<a href="#main-content" class="skip-link">Skip to content</a>`;
   const toastLive = `<div id="toast-live" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"></div>`;
 
-  const accessGate = `
-    <div id="access-gate" class="access-gate" style="display:none;">
-      <div class="access-card">
-        <div class="access-brand" style="justify-content:center;">
-          <span style="font-family:'Anton',sans-serif;font-size:1.35rem;letter-spacing:0.06em;text-transform:uppercase;color:#0f172a;">Measure Once</span>
-        </div>
-        <div id="access-sign-in-state">
-          <h1 class="access-title">Request access</h1>
-          <p class="access-sub">Enter your details below and we'll review your request.</p>
-          <form id="access-request-form" onsubmit="handleAccessRequestSubmit(event)" novalidate>
-            <input id="access-req-name" type="text" class="access-input" placeholder="Full name" autocomplete="name" required>
-            <input id="access-req-email" type="email" class="access-input" placeholder="Email address" autocomplete="email" required>
-            <div id="access-email-approved-msg" style="display:none;" class="access-email-approved-msg">
-              Your account is already approved — <a href="/login">sign in to get started</a>.
-            </div>
-            <div id="access-req-submit-wrap">
-              <button type="submit" id="access-req-btn" class="access-submit" style="width:100%;border:none;cursor:pointer;margin-top:0;">Request access</button>
-            </div>
-            <div id="access-req-error" style="display:none;" class="access-req-error"></div>
-          </form>
-          <div class="access-footer" style="margin-top:20px;text-align:center;">
-            Already have access? <a href="/login">Sign in</a>
-          </div>
-        </div>
-        <div id="access-confirmed-state" style="display:none;">
-          <div class="access-confirmed-icon">✓</div>
-          <h1 class="access-title">Request received</h1>
-          <p class="access-sub">Your access request has been submitted. We'll review it and be in touch — you don't need to do anything else.</p>
-          <div class="access-footer" style="margin-top:20px;">
-            Already approved? <a href="/login">Sign in</a>
-          </div>
-        </div>
-        <div id="access-email-conflict-state" style="display:none;">
-          <div class="access-confirmed-icon" style="background:#fee2e2;color:#dc2626;">✕</div>
-          <h1 class="access-title">Email already in use</h1>
-          <p class="access-sub">This email address is already registered to a different account here. Please contact an admin if you think this is an error.</p>
-          <div class="access-footer" style="margin-top:20px;">
-            <a href="/login">Try a different account</a>
-          </div>
-        </div>
-        <div id="access-pending-state" style="display:none;">
-          <div class="access-confirmed-icon" style="background:#fef3c7;color:#d97706;">⏳</div>
-          <h1 class="access-title">Request already under review</h1>
-          <p class="access-sub">Your request is already under review — you'll hear back soon. You don't need to submit again.</p>
-          <div class="access-footer" style="margin-top:20px;">
-            Already approved? <a href="/login">Sign in</a>
-          </div>
-        </div>
-        <div id="access-already-approved-state" style="display:none;">
-          <div class="access-confirmed-icon" style="background:#dcfce7;color:#16a34a;">✓</div>
-          <h1 class="access-title">Your account is already approved</h1>
-          <p class="access-sub">Your account is already approved — sign in to get started.</p>
-          <div class="access-footer" style="margin-top:20px;">
-            <a href="/login" class="access-submit" style="display:block;text-align:center;text-decoration:none;">Sign in</a>
-          </div>
-        </div>
-      </div>
-    </div>`;
+  // The access-request gate is a React island (AccessRequestGate.tsx)
+  // mounted into #access-gate-mount by /react/main.js. It is triggered via
+  // window.showAccessGate() which dispatches a CustomEvent the component listens for.
+  const accessGate = `<div id="access-gate-mount"></div>`;
 
   // The top app bar is a React island (src/react/components/GlobalHeader.tsx)
   // mounted into #app-header-mount by /react/main.js. We still insert the
@@ -142,7 +88,7 @@ window.getShortcut = function (key) {
 
   const isAdminPage = path === '/admin' || path.startsWith('/admin/');
   const isAppBodyPage = path === '/sales' || path === '/survey';
-  document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner + (isAppBodyPage ? '' : pageHeading));
+  document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + header + viewerBanner + (isAppBodyPage ? '' : pageHeading) + accessGate);
   document.body.insertAdjacentHTML('beforeend', (isAdminPage ? '' : bottomNav) + bottomBar + commandPaletteMount);
 
 
@@ -150,48 +96,3 @@ window.getShortcut = function (key) {
   // BottomNav island; see src/react/components/BottomNav.tsx.
 })();
 
-// ── Access request form ───────────────────────────────────────────────────────
-// The on-blur email preflight against /api/check-email has been removed.
-// That endpoint no longer discloses approval status (it always returns false)
-// to prevent unauthenticated email-address enumeration. The POST /api/request-access
-// 409 response is the authoritative already-approved signal and is handled below.
-
-async function handleAccessRequestSubmit(e) {
-  e.preventDefault();
-
-  const name    = (document.getElementById('access-req-name')?.value  || '').trim();
-  const email   = (document.getElementById('access-req-email')?.value || '').trim().toLowerCase();
-  const errEl   = document.getElementById('access-req-error');
-  const btn     = document.getElementById('access-req-btn');
-  const signInEl    = document.getElementById('access-sign-in-state');
-  const confirmedEl = document.getElementById('access-confirmed-state');
-
-  if (!name || !email) {
-    if (errEl) { errEl.textContent = 'Please enter your name and email address.'; errEl.style.display = ''; }
-    return;
-  }
-  if (errEl) errEl.style.display = 'none';
-  if (btn)   { btn.disabled = true; btn.textContent = 'Sending…'; }
-
-  try {
-    const r = await fetch('/api/request-access', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ name, email }),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (r.ok && data.ok) {
-      if (signInEl)    signInEl.style.display    = 'none';
-      if (confirmedEl) confirmedEl.style.display = '';
-    } else if (r.status === 429) {
-      if (errEl) { errEl.textContent = 'Too many requests — please try again later.'; errEl.style.display = ''; }
-      if (btn)   { btn.disabled = false; btn.textContent = 'Request access'; }
-    } else {
-      if (errEl) { errEl.textContent = data.error || 'Could not submit request. Please try again.'; errEl.style.display = ''; }
-      if (btn)   { btn.disabled = false; btn.textContent = 'Request access'; }
-    }
-  } catch {
-    if (errEl) { errEl.textContent = 'Network error — please check your connection and try again.'; errEl.style.display = ''; }
-    if (btn)   { btn.disabled = false; btn.textContent = 'Request access'; }
-  }
-}
