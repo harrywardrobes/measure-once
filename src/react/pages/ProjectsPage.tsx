@@ -387,11 +387,20 @@ function InvoiceBadge({ contact, qb }: { contact: Contact; qb: QBState | undefin
     <Box sx={{ px: '14px', py: '10px', borderTop: '1px solid #D9D2C2', display: 'flex', alignItems: 'center', gap: 1, minHeight: 36 }}>
       <button
         ref={btnRef}
-        className="qb-badge"
         data-inv-ids={JSON.stringify(invIds)}
         onClick={handleClick}
         title={`${count} outstanding invoice${count !== 1 ? 's' : ''}`}
-        style={{ cursor: 'pointer' }}
+        style={{
+          display: 'inline-flex', alignItems: 'center',
+          fontSize: '0.68rem', fontWeight: 700,
+          fontFamily: 'inherit',
+          padding: '2px 7px', borderRadius: '999px',
+          background: '#fef3c7', color: '#92400e',
+          border: '1px solid #fde68a',
+          whiteSpace: 'nowrap',
+          cursor: 'pointer',
+          lineHeight: 1.4,
+        }}
       >
         {fmtGBP(total)}
       </button>
