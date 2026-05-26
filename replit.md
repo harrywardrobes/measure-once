@@ -21,6 +21,11 @@ Project management dashboard (HubSpot CRM integration).
   them as small and focused as possible. Never pre-approve anything that would
   dramatically change application functionality — always surface it for the
   user to review and approve first.
+- **Design changes:** Before making any UI/design change, reference the
+  existing design system docs (theme.ts, ICONS.md, src/react/README.md) and
+  ask as many clarifying questions as needed to understand what the user wants.
+  Any new component or significant visual update must also be added to the
+  admin Design System page so it is visible and testable there.
 
 ## Stack
 - Node.js 20 + Express; single `server.js` serves API and static assets.
