@@ -2,7 +2,7 @@
 /**
  * check-typo-vars.mjs
  *
- * Verifies that every --typo-* CSS custom property in public/style.css
+ * Verifies that every --typo-* CSS custom property in public/app-styles.css
  * matches the corresponding typography value exported from src/react/theme.ts.
  *
  * Usage:
@@ -21,7 +21,7 @@ const ROOT = resolve(__dirname, '..');
 
 // ── File paths ────────────────────────────────────────────────────────────────
 
-const CSS_PATH   = resolve(ROOT, 'public/style.css');
+const CSS_PATH   = resolve(ROOT, 'public/app-styles.css');
 const THEME_PATH = resolve(ROOT, 'src/react/theme.ts');
 
 // ── Variants and property map ─────────────────────────────────────────────────
@@ -128,7 +128,7 @@ for (const variant of VARIANTS) {
 
     if (cssVal === undefined) {
       mismatches.push(
-        `  --typo-${variant}-${cssSuffix}: MISSING in style.css  (theme.ts = ${themeVal})`
+        `  --typo-${variant}-${cssSuffix}: MISSING in app-styles.css  (theme.ts = ${themeVal})`
       );
       continue;
     }
@@ -144,7 +144,7 @@ for (const variant of VARIANTS) {
     if (normalise(cssVal) !== normalise(themeVal)) {
       mismatches.push(
         `  --typo-${variant}-${cssSuffix}:\n` +
-        `      style.css  = ${cssVal}\n` +
+        `      app-styles.css  = ${cssVal}\n` +
         `      theme.ts   = ${themeVal}`
       );
     }
@@ -153,7 +153,7 @@ for (const variant of VARIANTS) {
 
 // ── Report ────────────────────────────────────────────────────────────────────
 
-console.log('check-typo-vars: comparing public/style.css ↔ src/react/theme.ts\n');
+console.log('check-typo-vars: comparing public/app-styles.css ↔ src/react/theme.ts\n');
 
 if (skipped.length) {
   console.log('Skipped (property not explicitly set in theme.ts):');
@@ -172,7 +172,7 @@ if (mismatches.length === 0) {
   console.error(`✗ ${mismatches.length} mismatch(es) found:\n`);
   mismatches.forEach(m => console.error(m));
   console.error(
-    '\nFix: update public/style.css :root to match src/react/theme.ts (or vice-versa).'
+    '\nFix: update public/app-styles.css :root to match src/react/theme.ts (or vice-versa).'
   );
   process.exit(1);
 }
