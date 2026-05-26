@@ -10,6 +10,7 @@
     "predev": "npm run build:react",
     "dev": "nodemon server.js",
     "dev:react": "vite",
+    "watch:react": "vite build --watch",
     "typecheck": "tsc --noEmit",
     "build:react": "npm run typecheck && vite build && node scripts/check-bundle-sizes.mjs",
     "bundle-sizes": "node scripts/check-bundle-sizes.mjs",

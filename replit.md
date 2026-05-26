@@ -38,10 +38,47 @@ Project management dashboard (HubSpot CRM integration).
 - Deployment: VM target, `node server.js`.
 - Build step: `npm run build:react && npm run build:storybook`.
   - `build:react` → `public/react/main.js` (stable filename, self-mounting).
-    Run after editing anything in `src/react/`. `npm run dev:react` runs
-    Vite on 5173 with `/api` proxied to Express.
   - `build:storybook` → `public/storybook/`, served as static assets.
   - Both output dirs are gitignored.
+
+## Local development workflow for React changes
+
+Two patterns for iterating on `src/react/` without a manual rebuild each time:
+
+### Option A — Vite dev server (recommended)
+Run two terminals in parallel:
+
+```
+# Terminal 1 — Express API server
+npm run dev          # nodemon, restarts on server-side changes
+
+# Terminal 2 — Vite dev server with HMR
+npm run dev:react    # http://0.0.0.0:5173, proxies /api → Express on 5000
+```
+
+Open the app on **port 5173** (not 5000) to get instant Hot Module Replacement.
+All `/api/*` calls pass through to Express automatically. TypeScript errors
+surface in the Vite terminal in real time.
+
+### Option B — Vite build watch (simpler, no HMR)
+Use this when you want to keep loading the app through the normal Express
+server on port 5000 but still get auto-rebuilds on save:
+
+```
+# Terminal 1 — Express server (with pre-built bundle)
+npm run dev          # nodemon on 5000
+
+# Terminal 2 — Vite in watch / incremental-build mode
+npm run watch:react  # rebuilds public/react/ on every src/react/ save
+```
+
+Reload the browser manually after each rebuild. Useful when testing
+server-rendered pages or middleware that must run through Express.
+
+> **Note:** `npm start` (`prestart`) and `npm run dev` (`predev`) both run a
+> full `build:react` (typecheck + bundle + bundle-size check) before starting
+> the server, so the bundle is always fresh for production use. The two
+> watch-mode scripts above skip the size check to keep iteration fast.
 
 ## React island conventions
 - Material UI is the standard component framework; every mount is wrapped
