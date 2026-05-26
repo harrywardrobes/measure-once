@@ -261,28 +261,6 @@ async function loadContactsPage({ page = 1, leadStatus = '', sort = 'newest' } =
   state.filteredContacts = [...state.contacts];
 }
 
-function setContactsViewMode(mode) {
-  state.contactsViewMode = mode;
-  const activeBtn = document.getElementById('view-active-btn');
-  const allBtn    = document.getElementById('view-all-btn');
-  if (activeBtn) activeBtn.classList.toggle('filter-btn-active', mode === 'active');
-  if (allBtn)    allBtn.classList.toggle('filter-btn-active',   mode === 'all');
-
-  // Show lead-status filter only in "All" view; reset it when switching modes
-  const lsRow = document.getElementById('lead-status-filter-row');
-  if (lsRow) lsRow.classList.toggle('hidden', mode !== 'all');
-  state.leadStatusFilter = '';
-  const lsSel = document.getElementById('lead-status-filter');
-  if (lsSel) lsSel.value = '';
-
-  const loader = (mode === 'all') ? loadAllContacts() : loadOpenLeads();
-  loader.then(() => {
-    state.filteredContacts = [...state.contacts];
-    if (mode === 'all') populateLeadStatusFilter();
-    renderCustomerList();
-  }).catch(() => {});
-}
-
 // Visibility-gated stale-banner state for the room assignments panel.
 // When /api/localdata/all returns X-Cache-Status: stale or fresh while the tab
 // is hidden we defer the banner update so the user sees it only when they look
@@ -314,15 +292,6 @@ async function _loadWorkflowStagesImpl() {
   for (const [contactId, rooms] of Object.entries(data || {})) {
     state.contactStageCache[contactId] = rooms;
   }
-}
-
-function _populateStageFilterImpl() {
-  const sel = document.getElementById('stage-filter');
-  if (!sel || !state.workflow?.stages) return;
-  sel.innerHTML = `<option value="">All stages</option>` +
-    Object.entries(state.workflow.stages).map(([key, s]) =>
-      `<option value="${escHtml(key)}">${escHtml(s.label)}</option>`
-    ).join('');
 }
 
 let LEAD_STATUS_OPTIONS = [
@@ -678,31 +647,6 @@ function _filterDealsImpl(query) {
   state.searchQuery = query || '';
   state.filteredContacts = applySearchFilter(state.contacts);
   state.currentPage = 1;
-  renderCustomerList();
-}
-
-function setStageFilter(value) {
-  state.stageFilter = value;
-  state.currentPage = 1;
-  renderCustomerList();
-}
-
-function setLeadStatusFilter(value) {
-  state.leadStatusFilter = value;
-  state.currentPage = 1;
-  renderCustomerList();
-}
-
-function setSortBy(value) {
-  state.sortBy = value;
-  state.currentPage = 1;
-  renderCustomerList();
-}
-
-function toggleArchived() {
-  state.showArchived = !state.showArchived;
-  const btn = document.getElementById('archived-toggle');
-  if (btn) btn.classList.toggle('filter-btn-active', state.showArchived);
   renderCustomerList();
 }
 
@@ -1075,7 +1019,6 @@ if (!window._leadDriftListenersAttached) {
 registerWorkflowLoader(_loadWorkflowImpl);
 registerOpenLeadsLoader(_loadOpenLeadsImpl);
 registerWorkflowStagesLoader(_loadWorkflowStagesImpl);
-registerStageFilterPopulator(_populateStageFilterImpl);
 registerDealsFilter(_filterDealsImpl);
 
 // ── Card picker cluster ────────────────────────────────────────────────────────
