@@ -145,6 +145,7 @@ export function usePaginatedContacts(
     if (stage) qs.set('stage', stage);
     if (sortBy && sortBy !== 'newest') qs.set('sort', sortBy);
     if (search) qs.set('q', search);
+    if (showArchived) qs.set('archived', '1');
 
     (async () => {
       try {
@@ -189,10 +190,7 @@ export function usePaginatedContacts(
     return () => {
       cancelled = true;
     };
-    // showArchived is intentionally omitted: it is a client-side display filter
-    // only; the server result set does not change based on it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectivePage, leadStatus, stage, sortBy, search, refreshNonce]);
+  }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, refreshNonce]);
 
   return { contacts, total, totalPages, loading, error, contactsStale, page: effectivePage, setPage };
 }

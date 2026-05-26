@@ -1010,15 +1010,24 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     }
 
     const stageParam = (req.query.stage || '').trim();
+    // archived=1 means show all rooms; archived=0 (default) means only active rooms.
+    const showArchived = req.query.archived === '1';
     if (stageParam) {
       contacts = contacts.filter(c => {
         const roomsJson = c.properties?.measure_once_rooms;
         if (!roomsJson) return false;
         try {
           const rooms = JSON.parse(roomsJson);
+          if (!Array.isArray(rooms)) return false;
           // Normalise missing stageKey to 'sales' (the default used throughout
           // the room-resolution layer in the client and localdata endpoint).
-          return Array.isArray(rooms) && rooms.some(r => (r.stageKey || 'sales') === stageParam);
+          const inStage = rooms.filter(r => (r.stageKey || 'sales') === stageParam);
+          if (inStage.length === 0) return false;
+          // When not showing archived, require at least one active room in the stage.
+          if (!showArchived) {
+            return inStage.some(r => (r.roomStatus || 'active') === 'active');
+          }
+          return true;
         } catch {
           return false;
         }

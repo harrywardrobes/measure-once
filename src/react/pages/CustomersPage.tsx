@@ -883,12 +883,14 @@ export function CustomersPage(): React.ReactElement {
   }, [contacts]);
 
 
-  // Resolve rooms for display on a contact card. Stage filtering is now
-  // server-side, so this function only handles archived-room display: when
-  // showArchived is false, archived rooms are omitted from the card pills
-  // (but the contact itself is still shown — the server already determined
-  // it should appear). If no rooms remain after filtering, fall back to the
-  // default sales room so cards always have at least one pill.
+  // Resolve rooms for display on a contact card. Stage and archived filtering
+  // are now both server-side: when a stage is active and showArchived is false,
+  // the server already excludes contacts whose only rooms in that stage are
+  // archived, so every contact here has at least one active room in the stage.
+  // This function only controls which room pills to show on the card: archived
+  // rooms are omitted from the pills when showArchived is false. The fallback
+  // to a synthetic "Main" room is retained for the no-stage (All) view where
+  // archived-only contacts can still appear.
   const resolveRooms = React.useCallback(
     (contactId: string): Room[] => {
       const cached = roomsByContact[contactId];
