@@ -17,6 +17,10 @@ Project management dashboard (HubSpot CRM integration).
   or page refresh does not lose the user's work. Use localStorage (or
   sessionStorage where appropriate) to draft-save form values and restore them
   on re-mount. Clear the draft only after a successful submit.
+- **Follow-up tasks:** Always propose follow-up tasks for complex work. Keep
+  them as small and focused as possible. Never pre-approve anything that would
+  dramatically change application functionality — always surface it for the
+  user to review and approve first.
 
 ## Stack
 - Node.js 20 + Express; single `server.js` serves API and static assets.
