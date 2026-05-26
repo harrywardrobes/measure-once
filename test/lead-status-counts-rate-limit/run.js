@@ -271,15 +271,19 @@ async function main() {
     record('B3 stale body matches earlier fresh body',
       JSON.stringify(r3.json) === JSON.stringify(r1.json),
       `stale=${JSON.stringify(r3.json)} fresh=${JSON.stringify(r1.json)}`);
-    // Retry budget: helper does up to 4 attempts per search × (1 + N) searches.
-    // Just assert *some* retries happened (more than one POST per search).
-    const minRetried = (1 + LS_KEYS.length) * 2; // at least 2 attempts per search
+    // Retry budget: helper does up to 4 attempts per search. With serialised
+    // fan-out, the first search exhausts all 4 retries before throwing and the
+    // loop stops there — subsequent searches are never reached. So posts = 4.
+    const minRetried = 4; // maxAttempts for hubspotSearchWithRetry
     record('B4 retried 429s before giving up',
       mock.state.posts.length >= minRetried,
       `posts=${mock.state.posts.length} >= ${minRetried}`);
 
     // ── (C) 429 + Retry-After then 200 ───────────────────────────────────────
     console.log('\n  [C] 429 + Retry-After → 200 on retry');
+    // Section B left a 60 s cooldown active. Reset it so C exercises the live
+    // retry path instead of being immediately served stale counts.
+    await adminClient.post('/api/admin/test/reset-lead-status-counts-cooldown', {});
     mock.state.mode = 'retryAfterOnce';
     mock.state.retryAfterUsed = false;
     mock.state.posts = [];

@@ -4342,6 +4342,19 @@ app.post('/api/admin/test/bust-open-leads-cache', isAuthenticated, requireAdmin,
   res.json({ ok: true, hadCache: _openLeadsCache !== null });
 });
 
+// ── Dev-only: reset the lead-status-counts rate-limit cooldown ───────────────
+// Clears _leadStatusCountsCooldownUntil so the next request performs a live
+// fan-out rather than immediately serving stale counts. Only useful in tests
+// that exercised the always-429 path (section B) and need section C to see a
+// live retry. Only available when NODE_ENV !== 'production'.
+app.post('/api/admin/test/reset-lead-status-counts-cooldown', isAuthenticated, requireAdmin, (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  _leadStatusCountsCooldownUntil = 0;
+  res.json({ ok: true });
+});
+
 // ── Admin: toggle HW_test_user on a contact ───────────────────────────────────
 // The production guard runs as a middleware *before* requireHubspotToken so
 // the 404 is returned even when HUBSPOT_TOKEN is absent.

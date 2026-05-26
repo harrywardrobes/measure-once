@@ -192,6 +192,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/admin/users/foo@bar.com/force-password-reset', level: 'admin', body: {} },
   { method: 'POST',   path: '/api/admin/users/0/resolve-profile-conflicts',      level: 'admin', body: {} },
   { method: 'POST',   path: '/api/admin/test/bust-open-leads-cache',             level: 'admin', body: {} },
+  { method: 'POST',   path: '/api/admin/test/reset-lead-status-counts-cooldown', level: 'admin', body: {} },
   { method: 'GET',    path: '/auth/quickbooks',                                level: 'admin' },
   { method: 'GET',    path: '/auth/quickbooks/callback?code=x&state=y&realmId=1', level: 'admin' },
   { method: 'POST',   path: '/auth/quickbooks/disconnect',                     level: 'admin', body: {} },
