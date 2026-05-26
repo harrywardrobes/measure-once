@@ -73,6 +73,23 @@ interface SearchSettings {
   action_order: string[];
 }
 
+let _cachedSettings: SearchSettings | null = null;
+let _settingsFetch: Promise<SearchSettings> | null = null;
+
+function loadSearchSettings(): Promise<SearchSettings> {
+  if (_cachedSettings !== null) return Promise.resolve(_cachedSettings);
+  if (_settingsFetch !== null) return _settingsFetch;
+  _settingsFetch = fetch('/api/search-settings')
+    .then(r => r.ok ? r.json() : { disabled_actions: [], hint_placeholder: '', action_order: [] })
+    .catch(() => ({ disabled_actions: [], hint_placeholder: '', action_order: [] }))
+    .then((data: SearchSettings) => {
+      _cachedSettings = data;
+      _settingsFetch = null;
+      return data;
+    });
+  return _settingsFetch;
+}
+
 const ALL_ACTIONS: Action[] = [
   { id: 'new-customer',    label: 'New customer',           hint: 'Create a new customer record',           category: 'Action',   icon: <PersonAddIcon fontSize="small" /> },
   { id: 'go-customers',    label: 'All customers',          hint: 'Browse your customer list',              category: 'Navigate', icon: <GroupIcon fontSize="small" />,           href: '/customers' },
@@ -183,33 +200,25 @@ function ResultItem({ icon, avatar, label, sub, category, onClick, itemRef }: Re
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [settings, setSettings] = useState<SearchSettings | null>(null);
+  const [settings, setSettings] = useState<SearchSettings | null>(_cachedSettings);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const fetchSettings = useCallback(async () => {
-    if (settings !== null || settingsLoading) return;
-    setSettingsLoading(true);
-    try {
-      const r = await fetch('/api/search-settings');
-      const data = r.ok ? await r.json() : { disabled_actions: [], hint_placeholder: '', action_order: [] };
-      setSettings(data);
-    } catch {
-      setSettings({ disabled_actions: [], hint_placeholder: '', action_order: [] });
-    } finally {
-      setSettingsLoading(false);
-    }
-  }, [settings, settingsLoading]);
-
   const doOpen = useCallback(() => {
-    fetchSettings();
+    if (_cachedSettings === null && !settingsLoading) {
+      setSettingsLoading(true);
+      loadSearchSettings().then(data => {
+        setSettings(data);
+        setSettingsLoading(false);
+      });
+    }
     const seed = location.pathname === '/customers' && window.state?.searchQuery
       ? window.state.searchQuery : '';
     setQuery(seed);
     setOpen(true);
     setTimeout(() => inputRef.current?.focus(), 30);
-  }, [fetchSettings]);
+  }, [settingsLoading]);
 
   const doClose = useCallback(() => {
     setOpen(false);
