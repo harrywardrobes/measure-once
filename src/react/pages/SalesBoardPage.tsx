@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Button, Card, Snackbar, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CircularProgress, Snackbar, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { usePaginatedContacts, PaginatedContact, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
+import { ContactsPagination } from '../components/ContactsPagination';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -310,96 +312,79 @@ interface BoardEntry {
 
 // ── Data processing ────────────────────────────────────────────────────────────
 
-function computeBoardData(): Record<string, BoardEntry[]> {
+function buildEntriesForStage(contacts: PaginatedContact[], stageKey: string): BoardEntry[] {
   const w = window as unknown as WindowGlobals;
-  const state = w.state;
-  const contacts = state?.filteredContacts || [];
-  const contactStageCache = state?.contactStageCache || {};
-  const workflow = state?.workflow;
+  const contactStageCache = w.state?.contactStageCache || {};
   const lsOptions = w.LEAD_STATUS_OPTIONS || [];
   const excludedLsSet = new Set(lsOptions.filter((o) => o.excluded_from_sales).map((o) => o.value));
 
-  const allEntries: BoardEntry[] = [];
-
+  const entries: BoardEntry[] = [];
   for (const contact of contacts) {
     const ls = (contact.properties?.hs_lead_status || '').toUpperCase();
     if (excludedLsSet.has(ls)) continue;
 
     const cached = contactStageCache[contact.id];
     const createdate = parseInt(contact.properties?.createdate || '0', 10);
-    const room = !cached || cached.length === 0 ? null : bestRoom(cached);
+    const lsOpt = ls ? lsOptions.find((o) => o.value === ls) : null;
 
-    if (!room) {
-      const lsInfo = columnForLeadStatus(ls);
-      const lsColumn = lsInfo.column || 'sales';
-      const lsOpt = ls ? lsOptions.find((o) => o.value === ls) : null;
-      allEntries.push({
-        contact,
-        stageKey: lsColumn,
+    if (!cached || cached.length === 0) {
+      entries.push({
+        contact: contact as Contact, stageKey,
         substageId: ls || '',
         badgeLabel: lsOpt ? lsOpt.label : '',
-        sourceId: '',
-        createdate,
-        stageTime: createdate,
-        priority: lsInfo.terminal ? 3 : 2,
+        sourceId: '', createdate, stageTime: createdate, priority: 2,
       });
       continue;
     }
 
-    const statusId = room.statusId || '';
+    let best: RoomWithIdx | null = null;
+    let bestScore = Infinity;
+    for (let idx = 0; idx < cached.length; idx++) {
+      const r = cached[idx];
+      if ((r.roomStatus || 'active') !== 'active') continue;
+      if ((r.stageKey || 'sales') !== stageKey) continue;
+      const score = priorityScore(stageKey, r.statusId || '');
+      if (score < bestScore) { bestScore = score; best = { ...r, roomIdx: idx }; }
+    }
+
+    if (!best) {
+      entries.push({
+        contact: contact as Contact, stageKey,
+        substageId: ls || '',
+        badgeLabel: lsOpt ? lsOpt.label : '',
+        sourceId: '', createdate, stageTime: createdate, priority: 2,
+      });
+      continue;
+    }
+
+    const statusId = best.statusId || '';
     const substageDate =
-      statusId && room.substateDates?.[statusId]
-        ? new Date(room.substateDates[statusId] + 'T00:00:00').getTime()
+      statusId && best.substateDates?.[statusId]
+        ? new Date(best.substateDates[statusId] + 'T00:00:00').getTime()
         : null;
-    const stageEntryDate = room.stageDates?.[room.stageKey || '']
-      ? new Date((room.stageDates as Record<string, string>)[room.stageKey || ''] + 'T00:00:00').getTime()
+    const stageEntryDate = best.stageDates?.[stageKey]
+      ? new Date((best.stageDates as Record<string, string>)[stageKey] + 'T00:00:00').getTime()
       : null;
 
-    const lsInfo = columnForLeadStatus(ls);
-    const lsColumn = lsInfo.column;
-    const finalStage = lsColumn || room.stageKey || 'sales';
-
-    const lsOpt2 = !statusId && lsColumn ? lsOptions.find((o) => o.value === ls) : null;
-    const roomBadge = lsOpt2 ? lsOpt2.label : '';
-
-    const basePriority = priorityScore(finalStage, statusId);
-    allEntries.push({
-      contact,
-      stageKey: finalStage,
+    entries.push({
+      contact: contact as Contact, stageKey,
       substageId: statusId,
-      badgeLabel: roomBadge,
-      sourceId: room.sourceId || '',
+      badgeLabel: !statusId && lsOpt ? lsOpt.label : '',
+      sourceId: best.sourceId || '',
       createdate,
       stageTime: substageDate || stageEntryDate || createdate,
-      priority: lsInfo.terminal ? 3 : basePriority,
-      roomIdx: room.roomIdx,
+      priority: priorityScore(stageKey, statusId),
+      roomIdx: best.roomIdx,
     });
   }
 
-  // Drop stale Sales-column entries (last modified > 4 weeks ago)
-  const staleCutoff = Date.now() - FOUR_WEEKS_MS;
-  const visible = allEntries.filter((e) => {
-    if (e.stageKey !== 'sales') return true;
-    const raw = e.contact.properties?.lastmodifieddate;
-    if (!raw) return true;
-    const lmd = new Date(raw).getTime();
-    return !isNaN(lmd) && lmd >= staleCutoff;
-  });
-
-  // Sort: priority band asc, then newest first
-  visible.sort((a, b) => {
+  // Sort within the current page: highest priority first, then newest
+  entries.sort((a, b) => {
     if (a.priority !== b.priority) return a.priority - b.priority;
     return b.createdate - a.createdate;
   });
 
-  // Group by stage
-  const byStage: Record<string, BoardEntry[]> = Object.fromEntries(
-    SALES_TAB_STAGES.map((k) => [k, []]),
-  );
-  for (const e of visible) {
-    if (byStage[e.stageKey]) byStage[e.stageKey].push(e);
-  }
-  return byStage;
+  return entries;
 }
 
 // ── StageTrail ─────────────────────────────────────────────────────────────────
@@ -899,7 +884,41 @@ export function SalesBoardPage() {
     };
   }, [forceUpdate]);
 
-  const byStage = useMemo(() => computeBoardData(), [tick]);
+  // ── usePaginatedContacts: one call per column ─────────────────────────────
+  // The server filters contacts by stage so each column fetches only what it
+  // needs. Room/substage data is still read from window.state.contactStageCache
+  // (populated by the legacy JS bootstrap); tick is a useMemo dependency so
+  // entry derivation re-runs when room data refreshes without forcing a refetch.
+  const salesHook = usePaginatedContacts({
+    initialPage: 1, leadStatus: '', substatus: '',
+    stage: 'sales', sortBy: 'newest', search: '', showArchived: false,
+  });
+  const dvHook = usePaginatedContacts({
+    initialPage: 1, leadStatus: '', substatus: '',
+    stage: 'designvisit', sortBy: 'newest', search: '', showArchived: false,
+  });
+
+  const staleCutoff = Date.now() - FOUR_WEEKS_MS;
+  const salesEntries = useMemo(
+    () => buildEntriesForStage(salesHook.contacts, 'sales')
+      .filter((e) => {
+        const raw = e.contact.properties?.lastmodifieddate;
+        if (!raw) return true;
+        const lmd = new Date(raw).getTime();
+        return !isNaN(lmd) && lmd >= staleCutoff;
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [salesHook.contacts, tick],
+  );
+  const dvEntries = useMemo(
+    () => buildEntriesForStage(dvHook.contacts, 'designvisit'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dvHook.contacts, tick],
+  );
+
+  const hookByStage = { sales: salesHook, designvisit: dvHook } as const;
+  const entriesByStage = { sales: salesEntries, designvisit: dvEntries } as const;
+
   const workflow = (window as unknown as WindowGlobals).state?.workflow;
 
   const switchColumn = (col: ColumnKey) => {
@@ -967,8 +986,9 @@ export function SalesBoardPage() {
       }}
     >
       {SALES_TAB_STAGES.map((sk, colIdx) => {
-        const entries = byStage[sk] || [];
-        const count = entries.length;
+        const hook = hookByStage[sk];
+        const entries = entriesByStage[sk];
+        const count = hook.total;
         const accent = STAGE_ACCENT[sk];
         const stageColor = STAGE_COLORS[sk] || STAGE_COLORS.sales;
         const label = getStageLabel(sk, workflow);
@@ -1071,15 +1091,16 @@ export function SalesBoardPage() {
                 WebkitOverflowScrolling: 'touch',
               }}
             >
-              {entries.length === 0 ? (
+              {hook.loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : hook.error ? (
+                <Alert severity="error" sx={{ m: 1 }}>{hook.error}</Alert>
+              ) : entries.length === 0 ? (
                 <Typography
                   variant="body2"
-                  sx={{
-                    color: 'text.secondary',
-                    textAlign: 'center',
-                    py: 6,
-                    opacity: 0.55,
-                  }}
+                  sx={{ color: 'text.secondary', textAlign: 'center', py: 6, opacity: 0.55 }}
                 >
                   Nothing here yet.
                 </Typography>
@@ -1092,6 +1113,18 @@ export function SalesBoardPage() {
                     workflow={workflow}
                   />
                 ))
+              )}
+              {!hook.loading && !hook.error && hook.total > 0 && (
+                <Box sx={{ px: 0.5, pb: 1 }}>
+                  <ContactsPagination
+                    page={hook.page}
+                    totalPages={hook.totalPages}
+                    total={hook.total}
+                    visibleCount={entries.length}
+                    pageLimit={PAGINATED_CONTACTS_PAGE_LIMIT}
+                    onPageChange={hook.setPage}
+                  />
+                </Box>
               )}
             </Box>
           </Box>

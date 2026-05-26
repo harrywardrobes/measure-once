@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   Checkbox,
+  CircularProgress,
   FormControlLabel,
   Popover,
   Snackbar,
@@ -15,6 +16,8 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { usePaginatedContacts, PaginatedContact, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
+import { ContactsPagination } from '../components/ContactsPagination';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -252,27 +255,14 @@ function saveHiddenSubstages(hidden: Set<string>): void {
 
 // ── Data processing ────────────────────────────────────────────────────────────
 
-function computeSurveyData(): BoardEntry[] {
+function buildSurveyEntries(contacts: PaginatedContact[]): BoardEntry[] {
   const w = window as unknown as WindowGlobals;
-  const state = w.state;
-  const contacts = state?.filteredContacts || [];
-  const contactStageCache = state?.contactStageCache || {};
-  const lsOptions = w.LEAD_STATUS_OPTIONS || [];
+  const contactStageCache = w.state?.contactStageCache || {};
 
   const entries: BoardEntry[] = [];
 
   for (const contact of contacts) {
-    const ls = (contact.properties?.hs_lead_status || '').toUpperCase();
-
-    if (ls) {
-      const lsOpt = lsOptions.find((o) => o.value === ls);
-      const lsStage = lsOpt?.stage;
-      if (lsStage && lsStage !== 'SURVEY') continue;
-    }
-
     const cached = contactStageCache[contact.id];
-    if (!cached || cached.length === 0) continue;
-
     const best = bestSurveyRoom(cached);
     if (!best) continue;
 
@@ -289,7 +279,7 @@ function computeSurveyData(): BoardEntry[] {
       : null;
 
     entries.push({
-      contact,
+      contact: contact as Contact,
       substageId: statusId,
       sourceId: best.sourceId || '',
       createdate,
@@ -299,6 +289,7 @@ function computeSurveyData(): BoardEntry[] {
     });
   }
 
+  // Sort within the current page: highest priority first, then newest
   entries.sort((a, b) => {
     if (a.priority !== b.priority) return a.priority - b.priority;
     return b.createdate - a.createdate;
@@ -770,7 +761,20 @@ export function SurveyBoardPage() {
     };
   }, [forceUpdate]);
 
-  const allEntries = useMemo(() => computeSurveyData(), [tick]);
+  // ── usePaginatedContacts: survey column ─────────────────────────────────
+  // Server filters to contacts with a room in the survey stage.  Room/substage
+  // data is augmented client-side from window.state.contactStageCache; tick
+  // keeps the useMemo in sync when room data refreshes without forcing a refetch.
+  const surveyHook = usePaginatedContacts({
+    initialPage: 1, leadStatus: '', substatus: '',
+    stage: 'survey', sortBy: 'newest', search: '', showArchived: false,
+  });
+
+  const allEntries = useMemo(
+    () => buildSurveyEntries(surveyHook.contacts),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [surveyHook.contacts, tick],
+  );
   const workflow = (window as unknown as WindowGlobals).state?.workflow;
 
   const visibleEntries = useMemo(
@@ -778,10 +782,18 @@ export function SurveyBoardPage() {
     [allEntries, hiddenSubstages],
   );
 
+  // Reset to page 1 when the substage filter changes — done in an effect
+  // (not inside useMemo) so it is never a render-phase side effect.
+  useEffect(() => {
+    surveyHook.setPage(1);
+  // surveyHook.setPage is a stable useState setter; only hiddenSubstages matters.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hiddenSubstages]);
+
   const surveyColor = STAGE_COLORS[SURVEY_STAGE_KEY];
   const accent = STAGE_ACCENT[SURVEY_STAGE_KEY];
   const label = getStageLabel(SURVEY_STAGE_KEY, workflow);
-  const count = visibleEntries.length;
+  const count = surveyHook.total;
 
   const hiddenCount = hiddenSubstages.size;
   const filterOpen = Boolean(filterAnchor);
@@ -1010,7 +1022,13 @@ export function SurveyBoardPage() {
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        {visibleEntries.length === 0 ? (
+        {surveyHook.loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : surveyHook.error ? (
+          <Alert severity="error" sx={{ m: 1 }}>{surveyHook.error}</Alert>
+        ) : visibleEntries.length === 0 ? (
           <Typography
             variant="body2"
             sx={{ color: 'text.secondary', textAlign: 'center', py: 6, opacity: 0.55 }}
@@ -1026,6 +1044,18 @@ export function SurveyBoardPage() {
               workflow={workflow}
             />
           ))
+        )}
+        {!surveyHook.loading && !surveyHook.error && surveyHook.total > 0 && (
+          <Box sx={{ px: 0.5, pb: 1 }}>
+            <ContactsPagination
+              page={surveyHook.page}
+              totalPages={surveyHook.totalPages}
+              total={surveyHook.total}
+              visibleCount={visibleEntries.length}
+              pageLimit={PAGINATED_CONTACTS_PAGE_LIMIT}
+              onPageChange={surveyHook.setPage}
+            />
+          </Box>
         )}
       </Box>
 

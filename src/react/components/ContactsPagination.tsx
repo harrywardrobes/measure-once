@@ -6,7 +6,14 @@ export function buildPaginationLabel(
   pageLimit: number,
   visibleCount: number,
   total: number,
+  totalPages?: number,
 ): string {
+  if (visibleCount === 0) {
+    // Client-side filter removed every item on this page; show page position so
+    // the user knows they can navigate to other pages that may have visible items.
+    const pageCount = totalPages ?? Math.max(1, Math.ceil(total / pageLimit));
+    return `Page ${page} of ${pageCount}`;
+  }
   const from = Math.min(total, (page - 1) * pageLimit + 1);
   const to = Math.min(total, (page - 1) * pageLimit + visibleCount);
   return `Showing ${from}\u2013${to} of ${total}`;
@@ -33,7 +40,7 @@ export function ContactsPagination({
   return (
     <Stack direction="row" sx={{ pt: 1, alignItems: 'center', justifyContent: 'space-between' }}>
       <Typography variant="body2" color="text.secondary">
-        {buildPaginationLabel(page, pageLimit, visibleCount, total)}
+        {buildPaginationLabel(page, pageLimit, visibleCount, total, totalPages)}
       </Typography>
       {totalPages > 1 ? (
         <Pagination
