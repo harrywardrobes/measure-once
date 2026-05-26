@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
   IconButton,
   Stack,
@@ -15,6 +16,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import LogoutIcon from '@mui/icons-material/Logout';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import LinkOffIcon from '@mui/icons-material/LinkOff';
 import { ChangePasswordCard } from '../components/ChangePasswordDialog';
 import { usePrivilege } from '../hooks/usePrivilege';
 
@@ -154,6 +157,7 @@ export function ProfilePage(): React.ReactElement {
 
       <IdentityCard profile={profile} appUser={appUser} onReload={reload} />
       <RoleCard profile={profile} />
+      <GoogleCalendarCard />
       <ChangePasswordCard profile={profile} />
       <AccountActionsCard isAdmin={isAdmin} />
     </Box>
@@ -345,6 +349,102 @@ function RoleCard({ profile }: { profile: Profile }) {
             {profile.job_role || '—'}
           </Typography>
         </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Google Calendar connection ─────────────────────────────────────────
+
+type GoogleStatus = { connected: boolean; code?: string };
+
+function GoogleCalendarCard() {
+  const [status, setStatus] = React.useState<GoogleStatus | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [disconnecting, setDisconnecting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetch('/api/google/status', { headers: { Accept: 'application/json' } })
+      .then((r) => r.json())
+      .then((data: GoogleStatus) => { if (!cancelled) { setStatus(data); setLoading(false); } })
+      .catch(() => { if (!cancelled) { setStatus(null); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, []);
+
+  const onDisconnect = async () => {
+    setDisconnecting(true);
+    setError(null);
+    try {
+      const r = await fetch('/auth/logout-google', { method: 'POST', headers: { Accept: 'application/json' } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setStatus({ connected: false });
+      showToast('Google Calendar disconnected');
+    } catch (e) {
+      setError((e as Error).message || 'Failed to disconnect');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
+  const connected = status?.connected === true;
+
+  return (
+    <Card variant="outlined" sx={{ mb: 1.5 }}>
+      <CardContent>
+        <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Google Calendar
+        </Typography>
+        <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <CalendarMonthIcon sx={{ fontSize: 20, color: connected ? 'success.main' : 'text.disabled' }} />
+            {loading ? (
+              <Typography variant="body2" color="text.secondary">Checking status…</Typography>
+            ) : (
+              <Chip
+                label={connected ? 'Connected' : 'Not connected'}
+                size="small"
+                color={connected ? 'success' : 'default'}
+                variant={connected ? 'filled' : 'outlined'}
+                sx={{ fontWeight: 600 }}
+              />
+            )}
+          </Stack>
+          {!loading && (
+            connected ? (
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                startIcon={<LinkOffIcon />}
+                onClick={onDisconnect}
+                disabled={disconnecting}
+              >
+                {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+              </Button>
+            ) : (
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<CalendarMonthIcon />}
+                href="/auth/google"
+              >
+                Connect Google Calendar
+              </Button>
+            )
+          )}
+        </Stack>
+        {error && (
+          <Alert severity="error" sx={{ mt: 1.5 }}>{error}</Alert>
+        )}
+        {!loading && !connected && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+            Connect your Google account to sync upcoming events on the Home page.
+          </Typography>
+        )}
       </CardContent>
     </Card>
   );
