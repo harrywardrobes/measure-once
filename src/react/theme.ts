@@ -115,9 +115,9 @@ export const theme: Theme = createTheme({
     subtitle2:{ fontFamily: FONT_FAMILY, fontWeight: 600, fontSize: '0.82rem',  lineHeight: 1.5 },
     body1:    { fontFamily: FONT_FAMILY, fontWeight: 400, fontSize: '0.95rem',  lineHeight: 1.55 },
     body2:    { fontFamily: FONT_FAMILY, fontWeight: 400, fontSize: '0.82rem',  lineHeight: 1.55 },
-    button:   { fontFamily: FONT_FAMILY, fontWeight: 600, fontSize: '0.88rem',  textTransform: 'none' },
+    button:   { fontFamily: FONT_FAMILY, fontWeight: 600, fontSize: '0.88rem',  lineHeight: 1.75, textTransform: 'none' },
     caption:  { fontFamily: FONT_FAMILY, fontWeight: 400, fontSize: '0.72rem',  lineHeight: 1.4 },
-    overline: { fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: '0.68rem',  letterSpacing: '0.08em', textTransform: 'uppercase' },
+    overline: { fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: '0.68rem',  lineHeight: 2.66, letterSpacing: '0.08em', textTransform: 'uppercase' },
   },
   components: {
     MuiButton: {

@@ -157,7 +157,7 @@ const rootTokens = {
 
   '--typo-button-font-size':   (TYPO.button as { fontSize: string }).fontSize,
   '--typo-button-font-weight': String((TYPO.button as { fontWeight: number }).fontWeight),
-  '--typo-button-line-height': '1.75',
+  '--typo-button-line-height': String((TYPO.button as { lineHeight: number }).lineHeight),
 
   '--typo-caption-font-size':   (TYPO.caption as { fontSize: string }).fontSize,
   '--typo-caption-font-weight': String((TYPO.caption as { fontWeight: number }).fontWeight),
@@ -165,7 +165,7 @@ const rootTokens = {
 
   '--typo-overline-font-size':   (TYPO.overline as { fontSize: string }).fontSize,
   '--typo-overline-font-weight': String((TYPO.overline as { fontWeight: number }).fontWeight),
-  '--typo-overline-line-height': '2.66',
+  '--typo-overline-line-height': String((TYPO.overline as { lineHeight: number }).lineHeight),
 
   /* ── Spacing unit ────────────────────────────────────────────────────────── */
   '--spacing-unit': 8,

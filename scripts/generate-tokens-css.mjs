@@ -143,15 +143,11 @@ for (let si = 0; si < stageEntries.length; si++) {
 
 // ── Build typography section ─────────────────────────────────────────────────
 
-// lineHeight is not defined in theme.ts for `button` and `overline`; those
-// values are hardcoded in AppThemeProvider.tsx and preserved here too.
-const HARDCODED_LINE_HEIGHT = { button: '1.75', overline: '2.66' };
-
 const typoLines = [];
 for (let vi = 0; vi < TYPO_VARIANTS.length; vi++) {
   const variant = TYPO_VARIANTS[vi];
   const t = typography[variant] || {};
-  const lh = t.lineHeight ?? HARDCODED_LINE_HEIGHT[variant];
+  const lh = t.lineHeight;
   const prefix = `typo-${variant}`;
   const w = 28;
   if (t.fontSize)   typoLines.push(col(`${prefix}-font-size`,   t.fontSize,   w));
