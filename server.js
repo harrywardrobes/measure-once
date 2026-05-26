@@ -3302,12 +3302,14 @@ async function ensureIdeasTables() {
       created_at     TIMESTAMP DEFAULT NOW()
     );
   `);
+  await pool.query(`ALTER TABLE ideas ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP`);
+  await pool.query(`ALTER TABLE idea_comments ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP`);
 }
 
 app.get('/api/ideas', async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT i.id, i.body, i.created_at,
+      SELECT i.id, i.body, i.created_at, i.edited_at,
              u.first_name, u.last_name, u.email AS author_email,
              COUNT(c.id)::int AS comment_count
       FROM ideas i
@@ -3320,6 +3322,7 @@ app.get('/api/ideas', async (req, res) => {
       id:            r.id,
       body:          r.body,
       created_at:    r.created_at,
+      edited_at:     r.edited_at || null,
       author_name:   [r.first_name, r.last_name].filter(Boolean).join(' ') || r.author_email || 'Unknown',
       comment_count: r.comment_count,
     })));
@@ -3357,7 +3360,7 @@ app.get('/api/ideas/:id/comments', async (req, res) => {
   if (isNaN(ideaId)) return res.status(400).json({ error: 'Invalid idea id.' });
   try {
     const { rows } = await pool.query(`
-      SELECT c.id, c.body, c.created_at,
+      SELECT c.id, c.body, c.created_at, c.edited_at,
              u.first_name, u.last_name, u.email AS author_email
       FROM idea_comments c
       LEFT JOIN users u ON u.id = c.author_user_id
@@ -3368,6 +3371,7 @@ app.get('/api/ideas/:id/comments', async (req, res) => {
       id:          r.id,
       body:        r.body,
       created_at:  r.created_at,
+      edited_at:   r.edited_at || null,
       author_name: [r.first_name, r.last_name].filter(Boolean).join(' ') || r.author_email || 'Unknown',
     })));
   } catch (e) {
@@ -3415,6 +3419,25 @@ app.delete('/api/ideas/:id', isAuthenticated, requireAdmin, async (req, res) => 
   }
 });
 
+app.patch('/api/ideas/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const ideaId = parseInt(req.params.id, 10);
+  if (isNaN(ideaId)) return res.status(400).json({ error: 'Invalid idea id.' });
+  const body = (req.body?.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'Idea body is required.' });
+  if (body.length > 1000) return res.status(400).json({ error: 'Idea body too long.' });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE ideas SET body = $1, edited_at = NOW() WHERE id = $2 RETURNING id, body, edited_at`,
+      [body, ideaId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Idea not found.' });
+    res.json({ id: rows[0].id, body: rows[0].body, edited_at: rows[0].edited_at });
+  } catch (e) {
+    console.error('PATCH /api/ideas/:id error:', e.message);
+    res.status(500).json({ error: 'Could not update idea.' });
+  }
+});
+
 app.delete('/api/ideas/:id/comments/:commentId', isAuthenticated, requireAdmin, async (req, res) => {
   const ideaId    = parseInt(req.params.id, 10);
   const commentId = parseInt(req.params.commentId, 10);
@@ -3429,6 +3452,26 @@ app.delete('/api/ideas/:id/comments/:commentId', isAuthenticated, requireAdmin, 
   } catch (e) {
     console.error('DELETE /api/ideas/:id/comments/:commentId error:', e.message);
     res.status(500).json({ error: 'Could not delete comment.' });
+  }
+});
+
+app.patch('/api/ideas/:id/comments/:commentId', isAuthenticated, requireAdmin, async (req, res) => {
+  const ideaId    = parseInt(req.params.id, 10);
+  const commentId = parseInt(req.params.commentId, 10);
+  if (isNaN(ideaId) || isNaN(commentId)) return res.status(400).json({ error: 'Invalid id.' });
+  const body = (req.body?.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'Comment body is required.' });
+  if (body.length > 500) return res.status(400).json({ error: 'Comment body too long.' });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE idea_comments SET body = $1, edited_at = NOW() WHERE id = $2 AND idea_id = $3 RETURNING id, body, edited_at`,
+      [body, commentId, ideaId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Comment not found.' });
+    res.json({ id: rows[0].id, body: rows[0].body, edited_at: rows[0].edited_at });
+  } catch (e) {
+    console.error('PATCH /api/ideas/:id/comments/:commentId error:', e.message);
+    res.status(500).json({ error: 'Could not update comment.' });
   }
 });
 

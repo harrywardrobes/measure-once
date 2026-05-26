@@ -83,7 +83,9 @@ const ROUTES = [
   { method: 'GET',    path: '/api/ideas/0/comments',           level: 'auth' },
   { method: 'POST',   path: '/api/ideas/0/comments',           level: 'auth',  body: { body: '__privtest_noop__' } },
   { method: 'DELETE', path: '/api/ideas/0',                    level: 'admin' },
+  { method: 'PATCH',  path: '/api/ideas/0',                    level: 'admin',  body: { body: '__privtest_noop__' } },
   { method: 'DELETE', path: '/api/ideas/0/comments/0',         level: 'admin' },
+  { method: 'PATCH',  path: '/api/ideas/0/comments/0',         level: 'admin',  body: { body: '__privtest_noop__' } },
   // Design-visit catalogue reads (any authenticated user can browse the
   // shared catalogue; admin writes live in the admin block below).
   { method: 'GET',    path: '/api/design-visit-terms',         level: 'auth' },

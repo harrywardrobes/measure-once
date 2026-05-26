@@ -24,6 +24,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import ChatBubbleOutlinedIcon from '@mui/icons-material/ChatBubbleOutlined';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import SendIcon from '@mui/icons-material/Send';
 import { usePrivilege } from '../hooks/usePrivilege';
@@ -34,6 +35,7 @@ interface Idea {
   id: number;
   body: string;
   created_at: string;
+  edited_at: string | null;
   author_name: string;
   comment_count: number;
 }
@@ -42,6 +44,7 @@ interface Comment {
   id: number;
   body: string;
   created_at: string;
+  edited_at: string | null;
   author_name: string;
 }
 
@@ -120,14 +123,19 @@ function CommentRow({
   ideaId,
   isAdmin,
   onDeleted,
+  onUpdated,
 }: {
   comment: Comment;
   ideaId: number;
   isAdmin: boolean;
   onDeleted: (id: number) => void;
+  onUpdated: (updated: Comment) => void;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const handleDelete = useCallback(async () => {
     setDeleting(true);
@@ -141,6 +149,34 @@ function CommentRow({
       setConfirmOpen(false);
     }
   }, [ideaId, comment.id, onDeleted]);
+
+  const handleEditStart = useCallback(() => {
+    setEditText(comment.body);
+    setEditing(true);
+  }, [comment.body]);
+
+  const handleEditCancel = useCallback(() => {
+    setEditing(false);
+    setEditText('');
+  }, []);
+
+  const handleEditSave = useCallback(async () => {
+    const body = editText.trim();
+    if (!body || body === comment.body) { handleEditCancel(); return; }
+    setSaving(true);
+    try {
+      const updated = await apiFetch<{ id: number; body: string; edited_at: string }>(
+        'PATCH', `/api/ideas/${ideaId}/comments/${comment.id}`, { body }
+      );
+      onUpdated({ ...comment, body: updated.body, edited_at: updated.edited_at });
+      setEditing(false);
+      setEditText('');
+    } catch {
+      // silent — leave edit mode open so user can retry or cancel
+    } finally {
+      setSaving(false);
+    }
+  }, [editText, comment, ideaId, onUpdated, handleEditCancel]);
 
   return (
     <>
@@ -168,21 +204,58 @@ function CommentRow({
             <Typography variant="caption" color="text.disabled">
               {relativeTime(comment.created_at)}
             </Typography>
+            {comment.edited_at && (
+              <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                (edited)
+              </Typography>
+            )}
           </Stack>
-          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {comment.body}
-          </Typography>
+          {editing ? (
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mt: 0.25 }}>
+              <TextField
+                size="small"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value.slice(0, 500))}
+                disabled={saving}
+                autoFocus
+                fullWidth
+                multiline
+                slotProps={{ htmlInput: { maxLength: 500 } }}
+              />
+              <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+                <Button size="small" onClick={handleEditCancel} disabled={saving}>Cancel</Button>
+                <Button size="small" variant="contained" onClick={handleEditSave} disabled={saving || !editText.trim()}>
+                  {saving ? 'Saving…' : 'Save'}
+                </Button>
+              </Stack>
+            </Box>
+          ) : (
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {comment.body}
+            </Typography>
+          )}
         </Box>
-        {isAdmin && (
-          <Tooltip title="Delete comment">
-            <IconButton
-              size="small"
-              onClick={() => setConfirmOpen(true)}
-              sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' }, flexShrink: 0 }}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+        {isAdmin && !editing && (
+          <Stack direction="row" spacing={0} sx={{ flexShrink: 0 }}>
+            <Tooltip title="Edit comment">
+              <IconButton
+                size="small"
+                onClick={handleEditStart}
+                sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main' } }}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete comment">
+              <IconButton
+                size="small"
+                onClick={() => setConfirmOpen(true)}
+                sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
         )}
       </Box>
 
@@ -208,11 +281,13 @@ function IdeaCard({
   idea,
   isAdmin,
   onDeleted,
+  onUpdated,
   onToast,
 }: {
   idea: Idea;
   isAdmin: boolean;
   onDeleted: (id: number) => void;
+  onUpdated: (updated: Idea) => void;
   onToast: (msg: string, error?: boolean) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -223,6 +298,9 @@ function IdeaCard({
   const [commentCount, setCommentCount] = useState(idea.comment_count);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+  const [saving, setSaving] = useState(false);
   const didFetch = useRef(false);
 
   const handleToggle = useCallback(async () => {
@@ -265,6 +343,10 @@ function IdeaCard({
     setCommentCount((c) => Math.max(0, c - 1));
   }, []);
 
+  const handleCommentUpdated = useCallback((updated: Comment) => {
+    setComments((prev) => (prev || []).map((c) => c.id === updated.id ? updated : c));
+  }, []);
+
   const handleDeleteIdea = useCallback(async () => {
     setDeleting(true);
     try {
@@ -278,7 +360,37 @@ function IdeaCard({
     }
   }, [idea.id, onDeleted, onToast]);
 
+  const handleEditStart = useCallback(() => {
+    setEditText(idea.body);
+    setEditing(true);
+  }, [idea.body]);
+
+  const handleEditCancel = useCallback(() => {
+    setEditing(false);
+    setEditText('');
+  }, []);
+
+  const handleEditSave = useCallback(async () => {
+    const body = editText.trim();
+    if (!body || body === idea.body) { handleEditCancel(); return; }
+    setSaving(true);
+    try {
+      const updated = await apiFetch<{ id: number; body: string; edited_at: string }>(
+        'PATCH', `/api/ideas/${idea.id}`, { body }
+      );
+      onUpdated({ ...idea, body: updated.body, edited_at: updated.edited_at });
+      setEditing(false);
+      setEditText('');
+      onToast('Idea updated.');
+    } catch (err: unknown) {
+      onToast((err as Error).message || 'Could not update idea.', true);
+    } finally {
+      setSaving(false);
+    }
+  }, [editText, idea, onUpdated, onToast, handleEditCancel]);
+
   const commentLabel = commentCount === 1 ? '1 comment' : `${commentCount} comments`;
+  const remaining = MAX_IDEA_CHARS - editText.length;
 
   return (
     <>
@@ -305,26 +417,79 @@ function IdeaCard({
                 <Typography variant="caption" color="text.disabled">
                   {relativeTime(idea.created_at)}
                 </Typography>
-                {isAdmin && (
+                {idea.edited_at && (
+                  <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                    (edited)
+                  </Typography>
+                )}
+                {isAdmin && !editing && (
                   <Box sx={{ ml: 'auto' }}>
-                    <Tooltip title="Delete idea">
-                      <IconButton
-                        size="small"
-                        onClick={() => setConfirmOpen(true)}
-                        sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    <Stack direction="row" spacing={0}>
+                      <Tooltip title="Edit idea">
+                        <IconButton
+                          size="small"
+                          onClick={handleEditStart}
+                          sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main' } }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete idea">
+                        <IconButton
+                          size="small"
+                          onClick={() => setConfirmOpen(true)}
+                          sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
                   </Box>
                 )}
               </Stack>
-              <Typography
-                variant="body1"
-                sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', mb: 1.25 }}
-              >
-                {idea.body}
-              </Typography>
+
+              {editing ? (
+                <Box sx={{ mb: 1 }}>
+                  <TextField
+                    multiline
+                    minRows={3}
+                    maxRows={10}
+                    fullWidth
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value.slice(0, MAX_IDEA_CHARS))}
+                    disabled={saving}
+                    autoFocus
+                    size="small"
+                    slotProps={{ htmlInput: { maxLength: MAX_IDEA_CHARS } }}
+                  />
+                  <Stack direction="row" spacing={1} sx={{ mt: 0.75, alignItems: 'center' }}>
+                    <Typography
+                      variant="caption"
+                      color={remaining < 50 ? 'warning.main' : 'text.disabled'}
+                      sx={{ flex: 1 }}
+                    >
+                      {remaining} characters remaining
+                    </Typography>
+                    <Button size="small" onClick={handleEditCancel} disabled={saving}>Cancel</Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={handleEditSave}
+                      disabled={saving || !editText.trim()}
+                    >
+                      {saving ? 'Saving…' : 'Save'}
+                    </Button>
+                  </Stack>
+                </Box>
+              ) : (
+                <Typography
+                  variant="body1"
+                  sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', mb: 1.25 }}
+                >
+                  {idea.body}
+                </Typography>
+              )}
+
               <Chip
                 icon={<ChatBubbleOutlinedIcon sx={{ fontSize: '14px !important' }} />}
                 label={commentLabel}
@@ -370,6 +535,7 @@ function IdeaCard({
                           ideaId={idea.id}
                           isAdmin={isAdmin}
                           onDeleted={handleCommentDeleted}
+                          onUpdated={handleCommentUpdated}
                         />
                       ))}
                     </Box>
@@ -549,6 +715,10 @@ export function IdeasPage() {
     showToast('Idea deleted.');
   }, [showToast]);
 
+  const handleUpdated = useCallback((updated: Idea) => {
+    setIdeas((prev) => prev.map((i) => i.id === updated.id ? updated : i));
+  }, []);
+
   return (
     <Box sx={{ maxWidth: 680, mx: 'auto', px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 3 } }}>
       <Stack direction="row" sx={{ alignItems: 'flex-start', justifyContent: 'space-between', mb: 3 }}>
@@ -600,6 +770,7 @@ export function IdeasPage() {
           idea={idea}
           isAdmin={isAdmin}
           onDeleted={handleDeleted}
+          onUpdated={handleUpdated}
           onToast={showToast}
         />
       ))}
