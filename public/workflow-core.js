@@ -605,134 +605,10 @@ function _filterDealsImpl(query) {
 let _bottomAction = null;
 let _bottomTimer  = null;
 
-// Workflow view: save is deferred until the undo bar expires
-let _deferredSave     = null; // { timerId }
-let _deferredSnapshot = null; // deep copy of allRooms BEFORE latest change
-
-// Monotonic sequence number for contact re-fetches triggered after a save.
-// When the user navigates rapidly between contacts, multiple re-fetches can be
-// in flight concurrently; we only apply the result of the most recent one so a
-// late-arriving stale response can't overwrite the badge.
-let _contactRefetchSeq = 0;
-
 function closeBottomBar() {
   document.getElementById('bottom-bar')?.remove();
   if (_bottomTimer) { clearTimeout(_bottomTimer); _bottomTimer = null; }
   _bottomAction = null;
-}
-
-// Flush any deferred save immediately (call on navigation away from current contact)
-async function flushDeferredSave() {
-  if (_deferredSave) {
-    clearTimeout(_deferredSave.timerId);
-    _deferredSave = null;
-    _deferredSnapshot = null;
-    closeBottomBar();
-    _updateBeforeUnloadGuard();
-    const cid = state.selectedContactId;
-    try {
-      document.dispatchEvent(new CustomEvent('localdata-updated', { detail: { contactId: cid } }));
-      // Re-fetch the contact so the list badge reflects the latest server state
-      // after the flush (mirrors the same pattern in scheduleSave / Task 215).
-      if (cid) {
-        const mySeq = ++_contactRefetchSeq;
-        const freshContact = await GET(`/api/contacts/${cid}`).catch(() => null);
-        // Drop the response if a newer re-fetch has been started in the meantime
-        // (e.g. user clicked through to another contact while this was in flight).
-        if (freshContact && mySeq === _contactRefetchSeq) {
-          _mergeContactIntoState(freshContact);
-          document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
-        }
-      }
-    } catch (e) {
-      if (e.code === 'HUBSPOT_AUTH') {
-        showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
-      } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
-        showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
-      } else {
-        showToast('Failed to save', true);
-      }
-    }
-  }
-}
-
-// Deferred save with undo bar — for workflow view changes.
-// snapshotRooms: deep copy of allRooms taken BEFORE the change was applied.
-function scheduleSave(undoMessage, snapshotRooms) {
-  // Cancel any existing pending save (new timer will cover all accumulated changes)
-  if (_deferredSave) {
-    clearTimeout(_deferredSave.timerId);
-    _deferredSave = null;
-  }
-  _deferredSnapshot = snapshotRooms;
-  closeBottomBar();
-
-  const timerId = setTimeout(async () => {
-    _deferredSave = null;
-    _deferredSnapshot = null;
-    closeBottomBar();
-    _updateBeforeUnloadGuard();
-    try {
-      document.dispatchEvent(new CustomEvent('localdata-updated', { detail: { contactId: state.selectedContactId } }));
-      // Re-fetch the contact so the list reflects the latest server state
-      // (e.g. HubSpot last-activity timestamp after the PATCH).  Route through
-      // _mergeContactIntoState so any in-flight optimistic lead-status change
-      // on the badge is preserved rather than overwritten by the fresh value.
-      const cid = state.selectedContactId;
-      if (cid) {
-        const mySeq = ++_contactRefetchSeq;
-        const freshContact = await GET(`/api/contacts/${cid}`).catch(() => null);
-        // Drop the response if a newer re-fetch has been started in the meantime.
-        if (freshContact && mySeq === _contactRefetchSeq) {
-          _mergeContactIntoState(freshContact);
-          document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
-        }
-      }
-    } catch (e) {
-      if (e.code === 'HUBSPOT_AUTH') {
-        showToast('Could not save — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
-      } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
-        showToast('Could not save — HubSpot rate limit reached. Please try again in a moment.', true);
-      } else {
-        showToast('Failed to save', true);
-      }
-    }
-  }, 5000);
-  _deferredSave = { timerId };
-  _updateBeforeUnloadGuard();
-
-  const el = document.createElement('div');
-  el.id = 'bottom-bar';
-  el.className = 'bottom-bar';
-  el.innerHTML = `
-    <span class="bottom-bar-msg">${escHtml(undoMessage)}</span>
-    <button class="bottom-bar-undo" onclick="undoLastChange()">Undo</button>
-    <div class="bottom-bar-progress"></div>
-  `;
-  document.body.appendChild(el);
-}
-
-async function undoLastChange() {
-  if (_deferredSave) {
-    clearTimeout(_deferredSave.timerId);
-    _deferredSave = null;
-  }
-  _updateBeforeUnloadGuard();
-  if (!_deferredSnapshot) { closeBottomBar(); return; }
-  const snapshot = _deferredSnapshot;
-  _deferredSnapshot = null;
-  closeBottomBar();
-
-  state.allRooms = snapshot;
-  state.workflowData = state.allRooms[state.selectedRoomIdx] || null;
-  state.expandedStages = new Set();
-  updateRoomCache();
-  document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
-  if (state.workflowData) {
-    renderWorkflowStages();
-    renderWorkflowHeader();
-  }
-  renderProjectsView();
 }
 
 // Immediate-save undo bar — for card-list changes (saves right away, undo makes a second save)
@@ -801,7 +677,6 @@ function _updateBeforeUnloadGuard() {
 }
 
 function hasUnsavedChanges() {
-  if (_deferredSave) return true;
   const commentArea  = document.getElementById('comment-input-area');
   const commentInput = document.getElementById('comment-input');
   if (commentArea && !commentArea.classList.contains('hidden') &&
@@ -824,15 +699,6 @@ function hasActiveInlineEdit() {
   if (window._invMemoDirty) return true;
   if (window._invSendDirty) return true;
   return false;
-}
-
-function discardPendingSave() {
-  if (_deferredSave) {
-    clearTimeout(_deferredSave.timerId);
-    _deferredSave    = null;
-    _deferredSnapshot = null;
-  }
-  _updateBeforeUnloadGuard();
 }
 
 function _clearCommentDraft() {
