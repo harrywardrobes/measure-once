@@ -47,6 +47,27 @@ const REPORT_PATH = path.join(
 const PAGE_LIMIT = 25; // must match CustomersPage.tsx PAGE_LIMIT
 const TOTAL_CONTACTS = 30; // enough to require 2 pages
 
+// Unique-prefix keys seeded into lead_status_config so the D.3 probe always
+// exercises the real lead-status filter path.  High sort_order values keep
+// them out of the way of any production rows.
+const PAGTEST_LS_KEYS = ['PAGTEST_LS_A', 'PAGTEST_LS_B', 'PAGTEST_LS_C'];
+
+async function seedLeadStatuses(pool) {
+  // Wipe any stale rows from a prior crashed run first.
+  await pool.query(
+    `DELETE FROM lead_status_config WHERE key = ANY($1::text[])`,
+    [PAGTEST_LS_KEYS],
+  );
+  for (let i = 0; i < PAGTEST_LS_KEYS.length; i++) {
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
+         VALUES ($1, $2, $3, false)
+         ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label, sort_order = EXCLUDED.sort_order`,
+      [PAGTEST_LS_KEYS[i], `Pagtest Status ${String.fromCharCode(65 + i)}`, 980 + i],
+    );
+  }
+}
+
 // ── Mock HubSpot server ───────────────────────────────────────────────────────
 // Returns TOTAL_CONTACTS fake contacts for the contacts/search endpoint
 // (used by /api/contacts-all via getSharedContactsCache).
@@ -274,7 +295,11 @@ async function writeReport(runId, findings) {
     '  appears; page-2 click sends `?page=2` to `/api/contacts-all`.',
     '- **[C] Showing X–Y of Z count**: visible on page 1.',
     '- **[D] Filter resets page**: navigating to page 2 then changing sort /',
-    '  search resets the URL back to page 1.',
+    '  search, or lead-status select resets the URL back to page 1.',
+    '- **[D.3] Lead-status select**: 3 rows seeded into `lead_status_config`',
+    '  (`PAGTEST_LS_A/B/C`) guarantee the native `<select id="lead-status-filter">`',
+    '  always has real options so the `setLeadStatus → setPage(1)` path is',
+    '  exercised instead of falling back to the sort-change path.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
@@ -307,8 +332,11 @@ async function main() {
   setPool(pool);
 
   await cleanupTestData(pool);
+  await pool.query(`DELETE FROM lead_status_config WHERE key = ANY($1::text[])`, [PAGTEST_LS_KEYS]);
   const users = await seedUsers(pool, runId);
   console.log(`  Seeded users  member=${users.member.email}`);
+  await seedLeadStatuses(pool);
+  console.log(`  Seeded lead statuses  keys=${PAGTEST_LS_KEYS.join(', ')}`);
 
   const mock = await startMockHubspot();
   console.log(`  Mock HubSpot on 127.0.0.1:${mock.port} (${TOTAL_CONTACTS} contacts)`);
@@ -341,6 +369,7 @@ async function main() {
   const cleanupAndExit = async (code) => {
     try { if (!exited) child.kill('SIGTERM'); } catch {}
     try { mock.server.close(); } catch {}
+    try { await pool.query(`DELETE FROM lead_status_config WHERE key = ANY($1::text[])`, [PAGTEST_LS_KEYS]); } catch {}
     try { await cleanupTestData(pool); } catch {}
     await pool.end().catch(() => {});
     process.exit(code);
@@ -372,6 +401,7 @@ async function main() {
     '[C.1] All view — "Showing X–Y of Z" count visible on page 1',
     '[D.1] Filter change (sort) resets from page 2 to page 1',
     '[D.2] Filter change (search) resets from page 2 to page 1',
+    '[D.3] Filter change (lead-status select) resets from page 2 to page 1',
   ];
 
   if (!puppeteer) {
@@ -582,6 +612,72 @@ async function main() {
 
       if (page.__logs.some(l => l.includes('[pageerror]')))
         console.log('  Page errors (probe D.2):', page.__logs.filter(l => l.includes('[pageerror]')));
+      await closePage(page);
+    }
+
+    // D.3 — Lead-status select change
+    // Requires the PAGTEST_LS_* rows seeded above so the native <select
+    // id="lead-status-filter"> always has at least one non-empty option to
+    // pick, guaranteeing we exercise the setLeadStatus → setPage(1) path.
+    {
+      const page = await newPage(browser, memberClient.cookie);
+      await page.goto(`${BASE}/customers?page=2`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+      await waitForResults(page);
+
+      const onPage2 = await page.evaluate(() => location.search.includes('page=2'));
+      if (!onPage2) {
+        record(UI_LABELS[6], true, 'skip — server reset page to 1 (only 1 page); reset confirmed');
+      } else {
+        // Wait for populateLeadStatusFilter() to run and add the seeded options
+        // (the select starts with just "All statuses"; seeded rows push it > 2).
+        const selectReady = await pollPage(page, () => {
+          const sel = document.getElementById('lead-status-filter');
+          return (sel && sel.options.length > 2) ? 'ok' : null;
+        }, null, 10000);
+
+        if (!selectReady) {
+          record(UI_LABELS[6], false,
+            'lead-status select options did not appear (method="lead-status select option click")');
+        } else {
+          // Pick the first option with a non-empty, non-sentinel value and
+          // trigger React's onChange by setting the native value + dispatching
+          // a change event (works even when the option is disabled because the
+          // count=0 in the mock — the onChange path is what we are exercising).
+          const picked = await page.evaluate(() => {
+            const sel = document.getElementById('lead-status-filter');
+            if (!sel || sel.options.length <= 2) return null;
+            let targetValue = null;
+            for (let i = 0; i < sel.options.length; i++) {
+              const opt = sel.options[i];
+              if (opt.value && opt.value !== '__no_status__') {
+                targetValue = opt.value;
+                break;
+              }
+            }
+            if (!targetValue) return null;
+            // Use the native value setter so React's synthetic event fires.
+            const nativeSetter = Object.getOwnPropertyDescriptor(
+              HTMLSelectElement.prototype, 'value',
+            ).set;
+            nativeSetter.call(sel, targetValue);
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+            return targetValue;
+          });
+
+          if (!picked) {
+            record(UI_LABELS[6], false,
+              'no selectable lead-status option found (method="lead-status select option click")');
+          } else {
+            const reset = await waitForUrlGone(page, 'page=2');
+            const urlStr = await page.evaluate(() => location.search);
+            record(UI_LABELS[6], reset === 'ok',
+              `method="lead-status select option click" picked="${picked}" URL: "${urlStr}" — page=2 ${!reset ? 'still present (bad)' : 'gone (good)'}`);
+          }
+        }
+      }
+
+      if (page.__logs.some(l => l.includes('[pageerror]')))
+        console.log('  Page errors (probe D.3):', page.__logs.filter(l => l.includes('[pageerror]')));
       await closePage(page);
     }
 
