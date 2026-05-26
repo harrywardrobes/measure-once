@@ -8,6 +8,15 @@ Project management dashboard (HubSpot CRM integration).
   documentation, or test infrastructure. Creating new testing tasks is not a
   priority — only add tests when a specific feature task explicitly requires
   them.
+- **UX first:** Before planning or building any feature, ask clarifying
+  questions about how users will actually use it — expected workflows, edge
+  cases, frequency of use, and pain points. Delivering an easy, intuitive
+  experience is the top priority.
+- **Form persistence:** All in-progress forms and multi-step data inputs must
+  persist their state so that a network disconnection, accidental navigation,
+  or page refresh does not lose the user's work. Use localStorage (or
+  sessionStorage where appropriate) to draft-save form values and restore them
+  on re-mount. Clear the draft only after a successful submit.
 
 ## Stack
 - Node.js 20 + Express; single `server.js` serves API and static assets.
