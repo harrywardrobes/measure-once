@@ -9,8 +9,6 @@
     "start": "node server.js",
     "predev": "npm run build:react",
     "dev": "nodemon server.js",
-    "build:css": "tailwindcss -i ./src/tailwind.css -o ./public/tailwind.css --minify",
-    "watch:css": "tailwindcss -i ./src/tailwind.css -o ./public/tailwind.css --watch",
     "dev:react": "vite",
     "typecheck": "tsc --noEmit",
     "build:react": "npm run typecheck && vite build && node scripts/check-bundle-sizes.mjs",
