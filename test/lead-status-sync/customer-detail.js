@@ -996,6 +996,230 @@ async function main() {
     detailTab.off('request', _reqHandler);
     await detailTab.setRequestInterception(false).catch(() => {});
 
+    // ── (H) BC: pill primary text updates when contact has substatus set ──────
+    // Distinct from [A2] (which seeds an empty hw_lead_substatus) and [F]
+    // (which checks the full pill textContent after a picker interaction).
+    // This probe explicitly seeds the contact WITH hw_lead_substatus pointing at
+    // SUB_A_KEY from the start, verifies the pill's primary text shows the
+    // current sub-status label, renames via PATCH, fans out via
+    // BroadcastChannel, and asserts the pill primary text updates in place.
+    //
+    // The customer-detail header is a React component (CustomerDetailHeader.tsx)
+    // that reads contact.properties.hw_lead_substatus and renders the sub-status
+    // label as the pill's primary text (with the parent status label in
+    // .ls-pill-parent). It listens to lead_substatuses_changed BC and calls
+    // fetchLeadSubstatuses() to pick up renamed labels. We re-enable request
+    // interception so the fetchContact() call (triggered by renderWorkflowHeader)
+    // returns a mocked contact that already has hw_lead_substatus set.
+    console.log('\n  [H] BC: pill primary text updates when contact has sub-status set');
+
+    const CHIP_BC_LABEL   = 'PrivTest DT Chip BC Label';
+    const CHIP_BC_RENAMED = 'PrivTest DT Chip BC Renamed';
+    const hwSubVal        = `${KEY_A}__${SUB_A_KEY}`;
+
+    // Set the sub-status label to a known value before seeding.
+    const patchChipBcInit = await adminClient.patch(
+      `/api/admin/lead-substatuses/${SUB_A_ID}`,
+      { label: CHIP_BC_LABEL },
+    );
+    record(
+      'PATCH /api/admin/lead-substatuses/:id sets initial label for chip BC probe',
+      `status=200 label="${CHIP_BC_LABEL}"`,
+      `status=${patchChipBcInit.status} label="${patchChipBcInit.json?.label}"`,
+      patchChipBcInit.status === 200 && patchChipBcInit.json?.label === CHIP_BC_LABEL,
+    );
+
+    // Re-enable request interception so the React component's fetchContact()
+    // returns a mocked contact that has hw_lead_substatus already set.
+    await detailTab.setRequestInterception(true);
+    const _chipReqHandler = req => {
+      const url    = req.url();
+      const method = req.method();
+      if (method === 'GET' && url.includes(`/api/contacts/${CONTACT_ID}`) &&
+          !url.includes('/localdata') && !url.includes('/notes') &&
+          !url.includes('/tasks')) {
+        req.respond({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: CONTACT_ID,
+            properties: {
+              hs_lead_status: KEY_A, hw_lead_substatus: hwSubVal,
+              firstname: 'Priv', lastname: 'Test', email: 'privtest@privtest.local',
+            },
+          }),
+        });
+      } else {
+        req.continue();
+      }
+    };
+    detailTab.on('request', _chipReqHandler);
+
+    // Also seed the vanilla-JS state and ensure workflow-header is in the DOM.
+    await bootstrapTracker(detailTab, KEY_A, hwSubVal);
+    await detailTab.evaluate(() => {
+      const wv = document.getElementById('workflow-view');
+      if (wv && !document.getElementById('workflow-header')) {
+        const hdr = document.createElement('div');
+        hdr.id = 'workflow-header';
+        wv.insertBefore(hdr, wv.firstChild);
+      }
+      // Trigger the React component's fetchContact() via the registered
+      // renderWorkflowHeader dispatcher.
+      if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
+    });
+    // Give React time to fetch + re-render.
+    await new Promise(r => setTimeout(r, 800));
+
+    // Capture the render token to verify no full-page reload occurs.
+    const chipToken = await detailTab.evaluate(() => window.__renderToken);
+
+    const chipBeforeBc = await detailTab.evaluate(() => {
+      const pill = document.querySelector('#workflow-header .lead-status-badge');
+      if (!pill) return null;
+      const parentSpan = pill.querySelector('.ls-pill-parent');
+      let primary = pill.textContent.trim();
+      if (parentSpan) {
+        primary = primary.slice(0, primary.length - parentSpan.textContent.length).trim();
+      }
+      return primary;
+    });
+    record(
+      'pill primary text shows current sub-status label when hw_lead_substatus is set',
+      `primary="${CHIP_BC_LABEL}"`,
+      `primary="${chipBeforeBc}"`,
+      chipBeforeBc === CHIP_BC_LABEL,
+    );
+
+    // Rename the sub-status and broadcast from a second tab.
+    const patchChipBcRename = await adminClient.patch(
+      `/api/admin/lead-substatuses/${SUB_A_ID}`,
+      { label: CHIP_BC_RENAMED },
+    );
+    record(
+      'PATCH renames sub-status for chip BC rename probe',
+      `status=200 label="${CHIP_BC_RENAMED}"`,
+      `status=${patchChipBcRename.status} label="${patchChipBcRename.json?.label}"`,
+      patchChipBcRename.status === 200 && patchChipBcRename.json?.label === CHIP_BC_RENAMED,
+    );
+
+    const senderTab3 = await browser.newPage();
+    await senderTab3.setCacheEnabled(false);
+    await injectSession(senderTab3, adminClient.cookie);
+    await senderTab3.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await new Promise(r => setTimeout(r, 300));
+
+    await senderTab3.evaluate(() => {
+      new BroadcastChannel('lead_substatuses_changed').postMessage('changed');
+    });
+
+    // The React component's BC handler calls fetchLeadSubstatuses() which
+    // fetches /api/lead-substatuses (passed through). React re-renders with
+    // the new label and updates the pill primary text.
+    const chipBcUpdated = await waitFor(detailTab, (args) => {
+      const pill = document.querySelector('#workflow-header .lead-status-badge');
+      if (!pill) return false;
+      const parentSpan = pill.querySelector('.ls-pill-parent');
+      let primary = pill.textContent.trim();
+      if (parentSpan) {
+        primary = primary.slice(0, primary.length - parentSpan.textContent.length).trim();
+      }
+      return primary === args.label;
+    }, { label: CHIP_BC_RENAMED }, 8000);
+
+    const chipBcSnap = await detailTab.evaluate((tok) => {
+      const pill = document.querySelector('#workflow-header .lead-status-badge');
+      const parentSpan = pill && pill.querySelector('.ls-pill-parent');
+      let primary = pill ? pill.textContent.trim() : null;
+      if (primary !== null && parentSpan) {
+        primary = primary.slice(0, primary.length - parentSpan.textContent.length).trim();
+      }
+      return {
+        primary,
+        hasParent:      !!(pill && pill.querySelector('.ls-pill-parent')),
+        renderToken:    window.__renderToken,
+        tokenPreserved: window.__renderToken === tok,
+      };
+    }, chipToken);
+    record(
+      'BC lead_substatuses_changed updates pill primary text to renamed sub-status (no reload)',
+      `primary="${CHIP_BC_RENAMED}" within 8 s, render token preserved`,
+      `found=${chipBcUpdated} primary="${chipBcSnap.primary}" hasParent=${chipBcSnap.hasParent} tokenPreserved=${chipBcSnap.tokenPreserved}`,
+      chipBcUpdated && chipBcSnap.tokenPreserved,
+    );
+
+    await senderTab3.close();
+
+    // ── (I) visibilitychange: pill primary text updates when substatus set ────
+    console.log('\n  [I] visibilitychange: pill primary text shows renamed sub-status label');
+
+    const CHIP_VIS_RENAMED = 'PrivTest DT Chip Vis Renamed';
+    const patchChipVis = await adminClient.patch(
+      `/api/admin/lead-substatuses/${SUB_A_ID}`,
+      { label: CHIP_VIS_RENAMED },
+    );
+    record(
+      'PATCH renames sub-status for chip visibilitychange probe',
+      `status=200 label="${CHIP_VIS_RENAMED}"`,
+      `status=${patchChipVis.status} label="${patchChipVis.json?.label}"`,
+      patchChipVis.status === 200 && patchChipVis.json?.label === CHIP_VIS_RENAMED,
+    );
+
+    // Synthesise hidden → visible visibilitychange sequence.
+    // The React component's visibilitychange handler calls fetchLeadSubstatuses()
+    // which fetches /api/lead-substatuses (passed through) with the new label.
+    await detailTab.evaluate(() => {
+      const proto   = Document.prototype;
+      const ownDesc = Object.getOwnPropertyDescriptor(proto, 'visibilityState')
+                   || Object.getOwnPropertyDescriptor(document, 'visibilityState');
+      Object.defineProperty(document, 'visibilityState',
+        { get: () => 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      if (ownDesc) {
+        Object.defineProperty(document, 'visibilityState', ownDesc);
+      } else {
+        Object.defineProperty(document, 'visibilityState',
+          { get: () => 'visible', configurable: true });
+      }
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    const chipVisUpdated = await waitFor(detailTab, (args) => {
+      const pill = document.querySelector('#workflow-header .lead-status-badge');
+      if (!pill) return false;
+      const parentSpan = pill.querySelector('.ls-pill-parent');
+      let primary = pill.textContent.trim();
+      if (parentSpan) {
+        primary = primary.slice(0, primary.length - parentSpan.textContent.length).trim();
+      }
+      return primary === args.label;
+    }, { label: CHIP_VIS_RENAMED }, 8000);
+
+    const chipVisSnap = await detailTab.evaluate((tok) => {
+      const pill = document.querySelector('#workflow-header .lead-status-badge');
+      const parentSpan = pill && pill.querySelector('.ls-pill-parent');
+      let primary = pill ? pill.textContent.trim() : null;
+      if (primary !== null && parentSpan) {
+        primary = primary.slice(0, primary.length - parentSpan.textContent.length).trim();
+      }
+      return {
+        primary,
+        hasParent:      !!(pill && pill.querySelector('.ls-pill-parent')),
+        renderToken:    window.__renderToken,
+        tokenPreserved: window.__renderToken === tok,
+      };
+    }, chipToken);
+    record(
+      'visibilitychange updates pill primary text to renamed sub-status (no reload)',
+      `primary="${CHIP_VIS_RENAMED}" within 8 s, render token preserved`,
+      `found=${chipVisUpdated} primary="${chipVisSnap.primary}" hasParent=${chipVisSnap.hasParent} tokenPreserved=${chipVisSnap.tokenPreserved}`,
+      chipVisUpdated && chipVisSnap.tokenPreserved,
+    );
+
+    // Tear down chip-probe request interception.
+    detailTab.off('request', _chipReqHandler);
+    await detailTab.setRequestInterception(false).catch(() => {});
+
     await detailTab.close();
 
     // ── (G) Viewer role: pill is read-only and does NOT open the picker ──────
@@ -1205,8 +1429,26 @@ async function writeReport(runId, findings) {
     '  stale `hw_lead_substatus` value attached to the contact). Then calls',
     '  `renderWorkflowHeader()` and asserts the pill reverts to the `lsb-empty`',
     '  "No status" empty state with no `.ls-pill-parent` span.',
+    '- **(H) BC — pill primary text rename (substatus pre-set)**: seeds the contact',
+    '  with `hw_lead_substatus` set to `KEY_A__STEP_ONE` (the contact already has',
+    '  a sub-status chosen). Re-enables request interception so the React',
+    '  `CustomerDetailHeader` component\'s `fetchContact()` call returns the mocked',
+    '  contact with `hw_lead_substatus` set. Renames the sub-status via',
+    '  `PATCH /api/admin/lead-substatuses/:id`, posts `lead_substatuses_changed`',
+    '  from a second tab, and asserts the pill\'s primary text (the sub-status',
+    '  label — checked via `#workflow-header .lead-status-badge` minus',
+    '  `.ls-pill-parent` text) updates in place to the new label within 8 s',
+    '  (render token preserved — no full reload). Distinct from probe A2 (empty',
+    '  `hw_lead_substatus`, row-text check) and probe F (full pill `textContent`',
+    '  after picker interaction).',
+    '- **(I) visibilitychange — pill primary text rename (substatus pre-set)**:',
+    '  renames the sub-status again and synthesises a hidden→visible',
+    '  `visibilitychange` event sequence; asserts the pill primary text picks up',
+    '  the new label without a full page reload (render token preserved). Guards',
+    '  the visibilitychange handler in `CustomerDetailPage.tsx` that calls',
+    '  `fetchLeadSubstatuses` on tab focus.',
     '',
-    'Every BC/visibilitychange assertion (probes A–B) also checks `window.__renderToken` is',
+    'Every BC/visibilitychange assertion (probes A–B, H–I) also checks `window.__renderToken` is',
     'preserved across the re-render, proving the tracker updated in place (no full',
     'page reload).',
     '',
