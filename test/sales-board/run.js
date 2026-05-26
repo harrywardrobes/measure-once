@@ -240,10 +240,31 @@ async function openBoardPage(browser, cookie, contactId = 'sb-test-001', opts = 
   page.on('request', req => {
     const u = req.url();
     if (u.includes('/api/contacts-all')) {
+      // Return per-stage contacts so usePaginatedContacts renders the seeded
+      // fixtures. The component now fetches contacts from the API (one call per
+      // column) rather than reading window.state.filteredContacts.
+      const urlObj = new URL(u);
+      const stage = urlObj.searchParams.get('stage') || '';
+      let stageContacts = [];
+      if (stage === 'sales') {
+        // sb-test-001: no room → falls back to lead-status (NEW → sales)
+        // sb-test-003: room stageKey=sales
+        stageContacts = CONTACTS.filter(c => {
+          const cached = CONTACT_STAGE_CACHE[c.id] || [];
+          if (cached.length === 0) return true;
+          return cached.some(r => r.stageKey === 'sales');
+        });
+      } else if (stage === 'designvisit') {
+        // sb-test-002: room stageKey=designvisit
+        stageContacts = CONTACTS.filter(c => {
+          const cached = CONTACT_STAGE_CACHE[c.id] || [];
+          return cached.some(r => r.stageKey === 'designvisit');
+        });
+      }
       req.respond({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ results: [], totalPages: 1, page: 1, total: 0 }),
+        body: JSON.stringify({ results: stageContacts, totalPages: 1, page: 1, total: stageContacts.length }),
       });
     } else if (u.includes('/api/localdata/all')) {
       req.respond({
