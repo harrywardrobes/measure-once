@@ -4,7 +4,112 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Design Visit Sign-Off · Measure Once</title>
-  <link rel="stylesheet" href="/app-styles.css">
+  <style>
+    body.dv-signoff-page {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #1f2937;
+      background: #f9fafb;
+      min-height: 100vh;
+    }
+    .dv-signoff-page .dv-page {
+      max-width: 660px; margin: 0 auto; padding: 32px 20px 60px;
+    }
+    .dv-signoff-page .dv-logo {
+      font-size: 1.1rem; font-weight: 700;
+      color: #8B2BFF; margin: 0 0 28px; letter-spacing: -.01em;
+    }
+    .dv-signoff-page h1 { font-size: 1.5rem; font-weight: 700; margin: 0 0 6px; }
+    .dv-signoff-page .dv-subtitle { color: #6b7280; font-size: .9rem; margin: 0 0 24px; }
+    .dv-signoff-page .dv-card {
+      background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px;
+      padding: 20px 22px; margin-bottom: 18px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    }
+    .dv-signoff-page .dv-card-title {
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: #9ca3af; margin: 0 0 12px;
+    }
+    .dv-signoff-page .dv-meta-grid {
+      display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: .88rem;
+    }
+    .dv-signoff-page .dv-meta-label { font-weight: 600; color: #4b5563; white-space: nowrap; }
+    .dv-signoff-page .dv-meta-val   { color: #1f2937; }
+    .dv-signoff-page table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    .dv-signoff-page th {
+      text-align: left; padding: 8px 10px;
+      font-size: .72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: #9ca3af; border-bottom: 1px solid #e5e7eb;
+    }
+    .dv-signoff-page td { padding: 10px; border-bottom: 1px solid #f3f4f6; }
+    .dv-signoff-page tr:last-child td { border-bottom: none; }
+    .dv-signoff-page tfoot td { font-weight: 700; border-top: 2px solid #e5e7eb; padding-top: 12px; }
+    .dv-signoff-page .dv-text-right { text-align: right; }
+    .dv-signoff-page .dv-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+    .dv-signoff-page .dv-btn-approve,
+    .dv-signoff-page .dv-btn-revision {
+      width: 100%; padding: 14px 20px; border: none; border-radius: 10px;
+      font-size: 1rem; font-weight: 600; cursor: pointer; font-family: inherit;
+      transition: opacity .15s, background .15s;
+    }
+    .dv-signoff-page .dv-btn-approve { background: #8B2BFF; color: #fff; }
+    .dv-signoff-page .dv-btn-approve:hover { background: #6A12D9; }
+    .dv-signoff-page .dv-btn-revision { background: #ffffff; color: #374151; border: 1.5px solid #d1d5db; }
+    .dv-signoff-page .dv-btn-revision:hover { background: #f9fafb; }
+    .dv-signoff-page .dv-btn-approve:disabled,
+    .dv-signoff-page .dv-btn-revision:disabled { opacity: .55; cursor: not-allowed; }
+    .dv-signoff-page .dv-revision-form { display: none; margin-top: 12px; }
+    .dv-signoff-page .dv-revision-form.open { display: block; }
+    .dv-signoff-page .dv-revision-form textarea {
+      width: 100%; padding: 10px 12px; border: 1.5px solid #d1d5db; border-radius: 8px;
+      font-size: .92rem; font-family: inherit; resize: vertical; min-height: 100px; color: #1f2937;
+    }
+    .dv-signoff-page .dv-revision-form textarea:focus { outline: none; border-color: #8B2BFF; }
+    .dv-signoff-page .dv-submit-revision {
+      margin-top: 8px; background: #374151; color: #fff;
+      padding: 10px 20px; border: none; border-radius: 8px;
+      font-size: .9rem; font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .dv-signoff-page .dv-submit-revision:hover { background: #1f2937; }
+    .dv-signoff-page .dv-error-msg { color: #dc2626; font-size: .85rem; margin-top: 8px; }
+    .dv-signoff-page .dv-state-block { text-align: center; padding: 48px 20px; }
+    .dv-signoff-page .dv-state-icon { font-size: 3rem; margin-bottom: 12px; }
+    .dv-signoff-page .dv-state-title { font-size: 1.3rem; font-weight: 700; margin: 0 0 8px; }
+    .dv-signoff-page .dv-state-sub { color: #6b7280; font-size: .9rem; line-height: 1.5; }
+    .dv-signoff-page details { margin-top: 6px; }
+    .dv-signoff-page summary { cursor: pointer; font-weight: 600; font-size: .85rem; color: #6b7280; }
+    .dv-signoff-page details > div {
+      margin-top: 10px; font-size: .82rem; color: #6b7280; white-space: pre-line; line-height: 1.6;
+    }
+    .dv-signoff-page .dv-loading {
+      text-align: center; padding: 60px 20px; color: #9ca3af; font-size: .9rem;
+    }
+    .dv-signoff-page .dv-terms-version-badge {
+      display: inline-block; margin-left: 8px; padding: 1px 8px;
+      border-radius: 999px; background: #e5e7eb;
+      color: #374151; font-size: .68rem; font-weight: 700; vertical-align: middle;
+    }
+    .dv-signoff-page .dv-action-blurb {
+      font-size: .9rem; color: #4b5563; margin: 0 0 14px;
+    }
+    .dv-signoff-page .dv-revision-label {
+      font-size: .82rem; font-weight: 600; color: #374151; display: block; margin-bottom: 6px;
+    }
+    .dv-signoff-page .dv-room-photos { margin-bottom: 18px; }
+    .dv-signoff-page .dv-room-photos h3 {
+      font-size: .82rem; font-weight: 700; margin: 0 0 8px; color: #374151;
+    }
+    .dv-signoff-page .dv-room-photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 8px;
+    }
+    .dv-signoff-page .dv-room-photo-grid img {
+      width: 100%; aspect-ratio: 1 / 1; object-fit: cover;
+      border-radius: 8px; border: 1px solid #e5e7eb;
+      background: #f3f4f6; cursor: zoom-in;
+    }
+  </style>
 </head>
 <body class="dv-signoff-page">
   <div class="dv-page">
