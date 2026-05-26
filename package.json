@@ -45,6 +45,7 @@
     "test:design-visit-list": "node test/design-visit-list/run.js",
     "test:design-visit-list:ci": "node scripts/with-test-db.js test/design-visit-list/run.js",
     "test:keyboard-shortcuts": "node test/keyboard-shortcuts/run.js",
+    "test:quick-load-and-update": "node test/quick-load-and-update/run.js",
     "test:dv-catalogue-admin": "node test/dv-catalogue-admin/run.js",
     "test:dv-catalogue-admin:ci": "node scripts/with-test-db.js test/dv-catalogue-admin/run.js",
     "test:dv-catalogue-image-upload": "node test/dv-catalogue-admin/image-upload.js",
