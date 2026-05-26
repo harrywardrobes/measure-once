@@ -13,6 +13,7 @@ import ShieldIcon from '@mui/icons-material/Shield';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrivilegeSync } from '../hooks/usePrivilegeSync';
+import { BRAND_COLORS } from '../theme';
 
 export type { CurrentUser as HeaderUser } from '../hooks/useCurrentUser';
 
@@ -125,7 +126,7 @@ export function GlobalHeader() {
       position="fixed"
       elevation={0}
       sx={{
-        bgcolor: '#200842',
+        bgcolor: BRAND_COLORS.plum,
         borderBottom: '1px solid rgba(255,255,255,0.08)',
         pt: 'env(safe-area-inset-top)',
         zIndex: (t) => t.zIndex.appBar,
@@ -248,7 +249,7 @@ export function GlobalHeader() {
                   anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
                   sx={{
                     '& .MuiBadge-dot': {
-                      border: '1.5px solid #200842',
+                      border: `1.5px solid ${BRAND_COLORS.plum}`,
                       width: 8,
                       height: 8,
                       minWidth: 8,

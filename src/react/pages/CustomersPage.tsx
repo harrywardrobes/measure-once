@@ -20,17 +20,17 @@ import {
   FormControl,
   Grid,
   InputAdornment,
-  InputLabel,
-  MenuItem,
   Select,
   Skeleton,
   Snackbar,
   Stack,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from '@mui/material';
+import { PageFilterBar } from '../components/PageFilterBar';
+import { StageTabGroup } from '../components/StageTabGroup';
+import { FilterChipRow } from '../components/FilterChipRow';
+import { SortSelect } from '../components/SortSelect';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import AddIcon from '@mui/icons-material/Add';
@@ -1008,48 +1008,14 @@ export function CustomersPage(): React.ReactElement {
             document.getElementById('page-heading-action') as HTMLElement,
           )}
 
-        <Box sx={{ overflowX: 'auto' }}>
-          <ToggleButtonGroup
-            size="small"
-            exclusive
+        <PageFilterBar>
+          <StageTabGroup
             value={currentTab}
-            onChange={(_, v: string | null) => {
-              if (!v) return;
-              onTabChange(v);
-            }}
-            aria-label="Stage filter"
-            sx={{ flexWrap: 'wrap' }}
-          >
-            {stageTabs.map((t) => {
-              const isStage = t.key !== '__all__';
-              const colour = isStage ? stageColour(t.key) : null;
-              const selected = currentTab === t.key;
-              return (
-                <ToggleButton
-                  key={t.key}
-                  value={t.key}
-                  sx={
-                    selected && colour
-                      ? {
-                          bgcolor: colour.bg,
-                          color: '#fff',
-                          borderColor: colour.bg,
-                          '&:hover': { bgcolor: colour.bg, opacity: 0.9 },
-                          '&.Mui-selected': {
-                            bgcolor: colour.bg,
-                            color: '#fff',
-                            '&:hover': { bgcolor: colour.bg, opacity: 0.9 },
-                          },
-                        }
-                      : undefined
-                  }
-                >
-                  {t.label}
-                </ToggleButton>
-              );
-            })}
-          </ToggleButtonGroup>
-        </Box>
+            onChange={onTabChange}
+            tabs={stageTabs}
+            stageColors={DEFAULT_STAGE_COLOURS}
+          />
+        </PageFilterBar>
 
         {/* ── Lead-status chip row ────────────────────────────────────────── */}
         {/* The native <select> stays in the DOM (off-screen) so the
@@ -1087,75 +1053,32 @@ export function CustomersPage(): React.ReactElement {
         </Box>
 
         {/* Chip row */}
-        <Box sx={{ overflowX: 'auto', pb: 0.5 }}>
-          {!store.loaded ? (
-            <Stack direction="row" spacing={1} sx={{ flexWrap: 'nowrap' }}>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} variant="rounded" width={90} height={28} sx={{ flexShrink: 0 }} />
-              ))}
-            </Stack>
-          ) : (
-            <Stack direction="row" spacing={1} sx={{ flexWrap: 'nowrap' }}>
-              {/* All statuses chip */}
-              <Chip
-                label="All statuses"
-                variant={leadStatus === '' ? 'filled' : 'outlined'}
-                color={leadStatus === '' ? 'primary' : 'default'}
-                onClick={() => {
-                  setLeadStatus('');
-                  setSubstatus('');
-                  setPage(1);
-                }}
-                size="small"
-                sx={{ flexShrink: 0 }}
-              />
-              {/* No-status chip */}
-              {(() => {
-                const n = store.counts['__no_status__'] || 0;
-                if (n === 0) return null;
-                const active = leadStatus === '__no_status__';
-                return (
-                  <Chip
-                    key="__no_status__"
-                    label={`${store.nullLabel} (${n})`}
-                    variant={active ? 'filled' : 'outlined'}
-                    color={active ? 'primary' : 'default'}
-                    onClick={() => {
-                      setLeadStatus(active ? '' : '__no_status__');
-                      setSubstatus('');
-                      setPage(1);
-                    }}
-                    size="small"
-                    sx={{ flexShrink: 0 }}
-                  />
-                );
-              })()}
-              {/* Per-status chips (zero-count hidden) */}
-              {store.statuses
+        {!store.loaded ? (
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'nowrap', overflowX: 'auto' }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} variant="rounded" width={90} height={28} sx={{ flexShrink: 0 }} />
+            ))}
+          </Stack>
+        ) : (
+          <FilterChipRow
+            chips={[
+              { key: '', label: 'All statuses' },
+              ...(store.counts['__no_status__'] > 0
+                ? [{ key: '__no_status__', label: store.nullLabel, count: store.counts['__no_status__'] }]
+                : []),
+              ...store.statuses
                 .filter((s) => !s.excluded_from_sales)
-                .map((s) => {
-                  const n = store.counts[s.key] || 0;
-                  if (n === 0) return null;
-                  const active = leadStatus === s.key;
-                  return (
-                    <Chip
-                      key={s.key}
-                      label={`${s.label} (${n})`}
-                      variant={active ? 'filled' : 'outlined'}
-                      color={active ? 'primary' : 'default'}
-                      onClick={() => {
-                        setLeadStatus(active ? '' : s.key);
-                        setSubstatus('');
-                        setPage(1);
-                      }}
-                      size="small"
-                      sx={{ flexShrink: 0 }}
-                    />
-                  );
-                })}
-            </Stack>
-          )}
-        </Box>
+                .filter((s) => (store.counts[s.key] || 0) > 0)
+                .map((s) => ({ key: s.key, label: s.label, count: store.counts[s.key] || 0 })),
+            ]}
+            value={leadStatus}
+            onChange={(key) => {
+              setLeadStatus(key === '' || key === leadStatus ? '' : key);
+              setSubstatus('');
+              setPage(1);
+            }}
+          />
+        )}
 
         {/* Substatus chip row — shown when a status with substatuses is selected */}
         {!store.subsLoaded && leadStatus && leadStatus !== '__no_status__' ? (
@@ -1166,33 +1089,20 @@ export function CustomersPage(): React.ReactElement {
             height={28}
           />
         ) : availableSubstatuses.length > 0 ? (
-          <Box sx={{ overflowX: 'auto', pb: 0.5 }}>
-            <Stack direction="row" spacing={1} sx={{ flexWrap: 'nowrap' }}>
-              <Chip
-                label="All sub-statuses"
-                variant={substatus === '' ? 'filled' : 'outlined'}
-                color={substatus === '' ? 'primary' : 'default'}
-                onClick={() => { setSubstatus(''); setPage(1); }}
-                size="small"
-                sx={{ flexShrink: 0 }}
-              />
-              {availableSubstatuses.map((s) => {
-                const full = `${String(leadStatus).toUpperCase()}__${String(s.substatus_key).toUpperCase()}`;
-                const active = substatus === full;
-                return (
-                  <Chip
-                    key={full}
-                    label={s.label || s.substatus_key}
-                    variant={active ? 'filled' : 'outlined'}
-                    color={active ? 'primary' : 'default'}
-                    onClick={() => { setSubstatus(active ? '' : full); setPage(1); }}
-                    size="small"
-                    sx={{ flexShrink: 0 }}
-                  />
-                );
-              })}
-            </Stack>
-          </Box>
+          <FilterChipRow
+            chips={[
+              { key: '', label: 'All sub-statuses' },
+              ...availableSubstatuses.map((s) => ({
+                key: `${String(leadStatus).toUpperCase()}__${String(s.substatus_key).toUpperCase()}`,
+                label: s.label || s.substatus_key,
+              })),
+            ]}
+            value={substatus}
+            onChange={(key) => {
+              setSubstatus(key === '' || key === substatus ? '' : key);
+              setPage(1);
+            }}
+          />
         ) : null}
 
         {/* ── Sort row: search | sort-by | Show all ───────────────────────── */}
@@ -1228,25 +1138,15 @@ export function CustomersPage(): React.ReactElement {
             }}
           />
 
-          <FormControl size="small" sx={{ minWidth: 160, flexShrink: 0 }}>
-            <InputLabel id="customers-sort-label">Sort by</InputLabel>
-            <Select
-              labelId="customers-sort-label"
-              id="customers-sort-select"
-              label="Sort by"
-              value={sortBy}
-              onChange={(e) => {
-                setSortBy(String(e.target.value));
-                setPage(1);
-              }}
-            >
-              {SORT_OPTIONS.map((o) => (
-                <MenuItem key={o.value} value={o.value}>
-                  {o.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <SortSelect
+            value={sortBy}
+            onChange={(v) => {
+              setSortBy(v);
+              setPage(1);
+            }}
+            options={SORT_OPTIONS}
+            label="Sort by"
+          />
 
           <Button
             id="archived-toggle"

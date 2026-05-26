@@ -97,6 +97,10 @@ import { FileUploadField } from '../components/FileUploadField';
 import { Pill } from '../components/Pill';
 import { EmptyState } from '../components/EmptyState';
 import { BRAND_COLORS, STAGE_COLORS, RADIUS } from '../theme';
+import { PageFilterBar } from '../components/PageFilterBar';
+import { StageTabGroup } from '../components/StageTabGroup';
+import { FilterChipRow } from '../components/FilterChipRow';
+import { SortSelect } from '../components/SortSelect';
 import { DesignVisitSignOffPage } from './DesignVisitSignOffPage';
 import { NotFoundPage } from './NotFoundPage';
 import { AccessRestrictedPage } from './AccessRestrictedPage';
@@ -128,7 +132,7 @@ import {
  * paste-ready — this page is a recipe book, not exhaustive API docs.
  */
 
-const CATEGORIES = ['Tokens', 'Inputs', 'Data Display', 'Feedback', 'Navigation', 'Surfaces', 'Layout', 'Icons', 'Skeletons', 'Pages', 'Sign-off'] as const;
+const CATEGORIES = ['Tokens', 'Inputs', 'Data Display', 'Feedback', 'Navigation', 'Surfaces', 'Layout', 'Icons', 'Skeletons', 'Pages', 'Sign-off', 'Filter & Toolbar'] as const;
 type Category = typeof CATEGORIES[number];
 
 const SIGN_OFF_MOCK_DATA = {
@@ -831,6 +835,134 @@ function StagePickerDemo() {
         onClose={() => setAnchor(null)}
         currentStageKey={selectedStage}
         onSelect={(key) => setSelectedStage(key)}
+      />
+    </>
+  );
+}
+
+// ── FilterAndToolbarTab ──────────────────────────────────────────────────────
+
+function FilterAndToolbarTab() {
+  const [stage, setStage] = useState('all');
+  const [chip, setChip] = useState('');
+  const [sort, setSort] = useState('name-asc');
+
+  const DEMO_TABS = [
+    { key: 'all', label: 'All' },
+    { key: 'survey', label: 'Survey' },
+    { key: 'design', label: 'Design' },
+    { key: 'install', label: 'Install' },
+  ];
+  const DEMO_CHIPS = [
+    { key: '', label: 'All' },
+    { key: 'new', label: 'New', count: 4 },
+    { key: 'active', label: 'Active', count: 12 },
+    { key: 'won', label: 'Won', count: 7 },
+  ];
+  const DEMO_SORT_OPTIONS = [
+    { value: 'name-asc', label: 'Name (A–Z)' },
+    { value: 'name-desc', label: 'Name (Z–A)' },
+    { value: 'date-desc', label: 'Newest first' },
+    { value: 'date-asc', label: 'Oldest first' },
+  ];
+
+  return (
+    <>
+      <ComponentShowcase
+        name="PageFilterBar"
+        description="Thin horizontal flex wrapper for filter controls. Provides consistent gap, horizontal overflow-scroll with hidden scrollbars, and a stable padding baseline. Always used as the outer shell around StageTabGroup, FilterChipRow, or SortSelect."
+        demo={
+          <PageFilterBar sx={{ px: 2, py: 1, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider', width: '100%' }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>child A</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>child B</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>child C</Typography>
+          </PageFilterBar>
+        }
+        code={`import { PageFilterBar } from '../components/PageFilterBar';
+
+<PageFilterBar sx={{ px: 2, py: 1 }}>
+  <StageTabGroup … />
+  <SortSelect … />
+</PageFilterBar>`}
+      />
+
+      <ComponentShowcase
+        name="StageTabGroup"
+        description="ToggleButtonGroup that represents the active pipeline stage. The selected tab fills with the stage's brand colour from the STAGE_COLORS map, falling back to the plum token. Ignores null changes so a value is always selected."
+        demo={
+          <Stack spacing={2} sx={{ width: '100%' }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>Default (plum fallback)</Typography>
+            <StageTabGroup value={stage} onChange={setStage} tabs={DEMO_TABS} />
+            <Typography variant="caption" sx={{ color: 'text.secondary', mt: 1 }}>
+              Active: <strong>{stage}</strong>
+            </Typography>
+          </Stack>
+        }
+        code={`import { StageTabGroup } from '../components/StageTabGroup';
+import { STAGE_COLORS } from '../theme';
+
+const TABS = [
+  { key: 'all',     label: 'All' },
+  { key: 'survey',  label: 'Survey' },
+  { key: 'design',  label: 'Design' },
+  { key: 'install', label: 'Install' },
+];
+
+<StageTabGroup
+  value={stage}
+  onChange={setStage}
+  tabs={TABS}
+  stageColors={STAGE_COLORS}
+/>`}
+      />
+
+      <ComponentShowcase
+        name="FilterChipRow"
+        description="Horizontally-scrollable row of MUI Chips for secondary filter dimensions (lead status, sub-status, etc.). Active chip uses variant=filled + color=primary; inactive chips use variant=outlined. Pass count to append a live count suffix."
+        demo={
+          <Stack spacing={1.5} sx={{ width: '100%' }}>
+            <FilterChipRow chips={DEMO_CHIPS} value={chip} onChange={setChip} />
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              Active key: <strong>{chip === '' ? '(all)' : chip}</strong>
+            </Typography>
+          </Stack>
+        }
+        code={`import { FilterChipRow } from '../components/FilterChipRow';
+
+const CHIPS = [
+  { key: '',       label: 'All' },
+  { key: 'new',    label: 'New',    count: 4 },
+  { key: 'active', label: 'Active', count: 12 },
+];
+
+<FilterChipRow chips={CHIPS} value={status} onChange={setStatus} />`}
+      />
+
+      <ComponentShowcase
+        name="SortSelect"
+        description="Standard MUI outlined FormControl + InputLabel + Select for sort dropdowns. No custom border-radius or colour overrides — uses MUI theme defaults. The label prop controls the visible label and is also used to derive unique DOM ids."
+        demo={
+          <Stack spacing={1.5} sx={{ width: '100%' }}>
+            <SortSelect value={sort} onChange={setSort} options={DEMO_SORT_OPTIONS} />
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              Selected: <strong>{sort}</strong>
+            </Typography>
+          </Stack>
+        }
+        code={`import { SortSelect } from '../components/SortSelect';
+
+const OPTIONS = [
+  { value: 'name-asc',  label: 'Name (A–Z)' },
+  { value: 'name-desc', label: 'Name (Z–A)' },
+  { value: 'date-desc', label: 'Newest first' },
+];
+
+<SortSelect
+  value={sort}
+  onChange={setSort}
+  options={OPTIONS}
+  label="Sort"
+/>`}
       />
     </>
   );
@@ -1668,6 +1800,8 @@ if (!sessionChecked) return <LoginPageSkeleton />;`}
           />
         </>
       )}
+
+      {tab === 'Filter & Toolbar' && <FilterAndToolbarTab />}
 
       {tab === 'Sign-off' && (
         <>

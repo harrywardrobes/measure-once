@@ -13,8 +13,6 @@ import {
   IconButton,
   List,
   ListItemButton,
-  MenuItem,
-  Select,
   Skeleton,
   Snackbar,
   Typography,
@@ -25,9 +23,12 @@ import CloseIcon from '@mui/icons-material/Close';
 import CheckIcon from '@mui/icons-material/Check';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import { STAGE_COLORS } from '../theme';
+import { BRAND_COLORS, RADIUS, STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { InvoiceDetailDrawer, fmtGBP as fmtGBPShared } from '../components/InvoiceDetailDrawer';
+import { PageFilterBar } from '../components/PageFilterBar';
+import { StageTabGroup } from '../components/StageTabGroup';
+import { SortSelect } from '../components/SortSelect';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -129,7 +130,7 @@ function getStageLabel(stageKey: string, workflow: WorkflowDef | undefined): str
 }
 
 function getStageColor(stageKey: string) {
-  return STAGE_COLORS[stageKey] || { bg: '#6B6860', light: '#F6F1E7', text: '#3C3A34' };
+  return STAGE_COLORS[stageKey] || { bg: BRAND_COLORS.ink3, light: BRAND_COLORS.paper, text: BRAND_COLORS.ink2 };
 }
 
 function getFitterInitials(user: PlatformUser | null | undefined): string {
@@ -258,7 +259,7 @@ function FitterChip({
         height: 18,
         fontSize: '0.6rem',
         fontWeight: 700,
-        bgcolor: '#200842',
+        bgcolor: BRAND_COLORS.plum,
       }}
     >
       {initials}
@@ -269,15 +270,15 @@ function FitterChip({
     display: 'inline-flex',
     alignItems: 'center',
     gap: '5px',
-    background: '#F6F1E7',
-    border: '1px solid #D9D2C2',
-    borderRadius: '999px',
+    background: BRAND_COLORS.paper,
+    border: `1px solid ${BRAND_COLORS.stone}`,
+    borderRadius: `${RADIUS.pill}px`,
     px: '8px',
     pl: '3px',
     py: '2px',
     fontSize: '0.72rem',
     fontWeight: 500,
-    color: '#6B6860',
+    color: BRAND_COLORS.ink3,
     whiteSpace: 'nowrap',
     maxWidth: '120px',
     overflow: 'hidden',
@@ -295,7 +296,7 @@ function FitterChip({
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
             fontStyle: !fitter ? 'italic' : undefined,
-            color: !fitter ? '#97927F' : undefined,
+            color: !fitter ? BRAND_COLORS.ink4 : undefined,
           }}
         >
           {name}
@@ -313,7 +314,7 @@ function FitterChip({
         transition: 'background 0.1s, border-color 0.1s',
         WebkitTapHighlightColor: 'transparent',
         fontFamily: 'inherit',
-        '&:hover': { background: '#D9D2C2', borderColor: '#B8AE99' },
+        '&:hover': { background: BRAND_COLORS.stone, borderColor: BRAND_COLORS.stoneDeep },
       }}
       title={fitter ? 'Reassign fitter' : 'Assign a fitter'}
       onClick={(e) => {
@@ -329,7 +330,7 @@ function FitterChip({
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
           fontStyle: !fitter ? 'italic' : undefined,
-          color: !fitter ? '#97927F' : undefined,
+          color: !fitter ? BRAND_COLORS.ink4 : undefined,
         }}
       >
         {name}
@@ -355,7 +356,7 @@ function InvoiceBadge({
         sx={{
           px: '14px',
           py: '10px',
-          borderTop: '1px solid #D9D2C2',
+          borderTop: `1px solid ${BRAND_COLORS.stone}`,
           display: 'flex',
           alignItems: 'center',
           gap: 1,
@@ -381,7 +382,7 @@ function InvoiceBadge({
   const invIds = invs.map((i) => i.id);
 
   return (
-    <Box sx={{ px: '14px', py: '10px', borderTop: '1px solid #D9D2C2', display: 'flex', alignItems: 'center', gap: 1, minHeight: 36 }}>
+    <Box sx={{ px: '14px', py: '10px', borderTop: `1px solid ${BRAND_COLORS.stone}`, display: 'flex', alignItems: 'center', gap: 1, minHeight: 36 }}>
       <button
         onClick={() => onOpen(invIds[0], invIds)}
         title={`${count} outstanding invoice${count !== 1 ? 's' : ''}`}
@@ -434,21 +435,21 @@ function ProjectCard({
   return (
     <Box
       sx={{
-        background: '#F6F1E7',
-        border: '1px solid #D9D2C2',
-        borderRadius: '8px',
+        background: BRAND_COLORS.paper,
+        border: `1px solid ${BRAND_COLORS.stone}`,
+        borderRadius: `${RADIUS.lg}px`,
         boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
         overflow: 'hidden',
       }}
     >
       {/* Card header */}
-      <Box sx={{ p: '12px 14px 10px', borderBottom: '1px solid #D9D2C2' }}>
+      <Box sx={{ p: '12px 14px 10px', borderBottom: `1px solid ${BRAND_COLORS.stone}` }}>
         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}>
           <Typography
             sx={{
               fontSize: '0.975rem',
               fontWeight: 700,
-              color: '#141413',
+              color: BRAND_COLORS.ink1,
               lineHeight: 1.25,
               whiteSpace: 'nowrap',
               overflow: 'hidden',
@@ -464,7 +465,7 @@ function ProjectCard({
               sx={{
                 fontSize: '0.68rem',
                 fontWeight: 600,
-                color: '#6B6860',
+                color: BRAND_COLORS.ink3,
                 whiteSpace: 'nowrap',
                 letterSpacing: '0.01em',
                 flexShrink: 0,
@@ -474,7 +475,7 @@ function ProjectCard({
             </Typography>
           )}
         </Box>
-        <Typography sx={{ fontSize: '0.72rem', fontWeight: 500, color: '#97927F', letterSpacing: '0.02em', mt: '2px' }}>
+        <Typography sx={{ fontSize: '0.72rem', fontWeight: 500, color: BRAND_COLORS.ink4, letterSpacing: '0.02em', mt: '2px' }}>
           #{contact.id}
         </Typography>
       </Box>
@@ -500,16 +501,16 @@ function ProjectCard({
                 cursor: 'pointer',
                 transition: 'background 0.1s',
                 WebkitTapHighlightColor: 'transparent',
-                borderBottom: isLast ? 'none' : '1px solid #D9D2C2',
+                borderBottom: isLast ? 'none' : `1px solid ${BRAND_COLORS.stone}`,
                 '&:hover': { background: 'rgba(0,0,0,0.03)' },
-                '&:active': { background: '#D9D2C2' },
+                '&:active': { background: BRAND_COLORS.stone },
               }}
             >
               <Typography
                 sx={{
                   fontSize: '0.85rem',
                   fontWeight: 600,
-                  color: '#3C3A34',
+                  color: BRAND_COLORS.ink2,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -614,7 +615,7 @@ function FitterPickerDialog({
       <DialogContent sx={{ p: 0, overflowY: 'auto' }}>
         <List disablePadding>
           {platformUsers.length === 0 && (
-            <Box sx={{ p: 3, textAlign: 'center', color: '#97927F', fontSize: '0.875rem' }}>
+            <Box sx={{ p: 3, textAlign: 'center', color: BRAND_COLORS.ink4, fontSize: '0.875rem' }}>
               No team members found.
             </Box>
           )}
@@ -632,12 +633,12 @@ function FitterPickerDialog({
                 {u.profileImageUrl ? (
                   <Avatar src={u.profileImageUrl} sx={{ width: 36, height: 36 }} />
                 ) : (
-                  <Avatar sx={{ width: 36, height: 36, bgcolor: '#200842', fontSize: '0.85rem', fontWeight: 700 }}>
+                  <Avatar sx={{ width: 36, height: 36, bgcolor: BRAND_COLORS.plum, fontSize: '0.85rem', fontWeight: 700 }}>
                     {initials}
                   </Avatar>
                 )}
                 <Typography sx={{ flex: 1, fontWeight: isSelected ? 700 : 400 }}>{fullName}</Typography>
-                {isSelected && <CheckIcon fontSize="small" sx={{ color: '#200842' }} />}
+                {isSelected && <CheckIcon fontSize="small" sx={{ color: BRAND_COLORS.plum }} />}
               </ListItemButton>
             );
           })}
@@ -646,7 +647,7 @@ function FitterPickerDialog({
               <Divider />
               <ListItemButton
                 onClick={() => onAssign(contactId, roomIdx, null)}
-                sx={{ px: 2, py: 1.25, color: '#6B6860', fontSize: '0.875rem' }}
+                sx={{ px: 2, py: 1.25, color: BRAND_COLORS.ink3, fontSize: '0.875rem' }}
               >
                 Remove assignment
               </ListItemButton>
@@ -671,11 +672,11 @@ function EmptyState({ message }: { message: string }) {
         py: 8,
         px: 3,
         textAlign: 'center',
-        color: '#97927F',
+        color: BRAND_COLORS.ink4,
       }}
     >
       <PersonAddIcon sx={{ fontSize: 48, mb: 2, opacity: 0.35 }} />
-      <Typography sx={{ fontSize: '0.9rem', color: '#97927F' }}>{message}</Typography>
+      <Typography sx={{ fontSize: '0.9rem', color: BRAND_COLORS.ink4 }}>{message}</Typography>
     </Box>
   );
 }
@@ -967,7 +968,7 @@ export function ProjectsPage() {
                   >
                     {label}
                   </Box>
-                  <Box component="span" sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#97927F' }}>
+                  <Box component="span" sx={{ fontSize: '0.72rem', fontWeight: 600, color: BRAND_COLORS.ink4 }}>
                     {groupRows.length}
                   </Box>
                 </Box>
@@ -1023,7 +1024,7 @@ export function ProjectsPage() {
         right: 0,
         display: 'flex',
         flexDirection: 'column',
-        background: '#F6F1E7',
+        background: BRAND_COLORS.paper,
       }}
     >
       {/* Stale data banner */}
@@ -1046,86 +1047,43 @@ export function ProjectsPage() {
       )}
 
       {/* Stage filter tabs */}
-      <Box
+      <PageFilterBar
         sx={{
-          display: 'flex',
-          gap: '6px',
-          overflowX: 'auto',
           p: '12px 16px',
-          borderBottom: '1px solid #D9D2C2',
-          background: '#F6F1E7',
+          borderBottom: `1px solid ${BRAND_COLORS.stone}`,
+          background: BRAND_COLORS.paper,
           flexShrink: 0,
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-          '&::-webkit-scrollbar': { display: 'none' },
         }}
       >
-        {stageTabs.map(({ key, label }) => {
-          const active = filter === key;
-          const colour = key && key !== '__mine__' ? getStageColor(key) : null;
-          return (
-            <Box
-              key={key}
-              component="button"
-              onClick={() => setFilter(key)}
-              sx={{
-                flexShrink: 0,
-                fontSize: '0.78rem',
-                fontWeight: 600,
-                px: '13px',
-                py: '5px',
-                borderRadius: '999px',
-                border: `1.5px solid ${active && colour ? colour.bg : active ? '#200842' : '#D9D2C2'}`,
-                background: active && colour ? colour.bg : active ? '#200842' : 'transparent',
-                color: active ? '#fff' : '#6B6860',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                transition: 'background 0.12s, color 0.12s, border-color 0.12s',
-                whiteSpace: 'nowrap',
-                '&:hover': active
-                  ? {}
-                  : { background: '#D9D2C2', color: '#3C3A34' },
-              }}
-            >
-              {label}
-            </Box>
-          );
-        })}
-      </Box>
+        <StageTabGroup
+          value={filter}
+          onChange={setFilter}
+          tabs={stageTabs}
+          stageColors={STAGE_COLORS}
+        />
+      </PageFilterBar>
 
       {/* Sort / group bar */}
-      <Box
+      <PageFilterBar
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
           p: '8px 16px',
-          background: '#F6F1E7',
-          borderBottom: '1px solid #D9D2C2',
+          background: BRAND_COLORS.paper,
+          borderBottom: `1px solid ${BRAND_COLORS.stone}`,
           flexShrink: 0,
         }}
       >
-        <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#97927F', whiteSpace: 'nowrap' }}>
-          Sort by
-        </Typography>
-        <Select
-          size="small"
+        <SortSelect
           value={sortBy}
-          onChange={(e) => handleSortChange(e.target.value as SortKey)}
-          sx={{
-            fontSize: '0.78rem',
-            fontWeight: 600,
-            borderRadius: '999px',
-            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#D9D2C2', borderWidth: '1.5px' },
-            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#B8AE99' },
-            '& .MuiSelect-select': { py: '4px', px: '10px', pr: '28px !important' },
-          }}
-        >
-          <MenuItem value="stage">Stage</MenuItem>
-          <MenuItem value="name">Name</MenuItem>
-          <MenuItem value="date">Close date</MenuItem>
-          <MenuItem value="install">Install date</MenuItem>
-        </Select>
+          onChange={(v) => handleSortChange(v as SortKey)}
+          options={[
+            { value: 'stage', label: 'Stage' },
+            { value: 'name', label: 'Name' },
+            { value: 'date', label: 'Close date' },
+            { value: 'install', label: 'Install date' },
+          ]}
+          label="Sort by"
+          minWidth={130}
+        />
         <Box
           component="button"
           disabled={!!(stageKeyFilter || myRooms)}
@@ -1141,10 +1099,10 @@ export function ProjectsPage() {
             fontSize: '0.78rem',
             fontWeight: 600,
             fontFamily: 'inherit',
-            color: groupBy ? '#fff' : '#6B6860',
-            background: groupBy ? '#200842' : 'transparent',
-            border: `1.5px solid ${groupBy ? '#200842' : '#D9D2C2'}`,
-            borderRadius: '999px',
+            color: groupBy ? '#fff' : BRAND_COLORS.ink3,
+            background: groupBy ? BRAND_COLORS.plum : 'transparent',
+            border: `1.5px solid ${groupBy ? BRAND_COLORS.plum : BRAND_COLORS.stone}`,
+            borderRadius: `${RADIUS.pill}px`,
             px: '12px',
             py: '4px',
             cursor: stageKeyFilter || myRooms ? 'not-allowed' : 'pointer',
@@ -1153,15 +1111,15 @@ export function ProjectsPage() {
             ml: 'auto',
             opacity: stageKeyFilter || myRooms ? 0.4 : 1,
             '&:hover:not(:disabled)': {
-              background: groupBy ? '#200842' : '#D9D2C2',
-              color: groupBy ? '#fff' : '#3C3A34',
+              background: groupBy ? BRAND_COLORS.plum : BRAND_COLORS.stone,
+              color: groupBy ? '#fff' : BRAND_COLORS.ink2,
             },
             '@media (pointer: coarse)': { minHeight: '44px', py: '10px' },
           }}
         >
           Group by stage
         </Box>
-      </Box>
+      </PageFilterBar>
 
       {/* Scrollable content area */}
       <Box
@@ -1222,7 +1180,7 @@ export function ProjectsPage() {
             zIndex: 1400,
           }}
         >
-          <CircularProgress size={40} sx={{ color: '#200842' }} />
+          <CircularProgress size={40} sx={{ color: BRAND_COLORS.plum }} />
         </Box>
       )}
 
