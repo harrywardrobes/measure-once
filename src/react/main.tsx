@@ -27,6 +27,7 @@ import { PageHeadingPanel } from './components/PageHeadingPanel';
 import { BottomNav } from './components/BottomNav';
 import { AdminTabsBar } from './components/AdminTabsBar';
 import { BottomActionBar } from './components/BottomActionBar';
+import { CommandPalette } from './components/CommandPalette';
 
 /*
  * Page-level components are lazy-imported so Vite emits a separate chunk
@@ -120,6 +121,7 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'page-heading-mount',    render: () => <PageHeadingPanel /> },
   { id: 'app-bottom-nav-mount',  render: () => <BottomNav /> },
   { id: 'app-bottom-bar-mount',  render: () => <BottomActionBar /> },
+  { id: 'command-palette-mount', render: () => <CommandPalette />, fallback: <></> },
   { id: 'trades-view',          render: () => <TradesPage /> },
   { id: 'home-view',            render: () => <HomePage />,     fallback: <HomePageSkeleton /> },
   { id: 'tab-calendar',         render: () => <CalendarPage />, fallback: <CalendarPageSkeleton /> },

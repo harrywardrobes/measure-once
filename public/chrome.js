@@ -156,9 +156,11 @@ window.getShortcut = function (key) {
       </button>
     </div>`;
 
+  const commandPaletteMount = `<div id="command-palette-mount"></div>`;
+
   const isAdminPage = path === '/admin' || path.startsWith('/admin/');
   document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner + pageHeading);
-  document.body.insertAdjacentHTML('beforeend', invoicePanel + (isAdminPage ? '' : bottomNav) + bottomBar);
+  document.body.insertAdjacentHTML('beforeend', invoicePanel + (isAdminPage ? '' : bottomNav) + bottomBar + commandPaletteMount);
 
   // Styles for the invoice panel.
   // These are injected here (rather than living in app-styles.css) so they
