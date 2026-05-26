@@ -802,6 +802,16 @@ app.get('/api/hubspot/status', async (req, res) => {
   if (!process.env.HUBSPOT_ACCESS_TOKEN) {
     return res.json({ connected: false, code: 'NO_TOKEN' });
   }
+  // Expose cooldown state from the lead-status-counts fan-out so the admin
+  // panel can show a live countdown instead of a vague "try again shortly".
+  const cooldownMs = _leadStatusCountsCooldownUntil - Date.now();
+  if (cooldownMs > 0) {
+    return res.json({
+      connected: false,
+      code: 'HUBSPOT_RATE_LIMIT',
+      cooldownSecondsRemaining: Math.ceil(cooldownMs / 1000),
+    });
+  }
   try {
     await axios.get(`${HS}/account-info/v3/details`, { headers: hsHeaders(), timeout: 8000 });
     res.json({ connected: true });

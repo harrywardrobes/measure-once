@@ -236,8 +236,16 @@
   }
 
   let _hubspotStatusLoaded = false;
+  let _hubspotCooldownTimer = null;
+  function _clearHubspotCooldownTimer() {
+    if (_hubspotCooldownTimer !== null) {
+      clearInterval(_hubspotCooldownTimer);
+      _hubspotCooldownTimer = null;
+    }
+  }
   async function loadHubspotStatus() {
     if (_hubspotStatusLoaded) return;
+    _clearHubspotCooldownTimer();
     const badge = await waitForElement('hubspot-status-badge');
     if (!badge) return;
     try {
@@ -247,18 +255,42 @@
         badge.textContent = 'Connected';
         badge.style.background = '#dcfce7';
         badge.style.color = '#166534';
+        _hubspotStatusLoaded = true;
       } else if (data.code === 'HUBSPOT_RATE_LIMIT') {
-        badge.textContent = 'Rate limited — try again shortly';
         badge.style.background = '#fef3c7';
         badge.style.color = '#92400e';
+        const seconds = (typeof data.cooldownSecondsRemaining === 'number' && data.cooldownSecondsRemaining > 0)
+          ? data.cooldownSecondsRemaining
+          : null;
+        if (seconds !== null) {
+          let remaining = seconds;
+          const updateBadge = () => {
+            badge.textContent = `Rate limited — retrying in ${remaining} s`;
+          };
+          updateBadge();
+          _hubspotCooldownTimer = setInterval(() => {
+            remaining -= 1;
+            if (remaining <= 0) {
+              _clearHubspotCooldownTimer();
+              badge.textContent = 'Rate limited — rechecking…';
+              _hubspotStatusLoaded = false;
+              loadHubspotStatus();
+            } else {
+              updateBadge();
+            }
+          }, 1000);
+        } else {
+          badge.textContent = 'Rate limited — try again shortly';
+        }
+        _hubspotStatusLoaded = true;
       } else {
         let label = 'Not connected — check your token';
         if (data.code === 'NO_TOKEN') label = 'No token set';
         badge.textContent = label;
         badge.style.background = '#fee2e2';
         badge.style.color = '#991b1b';
+        _hubspotStatusLoaded = true;
       }
-      _hubspotStatusLoaded = true;
     } catch {
       if (badge) {
         badge.textContent = 'Could not check';
