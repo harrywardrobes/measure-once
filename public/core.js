@@ -378,7 +378,7 @@ function showAccessGate(params) {
 }
 
 async function checkAuthStatus() {
-  const prevGoogle = state.authStatus?.google;
+  const prevGoogle = !!(state.authStatus?.google);
   const [status, user] = await Promise.all([
     GET('/auth/status'),
     fetch('/api/auth/user').then(r => r.ok ? r.json() : null).catch(() => null),

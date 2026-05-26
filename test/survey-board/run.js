@@ -195,20 +195,43 @@ async function pollPage(page, fn, arg, timeoutMs = 12000, intervalMs = 200) {
 // DOM structure (AppThemeProvider wraps every island in MuiScopedCssBaseline):
 //   #survey-board-mount          ← React root
 //     div.MuiScopedCssBaseline   ← AppThemeProvider shell
-//       div (flex column)        ← SurveyBoardPage outer Box
-//         div (column header)
+//       div (flex column)        ← SurveyBoardPage outer Box (normal: 2+ children)
+//         div (column header)        — or bootstrap-failed UI (1 child: centred Box)
 //         div (card list)
+//
+// We detect SurveyBoardPage by looking for a <button> anywhere inside the mount:
+//   • Normal state:          "Filter" button in column header
+//   • Bootstrap-failed state: "Reload page" button in error panel
+//   • PageLoadingSkeleton:    no buttons — so this check excludes the Suspense
+//                             fallback entirely, preventing a premature return that
+//                             would cause seedSurveyBoard() to dispatch
+//                             DATA_READY_EVENT before the component's useEffect
+//                             listener is registered.
 async function waitForReactMount(page) {
   return pollPage(page, () => {
     const mount = document.getElementById('survey-board-mount');
     if (!mount) return false;
-    const themed = mount.firstElementChild;          // MuiScopedCssBaseline wrapper
-    if (!themed) return false;
-    const board = themed.firstElementChild;          // SurveyBoardPage outer Box
-    if (!board) return false;
-    // Header + card-list are always present once SurveyBoardPage has rendered.
-    return board.children.length >= 2;
+    // Any <button> inside the mount means SurveyBoardPage has rendered (either the
+    // "Filter" button in the normal column header or the "Reload page" button in the
+    // bootstrap-failure error panel).  PageLoadingSkeleton renders no buttons.
+    return !!mount.querySelector('button');
   }, null, 20000);
+}
+
+// After seedSurveyBoard() fires DATA_READY_EVENT, the board may briefly be in the
+// bootstrap-failure error state (1 child) if the failure fired before the lazy
+// chunk loaded.  Poll until the board reaches the normal 2-child layout so that
+// callers can rely on the board being healthy before they run their checks.
+async function waitForNormalMount(page) {
+  return pollPage(page, () => {
+    const mount = document.getElementById('survey-board-mount');
+    if (!mount) return false;
+    const themed = mount.firstElementChild;
+    if (!themed) return false;
+    const board = themed.firstElementChild;
+    if (!board) return false;
+    return board.children.length >= 2;
+  }, null, 8000);
 }
 
 // Inject window.state globals then fire the DATA_READY_EVENT so the component
@@ -251,11 +274,24 @@ async function waitForCard(page, contactId) {
 // Open /survey, wait for React to mount, seed state, and wait for a card.
 // Returns { page, mounted, cardReady } — caller must close the page.
 //
-// Bootstrap on the survey page calls loadAllContacts() → /api/contacts-all
-// and loadWorkflow() → /api/localdata/all, both of which 503 when the server
-// runs without HUBSPOT_TOKEN (as the test harness does).  We intercept those
-// requests and return empty-but-valid responses so bootstrap() completes
-// normally and the mount point survives.
+// The test server runs without HUBSPOT_ACCESS_TOKEN, so several bootstrap
+// endpoints return 503.  We intercept all network requests that the bootstrap()
+// sequence makes and return minimal-but-valid stubs so the bootstrap completes
+// without throwing and the survey-board-bootstrap-failed event is never fired:
+//
+//   /api/contacts-all      → fixture CONTACTS (needed by usePaginatedContacts)
+//   /api/localdata/all     → {} (loadWorkflowStages, would 503 without token)
+//   /api/workflow          → null (loadWorkflow, safe pass-through but stubbed
+//                            for speed/reliability across test runs)
+//   /auth/status           → { google:false, hubspot:false } (checkAuthStatus)
+//   /api/lead-statuses     → [] (loadLeadStatuses, has try/catch but stubbed
+//   /api/lead-substatuses  →    for isolation — avoids any DB-timing races)
+//   /api/stage-action-labels → []
+//   /api/users/me/prefs    → {}
+//   /api/whatsapp/config   → {} (already has .catch, stubbed for speed)
+//
+// After seeding, waitForNormalMount() confirms the board has reached the
+// healthy 2-child layout before callers run their assertions.
 async function openBoardPage(browser, cookie, contactId = 'sv-test-001', { withHandler = false } = {}) {
   const page = await browser.newPage();
   page.on('pageerror', () => {});
@@ -306,11 +342,15 @@ async function openBoardPage(browser, cookie, contactId = 'sv-test-001', { withH
         body: JSON.stringify({ results: CONTACTS, totalPages: 1, page: 1, total: CONTACTS.length }),
       });
     } else if (u.includes('/api/localdata/all')) {
-      req.respond({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({}),
-      });
+      req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+    } else if (u.includes('/api/workflow') && !u.includes('/api/workflow-stages')) {
+      req.respond({ status: 200, contentType: 'application/json', body: 'null' });
+    } else if (u.includes('/auth/status')) {
+      req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ google: false, hubspot: false }) });
+    } else if (u.includes('/api/lead-statuses') || u.includes('/api/lead-substatuses') || u.includes('/api/stage-action-labels')) {
+      req.respond({ status: 200, contentType: 'application/json', body: '[]' });
+    } else if (u.includes('/api/users/me/prefs') || u.includes('/api/whatsapp/config')) {
+      req.respond({ status: 200, contentType: 'application/json', body: '{}' });
     } else {
       req.continue();
     }
@@ -320,8 +360,12 @@ async function openBoardPage(browser, cookie, contactId = 'sv-test-001', { withH
   await page.goto(`${BASE}/survey`, { waitUntil: 'domcontentloaded', timeout: 15000 });
   const mounted = await waitForReactMount(page);
   await seedSurveyBoard(page, { withHandler });
+  // Confirm the board has recovered to the healthy 2-child layout in case the
+  // bootstrap fired survey-board-bootstrap-failed before the lazy chunk loaded.
+  // seedSurveyBoard dispatches DATA_READY_EVENT which clears that failure state.
+  const normalMount = await waitForNormalMount(page);
   const cardReady = contactId ? await waitForCard(page, contactId) : true;
-  return { page, mounted, cardReady, updateHandlers };
+  return { page, mounted: normalMount, cardReady };
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -561,15 +605,17 @@ async function main() {
     {
       let page;
       try {
-        // sv-test-002 has statusId='unqualified' which is in SURVEY_TERMINAL_SUBSTAGES.
-        // The component's loadHiddenSubstages() defaults to hiding 'unqualified'
-        // and 'not_suitable' when localStorage has no entry.  We use
-        // evaluateOnNewDocument so localStorage is set to [] (show all) BEFORE
-        // the React component initialises its hiddenSubstages state.
-        page = await browser.newPage();
-        page.on('pageerror', () => {});
-        page.on('console',   () => {});
+        // sv-test-003 has statusId='bad_timing' which is in SURVEY_TERMINAL_SUBSTAGES
+        // (priority=3 → opacity 0.55) but is NOT in the default hiddenSubstages set
+        // ('unqualified' and 'not_suitable' only).  We can therefore use the standard
+        // openBoardPage() helper — no localStorage override or evaluateOnNewDocument
+        // required.  Using evaluateOnNewDocument + setRequestInterception together
+        // interferes with Puppeteer's page-evaluate context, causing waitForReactMount
+        // to time out every time.
+        const opened = await openBoardPage(browser, adminClient.cookie, 'sv-test-003');
+        page = opened.page;
 
+<<<<<<< HEAD
         await page.evaluateOnNewDocument(() => {
           try {
             localStorage.setItem('surveyHiddenSubstages', JSON.stringify([]));
@@ -599,36 +645,34 @@ async function main() {
         const mounted = await waitForReactMount(page);
 
         if (!mounted) {
+=======
+        if (!opened.mounted) {
+>>>>>>> 653b837 (fix: survey-board test probes I.2 and I.3 (stale-data Snackbar E2E))
           record('(C) Terminal card has opacity ≈ 0.55', 'opacity ≈ 0.55', 'timed out (board not mounted)', false);
+        } else if (!opened.cardReady) {
+          record('(C) Terminal card has opacity ≈ 0.55', 'opacity ≈ 0.55', 'timed out waiting for card', false);
         } else {
-          await seedSurveyBoard(page);
-          const cardReady = await waitForCard(page, 'sv-test-002');
-
-          if (!cardReady) {
-            record('(C) Terminal card has opacity ≈ 0.55', 'opacity ≈ 0.55', 'timed out waiting for card', false);
-          } else {
-            const termInfo = await page.evaluate(() => {
-              const body = document.querySelector('[data-contact-id="sv-test-002"]');
-              if (!body) return { error: 'sv-test-002 card body not found' };
-              // Walk up from the card body to find the first ancestor with reduced opacity.
-              let el = body.parentElement;
-              while (el && el.id !== 'survey-board-mount') {
-                const op = parseFloat(window.getComputedStyle(el).opacity);
-                if (op < 1) return { opacity: op };
-                el = el.parentElement;
-              }
-              return { opacity: 1, note: 'no reduced-opacity ancestor found' };
-            });
-            const opacityOk = !termInfo.error
-              && typeof termInfo.opacity === 'number'
-              && Math.abs(termInfo.opacity - 0.55) < 0.05;
-            record(
-              '(C) Terminal card (statusId=unqualified) has opacity ≈ 0.55',
-              'opacity ≈ 0.55',
-              termInfo.error || `opacity=${termInfo.opacity}${termInfo.note ? ' (' + termInfo.note + ')' : ''}`,
-              opacityOk,
-            );
-          }
+          const termInfo = await page.evaluate(() => {
+            const body = document.querySelector('[data-contact-id="sv-test-003"]');
+            if (!body) return { error: 'sv-test-003 card body not found' };
+            // Walk up from the card body to find the first ancestor with reduced opacity.
+            let el = body.parentElement;
+            while (el && el.id !== 'survey-board-mount') {
+              const op = parseFloat(window.getComputedStyle(el).opacity);
+              if (op < 1) return { opacity: op };
+              el = el.parentElement;
+            }
+            return { opacity: 1, note: 'no reduced-opacity ancestor found' };
+          });
+          const opacityOk = !termInfo.error
+            && typeof termInfo.opacity === 'number'
+            && Math.abs(termInfo.opacity - 0.55) < 0.05;
+          record(
+            '(C) Terminal card (statusId=bad_timing) has opacity ≈ 0.55',
+            'opacity ≈ 0.55',
+            termInfo.error || `opacity=${termInfo.opacity}${termInfo.note ? ' (' + termInfo.note + ')' : ''}`,
+            opacityOk,
+          );
         }
       } catch (e) {
         record('(C) Terminal card opacity', 'no error', `error: ${e.message}`, false, e.stack || '');
@@ -796,16 +840,17 @@ async function main() {
             return { found: true, nowChecked: checkbox.checked };
           });
 
-          await new Promise(r => setTimeout(r, 600));
-
-          const afterShow = await page.evaluate(() => {
-            return !!document.querySelector('[data-contact-id="sv-test-003"]');
-          });
+          // Poll for the card to reappear — React 18 concurrent mode can take
+          // longer than a fixed 600 ms delay to commit the re-render that
+          // restores the card after the filter state update.
+          const afterShow = rechecked.found
+            ? await pollPage(page, () => !!document.querySelector('[data-contact-id="sv-test-003"]'), null, 5000)
+            : null;
           record(
             '(E.5) Re-checking "Bad Timing" restores sv-test-003 card in DOM',
             'card present in DOM',
-            rechecked.found ? `cardPresent=${afterShow}` : 'checkbox not found to re-check',
-            rechecked.found && afterShow,
+            rechecked.found ? `cardPresent=${!!afterShow}` : 'checkbox not found to re-check',
+            rechecked.found && !!afterShow,
           );
         }
       } catch (e) {
@@ -828,18 +873,27 @@ async function main() {
           record('(F) Action strip renders when handler configured', 'strip visible', 'timed out', false);
           record('(F.2) Clicking the action strip opens the handler modal (show_message type) with contactId=sv-test-001', 'modal .cah-backdrop appears; data-card-action-contact-id=sv-test-001', 'skipped — card not ready', false);
         } else {
+<<<<<<< HEAD
           // Give the useCardActionHandlers hook time to complete its initial
           // fetch of /api/card-action-handlers (intercepted → immediate) and
           // trigger the re-render that shows the action strip.
           await new Promise(r => setTimeout(r, 800));
-
-          // The action strip carries data-card-action-handler-id and shows the
-          // title-cased action_name: 'book_survey' → 'Book Survey'.
-          const stripInfo = await page.evaluate(() => {
-            const strip = document.querySelector('[data-card-action-handler-id="999"]');
-            if (!strip) return { found: false };
-            return { found: true, text: (strip.textContent || '').trim() };
+=======
+          // Dispatch a second event so React re-renders with the updated
+          // cardActionHandlerFor function that was injected by seedSurveyBoard.
+          await page.evaluate(() => {
+            document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
           });
+>>>>>>> 653b837 (fix: survey-board test probes I.2 and I.3 (stale-data Snackbar E2E))
+
+          // Poll for the action strip instead of a fixed 800 ms sleep — React 18
+          // concurrent mode may take longer to commit the re-render that adds the
+          // strip after the DATA_READY_EVENT fires.
+          const stripInfo = await pollPage(page, () => {
+            const strip = document.querySelector('[data-card-action-handler-id="999"]');
+            if (!strip) return null;
+            return { found: true, text: (strip.textContent || '').trim() };
+          }, null, 5000) || { found: false };
 
           record(
             '(F) Action strip renders when cardActionHandlerFor returns a handler',
@@ -858,6 +912,7 @@ async function main() {
           // listener end-to-end.
           // We also assert data-card-action-contact-id on the strip is correct.
           if (stripInfo.found) {
+<<<<<<< HEAD
             // Re-seed: update the intercepted /api/card-action-handlers response to
             // 'show_message' and fire a BroadcastChannel message so both the React
             // hook and card-action-handlers.js re-fetch and update in sync.
@@ -867,17 +922,43 @@ async function main() {
               config: { action_name: 'test_action', message: 'F2 click-wiring test' },
               bindings: [{ stage_key: 'survey', status_key: '' }],
             }]);
+=======
+            // Re-seed: swap handler type to 'show_message' so the delegated
+            // listener routes to openMessagePopup and opens a visible modal.
+            await page.evaluate(
+              ({ contacts, cache, workflow, lsOptions }) => {
+                window.state                   = window.state || {};
+                window.state.filteredContacts  = contacts;
+                window.state.contactStageCache = cache;
+                window.state.workflow          = workflow;
+                window.state.user              = { privilege_level: 'admin' };
+                window.LEAD_STATUS_OPTIONS     = lsOptions;
+                window.LEAD_SUBSTATUSES        = [];
+                window.cardActionHandlerFor = () => ({
+                  id: 999,
+                  type: 'show_message',
+                  config: { action_name: 'test_action', message: 'F2 click-wiring test' },
+                  bindings: [],
+                });
+                window.stageOrLeadStatusActionLabel = () => '';
+                window.substatusActionLabelLookup   = () => '';
+                document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
+              },
+              { contacts: CONTACTS, cache: CONTACT_STAGE_CACHE, workflow: WORKFLOW, lsOptions: LEAD_STATUS_OPTIONS },
+            );
+>>>>>>> 653b837 (fix: survey-board test probes I.2 and I.3 (stale-data Snackbar E2E))
 
-            // Read the strip's contact-id attribute before clicking.
-            const stripAttrs = await page.evaluate(() => {
+            // Poll for the re-seeded strip (show_message type) — same concurrent-
+            // mode timing concern as the first strip check above.
+            const stripAttrs = await pollPage(page, () => {
               const strip = document.querySelector('[data-card-action-handler-id="999"]');
-              if (!strip) return { found: false };
+              if (!strip) return null;
               return {
                 found: true,
                 contactId:   strip.dataset.cardActionContactId   || '',
                 handlerType: strip.dataset.cardActionHandlerType || '',
               };
-            });
+            }, null, 5000) || { found: false };
 
             if (!stripAttrs.found) {
               record(
@@ -1248,11 +1329,15 @@ async function main() {
               });
             }).catch(() => {});
           } else if (u.includes('/api/localdata/all')) {
-            req.respond({
-              status:      200,
-              contentType: 'application/json',
-              body:        JSON.stringify({}),
-            });
+            req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+          } else if (u.includes('/api/workflow') && !u.includes('/api/workflow-stages')) {
+            req.respond({ status: 200, contentType: 'application/json', body: 'null' });
+          } else if (u.includes('/auth/status')) {
+            req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ google: false, hubspot: false }) });
+          } else if (u.includes('/api/lead-statuses') || u.includes('/api/lead-substatuses') || u.includes('/api/stage-action-labels')) {
+            req.respond({ status: 200, contentType: 'application/json', body: '[]' });
+          } else if (u.includes('/api/users/me/prefs') || u.includes('/api/whatsapp/config')) {
+            req.respond({ status: 200, contentType: 'application/json', body: '{}' });
           } else {
             req.continue();
           }
@@ -1261,9 +1346,13 @@ async function main() {
         await injectSession(page, adminClient.cookie);
         await page.goto(`${BASE}/survey`, { waitUntil: 'domcontentloaded', timeout: 15000 });
 
-        // Wait for React to mount — listener for survey-board-cache-status is
-        // now registered in the component's useEffect.
+        // Wait for React to mount.  React useEffects (including the
+        // survey-board-cache-status listener) run after the browser paint, so
+        // give the microtask + rAF queue a moment to drain before releasing
+        // the held response — ensures onCacheStatus is registered before
+        // loadAllContacts dispatches the stale event.
         const mounted = await waitForReactMount(page);
+        await page.evaluate(() => new Promise(r => requestAnimationFrame(() => setTimeout(r, 50))));
         // Release the held /api/contacts-all response WITH the stale header.
         // loadAllContacts() will now parse the header and dispatch the event.
         releaseContactsAll();
