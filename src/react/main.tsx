@@ -35,6 +35,9 @@ import { AdminTabsBar } from './components/AdminTabsBar';
  *
  * New pages: add a React.lazy() entry here and a matching row in MOUNTS.
  */
+const LoginPage          = React.lazy(() => import('./pages/auth/LoginPage').then(m => ({ default: m.LoginPage })));
+const SetPasswordPage    = React.lazy(() => import('./pages/auth/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })));
+const OnboardingPage     = React.lazy(() => import('./pages/auth/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
 const TradesPage         = React.lazy(() => import('./pages/TradesPage').then(m => ({ default: m.TradesPage })));
 const DesignSystemPage   = React.lazy(() => import('./pages/DesignSystemPage').then(m => ({ default: m.DesignSystemPage })));
 const SearchSettingsPage = React.lazy(() => import('./pages/SearchSettingsPage').then(m => ({ default: m.SearchSettingsPage })));
@@ -106,6 +109,9 @@ function withTheme(
  * *-page-body, etc.) distinct from the React mount ids listed below.
  */
 const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: React.ReactElement }> = [
+  { id: 'login-root',           render: () => <LoginPage /> },
+  { id: 'set-password-root',    render: () => <SetPasswordPage /> },
+  { id: 'onboarding-root',      render: () => <OnboardingPage /> },
   { id: 'app-header-mount',     render: () => <GlobalHeader /> },
   { id: 'page-heading-mount',   render: () => <PageHeadingPanel /> },
   { id: 'app-bottom-nav-mount', render: () => <BottomNav /> },
