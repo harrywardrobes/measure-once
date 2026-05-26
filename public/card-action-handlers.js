@@ -4,7 +4,7 @@
 // survey.html, customer-detail.html). Mirrors the labels-and-substatuses
 // resolver in workflow-core.js: looks up a handler bound to either
 // (stage_key, status_key) OR a lead_substatus_id and, when the user clicks
-// the `.eq-card-action` strip, opens the appropriate modal.
+// a `[data-card-action-handler-id]` element, opens the appropriate modal.
 
 (function () {
   let HANDLERS_BY_LABEL    = {}; // `${stage}|${status}` → handler
@@ -59,7 +59,7 @@
   }
   window.cardActionHandlerFor = cardActionHandlerFor;
 
-  // Render attributes to drop into the `.eq-card-action` element so the
+  // Render attributes to drop into the `[data-card-action-handler-id]` element so the
   // delegated click listener below knows to dispatch.
   function cardActionHandlerAttrs(stageKey, leadStatusKey, hwSubstatusValue, ctx) {
     const h = cardActionHandlerFor(stageKey, leadStatusKey, hwSubstatusValue);
