@@ -71,11 +71,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
         setActionError(`Could not delete: ${msg}`);
       }
     };
-    if (typeof window.showBottomConfirm === 'function') {
-      window.showBottomConfirm('Delete this design visit? This cannot be undone.', doDelete);
-    } else {
-      if (window.confirm('Delete this design visit? This cannot be undone.')) void doDelete();
-    }
+    window.showBottomConfirm('Delete this design visit? This cannot be undone.', doDelete);
   }, [isAdmin, onRefresh]);
 
   const handleEdit = useCallback(async (id: number) => {

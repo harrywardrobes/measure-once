@@ -272,23 +272,31 @@ function InvoiceDrawer({ open, invId, allIds, onClose, onNavigate, isAdmin }: Dr
   }, [invId, edit]);
 
   const handleClose = useCallback(() => {
+    const doClose = () => {
+      onClose();
+      setEdit({ due: '', email: '', memo: '', dirty: false });
+      setInv(null);
+      setSaveMsg(null);
+    };
     if (edit.dirty) {
-      if (!window.confirm('You have unsaved changes. Discard and close?')) return;
+      window.showBottomConfirm('You have unsaved changes. Discard and close?', doClose);
+      return;
     }
-    onClose();
-    setEdit({ due: '', email: '', memo: '', dirty: false });
-    setInv(null);
-    setSaveMsg(null);
+    doClose();
   }, [edit.dirty, onClose]);
 
   const handleNavigate = useCallback((delta: number) => {
-    if (edit.dirty) {
-      if (!window.confirm('You have unsaved changes. Discard and continue?')) return;
-    }
     const newIdx = currentIdx + delta;
     if (newIdx < 0 || newIdx >= allIds.length) return;
-    setEdit({ due: '', email: '', memo: '', dirty: false });
-    onNavigate(allIds[newIdx]);
+    const doNavigate = () => {
+      setEdit({ due: '', email: '', memo: '', dirty: false });
+      onNavigate(allIds[newIdx]);
+    };
+    if (edit.dirty) {
+      window.showBottomConfirm('You have unsaved changes. Discard and continue?', doNavigate);
+      return;
+    }
+    doNavigate();
   }, [edit.dirty, currentIdx, allIds, onNavigate]);
 
   const handleSave = useCallback(async () => {
@@ -652,11 +660,12 @@ export function StandaloneInvoicesPage() {
 
   useEffect(() => { loadInvoices(); }, [loadInvoices]);
 
-  const handleDisconnect = useCallback(async () => {
-    if (!window.confirm('Disconnect QuickBooks? Invoice data will no longer be visible.')) return;
-    await fetch('/auth/quickbooks/disconnect', { method: 'POST' }).catch(() => {});
-    setStatus({ connected: false });
-    setInvoices([]);
+  const handleDisconnect = useCallback(() => {
+    window.showBottomConfirm('Disconnect QuickBooks? Invoice data will no longer be visible.', async () => {
+      await fetch('/auth/quickbooks/disconnect', { method: 'POST' }).catch(() => {});
+      setStatus({ connected: false });
+      setInvoices([]);
+    });
   }, []);
 
   const openPanel = useCallback((id: string) => {
