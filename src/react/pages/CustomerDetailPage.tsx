@@ -439,6 +439,17 @@ export function CustomerDetailPage() {
     return () => window.removeEventListener('mo:google-auth-connected', handler);
   }, [fetchGoogleEmails]);
 
+  // ── Clear emails when Google disconnects mid-session ───────────────────────
+
+  useEffect(() => {
+    const handler = () => {
+      setGoogleConnected(false);
+      setEmails([]);
+    };
+    window.addEventListener('mo:google-auth-disconnected', handler);
+    return () => window.removeEventListener('mo:google-auth-disconnected', handler);
+  }, []);
+
   // ── Boot ───────────────────────────────────────────────────────────────────
 
   useEffect(() => {

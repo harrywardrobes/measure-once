@@ -378,6 +378,7 @@ function showAccessGate(params) {
 }
 
 async function checkAuthStatus() {
+  const prevGoogle = state.authStatus?.google;
   const [status, user] = await Promise.all([
     GET('/auth/status'),
     fetch('/api/auth/user').then(r => r.ok ? r.json() : null).catch(() => null),
@@ -387,6 +388,9 @@ async function checkAuthStatus() {
   renderAuthStatus();
   if (!prevGoogle && state.authStatus.google) {
     window.dispatchEvent(new CustomEvent('mo:google-auth-connected'));
+  }
+  if (prevGoogle && !state.authStatus.google) {
+    window.dispatchEvent(new CustomEvent('mo:google-auth-disconnected'));
   }
 }
 
