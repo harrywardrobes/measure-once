@@ -697,6 +697,203 @@ async function main() {
       }
     }
 
+    // ── (H) Stale-data Snackbar — end-to-end: stale header → banner appears ─────
+    //
+    // Tests the full production path:
+    //   /api/contacts-all → X-Cache-Status: stale
+    //   → loadAllContacts() reads header → dispatches sales-board-cache-status
+    //   → SalesBoardPage useEffect → setStaleData(true) → Snackbar visible
+    //
+    // Timing challenge: the bootstrap calls loadAllContacts() before React
+    // mounts.  If the response arrives before the component's useEffect
+    // registers the listener, the event is missed.
+    //
+    // Solution: hold the /api/contacts-all response until waitForReactMount()
+    // confirms the component has mounted, then release it with the stale header.
+    // loadAllContacts() receives the response AFTER the listener is active.
+    {
+      let page;
+      try {
+        page = await browser.newPage();
+        page.on('pageerror', () => {});
+        page.on('console',   () => {});
+
+        // Gate: hold /api/contacts-all until React mounts.
+        let releaseContactsAll = null;
+        const contactsAllGate = new Promise(resolve => { releaseContactsAll = resolve; });
+
+        await page.setRequestInterception(true);
+        page.on('request', req => {
+          const u = req.url();
+          if (u.includes('/api/contacts-all')) {
+            // Hold the request; respond after React mounts.
+            contactsAllGate.then(() => {
+              req.respond({
+                status:      200,
+                contentType: 'application/json',
+                headers:     { 'X-Cache-Status': 'stale' },
+                body:        JSON.stringify({ results: [], totalPages: 1, page: 1, total: 0 }),
+              });
+            }).catch(() => {});
+          } else if (u.includes('/api/localdata/all')) {
+            req.respond({
+              status:      200,
+              contentType: 'application/json',
+              body:        JSON.stringify({}),
+            });
+          } else {
+            req.continue();
+          }
+        });
+
+        await injectSession(page, adminClient.cookie);
+        await page.goto(`${BASE}/sales`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+        // Wait for React to mount — listener for sales-board-cache-status is
+        // now registered in the component's useEffect.
+        const mounted = await waitForReactMount(page);
+        // Release the held /api/contacts-all response WITH the stale header.
+        // loadAllContacts() will now parse the header and dispatch the event.
+        releaseContactsAll();
+
+        if (!mounted) {
+          record('(H.1) E2E stale-header: board mounted before response released', 'mounted', 'timed out (20 s)', false);
+          record('(H.2) E2E stale-header: Snackbar appears (loadAllContacts → header → event)', 'skipped', 'board not mounted', false);
+          record('(H.3) E2E stale-header: Snackbar auto-dismisses after ~10 s', 'skipped', 'board not mounted', false);
+        } else {
+          record('(H.1) E2E stale-header: board mounted before response released', 'mounted', 'mounted', true);
+
+          // The Snackbar must appear once loadAllContacts dispatches the event.
+          // Match the full Snackbar copy (em-dash is the HTML entity &mdash;).
+          const STALE_TEXT = 'Showing cached data \u2014 live results will load when HubSpot recovers';
+          const snackbarAppeared = await pollPage(page, (txt) => {
+            const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+            return alerts.some(el => (el.textContent || '').includes(txt)) ? 'visible' : null;
+          }, STALE_TEXT, 8000);
+
+          record(
+            '(H.2) E2E stale-header: Snackbar appears (loadAllContacts → header → event)',
+            `"${STALE_TEXT}" alert visible`,
+            snackbarAppeared === 'visible' ? 'visible' : 'did not appear within 8 s',
+            snackbarAppeared === 'visible',
+          );
+
+          if (snackbarAppeared === 'visible') {
+            // autoHideDuration is 10 s.  Poll until dismissed or 13 s elapses.
+            const dismissDeadline = Date.now() + 13000;
+            let gone = false;
+            while (Date.now() < dismissDeadline) {
+              const still = await page.evaluate((txt) => {
+                const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+                return alerts.some(el => (el.textContent || '').includes(txt));
+              }, STALE_TEXT).catch(() => true);
+              if (!still) { gone = true; break; }
+              await new Promise(r => setTimeout(r, 200));
+            }
+            record(
+              '(H.3) E2E stale-header: Snackbar auto-dismisses after ~10 s',
+              'dismissed within 13 s',
+              gone ? 'dismissed — autoHideDuration fired (good)' : 'still visible after 13 s (bad)',
+              gone,
+            );
+          } else {
+            record('(H.3) E2E stale-header: Snackbar auto-dismisses after ~10 s', 'skipped', 'Snackbar never appeared', false);
+          }
+        }
+      } catch (e) {
+        record('(H) E2E stale-header Snackbar', 'no error', `error: ${e.message}`, false, e.stack || '');
+      } finally {
+        if (page) await page.close().catch(() => {});
+      }
+    }
+
+    // ── (I) Stale-data Snackbar absent when X-Cache-Status is fresh or absent ──
+    // Verifies the Snackbar does NOT appear when /api/contacts-all returns a
+    // fresh (or absent) X-Cache-Status header.  Uses the same held-response
+    // technique so loadAllContacts() receives the response after mount.
+    {
+      let page;
+      try {
+        // (I.1) Fresh header — X-Cache-Status: fresh.
+        {
+          page = await browser.newPage();
+          page.on('pageerror', () => {});
+          page.on('console',   () => {});
+
+          let releaseFreshReq = null;
+          const freshGate = new Promise(resolve => { releaseFreshReq = resolve; });
+
+          await page.setRequestInterception(true);
+          page.on('request', req => {
+            const u = req.url();
+            if (u.includes('/api/contacts-all')) {
+              freshGate.then(() => {
+                req.respond({
+                  status:      200,
+                  contentType: 'application/json',
+                  headers:     { 'X-Cache-Status': 'fresh' },
+                  body:        JSON.stringify({ results: [], totalPages: 1, page: 1, total: 0 }),
+                });
+              }).catch(() => {});
+            } else if (u.includes('/api/localdata/all')) {
+              req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+            } else {
+              req.continue();
+            }
+          });
+
+          await injectSession(page, adminClient.cookie);
+          await page.goto(`${BASE}/sales`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          const mounted = await waitForReactMount(page);
+          releaseFreshReq();
+
+          if (!mounted) {
+            record('(I.1) Stale banner absent when X-Cache-Status: fresh', 'skipped', 'board not mounted', false);
+          } else {
+            await new Promise(r => setTimeout(r, 2000));   // let loadAllContacts settle
+            const alertPresent = await page.evaluate(() => {
+              const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+              return alerts.some(el => (el.textContent || '').includes('Showing cached data'));
+            });
+            record(
+              '(I.1) Stale banner absent when X-Cache-Status: fresh',
+              '"Showing cached data" alert absent',
+              alertPresent ? 'alert FOUND (bad)' : 'absent (good)',
+              !alertPresent,
+            );
+          }
+          await page.close().catch(() => {});
+          page = null;
+        }
+
+        // (I.2) No X-Cache-Status header — default openBoardPage behaviour.
+        {
+          const opened = await openBoardPage(browser, adminClient.cookie, null);
+          page = opened.page;
+
+          if (!opened.mounted) {
+            record('(I.2) Stale banner absent when X-Cache-Status header absent', 'skipped', 'board not mounted', false);
+          } else {
+            await new Promise(r => setTimeout(r, 1500));
+            const alertPresent = await page.evaluate(() => {
+              const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+              return alerts.some(el => (el.textContent || '').includes('Showing cached data'));
+            });
+            record(
+              '(I.2) Stale banner absent when X-Cache-Status header absent',
+              '"Showing cached data" alert absent',
+              alertPresent ? 'alert FOUND (bad)' : 'absent (good)',
+              !alertPresent,
+            );
+          }
+        }
+      } catch (e) {
+        record('(I) Stale banner absent (fresh/no header)', 'no error', `error: ${e.message}`, false, e.stack || '');
+      } finally {
+        if (page) await page.close().catch(() => {});
+      }
+    }
+
   } finally {
     if (browser) await browser.close().catch(() => {});
   }
@@ -873,6 +1070,15 @@ async function writeReport(findings) {
     '  shows the warning Snackbar; simulating tab-hide proves the MUI',
     '  autoHideDuration timer is paused (Snackbar still visible after 9.5 s > 8 s),',
     '  then auto-dismisses once the tab returns to the foreground.',
+    '- **(H)** Stale-data Snackbar appears: dispatching `sales-board-cache-status`',
+    '  with `{ stale: true }` (the event `loadAllContacts` emits when',
+    '  `/api/contacts-all` returns `X-Cache-Status: stale`) causes the',
+    '  "Showing cached data — live results will load when HubSpot recovers"',
+    '  MUI Snackbar to appear, then auto-dismisses after the 10 s',
+    '  `autoHideDuration` elapses.',
+    '- **(I)** Stale-data Snackbar absent: dispatching `{ stale: false }` (fresh',
+    '  cache status) does not show the Snackbar; and the Snackbar is absent when',
+    '  no `sales-board-cache-status` event is dispatched at all.',
     '',
     '## React mount timing',
     '',
@@ -888,6 +1094,9 @@ async function writeReport(findings) {
     '- `public/sales.html` — page that mounts the component',
     '- `public/sales.js` — dispatches `sales-board-data-ready` and',
     '  `sales-board-bg-refresh-failed` (on error) after data load',
+    '- `public/workflow-core.js` — `loadAllContacts` dispatches',
+    '  `sales-board-cache-status` with `{ stale: true/false }` based on the',
+    '  `X-Cache-Status` header from `/api/contacts-all`',
   ];
   const outPath = path.join(dir, 'sales-board.md');
   fs.writeFileSync(outPath, lines.join('\n'));
