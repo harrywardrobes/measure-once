@@ -1,5 +1,6 @@
 /* ── Fonts ───────────────────────────────────────────────────────────────────── */
 @font-face {
+
   font-family: 'Open Sans';
   src: url('fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype');
   font-weight: 100 900;
@@ -7,6 +8,7 @@
   font-display: swap;
 }
 @font-face {
+
   font-family: 'Open Sans';
   src: url('fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype');
   font-weight: 100 900;
@@ -55,44 +57,7 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
    by that component. */
 
 /* ── Command Palette Hint Bar ────────────────────────────────────────────────── */
-.cp-hint-bar {
-  height: 44px;
-  background: rgba(255,255,255,0.065);
-  border-top: 1px solid rgba(255,255,255,0.07);
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 0 14px;
-  cursor: pointer;
-  transition: background 0.15s;
-  border-left: none;
-  border-right: none;
-  border-bottom: none;
-  width: 100%;
-  text-align: left;
-  font-family: inherit;
-  -webkit-tap-highlight-color: transparent;
-}
-.cp-hint-bar:hover  { background: rgba(255,255,255,0.12); }
-.cp-hint-bar:active { background: rgba(255,255,255,0.16); }
-.cp-hint-icon { color: rgba(255,255,255,0.45); flex-shrink: 0; }
-.cp-hint-text {
-  flex: 1;
-  font-size: 0.82rem;
-  color: rgba(255,255,255,0.42);
-}
-.cp-kbd-badge {
-  font-family: inherit;
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: rgba(255,255,255,0.45);
-  background: rgba(255,255,255,0.09);
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 4px;
-  padding: 2px 6px;
-  letter-spacing: 0.02em;
-  flex-shrink: 0;
-}
+
 
 /* ── Header Search ───────────────────────────────────────────────────────────── */
 /* The top app bar (including search/navigation) is fully migrated to React MUI —
@@ -155,51 +120,10 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 .app-body.hidden { display: none; }
 
 /* ── Nav Button ──────────────────────────────────────────────────────────────── */
-.nav-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: #fff;
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: .88rem;
-  font-weight: 600;
-  transition: background 0.15s;
-  white-space: nowrap;
-}
-.nav-btn:hover { background: rgba(255,255,255,0.12); }
+
 
 /* ── Auth status ─────────────────────────────────────────────────────────────── */
-.auth-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  display: inline-block;
-  flex-shrink: 0;
-}
-.auth-dot-ok      { background: #34d399; }
-.auth-dot-off     { background: #f87171; }
-.auth-dot-pending { background: #d1d5db; }
 
-.connect-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: .88rem;
-  font-weight: 600;
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  color: #fff;
-  white-space: nowrap;
-  transition: opacity 0.15s;
-  text-decoration: none;
-  font-family: inherit;
-}
-.connect-btn:hover { opacity: 0.85; }
-.connect-btn-google { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); }
 
 /* ── List Panel ──────────────────────────────────────────────────────────────── */
 .list-panel {
@@ -230,13 +154,14 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
   -webkit-overflow-scrolling: touch;
 }
 
-body.showing-workflow .list-panel    { display: none; }
-body.showing-workflow .workflow-panel { display: flex; }
 
 @media (min-width: 768px) {
+
   .list-panel    { display: flex !important; width: 17rem; }
   .workflow-panel { display: flex !important; }
+
 }
+
 
 /* ── Back button (mobile) ────────────────────────────────────────────────────── */
 .back-btn {
@@ -258,8 +183,11 @@ body.showing-workflow .workflow-panel { display: flex; }
 .back-btn:active { background: var(--paper-deep); }
 
 @media (min-width: 768px) {
+
   .back-btn { display: none !important; }
+
 }
+
 
 /* ── Spinner ─────────────────────────────────────────────────────────────────── */
 .spinner {
@@ -270,7 +198,9 @@ body.showing-workflow .workflow-panel { display: flex; }
   animation: spin 0.7s linear infinite;
   flex-shrink: 0;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+ to { transform: rotate(360deg); }
+}
 
 /* ── Scrollbars ──────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -279,14 +209,7 @@ body.showing-workflow .workflow-panel { display: flex; }
 ::-webkit-scrollbar-thumb:hover { background: var(--stone-deep); }
 
 /* ── Stage Pills ─────────────────────────────────────────────────────────────── */
-.stage-pill {
-  font-size: 0.68rem;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-  white-space: nowrap;
-  letter-spacing: 0.02em;
-}
+
 
 /* ── Admin Lead Statuses table — Stage select coloured left border ───────────
    data-stage is set by JS on render and oninput so CSS always reflects current
@@ -307,9 +230,12 @@ body.showing-workflow .workflow-panel { display: flex; }
 
 /* ── Customer List Skeleton ──────────────────────────────────────────────────── */
 @keyframes skeleton-shimmer {
+
   0%   { background-position: -400px 0; }
   100% { background-position: 400px 0; }
+
 }
+
 .skeleton-line {
   border-radius: var(--radius-sm);
   background: linear-gradient(90deg, var(--stone-light) 25%, var(--paper) 50%, var(--stone-light) 75%);
@@ -384,40 +310,13 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 
 /* ── Invoice list skeleton ───────────────────────────────────────────────────── */
-.skeleton-qb-row {
-  pointer-events: none;
-  cursor: default;
-}
+
 
 /* ── Stage pill button ───────────────────────────────────────────────────────── */
-.stage-pill-btn {
-  cursor: pointer;
-  transition: opacity 0.15s, filter 0.15s;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-.stage-pill-btn:hover { filter: brightness(0.93); }
+
 
 /* ── Status mini badge ───────────────────────────────────────────────────────── */
-.status-mini {
-  font-size: 0.67rem;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: var(--radius-pill);
-  white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  transition: opacity 0.15s;
-  letter-spacing: 0.02em;
-  margin-left: auto;
-  flex-shrink: 0;
-}
-.status-mini:hover { opacity: 0.75; }
-.status-mini-active   { background: #d1fae5; color: #065f46; }
-.status-mini-declined { background: #fee2e2; color: #991b1b; }
-.status-mini-complete { background: var(--orchid-tint); color: var(--orchid-deep); }
-.status-mini-remedial { background: #fef3c7; color: #b45309; }
+
 
 /* ── Card picker popup (stage / status) ──────────────────────────────────────── */
 .card-picker-popup {
@@ -459,56 +358,16 @@ body.showing-workflow .workflow-panel { display: flex; }
 .card-picker-opt--sub:hover { color: var(--ink-2); }
 .card-picker-opt--sub.card-picker-opt--active { color: var(--ink-2); font-weight: 600; }
 .ls-pill-parent { font-size: 0.7em; opacity: 0.65; font-weight: 400; margin-left: 3px; }
-.card-picker-status-active   { color: #065f46; }
-.card-picker-status-declined { color: #991b1b; }
-.card-picker-status-complete { color: var(--orchid-deep); }
-.card-picker-status-remedial { color: #b45309; }
+
 
 /* ── Archived card ───────────────────────────────────────────────────────────── */
-.card-archived { opacity: 0.5; }
-.card-archived:hover { opacity: 0.7; }
+
 
 /* ── Urgency dots ────────────────────────────────────────────────────────────── */
-.urgency-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: inline-block;
-}
-.urgency-orange { background: #d97706; }
-.urgency-red    { background: #dc2626; box-shadow: 0 0 0 2px rgba(220,38,38,0.2); }
+
 
 /* ── List filter controls ────────────────────────────────────────────────────── */
-.filter-btn {
-  font-size: .88rem;
-  font-weight: 600;
-  color: var(--ink-3);
-  background: var(--paper-deep);
-  border: 1px solid var(--stone);
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  white-space: nowrap;
-  font-family: inherit;
-  transition: background 0.15s, color 0.15s;
-  flex-shrink: 0;
-}
-.filter-btn:hover { background: var(--stone); color: var(--ink-2); }
-.filter-btn-active {
-  background: var(--plum);
-  color: #fff;
-  border-color: var(--plum);
-}
-.filter-btn-active:hover { background: #2e0f5a; }
 
-@media (pointer: coarse) {
-  .filter-btn {
-    min-height: 44px;
-    padding-top: 12px;
-    padding-bottom: 12px;
-  }
-}
 
 /* ── Room tabs ───────────────────────────────────────────────────────────────── */
 .room-tab {
@@ -533,11 +392,13 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 
 @media (pointer: coarse) {
+
   .room-tab {
     min-height: 44px;
     padding-top: 12px;
     padding-bottom: 12px;
   }
+
 }
 
 .room-tab-add {
@@ -555,86 +416,13 @@ body.showing-workflow .workflow-panel { display: flex; }
   -webkit-tap-highlight-color: transparent;
 }
 .room-tab-add:hover { color: var(--orchid); border-color: var(--orchid-soft); }
-.room-tab-wrap { display: inline-flex; align-items: stretch; }
-.room-tab-wrap .room-tab { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none; }
-.room-tab-del {
-  font-size: .88rem;
-  line-height: 1;
-  padding: 8px 10px;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  border: 1px solid var(--stone);
-  border-left: none;
-  background: var(--paper);
-  color: var(--ink-3);
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.15s, color 0.15s;
-  -webkit-tap-highlight-color: transparent;
-}
-.room-tab-del:hover { background: #fee2e2; color: #b91c1c; }
-.room-tab-wrap-active .room-tab-del {
-  background: var(--plum);
-  color: #fff;
-  border-color: var(--plum);
-}
-.room-tab-wrap-active .room-tab-del:hover { background: #b91c1c; border-color: #b91c1c; }
+
 
 /* ── Stage Cards ─────────────────────────────────────────────────────────────── */
-.stage-card {
-  background: var(--paper);
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  transition: box-shadow 0.15s;
-  box-shadow: var(--shadow-sm);
-}
-.stage-card:hover { box-shadow: var(--shadow-md); }
-.stage-current {
-  border-color: var(--orchid-soft);
-  box-shadow: 0 2px 10px rgba(139,43,255,0.12), 0 1px 3px rgba(30,24,14,0.08);
-}
-.stage-past   { opacity: 0.65; }
-.stage-future { opacity: 0.5; }
 
-.stage-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 15px 16px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
-  gap: 8px;
-  transition: background 0.1s;
-  min-height: 52px;
-}
-.stage-header-row:hover  { background: var(--paper-deep); }
-.stage-header-row:active { background: var(--paper-deep); }
 
-.stage-label        { font-size: 0.875rem; font-weight: 600; color: var(--ink-2); }
 .stage-sublabel     { font-size: 0.72rem; color: var(--ink-4); margin-top: 2px; }
-.stage-date-entered { font-size: 0.68rem; color: var(--ink-4); margin-top: 1px; opacity: 0.75; }
 
-.badge-current {
-  font-size: 0.6rem;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-}
-.badge-done {
-  font-size: 0.6rem;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-  background: #d1fae5;
-  color: #065f46;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-}
 
 /* ── Stage Statuses / Task rows ──────────────────────────────────────────────── */
 .stage-statuses {
@@ -688,11 +476,7 @@ body.showing-workflow .workflow-panel { display: flex; }
   text-decoration: line-through;
   color: var(--ink-4);
 }
-.status-hint {
-  font-size: 0.72rem;
-  color: var(--ink-4);
-  line-height: 1.4;
-}
+
 
 /* ── Lead-status tracker (vertical rail + focused panel) ───────────────────── */
 .ls-tracker {
@@ -784,117 +568,18 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 
 @media (max-width: 640px) {
+
   .ls-tracker { flex-direction: column; gap: 12px; }
   .ls-rail { flex: 0 0 auto; }
+
 }
+
 
 /* ── Stage Stepper + Panel (legacy fallback layout) ─────────────────────────── */
-.stage-stepper-wrap {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding-bottom: 4px;
-  margin-bottom: 12px;
-}
-.stage-stepper-wrap::-webkit-scrollbar { display: none; }
 
-.stage-stepper-row {
-  display: flex;
-  align-items: flex-start;
-  min-width: max-content;
-  padding: 4px 2px 0;
-}
-
-.stage-step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  position: relative;
-  flex-shrink: 0;
-  width: 68px;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.stage-step-clickable { cursor: pointer; }
-.stage-step-clickable:hover .stage-step-icon { transform: scale(1.1); }
-
-.stage-step-icon {
-  width: 24px; height: 24px;
-  border-radius: 50%;
-  border: 2px solid var(--stone-deep);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  transition: transform 0.15s, border-color 0.15s;
-  background: var(--paper);
-}
-.stage-step-done {
-  background: #059669;
-  border-color: #059669;
-}
-.stage-step-current {
-  border-width: 2px;
-}
-.stage-step-future {
-  border-color: var(--stone);
-  background: var(--paper);
-}
-
-.stage-step-label {
-  font-size: 0.6rem;
-  font-weight: 600;
-  text-align: center;
-  line-height: 1.3;
-  letter-spacing: 0.01em;
-  word-break: break-word;
-  width: 100%;
-}
-
-.stage-step-underline {
-  height: 2px;
-  width: 100%;
-  border-radius: 2px;
-}
-.stage-step-underline-empty {
-  background: transparent;
-}
-
-.stage-step-focused .stage-step-icon {
-  box-shadow: 0 0 0 3px var(--paper), 0 0 0 5px currentColor;
-}
-
-.stage-step-icon {
-  position: relative;
-}
-.stage-step-ring {
-  position: absolute;
-  top: 50%; left: 50%;
-  width: 30px; height: 30px;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  overflow: visible;
-}
-.stage-step-ring circle {
-  transition: stroke-dashoffset 300ms ease;
-}
-
-.stage-step-connector {
-  flex: 1;
-  height: 2px;
-  background: var(--stone);
-  margin-top: 11px;
-  min-width: 8px;
-  flex-shrink: 1;
-}
 
 /* ── Stage Panel ─────────────────────────────────────────────────────────────── */
-.stage-panel {
-  background: var(--paper);
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
+
 
 .stage-panel-header {
   display: flex;
@@ -955,61 +640,13 @@ body.showing-workflow .workflow-panel { display: flex; }
 .stage-nav-btn:disabled { opacity: 0.3; cursor: default; }
 
 /* ── Stage progress bar ───────────────────────────────────────────────────────── */
-.stage-panel-progress {
-  height: 4px;
-  background: var(--stone-light);
-  overflow: hidden;
-}
 
-.stage-panel-progress-bar {
-  height: 100%;
-  transition: width 0.35s ease;
-  border-radius: 0 2px 2px 0;
-}
 
 /* ── Stage advance button ─────────────────────────────────────────────────────── */
-.stage-panel-actions {
-  padding: 12px 16px;
-  border-top: 1px solid var(--stone-light);
-  display: flex;
-  justify-content: flex-start;
-}
 
-.stage-advance-btn {
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 10px 20px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: opacity 0.15s, transform 0.1s;
-  -webkit-tap-highlight-color: transparent;
-}
-.stage-advance-btn:hover  { opacity: 0.88; }
-.stage-advance-btn:active { opacity: 0.78; transform: scale(0.98); }
-
-.stage-move-back-btn {
-  margin: 0 !important;
-}
 
 /* ── Lead status row inside Sales stage panel ────────────────────────────────── */
-.stage-lead-status-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--stone-light);
-  background: var(--paper);
-}
 
-.stage-lead-status-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--ink-3);
-  flex-shrink: 0;
-}
 
 /* ── Notes / Comments ───────────────────────────────────────────────────────── */
 .notes-header {
@@ -1023,61 +660,11 @@ body.showing-workflow .workflow-panel { display: flex; }
   font-weight: 600;
   color: var(--ink-2);
 }
-.note-autosave-status {
-  font-size: 0.75rem;
-  color: var(--ink-3);
-  margin-right: auto;
-  padding-left: 8px;
-  transition: opacity 0.3s;
-}
-.btn-new-note {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--orchid);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px 0;
-}
-.btn-new-note:hover { opacity: 0.75; }
+
+
 .comment-input-area { margin-bottom: 10px; }
-.draft-resume-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: #92400e;
-  background: #fef3c7;
-  border: 1px solid #fde68a;
-  border-radius: var(--radius-md);
-  padding: 7px 12px;
-  margin-bottom: 8px;
-}
-.draft-resume-banner::before {
-  content: '↩';
-  font-size: 1rem;
-  flex-shrink: 0;
-}
-.draft-resume-banner-text { flex: 1; }
-.draft-resume-banner-close {
-  flex-shrink: 0;
-  background: transparent;
-  border: 0;
-  color: #92400e;
-  font-size: 1.1rem;
-  line-height: 1;
-  padding: 2px 6px;
-  margin: -2px -4px -2px 0;
-  cursor: pointer;
-  border-radius: var(--radius-sm, 4px);
-}
-.draft-resume-banner-close:hover { background: rgba(146, 64, 14, 0.12); }
-.comment-input-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
+
+
 .btn-save-note {
   background: var(--orchid);
   color: #fff;
@@ -1111,12 +698,7 @@ body.showing-workflow .workflow-panel { display: flex; }
   gap: 5px;
   margin-bottom: 4px;
 }
-.comment-author {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--ink-2);
-  letter-spacing: 0.01em;
-}
+
 .comment-meta-sep {
   font-size: 0.65rem;
   color: var(--ink-4);
@@ -1153,9 +735,12 @@ body.showing-workflow .workflow-panel { display: flex; }
 .toast-error   { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
 .toast-success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
 @keyframes slideUp {
+
   from { transform: translateX(-50%) translateY(8px); opacity: 0; }
   to   { transform: translateX(-50%) translateY(0);   opacity: 1; }
+
 }
+
 
 /* ── Tasks ───────────────────────────────────────────────────────────────────── */
 .task-item {
@@ -1288,9 +873,12 @@ body.showing-workflow .workflow-panel { display: flex; }
   pointer-events: none;
 }
 @keyframes bbProgress {
+
   from { width: 100%; }
   to   { width: 0%; }
+
 }
+
 .bottom-bar-msg {
   font-size: 0.875rem;
   font-weight: 500;
@@ -1328,102 +916,16 @@ body.showing-workflow .workflow-panel { display: flex; }
   transition: background 0.15s;
 }
 .bottom-bar-confirm:hover { background: var(--orchid-deep); }
-.bottom-bar-undo {
-  font-size: .88rem;
-  font-weight: 700;
-  padding: 8px 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(255,255,255,0.3);
-  background: transparent;
-  color: #fff;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.15s;
-  flex-shrink: 0;
-}
-.bottom-bar-undo:hover { background: rgba(255,255,255,0.12); }
 
-.btn-move-back {
-  font-size: .88rem;
-  font-weight: 600;
-  color: var(--orchid);
-  background: rgba(139,43,255,0.08);
-  border: 1px solid rgba(139,43,255,0.2);
-  border-radius: var(--radius-sm);
-  padding: 8px 16px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.15s;
-  margin: 0 16px 12px;
-  display: inline-block;
-}
-.btn-move-back:hover { background: rgba(139,43,255,0.15); }
 
 /* ── Customer notes ──────────────────────────────────────────────────────────── */
-.notes-textarea {
-  width: 100%;
-  min-height: 72px;
-  resize: vertical;
-  border: 1.5px solid var(--stone);
-  border-radius: var(--radius-md);
-  padding: 11px 14px;
-  font-size: 0.875rem;
-  font-family: inherit;
-  color: var(--ink-2);
-  background: var(--paper);
-  line-height: 1.55;
-  transition: border-color 0.15s, background 0.15s;
-  outline: none;
-  display: block;
-  box-sizing: border-box;
-}
-.notes-textarea:focus {
-  border-color: var(--orchid);
-  background: #fff;
-}
-.notes-textarea::placeholder { color: var(--stone-deep); }
+
 
 /* ── Installation dates ──────────────────────────────────────────────────────── */
-.install-dates-row {
-  display: flex;
-  gap: 12px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-}
-.install-date-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 140px;
-}
-.install-date-label {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--stone-deep);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.install-date-input {
-  border: 1.5px solid var(--stone);
-  border-radius: var(--radius-sm);
-  padding: 7px 10px;
-  font-size: 0.875rem;
-  font-family: inherit;
-  color: var(--ink-2);
-  background: var(--paper);
-  outline: none;
-  transition: border-color 0.15s, background 0.15s;
-  width: 100%;
-  box-sizing: border-box;
-}
-.install-date-input:focus {
-  border-color: var(--orchid);
-  background: #fff;
-}
+
 
 /* ── Utility ─────────────────────────────────────────────────────────────────── */
-.rotate-180 { transform: rotate(180deg); }
+
 
 .workflow-inner {
   max-width: 680px;
@@ -1432,8 +934,11 @@ body.showing-workflow .workflow-panel { display: flex; }
 }
 
 @media (min-width: 640px) {
+
   .workflow-inner { padding: 20px 24px 40px; }
+
 }
+
 
 /* ── Home Tab ────────────────────────────────────────────────────────────────── */
 /* The home page is fully migrated to React MUI — see
@@ -1478,19 +983,15 @@ body.showing-workflow .workflow-panel { display: flex; }
   background: var(--stone-light);
   color: var(--ink-3);
 }
-.lead-status-badge.lsb-open-deal   { background: #dbeafe; color: #1e40af; }
-.lead-status-badge.lsb-new         { background: #d1fae5; color: #065f46; }
-.lead-status-badge.lsb-in-progress { background: #fef3c7; color: #92400e; }
-.lead-status-badge.lsb-connected   { background: #ede9fe; color: #5b21b6; }
-.lead-status-badge.lsb-unqualified { background: #fee2e2; color: #991b1b; }
-.lead-status-badge.lsb-bad-timing  { background: #f3f4f6; color: #6b7280; }
+
+
 .lead-status-badge.lsb-clickable   { cursor: pointer; }
 .lead-status-badge.lsb-clickable:hover { filter: brightness(0.93); }
 .lead-status-badge.lsb-empty       { background: none; color: var(--ink-4); border: 1px dashed var(--stone); cursor: pointer; }
 .lead-status-badge.lsb-empty:hover { background: var(--paper-deep); color: var(--ink-2); }
 
 /* Sub-status affordance shown next to the lead-status pill */
-.lead-status-group { display: inline-flex; align-items: center; gap: 4px; }
+
 .lead-substatus-chip {
   display: inline-block;
   padding: 1px 6px;
@@ -1523,44 +1024,9 @@ body.showing-workflow .workflow-panel { display: flex; }
 .lead-substatus-add:hover { background: var(--paper-deep); color: var(--ink-2); }
 
 /* ── Tasks tab panel ─────────────────────────────────────────────────────────── */
-.tasks-tab {
-  position: fixed;
-  top: var(--header-h);
-  bottom: var(--nav-h);
-  left: 0; right: 0;
-  overflow-y: auto;
-  background: var(--paper);
-  -webkit-overflow-scrolling: touch;
-}
-.tasks-tab.hidden { display: none; }
 
-.tasks-inner {
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 20px 16px calc(40px + env(safe-area-inset-bottom));
-}
-@media (min-width: 640px) {
-  .tasks-inner { padding: 28px 24px 48px; }
-}
-
-.tasks-section-heading {
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-4);
-  margin-bottom: 10px;
-}
 
 /* ── Task groups ─────────────────────────────────────────────────────────────── */
-.task-group { margin-bottom: 20px; }
-.task-group-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  margin-bottom: 6px;
-}
 
 
 /* ── Tailwind colour overrides ───────────────────────────────────────────────── */
@@ -1571,13 +1037,11 @@ body.showing-workflow .workflow-panel { display: flex; }
 .border-blue-400, .border-blue-600 { border-color: var(--orchid-soft) !important; }
 .focus\:border-blue-400:focus { border-color: var(--orchid-soft) !important; }
 .focus\:bg-white:focus { background-color: var(--paper) !important; }
-.bg-indigo-600 { background-color: var(--orchid) !important; }
+
 
 /* Tailwind bg/text overrides for slate tones → brand */
-.bg-slate-100  { background-color: var(--paper) !important; }
-.bg-slate-50   { background-color: var(--paper) !important; }
-.text-slate-800 { color: var(--ink-1) !important; }
-.text-slate-600 { color: var(--ink-3) !important; }
+
+
 .text-slate-500 { color: var(--ink-4) !important; }
 .text-slate-400 { color: var(--stone-deep) !important; }
 .border-slate-200 { border-color: var(--stone) !important; }
@@ -1664,27 +1128,8 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   font-size: 0.9rem; color: #64748b;
   margin: 0 0 20px; line-height: 1.5;
 }
-.access-banner {
-  background: #fef3c7; color: #92400e;
-  border: 1px solid #fde68a; border-radius: 8px;
-  padding: 10px 12px; font-size: 0.85rem;
-  margin-bottom: 16px;
-}
-.access-form { display: flex; flex-direction: column; gap: 14px; }
-.access-label { display: flex; flex-direction: column; gap: 6px; }
-.access-label > span {
-  font-size: 0.8rem; font-weight: 500;
-  color: #475569; text-transform: uppercase; letter-spacing: 0.04em;
-}
-.access-label input {
-  border: 1px solid #cbd5e1; border-radius: 8px;
-  padding: 10px 12px; font-size: 0.95rem;
-  outline: none; transition: border-color 0.15s, box-shadow 0.15s;
-}
-.access-label input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
-}
+
+
 .access-submit {
   margin-top: 4px;
   background: #0f172a; color: #fff;
@@ -1704,30 +1149,16 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   margin-bottom: 16px;
   font-weight: 700;
 }
-.access-message {
-  margin-top: 16px; padding: 12px 14px;
-  border-radius: 8px; font-size: 0.9rem;
-}
-.access-message.success {
-  background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;
-}
-.access-message.error {
-  background: #fee2e2; color: #991b1b; border: 1px solid #fecaca;
-}
+
+
 .access-footer {
   margin-top: 20px; padding-top: 16px; border-top: 1px solid #e2e8f0;
   font-size: 0.85rem; color: #64748b; text-align: center;
 }
 .access-footer a { color: #3b82f6; text-decoration: none; }
 .access-footer a:hover { text-decoration: underline; }
-.access-divider {
-  display: flex; align-items: center; gap: 10px;
-  margin: 20px 0 16px; color: #94a3b8; font-size: 0.8rem;
-}
-.access-divider::before,
-.access-divider::after {
-  content: ''; flex: 1; height: 1px; background: #e2e8f0;
-}
+
+
 .access-input {
   display: block; width: 100%; box-sizing: border-box;
   border: 1px solid #cbd5e1; border-radius: 8px;
@@ -1775,6 +1206,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 
 /* ── Reduced motion ──────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -1782,30 +1214,24 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  .project-card:hover { transform: none; }
+
 }
 
+
 /* ── Utility helpers ─────────────────────────────────────────────────────────── */
-.flex-spacer      { flex: 1; }
-.flex-fill        { flex: 1; min-width: 0; }
+
+
 .flex-shrink-0    { flex-shrink: 0; }
-.field-full       { width: 100%; }
-.form-field-full  { grid-column: 1 / -1; }
+
+
 .fw-600           { font-weight: 600; }
 .mt-1             { margin-top: 2px; }
-.ml-1             { margin-left: 4px; }
-.text-faint       { color: var(--ink-4); }
-.text-secondary   { color: var(--ink-3); }
-.text-faint-sm    { color: var(--ink-4); font-size: .72rem; }
-.text-faint-xs    { color: var(--ink-4); font-size: .75rem; }
-.td-date          { color: var(--ink-4); font-size: .78rem; }
-.td-sm            { font-size: .78rem; }
-.td-secondary     { color: var(--ink-3); }
+
+
 .card-desc        { font-size: .82rem; color: var(--ink-3); margin: 0 0 14px; }
-.card-note        { font-size: .75rem; color: var(--ink-4); margin: 10px 0 0; }
+
 .count-muted      { color: var(--ink-4); font-weight: 400; }
-.picker-empty-msg   { padding: 12px; color: var(--ink-4); font-size: 0.875rem; }
-.profile-field-col  { flex-direction: column; gap: 6px; }
+
 
 /* ── Contact edit button (workflow header) ───────────────────────────────────── */
 .contact-edit-btn {
@@ -1817,105 +1243,18 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .contact-edit-btn:hover { color: var(--orchid); }
 
 /* ── Inline contact edit (customer detail) ───────────────────────────────────── */
-.contact-edit-inline {
-  background: #fff;
-  border: 1px solid var(--stone);
-  border-radius: var(--radius);
-  padding: 18px 20px;
-  margin: 12px 16px 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-}
-.contact-edit-inline-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 14px;
-}
-.contact-edit-inline-title {
-  font-size: 0.82rem; font-weight: 700; color: var(--ink-3);
-  text-transform: uppercase; letter-spacing: 0.05em;
-}
-.contact-edit-inline-status {
-  font-size: 0.75rem; color: var(--ink-4); font-style: italic;
-}
+
+
 /* ── Empty state (sales workflow panel) ──────────────────────────────────────── */
-.empty-state-text    { color: var(--stone-deep); }
-.empty-state-icon    { display: block; margin: 0 auto 16px; opacity: 0.4; }
-.empty-state-heading { font-weight: 600; color: var(--ink-3); font-size: 1rem; margin: 0; }
-.empty-state-sub     { font-size: 0.875rem; margin-top: 4px; color: var(--stone-deep); margin-bottom: 0; }
-.sales-goto-customers-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 16px;
-  padding: 9px 20px;
-  background: var(--plum);
-  color: #fff;
-  border-radius: var(--radius-pill);
-  font-size: 0.82rem;
-  font-weight: 600;
-  text-decoration: none;
-  transition: background 0.15s;
-}
-.sales-goto-customers-btn:hover { background: #3d0f7a; }
+
+
 #stage-filter        { font-size: 13px; }
 
 /* ── Admin photo approval ───────────────────────────────────────────────────── */
-.photo-approval-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 16px;
-}
-.photo-approval-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 14px;
-  border: 1px solid var(--paper-deep);
-  border-radius: var(--radius);
-  background: var(--paper);
-}
-.photo-approval-img {
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-  border: 2px solid var(--stone);
-}
-.photo-approval-info {
-  flex: 1;
-  min-width: 0;
-}
-.photo-approval-name {
-  font-weight: 700;
-  font-size: 0.9rem;
-  color: var(--ink-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.photo-approval-email {
-  font-size: 0.78rem;
-  color: var(--ink-4);
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.photo-approval-btns {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.btn-sm {
-  font-size: 0.78rem;
-  padding: 5px 12px;
-}
+
 
 /* ── Sales tab: projects-style layout with overlay workflow panel ─────────────── */
-.sales-layout {
-  position: relative;
-}
+
 .sales-list-panel {
   width: 100% !important;
   overflow-y: auto;
@@ -1925,8 +1264,11 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   background: var(--paper);
 }
 @media (min-width: 768px) {
+
   .sales-list-panel { overflow: hidden; }
+
 }
+
 .sales-list-panel > #sales-view {
   flex: 1;
   display: flex;
@@ -1973,35 +1315,13 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   flex-direction: column;
   overflow: hidden;
 }
-.sales-layout #workflow-panel {
-  position: absolute;
-  inset: 0;
-  z-index: var(--z-raised);
-  transform: translateX(105%);
-  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex !important;
-  flex-direction: column;
-  overflow-y: auto;
-  background: var(--paper);
-}
-body.showing-workflow .sales-layout #workflow-panel {
-  transform: translateX(0);
-}
+
+
 /* On the sales page the back button should always be visible */
-.sales-layout .back-btn {
-  display: flex !important;
-}
+
 
 /* ── Sales board: 3-column layout ────────────────────────────────────────── */
 
-.eq-ls-filter-row {
-  display: flex;
-  align-items: flex-start;
-  padding: 10px 10px;
-  background: var(--paper);
-  border-bottom: 1px solid var(--stone);
-  flex-shrink: 0;
-}
 
 /* Warning banner shown on the room-assignments view when stale data is served */
 .room-stale-banner {
@@ -2019,34 +1339,10 @@ body.showing-workflow .sales-layout #workflow-panel {
 .room-stale-banner span {
   flex: 1;
 }
-.room-stale-banner-dismiss {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-  color: #92400e;
-  padding: 0 2px;
-  flex-shrink: 0;
-}
-.room-stale-banner-dismiss:hover {
-  color: #78350f;
-}
 
 
 /* Subtle stale-counts dot shown when X-Cache-Status: stale is received */
-.ls-stale-hint {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.55rem;
-  line-height: 1;
-  color: var(--ink-3, #94a3b8);
-  cursor: default;
-  flex-shrink: 0;
-  margin-left: 4px;
-  vertical-align: middle;
-}
+
 
 /* Inline notice shown when counts fail to load (hard error / 5xx / network) */
 .ls-counts-error-notice {
@@ -2083,472 +1379,18 @@ body.showing-workflow .sales-layout #workflow-panel {
 /* .list-panel-fw > #customers-view removed — list-panel-fw is no longer used
    now that the customers page is a React island (#tab-customers). */
 
-#customers-view .customer-project-card {
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: box-shadow 0.12s, border-color 0.12s;
-}
-#customers-view .customer-project-card:hover {
-  border-color: var(--orchid);
-  box-shadow: var(--shadow-md);
-}
-#customers-view .customer-project-card.customer-project-card-selected {
-  border-color: var(--orchid);
-  background: var(--orchid-tint);
-}
-#customers-view .customer-project-card.card-archived { opacity: 0.6; }
-#customers-view .customer-project-card:focus-visible {
-  outline: 2px solid var(--orchid);
-  outline-offset: 2px;
-  border-color: var(--orchid);
-  box-shadow: var(--shadow-md);
-}
 
 /* .customer-list-secondary / .customer-list-email removed — no longer used
    after the customers page migrated to React (#tab-customers). */
 
 /* ── Customer list card (redesign: one card per contact) ─────────────────────── */
-.cl-card-main {
-  padding: 12px 14px 10px;
-}
-.cl-card-name-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  margin-bottom: 8px;
-}
-.cl-card-name {
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--ink-1);
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-.cl-card-pills {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.cl-card-footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--stone);
-}
-.cl-badge {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: var(--ink-3);
-  background: var(--paper);
-  border: 1px solid var(--stone);
-  border-radius: 4px;
-  padding: 2px 6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 220px;
-}
-.cl-badge-email { max-width: 200px; }
-.cl-badge-phone { max-width: 160px; }
-.cl-badge-hsid {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.68rem;
-  color: var(--ink-4);
-  background: transparent;
-  border-color: transparent;
-  padding-left: 0;
-}
+
 
 /* ── Customer list pagination ─────────────────────────────────────────────────── */
-.cl-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px 12px;
-  flex-shrink: 0;
-}
-.cl-stage-filter-note {
-  font-size: 0.72rem;
-  color: var(--ink-3);
-  background: var(--surface-2, #f8f5ff);
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: 6px;
-  padding: 6px 10px;
-  margin: 0 0 8px;
-}
-.cl-pagination-info {
-  font-size: 0.75rem;
-  color: var(--ink-3);
-  font-weight: 500;
-  white-space: nowrap;
-}
-.cl-pagination-btns {
-  display: flex;
-  gap: 6px;
-}
-.cl-pagination-btn {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 4px 12px;
-  border-radius: 20px;
-  border: 1.5px solid var(--border);
-  background: var(--surface);
-  color: var(--ink-1);
-  cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-.cl-pagination-btn:hover:not(:disabled) {
-  background: var(--orchid-tint);
-  border-color: var(--orchid);
-  color: var(--orchid);
-}
-.cl-pagination-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-.cl-pagination-btn--active {
-  background: var(--orchid);
-  border-color: var(--orchid);
-  color: #fff;
-  cursor: default;
-}
-.cl-pagination-btn--active:hover {
-  background: var(--orchid);
-  border-color: var(--orchid);
-  color: #fff;
-}
-.cl-pagination-ellipsis {
-  font-size: 0.75rem;
-  color: var(--ink-3);
-  line-height: 1;
-  padding: 0 2px;
-  display: flex;
-  align-items: center;
-  user-select: none;
-}
-.cl-pagination-jump {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-}
-.cl-pagination-jump-label {
-  font-size: 0.72rem;
-  color: var(--ink-3);
-  white-space: nowrap;
-  font-weight: 500;
-}
-.cl-pagination-jump-input {
-  width: 44px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  padding: 4px 6px;
-  border-radius: 8px;
-  border: 1.5px solid var(--border);
-  background: var(--surface);
-  color: var(--ink-1);
-  text-align: center;
-  line-height: 1.4;
-  -moz-appearance: textfield;
-}
-.cl-pagination-jump-input::-webkit-inner-spin-button,
-.cl-pagination-jump-input::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.cl-pagination-jump-input:focus {
-  outline: none;
-  border-color: var(--orchid);
-}
-.cl-pagination-jump-btn {
-  padding: 4px 10px;
-}
 
-@media (max-width: 540px) {
-  .cl-pagination-page,
-  .cl-pagination-ellipsis {
-    display: none;
-  }
-}
-
-@media (max-width: 420px) {
-  .cl-pagination-info,
-  .cl-pagination-jump-label {
-    display: none;
-  }
-}
 
 /* ── Ideas & Feedback ─────────────────────────────────────────────────────────── */
-.ideas-page-wrap {
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 16px 14px calc(80px + env(safe-area-inset-bottom));
-}
 
-.ideas-header-bar {
-  margin-bottom: 14px;
-}
-
-.ideas-page-title {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--ink-1);
-  margin: 0 0 3px;
-}
-
-.ideas-page-subtitle {
-  font-size: 0.82rem;
-  color: var(--ink-3);
-  margin: 0;
-}
-
-.ideas-submit-card {
-  background: #fff;
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-xl);
-  padding: 14px;
-  margin-bottom: 16px;
-  box-shadow: var(--shadow-sm);
-}
-
-.ideas-textarea {
-  width: 100%;
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
-  font-family: inherit;
-  font-size: 0.875rem;
-  color: var(--ink-1);
-  background: var(--paper);
-  resize: vertical;
-  outline: none;
-  transition: border-color 0.15s;
-  box-sizing: border-box;
-}
-.ideas-textarea:focus {
-  border-color: var(--orchid);
-}
-.ideas-textarea::placeholder {
-  color: var(--ink-4);
-}
-
-.ideas-form-footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
-}
-
-.ideas-submit-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--orchid);
-  color: #fff;
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 8px 16px;
-  font-family: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.ideas-submit-btn:hover { background: var(--orchid-deep); }
-.ideas-submit-btn:disabled { opacity: 0.6; cursor: default; }
-
-.ideas-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.ideas-loading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 20px;
-  font-size: 0.875rem;
-  color: var(--ink-3);
-}
-
-.ideas-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 20px;
-  font-size: 0.875rem;
-  color: var(--ink-3);
-  text-align: center;
-}
-
-.ideas-retry-btn {
-  margin-top: 10px;
-  padding: 6px 14px;
-  border: 1px solid var(--stone-deep);
-  border-radius: var(--radius-md);
-  background: #fff;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.82rem;
-  color: var(--ink-2);
-}
-.ideas-retry-btn:hover { background: var(--paper); }
-
-.idea-card {
-  background: #fff;
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-xl);
-  padding: 14px;
-  box-shadow: var(--shadow-sm);
-}
-.idea-card-skeleton { pointer-events: none; }
-
-.idea-card-body {
-  font-size: 0.875rem;
-  color: var(--ink-1);
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-  margin-bottom: 10px;
-}
-
-.idea-card-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.idea-author {
-  font-size: 0.78rem;
-  color: var(--ink-3);
-  font-weight: 600;
-}
-
-.idea-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: none;
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-pill);
-  padding: 4px 10px;
-  font-family: inherit;
-  font-size: 0.75rem;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.idea-toggle-btn:hover {
-  background: var(--paper);
-  color: var(--ink-1);
-  border-color: var(--stone-deep);
-}
-
-.idea-comments-section {
-  margin-top: 12px;
-  border-top: 1px solid var(--stone-light);
-  padding-top: 12px;
-}
-
-.idea-comments-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.idea-comments-loading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.8rem;
-  color: var(--ink-3);
-  padding: 4px 0;
-}
-
-.idea-comments-empty {
-  font-size: 0.8rem;
-  color: var(--ink-4);
-  padding: 2px 0;
-}
-
-.idea-comment {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.idea-comment-author {
-  font-size: 0.73rem;
-  font-weight: 700;
-  color: var(--ink-2);
-}
-
-.idea-comment-body {
-  font-size: 0.82rem;
-  color: var(--ink-1);
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.idea-reply-form {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.idea-reply-input {
-  flex: 1;
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-md);
-  padding: 7px 10px;
-  font-family: inherit;
-  font-size: 0.82rem;
-  color: var(--ink-1);
-  background: var(--paper);
-  outline: none;
-  transition: border-color 0.15s;
-  min-width: 0;
-}
-.idea-reply-input:focus { border-color: var(--orchid); }
-.idea-reply-input::placeholder { color: var(--ink-4); }
-
-.idea-reply-btn {
-  flex-shrink: 0;
-  background: var(--orchid-tint);
-  color: var(--orchid-deep);
-  border: 1px solid rgba(139,43,255,0.25);
-  border-radius: var(--radius-md);
-  padding: 7px 12px;
-  font-family: inherit;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.idea-reply-btn:hover { background: var(--orchid-soft); color: #fff; border-color: var(--orchid-soft); }
-.idea-reply-btn:disabled { opacity: 0.6; cursor: default; }
-
-.spinner-sm {
-  width: 13px; height: 13px;
-  border-width: 2px;
-}
 
 /* ── Command Palette ─────────────────────────────────────────────────────────── */
 .cp-overlay {
@@ -2713,18 +1555,8 @@ body.showing-workflow .sales-layout #workflow-panel {
    Read-only documentation panel rendered by the React island at
    src/react/pages/DesignSystemPage.tsx (built to /react/main.js).
 ─────────────────────────────────────────────────────────────────────────────── */
-.ds-section { margin-bottom: 28px; }
-.ds-section h3 {
-  font-size: .92rem; font-weight: 700; color: var(--ink-1);
-  margin: 0 0 6px; letter-spacing: -.005em;
-}
-.ds-section p.ds-section-sub {
-  font-size: .82rem; color: var(--ink-3); margin: 0 0 14px; line-height: 1.5;
-}
-.ds-swatch-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 12px;
-}
+
+
 .ds-swatch {
   border: 1px solid var(--stone); border-radius: var(--radius-lg);
   overflow: hidden; background: var(--paper);
@@ -2734,65 +1566,10 @@ body.showing-workflow .sales-layout #workflow-panel {
 .ds-swatch-meta { padding: 8px 10px; font-size: .72rem; line-height: 1.4; }
 .ds-swatch-name { font-weight: 700; color: var(--ink-1); }
 .ds-swatch-value { color: var(--ink-3); }
-.ds-type-row {
-  display: flex; align-items: baseline; gap: 16px;
-  padding: 10px 0; border-bottom: 1px solid var(--paper);
-}
-.ds-type-row:last-child { border-bottom: none; }
-.ds-type-label {
-  font-size: .72rem; color: var(--ink-4); font-family: ui-monospace, monospace;
-  min-width: 110px;
-}
-.ds-buttons-row, .ds-pills-row, .ds-empty-grid {
-  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
-}
-.ds-skeleton-stack { display: flex; flex-direction: column; gap: 8px; max-width: 340px; }
-.ds-z-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
-.ds-z-table th, .ds-z-table td {
-  text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--paper);
-  font-family: ui-monospace, monospace;
-}
-.ds-z-table th { color: var(--ink-4); font-weight: 700; }
-.ds-roadmap {
-  background: var(--paper); border: 1px solid var(--stone-light);
-  border-radius: var(--radius-lg); padding: 16px 18px;
-  font-size: .85rem; color: var(--ink-2); line-height: 1.55;
-}
-.ds-roadmap h4 {
-  font-size: .82rem; font-weight: 700; margin: 14px 0 6px;
-  color: var(--ink-1); text-transform: uppercase; letter-spacing: .04em;
-}
-.ds-roadmap h4:first-child { margin-top: 0; }
-.ds-roadmap code {
-  background: var(--paper); padding: 1px 5px;
-  border-radius: var(--radius-sm); font-size: .78em;
-}
-.ds-roadmap table { width: 100%; border-collapse: collapse; margin: 6px 0 4px; }
-.ds-roadmap th, .ds-roadmap td {
-  text-align: left; padding: 6px 10px;
-  border-bottom: 1px solid var(--paper); font-size: .8rem;
-}
-.ds-roadmap th { font-weight: 700; color: var(--ink-3); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+
 
 /* Demo helpers reused inside the Design System panel */
-.ds-empty-box {
-  border: 1px dashed var(--stone-deep); border-radius: var(--radius-lg);
-  padding: 28px 16px; text-align: center; color: var(--ink-3);
-  font-size: .85rem; min-width: 220px; flex: 1;
-}
-.ds-stage-tabbar {
-  display: flex; gap: 4px; border-bottom: 2px solid var(--stone);
-  padding-bottom: 0; overflow-x: auto;
-}
-.ds-stage-tab {
-  background: none; border: none; padding: 8px 14px;
-  font: inherit; font-weight: 600; font-size: .82rem; color: var(--ink-3);
-  cursor: pointer; border-bottom: 2px solid transparent;
-  margin-bottom: -2px; border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  white-space: nowrap;
-}
-.ds-stage-tab:hover { color: var(--ink-1); background: var(--paper); }
-.ds-stage-tab.is-active { color: var(--plum); border-bottom-color: var(--plum); }
+
 
 /* Shared empty-state block (used by renderEmptyState helper) */
 .ui-empty {
@@ -2885,7 +1662,7 @@ body.showing-workflow .sales-layout #workflow-panel {
   text-transform: uppercase; letter-spacing: .06em;
   color: var(--ink-3); margin: 0 0 16px;
 }
-.card-count { font-weight: 400; color: var(--ink-4); }
+
 
 /* Privilege level / status pill */
 .lvl {
@@ -2894,21 +1671,10 @@ body.showing-workflow .sales-layout #workflow-panel {
   font-size: .7rem; font-weight: 700;
   text-transform: capitalize; letter-spacing: .02em;
 }
-.lvl-viewer  { background: #f3f4f6; color: #6b7280; }
-.lvl-member  { background: #e5e7eb; color: #374151; }
-.lvl-manager { background: #6b7280; color: #fff; }
-.lvl-admin   { background: #111827; color: #fff; }
+
+
 /* User-status pill variants (re-skinned .lvl badges used on the Team table). */
-.lvl-needs-info {
-  background: var(--status-warn-bg);
-  color: #92400e;
-  border: 1px solid #fde68a;
-}
-.lvl-active {
-  background: var(--status-success-bg);
-  color: #166534;
-  border: 1px solid #bbf7d0;
-}
+
 
 /* Status badges */
 .badge {
@@ -2916,21 +1682,18 @@ body.showing-workflow .sales-layout #workflow-panel {
   border-radius: var(--radius-pill);
   font-size: .7rem; font-weight: 600; text-transform: capitalize;
 }
-.badge-pending  { background: var(--status-warn-bg); color: #92400e; }
-.badge-approved { background: var(--status-success-bg); color: #166534; }
-.badge-rejected { background: var(--status-danger-bg); color: var(--status-danger-text); }
+
 
 /* Secondary button variants. Pairs with the global .btn base defined above.
    .btn-primary stays scoped under .admin-page (admin uses plum, the global
    .btn-primary used elsewhere is orchid). */
-.btn-danger  { background: var(--paper); color: var(--status-danger-text); border-color: #fecaca; }
-.btn-danger:hover:not(:disabled)  { background: var(--status-danger-bg); }
+
+
 .btn-ghost   { background: var(--paper); color: var(--ink-2); border-color: var(--stone); }
 .btn-ghost:hover:not(:disabled)   { background: var(--paper); }
 .btn-approve { background: #059669; color: #fff; border: none; }
 .btn-approve:hover:not(:disabled) { background: #047857; }
-.btn-reject  { background: var(--paper); color: var(--status-danger-text); border-color: #fecaca; }
-.btn-reject:hover:not(:disabled)  { background: var(--status-danger-bg); }
+
 
 /* Field inputs (compact text input used in admin forms and inline edit rows). */
 .field {
@@ -2943,7 +1706,7 @@ body.showing-workflow .sales-layout #workflow-panel {
   transition: border-color .15s;
 }
 .field:focus { border-color: var(--orchid); }
-.field-upper { text-transform: uppercase; }
+
 
 /* Modal */
 .modal-overlay {
@@ -2961,15 +1724,7 @@ body.showing-workflow .sales-layout #workflow-panel {
   padding: 24px;
   max-height: 90vh; overflow-y: auto;
 }
-.modal--sm  { max-width: 440px; }
-.modal-title { font-size: 1rem; font-weight: 700; margin: 0 0 2px; color: var(--ink-1); }
-.modal-sub   { font-size: .78rem; color: var(--ink-4); margin: 0 0 18px; }
-.modal-err   { font-size: .8rem; color: var(--status-danger-text); margin-top: 10px; display: none; }
-.modal-actions {
-  display: flex; gap: 8px; justify-content: flex-end;
-  margin-top: 20px; padding-top: 16px;
-  border-top: 1px solid var(--stone);
-}
+
 
 /* ── Admin page ─────────────────────────────────────────────────────────────
    Rules that genuinely live only inside the admin shell. The .admin-page
@@ -2985,7 +1740,7 @@ body.showing-workflow .sales-layout #workflow-panel {
    add-member form, perm-toggle, checklist, avatar/user-cell, etc.) were
    removed. The surviving rules below are annotated with their consumers.
 ─────────────────────────────────────────────────────────────────────────── */
-.admin-page .cp-hint-bar { display: none !important; }
+
 /* Hide the search-shortcut hint inside the MUI GlobalHeader on /admin so the
    admin-tab bar doesn't compete with the search affordance. */
 .admin-page #app-header-mount [aria-label^="Search ("] > span:last-child { display: none; }
@@ -3091,8 +1846,11 @@ body.showing-workflow .sales-layout #workflow-panel {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;
 }
 @media (max-width: 640px) {
+
   .ss-action-hint { display: none; }
+
 }
+
 
 /* Small reusable text helpers used inside admin template literals (replacing
    recurring `style="font-size:.82rem;color:…"` attributes). */
