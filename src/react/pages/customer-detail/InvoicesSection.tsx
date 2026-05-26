@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Contact, QBInvoice } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { InvoiceDetailDrawer } from '../../components/InvoiceDetailDrawer';
@@ -57,15 +57,33 @@ export function InvoicesSection({ contact, qb }: Props) {
   const [drawerOpen, setDrawerOpen]   = useState(false);
   const [drawerInvId, setDrawerInvId] = useState<string | null>(null);
 
-  if (!qb.statusKnown) return null;
-  if (!qb.connected) return null;
-
   const matched = qb.loaded ? matchInvoices(contact, qb.invoices) : [];
   const allIds  = matched.map(inv => inv.Id);
+
+  useEffect(() => {
+    if (!qb.loaded) return;
+    const hash = window.location.hash;
+    if (hash.startsWith('#inv-')) {
+      const id = hash.slice(5);
+      if (id && allIds.includes(id)) {
+        setDrawerInvId(id);
+        setDrawerOpen(true);
+      }
+    }
+  }, [qb.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!qb.statusKnown) return null;
+  if (!qb.connected) return null;
 
   function openDrawer(invId: string) {
     setDrawerInvId(invId);
     setDrawerOpen(true);
+    window.location.hash = `inv-${invId}`;
+  }
+
+  function closeDrawer() {
+    setDrawerOpen(false);
+    history.replaceState(null, '', window.location.pathname + window.location.search);
   }
 
   return (
@@ -120,8 +138,8 @@ export function InvoicesSection({ contact, qb }: Props) {
         open={drawerOpen}
         invId={drawerInvId}
         allIds={allIds}
-        onClose={() => setDrawerOpen(false)}
-        onNavigate={id => setDrawerInvId(id)}
+        onClose={closeDrawer}
+        onNavigate={id => { setDrawerInvId(id); window.location.hash = `inv-${id}`; }}
         isAdmin={isAdmin}
       />
     </>

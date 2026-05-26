@@ -347,7 +347,7 @@ export function InvoiceDetailDrawer({
             <Typography variant="caption" color="text.secondary">{inv.customerName}</Typography>
           )}
         </Box>
-        <IconButton onClick={handleClose} size="small" sx={{ ml: 1, mt: 0.5 }}>
+        <IconButton onClick={handleClose} size="small" sx={{ ml: 1, mt: 0.5 }} aria-label="Close">
           <CloseIcon fontSize="small" />
         </IconButton>
       </Box>
