@@ -446,6 +446,7 @@ export function CustomerDetailPage() {
       setGoogleConnected(false);
       setEmails([]);
       setEmailsError(null);
+      setEmailsLoading(false);
     };
     window.addEventListener('mo:google-auth-disconnected', handler);
     return () => window.removeEventListener('mo:google-auth-disconnected', handler);
