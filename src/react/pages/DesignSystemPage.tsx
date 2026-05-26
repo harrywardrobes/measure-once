@@ -100,6 +100,9 @@ import {
   HomePageSkeleton,
   ProfilePageSkeleton,
   AdminTeamPageSkeleton,
+  AdminSettingsPageSkeleton,
+  CardActionsPageSkeleton,
+  ActionHandlersPageSkeleton,
 } from '../components/PageLoadingSkeleton';
 
 /**
@@ -1228,6 +1231,39 @@ export function DesignSystemPage() {
 
 <Suspense fallback={<AdminTeamPageSkeleton />}>
   <AdminTeamPage />
+</Suspense>`}
+          />
+
+          <ComponentShowcase
+            name="AdminSettingsPageSkeleton"
+            description="Shape-matched skeleton for the Admin Settings tab: integrations card with HubSpot status row, lead-status table rows, and add-new-status inset form."
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><AdminSettingsPageSkeleton forceVisible /></Box>}
+            code={`import { AdminSettingsPageSkeleton } from '../components/PageLoadingSkeleton';
+
+<Suspense fallback={<AdminSettingsPageSkeleton />}>
+  <AdminSettingsPage />
+</Suspense>`}
+          />
+
+          <ComponentShowcase
+            name="CardActionsPageSkeleton"
+            description="Shape-matched skeleton for the Card Actions admin tab: single card with heading, save button, table header row, and five stage-by-status rows with input outlines."
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><CardActionsPageSkeleton forceVisible /></Box>}
+            code={`import { CardActionsPageSkeleton } from '../components/PageLoadingSkeleton';
+
+<Suspense fallback={<CardActionsPageSkeleton />}>
+  <CardActionsPage />
+</Suspense>`}
+          />
+
+          <ComponentShowcase
+            name="ActionHandlersPageSkeleton"
+            description="Shape-matched skeleton for the Action Handlers admin tab: single card with heading and six handler rows each showing action label, stage chip, handler chip, and edit/delete icons."
+            demo={<Box sx={{ width: '100%', bgcolor: 'background.paper' }}><ActionHandlersPageSkeleton forceVisible /></Box>}
+            code={`import { ActionHandlersPageSkeleton } from '../components/PageLoadingSkeleton';
+
+<Suspense fallback={<ActionHandlersPageSkeleton />}>
+  <ActionHandlersPage />
 </Suspense>`}
           />
         </>

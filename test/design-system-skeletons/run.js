@@ -1,13 +1,14 @@
 'use strict';
 // test/design-system-skeletons/run.js
 //
-// End-to-end test that confirms ProfilePageSkeleton and AdminTeamPageSkeleton
-// are rendered in the design system gallery (DesignSystemPage → Skeletons tab)
-// when the page is opened as an admin.
+// End-to-end test that confirms ProfilePageSkeleton, AdminTeamPageSkeleton,
+// AdminSettingsPageSkeleton, CardActionsPageSkeleton, and
+// ActionHandlersPageSkeleton are rendered in the design system gallery
+// (DesignSystemPage → Skeletons tab) when the page is opened as an admin.
 //
-// Both skeletons are rendered with `forceVisible` in DesignSystemPage, so they
-// appear immediately without any network interaction.  No request interception
-// is needed.
+// All five skeletons are rendered with `forceVisible` in DesignSystemPage, so
+// they appear immediately without any network interaction.  No request
+// interception is needed.
 //
 // Strategy:
 //   1. Boot the server with the privileges harness.
@@ -355,6 +356,39 @@ async function main() {
       adminTeamCount > 0,
     );
 
+    // ── AdminSettingsPageSkeleton ─────────────────────────────────────────
+    console.log('\n  [AdminSettingsPageSkeleton]');
+
+    const adminSettingsCount = await skeletonCountForComponent(page, 'AdminSettingsPageSkeleton');
+    record(
+      'AdminSettingsPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+      'count > 0 inside the AdminSettingsPageSkeleton Paper wrapper',
+      `count=${adminSettingsCount}`,
+      adminSettingsCount > 0,
+    );
+
+    // ── CardActionsPageSkeleton ───────────────────────────────────────────
+    console.log('\n  [CardActionsPageSkeleton]');
+
+    const cardActionsCount = await skeletonCountForComponent(page, 'CardActionsPageSkeleton');
+    record(
+      'CardActionsPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+      'count > 0 inside the CardActionsPageSkeleton Paper wrapper',
+      `count=${cardActionsCount}`,
+      cardActionsCount > 0,
+    );
+
+    // ── ActionHandlersPageSkeleton ────────────────────────────────────────
+    console.log('\n  [ActionHandlersPageSkeleton]');
+
+    const actionHandlersCount = await skeletonCountForComponent(page, 'ActionHandlersPageSkeleton');
+    record(
+      'ActionHandlersPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+      'count > 0 inside the ActionHandlersPageSkeleton Paper wrapper',
+      `count=${actionHandlersCount}`,
+      actionHandlersCount > 0,
+    );
+
     // ── Page errors ───────────────────────────────────────────────────────
     record(
       'no uncaught page errors during design-system skeleton rendering',
@@ -413,13 +447,16 @@ async function writeReport(runId, findings) {
     '  are present inside it.  The skeleton renders immediately because',
     '  `DesignSystemPage` passes `forceVisible` to the component.',
     '- **(AdminTeamPageSkeleton)** Same pattern for `AdminTeamPageSkeleton`.',
+    '- **(AdminSettingsPageSkeleton)** Same pattern for `AdminSettingsPageSkeleton`.',
+    '- **(CardActionsPageSkeleton)** Same pattern for `CardActionsPageSkeleton`.',
+    '- **(ActionHandlersPageSkeleton)** Same pattern for `ActionHandlersPageSkeleton`.',
     '- **(runtime errors)** Asserts no `pageerror` or `console.error` events',
     '  during the design-system skeleton rendering.',
     '',
     '## Notes',
     '',
     '- Requires `public/react/main.js`; run `npm run build:react` first.',
-    '- No request interception is needed because both skeletons use `forceVisible`',
+    '- No request interception is needed because all skeletons use `forceVisible`',
     '  and render without any API calls.',
     '- The test targets the design-system gallery showcase, not the real',
     '  page-load Suspense skeletons.',

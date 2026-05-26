@@ -513,8 +513,8 @@ export function AdminAuditLogPageSkeleton() {
  *     + Lead Statuses heading/Save row + table placeholder rows
  *     + "Add new status" inset with key / stage / label fields + button
  */
-export function AdminSettingsPageSkeleton() {
-  const visible = useVisible();
+export function AdminSettingsPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
   if (!visible) return null;
 
   return (
@@ -593,8 +593,8 @@ export function AdminSettingsPageSkeleton() {
  *   • Single card — heading + subtitle + Save button
  *     + table rows (stage label column + a few lead-status label inputs)
  */
-export function CardActionsPageSkeleton() {
-  const visible = useVisible();
+export function CardActionsPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
   if (!visible) return null;
 
   return (
@@ -640,8 +640,8 @@ export function CardActionsPageSkeleton() {
  *   • Single card — heading + subtitle
  *     + handler rows (action label + bound handler chip or "+ Add action" button + handler name)
  */
-export function ActionHandlersPageSkeleton() {
-  const visible = useVisible();
+export function ActionHandlersPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
   if (!visible) return null;
 
   return (
