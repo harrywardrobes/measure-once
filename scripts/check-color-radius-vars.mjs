@@ -179,7 +179,7 @@ if (mismatches.length === 0) {
 } else {
   console.error(`✗ ${mismatches.length} issue(s) found:\n`);
   mismatches.forEach(m => console.error(m));
-  console.error('\nFix: update public/tokens.css to match src/react/theme.ts.');
+  console.error('\nFix: re-run `node scripts/generate-tokens-css.mjs` (or `npm run build:react:dev`) to regenerate tokens.css from theme.ts.');
   console.error('Note: AppThemeProvider.tsx derives its :root tokens automatically — no changes needed there.');
   process.exit(1);
 }

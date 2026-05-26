@@ -17,7 +17,8 @@ import { createTheme, type Theme } from '@mui/material/styles';
  * When adding a new token: update BRAND_COLORS / STAGE_COLORS / RADIUS below.
  * AppThemeProvider.tsx derives its rootTokens entries automatically by looping
  * over those constants, so no manual --<name> entry is needed there.
- * Also update public/tokens.css so non-React pages stay in sync.
+ * public/tokens.css is generated automatically by scripts/generate-tokens-css.mjs
+ * (runs as part of every build) — no manual edit needed there either.
  */
 
 // ── Brand colour scales ────────────────────────────────────────────────

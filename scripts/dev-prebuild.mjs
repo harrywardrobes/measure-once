@@ -24,5 +24,6 @@ if (existsSync(BUNDLE)) {
   console.log('[dev-prebuild] Run `npm run build:react:dev` to rebuild, or `npm run build:react` for a full build with type-checking.');
 } else {
   console.log('[dev-prebuild] No bundle found — running fast Vite build (skipping typecheck and bundle-size check).');
+  execSync('node scripts/generate-tokens-css.mjs', { stdio: 'inherit' });
   execSync('npx vite build', { stdio: 'inherit' });
 }
