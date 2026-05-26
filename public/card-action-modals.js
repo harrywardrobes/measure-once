@@ -1,82 +1,30 @@
-// Card action modals — dispatch + modal implementations, plus the lookup index.
+// Card action modals — dispatch + modal implementations.
 //
-// Loaded on sales.html.  The React SalesBoardPage now uses the
-// useCardActionHandlers hook for its own lookup, so the board renders
-// independently of this file.  However, this file still provides:
+// Loaded on sales.html.  The lookup index (HANDLERS_BY_LABEL, HANDLERS_BY_ID,
+// etc.) is now owned entirely by the React useCardActionHandlers hook, which
+// registers window.cardActionHandlerFor, window.cardActionHandlerById,
+// window.loadCardActionHandlers, and window.dispatchCardActionHandler as shims.
+// This file reads those shims; it no longer maintains its own copy.
 //
-//   window.cardActionHandlerFor      — lookup for test probes + vanilla helpers
-//   window.loadCardActionHandlers    — explicit re-fetch (called by test suite)
+// This file still provides:
+//
 //   window.cardActionHandlerAttrs    — attr-string helper (test probe E.2)
 //   window.enquiryRowHtml            — card-strip html helper (test probe E.3)
-//   window.dispatchCardActionHandler — modal dispatch (used by React onClick)
 //   window.openDesignVisitWizard     — multi-step wizard
 //
 // survey.html and customer-detail.html continue to load card-action-handlers.js
 // which provides BOTH the lookup AND dispatch in a single IIFE.
 
 (function () {
-  // ── Lookup index ──────────────────────────────────────────────────────────
-
-  let HANDLERS_BY_LABEL    = {}; // `${stage}|${status}` → handler
-  let HANDLERS_BY_SUBSTATUS = {}; // substatus_id → handler
-  let HANDLERS_BY_ID       = {}; // handler.id → handler
-
-  function _indexHandlers(rows) {
-    const byLabel = {};
-    const bySub   = {};
-    const byId    = {};
-    for (const h of rows || []) {
-      byId[h.id] = h;
-      for (const b of h.bindings || []) {
-        if (b.substatus_id) {
-          bySub[b.substatus_id] = h;
-        } else if (b.stage_key) {
-          const sk = String(b.stage_key  || '').toLowerCase();
-          const lk = String(b.status_key || '').toLowerCase();
-          byLabel[`${sk}|${lk}`] = h;
-        }
-      }
-    }
-    HANDLERS_BY_LABEL    = byLabel;
-    HANDLERS_BY_SUBSTATUS = bySub;
-    HANDLERS_BY_ID       = byId;
-  }
-
-  async function loadCardActionHandlers() {
-    try {
-      const rows = await GET('/api/card-action-handlers');
-      _indexHandlers(rows);
-    } catch (e) {
-      console.warn('Could not load card action handlers:', e.message);
-    }
-  }
-  window.loadCardActionHandlers = loadCardActionHandlers;
-
-  // Resolve handler for a card. Substatus binding wins (more specific).
-  // Reads window.LEAD_SUBSTATUSES which is populated by workflow-core.js's
-  // loadLeadSubstatuses().
-  function cardActionHandlerFor(stageKey, leadStatusKey, hwSubstatusValue) {
-    if (hwSubstatusValue && Array.isArray(window.LEAD_SUBSTATUSES)) {
-      const v  = String(hwSubstatusValue).toUpperCase();
-      const sk = String(leadStatusKey || '').toUpperCase();
-      const prefix = `${sk}__`;
-      if (v.startsWith(prefix)) {
-        const subKey = v.slice(prefix.length);
-        const row = window.LEAD_SUBSTATUSES.find(
-          r => String(r.status_key).toUpperCase() === sk &&
-               String(r.substatus_key).toUpperCase() === subKey
-        );
-        if (row && HANDLERS_BY_SUBSTATUS[row.id]) return HANDLERS_BY_SUBSTATUS[row.id];
-      }
-    }
-    const sKey  = String(stageKey || '').toLowerCase();
-    const lsKey = String(leadStatusKey || '').toLowerCase();
-    return HANDLERS_BY_LABEL[`${sKey}|${lsKey}`] || null;
-  }
-  window.cardActionHandlerFor = cardActionHandlerFor;
+  // ── Lookup helpers — delegated to window shims from useCardActionHandlers ──
+  // window.cardActionHandlerFor, window.cardActionHandlerById, and
+  // window.loadCardActionHandlers are registered by the React hook.  This file
+  // reads them; it no longer maintains its own index.
 
   function cardActionHandlerAttrs(stageKey, leadStatusKey, hwSubstatusValue, ctx) {
-    const h = cardActionHandlerFor(stageKey, leadStatusKey, hwSubstatusValue);
+    const h = typeof window.cardActionHandlerFor === 'function'
+      ? window.cardActionHandlerFor(stageKey, leadStatusKey, hwSubstatusValue)
+      : null;
     if (!h) return '';
     const safe = s => String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -953,10 +901,12 @@
       contactName:  el.dataset.cardActionContactName  || '',
       contactEmail: el.dataset.cardActionContactEmail || '',
     };
-    // Use the full handler from our index (populated by loadCardActionHandlers)
-    // so that config fields like intermediateLeadStatus are available.
-    // Fall back to a minimal stub if the id isn't in our index yet.
-    const handler = HANDLERS_BY_ID[id] || { id, type, config: {} };
+    // Use the full handler from the React hook's by-id index (window shim) so
+    // config fields like intermediateLeadStatus are available.  Fall back to a
+    // minimal stub if the index hasn't been populated yet.
+    const handler = (typeof window.cardActionHandlerById === 'function'
+      ? window.cardActionHandlerById(id)
+      : null) || { id, type, config: {} };
     dispatchCardActionHandler(handler, ctx);
   }, true);
 
@@ -970,16 +920,4 @@
     window.dispatchCardActionHandler = dispatchCardActionHandler;
   }
 
-  // ── Bootstrap + cross-tab refresh ─────────────────────────────────────────
-  // Pre-populate the local index at page load so window.cardActionHandlerFor,
-  // window.cardActionHandlerAttrs, and window.enquiryRowHtml return correct
-  // results immediately (same behaviour as the old card-action-handlers.js).
-  loadCardActionHandlers();
-
-  // When an admin changes handlers in another tab keep the index in sync.
-  // The React hook handles its own refresh independently via the same channel.
-  if (typeof BroadcastChannel !== 'undefined') {
-    const ch = new BroadcastChannel('card_action_handlers_changed');
-    ch.addEventListener('message', () => loadCardActionHandlers());
-  }
 })();

@@ -29,10 +29,13 @@ type HandlerIndex = Record<string, CardActionHandlerData>;
 function buildIndexes(rows: CardActionHandlerData[]): {
   byLabel: HandlerIndex;
   bySubstatus: Record<number, CardActionHandlerData>;
+  byId: Record<number, CardActionHandlerData>;
 } {
   const byLabel: HandlerIndex = {};
   const bySubstatus: Record<number, CardActionHandlerData> = {};
+  const byId: Record<number, CardActionHandlerData> = {};
   for (const h of rows || []) {
+    byId[h.id] = h;
     for (const b of h.bindings || []) {
       if (b.substatus_id) {
         bySubstatus[b.substatus_id] = h;
@@ -43,7 +46,7 @@ function buildIndexes(rows: CardActionHandlerData[]): {
       }
     }
   }
-  return { byLabel, bySubstatus };
+  return { byLabel, bySubstatus, byId };
 }
 
 export interface UseCardActionHandlersResult {
@@ -62,6 +65,7 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
 
   const byLabelRef = useRef<HandlerIndex>({});
   const bySubstatusRef = useRef<Record<number, CardActionHandlerData>>({});
+  const byIdRef = useRef<Record<number, CardActionHandlerData>>({});
   const substatusesRef = useRef<LeadSubstatus[]>([]);
 
   const [, setVersion] = useState(0);
@@ -79,9 +83,10 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       if (!handlersRes.ok) throw new Error(`handlers ${handlersRes.status}`);
 
       const handlers: CardActionHandlerData[] = await handlersRes.json();
-      const { byLabel, bySubstatus } = buildIndexes(handlers);
+      const { byLabel, bySubstatus, byId } = buildIndexes(handlers);
       byLabelRef.current = byLabel;
       bySubstatusRef.current = bySubstatus;
+      byIdRef.current = byId;
 
       if (substatusesRes.ok) {
         const substatuses: LeadSubstatus[] = await substatusesRes.json();
@@ -148,10 +153,14 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
   // Backwards-compat shims for pages that no longer load card-action-handlers.js
   // (currently sales.html which now loads card-action-modals.js instead).
   //
-  // window.cardActionHandlerFor — lookup function used by test probes and
+  // window.cardActionHandlerFor — label/substatus lookup used by test probes and
   // vanilla-JS call-sites.  Only set when card-action-handlers.js hasn't already
   // set it (that file is still present on survey/customer-detail and its re-fetch
   // logic is tested directly by the test suite).
+  //
+  // window.cardActionHandlerById — id-keyed lookup used by the click-delegation
+  // handler in card-action-modals.js so it can retrieve the full config (e.g.
+  // intermediateLeadStatus) without maintaining its own duplicate index.
   //
   // window.loadCardActionHandlers — async re-fetch trigger.  The test suite calls
   // this to force the in-page index to update after creating new handlers mid-test.
@@ -174,6 +183,14 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       });
     }
 
+    if (typeof w.cardActionHandlerById !== 'function') {
+      const handlerById = (id: number) => byIdRef.current[id] ?? null;
+      w.cardActionHandlerById = handlerById;
+      cleanups.push(() => {
+        if (w.cardActionHandlerById === handlerById) delete w.cardActionHandlerById;
+      });
+    }
+
     if (typeof w.loadCardActionHandlers !== 'function') {
       w.loadCardActionHandlers = fetchAll;
       cleanups.push(() => {
@@ -190,7 +207,7 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
     }
 
     return () => cleanups.forEach((fn) => fn());
-  }, [cardActionHandlerFor, fetchAll]);
+  }, [cardActionHandlerFor, fetchAll, byIdRef]);
 
   return { cardActionHandlerFor, loading, error };
 }
