@@ -628,7 +628,7 @@ async function main() {
       if (!onPage2) {
         record(UI_LABELS[6], true, 'skip — server reset page to 1 (only 1 page); reset confirmed');
       } else {
-        // Wait for populateLeadStatusFilter() to run and add the seeded options
+        // Wait for the React filter dropdown to render the seeded options
         // (the select starts with just "All statuses"; seeded rows push it > 2).
         const selectReady = await pollPage(page, () => {
           const sel = document.getElementById('lead-status-filter');

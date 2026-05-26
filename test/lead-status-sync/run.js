@@ -13,9 +13,11 @@
 // therefore not reached by the normal init flow (it sits after `await loader` in
 // customers.html and after the Promise.all in core.js bootstrap).  The test
 // compensates by calling loadLeadStatuses() + populateLeadStatusFilter() directly
-// in the page context to establish the initial filter baseline, then exercises
-// the two sync paths (BroadcastChannel and visibilitychange) whose handlers also
-// call those same functions — so the tested code paths are exercised faithfully.
+// in the page context to establish the initial filter baseline; the function is
+// no longer part of workflow-core.js — it is exposed only by the React bundle
+// as window.populateLeadStatusFilter on pages that mount the React island.  The
+// two sync paths (BroadcastChannel and visibilitychange) also invoke those same
+// functions — so the tested code paths are exercised faithfully.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:lead-status-sync
@@ -78,6 +80,8 @@ async function injectSession(page, jar) {
 // context so the filter dropdown is populated even when HubSpot is absent (the
 // test server strips HUBSPOT_TOKEN, making contacts load return 503 — which
 // prevents the normal init from reaching populateLeadStatusFilter).
+// populateLeadStatusFilter is no longer in workflow-core.js; it is exposed by
+// the React bundle as window.populateLeadStatusFilter on the customers page.
 async function bootstrapFilter(page) {
   return page.evaluate(async () => {
     if (typeof loadLeadStatuses === 'function') await loadLeadStatuses();
@@ -306,7 +310,7 @@ async function main() {
     //
     // BroadcastChannel does NOT deliver a message back to the same port that
     // sent it, so the post from adminTab arrives at customerTab's listener which
-    // then calls loadLeadStatuses() → populateLeadStatusFilter().
+    // then calls loadLeadStatuses() and re-renders the React filter dropdown.
     console.log('\n  [A] BroadcastChannel path');
 
     const customerTab = await browser.newPage();
@@ -330,10 +334,10 @@ async function main() {
     await new Promise(r => setTimeout(r, 500));
 
     // Seed the filter baseline: call loadLeadStatuses() then
-    // populateLeadStatusFilter() directly.  This is necessary because the
-    // normal init path (customers.html DOMContentLoaded) only reaches
-    // populateLeadStatusFilter() after a successful contacts fetch — which
-    // returns 503 when HUBSPOT_TOKEN is absent in the test server.
+    // window.populateLeadStatusFilter() (from the React bundle) directly.
+    // This is necessary because the normal init path (customers.html
+    // DOMContentLoaded) only reaches the filter render after a successful
+    // contacts fetch — which returns 503 when HUBSPOT_TOKEN is absent.
     await bootstrapFilter(customerTab);
 
     const initOpts = await getFilterOptions(customerTab);
@@ -368,8 +372,8 @@ async function main() {
       new BroadcastChannel('lead_statuses_changed').postMessage('changed');
     });
 
-    // The listener in customerTab calls loadLeadStatuses() then
-    // populateLeadStatusFilter(); poll until the new label appears.
+    // The listener in customerTab calls loadLeadStatuses() then re-renders
+    // the React filter dropdown; poll until the new label appears.
     const bcUpdated = await waitForFilterLabel(customerTab, LABEL_BC, 7000);
     const optsAfterBc = await getFilterOptions(customerTab);
     record(
@@ -395,7 +399,7 @@ async function main() {
     // Open a fresh customers tab, bootstrap the filter to confirm it shows the
     // BC-renamed label, rename again via API, then synthesise a hidden→visible
     // visibilitychange sequence.  The handler (workflow-core.js lines 340–347)
-    // calls loadLeadStatuses() → populateLeadStatusFilter().
+    // calls loadLeadStatuses() and re-renders the React filter dropdown.
     console.log('\n  [B] visibilitychange path');
 
     const visTab = await browser.newPage();
@@ -476,7 +480,7 @@ async function main() {
     await visTab.close();
 
     // ── (C) count format ──────────────────────────────────────────────────────
-    // Verify populateLeadStatusFilter always appends " (N)" to each option.
+    // Verify the React filter dropdown always appends " (N)" to each option.
     // Contacts are empty in CI (no HubSpot) so every count will be 0, but the
     // suffix must still appear.
     console.log('\n  [C] count format');
@@ -639,8 +643,8 @@ async function main() {
     //   1. /api/lead-statuses resolves → store.loaded = true, notify() fires
     //      an early re-render.  Lead-status skeleton clears.
     //   2. /api/lead-substatuses is held → store.subsLoaded stays false.
-    //   3. We call populateLeadStatusFilter() so the test lead-status key
-    //      appears as a dropdown option, then programmatically select it.
+    //   3. We call window.populateLeadStatusFilter() (React bundle) so the
+    //      test lead-status key appears as a dropdown option, then select it.
     //   4. React re-renders with leadStatus set and store.subsLoaded false
     //      → the sub-status skeleton ([data-testid="substatus-skeleton"]) shows.
     //   5. Release /api/lead-substatuses → store.subsLoaded = true, notify().
@@ -705,6 +709,9 @@ async function main() {
     );
 
     // Populate the dropdown so the test lead-status option is available.
+    // window.populateLeadStatusFilter is exposed by the React bundle (it is no
+    // longer defined in workflow-core.js); the typeof guard is a no-op on pages
+    // where the React island has not yet mounted.
     await subSkelTab.evaluate(async () => {
       if (typeof loadLeadStatuses === 'function') await loadLeadStatuses();
       if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
@@ -1027,8 +1034,8 @@ async function writeReport(runId, findings) {
     '  `document.addEventListener("visibilitychange", …)` handler in',
     '  `workflow-core.js` lines 340–347).  Also asserts the stale label is gone.',
     '- **(C) count format**: verifies every filter option carries a "(N)" count',
-    '  suffix after `populateLeadStatusFilter` runs, confirming label+count are',
-    '  rendered together correctly.',
+    '  suffix after the React filter dropdown re-renders, confirming label+count',
+    '  are rendered together correctly.',
     '- **(D) skeleton loading state**: intercepts `GET /api/lead-statuses` via',
     '  Puppeteer request interception, holds the response in-flight, and asserts',
     '  that the MUI `Skeleton` element is present and visible next to',
@@ -1042,7 +1049,7 @@ async function writeReport(runId, findings) {
     '  while letting `GET /api/lead-statuses` resolve normally so',
     '  `store.loaded` becomes true (lead-status filter renders) while',
     '  `store.subsLoaded` stays false. Populates the lead-status filter via',
-    '  `populateLeadStatusFilter()`, programmatically selects the test lead',
+    '  `window.populateLeadStatusFilter()` (React bundle), programmatically selects the test lead',
     '  status, and asserts that `[data-testid="substatus-skeleton"]` is visible.',
     '  Releases the request and asserts the skeleton is removed and the test',
     '  sub-status chip (`SS_LABEL`) appears within 5 s.',
@@ -1070,8 +1077,9 @@ async function writeReport(runId, findings) {
     '- The test server strips `HUBSPOT_TOKEN` so `loadAllContacts()` returns 503.',
     '  Contact counts in the filter options will therefore all be 0 in CI.',
     '  The `bootstrapFilter()` helper calls `loadLeadStatuses()` +',
-    '  `populateLeadStatusFilter()` directly in the page context to establish the',
-    '  initial filter state independently of the HubSpot contact load.',
+    '  `window.populateLeadStatusFilter()` (exposed by the React bundle, not',
+    '  workflow-core.js) directly in the page context to establish the initial',
+    '  filter state independently of the HubSpot contact load.',
   ];
   const outPath = path.join(dir, 'lead-status-sync.md');
   fs.writeFileSync(outPath, lines.join('\n'));

@@ -14,9 +14,10 @@
 //   (C) 429 retry/backoff — a single request that sees a 429 + Retry-After
 //       on the first attempt then a 200 on the retry must succeed.
 //   (D) DOM notice (Puppeteer) — loadLeadStatusCounts catching a hard 5xx
-//       must set state.leadStatusCountsError, which populateLeadStatusFilter
-//       turns into a .ls-counts-error-notice banner. Dismissing the banner
-//       clears the flag. A subsequent successful load removes the notice.
+//       must set state.leadStatusCountsError. The .ls-counts-error-notice DOM
+//       banner was previously rendered by the now-deleted vanilla-JS
+//       populateLeadStatusFilter; those probes have been removed. The browser
+//       probe now only confirms that the Puppeteer/browser harness starts.
 //   (E) Pill-bar notice (Puppeteer) — the second rendering path for the same
 //       error: the pill-bar renderer inserts #ls-counts-error-notice-pills when
 //       state.leadStatusCountsError is true. Dismissing it removes the element
@@ -305,15 +306,12 @@ async function main() {
       `retryAfterUsed=${mock.state.retryAfterUsed}`);
 
     // ── (D) DOM notice — Puppeteer browser test ──────────────────────────────
-    // Verifies that a hard 5xx from /api/contacts-lead-status-counts causes
-    // .ls-counts-error-notice to appear via populateLeadStatusFilter, that the
-    // dismiss button removes it and clears state.leadStatusCountsError, and
-    // that a subsequent successful load does NOT reintroduce the notice.
-    //
-    // The test navigates to /projects (loads workflow-core.js + workflow.js,
-    // no React island overriding loadLeadStatusCounts), intercepts the counts
-    // request at the browser level, and manually seeds the minimal filter DOM
-    // so populateLeadStatusFilter can attach the notice.
+    // The .ls-counts-error-notice DOM banner was produced by the vanilla-JS
+    // populateLeadStatusFilter() function, which was deleted from
+    // workflow-core.js in task #1228.  The DOM-seeding scaffold and the
+    // D1/D2/D2b/D3 assertions that checked for that element have been removed;
+    // the browser probe now only confirms the harness starts and the /projects
+    // page is reachable.
     console.log('\n  [D] DOM notice (Puppeteer)');
     if (!puppeteer) {
       record('D0 puppeteer available', false, 'puppeteer not installed — browser probes skipped');
@@ -358,134 +356,15 @@ async function main() {
           // Guard: confirm we haven't been bounced to /login by an auth check.
           const landedUrl = page.url();
           if (!landedUrl.includes('/projects')) {
-            record('D1 .ls-counts-error-notice appears after 5xx', false,
-              `navigated away from /projects to ${landedUrl} — skipping DOM probes`);
-            record('D2 notice removed after dismiss click', false, 'skipped');
-            record('D2b state.leadStatusCountsError false after dismiss', false, 'skipped');
-            record('D3 notice absent after successful follow-up load', false, 'skipped');
+            record('D0 /projects reachable', false,
+              `navigated away from /projects to ${landedUrl}`);
           } else {
-            // Wait until the page's own loadLeadStatusCounts() initialization
-            // call has fully settled (_llscInFlight === null and
-            // _llscLastSettledAt is non-zero).  If we patch window.fetch or
-            // reset the debounce state while a real fetch is still in-flight, its
-            // success callback will overwrite state.leadStatusCountsError.
-            await page.waitForFunction(
-              () => {
-                try {
-                  return _llscInFlight === null && _llscLastSettledAt !== 0;
-                } catch { return true; } // variables absent → no init call
-              },
-              { timeout: 10000 },
-            ).catch(() => {}); // tolerate timeout; proceed anyway
-
-            // Seed minimal filter DOM so populateLeadStatusFilter can attach the
-            // notice.  The function reads #lead-status-filter (the <select>) and
-            // inserts the notice after #lead-status-filter-row (if present) or
-            // after the select itself.
-            await page.evaluate(() => {
-              if (!document.getElementById('lead-status-filter-row')) {
-                const row = document.createElement('div');
-                row.id = 'lead-status-filter-row';
-                document.body.appendChild(row);
-              }
-              if (!document.getElementById('lead-status-filter')) {
-                const sel = document.createElement('select');
-                sel.id = 'lead-status-filter';
-                document.body.appendChild(sel);
-              }
-            });
-
-            // ── D1: 5xx → .ls-counts-error-notice appears ──────────────────
-            // Install a window.fetch monkey-patch so /api/contacts-lead-status-counts
-            // calls can be driven to fail or succeed without going through Puppeteer
-            // request interception (which deadlocks when combined with async
-            // page.evaluate and the single-flight debounce in workflow-core.js).
-            // Then reset the debounce and call loadLeadStatusCounts() for real so
-            // the catch block (not direct state mutation) sets the error flag.
-            await page.evaluate(async () => {
-              window.__fetchOrig = window.fetch;
-              window.__fetchCountsMode = 'fail'; // 'fail' | 'ok'
-              window.fetch = function (url, opts) {
-                if (
-                  typeof url === 'string' &&
-                  url.includes('/api/contacts-lead-status-counts')
-                ) {
-                  if (window.__fetchCountsMode === 'ok') {
-                    // Success: return a 200 JSON response with empty counts.
-                    return Promise.resolve(
-                      new Response(JSON.stringify({}), {
-                        status: 200,
-                        headers: { 'Content-Type': 'application/json' },
-                      }),
-                    );
-                  }
-                  // Failure: rejected promise → goes straight to the catch block in
-                  // loadLeadStatusCounts, which sets state.leadStatusCountsError = true.
-                  return Promise.reject(new TypeError('simulated 5xx network failure'));
-                }
-                return window.__fetchOrig.call(this, url, opts);
-              };
-
-              // Reset the debounce so the call isn't short-circuited.
-              try { _llscInFlight = null; } catch {}
-              try { _llscLastSettledAt = 0; } catch {}
-
-              // Drive the actual catch-path in loadLeadStatusCounts so
-              // state.leadStatusCountsError is set by production code, not by the test.
-              if (typeof loadLeadStatusCounts === 'function') {
-                await loadLeadStatusCounts().catch(() => {});
-              }
-
-              // populateLeadStatusFilter renders the notice when
-              // state.leadStatusCountsError is true (called by the visibilitychange
-              // listener in production; called explicitly here in the test).
-              if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
-            });
-
-            const noticeEl    = await page.$('.ls-counts-error-notice');
-            const errorFlagSet = await page.evaluate(
-              () => typeof state !== 'undefined' && state.leadStatusCountsError === true,
-            );
-            record('D1 .ls-counts-error-notice appears after 5xx',
-              !!noticeEl && errorFlagSet,
-              `found=${!!noticeEl} errorFlag=${errorFlagSet}`);
-
-            // ── D2: dismiss removes notice + clears state.leadStatusCountsError
-            // Check synchronously inside page.evaluate: btn.click() fires the
-            // event handler synchronously, removing the notice and clearing the
-            // flag before any other JS (e.g. a background loadLeadStatusCounts
-            // retry) can run.
-            const [noticeAfterDismiss, errorStateCleared] = await page.evaluate(() => {
-              const btn = document.querySelector('.ls-counts-error-dismiss');
-              if (btn) btn.click();
-              return [
-                !!document.querySelector('.ls-counts-error-notice'),
-                typeof state !== 'undefined' && state.leadStatusCountsError === false,
-              ];
-            });
-            record('D2 notice removed after dismiss click',
-              !noticeAfterDismiss,
-              `present=${noticeAfterDismiss}`);
-            record('D2b state.leadStatusCountsError false after dismiss',
-              errorStateCleared,
-              `cleared=${errorStateCleared}`);
-
-            // ── D3: successful follow-up load does not reintroduce notice ────
-            // Switch fetch mock to success mode, reset debounce, reload counts.
-            await page.evaluate(async () => {
-              window.__fetchCountsMode = 'ok';
-              try { _llscInFlight = null; } catch {}
-              try { _llscLastSettledAt = 0; } catch {}
-              if (typeof loadLeadStatusCounts === 'function') {
-                await loadLeadStatusCounts().catch(() => {});
-              }
-              if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
-            });
-
-            const noticeAfterSuccess = await page.$('.ls-counts-error-notice');
-            record('D3 notice absent after successful follow-up load',
-              !noticeAfterSuccess,
-              `present=${!!noticeAfterSuccess}`);
+            // The D1/D2/D2b/D3 probes that checked for .ls-counts-error-notice
+            // relied on calling populateLeadStatusFilter() after seeding a
+            // minimal filter DOM.  That function was deleted from workflow-core.js
+            // in task #1228 (it now lives only in the React bundle as
+            // window.populateLeadStatusFilter on pages that mount the island).
+            // Those probes have been removed to avoid silent no-op assertions.
           }
         } catch (e) {
           record('D browser probe', false, `crashed: ${e.message}`);
@@ -676,12 +555,11 @@ async function writeReport(runId) {
     '  the UI.',
     '- **(C) 429 + Retry-After**: a single 429 with `Retry-After: 1` followed by',
     '  a 200 must succeed via the retry helper and return `X-Cache-Status: fresh`.',
-    '- **(D) DOM notice (Puppeteer)**: navigates `/projects` (vanilla workflow-core.js,',
-    '  no React island), intercepts `/api/contacts-lead-status-counts` at the browser',
-    '  level to return 503, calls `loadLeadStatusCounts()` then `populateLeadStatusFilter()`',
-    '  and verifies `.ls-counts-error-notice` appears in the DOM. Clicking the dismiss',
-    '  button must remove the notice and set `state.leadStatusCountsError = false`. A',
-    '  subsequent successful load must leave the notice absent.',
+    '- **(D) DOM notice (Puppeteer)**: navigates `/projects` and confirms the page',
+    '  is reachable. The D1/D2/D2b/D3 probes that verified `.ls-counts-error-notice`',
+    '  DOM insertion have been removed: they relied on `populateLeadStatusFilter()`',
+    '  which was deleted from `workflow-core.js` in task #1228 (the function now',
+    '  lives only in the React bundle on pages that mount the React island).',
     '- **(E) Pill-bar notice (Puppeteer)**: navigates `/projects` and directly sets',
     '  `state.leadStatusCountsError = true`, then fires `mo:contacts-changed` to trigger',
     '  the pill-bar renderer. Verifies that `#ls-counts-error-notice-pills` appears in',
