@@ -75,6 +75,51 @@
   }
   window.cardActionHandlerAttrs = cardActionHandlerAttrs;
 
+  // Produce a minimal card-strip HTML string for a given board entry.
+  // Used by the test suite (E.3) and any vanilla-JS callers that need to
+  // render a sales card action strip outside of the React board.
+  //
+  // Entry shape: { contact, stageKey, substageId, sourceId, stageTime,
+  //               priority, badgeLabel, roomIdx }
+  // The returned HTML always contains a .eq-card-action-label when a handler
+  // with config.action_name is bound to (stageKey, leadStatusKey).
+  function enquiryRowHtml(entry) {
+    const contact = (entry && entry.contact) || {};
+    const stageKey = (entry && entry.stageKey) || 'sales';
+    const props = contact.properties || {};
+    const leadStatusKey     = props.hs_lead_status    || '';
+    const hwSubstatusValue  = props.hw_lead_substatus || '';
+    const firstName  = props.firstname || '';
+    const lastName   = props.lastname  || '';
+    const name = [firstName, lastName].filter(Boolean).join(' ') || props.email || '';
+    const ctx = {
+      contactId:    contact.id       || '',
+      contactName:  name,
+      contactEmail: props.email      || '',
+    };
+
+    const attrsStr = cardActionHandlerAttrs(stageKey, leadStatusKey, hwSubstatusValue, ctx);
+
+    // Extract action_name from the emitted attribute and title-case it.
+    const cahMatch = attrsStr.match(/data-card-action-name="([^"]+)"/);
+    const cahName  = cahMatch
+      ? cahMatch[1].replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); })
+      : '';
+
+    const actionLabel = cahName;
+
+    const safe = s => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const actionStrip = actionLabel
+      ? '<div class="eq-card-action"' + attrsStr + '>' +
+          '<span class="eq-card-action-label">' + safe(actionLabel) + '</span>' +
+        '</div>'
+      : '';
+
+    return '<div class="eq-card">' + actionStrip + '</div>';
+  }
+  window.enquiryRowHtml = enquiryRowHtml;
+
   // ── Click delegation (capture phase so we run before the existing
   //    leadstatus-edit listeners on the same element) ────────────────────────
   document.addEventListener('click', function (e) {
