@@ -68,6 +68,7 @@
     "test:room-stale-banner-visibility": "node test/room-stale-banner-visibility/run.js",
     "test:trades": "node test/trades/run.js",
     "test:trades:ci": "node scripts/with-test-db.js test/trades/run.js",
+    "prune-test-dbs": "node scripts/prune-test-dbs.js",
     "test:sales-board-stage-labels": "node test/sales-board-stage-labels/run.js",
     "test:sales-board-error-state": "node test/sales-board-error-state/run.js",
     "test:design-system-skeletons": "node test/design-system-skeletons/run.js",
