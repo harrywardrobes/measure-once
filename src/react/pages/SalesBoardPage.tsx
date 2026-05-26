@@ -76,15 +76,6 @@ interface WindowGlobals {
   loadLeadStatuses?: () => Promise<void>;
   openCardSubstagePicker?: (evt: object, contactId: string, roomIdx: number) => void;
   openLeadStatusPicker?: (evt: object, contactId: string) => void;
-  stageOrLeadStatusActionLabel?: (
-    stageKey: string,
-    leadStatusKey: string | undefined,
-    substageId: string | undefined,
-  ) => string;
-  substatusActionLabelLookup?: (
-    leadStatusKey: string | undefined,
-    hwSubstatusValue: string | undefined,
-  ) => string;
   __salesBoardBootstrapFailed?: { code: string | undefined; message: string } | undefined;
 }
 
@@ -250,22 +241,6 @@ function bestRoom(cached: Room[] | undefined | null): RoomWithIdx | null {
   return best;
 }
 
-function getNextActionLabel(
-  stageKey: string,
-  substageId: string,
-  leadStatusKey: string | undefined,
-  hwSubstatusValue: string | undefined,
-): string {
-  const w = window as unknown as WindowGlobals;
-  if (typeof w.substatusActionLabelLookup === 'function') {
-    const fromSub = w.substatusActionLabelLookup(leadStatusKey, hwSubstatusValue);
-    if (fromSub) return fromSub;
-  }
-  if (typeof w.stageOrLeadStatusActionLabel === 'function') {
-    return w.stageOrLeadStatusActionLabel(stageKey, leadStatusKey, substageId) || '';
-  }
-  return '';
-}
 
 function getContactName(c: Contact): string {
   const first = c.properties?.firstname || '';
@@ -456,6 +431,7 @@ function SalesCard({
   isManager,
   workflow,
   cardActionHandlerFor,
+  resolveActionLabel,
 }: {
   entry: BoardEntry;
   isManager: boolean;
@@ -465,6 +441,12 @@ function SalesCard({
     leadStatusKey: string | undefined,
     hwSubstatusValue: string | undefined,
   ) => CardActionHandlerData | null;
+  resolveActionLabel: (
+    stageKey: string,
+    leadStatusKey: string | undefined,
+    substageId: string | undefined,
+    hwSubstatusValue: string | undefined,
+  ) => string;
 }) {
   const { contact, stageKey, substageId, badgeLabel, sourceId, stageTime, priority, roomIdx } =
     entry;
@@ -495,7 +477,7 @@ function SalesCard({
     : '';
   const actionLabel = isTerminal
     ? ''
-    : cahName || getNextActionLabel(stageKey, substageId, leadStatusKey, hwSubstatusValue);
+    : cahName || resolveActionLabel(stageKey, leadStatusKey, substageId, hwSubstatusValue);
 
   const actionTint = STAGE_TINT[stageKey] || '#f3f4f6';
   const actionTextColor = STAGE_ACTION_TEXT[stageKey] || '#374151';
@@ -765,7 +747,7 @@ export function SalesBoardPage() {
     }
   });
   const { isManager } = usePrivilege();
-  const { cardActionHandlerFor } = useCardActionHandlers();
+  const { cardActionHandlerFor, resolveActionLabel } = useCardActionHandlers();
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
 
   // Retry-failure Snackbar with Page Visibility pause — mirrors the pattern
@@ -1103,6 +1085,7 @@ export function SalesBoardPage() {
                     isManager={isManager}
                     workflow={workflow}
                     cardActionHandlerFor={cardActionHandlerFor}
+                    resolveActionLabel={resolveActionLabel}
                   />
                 ))
               )}
