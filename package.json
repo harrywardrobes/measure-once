@@ -105,6 +105,8 @@
     "test:admin-tab-skeletons:ci": "node scripts/with-test-db.js test/admin-tab-skeletons/run.js",
     "test:admin-tab-skeletons-new": "node test/admin-tab-skeletons/settings-cardactions-actionhandlers.js",
     "test:admin-tab-skeletons-new:ci": "node scripts/with-test-db.js test/admin-tab-skeletons/settings-cardactions-actionhandlers.js",
+    "test:admin-tab-skeletons-suspense": "node test/admin-tab-skeletons/permissions-requests-auditlog.js",
+    "test:admin-tab-skeletons-suspense:ci": "node scripts/with-test-db.js test/admin-tab-skeletons/permissions-requests-auditlog.js",
     "test:sales-board": "node test/sales-board/run.js",
     "test:sales-board:ci": "node scripts/with-test-db.js test/sales-board/run.js",
     "test:sales-board-bootstrap": "node test/sales-board-bootstrap/run.js",

@@ -101,6 +101,7 @@ const DB_SUITES = [
   'test:nav-customise-reset:ci',
   'test:admin-tab-skeletons:ci',
   'test:admin-tab-skeletons-new:ci',
+  'test:admin-tab-skeletons-suspense:ci',
   'test:sales-board:ci',
   'test:sales-board-bootstrap:ci',
   'test:survey-board:ci',

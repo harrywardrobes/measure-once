@@ -71,6 +71,7 @@ const STEPS = [
   'test:nav-customise:ci',
   'test:admin-tab-skeletons:ci',
   'test:admin-tab-skeletons-new:ci',
+  'test:admin-tab-skeletons-suspense:ci',
   'test:sales-board:ci',
   'test:sales-board-bootstrap:ci',
   'test:survey-board:ci',
