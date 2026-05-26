@@ -58,7 +58,7 @@ const state = {
   filteredContacts: [],
   contactsViewMode: 'active',
   workflow: null,
-  authStatus: { google: false, hubspot: false },
+  authStatus: null,
   selectedContactId: null,
   selectedContact: null,
   selectedRoomIdx: 0,
@@ -378,6 +378,7 @@ function showAccessGate(params) {
 }
 
 async function checkAuthStatus() {
+  const isFirstCheck = state.authStatus === null;
   const prevGoogle = !!(state.authStatus?.google);
   const [status, user] = await Promise.all([
     GET('/auth/status'),
@@ -386,10 +387,10 @@ async function checkAuthStatus() {
   state.authStatus = status;
   state.user = user;
   renderAuthStatus();
-  if (!prevGoogle && state.authStatus.google) {
+  if (!isFirstCheck && !prevGoogle && state.authStatus.google) {
     window.dispatchEvent(new CustomEvent('mo:google-auth-connected'));
   }
-  if (prevGoogle && !state.authStatus.google) {
+  if (!isFirstCheck && prevGoogle && !state.authStatus.google) {
     window.dispatchEvent(new CustomEvent('mo:google-auth-disconnected'));
   }
 }
