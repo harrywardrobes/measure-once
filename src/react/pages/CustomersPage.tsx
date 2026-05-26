@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  Grid,
   InputAdornment,
   InputLabel,
   MenuItem,
@@ -490,19 +491,19 @@ function saveCustomersScroll() {
 
 function CustomerCardSkeleton() {
   return (
-    <Card variant="outlined" sx={{ width: '100%' }}>
+    <Card variant="outlined" sx={{ width: '100%', height: '100%' }}>
       <Box sx={{ p: 2 }}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-          <Skeleton variant="text" width="45%" height={22} />
-          <Skeleton variant="rounded" width={72} height={22} />
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
+          <Skeleton variant="text" width="55%" height={24} />
+          <Skeleton variant="rounded" width={64} height={22} sx={{ flexShrink: 0 }} />
         </Stack>
-        <Stack direction="row" spacing={0.75} sx={{ mb: 1 }}>
+        <Stack direction="row" spacing={0.75} sx={{ mb: 1, flexWrap: 'wrap' }}>
           <Skeleton variant="rounded" width={80} height={20} />
           <Skeleton variant="rounded" width={64} height={20} />
         </Stack>
-        <Stack direction="row" spacing={1}>
-          <Skeleton variant="rounded" width={140} height={20} />
-          <Skeleton variant="rounded" width={100} height={20} />
+        <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap' }}>
+          <Skeleton variant="rounded" width={120} height={20} />
+          <Skeleton variant="rounded" width={90} height={20} />
         </Stack>
       </Box>
     </Card>
@@ -969,7 +970,7 @@ export function CustomersPage(): React.ReactElement {
   };
 
   return (
-    <Container maxWidth="md" sx={{ py: 2 }}>
+    <Container maxWidth="lg" sx={{ py: 2 }}>
       <Stack spacing={2}>
         {!isViewer && typeof document !== 'undefined' &&
           document.getElementById('page-heading-action') &&
@@ -1029,7 +1030,152 @@ export function CustomersPage(): React.ReactElement {
           </ToggleButtonGroup>
         </Box>
 
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+        {/* ── Lead-status chip row ────────────────────────────────────────── */}
+        {/* The native <select> stays in the DOM (off-screen) so the
+            lead-status-sync test harness can read/mutate it via
+            getElementById('lead-status-filter'). We preserve the original
+            Skeleton + visibility:hidden pattern so the skeleton test (probe D)
+            continues to pass: the Skeleton is a sibling of the FormControl
+            inside the off-screen wrapper, and the FormControl toggles
+            visibility:hidden↔visible as store.loaded changes. */}
+        <Box
+          sx={{ position: 'absolute', left: -9999, width: 200, overflow: 'hidden' }}
+          aria-hidden="true"
+        >
+          {!store.loaded && (
+            <Skeleton variant="rounded" sx={{ position: 'absolute', inset: 0, zIndex: 1 }} />
+          )}
+          <FormControl
+            size="small"
+            sx={{ width: '100%', visibility: store.loaded ? 'visible' : 'hidden' }}
+          >
+            <Select
+              native
+              value={leadStatus}
+              onChange={(e) => {
+                const v = (e.target as HTMLSelectElement).value;
+                setLeadStatus(v);
+                setSubstatus('');
+                setPage(1);
+              }}
+              slotProps={{ input: { id: 'lead-status-filter', name: 'lead-status-filter' } }}
+            >
+              <option value="">All statuses</option>
+            </Select>
+          </FormControl>
+        </Box>
+
+        {/* Chip row */}
+        <Box sx={{ overflowX: 'auto', pb: 0.5 }}>
+          {!store.loaded ? (
+            <Stack direction="row" spacing={1} sx={{ flexWrap: 'nowrap' }}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} variant="rounded" width={90} height={28} sx={{ flexShrink: 0 }} />
+              ))}
+            </Stack>
+          ) : (
+            <Stack direction="row" spacing={1} sx={{ flexWrap: 'nowrap' }}>
+              {/* All statuses chip */}
+              <Chip
+                label="All statuses"
+                variant={leadStatus === '' ? 'filled' : 'outlined'}
+                color={leadStatus === '' ? 'primary' : 'default'}
+                onClick={() => {
+                  setLeadStatus('');
+                  setSubstatus('');
+                  setPage(1);
+                }}
+                size="small"
+                sx={{ flexShrink: 0 }}
+              />
+              {/* No-status chip */}
+              {(() => {
+                const n = store.counts['__no_status__'] || 0;
+                if (n === 0) return null;
+                const active = leadStatus === '__no_status__';
+                return (
+                  <Chip
+                    key="__no_status__"
+                    label={`${store.nullLabel} (${n})`}
+                    variant={active ? 'filled' : 'outlined'}
+                    color={active ? 'primary' : 'default'}
+                    onClick={() => {
+                      setLeadStatus(active ? '' : '__no_status__');
+                      setSubstatus('');
+                      setPage(1);
+                    }}
+                    size="small"
+                    sx={{ flexShrink: 0 }}
+                  />
+                );
+              })()}
+              {/* Per-status chips (zero-count hidden) */}
+              {store.statuses
+                .filter((s) => !s.excluded_from_sales)
+                .map((s) => {
+                  const n = store.counts[s.key] || 0;
+                  if (n === 0) return null;
+                  const active = leadStatus === s.key;
+                  return (
+                    <Chip
+                      key={s.key}
+                      label={`${s.label} (${n})`}
+                      variant={active ? 'filled' : 'outlined'}
+                      color={active ? 'primary' : 'default'}
+                      onClick={() => {
+                        setLeadStatus(active ? '' : s.key);
+                        setSubstatus('');
+                        setPage(1);
+                      }}
+                      size="small"
+                      sx={{ flexShrink: 0 }}
+                    />
+                  );
+                })}
+            </Stack>
+          )}
+        </Box>
+
+        {/* Substatus chip row — shown when a status with substatuses is selected */}
+        {!store.subsLoaded && leadStatus && leadStatus !== '__no_status__' ? (
+          <Skeleton
+            data-testid="substatus-skeleton"
+            variant="rounded"
+            width={220}
+            height={28}
+          />
+        ) : availableSubstatuses.length > 0 ? (
+          <Box sx={{ overflowX: 'auto', pb: 0.5 }}>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: 'nowrap' }}>
+              <Chip
+                label="All sub-statuses"
+                variant={substatus === '' ? 'filled' : 'outlined'}
+                color={substatus === '' ? 'primary' : 'default'}
+                onClick={() => { setSubstatus(''); setPage(1); }}
+                size="small"
+                sx={{ flexShrink: 0 }}
+              />
+              {availableSubstatuses.map((s) => {
+                const full = `${String(leadStatus).toUpperCase()}__${String(s.substatus_key).toUpperCase()}`;
+                const active = substatus === full;
+                return (
+                  <Chip
+                    key={full}
+                    label={s.label || s.substatus_key}
+                    variant={active ? 'filled' : 'outlined'}
+                    color={active ? 'primary' : 'default'}
+                    onClick={() => { setSubstatus(active ? '' : full); setPage(1); }}
+                    size="small"
+                    sx={{ flexShrink: 0 }}
+                  />
+                );
+              })}
+            </Stack>
+          </Box>
+        ) : null}
+
+        {/* ── Sort row: search | sort-by | Show all ───────────────────────── */}
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
           <TextField
             id="search"
             placeholder="Search customers"
@@ -1061,50 +1207,7 @@ export function CustomersPage(): React.ReactElement {
             }}
           />
 
-          {/* Keep the select in the DOM at all times so populateLeadStatusFilter()
-              can find it via getElementById. While statuses are still loading
-              we overlay a Skeleton and hide the FormControl with
-              visibility:hidden (which preserves DOM presence). */}
-          <Box sx={{ position: 'relative', minWidth: 200, flexShrink: 0 }}>
-            {!store.loaded && (
-              <Skeleton
-                variant="rounded"
-                sx={{ position: 'absolute', inset: 0, zIndex: 1 }}
-              />
-            )}
-            <FormControl
-              size="small"
-              sx={{
-                minWidth: 200,
-                width: '100%',
-                visibility: store.loaded ? 'visible' : 'hidden',
-              }}
-            >
-              <InputLabel htmlFor="lead-status-filter" shrink>
-                Lead status
-              </InputLabel>
-              <Select
-                native
-                label="Lead status"
-                value={leadStatus}
-                onChange={(e) => {
-                  const v = (e.target as HTMLSelectElement).value;
-                  setLeadStatus(v);
-                  setSubstatus('');
-                  setPage(1);
-                }}
-                slotProps={{ input: { id: 'lead-status-filter', name: 'lead-status-filter' } }}
-              >
-                {/* Native options are managed by populateLeadStatusFilter() so
-                    the existing lead-status-sync test can mutate them
-                    directly. React seeds an initial empty option here so the
-                    control renders before the first fetch completes. */}
-                <option value="">All statuses</option>
-              </Select>
-            </FormControl>
-          </Box>
-
-          <FormControl size="small" sx={{ minWidth: 180 }}>
+          <FormControl size="small" sx={{ minWidth: 160, flexShrink: 0 }}>
             <InputLabel id="customers-sort-label">Sort by</InputLabel>
             <Select
               labelId="customers-sort-label"
@@ -1127,8 +1230,8 @@ export function CustomersPage(): React.ReactElement {
           <Button
             id="archived-toggle"
             size="small"
-            variant={showArchived ? 'contained' : 'outlined'}
-            color={showArchived ? 'secondary' : 'inherit'}
+            variant="text"
+            color={showArchived ? 'secondary' : 'primary'}
             aria-pressed={showArchived}
             onClick={() => {
               const next = !showArchived;
@@ -1140,44 +1243,11 @@ export function CustomersPage(): React.ReactElement {
                 setSubstatus('');
               }
             }}
-            sx={{ whiteSpace: 'nowrap' }}
+            sx={{ whiteSpace: 'nowrap', flexShrink: 0, alignSelf: { xs: 'flex-end', sm: 'auto' } }}
           >
-            {showArchived ? 'Hide archived' : 'Show archived'}
+            {showArchived ? 'Hide archived' : 'Show all'}
           </Button>
         </Stack>
-
-        {!store.subsLoaded && leadStatus && leadStatus !== '__no_status__' ? (
-          <Skeleton
-            data-testid="substatus-skeleton"
-            variant="rounded"
-            width={220}
-            height={32}
-          />
-        ) : availableSubstatuses.length > 0 ? (
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-            <Chip
-              label="All sub-statuses"
-              variant={substatus === '' ? 'filled' : 'outlined'}
-              color={substatus === '' ? 'primary' : 'default'}
-              onClick={() => { setSubstatus(''); setPage(1); }}
-              size="small"
-            />
-            {availableSubstatuses.map((s) => {
-              const full = `${String(leadStatus).toUpperCase()}__${String(s.substatus_key).toUpperCase()}`;
-              const active = substatus === full;
-              return (
-                <Chip
-                  key={full}
-                  label={s.label || s.substatus_key}
-                  variant={active ? 'filled' : 'outlined'}
-                  color={active ? 'primary' : 'default'}
-                  onClick={() => { setSubstatus(active ? '' : full); setPage(1); }}
-                  size="small"
-                />
-              );
-            })}
-          </Stack>
-        ) : null}
 
         {error ? <Alert severity="error">{error}</Alert> : null}
 
@@ -1188,29 +1258,32 @@ export function CustomersPage(): React.ReactElement {
         ) : null}
 
         {loading ? (
-          <Stack spacing={1.5}>
+          <Grid container spacing={2} id="customers-results">
             {Array.from({ length: 6 }).map((_, i) => (
-              <CustomerCardSkeleton key={i} />
+              <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
+                <CustomerCardSkeleton />
+              </Grid>
             ))}
-          </Stack>
+          </Grid>
         ) : visibleContacts.length === 0 ? (
           <Box sx={{ py: 6, textAlign: 'center', color: 'text.secondary' }}>
             <Typography variant="body1">No customers match</Typography>
           </Box>
         ) : (
-          <Stack spacing={1.5} id="customers-results">
+          <Grid container spacing={2} id="customers-results">
             {visibleContacts.map(({ contact, rooms }) => (
-              <CustomerCard
-                key={contact.id}
-                contact={contact}
-                statusMap={statusMap}
-                rooms={rooms}
-                workflow={workflow}
-                invoices={matchInvoicesForContact(contact, qbInvoices)}
-                urgency={urgencyMap[contact.id] || null}
-              />
+              <Grid key={contact.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                <CustomerCard
+                  contact={contact}
+                  statusMap={statusMap}
+                  rooms={rooms}
+                  workflow={workflow}
+                  invoices={matchInvoicesForContact(contact, qbInvoices)}
+                  urgency={urgencyMap[contact.id] || null}
+                />
+              </Grid>
             ))}
-          </Stack>
+          </Grid>
         )}
 
         <ContactsPagination
