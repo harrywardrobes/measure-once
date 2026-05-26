@@ -122,6 +122,7 @@ const DB_SUITES = [
   'test:ideas:ci',
   'test:onboarding-conflicts:ci',
   'test:open-leads-stale-visibility:ci',
+  'test:conflict-digest-settings:ci',
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',
 ];

@@ -148,6 +148,8 @@
     "test:onboarding-conflicts:ci": "node scripts/with-test-db.js test/onboarding-conflicts/run.js",
     "test:open-leads-stale-visibility": "node test/open-leads-stale-visibility/run.js",
     "test:open-leads-stale-visibility:ci": "node scripts/with-test-db.js test/open-leads-stale-visibility/run.js",
+    "test:conflict-digest-settings": "node test/conflict-digest-settings/run.js",
+    "test:conflict-digest-settings:ci": "node scripts/with-test-db.js test/conflict-digest-settings/run.js",
     "test:settings-tab-load": "node test/settings-tab-load/run.js",
     "test:settings-tab-load:ci": "node scripts/with-test-db.js test/settings-tab-load/run.js",
     "test:profile-google-calendar": "node test/profile-google-calendar/run.js",
