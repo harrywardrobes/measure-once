@@ -6,6 +6,7 @@ import { STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePaginatedContacts, PaginatedContact, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
 import { ContactsPagination } from '../components/ContactsPagination';
+import { useCardActionHandlers, CardActionHandlerData } from '../hooks/useCardActionHandlers';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -51,16 +52,6 @@ interface LeadSubstatus {
   label?: string;
 }
 
-interface CardActionHandler {
-  id: number;
-  type: string;
-  config?: {
-    action_name?: string;
-    [key: string]: unknown;
-  };
-  bindings?: unknown[];
-}
-
 interface WorkflowStage {
   label?: string;
   statuses?: Array<{ id: string; label: string }>;
@@ -80,16 +71,10 @@ interface StateGlobal {
 interface WindowGlobals {
   state?: StateGlobal;
   LEAD_STATUS_OPTIONS?: LeadStatusOption[];
-  LEAD_SUBSTATUSES?: LeadSubstatus[];
   loadWorkflow?: () => Promise<void>;
   loadLeadStatuses?: () => Promise<void>;
   openCardSubstagePicker?: (evt: object, contactId: string, roomIdx: number) => void;
   openLeadStatusPicker?: (evt: object, contactId: string) => void;
-  cardActionHandlerFor?: (
-    stageKey: string,
-    leadStatusKey: string | undefined,
-    hwSubstatusValue: string | undefined,
-  ) => CardActionHandler | null;
   stageOrLeadStatusActionLabel?: (
     stageKey: string,
     leadStatusKey: string | undefined,
@@ -469,10 +454,16 @@ function SalesCard({
   entry,
   isManager,
   workflow,
+  cardActionHandlerFor,
 }: {
   entry: BoardEntry;
   isManager: boolean;
   workflow: WorkflowDef | undefined;
+  cardActionHandlerFor: (
+    stageKey: string,
+    leadStatusKey: string | undefined,
+    hwSubstatusValue: string | undefined,
+  ) => CardActionHandlerData | null;
 }) {
   const { contact, stageKey, substageId, badgeLabel, sourceId, stageTime, priority, roomIdx } =
     entry;
@@ -495,10 +486,7 @@ function SalesCard({
 
   // Resolve action handler and label
   const w = window as unknown as WindowGlobals;
-  const handler =
-    typeof w.cardActionHandlerFor === 'function'
-      ? w.cardActionHandlerFor(stageKey, leadStatusKey, hwSubstatusValue)
-      : null;
+  const handler = cardActionHandlerFor(stageKey, leadStatusKey, hwSubstatusValue);
   const cahName = handler?.config?.action_name
     ? handler.config.action_name
         .replace(/_/g, ' ')
@@ -726,17 +714,23 @@ function SalesCard({
           }}
           {...(handler
             ? {
-                'data-card-action-handler-id': handler.id,
-                'data-card-action-handler-type': handler.type,
-                ...(handler.config?.action_name
-                  ? { 'data-card-action-name': handler.config.action_name }
-                  : {}),
-                'data-card-action-contact-id': contact.id,
-                'data-card-action-contact-name': name,
-                'data-card-action-contact-email': contact.properties?.email || '',
                 role: 'button' as const,
                 tabIndex: -1,
                 title: 'Run action',
+                onClick: (e: React.MouseEvent) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const dispatch = (
+                    window as unknown as { dispatchCardActionHandler?: (h: unknown, ctx: unknown) => void }
+                  ).dispatchCardActionHandler;
+                  if (typeof dispatch === 'function') {
+                    dispatch(handler, {
+                      contactId:    contact.id,
+                      contactName:  name,
+                      contactEmail: contact.properties?.email || '',
+                    });
+                  }
+                },
               }
             : isManager
               ? {
@@ -775,6 +769,7 @@ export function SalesBoardPage() {
     }
   });
   const { isManager } = usePrivilege();
+  const { cardActionHandlerFor } = useCardActionHandlers();
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
 
   // Retry-failure Snackbar with Page Visibility pause — mirrors the pattern
@@ -1111,6 +1106,7 @@ export function SalesBoardPage() {
                     entry={e}
                     isManager={isManager}
                     workflow={workflow}
+                    cardActionHandlerFor={cardActionHandlerFor}
                   />
                 ))
               )}
