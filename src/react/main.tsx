@@ -26,6 +26,7 @@ import { GlobalHeader } from './components/GlobalHeader';
 import { PageHeadingPanel } from './components/PageHeadingPanel';
 import { BottomNav } from './components/BottomNav';
 import { AdminTabsBar } from './components/AdminTabsBar';
+import { BottomActionBar } from './components/BottomActionBar';
 
 /*
  * Page-level components are lazy-imported so Vite emits a separate chunk
@@ -113,9 +114,10 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'login-root',           render: () => <LoginPage /> },
   { id: 'set-password-root',    render: () => <SetPasswordPage /> },
   { id: 'onboarding-root',      render: () => <OnboardingPage /> },
-  { id: 'app-header-mount',     render: () => <GlobalHeader /> },
-  { id: 'page-heading-mount',   render: () => <PageHeadingPanel /> },
-  { id: 'app-bottom-nav-mount', render: () => <BottomNav /> },
+  { id: 'app-header-mount',      render: () => <GlobalHeader /> },
+  { id: 'page-heading-mount',    render: () => <PageHeadingPanel /> },
+  { id: 'app-bottom-nav-mount',  render: () => <BottomNav /> },
+  { id: 'app-bottom-bar-mount',  render: () => <BottomActionBar /> },
   { id: 'trades-view',          render: () => <TradesPage /> },
   { id: 'home-view',            render: () => <HomePage />,     fallback: <HomePageSkeleton /> },
   { id: 'tab-calendar',         render: () => <CalendarPage />, fallback: <CalendarPageSkeleton /> },

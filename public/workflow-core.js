@@ -600,55 +600,6 @@ function _filterDealsImpl(query) {
   document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
 }
 
-// ── Bottom action bar ─────────────────────────────────────────────────────────
-// Card-list operations: save immediately, undo reverts with a second save
-let _bottomAction = null;
-let _bottomTimer  = null;
-
-function closeBottomBar() {
-  document.getElementById('bottom-bar')?.remove();
-  if (_bottomTimer) { clearTimeout(_bottomTimer); _bottomTimer = null; }
-  _bottomAction = null;
-}
-
-// Immediate-save undo bar — for card-list changes (saves right away, undo makes a second save)
-function showBottomUndo(message, onUndo) {
-  closeBottomBar();
-  _bottomAction = onUndo;
-  const el = document.createElement('div');
-  el.id = 'bottom-bar';
-  el.className = 'bottom-bar';
-  el.innerHTML = `
-    <span class="bottom-bar-msg">${escHtml(message)}</span>
-    <button class="bottom-bar-undo" onclick="runBottomAction()">Undo</button>
-    <div class="bottom-bar-progress"></div>
-  `;
-  document.body.appendChild(el);
-  _bottomTimer = setTimeout(closeBottomBar, 5000);
-}
-
-function showBottomConfirm(message, onConfirm) {
-  closeBottomBar();
-  _bottomAction = onConfirm;
-  const el = document.createElement('div');
-  el.id = 'bottom-bar';
-  el.className = 'bottom-bar';
-  el.innerHTML = `
-    <span class="bottom-bar-msg">${escHtml(message)}</span>
-    <div class="bottom-bar-btns">
-      <button class="bottom-bar-cancel" onclick="closeBottomBar()">Cancel</button>
-      <button class="bottom-bar-confirm" onclick="runBottomAction()">Confirm</button>
-    </div>
-  `;
-  document.body.appendChild(el);
-}
-
-async function runBottomAction() {
-  const fn = _bottomAction;
-  closeBottomBar();
-  if (fn) await fn();
-}
-
 // ── Unsaved-changes guard ─────────────────────────────────────────────────────
 
 // Browser-tab close / refresh guard — fires the built-in "Leave site?" dialog
@@ -707,29 +658,6 @@ function _clearCommentDraft() {
   if (area)  area.classList.add('hidden');
   if (input) input.value = '';
   _updateBeforeUnloadGuard();
-}
-
-function showUnsavedChangesBar(onSave, onDiscard) {
-  closeBottomBar();
-  const el = document.createElement('div');
-  el.id = 'bottom-bar';
-  el.className = 'bottom-bar';
-  el.innerHTML = `
-    <span class="bottom-bar-msg">You have unsaved changes</span>
-    <div class="bottom-bar-btns">
-      <button class="bottom-bar-cancel" id="unsaved-discard-btn">Discard</button>
-      <button class="bottom-bar-confirm" id="unsaved-save-btn">Save &amp; leave</button>
-    </div>
-  `;
-  document.body.appendChild(el);
-  document.getElementById('unsaved-save-btn').addEventListener('click', async () => {
-    closeBottomBar();
-    await onSave();
-  });
-  document.getElementById('unsaved-discard-btn').addEventListener('click', async () => {
-    closeBottomBar();
-    await onDiscard();
-  });
 }
 
 // ── Lead-status drift detection on tab focus ───────────────────────────────────

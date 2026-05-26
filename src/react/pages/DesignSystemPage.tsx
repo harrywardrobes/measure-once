@@ -574,6 +574,44 @@ function SnackbarDemo() {
   );
 }
 
+function BottomActionBarDemo() {
+  return (
+    <Stack spacing={1} direction="row" sx={{ flexWrap: 'wrap' }}>
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={() => window.showBottomUndo('Lead status set to Sales', () => {})}
+      >
+        Undo bar
+      </Button>
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={() =>
+          window.showBottomConfirm('Delete this card?', () => {})
+        }
+      >
+        Confirm bar
+      </Button>
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={() => window.showUnsavedChangesBar(() => {}, () => {})}
+      >
+        Unsaved changes bar
+      </Button>
+      <Button
+        variant="outlined"
+        size="small"
+        color="error"
+        onClick={() => window.closeBottomBar()}
+      >
+        Close
+      </Button>
+    </Stack>
+  );
+}
+
 function DrawerDemo() {
   const [open, setOpen] = useState(false);
   return (
@@ -1021,6 +1059,25 @@ export function DesignSystemPage() {
   onClose={() => setOpen(false)}
   message="Saved ✓"
 />`}
+          />
+          <ComponentShowcase
+            name="BottomActionBar"
+            description="Fixed bottom bar for immediate-save undo, confirm prompts, and unsaved-changes guards. Mounted globally as a React island — call window.showBottomUndo / showBottomConfirm / showUnsavedChangesBar from any JS context."
+            demo={<BottomActionBarDemo />}
+            code={`// Undo (auto-dismisses after 5 s)
+window.showBottomUndo('Lead status set to Sales', async () => { /* revert */ });
+
+// Confirm prompt
+window.showBottomConfirm('Delete this card?', async () => { /* confirmed */ });
+
+// Unsaved-changes guard
+window.showUnsavedChangesBar(
+  async () => { /* save then navigate */ },
+  async () => { /* discard then navigate */ },
+);
+
+// Dismiss programmatically
+window.closeBottomBar();`}
           />
           <ComponentShowcase
             name="Tooltip"

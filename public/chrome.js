@@ -113,6 +113,15 @@ window.getShortcut = function (key) {
   // immediately and the React island fills it when the bundle loads.
   const bottomNav = `<div id="app-bottom-nav-mount"></div>`;
 
+  // The bottom action bar is a React island
+  // (src/react/components/BottomActionBar.tsx) mounted into
+  // #app-bottom-bar-mount by /react/main.js. It exposes
+  // window.showBottomUndo / showBottomConfirm / showUnsavedChangesBar
+  // as replacements for the former manual DOM manipulation in
+  // workflow-core.js. The placeholder is inserted on every page so
+  // the island is available wherever workflow-core.js runs.
+  const bottomBar = `<div id="app-bottom-bar-mount"></div>`;
+
   const invoicePanel = `
     <div id="inv-overlay" class="inv-overlay hidden" onclick="closeInvoicePanel()"></div>
     <div id="inv-panel" class="inv-panel" aria-hidden="true">
@@ -149,7 +158,7 @@ window.getShortcut = function (key) {
 
   const isAdminPage = path === '/admin' || path.startsWith('/admin/');
   document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + accessGate + header + viewerBanner + pageHeading);
-  document.body.insertAdjacentHTML('beforeend', invoicePanel + (isAdminPage ? '' : bottomNav));
+  document.body.insertAdjacentHTML('beforeend', invoicePanel + (isAdminPage ? '' : bottomNav) + bottomBar);
 
   // Styles for the invoice panel.
   // These are injected here (rather than living in app-styles.css) so they
