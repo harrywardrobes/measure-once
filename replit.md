@@ -31,21 +31,29 @@ Project management dashboard (HubSpot CRM integration).
   Returns `{ privilegeLevel, isAdmin, isManager, isViewer }`.
 - **Vanilla-JS files:** call `getPrivilegeLevel()` (defined in `public/core.js`).
   It reads `window.__moHeaderUser || state.user` and defaults to `'member'`.
-- **Deprecated:** reading `window.__moHeaderUser?.privilege_level` or
-  `state.user?.privilege_level` directly is deprecated. Route all privilege
-  checks through one of the two helpers above.
+- **Server route code:** call `getReqPrivilege(req)` (exported from `auth.js`).
+  Returns `req.user?.privilege_level || 'member'` — the session-cached value.
+  For route-level gating prefer `requireAdmin` / `requirePrivilege(minLevel)` /
+  `requireManagerOrAdmin` (also in `auth.js`) — those re-query the database and
+  are always up-to-date after a privilege change.
+- **Deprecated:** reading `window.__moHeaderUser?.privilege_level`,
+  `state.user?.privilege_level`, or `req.user?.privilege_level` directly is
+  deprecated. Route all privilege checks through one of the helpers above.
 - **Lint guard:** `npm run test:privilege-reads` (script:
   `scripts/check-privilege-reads.mjs`) fails CI if any guarded file contains
-  a non-comment line with `privilege_level` outside an approved context.
-  Two surfaces are scanned:
+  a privilege bypass outside an approved context. Three surfaces are scanned:
   - `.js` files under `public/` — except `core.js`, `react/`, and `storybook/`
-    (auto-generated).
+    (auto-generated). Flags any `privilege_level` read.
   - `.ts`/`.tsx` files under `src/react/` — except `hooks/usePrivilege.ts` and
     `hooks/usePrivilegeSync.ts` (canonical implementations) and `*.stories.*`
     (Storybook fixtures). TypeScript property-declaration lines
-    (`privilege_level?: string`) are skipped automatically; admin data-management
-    lines that legitimately reference another user's field are annotated with a
-    trailing `// privilege-read-ok: <reason>` comment.
+    (`privilege_level?: string`) are skipped automatically.
+  - Server-side modules (`server.js`, `design-visits.js`, etc.) — `auth.js`
+    is excluded as the canonical owner. Flags direct `req.user?.privilege_level`
+    reads (the narrower server-side pattern; DB-query results and data-management
+    code are not flagged).
+  Lines that legitimately reference another user's field are annotated with a
+  trailing `// privilege-read-ok: <reason>` comment (suppresses all surfaces).
   Run standalone or via `npm run test:ci`.
 
 ## Authentication

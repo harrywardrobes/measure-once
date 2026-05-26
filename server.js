@@ -4,7 +4,7 @@ const axios = require('axios').create({ timeout: 10000 });
 const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
-const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction } = require('./auth');
+const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction, getReqPrivilege } = require('./auth');
 const {
   hubspotMutationLimiter,
   gmailSendLimiter,
@@ -984,7 +984,7 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     // unless the global dev-filter toggle has been turned off by an admin.
     // Admins may also pass ?all=1 to bypass (e.g. for the test-user management UI).
     if (process.env.NODE_ENV !== 'production') {
-      const bypassForAdmin = req.query.all === '1' && req.user?.privilege_level === 'admin';
+      const bypassForAdmin = req.query.all === '1' && getReqPrivilege(req) === 'admin';
       const devFilterOn = await getDevFilterEnabled();
       if (!bypassForAdmin && devFilterOn) {
         contacts = contacts.filter(c => c.properties?.hw_test_user === 'true');
@@ -2556,7 +2556,7 @@ app.get('/trades', isAuthenticated, (_req, res) => {
 // Sales, Projects, Invoices — manager/admin only
 function requireManagerOrAdminPage(req, res, next) {
   if (!req.isAuthenticated || !req.isAuthenticated()) return res.redirect('/login');
-  const priv = req.user?.privilege_level || 'member';
+  const priv = getReqPrivilege(req);
   if (priv === 'manager' || priv === 'admin') return next();
   return res.redirect('/access-restricted');
 }

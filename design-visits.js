@@ -438,7 +438,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
   // 2. HubSpot lead status update (non-fatal)
   // Only manager/admin users may drive pipeline changes through this path —
   // the same restriction enforced by PATCH /api/contacts/:id for direct updates.
-  const submitterPrivilege = submitterUser?.privilege_level || 'member';
+  const submitterPrivilege = submitterUser?.privilege_level || 'member'; // privilege-read-ok: checking the submitter's privilege, not the current request user's
   const submitterCanEditPipeline = submitterPrivilege === 'admin' || submitterPrivilege === 'manager';
   const submittedLeadStatus = submitterCanEditPipeline ? handlerConfig?.submittedLeadStatus : null;
   if (submittedLeadStatus && process.env.HUBSPOT_ACCESS_TOKEN && visit.contact_id) {

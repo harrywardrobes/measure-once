@@ -593,6 +593,29 @@ const requireManagerOrAdmin = async (req, res, next) => {
   }
 };
 
+/**
+ * getReqPrivilege(req)
+ *
+ * Canonical helper for reading the current request user's privilege level
+ * from the Passport session object.  Always defaults to 'member' when
+ * req.user is absent (unauthenticated) or the field is unset.
+ *
+ * Use this in route handlers that need the session-cached privilege level
+ * for conditional logic (e.g. a dev-only bypass, a page-serve redirect)
+ * rather than scattering `req.user?.privilege_level || 'member'` inline.
+ *
+ * For route-level gating prefer the middleware functions:
+ *   requireAdmin, requireManagerOrAdmin, requirePrivilege(minLevel).
+ * Those re-query the database and are therefore always up-to-date even if
+ * the session was created before a privilege change.
+ *
+ * @param {import('express').Request} req
+ * @returns {'viewer'|'member'|'manager'|'admin'}
+ */
+function getReqPrivilege(req) {
+  return req.user?.privilege_level || 'member';
+}
+
 // ── Onboarding gate ──────────────────────────────────────────────────────────
 // Used after isAuthenticated to block users still in 'more_info_required'
 // from any API except the small set of onboarding/logout endpoints. The list
@@ -2381,5 +2404,5 @@ const isAuthenticated = async (req, res, next) => {
 module.exports = {
   installSession, setupAuth, isAuthenticated, requireAdmin,
   requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete,
-  isAdminEmail, userIdExists, pool, logAdminAction,
+  isAdminEmail, userIdExists, pool, logAdminAction, getReqPrivilege,
 };
