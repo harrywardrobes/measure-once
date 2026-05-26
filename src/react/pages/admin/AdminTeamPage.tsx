@@ -8,7 +8,7 @@ import {
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import DifferenceIcon from '@mui/icons-material/Difference';
 import {
-  api, toast, fmtDate, fmtDateShort, emitAdminChange, onAdminChange,
+  api, toast, fmtDate, fmtDateShort, fmtRelativeAge, emitAdminChange, onAdminChange,
   setTeamCount, setConflictBadge, PRIVILEGE_LEVELS, PRIVILEGE_LABEL,
 } from './adminApi';
 import { phoneKey, phoneFieldLabel } from './adminPhoneHelpers';
@@ -547,17 +547,22 @@ export function AdminTeamPage() {
                     <TableCell>Privilege</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell>Joined</TableCell>
+                    <TableCell>Conflict since</TableCell>
                     <TableCell align="right" />
                   </TableRow>
                 </TableHead>
                 {/* id="team-body" preserved for tests */}
                 <TableBody id="team-body">
                   {users.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} align="center"><Typography variant="body2" color="text.secondary">No users yet.</Typography></TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} align="center"><Typography variant="body2" color="text.secondary">No users yet.</Typography></TableCell></TableRow>
                   ) : users.map((u) => {
                     const name = fullName(u) || '—';
                     const needsInfo = u.onboarding_status === 'more_info_required';
                     const hasConflicts = !!(u.pending_profile_updates && Object.keys(u.pending_profile_updates).length > 0);
+                    const conflictSince = hasConflicts ? (u.updated_at || u.created_at) : null;
+                    const isStaleConflict = conflictSince
+                      ? Date.now() - new Date(conflictSince).getTime() >= 7 * 24 * 60 * 60 * 1000
+                      : false;
                     return (
                       <TableRow key={u.id} hover>
                         <TableCell>
@@ -586,6 +591,19 @@ export function AdminTeamPage() {
                             : <Chip size="small" color="success" label="Active" />}
                         </TableCell>
                         <TableCell><Typography variant="body2">{fmtDateShort(u.created_at)}</Typography></TableCell>
+                        <TableCell>
+                          {conflictSince ? (
+                            <Tooltip title={fmtDateShort(conflictSince)}>
+                              <Typography
+                                variant="body2"
+                                color={isStaleConflict ? 'warning.main' : 'text.secondary'}
+                                sx={isStaleConflict ? { fontWeight: 600 } : undefined}
+                              >
+                                {fmtRelativeAge(conflictSince)}
+                              </Typography>
+                            </Tooltip>
+                          ) : null}
+                        </TableCell>
                         <TableCell align="right">
                           <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
                             {u.email && (
