@@ -3909,8 +3909,8 @@ body.showing-workflow .sales-layout #workflow-panel {
   color: var(--ink-4); font-size: .9rem;
 }
 
-/* Search Settings tab */
-.admin-page .ss-action-row {
+/* Search Settings tab — standalone (no .admin-page scope so SearchActionList works anywhere) */
+.ss-action-row {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 10px;
   background: #fff;
@@ -3919,44 +3919,44 @@ body.showing-workflow .sales-layout #workflow-panel {
   user-select: none;
   transition: opacity 0.15s, background 0.1s;
 }
-.admin-page .ss-action-row + .ss-action-row { margin-top: 4px; }
-.admin-page .ss-action-row.ss-action-disabled { opacity: 0.45; }
-.admin-page .ss-action-row.ss-drag-over { background: var(--orchid-tint); border-color: var(--plum); }
-.admin-page .ss-action-row.ss-dragging  { opacity: 0.35; }
-.admin-page .ss-drag-handle {
+.ss-action-row + .ss-action-row { margin-top: 4px; }
+.ss-action-row.ss-action-disabled { opacity: 0.45; }
+.ss-action-row.ss-drag-over { background: var(--orchid-tint); border-color: var(--plum); }
+.ss-action-row.ss-dragging  { opacity: 0.35; }
+.ss-drag-handle {
   cursor: grab; color: var(--ink-4); font-size: 1rem;
   flex-shrink: 0; padding: 0 2px; line-height: 1;
 }
-.admin-page .ss-toggle { position: relative; display: inline-flex; cursor: pointer; flex-shrink: 0; }
-.admin-page .ss-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
-.admin-page .ss-toggle-track {
+.ss-toggle { position: relative; display: inline-flex; cursor: pointer; flex-shrink: 0; }
+.ss-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.ss-toggle-track {
   width: 32px; height: 18px;
   background: #9ca3af; border-radius: 9px;
   transition: background 0.2s; position: relative;
 }
-.admin-page .ss-toggle-track::after {
+.ss-toggle-track::after {
   content: ''; position: absolute; top: 2px; left: 2px;
   width: 14px; height: 14px; background: #fff; border-radius: 50%;
   transition: transform 0.2s;
 }
-.admin-page .ss-toggle input:checked + .ss-toggle-track { background: var(--plum); }
-.admin-page .ss-toggle input:checked + .ss-toggle-track::after { transform: translateX(14px); }
-.admin-page .ss-action-label {
+.ss-toggle input:checked + .ss-toggle-track { background: var(--plum); }
+.ss-toggle input:checked + .ss-toggle-track::after { transform: translateX(14px); }
+.ss-action-label {
   flex: 1; font-size: .875rem; font-weight: 600; color: var(--ink-1); min-width: 0;
 }
-.admin-page .ss-action-category {
+.ss-action-category {
   font-size: .65rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: .07em;
   color: var(--ink-3);
   background: var(--paper);
   border-radius: 4px; padding: 2px 6px; flex-shrink: 0;
 }
-.admin-page .ss-action-hint {
+.ss-action-hint {
   font-size: .78rem; color: var(--ink-4);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;
 }
 @media (max-width: 640px) {
-  .admin-page .ss-action-hint { display: none; }
+  .ss-action-hint { display: none; }
 }
 
 /* Small reusable text helpers used inside admin template literals (replacing
