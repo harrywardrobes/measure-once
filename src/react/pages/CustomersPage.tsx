@@ -694,17 +694,6 @@ export function CustomersPage(): React.ReactElement {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
-  // Test hook: lets integration tests set pendingContactsStaleRef.current
-  // directly so F2 (deferred fresh-response clear) can be driven without
-  // relying on a full re-fetch (which would clear contactsStale at effect start).
-  React.useEffect(() => {
-    (window as unknown as Record<string, unknown>).__setTestPendingContactsStale =
-      (v: boolean | null) => { pendingContactsStaleRef.current = v; };
-    return () => {
-      delete (window as unknown as Record<string, unknown>).__setTestPendingContactsStale;
-    };
-  }, []);
-
   // Viewers cannot create contacts; close any auto-opened dialog if the
   // role resolves to viewer after mount.
   React.useEffect(() => {
@@ -882,7 +871,14 @@ export function CustomersPage(): React.ReactElement {
     const countsRetryTimers: ReturnType<typeof setTimeout>[] = [];
     setLoading(true);
     setError(null);
-    setContactsStale(false);
+    // Defer the stale-clear when the tab is hidden so the banner is never
+    // dismissed without the user seeing the page — consistent with how the
+    // post-fetch stale update is deferred in the response callback below.
+    if (document.hidden) {
+      pendingContactsStaleRef.current = false;
+    } else {
+      setContactsStale(false);
+    }
 
     {
       const qs = new URLSearchParams({ page: String(page), limit: String(PAGE_LIMIT) });

@@ -381,17 +381,11 @@ async function main() {
       `bannerPresent=${f1BannerVisible}`);
 
     // ── (F2) Fresh response while hidden → pending clear deferred ────────────
-    // When a fetch returns a fresh (non-stale) response while the tab is
-    // hidden, the component stores pendingContactsStaleRef.current = false.
-    // It must NOT call setContactsStale(false) immediately (that would hide the
-    // banner without the user ever seeing the resolution).  Instead it defers
-    // the clear until the next visibilitychange → visible event.
-    //
-    // We drive this via a test hook (__setTestPendingContactsStale) exposed by
-    // the component, so we can set the pending ref directly without triggering
-    // a full effect re-run (which would reset contactsStale at the effect start
-    // regardless of visibility — that is separate, intentional behaviour for the
-    // "loading" phase).
+    // With the banner showing from F1, hide the tab, switch the interceptor to
+    // 'fresh' (no X-Cache-Status header), and trigger a real re-fetch.
+    // Both the pre-fetch setContactsStale(false) and the response callback
+    // are now deferred when document.hidden === true, so the banner must
+    // remain visible until the user sees the tab again.
     console.log('\n  [F2] Fresh response while tab hidden → pending clear deferred');
 
     const f2Pre = await isBannerVisible(page);
@@ -405,20 +399,19 @@ async function main() {
     record('F2 document.hidden override active', f2HiddenConfirm === true,
       `document.hidden=${f2HiddenConfirm}`);
 
-    // Use the test hook to simulate a fresh response arriving while hidden
-    // (pendingContactsStaleRef.current = false).  This is what the fetch
-    // callback sets when it receives a non-stale response while document.hidden
-    // is true.  We drive it directly so the effect's pre-fetch
-    // setContactsStale(false) does not confound the assertion.
-    const hookAvailable = await page.evaluate(() => {
-      if (typeof window.__setTestPendingContactsStale !== 'function') return false;
-      window.__setTestPendingContactsStale(false);
-      return true;
-    });
-    record('F2 test hook available and pending ref set to false', hookAvailable,
-      `hookAvailable=${hookAvailable}`);
+    // Switch interceptor to fresh mode — next /api/contacts-all will respond
+    // without X-Cache-Status, simulating a live HubSpot response.
+    interceptMode = 'fresh';
+    interceptHits = 0;
 
-    // Banner must STILL be visible — the pending false has not been applied yet.
+    // Trigger a real re-fetch via the search input.
+    await triggerReFetch(page, 900);
+
+    record('F2 /api/contacts-all request intercepted (fresh)', interceptHits >= 1,
+      `interceptHits=${interceptHits}`);
+
+    // Banner must STILL be visible — both the pre-fetch clear and the
+    // response-callback clear were deferred because document.hidden === true.
     const f2BannerStillShowing = await isBannerVisible(page);
     record('F2 stale banner persists while tab is hidden (pending clear deferred)',
       f2BannerStillShowing, `bannerPresent=${f2BannerStillShowing}`);
@@ -479,13 +472,13 @@ async function writeReport(runId) {
     '  hidden, then synthesises a `visibilitychange` event (→ visible) and',
     '  confirms the banner appears.',
     '- **(F2) Fresh response while hidden — pending clear deferred**: with the',
-    '  banner showing from (F1), overrides `document.hidden` to `true`.  Uses',
-    '  the `__setTestPendingContactsStale(false)` test hook (exposed by the',
-    '  component) to set `pendingContactsStaleRef.current = false` directly,',
-    '  simulating a fresh HubSpot response arriving while the tab is hidden.',
-    '  Confirms the banner still shows (the deferred `false` has not been',
-    '  applied yet), then synthesises a `visibilitychange` event (→ visible)',
-    '  and confirms the banner disappears.',
+    '  banner showing from (F1), overrides `document.hidden` to `true` and',
+    '  switches the interceptor to `fresh` mode (no `X-Cache-Status` header).',
+    '  Triggers a real re-fetch via the search input.  Both the pre-fetch',
+    '  `setContactsStale(false)` and the response-callback clear are deferred',
+    '  because `document.hidden === true`.  Confirms the banner still shows,',
+    '  then synthesises a `visibilitychange` event (→ visible) and confirms',
+    '  the banner disappears.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
