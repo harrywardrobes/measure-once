@@ -792,6 +792,56 @@ export function SalesBoardPageSkeleton({ forceVisible }: { forceVisible?: boolea
 }
 
 /**
+ * Shape-matched skeleton for LoginPage.
+ *
+ * Mirrors the card structure:
+ *   • Logo placeholder
+ *   • Heading + subtitle
+ *   • Two input field outlines
+ *   • Sign-in button
+ */
+export function LoginPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
+  if (!visible) return null;
+
+  return (
+    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3, bgcolor: '#f8f7f4' }}>
+      <Box
+        sx={{
+          width: '100%',
+          maxWidth: 440,
+          p: 4.5,
+          border: '2px solid',
+          borderColor: 'divider',
+          borderRadius: 3,
+          boxShadow: '0 2px 6px rgba(0,0,0,.06)',
+          bgcolor: 'background.paper',
+        }}
+      >
+        {/* Logo */}
+        <Box sx={{ textAlign: 'center', mb: 3.5 }}>
+          <MuiSkeleton variant="rounded" width={180} height={40} sx={{ mx: 'auto' }} />
+        </Box>
+
+        {/* Heading + subtitle */}
+        <MuiSkeleton variant="text" width="40%" height={32} sx={{ mb: 0.75 }} />
+        <MuiSkeleton variant="text" width="85%" height={20} />
+        <MuiSkeleton variant="text" width="60%" height={20} sx={{ mb: 3.5 }} />
+
+        {/* Email input */}
+        <MuiSkeleton variant="rounded" width="100%" height={56} sx={{ mb: 2.5 }} />
+
+        {/* Password input */}
+        <MuiSkeleton variant="rounded" width="100%" height={56} sx={{ mb: 2.5 }} />
+
+        {/* Sign-in button */}
+        <MuiSkeleton variant="rounded" width="100%" height={48} />
+      </Box>
+    </Box>
+  );
+}
+
+/**
  * Shape-matched skeleton for HomePage.
  *
  * Mirrors the real page structure:

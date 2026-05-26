@@ -107,6 +107,7 @@ import {
   AdminSettingsPageSkeleton,
   CardActionsPageSkeleton,
   ActionHandlersPageSkeleton,
+  LoginPageSkeleton,
 } from '../components/PageLoadingSkeleton';
 
 /**
@@ -1342,6 +1343,16 @@ export function DesignSystemPage() {
 <Suspense fallback={<ActionHandlersPageSkeleton />}>
   <ActionHandlersPage />
 </Suspense>`}
+          />
+
+          <ComponentShowcase
+            name="LoginPageSkeleton"
+            description="Shape-matched skeleton for the Login page: shown while the app checks for an existing session on mount. Mirrors the auth card with logo placeholder, heading, two input outlines, and a sign-in button."
+            demo={<Box sx={{ width: '100%' }}><LoginPageSkeleton forceVisible /></Box>}
+            code={`import { LoginPageSkeleton } from '../components/PageLoadingSkeleton';
+
+// Rendered by LoginPage while GET /api/auth/user is in-flight.
+if (!sessionChecked) return <LoginPageSkeleton />;`}
           />
         </>
       )}

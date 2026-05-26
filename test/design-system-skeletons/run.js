@@ -1,7 +1,7 @@
 'use strict';
 // test/design-system-skeletons/run.js
 //
-// End-to-end test that confirms all twelve page skeletons are rendered in the
+// End-to-end test that confirms all thirteen page skeletons are rendered in the
 // design system gallery (DesignSystemPage → Skeletons tab) when the page is
 // opened as an admin.
 //
@@ -19,8 +19,9 @@
 //      CustomersPageSkeleton, CalendarPageSkeleton, HomePageSkeleton,
 //      ProfilePageSkeleton, AdminTeamPageSkeleton, AdminPermissionsPageSkeleton,
 //      AdminRequestsPageSkeleton, AdminAuditLogPageSkeleton,
-//      AdminSettingsPageSkeleton, CardActionsPageSkeleton, and
-//      ActionHandlersPageSkeleton each contain at least one .MuiSkeleton-root.
+//      AdminSettingsPageSkeleton, CardActionsPageSkeleton,
+//      ActionHandlersPageSkeleton, and LoginPageSkeleton each contain at least
+//      one .MuiSkeleton-root.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:design-system-skeletons
@@ -469,6 +470,17 @@ async function main() {
       actionHandlersCount > 0,
     );
 
+    // ── LoginPageSkeleton ─────────────────────────────────────────────────
+    console.log('\n  [LoginPageSkeleton]');
+
+    const loginPageCount = await skeletonCountForComponent(page, 'LoginPageSkeleton');
+    record(
+      'LoginPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+      'count > 0 inside the LoginPageSkeleton Paper wrapper',
+      `count=${loginPageCount}`,
+      loginPageCount > 0,
+    );
+
     // ── Page errors ───────────────────────────────────────────────────────
     record(
       'no uncaught page errors during design-system skeleton rendering',
@@ -537,6 +549,7 @@ async function writeReport(runId, findings) {
     '- **(AdminSettingsPageSkeleton)** Same pattern for `AdminSettingsPageSkeleton`.',
     '- **(CardActionsPageSkeleton)** Same pattern for `CardActionsPageSkeleton`.',
     '- **(ActionHandlersPageSkeleton)** Same pattern for `ActionHandlersPageSkeleton`.',
+    '- **(LoginPageSkeleton)** Same pattern for `LoginPageSkeleton`.',
     '- **(runtime errors)** Asserts no `pageerror` or `console.error` events',
     '  during the design-system skeleton rendering.',
     '',

@@ -8,6 +8,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import { LoginPageSkeleton } from '../../components/PageLoadingSkeleton';
 
 type View = 'login' | 'forgot' | 'request';
 
@@ -143,7 +144,7 @@ function AuthAlert({ msg, severity, id }: { msg: string; severity: 'success' | '
   );
 }
 
-export function LoginPage() {
+function LoginPageInner() {
   const [view, setView] = React.useState<View>(() => {
     const h = window.location.hash;
     if (h === '#forgot') return 'forgot';
@@ -430,6 +431,28 @@ export function LoginPage() {
       </Box>
     </AuthCard>
   );
+}
+
+export function LoginPage() {
+  const [sessionChecked, setSessionChecked] = React.useState(false);
+
+  React.useEffect(() => {
+    fetch('/api/auth/user', { credentials: 'same-origin' })
+      .then(r => {
+        if (r.ok) {
+          window.location.replace('/');
+        } else {
+          setSessionChecked(true);
+        }
+      })
+      .catch(() => setSessionChecked(true));
+  }, []);
+
+  if (!sessionChecked) {
+    return <LoginPageSkeleton forceVisible />;
+  }
+
+  return <LoginPageInner />;
 }
 
 export default LoginPage;
