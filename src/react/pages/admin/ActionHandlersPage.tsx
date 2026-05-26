@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useToast } from '../../contexts/ToastContext';
 import { Box, Card, CardContent, Stack, Typography } from '@mui/material';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -75,11 +76,12 @@ interface ActionStage { stage: { key: string; label: string }; groups: ActionGro
 
 const W = window as unknown as Record<string, unknown>;
 const _nonce = Math.random().toString(36).slice(2);
-const _reloadRef:       { fn: (() => Promise<void>) | null } = { fn: null };
-const _handlersRef:     { current: Handler[]    } = { current: [] };
-const _labelsRef:       { current: CALabel[]    } = { current: [] };
-const _substatusesRef:  { current: Substatus[]  } = { current: [] };
-const _statusesRef:     { current: LeadStatus[] } = { current: [] };
+const _reloadRef:       { fn: (() => Promise<void>) | null }          = { fn: null };
+const _handlersRef:     { current: Handler[]    }                      = { current: [] };
+const _labelsRef:       { current: CALabel[]    }                      = { current: [] };
+const _substatusesRef:  { current: Substatus[]  }                      = { current: [] };
+const _statusesRef:     { current: LeadStatus[] }                      = { current: [] };
+const _toastRef:        { fn: ((m: string, err?: boolean) => void) | null } = { fn: null };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -96,7 +98,8 @@ function callApi(method: string, path: string, body?: unknown): Promise<unknown>
 }
 
 function showToast(msg: string, err?: boolean) {
-  if (typeof W.toast === 'function') (W.toast as (m: string, e?: boolean) => void)(msg, err);
+  if (_toastRef.fn) _toastRef.fn(msg, err);
+  else if (typeof W.toast === 'function') (W.toast as (m: string, e?: boolean) => void)(msg, err);
 }
 
 function esc(s: unknown): string {
@@ -592,6 +595,7 @@ function HandlerSummary({ h }: { h: Handler }) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function ActionHandlersPage() {
+  const toast = useToast();
   const [handlers,    setHandlers]    = useState<Handler[]>([]);
   const [labels,      setLabels]      = useState<CALabel[]>([]);
   const [substatuses, setSubstatuses] = useState<Substatus[]>([]);
@@ -600,6 +604,8 @@ export function ActionHandlersPage() {
   const [dismissed,   setDismissed]   = useState('');
   const [loading,     setLoading]     = useState(true);
   const everLoaded = useRef(false);
+
+  useEffect(() => { _toastRef.fn = toast; return () => { _toastRef.fn = null; }; }, [toast]);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 

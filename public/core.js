@@ -125,6 +125,9 @@ function isAdminPrivilege()   { return getPrivilegeLevel() === 'admin'; }
 function canEditPrivilege()   { const p = getPrivilegeLevel(); return p === 'manager' || p === 'admin'; }
 
 // ── User prefs helpers ────────────────────────────────────────────────────────
+// @deprecated — React components should use the usePrefs() hook from
+// src/react/hooks/usePrefs.ts instead. These functions remain for vanilla-JS
+// pages during migration; state.prefs is kept populated for bridge access.
 // Fetched once per session; cached in state.prefs. Individual keys are updated
 // with patchPref() which keeps the local cache in sync and fire-and-forgets the
 // server write so callers don't have to await it for UI responsiveness.
@@ -156,6 +159,9 @@ async function patchPref(key, value) {
 }
 
 // ── API helpers ───────────────────────────────────────────────────────────────
+// @deprecated — React components should import GET/POST/PATCH/PUT/DELETE from
+// src/react/utils/api.ts instead of using these window globals. These remain for
+// vanilla-JS pages during migration.
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body !== undefined) opts.body = JSON.stringify(body);
@@ -197,10 +203,12 @@ function dismissViewerBanner() {
   sessionStorage.setItem('viewerBannerDismissed', '1');
 }
 
+// @deprecated — React components should import escHtml from src/react/utils/formatters.ts.
 function escHtml(str) {
   return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// @deprecated — React components should import safeUrl from src/react/utils/formatters.ts.
 function safeUrl(url) {
   const s = (url || '').trim();
   if (!s) return '';
@@ -213,6 +221,8 @@ function safeUrl(url) {
   return s;
 }
 
+// @deprecated — React components should import formatDate/formatShortDate/todayISO
+// from src/react/utils/formatters.ts. These remain for vanilla-JS pages during migration.
 function formatDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -230,6 +240,8 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// @deprecated — React components should import contactName/contactDisplayName from
+// src/react/utils/formatters.ts. These remain for vanilla-JS pages during migration.
 function contactName(contact) {
   const p = contact?.properties || {};
   const name = [p.firstname, p.lastname].filter(Boolean).join(' ');
@@ -242,7 +254,18 @@ function contactDisplayName(c) {
   return n || p.email || `Contact ${c?.id || ''}`;
 }
 
+// @deprecated — Use window.toast() (set by ToastProvider in AppThemeProvider) for
+// cross-island toast messages. This vanilla-JS implementation is kept as a fallback
+// for pages that have no React island mounted (there are currently none). New callers
+// should use the useToast() hook inside React components, or window.toast() from
+// vanilla-JS modules. window.toast() is registered by src/react/contexts/ToastContext.tsx.
 function showToast(msg, isError) {
+  // Forward to the React ToastProvider shim if available (registered on DOMContentLoaded
+  // by the first island that mounts). Falls back to the DOM-append implementation.
+  if (typeof window.toast === 'function') {
+    window.toast(msg, isError);
+    return;
+  }
   const el = document.createElement('div');
   el.className = `toast ${isError ? 'toast-error' : 'toast-success'}`;
   el.setAttribute('role', 'status');

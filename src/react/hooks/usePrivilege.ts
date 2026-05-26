@@ -1,13 +1,4 @@
-import { useState, useEffect } from 'react';
-
-function readPrivilegeLevel(): string {
-  const w = window as unknown as {
-    __moHeaderUser?: { privilege_level?: string } | null;
-    state?: { user?: { privilege_level?: string } | null };
-  };
-  const user = w.__moHeaderUser || w.state?.user || null;
-  return user?.privilege_level || '';
-}
+import { useAuth } from '../contexts/AuthContext';
 
 type UsePrivilegeResult = {
   privilegeLevel: string;
@@ -18,24 +9,15 @@ type UsePrivilegeResult = {
 
 /**
  * Returns the current user's privilege level and convenience booleans.
- * Reads from the user object published by core.js via `window.__moHeaderUser`
- * and the `mo:user` window event.
+ *
+ * Reads from `AuthContext` (populated by `AuthProvider` inside
+ * `AppThemeProvider`). Falls back to the `mo:user` window event /
+ * `window.__moHeaderUser` when no provider is present (Storybook, tests).
  *
  * Use this in all React components that need to gate on privilege.
  */
 export function usePrivilege(): UsePrivilegeResult {
-  const [privilegeLevel, setPrivilegeLevel] = useState<string>(() => readPrivilegeLevel());
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const user = (e as CustomEvent<{ privilege_level?: string } | null>).detail;
-      setPrivilegeLevel(user?.privilege_level || '');
-    };
-    window.addEventListener('mo:user', handler as EventListener);
-    const current = readPrivilegeLevel();
-    if (current) setPrivilegeLevel(current);
-    return () => window.removeEventListener('mo:user', handler as EventListener);
-  }, []);
+  const { privilegeLevel } = useAuth();
 
   return {
     privilegeLevel,

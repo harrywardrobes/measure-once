@@ -3,6 +3,8 @@ import { ThemeProvider } from '@mui/material/styles';
 import GlobalStyles from '@mui/material/GlobalStyles';
 import ScopedCssBaseline from '@mui/material/ScopedCssBaseline';
 import { theme, BRAND_COLORS, STAGE_COLORS, RADIUS } from './theme';
+import { ToastProvider } from './contexts/ToastContext';
+import { AuthProvider } from './contexts/AuthContext';
 
 /**
  * Wraps every React mount in the shared MUI theme.
@@ -178,7 +180,11 @@ export function AppThemeProvider({ children }: { children: React.ReactNode }) {
           CSS custom properties as React islands. GlobalStyles targets the
           document <head>, not just the React subtree.  */}
       <GlobalStyles styles={{ ':root': rootTokens }} />
-      <ScopedCssBaseline>{children}</ScopedCssBaseline>
+      <AuthProvider>
+        <ToastProvider>
+          <ScopedCssBaseline>{children}</ScopedCssBaseline>
+        </ToastProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

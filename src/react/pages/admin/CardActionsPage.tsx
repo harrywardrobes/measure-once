@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Button, Card, CardContent, CircularProgress, Stack, Typography } from '@mui/material';
+import { useToast } from '../../contexts/ToastContext';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -55,10 +56,6 @@ function callApi(method: string, path: string, body?: unknown): Promise<unknown>
   }).then(r => r.ok ? r.json() : r.json().then((e: { error?: string }) => {
     throw new Error(e.error || r.statusText);
   }));
-}
-
-function showToast(msg: string, err?: boolean) {
-  if (typeof W.toast === 'function') (W.toast as (m: string, e?: boolean) => void)(msg, err);
 }
 
 function buildModel(
@@ -176,6 +173,7 @@ function HandlerBadges({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function CardActionsPage() {
+  const showToast = useToast();
   const [labels,      setLabels]      = useState<CALabel[]>([]);
   const [statuses,    setStatuses]    = useState<LeadStatus[]>([]);
   const [substatuses, setSubstatuses] = useState<Substatus[]>([]);
@@ -358,7 +356,7 @@ export function CardActionsPage() {
     try { new BroadcastChannel('stage_action_labels_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
     try { new BroadcastChannel('lead_substatuses_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
     fetchAll();
-  }, [fetchAll]);
+  }, [fetchAll, showToast]);
 
   const addCardActionSubstatus = useCallback((lsKey: string) => {
     const ls = statusesRef.current.find(s => s.key === lsKey);
@@ -389,7 +387,7 @@ export function CardActionsPage() {
       a.sort_order = bOrder; b.sort_order = aOrder;
       fetchAll();
     } catch (e) { showToast(`Failed to reorder: ${(e as Error).message}`, true); }
-  }, [fetchAll]);
+  }, [fetchAll, showToast]);
 
   useEffect(() => {
     W.loadCardActionsAdmin    = fetchAll;

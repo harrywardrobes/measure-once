@@ -19,6 +19,7 @@ import {
   StrengthMeter,
   StrengthMeterErrorBoundary,
 } from '../utils/passwordStrength';
+import { useToast } from '../contexts/ToastContext';
 
 type Profile = {
   email?: string;
@@ -37,12 +38,8 @@ async function jpost<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-function showToast(msg: string, isError = false) {
-  const w = window as unknown as { showToast?: (m: string, e?: boolean) => void };
-  if (typeof w.showToast === 'function') w.showToast(msg, isError);
-}
-
 export function ChangePasswordCard({ profile }: { profile: Profile }) {
+  const showToast = useToast();
   const [open, setOpen] = React.useState(false);
   const [openNonce, setOpenNonce] = React.useState(0);
   const [current, setCurrent] = React.useState('');
