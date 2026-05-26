@@ -2228,7 +2228,7 @@ app.get('/api/users/me/prefs', isAuthenticated, async (req, res) => {
   }
 });
 
-const VALID_NAV_KEYS = new Set(['home', 'sales', 'survey', 'projects', 'calendar', 'invoices', 'trades', 'ideas']);
+const VALID_NAV_KEYS = new Set(['home', 'customers', 'sales', 'survey', 'projects', 'calendar', 'invoices', 'trades', 'ideas']);
 const NAV_BAR_SIZE = 3;
 
 app.patch('/api/users/me/prefs', isAuthenticated, prefsWriteLimiter, async (req, res) => {
@@ -2240,21 +2240,41 @@ app.patch('/api/users/me/prefs', isAuthenticated, prefsWriteLimiter, async (req,
     }
     if ('nav_primary_keys' in patch) {
       const keys = patch.nav_primary_keys;
-      if (
-        !Array.isArray(keys) ||
-        keys.length !== NAV_BAR_SIZE ||
-        !keys.every((k) => typeof k === 'string' && VALID_NAV_KEYS.has(k)) ||
-        new Set(keys).size !== NAV_BAR_SIZE
-      ) {
-        return res.status(400).json({
-          error: `nav_primary_keys must be an array of exactly ${NAV_BAR_SIZE} unique valid nav keys`,
-        });
+      if (keys !== null) {
+        if (
+          !Array.isArray(keys) ||
+          keys.length !== NAV_BAR_SIZE ||
+          !keys.every((k) => typeof k === 'string' && VALID_NAV_KEYS.has(k)) ||
+          new Set(keys).size !== NAV_BAR_SIZE
+        ) {
+          return res.status(400).json({
+            error: `nav_primary_keys must be an array of exactly ${NAV_BAR_SIZE} unique valid nav keys, or null to clear`,
+          });
+        }
       }
     }
+    // Build the update: for any key set to null, remove it from the JSONB
+    // column (so GET /prefs returns null/absent rather than a JSON null).
+    // For all other keys, merge them in with the || operator.
+    const nullKeys = Object.keys(patch).filter((k) => patch[k] === null);
+    const nonNullPatch = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== null));
+    let updateExpr = 'prefs';
+    const queryParams = [userId];
+    let paramIdx = 2;
+    if (Object.keys(nonNullPatch).length > 0) {
+      updateExpr = `${updateExpr} || $${paramIdx}::jsonb`;
+      queryParams.splice(paramIdx - 1, 0, JSON.stringify(nonNullPatch));
+      paramIdx++;
+    }
+    for (const k of nullKeys) {
+      updateExpr = `${updateExpr} - $${paramIdx}`;
+      queryParams.splice(paramIdx - 1, 0, k);
+      paramIdx++;
+    }
     const r = await pool.query(
-      `UPDATE users SET prefs = prefs || $1::jsonb, updated_at = NOW()
-       WHERE id = $2 RETURNING prefs`,
-      [JSON.stringify(patch), userId]
+      `UPDATE users SET prefs = ${updateExpr}, updated_at = NOW()
+       WHERE id = $1 RETURNING prefs`,
+      queryParams
     );
     if (r.rowCount === 0) return res.status(404).json({ error: 'User not found' });
     res.json(r.rows[0].prefs);

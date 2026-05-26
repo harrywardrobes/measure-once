@@ -3,13 +3,16 @@ import { usePrivilege } from '../hooks/usePrivilege';
 import Box from '@mui/material/Box';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
+import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIconWrapper from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import { useTheme, type Theme } from '@mui/material/styles';
+import TuneIcon from '@mui/icons-material/Tune';
 import HomeIcon from '@mui/icons-material/Home';
+import { NavCustomiseDialog } from './NavCustomiseDialog';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import SellIcon from '@mui/icons-material/Sell';
 import SellOutlinedIcon from '@mui/icons-material/SellOutlined';
@@ -126,6 +129,38 @@ async function loadRoleNavConfig(): Promise<string[] | null> {
   }
 }
 
+async function loadUserNavPrefs(): Promise<string[] | null> {
+  try {
+    const r = await fetch('/api/users/me/prefs', { headers: { Accept: 'application/json' } });
+    if (!r.ok) return null;
+    const data = await r.json() as { nav_primary_keys?: unknown };
+    const keys = data.nav_primary_keys;
+    if (
+      Array.isArray(keys) &&
+      keys.length === BAR_SIZE &&
+      keys.every((k) => typeof k === 'string' && VALID_NAV_KEYS.has(k)) &&
+      new Set(keys).size === BAR_SIZE
+    ) {
+      return keys as string[];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveUserNavPrefs(keys: string[]): Promise<void> {
+  try {
+    await fetch('/api/users/me/prefs', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ nav_primary_keys: keys }),
+    });
+  } catch {
+    // best-effort
+  }
+}
+
 export function BottomNav() {
   const theme = useTheme();
   const { isManager } = usePrivilege();
@@ -136,6 +171,7 @@ export function BottomNav() {
 
   const [primaryKeys, setPrimaryKeys] = useState<string[]>(DEFAULT_PRIMARY_KEYS);
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [customiseOpen, setCustomiseOpen] = useState(false);
 
   // visibleNav and defaultPrimaryKeys are computed here (before the ref) so
   // that defaultPrimaryKeysRef always holds a role-aware value that the async
@@ -180,8 +216,10 @@ export function BottomNav() {
 
   useEffect(() => {
     let cancelled = false;
-    loadRoleNavConfig().then((keys) => {
+    Promise.all([loadUserNavPrefs(), loadRoleNavConfig()]).then(([userPrefs, roleKeys]) => {
       if (cancelled) return;
+      // User personal prefs take priority over role config.
+      const keys = userPrefs ?? roleKeys;
       if (keys) {
         setPrimaryKeys(keys);
         apiConfigFoundRef.current = true;
@@ -223,6 +261,12 @@ export function BottomNav() {
   const moreSelected = activeInOverflow || drawerOpen;
 
   const barValue = activeInOverflow ? '__more__' : (value || false);
+
+  const handleCustomiseSave = useCallback((keys: string[]) => {
+    setPrimaryKeys(keys);
+    apiConfigFoundRef.current = true;
+    void saveUserNavPrefs(keys);
+  }, []);
 
   const actionSx = {
     color: 'text.secondary',
@@ -404,8 +448,44 @@ export function BottomNav() {
               </ListItemButton>
             );
           })}
+          {isManager && (
+            <>
+              <Divider sx={{ mx: 2, my: 0.5 }} />
+              <ListItemButton
+                onClick={() => { setDrawerOpen(false); setCustomiseOpen(true); }}
+                sx={{ py: 1.5, px: 2.5 }}
+              >
+                <ListItemIconWrapper sx={{ minWidth: 40, color: 'text.secondary' }}>
+                  <TuneIcon />
+                </ListItemIconWrapper>
+                <ListItemText
+                  primary="Customise navigation"
+                  slotProps={{
+                    primary: {
+                      style: {
+                        fontWeight: 600,
+                        fontSize: '0.95rem',
+                        letterSpacing: '0.02em',
+                        textTransform: 'uppercase',
+                        color: theme.palette.text.secondary,
+                      },
+                    },
+                  }}
+                />
+              </ListItemButton>
+            </>
+          )}
         </List>
       </Drawer>
+
+      <NavCustomiseDialog
+        open={customiseOpen}
+        onClose={() => setCustomiseOpen(false)}
+        availableItems={visibleNav}
+        currentKeys={resolvedPrimaryKeys}
+        defaultKeys={defaultPrimaryKeys}
+        onSave={handleCustomiseSave}
+      />
 
       {moreSelected && (
         <Box sx={{ display: 'none' }} aria-hidden="true" data-more-selected />
