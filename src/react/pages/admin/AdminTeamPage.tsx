@@ -27,6 +27,7 @@ type User = {
   profile_image_url?: string;
   created_at?: string;
   updated_at?: string;
+  conflict_created_at?: string;
   metadata?: Record<string, string>;
   note?: string;
   pending_profile_updates?: Record<string, ProfileConflict> | null;
@@ -159,7 +160,7 @@ export function AdminTeamPage() {
       const staleThreshold = Date.now() - 7 * 24 * 60 * 60 * 1000;
       const staleConflictCount = userList.filter(usr => {
         if (!usr.pending_profile_updates || !Object.keys(usr.pending_profile_updates).length) return false;
-        const since = new Date(usr.updated_at || usr.created_at || 0).getTime();
+        const since = new Date(usr.conflict_created_at || usr.updated_at || usr.created_at || 0).getTime();
         return since < staleThreshold;
       }).length;
       setConflictBadge(staleConflictCount);
@@ -559,7 +560,7 @@ export function AdminTeamPage() {
                     const name = fullName(u) || '—';
                     const needsInfo = u.onboarding_status === 'more_info_required';
                     const hasConflicts = !!(u.pending_profile_updates && Object.keys(u.pending_profile_updates).length > 0);
-                    const conflictSince = hasConflicts ? (u.updated_at || u.created_at) : null;
+                    const conflictSince = hasConflicts ? (u.conflict_created_at || u.updated_at || u.created_at) : null;
                     const isStaleConflict = conflictSince
                       ? Date.now() - new Date(conflictSince).getTime() >= 7 * 24 * 60 * 60 * 1000
                       : false;

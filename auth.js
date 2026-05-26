@@ -340,6 +340,24 @@ async function ensureAuthTables() {
   `);
 
   await pool.query(`
+    ALTER TABLE allowed_emails ADD COLUMN IF NOT EXISTS conflict_created_at TIMESTAMPTZ;
+  `);
+
+  // One-time backfill: stamp conflict_created_at for any pre-existing unresolved conflicts
+  // that pre-date this migration.  We use COALESCE(u.updated_at, u.created_at) as the best
+  // available approximation of when the conflict was first created — this is exactly the same
+  // value the old stale checks used, so behaviour is preserved for legacy rows while preventing
+  // future profile edits from resetting the timer.
+  await pool.query(`
+    UPDATE allowed_emails ae
+       SET conflict_created_at = COALESCE(u.updated_at, u.created_at, NOW())
+      FROM users u
+     WHERE LOWER(u.email) = ae.email
+       AND ae.pending_profile_updates IS NOT NULL
+       AND ae.conflict_created_at IS NULL
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_settings (
       key VARCHAR PRIMARY KEY,
       value JSONB NOT NULL,
@@ -1338,9 +1356,16 @@ async function setupAuth(app) {
         : null;
 
       await client.query(
-        `INSERT INTO allowed_emails (email, metadata, pending_profile_updates)
-         VALUES ($1, $2::jsonb, $3::jsonb)
-         ON CONFLICT (email) DO UPDATE SET metadata = $2::jsonb, pending_profile_updates = $3::jsonb`,
+        `INSERT INTO allowed_emails (email, metadata, pending_profile_updates, conflict_created_at)
+         VALUES ($1, $2::jsonb, $3::jsonb, CASE WHEN $3::jsonb IS NOT NULL THEN NOW() ELSE NULL END)
+         ON CONFLICT (email) DO UPDATE SET
+           metadata = $2::jsonb,
+           pending_profile_updates = $3::jsonb,
+           conflict_created_at = CASE
+             WHEN $3::jsonb IS NULL THEN NULL
+             WHEN allowed_emails.conflict_created_at IS NOT NULL THEN allowed_emails.conflict_created_at
+             ELSE NOW()
+           END`,
         [email, JSON.stringify(newMeta), pendingJson]
       );
 
@@ -1743,14 +1768,14 @@ async function setupAuth(app) {
         if (safeResolutions.first_name !== undefined) newMeta.first_name = safeResolutions.first_name || undefined;
         if (safeResolutions.last_name  !== undefined) newMeta.last_name  = safeResolutions.last_name  || undefined;
         await client.query(
-          `INSERT INTO allowed_emails (email, metadata, pending_profile_updates)
-           VALUES ($1, $2::jsonb, NULL)
-           ON CONFLICT (email) DO UPDATE SET metadata = $2::jsonb, pending_profile_updates = NULL`,
+          `INSERT INTO allowed_emails (email, metadata, pending_profile_updates, conflict_created_at)
+           VALUES ($1, $2::jsonb, NULL, NULL)
+           ON CONFLICT (email) DO UPDATE SET metadata = $2::jsonb, pending_profile_updates = NULL, conflict_created_at = NULL`,
           [email, JSON.stringify(newMeta)]
         );
       } else {
         await client.query(
-          `UPDATE allowed_emails SET pending_profile_updates = NULL WHERE email = $1`,
+          `UPDATE allowed_emails SET pending_profile_updates = NULL, conflict_created_at = NULL WHERE email = $1`,
           [email]
         );
       }
@@ -1833,7 +1858,7 @@ async function setupAuth(app) {
                 (u.password_hash IS NOT NULL) AS has_password,
                 (u.custom_photo  IS NOT NULL) AS has_custom_photo,
                 (u.pending_photo IS NOT NULL) AS has_pending_photo,
-                ae.note, ae.metadata, ae.pending_profile_updates
+                ae.note, ae.metadata, ae.pending_profile_updates, ae.conflict_created_at
          FROM users u
          LEFT JOIN allowed_emails ae ON LOWER(u.email) = ae.email
          ORDER BY u.created_at DESC LIMIT 500`
@@ -1847,12 +1872,12 @@ async function setupAuth(app) {
   app.get('/api/admin/conflict-summary', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
-        `SELECT u.id, u.email, u.first_name, u.last_name, u.updated_at,
-                ae.pending_profile_updates
+        `SELECT u.id, u.email, u.first_name, u.last_name,
+                ae.conflict_created_at, ae.pending_profile_updates
          FROM users u
          JOIN allowed_emails ae ON LOWER(u.email) = ae.email
          WHERE ae.pending_profile_updates IS NOT NULL
-           AND COALESCE(u.updated_at, u.created_at) < NOW() - INTERVAL '7 days'`
+           AND COALESCE(ae.conflict_created_at, u.updated_at, u.created_at) < NOW() - INTERVAL '7 days'`
       );
       res.json({ count: r.rowCount, users: r.rows });
     } catch (e) {
@@ -2476,11 +2501,11 @@ async function sendConflictDigest() {
   // Find users with unresolved conflicts older than 7 days.
   const r = await pool.query(
     `SELECT u.email, u.first_name, u.last_name,
-            COALESCE(u.updated_at, u.created_at) AS conflict_since
+            COALESCE(ae.conflict_created_at, u.updated_at, u.created_at) AS conflict_since
      FROM users u
      JOIN allowed_emails ae ON LOWER(u.email) = ae.email
      WHERE ae.pending_profile_updates IS NOT NULL
-       AND COALESCE(u.updated_at, u.created_at) < NOW() - INTERVAL '7 days'
+       AND COALESCE(ae.conflict_created_at, u.updated_at, u.created_at) < NOW() - INTERVAL '7 days'
      ORDER BY conflict_since ASC`
   );
   if (r.rowCount === 0) return false;
