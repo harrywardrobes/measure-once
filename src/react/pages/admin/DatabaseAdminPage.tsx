@@ -16,6 +16,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Drawer,
   FormControl,
@@ -168,6 +172,94 @@ function diffLines(before: RowData | null, after: RowData | null): DiffLine[] {
     if (after !== null) lines.push({ type: 'add', text: `+ ${k}: ${as2}` });
   }
   return lines;
+}
+
+// Tables that benefit from a cleaner, text-focused diff display.
+const IDEA_TABLES = new Set(['ideas', 'idea_comments']);
+
+// Changed-field pairs for structured display (field, before value, after value).
+type FieldChange = { field: string; before: string; after: string };
+
+function fieldChanges(before: RowData | null, after: RowData | null): FieldChange[] {
+  const keys = Array.from(new Set([
+    ...Object.keys(before || {}),
+    ...Object.keys(after || {}),
+  ])).sort();
+  const out: FieldChange[] = [];
+  for (const k of keys) {
+    const b = before ? before[k] : undefined;
+    const a = after ? after[k] : undefined;
+    const bs = b === undefined ? '(unset)' : b === null ? 'null' : typeof b === 'object' ? JSON.stringify(b) : String(b);
+    const as2 = a === undefined ? '(unset)' : a === null ? 'null' : typeof a === 'object' ? JSON.stringify(a) : String(a);
+    if (bs === as2) continue;
+    out.push({ field: k, before: before !== null ? bs : '', after: after !== null ? as2 : '' });
+  }
+  return out;
+}
+
+// Structured diff block for ideas / idea_comments — shows field-level before/after
+// in a readable way instead of a monospace git-style patch.
+function IdeaFieldDiff({ before, after }: { before: RowData | null; after: RowData | null }) {
+  const changes = fieldChanges(before, after);
+  if (!changes.length) {
+    return <Typography variant="caption" color="text.secondary">No diff data.</Typography>;
+  }
+  return (
+    <Stack spacing={1.5}>
+      {changes.map(({ field, before: bv, after: av }) => (
+        <Box key={field}>
+          <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.62rem', display: 'block', mb: 0.5 }}>
+            {field}
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: bv && av ? '1fr 1fr' : '1fr', gap: 1 }}>
+            {bv && (
+              <Box sx={{ bgcolor: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 1, p: 1, fontSize: '0.78rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#9f1239' }}>
+                <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, mb: 0.25, color: '#e11d48', fontSize: '0.64rem' }}>Before</Typography>
+                {bv}
+              </Box>
+            )}
+            {av && (
+              <Box sx={{ bgcolor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 1, p: 1, fontSize: '0.78rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#14532d' }}>
+                <Typography variant="caption" sx={{ display: 'block', fontWeight: 700, mb: 0.25, color: '#16a34a', fontSize: '0.64rem' }}>After</Typography>
+                {av}
+              </Box>
+            )}
+          </Box>
+        </Box>
+      ))}
+    </Stack>
+  );
+}
+
+// Diff block used in the revert confirmation dialog — shows what the row will look like
+// after the revert completes, compared to the current state.
+function RevertPreviewDiff({ auditRow, tableName }: { auditRow: AuditRow; tableName: string }) {
+  // For a revert:
+  //   update → restores before_data onto the row (current: after_data, result: before_data)
+  //   delete → re-inserts before_data (current: nothing, result: before_data)
+  //   insert → deletes the inserted row (current: after_data, result: nothing)
+  const [revertFrom, revertTo] = (() => {
+    if (auditRow.op === 'update') return [auditRow.after_data, auditRow.before_data];
+    if (auditRow.op === 'delete') return [null, auditRow.before_data];
+    return [auditRow.after_data, null]; // insert → undo delete
+  })();
+
+  if (IDEA_TABLES.has(tableName)) {
+    return <IdeaFieldDiff before={revertFrom} after={revertTo} />;
+  }
+  const lines = diffLines(revertFrom, revertTo);
+  if (!lines.length) {
+    return <Typography variant="caption" color="text.secondary">No changes to preview.</Typography>;
+  }
+  return (
+    <Box sx={{ fontFamily: 'monospace', fontSize: '0.72rem', bgcolor: 'grey.50', borderRadius: 1, p: 1.5, maxHeight: 280, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+      {lines.map((l, i) => (
+        <Box key={i} sx={{ color: l.type === 'add' ? '#166534' : '#991b1b', textDecoration: l.type === 'del' ? 'line-through' : 'none' }}>
+          {l.text}
+        </Box>
+      ))}
+    </Box>
+  );
 }
 
 // ── CellValue ─────────────────────────────────────────────────────────────
@@ -894,6 +986,7 @@ function AuditLog({
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [revertingId, setRevertingId] = useState<number | null>(null);
   const [revertErrors, setRevertErrors] = useState<Record<number, string>>({});
+  const [revertPending, setRevertPending] = useState<AuditRow | null>(null);
   const debRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tablesByName = new Map(tables.map(t => [t.name, t]));
 
@@ -925,13 +1018,10 @@ function AuditLog({
     setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
 
-  async function revert(row: AuditRow) {
-    const prompt = row.op === 'delete'
-      ? `Restore the previously-deleted row in "${row.table_name}" (pk=${row.pk})?`
-      : row.op === 'insert'
-        ? `Delete the row that was inserted into "${row.table_name}" (pk=${row.pk})?`
-        : `Revert this update to "${row.table_name}" (pk=${row.pk}) by re-applying the original values?`;
-    if (!window.confirm(prompt)) return;
+  async function confirmRevert() {
+    if (!revertPending) return;
+    const row = revertPending;
+    setRevertPending(null);
     setRevertingId(row.id);
     setRevertErrors(prev => { const n = { ...prev }; delete n[row.id]; return n; });
     try {
@@ -1033,7 +1123,7 @@ function AuditLog({
                       ) : (
                         <Button size="small" variant="outlined" sx={{ fontSize: '0.7rem', p: '1px 10px' }}
                           disabled={revertingId === row.id}
-                          onClick={() => revert(row)}>
+                          onClick={() => setRevertPending(row)}>
                           {revertingId === row.id ? <CircularProgress size={14} /> : revertLabel}
                         </Button>
                       )}
@@ -1042,14 +1132,20 @@ function AuditLog({
                     {revertErrors[row.id] && <Alert severity="error" sx={{ mt: 0.5, py: 0.25 }}>{revertErrors[row.id]}</Alert>}
 
                     {isExpanded && (
-                      <Box sx={{ fontFamily: 'monospace', fontSize: '0.72rem', bgcolor: 'grey.50', borderRadius: 1, p: 1, mt: 0.75, maxHeight: 160, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                        {lines.length === 0
-                          ? <Box sx={{ color: 'text.secondary' }}>No diff data.</Box>
-                          : lines.map((l, i) => (
-                            <Box key={i} sx={{ color: l.type === 'add' ? '#166534' : '#991b1b', textDecoration: l.type === 'del' ? 'line-through' : 'none' }}>
-                              {l.text}
-                            </Box>
-                          ))}
+                      <Box sx={{ mt: 0.75, maxHeight: 280, overflowY: 'auto' }}>
+                        {IDEA_TABLES.has(row.table_name) ? (
+                          <IdeaFieldDiff before={row.before_data} after={row.after_data} />
+                        ) : (
+                          <Box sx={{ fontFamily: 'monospace', fontSize: '0.72rem', bgcolor: 'grey.50', borderRadius: 1, p: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                            {lines.length === 0
+                              ? <Box sx={{ color: 'text.secondary' }}>No diff data.</Box>
+                              : lines.map((l, i) => (
+                                <Box key={i} sx={{ color: l.type === 'add' ? '#166534' : '#991b1b', textDecoration: l.type === 'del' ? 'line-through' : 'none' }}>
+                                  {l.text}
+                                </Box>
+                              ))}
+                          </Box>
+                        )}
                       </Box>
                     )}
                   </Box>
@@ -1065,6 +1161,52 @@ function AuditLog({
         <Typography variant="caption">Page {page} / {pageCount}</Typography>
         <Button size="small" variant="outlined" disabled={page >= pageCount} onClick={() => { const p = page + 1; setPage(p); fetchAudit(p, tableFilter, adminFilter); }}>Next</Button>
       </Box>
+
+      {/* Revert confirmation Dialog */}
+      <Dialog
+        open={!!revertPending}
+        onClose={() => setRevertPending(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        {revertPending && (
+          <>
+            <DialogTitle sx={{ pb: 1 }}>
+              {revertPending.op === 'delete'
+                ? `Restore deleted row — ${revertPending.table_name}`
+                : revertPending.op === 'insert'
+                  ? `Undo insert — ${revertPending.table_name}`
+                  : `Revert change — ${revertPending.table_name}`}
+            </DialogTitle>
+            <DialogContent dividers>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                {revertPending.op === 'delete'
+                  ? `This will re-insert the row that was deleted (pk=${revertPending.pk}). The row will be restored to its state at the time of deletion.`
+                  : revertPending.op === 'insert'
+                    ? `This will delete the row that was inserted (pk=${revertPending.pk}). The row will be permanently removed.`
+                    : `This will restore the row (pk=${revertPending.pk}) to its state before this edit was made.`}
+              </Typography>
+              <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', mb: 1, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.65rem' }}>
+                {revertPending.op === 'delete' ? 'Row to restore' : revertPending.op === 'insert' ? 'Row to remove' : 'What will change'}
+              </Typography>
+              <RevertPreviewDiff auditRow={revertPending} tableName={revertPending.table_name} />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setRevertPending(null)}>Cancel</Button>
+              <Button
+                variant="contained"
+                color={revertPending.op === 'insert' ? 'error' : 'primary'}
+                onClick={confirmRevert}
+                disabled={!!revertingId}
+              >
+                {revertingId
+                  ? <CircularProgress size={18} />
+                  : revertPending.op === 'delete' ? 'Restore row' : revertPending.op === 'insert' ? 'Undo insert' : 'Revert change'}
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Box>
   );
 }

@@ -3498,13 +3498,30 @@ app.post('/api/ideas/:id/comments', async (req, res) => {
 app.delete('/api/ideas/:id', isAuthenticated, requireAdmin, async (req, res) => {
   const ideaId = parseInt(req.params.id, 10);
   if (isNaN(ideaId)) return res.status(400).json({ error: 'Invalid idea id.' });
+  const client = await pool.connect();
   try {
-    const result = await pool.query('DELETE FROM ideas WHERE id = $1', [ideaId]);
-    if (result.rowCount === 0) return res.status(404).json({ error: 'Idea not found.' });
+    await client.query('BEGIN');
+    const beforeR = await client.query('SELECT * FROM ideas WHERE id = $1 LIMIT 1', [ideaId]);
+    if (!beforeR.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Idea not found.' });
+    }
+    const before = beforeR.rows[0];
+    await client.query('DELETE FROM ideas WHERE id = $1', [ideaId]);
+    const adminEmail = req.user?.claims?.email || req.user?.email || 'unknown';
+    await client.query(
+      `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
+       VALUES ($1, 'ideas', $2, 'delete', $3::jsonb, NULL)`,
+      [adminEmail, String(ideaId), JSON.stringify(before)]
+    );
+    await client.query('COMMIT');
     res.json({ ok: true });
   } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('DELETE /api/ideas/:id error:', e.message);
     res.status(500).json({ error: 'Could not delete idea.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -3514,16 +3531,34 @@ app.patch('/api/ideas/:id', isAuthenticated, requireAdmin, async (req, res) => {
   const body = (req.body?.body || '').trim();
   if (!body) return res.status(400).json({ error: 'Idea body is required.' });
   if (body.length > 1000) return res.status(400).json({ error: 'Idea body too long.' });
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
-      `UPDATE ideas SET body = $1, edited_at = NOW() WHERE id = $2 RETURNING id, body, edited_at`,
+    await client.query('BEGIN');
+    const beforeR = await client.query('SELECT * FROM ideas WHERE id = $1 LIMIT 1', [ideaId]);
+    if (!beforeR.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Idea not found.' });
+    }
+    const before = beforeR.rows[0];
+    const { rows } = await client.query(
+      `UPDATE ideas SET body = $1, edited_at = NOW() WHERE id = $2 RETURNING *`,
       [body, ideaId]
     );
-    if (!rows.length) return res.status(404).json({ error: 'Idea not found.' });
-    res.json({ id: rows[0].id, body: rows[0].body, edited_at: rows[0].edited_at });
+    const after = rows[0];
+    const adminEmail = req.user?.claims?.email || req.user?.email || 'unknown';
+    await client.query(
+      `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
+       VALUES ($1, 'ideas', $2, 'update', $3::jsonb, $4::jsonb)`,
+      [adminEmail, String(ideaId), JSON.stringify(before), JSON.stringify(after)]
+    );
+    await client.query('COMMIT');
+    res.json({ id: after.id, body: after.body, edited_at: after.edited_at });
   } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('PATCH /api/ideas/:id error:', e.message);
     res.status(500).json({ error: 'Could not update idea.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -3531,16 +3566,33 @@ app.delete('/api/ideas/:id/comments/:commentId', isAuthenticated, requireAdmin, 
   const ideaId    = parseInt(req.params.id, 10);
   const commentId = parseInt(req.params.commentId, 10);
   if (isNaN(ideaId) || isNaN(commentId)) return res.status(400).json({ error: 'Invalid id.' });
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
-      'DELETE FROM idea_comments WHERE id = $1 AND idea_id = $2',
+    await client.query('BEGIN');
+    const beforeR = await client.query(
+      'SELECT * FROM idea_comments WHERE id = $1 AND idea_id = $2 LIMIT 1',
       [commentId, ideaId]
     );
-    if (result.rowCount === 0) return res.status(404).json({ error: 'Comment not found.' });
+    if (!beforeR.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Comment not found.' });
+    }
+    const before = beforeR.rows[0];
+    await client.query('DELETE FROM idea_comments WHERE id = $1 AND idea_id = $2', [commentId, ideaId]);
+    const adminEmail = req.user?.claims?.email || req.user?.email || 'unknown';
+    await client.query(
+      `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
+       VALUES ($1, 'idea_comments', $2, 'delete', $3::jsonb, NULL)`,
+      [adminEmail, String(commentId), JSON.stringify(before)]
+    );
+    await client.query('COMMIT');
     res.json({ ok: true });
   } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('DELETE /api/ideas/:id/comments/:commentId error:', e.message);
     res.status(500).json({ error: 'Could not delete comment.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -3551,16 +3603,37 @@ app.patch('/api/ideas/:id/comments/:commentId', isAuthenticated, requireAdmin, a
   const body = (req.body?.body || '').trim();
   if (!body) return res.status(400).json({ error: 'Comment body is required.' });
   if (body.length > 500) return res.status(400).json({ error: 'Comment body too long.' });
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
-      `UPDATE idea_comments SET body = $1, edited_at = NOW() WHERE id = $2 AND idea_id = $3 RETURNING id, body, edited_at`,
+    await client.query('BEGIN');
+    const beforeR = await client.query(
+      'SELECT * FROM idea_comments WHERE id = $1 AND idea_id = $2 LIMIT 1',
+      [commentId, ideaId]
+    );
+    if (!beforeR.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Comment not found.' });
+    }
+    const before = beforeR.rows[0];
+    const { rows } = await client.query(
+      `UPDATE idea_comments SET body = $1, edited_at = NOW() WHERE id = $2 AND idea_id = $3 RETURNING *`,
       [body, commentId, ideaId]
     );
-    if (!rows.length) return res.status(404).json({ error: 'Comment not found.' });
-    res.json({ id: rows[0].id, body: rows[0].body, edited_at: rows[0].edited_at });
+    const after = rows[0];
+    const adminEmail = req.user?.claims?.email || req.user?.email || 'unknown';
+    await client.query(
+      `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
+       VALUES ($1, 'idea_comments', $2, 'update', $3::jsonb, $4::jsonb)`,
+      [adminEmail, String(commentId), JSON.stringify(before), JSON.stringify(after)]
+    );
+    await client.query('COMMIT');
+    res.json({ id: after.id, body: after.body, edited_at: after.edited_at });
   } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('PATCH /api/ideas/:id/comments/:commentId error:', e.message);
     res.status(500).json({ error: 'Could not update comment.' });
+  } finally {
+    client.release();
   }
 });
 
