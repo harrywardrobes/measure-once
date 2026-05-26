@@ -61,7 +61,8 @@ const IdeasPage              = React.lazy(() => import('./pages/IdeasPage').then
 const CustomerDetailPage     = React.lazy(() => import('./pages/CustomerDetailPage').then(m => ({ default: m.CustomerDetailPage })));
 const StandaloneInvoicesPage = React.lazy(() => import('./pages/StandaloneInvoicesPage').then(m => ({ default: m.StandaloneInvoicesPage })));
 const ProjectsPage           = React.lazy(() => import('./pages/ProjectsPage').then(m => ({ default: m.ProjectsPage })));
-const DatabaseAdminPage      = React.lazy(() => import('./pages/admin/DatabaseAdminPage').then(m => ({ default: m.DatabaseAdminPage })));
+const DatabaseAdminPage          = React.lazy(() => import('./pages/admin/DatabaseAdminPage').then(m => ({ default: m.DatabaseAdminPage })));
+const DesignVisitSignOffPage     = React.lazy(() => import('./pages/DesignVisitSignOffPage').then(m => ({ default: m.DesignVisitSignOffPage })));
 
 /**
  * Every React mount goes through `AppThemeProvider` so the shared MUI
@@ -139,7 +140,8 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'customer-detail-root',   render: () => <CustomerDetailPage /> },
   { id: 'invoices-page-mount',    render: () => <StandaloneInvoicesPage /> },
   { id: 'projects-view',          render: () => <ProjectsPage /> },
-  { id: 'db-page-mount',          render: () => <DatabaseAdminPage /> },
+  { id: 'db-page-mount',              render: () => <DatabaseAdminPage /> },
+  { id: 'dv-signoff-mount',           render: () => <DesignVisitSignOffPage /> },
 ];
 
 function mountKnown(): number {
