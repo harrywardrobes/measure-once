@@ -355,8 +355,6 @@ function writeReport(findings) {
       '',
       '- `public/workflow-core.js` — `_loadWorkflowStagesImpl` reads the',
       '  `X-Cache-Status` header and sets `state.roomAssignmentsStale`.',
-      '- `public/projects.js` — `_renderProjectsViewImpl` checks',
-      '  `state.roomAssignmentsStale` and inlines the banner HTML.',
       '- `server.js` — `GET /api/localdata/all` handler that sets the header.',
     ];
     fs.writeFileSync(path.join(dir, 'room-stale-banner.md'), lines.join('\n'));

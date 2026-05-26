@@ -403,10 +403,6 @@ function onHeaderSearchSubmit(val) {
   if (!val) return;
   if (location.pathname === '/customers') {
     filterDeals(val);
-    setTimeout(() => {
-      const firstCard = document.querySelector('.customer-project-card');
-      if (firstCard) firstCard.click();
-    }, 50);
   } else {
     location.href = '/customers?q=' + encodeURIComponent(val);
   }

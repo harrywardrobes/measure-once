@@ -366,8 +366,6 @@ async function writeReport(runId) {
     '  `X-Cache-Status` header; defers `state.roomAssignmentsStale` update',
     '  when `document.hidden` is true.  The `visibilitychange` listener applies',
     '  any pending update and calls `renderProjectsView()`.',
-    '- `public/projects.js` — `_renderProjectsViewImpl` checks',
-    '  `state.roomAssignmentsStale` and inlines the banner HTML.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
