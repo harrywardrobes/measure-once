@@ -217,9 +217,9 @@ async function waitForReactMount(page) {
 // We clear surveyHiddenSubstages from localStorage so default state is
 // predictable: 'unqualified' and 'not_suitable' start hidden; 'bad_timing'
 // starts visible.
-async function seedSurveyBoard(page, { withHandler = false } = {}) {
+async function seedSurveyBoard(page, { withHandler: _withHandler = false } = {}) {
   await page.evaluate(
-    ({ contacts, cache, workflow, lsOptions, withHandler }) => {
+    ({ contacts, cache, workflow, lsOptions }) => {
       // Clear stored filter state so each probe starts from known defaults.
       try { localStorage.removeItem('surveyHiddenSubstages'); } catch {}
 
@@ -231,23 +231,15 @@ async function seedSurveyBoard(page, { withHandler = false } = {}) {
       window.LEAD_STATUS_OPTIONS     = lsOptions;
       window.LEAD_SUBSTATUSES        = [];
 
-      if (withHandler) {
-        // Return a handler for every card so the action strip always shows.
-        window.cardActionHandlerFor = () => ({
-          id: 999,
-          type: 'book_survey',
-          config: { action_name: 'book_survey' },
-          bindings: [],
-        });
-      } else {
-        window.cardActionHandlerFor = () => null;
-      }
+      // cardActionHandlerFor is now resolved by the useCardActionHandlers React
+      // hook which fetches from /api/card-action-handlers (intercepted by
+      // openBoardPage).  No window injection needed here.
       window.stageOrLeadStatusActionLabel = () => '';
       window.substatusActionLabelLookup   = () => '';
 
       document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
     },
-    { contacts: CONTACTS, cache: CONTACT_STAGE_CACHE, workflow: WORKFLOW, lsOptions: LEAD_STATUS_OPTIONS, withHandler },
+    { contacts: CONTACTS, cache: CONTACT_STAGE_CACHE, workflow: WORKFLOW, lsOptions: LEAD_STATUS_OPTIONS },
   );
 }
 
@@ -269,14 +261,49 @@ async function openBoardPage(browser, cookie, contactId = 'sv-test-001', { withH
   page.on('pageerror', () => {});
   page.on('console',   () => {});
 
+  // SurveyBoardPage now uses useCardActionHandlers (React hook) which fetches
+  // from /api/card-action-handlers.  Use a mutable variable so the intercepted
+  // response can be updated mid-test (e.g. for probe F.2 re-seed).
+  let handlerRows = withHandler
+    ? [{ id: 999, type: 'book_survey', config: { action_name: 'book_survey' }, bindings: [{ stage_key: 'survey', status_key: '' }] }]
+    : [];
+
+  // Helper: change the handler data and trigger the hook to re-fetch by
+  // posting a BroadcastChannel message (card-action-handlers.js also
+  // listens to the same channel, keeping both sides in sync).
+  const updateHandlers = async (newRows) => {
+    handlerRows = newRows;
+    await page.evaluate(() => {
+      const bc = new BroadcastChannel('card_action_handlers_changed');
+      bc.postMessage({});
+      bc.close();
+    });
+    await new Promise(r => setTimeout(r, 1000));
+  };
+
   await page.setRequestInterception(true);
   page.on('request', req => {
     const u = req.url();
-    if (u.includes('/api/contacts-all')) {
+    if (u.includes('/api/card-action-handlers')) {
       req.respond({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ results: [], totalPages: 1, page: 1, total: 0 }),
+        body: JSON.stringify(handlerRows),
+      });
+    } else if (u.includes('/api/lead-substatuses')) {
+      req.respond({
+        status: 200,
+        contentType: 'application/json',
+        body: '[]',
+      });
+    } else if (u.includes('/api/contacts-all')) {
+      // Return survey-stage fixture contacts so usePaginatedContacts populates
+      // the board.  SurveyBoardPage always queries with stage=survey; all
+      // CONTACTS have survey-stage rooms so we return them unconditionally.
+      req.respond({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ results: CONTACTS, totalPages: 1, page: 1, total: CONTACTS.length }),
       });
     } else if (u.includes('/api/localdata/all')) {
       req.respond({
@@ -294,7 +321,7 @@ async function openBoardPage(browser, cookie, contactId = 'sv-test-001', { withH
   const mounted = await waitForReactMount(page);
   await seedSurveyBoard(page, { withHandler });
   const cardReady = contactId ? await waitForCard(page, contactId) : true;
-  return { page, mounted, cardReady };
+  return { page, mounted, cardReady, updateHandlers };
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -552,9 +579,13 @@ async function main() {
         await page.setRequestInterception(true);
         page.on('request', req => {
           const u = req.url();
-          if (u.includes('/api/contacts-all')) {
+          if (u.includes('/api/card-action-handlers')) {
+            req.respond({ status: 200, contentType: 'application/json', body: '[]' });
+          } else if (u.includes('/api/lead-substatuses')) {
+            req.respond({ status: 200, contentType: 'application/json', body: '[]' });
+          } else if (u.includes('/api/contacts-all')) {
             req.respond({ status: 200, contentType: 'application/json',
-              body: JSON.stringify({ results: [], totalPages: 1, page: 1, total: 0 }) });
+              body: JSON.stringify({ results: CONTACTS, totalPages: 1, page: 1, total: CONTACTS.length }) });
           } else if (u.includes('/api/localdata/all')) {
             req.respond({ status: 200, contentType: 'application/json',
               body: JSON.stringify({}) });
@@ -797,11 +828,9 @@ async function main() {
           record('(F) Action strip renders when handler configured', 'strip visible', 'timed out', false);
           record('(F.2) Clicking the action strip opens the handler modal (show_message type) with contactId=sv-test-001', 'modal .cah-backdrop appears; data-card-action-contact-id=sv-test-001', 'skipped — card not ready', false);
         } else {
-          // Dispatch a second event so React re-renders with the updated
-          // cardActionHandlerFor function that was injected by seedSurveyBoard.
-          await page.evaluate(() => {
-            document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
-          });
+          // Give the useCardActionHandlers hook time to complete its initial
+          // fetch of /api/card-action-handlers (intercepted → immediate) and
+          // trigger the re-render that shows the action strip.
           await new Promise(r => setTimeout(r, 800));
 
           // The action strip carries data-card-action-handler-id and shows the
@@ -821,38 +850,23 @@ async function main() {
 
           // ── (F.2) Click the strip — verify the delegated listener opens a modal ─
           // The capture-phase delegated listener in card-action-handlers.js calls
-          // the lexical dispatchCardActionHandler (inside the IIFE closure), so a
-          // window-level spy cannot intercept it.  Instead we re-seed with a
-          // 'show_message' handler type that the listener natively handles by
-          // calling openMessagePopup → a visible .cah-backdrop .cah-modal.
-          // Observing that modal appear is the real, correct proof that the click
-          // wiring in SurveyCard reaches the delegated listener end-to-end.
+          // dispatchCardActionHandler (inside its IIFE closure), so a window-level
+          // spy cannot intercept it.  Instead we re-seed with a 'show_message'
+          // handler type: the listener routes to openMessagePopup → a visible
+          // .cah-backdrop .cah-modal.  Observing that modal appear is the real,
+          // correct proof that the click wiring in SurveyCard reaches the delegated
+          // listener end-to-end.
           // We also assert data-card-action-contact-id on the strip is correct.
           if (stripInfo.found) {
-            // Re-seed: swap handler type to 'show_message' so the delegated
-            // listener routes to openMessagePopup and opens a visible modal.
-            await page.evaluate(
-              ({ contacts, cache, workflow, lsOptions }) => {
-                window.state                   = window.state || {};
-                window.state.filteredContacts  = contacts;
-                window.state.contactStageCache = cache;
-                window.state.workflow          = workflow;
-                window.state.user              = { privilege_level: 'admin' };
-                window.LEAD_STATUS_OPTIONS     = lsOptions;
-                window.LEAD_SUBSTATUSES        = [];
-                window.cardActionHandlerFor = () => ({
-                  id: 999,
-                  type: 'show_message',
-                  config: { action_name: 'test_action', message: 'F2 click-wiring test' },
-                  bindings: [],
-                });
-                window.stageOrLeadStatusActionLabel = () => '';
-                window.substatusActionLabelLookup   = () => '';
-                document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
-              },
-              { contacts: CONTACTS, cache: CONTACT_STAGE_CACHE, workflow: WORKFLOW, lsOptions: LEAD_STATUS_OPTIONS },
-            );
-            await new Promise(r => setTimeout(r, 800));
+            // Re-seed: update the intercepted /api/card-action-handlers response to
+            // 'show_message' and fire a BroadcastChannel message so both the React
+            // hook and card-action-handlers.js re-fetch and update in sync.
+            await opened.updateHandlers([{
+              id: 999,
+              type: 'show_message',
+              config: { action_name: 'test_action', message: 'F2 click-wiring test' },
+              bindings: [{ stage_key: 'survey', status_key: '' }],
+            }]);
 
             // Read the strip's contact-id attribute before clicking.
             const stripAttrs = await page.evaluate(() => {

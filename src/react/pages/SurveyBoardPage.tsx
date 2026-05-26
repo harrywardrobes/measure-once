@@ -16,6 +16,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { useCardActionHandlers, CardActionHandlerData } from '../hooks/useCardActionHandlers';
 import { usePaginatedContacts, PaginatedContact, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
 import { ContactsPagination } from '../components/ContactsPagination';
 
@@ -62,16 +63,6 @@ interface LeadSubstatus {
   label?: string;
 }
 
-interface CardActionHandler {
-  id: number;
-  type: string;
-  config?: {
-    action_name?: string;
-    [key: string]: unknown;
-  };
-  bindings?: unknown[];
-}
-
 interface WorkflowStage {
   label?: string;
   statuses?: Array<{ id: string; label: string }>;
@@ -95,11 +86,6 @@ interface WindowGlobals {
   loadLeadStatuses?: () => Promise<void>;
   openCardSubstagePicker?: (evt: object, contactId: string, roomIdx: number) => void;
   openLeadStatusPicker?: (evt: object, contactId: string) => void;
-  cardActionHandlerFor?: (
-    stageKey: string,
-    leadStatusKey: string | undefined,
-    hwSubstatusValue: string | undefined,
-  ) => CardActionHandler | null;
   stageOrLeadStatusActionLabel?: (
     stageKey: string,
     leadStatusKey: string | undefined,
@@ -378,10 +364,16 @@ function SurveyCard({
   entry,
   isManager,
   workflow,
+  cardActionHandlerFor,
 }: {
   entry: BoardEntry;
   isManager: boolean;
   workflow: WorkflowDef | undefined;
+  cardActionHandlerFor: (
+    stageKey: string,
+    leadStatusKey: string | undefined,
+    hwSubstatusValue: string | undefined,
+  ) => CardActionHandlerData | null;
 }) {
   const { contact, substageId, sourceId, stageTime, priority, roomIdx } = entry;
   const isTerminal = priority === 3;
@@ -403,10 +395,7 @@ function SurveyCard({
   const hwSubstatusValue = contact.properties?.hw_lead_substatus;
 
   const w = window as unknown as WindowGlobals;
-  const handler =
-    typeof w.cardActionHandlerFor === 'function'
-      ? w.cardActionHandlerFor(SURVEY_STAGE_KEY, leadStatusKey, hwSubstatusValue)
-      : null;
+  const handler = cardActionHandlerFor(SURVEY_STAGE_KEY, leadStatusKey, hwSubstatusValue);
   const cahName = handler?.config?.action_name
     ? handler.config.action_name
         .replace(/_/g, ' ')
@@ -678,6 +667,7 @@ export function SurveyBoardPage() {
   const [filterAnchor, setFilterAnchor] = useState<HTMLButtonElement | null>(null);
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const { isManager } = usePrivilege();
+  const { cardActionHandlerFor } = useCardActionHandlers();
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
 
   // Bootstrap-failure error state — fires when core.js bootstrap() throws and
@@ -1068,6 +1058,7 @@ export function SurveyBoardPage() {
               entry={e}
               isManager={isManager}
               workflow={workflow}
+              cardActionHandlerFor={cardActionHandlerFor}
             />
           ))
         )}
