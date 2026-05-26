@@ -36,11 +36,9 @@
     bootstrap() is NOT called) so the React Customers island can reuse:
       - the legacy `state.qb.invoices` cache + `matchInvoicesForContact`
       - the legacy `state.contactUrgencyCache` + `getTaskUrgency`
-      - the shared invoice side-panel (`openInvoicePanelFromBadge`,
-        whose DOM `#inv-panel` is mounted by chrome.js)
     Their plain-script globals (`state`, `STAGE_COLOURS`, `stageColour`,
-    `matchInvoicesForContact`, `openInvoicePanelFromBadge`, …) are read
-    from `window.*` by `CustomersPage.tsx`.
+    `matchInvoicesForContact`, …) are read from `window.*` by `CustomersPage.tsx`.
+    Invoice detail is handled by the React InvoiceDetailDrawer component.
   -->
   <script src="/core.js"></script>
   <script src="/workflow-core.js"></script>

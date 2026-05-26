@@ -2,6 +2,7 @@ import React from 'react';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePaginatedContacts, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
 import { ContactsPagination } from '../components/ContactsPagination';
+import { InvoiceDetailDrawer } from '../components/InvoiceDetailDrawer';
 import { createPortal } from 'react-dom';
 import {
   Alert,
@@ -439,24 +440,26 @@ function fmtGBP(n: number): string {
   );
 }
 
-function QBBadge({ invoices }: { invoices: QBInvoice[] }) {
+function QBBadge({
+  invoices,
+  onOpen,
+}: {
+  invoices: QBInvoice[];
+  onOpen: (firstId: string, allIds: string[]) => void;
+}) {
   if (!invoices.length) return null;
   const total = invoices.reduce((s, i) => s + (i.balance || 0), 0);
-  const ids = JSON.stringify(invoices.map((i) => i.id));
+  const ids = invoices.map((i) => i.id);
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    const opener = (
-      window as unknown as { openInvoicePanelFromBadge?: (btn: HTMLElement) => void }
-    ).openInvoicePanelFromBadge;
-    if (typeof opener === 'function') opener(e.currentTarget);
+    onOpen(ids[0], ids);
   };
   return (
     <Box
       component="button"
       type="button"
       onClick={handleClick}
-      data-inv-ids={ids}
       title={`${invoices.length} outstanding invoice${invoices.length !== 1 ? 's' : ''}`}
       sx={{
         appearance: 'none',
@@ -522,6 +525,7 @@ function CustomerCard({
   workflow,
   invoices,
   urgency,
+  onOpenInvoice,
 }: {
   contact: Contact;
   statusMap: Map<string, LeadStatus>;
@@ -529,6 +533,7 @@ function CustomerCard({
   workflow: WorkflowDef | null;
   invoices: QBInvoice[];
   urgency: Urgency;
+  onOpenInvoice: (firstId: string, allIds: string[]) => void;
 }) {
   const name = contactName(contact);
   const email = contact.properties?.email || '';
@@ -585,7 +590,7 @@ function CustomerCard({
         <Stack direction="row" spacing={1} sx={{  mt: 1, flexWrap: 'wrap' }}>
           {email ? <Chip label={email} size="small" variant="outlined" /> : null}
           {phone ? <Chip label={phone} size="small" variant="outlined" /> : null}
-          <QBBadge invoices={invoices} />
+          <QBBadge invoices={invoices} onOpen={onOpenInvoice} />
           {customerNum ? (
             <Chip label={customerNum} size="small" color="secondary" variant="outlined" />
           ) : null}
@@ -609,6 +614,18 @@ export function CustomersPage(): React.ReactElement {
   const [roomsByContact, setRoomsByContact] = React.useState<Record<string, Room[]>>({});
   const [qbInvoices, setQbInvoices] = React.useState<QBInvoice[]>([]);
   const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
+
+  // Invoice drawer state
+  const [invDrawerOpen, setInvDrawerOpen]     = React.useState(false);
+  const [invDrawerInvId, setInvDrawerInvId]   = React.useState<string | null>(null);
+  const [invDrawerAllIds, setInvDrawerAllIds] = React.useState<string[]>([]);
+  const { isAdmin } = usePrivilege();
+
+  const handleOpenInvoice = React.useCallback((firstId: string, allIds: string[]) => {
+    setInvDrawerInvId(firstId);
+    setInvDrawerAllIds(allIds);
+    setInvDrawerOpen(true);
+  }, []);
 
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
@@ -816,8 +833,7 @@ export function CustomersPage(): React.ReactElement {
       })
       .catch(() => {});
 
-    // QB invoices: only attempt when QuickBooks is connected. Mirror into
-    // `state.qb` so the legacy `openInvoicePanelFromBadge` panel works.
+    // QB invoices: only attempt when QuickBooks is connected.
     (async () => {
       try {
         const status = await apiGet<{ connected?: boolean }>('/api/quickbooks/status');
@@ -1285,6 +1301,7 @@ export function CustomersPage(): React.ReactElement {
                   workflow={workflow}
                   invoices={matchInvoicesForContact(contact, qbInvoices)}
                   urgency={urgencyMap[contact.id] || null}
+                  onOpenInvoice={handleOpenInvoice}
                 />
               </Grid>
             ))}
@@ -1322,6 +1339,16 @@ export function CustomersPage(): React.ReactElement {
         autoHideDuration={snackbarHideDuration}
         onClose={() => setBgRefreshFailed(false)}
         message="Couldn't refresh live data — fresh results will load on your next visit"
+      />
+
+      {/* Invoice detail drawer */}
+      <InvoiceDetailDrawer
+        open={invDrawerOpen}
+        invId={invDrawerInvId}
+        allIds={invDrawerAllIds}
+        onClose={() => setInvDrawerOpen(false)}
+        onNavigate={id => setInvDrawerInvId(id)}
+        isAdmin={isAdmin}
       />
     </Container>
   );

@@ -47,10 +47,7 @@ function registerDealsFilter(fn) { _dealsFilter = fn; }
 let _qbInvoicesLoader = async function() {};
 async function loadQBInvoices() { return _qbInvoicesLoader(); }
 function registerQBInvoicesLoader(fn) { _qbInvoicesLoader = fn; }
-function closeInvoicePanel() {
-  document.getElementById('inv-panel')?.classList.remove('inv-panel-open');
-  document.getElementById('inv-overlay')?.classList.add('hidden');
-}
+function closeInvoicePanel() { /* legacy no-op — panel migrated to React InvoiceDetailDrawer */ }
 
 // ── App State ─────────────────────────────────────────────────────────────────
 const state = {

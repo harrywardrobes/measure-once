@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Avatar,
@@ -27,6 +27,7 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { InvoiceDetailDrawer, fmtGBP as fmtGBPShared } from '../components/InvoiceDetailDrawer';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -106,8 +107,6 @@ interface WindowGlobals {
   };
   registerProjectsViewRenderer?: (fn: () => void) => void;
   matchInvoicesForContact?: (contact: Contact) => Array<{ id: string; balance: number }>;
-  fmtGBP?: (amount: number) => string;
-  openInvoicePanelFromBadge?: (btn: HTMLElement) => void;
   GET?: (path: string) => Promise<unknown>;
   PATCH_REQ?: (path: string, body: unknown) => Promise<unknown>;
   showToast?: (msg: string, isError?: boolean) => void;
@@ -148,9 +147,7 @@ function fmtInstallDate(isoStr: string | null | undefined): string | null {
 }
 
 function fmtGBP(amount: number): string {
-  const w = window as unknown as WindowGlobals;
-  if (typeof w.fmtGBP === 'function') return w.fmtGBP(amount);
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(amount);
+  return fmtGBPShared(amount);
 }
 
 // ── Row computation ────────────────────────────────────────────────────────────
@@ -343,9 +340,15 @@ function FitterChip({
 
 // ── InvoiceBadge ───────────────────────────────────────────────────────────────
 
-function InvoiceBadge({ contact, qb }: { contact: Contact; qb: QBState | undefined }) {
-  const btnRef = useRef<HTMLButtonElement>(null);
-
+function InvoiceBadge({
+  contact,
+  qb,
+  onOpen,
+}: {
+  contact: Contact;
+  qb: QBState | undefined;
+  onOpen: (firstId: string, allIds: string[]) => void;
+}) {
   if (!qb?.statusKnown || qb.loading || (qb.connected && !qb.loaded)) {
     return (
       <Box
@@ -377,18 +380,10 @@ function InvoiceBadge({ contact, qb }: { contact: Contact; qb: QBState | undefin
   const count = invs.length;
   const invIds = invs.map((i) => i.id);
 
-  const handleClick = () => {
-    if (btnRef.current && typeof w.openInvoicePanelFromBadge === 'function') {
-      w.openInvoicePanelFromBadge(btnRef.current);
-    }
-  };
-
   return (
     <Box sx={{ px: '14px', py: '10px', borderTop: '1px solid #D9D2C2', display: 'flex', alignItems: 'center', gap: 1, minHeight: 36 }}>
       <button
-        ref={btnRef}
-        data-inv-ids={JSON.stringify(invIds)}
-        onClick={handleClick}
+        onClick={() => onOpen(invIds[0], invIds)}
         title={`${count} outstanding invoice${count !== 1 ? 's' : ''}`}
         style={{
           display: 'inline-flex', alignItems: 'center',
@@ -419,6 +414,7 @@ function ProjectCard({
   qb,
   onOpenFitterPicker,
   onNavigate,
+  onOpenInvoice,
 }: {
   contact: Contact;
   rooms: Room[];
@@ -428,6 +424,7 @@ function ProjectCard({
   qb: QBState | undefined;
   onOpenFitterPicker: (contactId: string, roomIdx: number) => void;
   onNavigate: (contactId: string, roomIdx: number) => void;
+  onOpenInvoice: (firstId: string, allIds: string[]) => void;
 }) {
   const name = getContactName(contact);
   const earliestInstall =
@@ -550,7 +547,7 @@ function ProjectCard({
       </Box>
 
       {/* Invoice badge */}
-      <InvoiceBadge contact={contact} qb={qb} />
+      <InvoiceBadge contact={contact} qb={qb} onOpen={onOpenInvoice} />
     </Box>
   );
 }
@@ -703,6 +700,17 @@ export function ProjectsPage() {
   const [pickerContactId, setPickerContactId] = useState('');
   const [pickerRoomIdx, setPickerRoomIdx] = useState(0);
   const [pickerAssigning, setPickerAssigning] = useState(false);
+
+  // Invoice drawer state
+  const [invDrawerOpen, setInvDrawerOpen]   = useState(false);
+  const [invDrawerInvId, setInvDrawerInvId] = useState<string | null>(null);
+  const [invDrawerAllIds, setInvDrawerAllIds] = useState<string[]>([]);
+
+  const handleOpenInvoice = useCallback((firstId: string, allIds: string[]) => {
+    setInvDrawerInvId(firstId);
+    setInvDrawerAllIds(allIds);
+    setInvDrawerOpen(true);
+  }, []);
 
   // ── Register as the projects view renderer ─────────────────────────────────
   useEffect(() => {
@@ -974,6 +982,7 @@ export function ProjectsPage() {
                     qb={qb}
                     onOpenFitterPicker={handleOpenPicker}
                     onNavigate={handleNavigate}
+                    onOpenInvoice={handleOpenInvoice}
                   />
                 ))}
               </React.Fragment>
@@ -996,6 +1005,7 @@ export function ProjectsPage() {
             qb={qb}
             onOpenFitterPicker={handleOpenPicker}
             onNavigate={handleNavigate}
+            onOpenInvoice={handleOpenInvoice}
           />
         ))}
       </>
@@ -1228,6 +1238,16 @@ export function ProjectsPage() {
             ? { content: { sx: { background: '#b91c1c' } } }
             : undefined
         }
+      />
+
+      {/* Invoice detail drawer */}
+      <InvoiceDetailDrawer
+        open={invDrawerOpen}
+        invId={invDrawerInvId}
+        allIds={invDrawerAllIds}
+        onClose={() => setInvDrawerOpen(false)}
+        onNavigate={id => setInvDrawerInvId(id)}
+        isAdmin={isAdmin}
       />
     </Box>
   );

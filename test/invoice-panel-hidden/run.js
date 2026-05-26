@@ -1,17 +1,15 @@
 'use strict';
 // test/invoice-panel-hidden/run.js
 //
-// End-to-end test confirming that the invoice panel (#inv-panel) is hidden
-// on every dashboard page when not explicitly opened, and becomes visible
-// when openInvoicePanel() is simulated on the invoices page.
+// End-to-end regression test confirming that the legacy #inv-panel static
+// element is gone from every dashboard page (migrated to InvoiceDetailDrawer),
+// and that no MUI Drawer is visibly open on initial page load.
 //
 // Checks:
-//   - Home, Trades, Projects, Survey, Invoices, Calendar: #inv-panel has
-//     `visibility: hidden` via computed style (no inv-panel-open class).
-//   - Invoices page: adding the inv-panel-open class makes visibility: visible.
-//
-// This guards against stylesheet regressions where MUI emotion, Tailwind,
-// or other CSS overrides the `.inv-panel` hiding rules in app-styles.css.
+//   - Home, Trades, Projects, Survey, Invoices, Calendar:
+//       (A) #inv-panel is NOT present in the DOM (old static panel removed)
+//       (B) No [data-testid="invoice-detail-drawer"] element has its paper
+//           in a translated-open state on initial load
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:invoice-panel-hidden
@@ -46,39 +44,29 @@ function parseCookieKV(jar) {
   return { name: jar.slice(0, idx), value: jar.slice(idx + 1) };
 }
 
-async function injectSession(page, jar) {
-  const kv = parseCookieKV(jar);
-  if (!kv) return;
-  const { hostname } = new URL(BASE);
-  await page.setCookie({
-    name: kv.name, value: kv.value,
-    domain: hostname, path: '/', httpOnly: true,
-  });
-}
-
 async function pollPage(page, fn, arg, timeoutMs = 8000, intervalMs = 150) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const got = await page.evaluate(fn, arg);
-    if (got) return got;
+    if (got !== null && got !== undefined) return got;
     await new Promise(r => setTimeout(r, intervalMs));
   }
   return page.evaluate(fn, arg);
 }
 
-// Returns the computed visibility of #inv-panel ('hidden', 'visible', or null
-// if the element is missing).
-async function getPanelVisibility(page) {
-  return page.evaluate(() => {
-    const panel = document.getElementById('inv-panel');
-    if (!panel) return null;
-    return window.getComputedStyle(panel).visibility;
-  });
-}
-
-// Returns true if #inv-panel is present in the DOM.
-async function waitForPanel(page) {
-  return pollPage(page, () => !!document.getElementById('inv-panel'), null, 8000);
+// Wait until the React bundle has mounted (checks for known React mount markers).
+async function waitForReact(page, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ready = await page.evaluate(() => {
+      // The React bundle sets data-ds-rendered="1" on mount elements.
+      return document.querySelector('[data-ds-rendered="1"]') !== null
+        || document.querySelector('[data-testid]') !== null
+        || document.readyState === 'complete';
+    });
+    if (ready) return;
+    await new Promise(r => setTimeout(r, 150));
+  }
 }
 
 // ── report ────────────────────────────────────────────────────────────────────
@@ -108,19 +96,17 @@ async function writeReport(findings) {
     '',
     '## What is tested',
     '',
-    'Loads six dashboard pages as an admin user and asserts that `#inv-panel`',
-    'has `visibility: hidden` via computed style on each page before the panel',
-    'is opened. On the invoices page, also adds the `inv-panel-open` class and',
-    'confirms `visibility` becomes `visible`.',
-    '',
-    'Guards against stylesheet regressions where MUI emotion, Tailwind, or',
-    'other CSS overrides the `.inv-panel` hiding rules in `app-styles.css`.',
+    'Loads six dashboard pages as an admin user and asserts:',
+    '- `#inv-panel` (the old static panel) is NOT present in the DOM — it has been',
+    '  replaced by the React InvoiceDetailDrawer component.',
+    '- No MUI Drawer with data-testid="invoice-detail-drawer" is open on initial load.',
     '',
     '## Relevant files',
     '',
-    '- `public/chrome.js` — injects `#inv-panel` into every dashboard page',
-    '- `public/app-styles.css` — `.inv-panel { visibility: hidden }` + `.inv-panel-open { visibility: visible !important }`',
-    '- `public/invoices-core.js` — `openInvoicePanel()` adds `inv-panel-open`',
+    '- `src/react/components/InvoiceDetailDrawer.tsx` — shared MUI Drawer component',
+    '- `src/react/pages/customer-detail/InvoicesSection.tsx` — customer detail integration',
+    '- `src/react/pages/ProjectsPage.tsx` — projects page integration',
+    '- `src/react/pages/StandaloneInvoicesPage.tsx` — invoices page integration',
   ];
   const outPath = path.join(dir, 'invoice-panel-hidden.md');
   fs.writeFileSync(outPath, lines.join('\n'));
@@ -130,7 +116,7 @@ async function writeReport(findings) {
 // ── main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('\n  invoice-panel-hidden  CSS visibility regression E2E\n');
+  console.log('\n  invoice-panel-hidden  drawer migration regression E2E\n');
 
   const findings = [];
   function record(name, expected, observed, ok, detail = '') {
@@ -230,7 +216,7 @@ async function main() {
     return;
   }
 
-  // Pages to verify the panel is hidden on load.
+  // Pages to verify the old panel is gone and no drawer is open.
   const PAGES = [
     { label: 'Home',     path: '/' },
     { label: 'Trades',   path: '/trades' },
@@ -241,7 +227,6 @@ async function main() {
   ];
 
   try {
-    // ── F1: panel hidden on each page ───────────────────────────────────────
     for (const { label, path: pagePath } of PAGES) {
       const page = await browser.newPage();
       await page.setCacheEnabled(false);
@@ -264,95 +249,39 @@ async function main() {
       );
 
       if (resp && resp.ok()) {
-        const panelPresent = await waitForPanel(page);
+        // Wait briefly for React to mount
+        await waitForReact(page);
+        await new Promise(r => setTimeout(r, 500));
+
+        // (A) Old static #inv-panel must NOT be in the DOM
+        const panelPresent = await page.evaluate(() => !!document.getElementById('inv-panel'));
         record(
-          `${label}: #inv-panel present in DOM (injected by chrome.js)`,
-          'present',
+          `${label}: #inv-panel (old static panel) absent from DOM`,
+          'absent',
           panelPresent ? 'present' : 'absent',
-          !!panelPresent,
+          !panelPresent,
         );
 
-        if (panelPresent) {
-          const visibility = await getPanelVisibility(page);
-          record(
-            `${label}: #inv-panel visibility === "hidden" on load`,
-            'hidden',
-            visibility ?? 'null',
-            visibility === 'hidden',
-          );
-        }
-      }
-
-      await page.close();
-    }
-
-    // ── F2: panel becomes visible when inv-panel-open class is added ─────────
-    {
-      const page = await browser.newPage();
-      await page.setCacheEnabled(false);
-      page.on('pageerror', (e) => console.log('    [invoices open pageerror]', String(e).slice(0, 200)));
-
-      const { hostname } = new URL(BASE);
-      await page.setCookie({
-        name: parseCookieKV(adminClient.cookie)?.name,
-        value: parseCookieKV(adminClient.cookie)?.value,
-        domain: hostname, path: '/', httpOnly: true,
-      });
-
-      const resp = await page.goto(`${BASE}/invoices`, { waitUntil: 'domcontentloaded', timeout: 20000 });
-
-      record(
-        'Invoices open: page loads (HTTP 200)',
-        '200',
-        String(resp ? resp.status() : 0),
-        resp && resp.ok(),
-      );
-
-      if (resp && resp.ok()) {
-        const panelPresent = await waitForPanel(page);
-
-        if (panelPresent) {
-          // Simulate openInvoicePanel() by adding the class directly
-          // (avoids needing QB API credentials).
-          await page.evaluate(() => {
-            document.getElementById('inv-panel').classList.add('inv-panel-open');
-          });
-
-          // Allow the CSS transition to start (transition-delay: 0s on open).
-          await new Promise(r => setTimeout(r, 100));
-
-          const visibilityAfterOpen = await getPanelVisibility(page);
-          record(
-            'Invoices open: #inv-panel visibility === "visible" after adding inv-panel-open',
-            'visible',
-            visibilityAfterOpen ?? 'null',
-            visibilityAfterOpen === 'visible',
-          );
-
-          // Also confirm no-open class = hidden again.
-          await page.evaluate(() => {
-            document.getElementById('inv-panel').classList.remove('inv-panel-open');
-          });
-
-          // After removal the CSS applies `visibility: hidden` with a 0.25s
-          // transition-delay, so we need to wait for it.
-          await new Promise(r => setTimeout(r, 400));
-
-          const visibilityAfterClose = await getPanelVisibility(page);
-          record(
-            'Invoices open: #inv-panel visibility === "hidden" after removing inv-panel-open',
-            'hidden',
-            visibilityAfterClose ?? 'null',
-            visibilityAfterClose === 'hidden',
-          );
-        } else {
-          record(
-            'Invoices open: #inv-panel present (prerequisite for open test)',
-            'present',
-            'absent',
-            false,
-          );
-        }
+        // (B) No MUI Drawer with invoice-detail-drawer testid should be open on load.
+        // MUI Drawer renders a .MuiDrawer-paper element; when open=false the paper
+        // has transform: translateX(100%) (off-screen). We check the element is
+        // either absent or not translated to translateX(0).
+        const drawerOpenOnLoad = await page.evaluate(() => {
+          const drawer = document.querySelector('[data-testid="invoice-detail-drawer"]');
+          if (!drawer) return false;
+          const paper = drawer.querySelector('.MuiDrawer-paper');
+          if (!paper) return false;
+          const style = window.getComputedStyle(paper);
+          const transform = style.transform || style.webkitTransform || '';
+          // translateX(0) means the drawer is open; anything else means closed
+          return transform === 'matrix(1, 0, 0, 1, 0, 0)' || transform === 'none';
+        });
+        record(
+          `${label}: InvoiceDetailDrawer not open on initial load`,
+          'closed',
+          drawerOpenOnLoad ? 'open' : 'closed',
+          !drawerOpenOnLoad,
+        );
       }
 
       await page.close();

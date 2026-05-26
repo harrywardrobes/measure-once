@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Contact, QBInvoice } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
+import { InvoiceDetailDrawer } from '../../components/InvoiceDetailDrawer';
 
 interface QBState {
   connected: boolean;
@@ -53,47 +54,76 @@ function matchInvoices(contact: Contact, invoices: QBInvoice[]): QBInvoice[] {
 
 export function InvoicesSection({ contact, qb }: Props) {
   const { isAdmin } = usePrivilege();
+  const [drawerOpen, setDrawerOpen]   = useState(false);
+  const [drawerInvId, setDrawerInvId] = useState<string | null>(null);
 
   if (!qb.statusKnown) return null;
   if (!qb.connected) return null;
 
   const matched = qb.loaded ? matchInvoices(contact, qb.invoices) : [];
+  const allIds  = matched.map(inv => inv.Id);
+
+  function openDrawer(invId: string) {
+    setDrawerInvId(invId);
+    setDrawerOpen(true);
+  }
 
   return (
-    <div id="invoices-section" className="mb-5">
-      <div className="notes-header">
-        <span className="notes-header-label">Invoices</span>
-        {qb.company && <span className="text-xs text-slate-400 ml-2">· {qb.company}</span>}
+    <>
+      <div id="invoices-section" className="mb-5">
+        <div className="notes-header">
+          <span className="notes-header-label">Invoices</span>
+          {qb.company && <span className="text-xs text-slate-400 ml-2">· {qb.company}</span>}
+        </div>
+
+        {qb.loading && (
+          <p className="text-sm text-slate-400 italic px-1">Loading invoices…</p>
+        )}
+        {qb.loadError && (
+          <p className="text-sm text-red-500 px-1">{qb.error || 'Failed to load invoices.'}</p>
+        )}
+        {qb.loaded && matched.length === 0 && (
+          <p className="text-sm text-slate-400 italic px-1">No invoices found for this customer.</p>
+        )}
+        {qb.loaded && matched.length > 0 && (
+          <div className="space-y-2">
+            {matched.map(inv => (
+              <div
+                key={inv.Id}
+                className="inv-row flex items-center justify-between gap-3 px-1 py-1.5 border-b border-slate-100 cursor-pointer hover:bg-slate-50 rounded"
+                onClick={() => openDrawer(inv.Id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openDrawer(inv.Id); }}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs text-slate-500">#{inv.DocNumber}</span>
+                  {statusPill(inv)}
+                </div>
+                <div className="flex items-center gap-3 shrink-0 text-xs text-slate-500">
+                  <span>{fmtQBDate(inv.TxnDate)}</span>
+                  <span className="font-semibold text-slate-700">{fmtGBP(inv.TotalAmt)}</span>
+                  {inv.Balance != null && Number(inv.Balance) > 0 && (
+                    <span className="text-slate-400">due {fmtGBP(inv.Balance)}</span>
+                  )}
+                  <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/>
+                  </svg>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {qb.loading && (
-        <p className="text-sm text-slate-400 italic px-1">Loading invoices…</p>
-      )}
-      {qb.loadError && (
-        <p className="text-sm text-red-500 px-1">{qb.error || 'Failed to load invoices.'}</p>
-      )}
-      {qb.loaded && matched.length === 0 && (
-        <p className="text-sm text-slate-400 italic px-1">No invoices found for this customer.</p>
-      )}
-      {qb.loaded && matched.length > 0 && (
-        <div className="space-y-2">
-          {matched.map(inv => (
-            <div key={inv.Id} className="inv-row flex items-center justify-between gap-3 px-1 py-1.5 border-b border-slate-100">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xs text-slate-500">#{inv.DocNumber}</span>
-                {statusPill(inv)}
-              </div>
-              <div className="flex items-center gap-3 shrink-0 text-xs text-slate-500">
-                <span>{fmtQBDate(inv.TxnDate)}</span>
-                <span className="font-semibold text-slate-700">{fmtGBP(inv.TotalAmt)}</span>
-                {inv.Balance != null && Number(inv.Balance) > 0 && (
-                  <span className="text-slate-400">due {fmtGBP(inv.Balance)}</span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+      <InvoiceDetailDrawer
+        open={drawerOpen}
+        invId={drawerInvId}
+        allIds={allIds}
+        onClose={() => setDrawerOpen(false)}
+        onNavigate={id => setDrawerInvId(id)}
+        isAdmin={isAdmin}
+      />
+    </>
   );
 }
