@@ -6,16 +6,19 @@
 //
 // Probes
 // ──────
-// [CHUNK]      GET /react/chunks/<hashed-chunk>.js
-//              → Cache-Control must contain "immutable"
-// [ASSETS]     GET /react/assets/<hashed-asset>.js  (if any exist in the build)
-//              → Cache-Control must contain "immutable"
-// [ASSETS-CSS] GET /react/assets/<hashed-asset>.css (if any exist in the build)
-//              → Cache-Control must contain "immutable"
+// [CHUNK]       GET /react/chunks/<hashed-chunk>.js
+//               → Cache-Control must contain "immutable"
+// [ASSETS]      GET /react/assets/<hashed-asset>.<ext>
+//               → Cache-Control must contain "immutable"
+//               A synthetic file (test-asset-probe-<hex>.css) is written when
+//               no real build output exists in public/react/assets/ so the probe
+//               always runs and is never silently skipped.
+// [ASSETS-CSS]  GET /react/assets/<hashed-asset>.css (if any exist in the build)
+//               → Cache-Control must contain "immutable"
 // [ASSETS-FONT] GET /react/assets/<hashed-font>.<ext> (if any exist in the build)
-//              → Cache-Control must contain "immutable"
-// [MAIN]       GET /react/main.js
-//              → Cache-Control must NOT contain "immutable"
+//               → Cache-Control must contain "immutable"
+// [MAIN]        GET /react/main.js
+//               → Cache-Control must NOT contain "immutable"
 //
 // No Puppeteer, no seed users, no database writes needed.
 // The static-file routes are mounted before authentication, so GET requests
@@ -69,6 +72,23 @@ function firstFontFile(dir) {
   }
 }
 
+/**
+ * Return the first file (any extension) in dir whose name looks like a
+ * content-addressed Vite output (contains a hyphen followed by 8+ hex chars
+ * before the extension).  Falls back to any file if none match the pattern.
+ * Returns null when the directory is empty or unreadable.
+ */
+function firstHashedFile(dir) {
+  try {
+    const entries = fs.readdirSync(dir).filter(f => !f.endsWith('.map'));
+    if (entries.length === 0) return null;
+    const hashed = entries.find(f => /[_-][0-9a-f]{8,}\.[a-z0-9]+$/i.test(f));
+    return hashed || entries[0];
+  } catch {
+    return null;
+  }
+}
+
 async function headRequest(url) {
   const res = await fetch(url, { method: 'HEAD' });
   return {
@@ -83,6 +103,7 @@ async function main() {
   const results = [];
   let allPassed = true;
   let serverHandle = null;
+  let syntheticAssetPath = null;
 
   function record(probe, url, pass, detail) {
     results.push({ probe, url, pass, detail });
@@ -93,15 +114,28 @@ async function main() {
 
   try {
     // ── preflight: verify build output exists ─────────────────────────────────
-    const chunkFile   = firstFileByExt(CHUNKS_DIR, '.js');
-    const assetsFile  = firstFileByExt(ASSETS_DIR, '.js');
-    const cssFile     = firstFileByExt(ASSETS_DIR, '.css');
-    const fontFile    = firstFontFile(ASSETS_DIR);
+    const chunkFile  = firstFileByExt(CHUNKS_DIR, '.js');
+    const cssFile    = firstFileByExt(ASSETS_DIR, '.css');
+    const fontFile   = firstFontFile(ASSETS_DIR);
 
     if (!chunkFile) {
       console.error('[chunk-cache-headers] No .js files found in public/react/chunks/.');
       console.error('  Run `npm run build:react` before running this test.');
       process.exit(1);
+    }
+
+    // ── preflight: ensure assets dir has at least one file to probe ───────────
+    fs.mkdirSync(ASSETS_DIR, { recursive: true });
+    let assetsFile = firstHashedFile(ASSETS_DIR);
+
+    if (!assetsFile) {
+      // Write a synthetic content-addressed file so the ASSETS probe always
+      // exercises the /react/assets static mount rather than silently skipping.
+      const hex = Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
+      assetsFile = `test-asset-probe-${hex}.css`;
+      syntheticAssetPath = path.join(ASSETS_DIR, assetsFile);
+      fs.writeFileSync(syntheticAssetPath, '/* chunk-cache-headers test probe */\n');
+      console.log(`[chunk-cache-headers] Wrote synthetic asset: ${assetsFile}`);
     }
 
     // ── start server ──────────────────────────────────────────────────────────
@@ -120,8 +154,8 @@ async function main() {
       );
     }
 
-    // ── [ASSETS] hashed asset JS → must have immutable (if present) ───────────
-    if (assetsFile) {
+    // ── [ASSETS] hashed asset → must have immutable ───────────────────────────
+    {
       const url = `${BASE}/react/assets/${assetsFile}`;
       const { status, cacheControl } = await headRequest(url);
       const hasImmutable = cacheControl.includes('immutable');
@@ -130,8 +164,6 @@ async function main() {
         status === 200 && hasImmutable,
         `status=${status} Cache-Control="${cacheControl}" → immutable=${hasImmutable}`,
       );
-    } else {
-      console.log('[SKIP] [ASSETS] No .js files found in public/react/assets/ — skipped');
     }
 
     // ── [ASSETS-CSS] hashed CSS → must have immutable (if present) ───────────
@@ -175,6 +207,9 @@ async function main() {
     }
   } finally {
     if (serverHandle) serverHandle.child.kill();
+    if (syntheticAssetPath) {
+      try { fs.unlinkSync(syntheticAssetPath); } catch { /* ignore */ }
+    }
   }
 
   // ── report ────────────────────────────────────────────────────────────────
@@ -183,7 +218,9 @@ async function main() {
     '',
     'Verifies that hashed React chunks, assets, CSS files, and font files are',
     'served with `immutable` Cache-Control, and that the stable `main.js` entry',
-    'point is NOT served as immutable.',
+    'point is NOT served as immutable. The ASSETS probe uses a synthetic file',
+    'when no real build output exists in `public/react/assets/` so it always',
+    'runs and is never silently skipped.',
     '',
     '| probe | url | result | detail |',
     '| ----- | --- | ------ | ------ |',
