@@ -9,7 +9,7 @@
 //
 // Kept on purpose:
 //   - The 9 stage keys, in pipeline order. STAGE_KEYS is derived from them and
-//     is used across projects.js / workflow.js / customer-detail.js to order
+//     is used across workflow.js / customer-detail.js to order
 //     and compare stages.
 //   - A `label` per stage so labels rendered from state.workflow.stages[k].label
 //     don't fall through to the raw key on cold-start.
