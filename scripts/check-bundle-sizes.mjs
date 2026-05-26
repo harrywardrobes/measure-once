@@ -58,19 +58,17 @@ import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { execSync } from 'child_process';
-import { TREND_WINDOW, TREND_DRIFT_PCT, detectTrendWarning, detectChunkTrendWarnings } from './bundle-size-trend.mjs';
+import { TREND_WINDOW, TREND_DRIFT_PCT, SPIKE_PCT, detectTrendWarning, detectChunkTrendWarnings, detectSpikeWarning } from './bundle-size-trend.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const REACT_DIR = resolve(__dirname, '..', 'public', 'react');
-const CHUNKS_DIR = join(REACT_DIR, 'chunks');
 
-// ── Trend-regression configuration ───────────────────────────────────────────
-// TREND_WINDOW and TREND_DRIFT_PCT are imported from bundle-size-trend.mjs.
-// SPIKE_PCT      – warn (non-fatal) when a single build increases the
-//                  always-loaded total by more than this percentage relative to
-//                  the immediately preceding history entry.  E.g. 5 means "warn
-//                  if this build added > 5% in one go".
-const SPIKE_PCT = 5;    // percent
+// Test-only overrides (never set in production) — allow the integration test
+// suite to point the script at a controlled temp directory and an isolated
+// report/history location so it does not pollute the real build artefacts.
+const REACT_DIR  = process.env.BUNDLE_SIZES_REACT_DIR_OVERRIDE
+  || resolve(__dirname, '..', 'public', 'react');
+const REPORT_DIR_OVERRIDE = process.env.BUNDLE_SIZES_REPORT_DIR_OVERRIDE || null;
+const CHUNKS_DIR = join(REACT_DIR, 'chunks');
 
 
 // ── Threshold definitions ────────────────────────────────────────────────────
@@ -251,7 +249,7 @@ if (warnings.length > 0) {
 
 // ── Markdown report ──────────────────────────────────────────────────────────
 
-const reportDir = resolve(__dirname, '..', 'test-results');
+const reportDir = REPORT_DIR_OVERRIDE || resolve(__dirname, '..', 'test-results');
 mkdirSync(reportDir, { recursive: true });
 
 const now = new Date().toISOString();
@@ -341,20 +339,7 @@ const chunkTrendWarnings = detectChunkTrendWarnings(recentEntries, TREND_DRIFT_P
 // ── Per-build spike check ─────────────────────────────────────────────────────
 // Warn (non-fatal) when this single build increased the always-loaded total by
 // more than SPIKE_PCT % relative to the immediately preceding history entry.
-let spikeWarning = null;
-if (recentEntries.length >= 2) {
-  const prev = recentEntries[recentEntries.length - 2];
-  const curr = recentEntries[recentEntries.length - 1];
-  if (prev.totalAlwaysGzBytes > 0) {
-    const deltaPct = ((curr.totalAlwaysGzBytes - prev.totalAlwaysGzBytes) / prev.totalAlwaysGzBytes) * 100;
-    if (deltaPct > SPIKE_PCT) {
-      spikeWarning =
-        `Always-loaded total jumped ${deltaPct.toFixed(1)}% in this build ` +
-        `(${kbStr(prev.totalAlwaysGzBytes)} → ${kbStr(curr.totalAlwaysGzBytes)}, ` +
-        `threshold: >${SPIKE_PCT}%). A large dependency may have been added.`;
-    }
-  }
-}
+const spikeWarning = detectSpikeWarning(recentEntries, SPIKE_PCT, kbStr);
 
 if (trendWarning) {
   console.log(`\n⚠  Trend warning: ${trendWarning}`);

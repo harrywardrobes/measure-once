@@ -1,10 +1,11 @@
 /**
- * Trend-regression logic for bundle-size checks.
+ * Trend-regression and spike-detection logic for bundle-size checks.
  * Exported so the test suite can exercise it directly.
  */
 
 export const TREND_WINDOW    = 10;
 export const TREND_DRIFT_PCT = 10;   // percent — warn when growth strictly exceeds this
+export const SPIKE_PCT       = 5;    // percent — warn when a single build grows by more than this
 
 /**
  * Inspect a window of history entries and return a warning string when the
@@ -83,6 +84,38 @@ export function detectChunkTrendWarnings(recentEntries, driftPct = TREND_DRIFT_P
   }
 
   return warnings;
+}
+
+/**
+ * Compare the two most-recent history entries and return a warning string when
+ * the always-loaded total jumped by more than spikePct % in a single build,
+ * or null when everything is fine.
+ *
+ * @param {Array<{totalAlwaysGzBytes: number}>} recentEntries
+ *   Entries in chronological order (oldest first).  Only the last two matter.
+ * @param {number} [spikePct]   Override the spike threshold (defaults to SPIKE_PCT).
+ * @param {function} [kbStr]    Optional formatter used in the warning message.
+ * @returns {string|null}
+ */
+export function detectSpikeWarning(recentEntries, spikePct = SPIKE_PCT, kbStr = defaultKbStr) {
+  if (recentEntries.length < 2) return null;
+
+  const prev = recentEntries[recentEntries.length - 2];
+  const curr = recentEntries[recentEntries.length - 1];
+
+  if (prev.totalAlwaysGzBytes <= 0) return null;
+
+  const deltaPct = ((curr.totalAlwaysGzBytes - prev.totalAlwaysGzBytes) / prev.totalAlwaysGzBytes) * 100;
+
+  if (deltaPct > spikePct) {
+    return (
+      `Always-loaded total jumped ${deltaPct.toFixed(1)}% in this build ` +
+      `(${kbStr(prev.totalAlwaysGzBytes)} → ${kbStr(curr.totalAlwaysGzBytes)}, ` +
+      `threshold: >${spikePct}%). A large dependency may have been added.`
+    );
+  }
+
+  return null;
 }
 
 function defaultKbStr(bytes) {
