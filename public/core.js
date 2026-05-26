@@ -119,6 +119,7 @@ const state = {
   },
   whatsappEnabled: false,
 };
+window.state = state;
 
 // ── Privilege helper (non-React) ──────────────────────────────────────────────
 // Single source of truth for vanilla-JS privilege reads. Mirrors the logic in

@@ -507,6 +507,7 @@ async function loadLeadStatuses() {
           excluded_from_sales: !!r.excluded_from_sales,
           stage:               r.stage || null,
         }));
+      window.LEAD_STATUS_OPTIONS = LEAD_STATUS_OPTIONS;
       LEAD_STATUSES_LOADED = true;
     }
   } catch (e) {
