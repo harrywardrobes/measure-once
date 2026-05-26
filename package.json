@@ -88,6 +88,8 @@
     "test:room-assignments-outage:ci": "node scripts/with-test-db.js test/room-assignments-outage/run.js",
     "test:change-password": "node test/change-password/run.js",
     "test:change-password:ci": "node scripts/with-test-db.js test/change-password/run.js",
+    "test:set-password": "node test/set-password/run.js",
+    "test:set-password:ci": "node scripts/with-test-db.js test/set-password/run.js",
     "test:invoice-admin-controls": "node test/invoice-admin-controls/run.js",
     "test:invoice-admin-controls:ci": "node scripts/with-test-db.js test/invoice-admin-controls/run.js",
     "test:bottom-nav": "node test/bottom-nav/run.js",
