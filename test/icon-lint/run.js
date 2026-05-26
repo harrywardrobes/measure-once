@@ -188,8 +188,17 @@ function stripCommentsAndStrings(src) {
         parseTemplateLiteralBody();
         // parseTemplateLiteralBody consumes the closing backtick
       } else if (ch === "'") {
-        i++; // consume opening quote
-        parseSingleQuoted();
+        // Apply the same word-character guard used in the main parse loop:
+        // an apostrophe preceded by a word character is prose (e.g. "You're"),
+        // not a JS string delimiter.
+        const prevCh = i > 0 ? src[i - 1] : '';
+        if (/\w/.test(prevCh)) {
+          result += ch;
+          i++;
+        } else {
+          i++; // consume opening quote
+          parseSingleQuoted();
+        }
       } else if (ch === '"') {
         i++; // consume opening quote
         parseDoubleQuoted();
@@ -700,6 +709,25 @@ function extractIconUsages(src) {
     assert(
       usages.some((u) => u.identifier === 'LayersIcon'),
       'LayersIcon inside a template literal nested within a ${} interpolation must be detected as a usage',
+    );
+  }
+
+  // 19. An apostrophe inside a ${} interpolation body must NOT cause an icon
+  //     identifier that follows it to be swallowed.
+  //     e.g. `You're all clear. ${<FooIcon />}`
+  //     Before the fix, parseInterpolationBody treated the apostrophe in
+  //     "You're" as a JS string-literal opener and consumed everything up to
+  //     the next `'` or end-of-line, hiding the icon identifier.
+  {
+    const src = [
+      "import CheckCircleIcon from '@mui/icons-material/CheckCircle';",
+      'const msg = `You\'re all clear. ${<CheckCircleIcon />}`;',
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.some((u) => u.identifier === 'CheckCircleIcon'),
+      "CheckCircleIcon inside a template-literal interpolation after an apostrophe (You're) must not be swallowed",
     );
   }
 })();
