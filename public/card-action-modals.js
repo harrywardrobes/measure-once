@@ -927,7 +927,10 @@
 
     renderStep1();
   }
-  window.openDesignVisitWizard = openDesignVisitWizard;
+  window.openDesignVisitWizard   = openDesignVisitWizard;
+  window.openDesignVisitModal    = openDesignVisitModal;
+  window.openPhoneSummaryModal   = openPhoneSummaryModal;
+  window.openMessagePopup        = openMessagePopup;
 
   function _makeRoom() {
     return { roomName: '', doorStyleId: '', widthMm: null, heightMm: null, depthMm: null, unitCount: 1, unitPricePence: 0, notes: '' };
@@ -957,7 +960,15 @@
     dispatchCardActionHandler(handler, ctx);
   }, true);
 
-  window.dispatchCardActionHandler = dispatchCardActionHandler;
+  // window.dispatchCardActionHandler is registered by the React
+  // useCardActionHandlers hook (which imports dispatchCardActionHandler from
+  // src/react/utils/dispatchCardActionHandler.ts).  We expose it here only as
+  // a fallback for pages that don't mount the React hook (survey.html,
+  // customer-detail.html still load card-action-handlers.js which registers its
+  // own copy).
+  if (typeof window.dispatchCardActionHandler !== 'function') {
+    window.dispatchCardActionHandler = dispatchCardActionHandler;
+  }
 
   // ── Bootstrap + cross-tab refresh ─────────────────────────────────────────
   // Pre-populate the local index at page load so window.cardActionHandlerFor,

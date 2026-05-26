@@ -7,6 +7,7 @@ import { usePrivilege } from '../hooks/usePrivilege';
 import { usePaginatedContacts, PaginatedContact, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
 import { ContactsPagination } from '../components/ContactsPagination';
 import { useCardActionHandlers, CardActionHandlerData } from '../hooks/useCardActionHandlers';
+import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -720,16 +721,11 @@ function SalesCard({
                 onClick: (e: React.MouseEvent) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  const dispatch = (
-                    window as unknown as { dispatchCardActionHandler?: (h: unknown, ctx: unknown) => void }
-                  ).dispatchCardActionHandler;
-                  if (typeof dispatch === 'function') {
-                    dispatch(handler, {
-                      contactId:    contact.id,
-                      contactName:  name,
-                      contactEmail: contact.properties?.email || '',
-                    });
-                  }
+                  dispatchCardActionHandler(handler, {
+                    contactId:    contact.id,
+                    contactName:  name,
+                    contactEmail: contact.properties?.email || '',
+                  });
                 },
               }
             : isManager

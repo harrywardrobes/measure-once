@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 
 export interface CardActionHandlerBinding {
   substatus_id?: number;
@@ -155,6 +156,13 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
   // window.loadCardActionHandlers — async re-fetch trigger.  The test suite calls
   // this to force the in-page index to update after creating new handlers mid-test.
   // Only set when card-action-handlers.js hasn't already claimed the name.
+  //
+  // window.dispatchCardActionHandler — modal dispatch.  The TypeScript
+  // implementation lives in src/react/utils/dispatchCardActionHandler.ts; we
+  // expose it on window so test probes (start-design-visit, design-visit) can
+  // call it directly on the sales page without going through a React onClick.
+  // card-action-modals.js registers a fallback copy only when this hook hasn't
+  // already claimed the name.
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>;
     const cleanups: (() => void)[] = [];
@@ -170,6 +178,14 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       w.loadCardActionHandlers = fetchAll;
       cleanups.push(() => {
         if (w.loadCardActionHandlers === fetchAll) delete w.loadCardActionHandlers;
+      });
+    }
+
+    if (typeof w.dispatchCardActionHandler !== 'function') {
+      w.dispatchCardActionHandler = dispatchCardActionHandler;
+      cleanups.push(() => {
+        if (w.dispatchCardActionHandler === dispatchCardActionHandler)
+          delete w.dispatchCardActionHandler;
       });
     }
 
