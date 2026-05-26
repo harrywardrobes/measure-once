@@ -147,10 +147,10 @@ export function BottomNav() {
   });
   // Role-aware fallback used when the API returns no saved config (or when
   // the user has no job_role and the API fell back to the __default__ config).
-  // Managers see Home/Sales/Projects by default; non-managers see
+  // Managers see Home/Customers/Sales by default; non-managers see
   // DEFAULT_PRIMARY_KEYS. Filtered to actually-visible items.
   const defaultPrimaryKeys = (
-    isManager ? (['home', 'sales', 'projects'] as string[]) : DEFAULT_PRIMARY_KEYS
+    isManager ? (['home', 'customers', 'sales'] as string[]) : DEFAULT_PRIMARY_KEYS
   ).filter((k) => visibleNav.some((n) => n.key === k));
 
   // Always reflects the latest defaultPrimaryKeys so the prefs-load callback

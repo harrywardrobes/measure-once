@@ -111,7 +111,7 @@ async function openPage(browser, jar, url) {
   // Wait for the BottomNav to re-render after the privilege level is known.
   // We poll for the presence of at least one manager-only OR member-only nav
   // element to confirm the component has flushed the privilege update:
-  //   - #bnav-sales / #bnav-projects  → manager bar rendered
+  //   - #bnav-sales                    → manager bar rendered
   //   - #bnav-calendar                 → member bar rendered
   // This avoids a race where __moHeaderUser is set but React hasn't
   // batched + flushed the setPrivilegeLevel() state update yet.
@@ -140,7 +140,7 @@ function readBarKeys(page) {
   return page.evaluate(() => {
     const nav = document.querySelector('nav.bottom-nav#main-content');
     if (!nav) return null;
-    return ['home', 'sales', 'survey', 'projects', 'calendar', 'invoices', 'trades', 'ideas']
+    return ['home', 'customers', 'sales', 'survey', 'projects', 'calendar', 'invoices', 'trades', 'ideas']
       .filter(k => !!nav.querySelector(`#bnav-${k}`));
   });
 }
@@ -457,14 +457,14 @@ async function main() {
 
     // ══════════════════════════════════════════════════════════════════════════
     // [CUST-SAVE] Select 3 different tabs and save → bar updates immediately
-    // Manager defaults: home, sales, projects.
+    // Manager defaults: home, customers, sales.
     // We select:        home, survey, calendar.
     // ══════════════════════════════════════════════════════════════════════════
     console.log('\n  [CUST-SAVE] Select and save custom tabs');
 
     const customKeys   = ['home', 'survey', 'calendar'];
     const customLabels = ['Home', 'Survey', 'Calendar'];
-    const removedKeys  = ['sales', 'projects'];
+    const removedKeys  = ['customers', 'sales'];
 
     {
       const page = await openPage(browser, managerClient.cookie, '/');
@@ -472,10 +472,10 @@ async function main() {
       // Confirm default bar before customising
       const defaultBar = await readBarKeys(page);
       record(
-        '[CUST-SAVE] Default manager bar contains home, sales, projects',
-        'home, sales, projects in bar',
+        '[CUST-SAVE] Default manager bar contains home, customers, sales',
+        'home, customers, sales in bar',
         JSON.stringify(defaultBar),
-        ['home', 'sales', 'projects'].every(k => defaultBar && defaultBar.includes(k)),
+        ['home', 'customers', 'sales'].every(k => defaultBar && defaultBar.includes(k)),
       );
 
       // Open More drawer → Customise navigation dialog
@@ -558,8 +558,8 @@ async function main() {
           '[CUST-SAVE] After selection, Home + Survey + Calendar are the 3 checked items',
           '[CUST-SAVE] Save button is enabled when exactly 3 tabs selected',
           '[CUST-SAVE] Bar immediately shows the selected tabs (home, survey, calendar)',
+          '[CUST-SAVE] "customers" no longer in bar after customisation',
           '[CUST-SAVE] "sales" no longer in bar after customisation',
-          '[CUST-SAVE] "projects" no longer in bar after customisation',
         ]) {
           record(skip, 'dialog opened', 'dialog did not open (skipped)', false);
         }
@@ -592,10 +592,10 @@ async function main() {
         !!(bar && !bar.includes('sales')),
       );
       record(
-        '[CUST-PERS] Reloaded page: projects absent from bar (moved to overflow)',
-        'bnav-projects absent',
-        bar && bar.includes('projects') ? 'present' : 'absent',
-        !!(bar && !bar.includes('projects')),
+        '[CUST-PERS] Reloaded page: customers absent from bar (moved to overflow)',
+        'bnav-customers absent',
+        bar && bar.includes('customers') ? 'present' : 'absent',
+        !!(bar && !bar.includes('customers')),
       );
 
       // Previously-primary tabs should appear in the More drawer
@@ -612,10 +612,10 @@ async function main() {
         drawerIds.includes('sales'),
       );
       record(
-        '[CUST-PERS] "projects" now appears in More drawer after customisation',
-        'projects in drawer',
+        '[CUST-PERS] "customers" now appears in More drawer after customisation',
+        'customers in drawer',
         JSON.stringify(drawerIds),
-        drawerIds.includes('projects'),
+        drawerIds.includes('customers'),
       );
 
       await page.close().catch(() => {});
@@ -647,15 +647,15 @@ async function main() {
         keysAfter === null || keysAfter === undefined,
       );
 
-      // Open a fresh page — should revert to manager defaults (home, sales, projects)
+      // Open a fresh page — should revert to manager defaults (home, customers, sales)
       const page = await openPage(browser, managerClient.cookie, '/');
       const bar  = await readBarKeys(page);
 
       record(
-        '[CUST-FALL] Bar reverts to manager defaults (home, sales, projects)',
-        'bnav-home, bnav-sales, bnav-projects in bar',
+        '[CUST-FALL] Bar reverts to manager defaults (home, customers, sales)',
+        'bnav-home, bnav-customers, bnav-sales in bar',
         JSON.stringify(bar),
-        ['home', 'sales', 'projects'].every(k => bar && bar.includes(k)),
+        ['home', 'customers', 'sales'].every(k => bar && bar.includes(k)),
       );
       record(
         '[CUST-FALL] survey not in bar after default fallback',
@@ -680,7 +680,7 @@ async function main() {
     console.log('\n  [CUST-CANCEL] Cancel discards unsaved changes');
 
     {
-      // Prefs were cleared above so manager is on defaults (home, sales, projects)
+      // Prefs were cleared above so manager is on defaults (home, customers, sales)
       const page = await openPage(browser, managerClient.cookie, '/');
 
       // Open More drawer → dialog
@@ -703,13 +703,13 @@ async function main() {
         // Click Cancel — do NOT save
         await clickCancelButton(page);
 
-        // Bar should still reflect role defaults (home, sales, projects)
+        // Bar should still reflect role defaults (home, customers, sales)
         const barAfterCancel = await readBarKeys(page);
         record(
-          '[CUST-CANCEL] Bar unchanged after Cancel (still home, sales, projects)',
-          'home, sales, projects in bar',
+          '[CUST-CANCEL] Bar unchanged after Cancel (still home, customers, sales)',
+          'home, customers, sales in bar',
           JSON.stringify(barAfterCancel),
-          ['home', 'sales', 'projects'].every(k => barAfterCancel && barAfterCancel.includes(k)),
+          ['home', 'customers', 'sales'].every(k => barAfterCancel && barAfterCancel.includes(k)),
         );
         record(
           '[CUST-CANCEL] survey absent from bar after Cancel',
@@ -720,7 +720,7 @@ async function main() {
       } else {
         for (const skip of [
           '[CUST-CANCEL] Dialog selection changed to Home, Survey, Calendar before cancel',
-          '[CUST-CANCEL] Bar unchanged after Cancel (still home, sales, projects)',
+          '[CUST-CANCEL] Bar unchanged after Cancel (still home, customers, sales)',
           '[CUST-CANCEL] survey absent from bar after Cancel',
         ]) {
           record(skip, 'dialog opened', 'dialog did not open (skipped)', false);
@@ -784,13 +784,13 @@ async function writeReport(findings, runId) {
     '  `usePrivilege` in `BottomNav.tsx`).',
     '- **[CUST-SAVE]** Opening the customise dialog shows the current 3 selections',
     '  pre-checked; selecting Home + Survey + Calendar (replacing the default',
-    '  Home + Sales + Projects) and clicking Save immediately updates the bar',
+    '  Home + Customers + Sales) and clicking Save immediately updates the bar',
     '  without a page reload; previously-primary tabs move to the More drawer.',
     '- **[CUST-PERS]** A fresh page load after saving reads the persisted',
     '  `nav_primary_keys` preference via `GET /api/users/me/prefs` and renders the',
-    '  correct bar; Sales and Projects appear in the More drawer.',
+    '  correct bar; Customers and Sales appear in the More drawer.',
     '- **[CUST-FALL]** Setting `nav_primary_keys` to null via PATCH causes the bar',
-    '  to fall back to the manager role defaults (Home, Sales, Projects) on the',
+    '  to fall back to the manager role defaults (Home, Customers, Sales) on the',
     '  next page load — covering the `loadNavPref()` returns-null branch.',
     '- **[CUST-CANCEL]** Clicking Cancel in the dialog closes it without calling',
     '  `onSave`; the bar remains on its current state.',
