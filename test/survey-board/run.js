@@ -12,6 +12,9 @@
 //   (D) Card body click navigates to /customers/:id
 //   (E) Filter button opens the substage popover; unchecking a substage hides
 //       matching cards; re-checking the substage shows them again
+//   (F) Action strip renders when cardActionHandlerFor returns a handler
+//   (G) Snackbar visibility pause — refresh-failure Snackbar stays visible when
+//       the tab is hidden (timer paused), then dismisses after tab returns
 //
 // React mount timing note: SurveyBoardPage is a React.lazy chunk.  The browser
 // loads the chunk asynchronously after the module entry point executes.
@@ -200,9 +203,9 @@ async function waitForReactMount(page) {
 // We clear surveyHiddenSubstages from localStorage so default state is
 // predictable: 'unqualified' and 'not_suitable' start hidden; 'bad_timing'
 // starts visible.
-async function seedSurveyBoard(page) {
+async function seedSurveyBoard(page, { withHandler = false } = {}) {
   await page.evaluate(
-    ({ contacts, cache, workflow, lsOptions }) => {
+    ({ contacts, cache, workflow, lsOptions, withHandler }) => {
       // Clear stored filter state so each probe starts from known defaults.
       try { localStorage.removeItem('surveyHiddenSubstages'); } catch {}
 
@@ -214,13 +217,23 @@ async function seedSurveyBoard(page) {
       window.LEAD_STATUS_OPTIONS     = lsOptions;
       window.LEAD_SUBSTATUSES        = [];
 
-      window.cardActionHandlerFor         = () => null;
+      if (withHandler) {
+        // Return a handler for every card so the action strip always shows.
+        window.cardActionHandlerFor = () => ({
+          id: 999,
+          type: 'book_survey',
+          config: { action_name: 'book_survey' },
+          bindings: [],
+        });
+      } else {
+        window.cardActionHandlerFor = () => null;
+      }
       window.stageOrLeadStatusActionLabel = () => '';
       window.substatusActionLabelLookup   = () => '';
 
       document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
     },
-    { contacts: CONTACTS, cache: CONTACT_STAGE_CACHE, workflow: WORKFLOW, lsOptions: LEAD_STATUS_OPTIONS },
+    { contacts: CONTACTS, cache: CONTACT_STAGE_CACHE, workflow: WORKFLOW, lsOptions: LEAD_STATUS_OPTIONS, withHandler },
   );
 }
 
@@ -237,7 +250,7 @@ async function waitForCard(page, contactId) {
 // runs without HUBSPOT_TOKEN (as the test harness does).  We intercept those
 // requests and return empty-but-valid responses so bootstrap() completes
 // normally and the mount point survives.
-async function openBoardPage(browser, cookie, contactId = 'sv-test-001') {
+async function openBoardPage(browser, cookie, contactId = 'sv-test-001', { withHandler = false } = {}) {
   const page = await browser.newPage();
   page.on('pageerror', () => {});
   page.on('console',   () => {});
@@ -265,7 +278,7 @@ async function openBoardPage(browser, cookie, contactId = 'sv-test-001') {
   await injectSession(page, cookie);
   await page.goto(`${BASE}/survey`, { waitUntil: 'domcontentloaded', timeout: 15000 });
   const mounted = await waitForReactMount(page);
-  await seedSurveyBoard(page);
+  await seedSurveyBoard(page, { withHandler });
   const cardReady = contactId ? await waitForCard(page, contactId) : true;
   return { page, mounted, cardReady };
 }
@@ -757,6 +770,47 @@ async function main() {
       }
     }
 
+    // ── (F) Action strip renders with handler ──────────────────────────────────
+    console.log('\n  [F] Action strip');
+    {
+      let page;
+      try {
+        // Open with handler enabled — all cards get an action strip.
+        const opened = await openBoardPage(browser, adminClient.cookie, 'sv-test-001', { withHandler: true });
+        page = opened.page;
+
+        if (!opened.cardReady) {
+          record('(F) Action strip renders when handler configured', 'strip visible', 'timed out', false);
+        } else {
+          // Dispatch a second event so React re-renders with the updated
+          // cardActionHandlerFor function that was injected by seedSurveyBoard.
+          await page.evaluate(() => {
+            document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
+          });
+          await new Promise(r => setTimeout(r, 800));
+
+          // The action strip carries data-card-action-handler-id and shows the
+          // title-cased action_name: 'book_survey' → 'Book Survey'.
+          const stripInfo = await page.evaluate(() => {
+            const strip = document.querySelector('[data-card-action-handler-id="999"]');
+            if (!strip) return { found: false };
+            return { found: true, text: (strip.textContent || '').trim() };
+          });
+
+          record(
+            '(F) Action strip renders when cardActionHandlerFor returns a handler',
+            '"Book Survey" in action strip with data-card-action-handler-id="999"',
+            stripInfo.found ? `text="${stripInfo.text}"` : 'strip not found in DOM',
+            stripInfo.found && (stripInfo.text || '').includes('Book Survey'),
+          );
+        }
+      } catch (e) {
+        record('(F) Action strip', 'no error', `error: ${e.message}`, false, e.stack || '');
+      } finally {
+        if (page) await page.close().catch(() => {});
+      }
+    }
+
     // ── (G) Snackbar visibility pause (tab-hide) ──────────────────────────────
     // Probe G: dispatch the survey-board-bg-refresh-failed event to trigger the
     // warning Snackbar, then simulate the document going hidden.  The MUI
@@ -907,6 +961,9 @@ async function writeReport(findings) {
     '- **(D)** Card body click navigates to `/customers/:id`',
     '- **(E)** Substage filter: Filter button opens the MUI Popover; unchecking',
     '  "Bad Timing" hides matching cards; re-checking restores them',
+    '- **(F)** Action strip: when `cardActionHandlerFor` returns a handler with',
+    '  `action_name: \'book_survey\'`, the `[data-card-action-handler-id]` element',
+    '  is present and shows "Book Survey" text',
     '- **(G)** Snackbar visibility pause: dispatching `survey-board-bg-refresh-failed`',
     '  shows the warning Snackbar; simulating tab-hide proves the MUI',
     '  autoHideDuration timer is paused (Snackbar still visible after 9.5 s > 8 s),',
