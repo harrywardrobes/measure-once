@@ -39,6 +39,7 @@ type Allowed = {
   approved_at?: string;
   protected?: boolean;
   metadata?: Record<string, string>;
+  conflict_created_at?: string;
   pending_profile_updates?: Record<string, ProfileConflict> | null;
 };
 
@@ -808,6 +809,7 @@ export function AdminTeamPage() {
                     <TableCell>HR details</TableCell>
                     <TableCell>Note</TableCell>
                     <TableCell>Approved</TableCell>
+                    <TableCell>Conflict since</TableCell>
                     <TableCell align="right" />
                   </TableRow>
                 </TableHead>
@@ -817,6 +819,10 @@ export function AdminTeamPage() {
                     const name = [m.first_name, m.last_name].filter(Boolean).join(' ');
                     const ec = [m.ec_first_name, m.ec_last_name].filter(Boolean).join(' ');
                     const hasConflicts = !!(a.pending_profile_updates && Object.keys(a.pending_profile_updates).length > 0);
+                    const conflictSince = hasConflicts ? (a.conflict_created_at || a.approved_at) : null;
+                    const isStaleConflict = conflictSince
+                      ? Date.now() - new Date(conflictSince).getTime() >= 7 * 24 * 60 * 60 * 1000
+                      : false;
                     return (
                       <TableRow
                         key={a.email}
@@ -852,6 +858,19 @@ export function AdminTeamPage() {
                         </TableCell>
                         <TableCell><Chip size="small" label={a.note || '—'} variant="outlined" /></TableCell>
                         <TableCell><Typography variant="body2">{fmtDate(a.approved_at)}</Typography></TableCell>
+                        <TableCell>
+                          {conflictSince ? (
+                            <Tooltip title={fmtDateShort(conflictSince)}>
+                              <Typography
+                                variant="body2"
+                                color={isStaleConflict ? 'warning.main' : 'text.secondary'}
+                                sx={isStaleConflict ? { fontWeight: 600 } : undefined}
+                              >
+                                {fmtRelativeAge(conflictSince)}
+                              </Typography>
+                            </Tooltip>
+                          ) : null}
+                        </TableCell>
                         <TableCell align="right">
                           {a.protected
                             ? <Typography variant="caption" color="text.disabled">Protected</Typography>
