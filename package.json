@@ -10,7 +10,7 @@
     "predev": "node scripts/dev-prebuild.mjs",
     "dev": "nodemon server.js",
     "dev:react": "vite",
-    "watch:react": "vite build --watch",
+    "watch:react": "node scripts/watch-react.mjs",
     "build:react:dev": "node scripts/generate-tokens-css.mjs && vite build",
     "typecheck": "tsc --noEmit",
     "build:react": "node scripts/generate-tokens-css.mjs && npm run typecheck && vite build && node scripts/check-bundle-sizes.mjs",
