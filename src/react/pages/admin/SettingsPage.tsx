@@ -169,10 +169,8 @@ export function SettingsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [hubStatus, setHubStatus] = useState<HubStatus | null>(null);
   const [devMode, setDevMode] = useState(false);
-  const [devFilter, setDevFilter] = useState(true);
   const [devContacts, setDevContacts] = useState<DevContact[]>([]);
   const [devLoading, setDevLoading] = useState(false);
-  const [backfillMsg, setBackfillMsg] = useState('');
   const [newKey, setNewKey] = useState('');
   const [newStage, setNewStage] = useState('');
   const [newLabel, setNewLabel] = useState('');
@@ -250,10 +248,6 @@ export function SettingsPage() {
     } catch {}
     setDevMode(dm);
     if (!dm) return;
-    try {
-      const fd = await callApi('GET', '/api/admin/hubspot/dev-filter') as { enabled?: boolean };
-      setDevFilter(fd?.enabled !== false);
-    } catch {}
     setDevLoading(true);
     try {
       let contacts: DevContact[] = [];
@@ -265,7 +259,7 @@ export function SettingsPage() {
         total = d.totalPages || 1;
         page++;
       } while (page <= total);
-      setDevContacts(contacts);
+      setDevContacts(contacts.filter(c => c.properties?.hw_test_user === 'true'));
     } catch {}
     setDevLoading(false);
   }, []);
@@ -384,56 +378,14 @@ export function SettingsPage() {
     } catch (e) { setAddErr((e as Error).message || 'Failed to add status.'); }
   }, [newKey, newLabel, newStage]);
 
-  const toggleDevFilter = useCallback(async (enabled: boolean) => {
-    try {
-      await callApi('PATCH', '/api/admin/hubspot/dev-filter', { enabled });
-      setDevFilter(enabled);
-      showToast(enabled ? 'Dev filter turned ON.' : 'Dev filter turned OFF — all contacts will be visible.');
-    } catch (e) {
-      setDevFilter(!enabled);
-      showToast('Failed: ' + (e as Error).message, true);
-    }
-  }, []);
-
-  const toggleTestUser = useCallback(async (id: string, enabled: boolean) => {
-    try {
-      await callApi('PATCH', `/api/admin/hubspot/test-users/${encodeURIComponent(id)}`, { enabled });
-      showToast(enabled ? 'Marked as test user.' : 'Removed from test users.');
-      setDevContacts(cs => cs.map(c => c.id === id
-        ? { ...c, properties: { ...c.properties, hw_test_user: enabled ? 'true' : 'false' } }
-        : c));
-    } catch (e) { showToast('Failed: ' + (e as Error).message, true); }
-  }, []);
-
-  const backfill = useCallback(async () => {
-    setBackfillMsg('Running backfill…');
-    try {
-      const d = await callApi('POST', '/api/admin/hubspot/backfill-test-user-defaults') as { patched?: number };
-      setBackfillMsg(`Done — ${d?.patched ?? 0} contact(s) updated.`);
-      showToast(`Backfill complete: ${d?.patched ?? 0} contact(s) set to false.`);
-      setDevContacts([]); setDevLoading(true);
-      try {
-        let contacts: DevContact[] = []; let page = 1, total = 1;
-        do {
-          const dd = await callApi('GET', `/api/contacts-all?all=1&limit=100&page=${page}`) as { results?: DevContact[]; totalPages?: number };
-          if (!dd) break;
-          contacts = contacts.concat(dd.results || []);
-          total = dd.totalPages || 1; page++;
-        } while (page <= total);
-        setDevContacts(contacts);
-      } finally { setDevLoading(false); }
-    } catch (e) { setBackfillMsg(''); showToast('Backfill failed: ' + (e as Error).message, true); }
-  }, []);
 
   useEffect(() => {
-    W.saveAllLeadStatuses      = saveAll;
-    W.moveLeadStatus           = (key: string, dir: 'up' | 'down') => moveStatus(key, dir);
-    W.addLeadStatus            = addStatus;
-    W.loadLeadStatusesAdmin    = fetchStatuses;
-    W.loadHubspotStatus        = fetchHubStatus;
-    W.loadDevTestUsers         = initDevSection;
-    W.backfillTestUserDefaults = backfill;
-    W.setDevFilter             = (en: boolean) => toggleDevFilter(en);
+    W.saveAllLeadStatuses   = saveAll;
+    W.moveLeadStatus        = (key: string, dir: 'up' | 'down') => moveStatus(key, dir);
+    W.addLeadStatus         = addStatus;
+    W.loadLeadStatusesAdmin = fetchStatuses;
+    W.loadHubspotStatus     = fetchHubStatus;
+    W.loadDevTestUsers      = initDevSection;
     return () => {
       delete W.saveAllLeadStatuses;
       delete W.moveLeadStatus;
@@ -441,10 +393,8 @@ export function SettingsPage() {
       delete W.loadLeadStatusesAdmin;
       delete W.loadHubspotStatus;
       delete W.loadDevTestUsers;
-      delete W.backfillTestUserDefaults;
-      delete W.setDevFilter;
     };
-  }, [saveAll, moveStatus, addStatus, fetchStatuses, fetchHubStatus, initDevSection, backfill, toggleDevFilter]);
+  }, [saveAll, moveStatus, addStatus, fetchStatuses, fetchHubStatus, initDevSection]);
 
   const badge = (() => {
     if (!hubStatus) return { text: 'Checking…', bg: '#f3f4f6', color: '#6b7280' };
@@ -605,60 +555,27 @@ export function SettingsPage() {
             <Box sx={{ mb: 2 }}>
               <Typography variant="h6">Dev test users</Typography>
               <Typography variant="body2" color="text.secondary">
-                In development mode the customer list is filtered to contacts marked below. Toggle a
-                contact to include or exclude it from the dev view.
+                Contacts currently marked as dev test users in HubSpot (<code>hw_test_user = true</code>).
+                Toggling is done directly in HubSpot.
               </Typography>
             </Box>
 
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, p: 1.5, borderRadius: 1, border: 1, borderColor: 'divider', mb: 1 }}>
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>Dev filter</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  When ON, only contacts marked below appear in the Customers list and lead-status counts.
-                </Typography>
-              </Box>
-              <label className="ss-toggle flex-shrink-0" title="Toggle dev filter">
-                <input type="checkbox" id="dev-filter-global-toggle" checked={devFilter}
-                  onChange={(e) => toggleDevFilter(e.currentTarget.checked)} />
-                <span className="ss-toggle-track" />
-              </label>
-            </Box>
-            <div id="dev-filter-toggle-label" style={{
-              padding: '2px 10px', borderRadius: 999, fontSize: '.75rem', fontWeight: 600, display: 'inline-block',
-              background: devFilter ? '#dcfce7' : '#fee2e2', color: devFilter ? '#166534' : '#991b1b',
-            }}>
-              {devFilter ? 'Dev filter: ON' : 'Dev filter: OFF'}
-            </div>
-
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 2 }}>
-              <Button variant="outlined" id="dev-backfill-btn" onClick={backfill}>
-                Set unset contacts to false
-              </Button>
-              {backfillMsg && <span id="dev-backfill-result" style={{ fontSize: '.8rem', color: '#6b7280' }}>{backfillMsg}</span>}
-            </Box>
-
-            <Box id="dev-test-users-list" sx={{ mt: 2 }}>
+            <Box id="dev-test-users-list">
               {devLoading ? (
                 <p className="admin-msg admin-msg--muted">Loading contacts…</p>
               ) : !devContacts.length ? (
-                <p className="admin-msg admin-msg--muted">No contacts found in HubSpot.</p>
+                <p className="admin-msg admin-msg--muted">No dev test users found.</p>
               ) : devContacts.map(c => {
-                const first   = c.properties?.firstname || '';
-                const last    = c.properties?.lastname  || '';
-                const name    = [first, last].filter(Boolean).join(' ') || `Contact ${c.id}`;
-                const email   = c.properties?.email || '';
-                const enabled = c.properties?.hw_test_user === 'true';
+                const first = c.properties?.firstname || '';
+                const last  = c.properties?.lastname  || '';
+                const name  = [first, last].filter(Boolean).join(' ') || `Contact ${c.id}`;
+                const email = c.properties?.email || '';
                 return (
-                  <Box key={c.id} id={`dtu-row-${c.id}`} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.75, borderBottom: '1px solid #f3f4f6' }}>
+                  <Box key={c.id} id={`dtu-row-${c.id}`} sx={{ display: 'flex', alignItems: 'center', py: 0.75, borderBottom: '1px solid #f3f4f6', gap: 1.5 }}>
                     <Box>
                       <Typography variant="body2" sx={{ fontWeight: 500 }}>{name}</Typography>
                       {email && <Typography variant="caption" color="text.secondary">{email}</Typography>}
                     </Box>
-                    <label className="ss-toggle" title="Include in dev test data">
-                      <input type="checkbox" checked={enabled}
-                        onChange={(e) => toggleTestUser(c.id, e.currentTarget.checked)} />
-                      <span className="ss-toggle-track" />
-                    </label>
                   </Box>
                 );
               })}
