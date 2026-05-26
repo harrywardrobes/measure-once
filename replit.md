@@ -17,6 +17,11 @@ Project management dashboard (HubSpot CRM integration).
   or page refresh does not lose the user's work. Use localStorage (or
   sessionStorage where appropriate) to draft-save form values and restore them
   on re-mount. Clear the draft only after a successful submit.
+- **Component reuse:** Always reuse existing site components before writing new
+  ones. When a genuinely new MUI component type is required, reference the
+  official MUI documentation before implementing it. If something outside MUI
+  or the existing component set appears necessary, confirm with the user before
+  proceeding.
 - **Follow-up tasks:** Always propose follow-up tasks for complex work. Keep
   them as small and focused as possible. Never pre-approve anything that would
   dramatically change application functionality — always surface it for the
