@@ -40,16 +40,6 @@
       href: '/invoices',
     },
     {
-      id: 'go-trades', label: 'Trade contacts', hint: 'Suppliers and contractor directory', category: 'Navigate',
-      icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/>',
-      href: '/trades',
-    },
-    {
-      id: 'go-ideas', label: 'Ideas board', hint: 'Capture and review design ideas', category: 'Navigate',
-      icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>',
-      href: '/ideas',
-    },
-    {
       id: 'go-admin', label: 'Admin panel', hint: 'Manage users and team access', category: 'Navigate',
       icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>',
       href: '/admin',
@@ -131,11 +121,6 @@
     return [];
   }
 
-  function getTradeContacts() {
-    if (typeof window._cpGetTradeContacts === 'function') return window._cpGetTradeContacts();
-    return [];
-  }
-
   function getInvoices() {
     if (window.state && window.state.qb && Array.isArray(window.state.qb.invoices)) return window.state.qb.invoices;
     return [];
@@ -154,7 +139,6 @@
     if (q) {
       const encoded = encodeURIComponent((query || '').trim());
       const searchIcon = `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0z"/></svg>`;
-      const tradesIcon = `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>`;
       const invoicesIcon = `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
       const _urlParams = location.pathname === '/customers' ? new URLSearchParams(location.search) : null;
       const _ls   = (window.state && window.state.leadStatusFilter) || (_urlParams && _urlParams.get('leadStatus')) || '';
@@ -170,13 +154,6 @@
         <span class="cp-result-text">
           <span class="cp-result-label">Search customers for &ldquo;${escHtml((query || '').trim())}&rdquo;</span>
           <span class="cp-result-sub">Browse all matching customers</span>
-        </span>
-      </button>`;
-      html += `<button class="cp-result-item" onclick="closeCommandPalette();location.href='/trades?q=${encoded}'" tabindex="0">
-        <span class="cp-result-icon">${tradesIcon}</span>
-        <span class="cp-result-text">
-          <span class="cp-result-label">Search trades for &ldquo;${escHtml((query || '').trim())}&rdquo;</span>
-          <span class="cp-result-sub">Browse matching trade contacts</span>
         </span>
       </button>`;
       html += `<button class="cp-result-item" onclick="closeCommandPalette();location.href='/invoices?q=${encoded}'" tabindex="0">
@@ -209,35 +186,6 @@
           const id = c.id || (c.properties && c.properties.hs_object_id) || '';
           html += `<button class="cp-result-item" onclick="closeCommandPalette();location.href='/customers/${escHtml(id)}'" tabindex="0">
             <span class="cp-result-avatar">${escHtml(initials)}</span>
-            <span class="cp-result-text">
-              <span class="cp-result-label">${escHtml(name)}</span>
-              ${sub ? `<span class="cp-result-sub">${escHtml(sub)}</span>` : ''}
-            </span>
-          </button>`;
-        });
-      }
-    }
-
-    const trades = getTradeContacts();
-    if (q && trades.length) {
-      const tradeIcon = `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>`;
-      const matchedTrades = trades.filter(c => {
-        const name = (c.company_name || '').toLowerCase();
-        const type = (c.trade_type || '').toLowerCase();
-        return name.includes(q) || type.includes(q);
-      }).slice(0, 5);
-
-      if (matchedTrades.length) {
-        html += `<div class="cp-section-label">Trades</div>`;
-        matchedTrades.forEach(c => {
-          const name = c.company_name || 'Unknown';
-          const sub  = c.trade_type || '';
-          const id   = c.id;
-          const numId = Number(id);
-          const idLiteral = Number.isFinite(numId) ? numId : `'${escHtml(String(id))}'`;
-          const onclick = `closeCommandPalette();if(typeof openTradesModal==='function')openTradesModal(${idLiteral});else location.href='/trades';`;
-          html += `<button class="cp-result-item" onclick="${onclick}" tabindex="0">
-            <span class="cp-result-icon">${tradeIcon}</span>
             <span class="cp-result-text">
               <span class="cp-result-label">${escHtml(name)}</span>
               ${sub ? `<span class="cp-result-sub">${escHtml(sub)}</span>` : ''}

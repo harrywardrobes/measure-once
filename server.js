@@ -2605,7 +2605,7 @@ app.get('/admin/database', async (req, res) => {
 installDbEditorRoutes(app, { isAuthenticated, requireAdmin });
 
 app.get('/trades', isAuthenticated, (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'trades.html'));
+  res.redirect('/');
 });
 
 // Sales, Projects, Invoices — manager/admin only
@@ -3337,7 +3337,7 @@ app.get('/api/calendar/upcoming', async (req, res) => {
 });
 
 // ── Ideas & Feedback ──────────────────────────────────────────────────────────
-app.get('/ideas', isAuthenticated, (req, res) => res.sendFile(path.join(__dirname, 'public', 'ideas.html')));
+app.get('/ideas', isAuthenticated, (_req, res) => res.redirect('/'));
 
 async function ensureIdeasTables() {
   await pool.query(`

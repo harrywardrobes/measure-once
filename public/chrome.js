@@ -24,7 +24,7 @@ window.getShortcut = function (key) {
   window.PAGE_TITLES = {
     '/': 'Home', '/customers': 'Customers', '/sales': 'Sales',
     '/survey': 'Survey', '/projects': 'Projects', '/calendar': 'Calendar',
-    '/invoices': 'Invoices', '/trades': 'Trades', '/ideas': 'Ideas',
+    '/invoices': 'Invoices',
     '/admin': 'Admin', '/profile': 'Profile',
   };
 

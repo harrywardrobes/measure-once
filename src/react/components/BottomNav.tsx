@@ -24,10 +24,6 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
-import HandymanIcon from '@mui/icons-material/Handyman';
-import HandymanOutlinedIcon from '@mui/icons-material/HandymanOutlined';
-import LightbulbIcon from '@mui/icons-material/Lightbulb';
-import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
@@ -81,11 +77,9 @@ export const NAV: NavItem[] = [
   { key: 'projects', href: '/projects', label: 'Projects', Icon: SquareFootIcon,    IconOutlined: SquareFootOutlinedIcon,    managerOnly: true },
   { key: 'calendar', href: '/calendar', label: 'Calendar', Icon: CalendarMonthIcon, IconOutlined: CalendarMonthOutlinedIcon },
   { key: 'invoices', href: '/invoices', label: 'Invoices', Icon: ReceiptLongIcon,   IconOutlined: ReceiptLongOutlinedIcon,   managerOnly: true },
-  { key: 'trades',   href: '/trades',   label: 'Trades',   Icon: HandymanIcon,      IconOutlined: HandymanOutlinedIcon },
-  { key: 'ideas',    href: '/ideas',    label: 'Ideas',    Icon: LightbulbIcon,     IconOutlined: LightbulbOutlinedIcon },
 ];
 
-const DEFAULT_PRIMARY_KEYS = ['home', 'calendar', 'trades'];
+const DEFAULT_PRIMARY_KEYS = ['home', 'customers', 'calendar'];
 const BAR_SIZE = 3;
 
 function accentFor(key: string, theme: Theme): string {
