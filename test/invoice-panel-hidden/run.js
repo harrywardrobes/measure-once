@@ -6,7 +6,7 @@
 // when openInvoicePanel() is simulated on the invoices page.
 //
 // Checks:
-//   - Home, Trades, Projects, Survey, Invoices: #inv-panel has
+//   - Home, Trades, Projects, Survey, Invoices, Calendar: #inv-panel has
 //     `visibility: hidden` via computed style (no inv-panel-open class).
 //   - Invoices page: adding the inv-panel-open class makes visibility: visible.
 //
@@ -108,7 +108,7 @@ async function writeReport(findings) {
     '',
     '## What is tested',
     '',
-    'Loads five dashboard pages as an admin user and asserts that `#inv-panel`',
+    'Loads six dashboard pages as an admin user and asserts that `#inv-panel`',
     'has `visibility: hidden` via computed style on each page before the panel',
     'is opened. On the invoices page, also adds the `inv-panel-open` class and',
     'confirms `visibility` becomes `visible`.',
@@ -237,6 +237,7 @@ async function main() {
     { label: 'Projects', path: '/projects' },
     { label: 'Survey',   path: '/survey' },
     { label: 'Invoices', path: '/invoices' },
+    { label: 'Calendar', path: '/calendar' },
   ];
 
   try {
