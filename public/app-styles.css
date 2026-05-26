@@ -3741,6 +3741,7 @@ body.showing-workflow .sales-layout #workflow-panel {
   border-radius: var(--radius-pill);
   font-size: .65rem; font-weight: 700; margin-left: 5px;
 }
+.tab-badge--warn { background: #ed6c02; }
 .tab-panel         { display: none; }
 .tab-panel.active  { display: block; }
 

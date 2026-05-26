@@ -9,7 +9,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import DifferenceIcon from '@mui/icons-material/Difference';
 import {
   api, toast, fmtDate, fmtDateShort, emitAdminChange, onAdminChange,
-  setTeamCount, PRIVILEGE_LEVELS, PRIVILEGE_LABEL,
+  setTeamCount, setConflictBadge, PRIVILEGE_LEVELS, PRIVILEGE_LABEL,
 } from './adminApi';
 import { phoneKey, phoneFieldLabel } from './adminPhoneHelpers';
 type ProfileConflict = { admin: string; user: string };
@@ -26,6 +26,7 @@ type User = {
   has_custom_photo?: boolean;
   profile_image_url?: string;
   created_at?: string;
+  updated_at?: string;
   metadata?: Record<string, string>;
   note?: string;
   pending_profile_updates?: Record<string, ProfileConflict> | null;
@@ -149,11 +150,19 @@ export function AdminTeamPage() {
         api<AccessRequest[]>('GET', '/api/admin/requests'),
       ]);
       if (!mountedRef.current) return;
-      setUsers(Array.isArray(u) ? u : []);
+      const userList = Array.isArray(u) ? u : [];
+      setUsers(userList);
       setAllowed(Array.isArray(a) ? a : []);
       setJobRoles(Array.isArray(r) ? r : []);
       setRequests(Array.isArray(q) ? q : []);
-      setTeamCount(Array.isArray(u) ? u.length : 0);
+      setTeamCount(userList.length);
+      const staleThreshold = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const staleConflictCount = userList.filter(usr => {
+        if (!usr.pending_profile_updates || !Object.keys(usr.pending_profile_updates).length) return false;
+        const since = new Date(usr.updated_at || usr.created_at || 0).getTime();
+        return since < staleThreshold;
+      }).length;
+      setConflictBadge(staleConflictCount);
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : String(e), true);
     } finally {

@@ -106,6 +106,14 @@ export function setTeamCount(n: number): void {
   if (el) el.textContent = String(n);
 }
 
+export function setConflictBadge(n: number): void {
+  const el = document.getElementById('team-conflict-badge');
+  if (!el) return;
+  el.innerHTML = n > 0
+    ? `<span class="tab-badge tab-badge--warn" title="${n} unresolved onboarding conflict${n === 1 ? '' : 's'}">${n}</span>`
+    : '';
+}
+
 export const PRIVILEGE_LEVELS = ['viewer', 'member', 'manager', 'admin'] as const;
 export const PRIVILEGE_LABEL: Record<string, string> = {
   viewer: 'Viewer', member: 'Member', manager: 'Manager', admin: 'Admin',

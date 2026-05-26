@@ -1829,7 +1829,7 @@ async function setupAuth(app) {
     try {
       const r = await pool.query(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.profile_image_url,
-                u.job_role, u.privilege_level, u.onboarding_status, u.created_at,
+                u.job_role, u.privilege_level, u.onboarding_status, u.created_at, u.updated_at,
                 (u.password_hash IS NOT NULL) AS has_password,
                 (u.custom_photo  IS NOT NULL) AS has_custom_photo,
                 (u.pending_photo IS NOT NULL) AS has_pending_photo,
@@ -1839,6 +1839,22 @@ async function setupAuth(app) {
          ORDER BY u.created_at DESC LIMIT 500`
       );
       res.json(r.rows.map(u => ({ ...u, isAdmin: isAdminEmail(u.email) })));
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.get('/api/admin/conflict-summary', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT u.id, u.email, u.first_name, u.last_name, u.updated_at,
+                ae.pending_profile_updates
+         FROM users u
+         JOIN allowed_emails ae ON LOWER(u.email) = ae.email
+         WHERE ae.pending_profile_updates IS NOT NULL
+           AND COALESCE(u.updated_at, u.created_at) < NOW() - INTERVAL '7 days'`
+      );
+      res.json({ count: r.rowCount, users: r.rows });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -2401,8 +2417,118 @@ const isAuthenticated = async (req, res, next) => {
   return res.status(401).json({ message: 'Unauthorized' });
 };
 
+// ── Onboarding conflict digest ────────────────────────────────────────────────
+// Sends a weekly email to admins listing team members whose onboarding
+// conflicts (pending_profile_updates) have been unresolved for 7+ days.
+// The last-sent timestamp is persisted in admin_settings so restarts don't
+// trigger duplicate sends within the same week.
+
+const CONFLICT_DIGEST_INTERVAL_MS = 24 * 60 * 60 * 1000; // check daily
+const CONFLICT_DIGEST_MIN_GAP_MS  = 7 * 24 * 60 * 60 * 1000; // send at most weekly
+
+async function sendConflictDigest() {
+  const adminEmails = (process.env.ADMIN_EMAILS || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  if (adminEmails.length === 0) return;
+
+  const transport = createMailTransport();
+  if (!transport) return;
+
+  // Find users with unresolved conflicts older than 7 days.
+  const r = await pool.query(
+    `SELECT u.email, u.first_name, u.last_name,
+            COALESCE(u.updated_at, u.created_at) AS conflict_since
+     FROM users u
+     JOIN allowed_emails ae ON LOWER(u.email) = ae.email
+     WHERE ae.pending_profile_updates IS NOT NULL
+       AND COALESCE(u.updated_at, u.created_at) < NOW() - INTERVAL '7 days'
+     ORDER BY conflict_since ASC`
+  );
+  if (r.rowCount === 0) return false;
+
+  const count = r.rowCount;
+  const rows  = r.rows;
+
+  const baseUrl = appBaseUrl();
+  const adminUrl = `${baseUrl}/admin`;
+  const from    = buildFromHeader();
+  const replyTo = buildReplyTo();
+
+  const listText = rows.map(u => {
+    const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email;
+    const since = new Date(u.conflict_since).toDateString();
+    return `  • ${name} <${u.email}> — unresolved since ${since}`;
+  }).join('\n');
+
+  const listHtml = rows.map(u => {
+    const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email;
+    const since = new Date(u.conflict_since).toDateString();
+    return `<li><strong>${escapeHtml(name)}</strong> &lt;${escapeHtml(u.email)}&gt; — unresolved since ${escapeHtml(since)}</li>`;
+  }).join('\n');
+
+  const subject = `Measure Once — ${count} unresolved onboarding conflict${count === 1 ? '' : 's'}`;
+
+  await transport.sendMail({
+    from, replyTo,
+    to: adminEmails.join(', '),
+    subject,
+    text: [
+      `${count} team member${count === 1 ? ' has' : 's have'} an onboarding conflict that has been unresolved for 7 or more days.`,
+      '',
+      listText,
+      '',
+      `Review and resolve conflicts in the admin panel:`,
+      `  ${adminUrl}`,
+    ].join('\n'),
+    html: `
+      <p>${count} team member${count === 1 ? ' has' : 's have'} an onboarding conflict that has been unresolved for <strong>7 or more days</strong>.</p>
+      <ul>${listHtml}</ul>
+      <p>Review and resolve conflicts in the <a href="${escapeHtml(adminUrl)}">admin panel → Team tab</a>.</p>
+    `,
+  });
+  console.log(`[conflict-digest] Sent weekly digest to ${adminEmails.length} admin(s) — ${count} conflict(s).`);
+  return true;
+}
+
+async function runConflictDigestIfDue() {
+  try {
+    // Check whether enough time has passed since the last digest.
+    const r = await pool.query(
+      `SELECT value FROM admin_settings WHERE key = 'last_conflict_digest_sent_at'`
+    );
+    if (r.rowCount > 0) {
+      const lastSent = new Date(r.rows[0].value).getTime();
+      if (Date.now() - lastSent < CONFLICT_DIGEST_MIN_GAP_MS) return;
+    }
+
+    const sent = await sendConflictDigest();
+
+    // Only record the send time when an email was actually dispatched.
+    // If SMTP is not configured or there are no conflicts, we skip stamping so
+    // that a later run can fire as soon as conditions change (e.g. SMTP is
+    // configured, or a conflict becomes stale).
+    if (sent) {
+      await pool.query(
+        `INSERT INTO admin_settings (key, value, updated_at)
+         VALUES ('last_conflict_digest_sent_at', to_jsonb(NOW()::text), NOW())
+         ON CONFLICT (key) DO UPDATE SET value = to_jsonb(NOW()::text), updated_at = NOW()`
+      );
+    }
+  } catch (e) {
+    console.error('[conflict-digest] Error:', e.message);
+  }
+}
+
+function scheduleConflictDigest() {
+  // Run an initial check shortly after boot so we catch a missed weekly window
+  // even after frequent Replit restarts.
+  setTimeout(runConflictDigestIfDue, 60 * 1000);
+  setInterval(runConflictDigestIfDue, CONFLICT_DIGEST_INTERVAL_MS);
+}
+
 module.exports = {
   installSession, setupAuth, isAuthenticated, requireAdmin,
   requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete,
   isAdminEmail, userIdExists, pool, logAdminAction, getReqPrivilege,
+  scheduleConflictDigest,
 };

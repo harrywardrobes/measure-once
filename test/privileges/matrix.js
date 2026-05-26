@@ -170,6 +170,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/admin/allowed',                              level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/allowed/test-noop@privtest.local',     level: 'admin' },
   { method: 'GET',    path: '/api/admin/users',                                level: 'admin' },
+  { method: 'GET',    path: '/api/admin/conflict-summary',                     level: 'admin' },
   { method: 'GET',    path: '/api/admin/audit-log',                            level: 'admin' },
   { method: 'GET',    path: '/api/admin/capabilities',                         level: 'admin' },
   { method: 'PATCH',  path: '/api/admin/capabilities',                         level: 'admin', body: {} },

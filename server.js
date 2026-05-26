@@ -4,7 +4,7 @@ const axios = require('axios').create({ timeout: 10000 });
 const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
-const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction, getReqPrivilege } = require('./auth');
+const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction, getReqPrivilege, scheduleConflictDigest } = require('./auth');
 const {
   hubspotMutationLimiter,
   gmailSendLimiter,
@@ -5539,5 +5539,6 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Design visit tables setup failed:', e.message); }
     try { await ensureDbEditorAuditTable(); console.log('  DB editor audit table ready'); }
     catch (e) { console.error('  DB editor audit table setup failed:', e.message); }
+    scheduleConflictDigest();
   });
 })();
