@@ -40,6 +40,51 @@ export function detectTrendWarning(recentEntries, driftPct = TREND_DRIFT_PCT, kb
   return null;
 }
 
+/**
+ * Inspect a window of history entries and return per-chunk warning strings for
+ * any individual chunk whose size has grown by more than driftPct % relative
+ * to its size in the oldest entry.
+ *
+ * A chunk is skipped when:
+ *   - it is absent from the oldest entry (newly added — no baseline to compare)
+ *   - its oldest size is zero (avoids division by zero)
+ *
+ * @param {Array<{chunks: Object.<string,number>}>} recentEntries
+ *   Entries in chronological order (oldest first), already sliced to the window.
+ *   Each entry's `chunks` map is { chunkName: gzBytes }.
+ * @param {number} [driftPct]   Override the drift threshold (defaults to TREND_DRIFT_PCT).
+ * @param {function} [kbStr]    Optional formatter used in warning messages.
+ * @returns {string[]}  Array of warning strings, one per offending chunk (empty when none).
+ */
+export function detectChunkTrendWarnings(recentEntries, driftPct = TREND_DRIFT_PCT, kbStr = defaultKbStr) {
+  if (recentEntries.length < 2) return [];
+
+  const oldest = recentEntries[0];
+  const newest = recentEntries[recentEntries.length - 1];
+
+  const newestChunks = newest.chunks ?? {};
+  const oldestChunks = oldest.chunks ?? {};
+
+  const warnings = [];
+
+  for (const [name, newestBytes] of Object.entries(newestChunks)) {
+    const oldestBytes = oldestChunks[name];
+    if (oldestBytes == null || oldestBytes <= 0) continue;
+
+    const growthPct = ((newestBytes - oldestBytes) / oldestBytes) * 100;
+    if (growthPct > driftPct) {
+      warnings.push(
+        `Chunk "${name}" grew ${growthPct.toFixed(1)}% ` +
+        `over the last ${recentEntries.length} run${recentEntries.length === 1 ? '' : 's'} ` +
+        `(${kbStr(oldestBytes)} → ${kbStr(newestBytes)}, ` +
+        `threshold: >${driftPct}%).`
+      );
+    }
+  }
+
+  return warnings;
+}
+
 function defaultKbStr(bytes) {
   return (bytes / 1024).toFixed(1) + ' kB';
 }

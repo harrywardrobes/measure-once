@@ -58,7 +58,7 @@ import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { execSync } from 'child_process';
-import { TREND_WINDOW, TREND_DRIFT_PCT, detectTrendWarning } from './bundle-size-trend.mjs';
+import { TREND_WINDOW, TREND_DRIFT_PCT, detectTrendWarning, detectChunkTrendWarnings } from './bundle-size-trend.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REACT_DIR = resolve(__dirname, '..', 'public', 'react');
@@ -332,6 +332,12 @@ const recentEntries = recentLines.map(l => JSON.parse(l));
 // by more than TREND_DRIFT_PCT % relative to the oldest entry in the window.
 const trendWarning = detectTrendWarning(recentEntries, TREND_DRIFT_PCT, kbStr);
 
+// ── Per-chunk trend check ─────────────────────────────────────────────────────
+// Warn (non-fatal) when any individual always-loaded chunk has grown by more
+// than TREND_DRIFT_PCT % relative to its oldest value in the window.  A single
+// chunk can balloon while another shrinks, masking a regression in the total.
+const chunkTrendWarnings = detectChunkTrendWarnings(recentEntries, TREND_DRIFT_PCT, kbStr);
+
 // ── Per-build spike check ─────────────────────────────────────────────────────
 // Warn (non-fatal) when this single build increased the always-loaded total by
 // more than SPIKE_PCT % relative to the immediately preceding history entry.
@@ -354,6 +360,11 @@ if (trendWarning) {
   console.log(`\n⚠  Trend warning: ${trendWarning}`);
 }
 
+if (chunkTrendWarnings.length > 0) {
+  console.log(`\n⚠  Per-chunk trend warning${chunkTrendWarnings.length > 1 ? 's' : ''}:`);
+  for (const w of chunkTrendWarnings) console.log(`   ${w}`);
+}
+
 if (spikeWarning) {
   console.log(`\n⚠  Spike warning: ${spikeWarning}`);
 }
@@ -374,12 +385,16 @@ const trendWarnMd = trendWarning
   ? `\n> ⚠ **Trend warning:** ${trendWarning}\n`
   : '';
 
+const chunkTrendWarnMd = chunkTrendWarnings.length > 0
+  ? chunkTrendWarnings.map(w => `\n> ⚠ **Per-chunk trend warning:** ${w}`).join('\n') + '\n'
+  : '';
+
 const spikeWarnMd = spikeWarning
   ? `\n> ⚠ **Spike warning:** ${spikeWarning}\n`
   : '';
 
 const trendSection = `\n## Trend (last ${recentEntries.length} run${recentEntries.length === 1 ? '' : 's'})` +
-  spikeWarnMd + trendWarnMd + '\n' +
+  spikeWarnMd + trendWarnMd + chunkTrendWarnMd + '\n' +
   `| Date (UTC) | SHA | Total always-loaded | ${alwaysHeaders} | Result |\n` +
   `|---|---|---|${alwaysSeps}|---|\n` +
   trendRows + '\n';
