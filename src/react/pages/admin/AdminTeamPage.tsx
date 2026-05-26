@@ -45,6 +45,8 @@ type Allowed = {
 
 type JobRole = { name: string; privilege_level?: string }; // privilege-read-ok: data field managed by admin
 
+const CONFLICT_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+
 type AccessRequest = {
   id: number;
   email: string;
@@ -528,6 +530,8 @@ export function AdminTeamPage() {
     jobRoles.map((r) => <MenuItem key={r.name} value={r.name}>{r.name}</MenuItem>)
   ), [jobRoles]);
 
+  const now = Date.now();
+
   return (
     <Stack spacing={3}>
       {/* Team table */}
@@ -557,7 +561,20 @@ export function AdminTeamPage() {
                 <TableBody id="team-body">
                   {users.length === 0 ? (
                     <TableRow><TableCell colSpan={7} align="center"><Typography variant="body2" color="text.secondary">No users yet.</Typography></TableCell></TableRow>
-                  ) : users.map((u) => {
+                  ) : [...users].sort((a, b) => {
+                    const aHasConflict = !!(a.pending_profile_updates && Object.keys(a.pending_profile_updates).length > 0);
+                    const bHasConflict = !!(b.pending_profile_updates && Object.keys(b.pending_profile_updates).length > 0);
+                    if (aHasConflict !== bHasConflict) return aHasConflict ? -1 : 1;
+                    if (aHasConflict && bHasConflict) {
+                      const aSince = new Date(a.conflict_created_at || a.updated_at || a.created_at || 0).getTime();
+                      const bSince = new Date(b.conflict_created_at || b.updated_at || b.created_at || 0).getTime();
+                      const aStale = now - aSince >= CONFLICT_STALE_MS;
+                      const bStale = now - bSince >= CONFLICT_STALE_MS;
+                      if (aStale !== bStale) return aStale ? -1 : 1;
+                      return aSince - bSince;
+                    }
+                    return 0;
+                  }).map((u) => {
                     const name = fullName(u) || '—';
                     const needsInfo = u.onboarding_status === 'more_info_required';
                     const hasConflicts = !!(u.pending_profile_updates && Object.keys(u.pending_profile_updates).length > 0);
