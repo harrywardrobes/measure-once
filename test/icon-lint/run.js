@@ -730,6 +730,25 @@ function extractIconUsages(src) {
       "CheckCircleIcon inside a template-literal interpolation after an apostrophe (You're) must not be swallowed",
     );
   }
+
+  // 20. A REAL single-quoted JS string appearing after an apostrophe-word
+  //     inside a ${} interpolation must have its contents stripped.
+  //     e.g. `it's nice ${const y = 'AddIcon'}`
+  //     The apostrophe in "it's" is prose (must NOT open a string literal);
+  //     the 'AddIcon' that follows inside the interpolation IS a JS string
+  //     and must be stripped so the identifier does not appear in usages.
+  {
+    const src = [
+      "import AddIcon from '@mui/icons-material/Add';",
+      "const x = `it's nice ${const y = 'AddIcon'}`;",
+    ].join('\n');
+    const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+    const usages  = extractIconUsages(bodySrc);
+    assert(
+      usages.every((u) => u.identifier !== 'AddIcon'),
+      "AddIcon inside a single-quoted string within a template interpolation after an apostrophe-word must be stripped",
+    );
+  }
 })();
 
 // ── scan ─────────────────────────────────────────────────────────────────────
