@@ -15,6 +15,9 @@ const dvUploads = require('./design-visit-uploads');
 const HANDLES_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'handles');
 if (!fs.existsSync(HANDLES_UPLOAD_DIR)) fs.mkdirSync(HANDLES_UPLOAD_DIR, { recursive: true });
 
+const DOOR_STYLES_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'door-styles');
+if (!fs.existsSync(DOOR_STYLES_UPLOAD_DIR)) fs.mkdirSync(DOOR_STYLES_UPLOAD_DIR, { recursive: true });
+
 function _deleteLocalHandleImage(imageUrl) {
   if (!imageUrl || typeof imageUrl !== 'string') return;
   const m = imageUrl.match(/^\/uploads\/handles\/([^/\\]+)$/);
@@ -31,6 +34,22 @@ function _deleteLocalHandleImage(imageUrl) {
   });
 }
 
+function _deleteLocalDoorStyleImage(imageUrl) {
+  if (!imageUrl || typeof imageUrl !== 'string') return;
+  const m = imageUrl.match(/^\/uploads\/door-styles\/([^/\\]+)$/);
+  if (!m) return;
+  const filename = m[1];
+  if (filename === '.' || filename === '..') return;
+  const filePath = path.join(DOOR_STYLES_UPLOAD_DIR, filename);
+  const resolved = path.resolve(filePath);
+  if (path.dirname(resolved) !== path.resolve(DOOR_STYLES_UPLOAD_DIR)) return;
+  fs.unlink(resolved, err => {
+    if (err && err.code !== 'ENOENT') {
+      console.warn('[design-visits] Failed to delete door-style image', resolved, err.message);
+    }
+  });
+}
+
 const _handlesStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, HANDLES_UPLOAD_DIR),
   filename: (req, file, cb) => {
@@ -41,6 +60,38 @@ const _handlesStorage = multer.diskStorage({
 });
 const _handlesUpload = multer({
   storage: _handlesStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\//i.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Only image files are allowed'));
+  },
+});
+
+const _handlesPreStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, HANDLES_UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
+    cb(null, `pre-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  },
+});
+const _handlesPreUpload = multer({
+  storage: _handlesPreStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\//i.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Only image files are allowed'));
+  },
+});
+
+const _doorStylesStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, DOOR_STYLES_UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  },
+});
+const _doorStylesUpload = multer({
+  storage: _doorStylesStorage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (/^image\//i.test(file.mimetype)) cb(null, true);
@@ -865,6 +916,17 @@ router.delete('/api/admin/design-visit-handles/:id', isAuthenticated, requireAdm
   }
 });
 
+router.post('/api/admin/design-visit-handles/upload-image', isAuthenticated, requireAdmin,
+  (req, res, next) => _handlesPreUpload.single('image')(req, res, err => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  }),
+  (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+    res.json({ url: `/uploads/handles/${req.file.filename}` });
+  }
+);
+
 router.post('/api/admin/dv-handles/:id/image', isAuthenticated, requireAdmin,
   (req, res, next) => _handlesUpload.single('image')(req, res, err => {
     if (err) return res.status(400).json({ error: err.message });
@@ -1022,13 +1084,25 @@ router.delete('/api/admin/design-visit-door-styles/:id', isAuthenticated, requir
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   try {
-    const r = await pool.query(`DELETE FROM design_visit_door_styles WHERE id=$1 RETURNING id`, [id]);
+    const r = await pool.query(`DELETE FROM design_visit_door_styles WHERE id=$1 RETURNING id, image_url`, [id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    _deleteLocalDoorStyleImage(r.rows[0].image_url);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
+
+router.post('/api/admin/design-visit-door-styles/upload-image', isAuthenticated, requireAdmin,
+  (req, res, next) => _doorStylesUpload.single('image')(req, res, err => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  }),
+  (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+    res.json({ url: `/uploads/door-styles/${req.file.filename}` });
+  }
+);
 
 // ── Non-admin read of T&C text (any authenticated user — used by wizard) ─────
 router.get('/api/design-visit-terms', isAuthenticated, async (req, res) => {

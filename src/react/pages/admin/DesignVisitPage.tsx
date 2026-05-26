@@ -94,7 +94,7 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
   const hasDescription = type === 'furniture';
   const hasStyleSelect = type === 'handle';
   const hasImageUrl    = type !== 'furniture';
-  const hasFileUpload  = type === 'handle';
+  const hasFileUpload  = type === 'handle' || type === 'door-style';
 
   useEffect(() => {
     if (!open) {
@@ -134,11 +134,15 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
     let finalImageUrl: string | undefined = imageUrl || undefined;
 
     if (hasFileUpload && imageFile) {
+      const uploadUrlMap: Record<string, string> = {
+        handle:       '/api/admin/design-visit-handles/upload-image',
+        'door-style': '/api/admin/design-visit-door-styles/upload-image',
+      };
       const formData = new FormData();
       formData.append('image', imageFile);
       setSaving(true);
       try {
-        const res = await fetch('/api/admin/design-visit-handles/upload-image', { method: 'POST', body: formData });
+        const res = await fetch(uploadUrlMap[type], { method: 'POST', body: formData });
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as {error?: string}).error || res.statusText); }
         const j = await res.json() as { url: string };
         finalImageUrl = j.url;
@@ -237,7 +241,7 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
                     <Box
                       component="img"
                       src={previewSrc}
-                      alt="Current handle image"
+                      alt="Current image"
                       onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                       sx={{ maxWidth: 120, maxHeight: 80, borderRadius: 1, border: '1px solid', borderColor: 'divider', display: 'block' }}
                     />
