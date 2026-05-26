@@ -1,6 +1,16 @@
 /* ── Auth pages shared stylesheet ────────────────────────────────────────────
    Loaded by login.html, onboarding.html, and set-password.html.
    Page-specific overrides stay in a small <style> block in each HTML file.
+
+   CSS custom properties (brand colours, radii, shadows, status colours, etc.)
+   are NOT defined here. They come from public/tokens.css, which every auth
+   page loads before this file. tokens.css is the single CSS source of truth.
+
+   To change a design token:
+     1. Update the constant in src/react/theme.ts (canonical JS/TS source).
+     2. Update the matching entry in AppThemeProvider.tsx (rootTokens map).
+     3. Update the matching var in public/tokens.css.
+   Do not add a :root block to this file or to any auth page <style> tag.
    ──────────────────────────────────────────────────────────────────────────── */
 
 /* ── Fonts ─────────────────────────────────────────────────────────────────── */
