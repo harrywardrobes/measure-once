@@ -138,6 +138,7 @@
     "test:permissions-ui:ci": "node scripts/with-test-db.js test/permissions-ui/run.js",
     "test:ideas": "node test/ideas/run.js",
     "test:ideas:ci": "node scripts/with-test-db.js test/ideas/run.js",
+    "test:onboarding-conflicts": "node test/onboarding-conflicts/run.js",
     "test:settings-tab-load": "node test/settings-tab-load/run.js",
     "test:settings-tab-load:ci": "node scripts/with-test-db.js test/settings-tab-load/run.js",
     "test:bundle-sizes": "node scripts/check-bundle-sizes.mjs",
