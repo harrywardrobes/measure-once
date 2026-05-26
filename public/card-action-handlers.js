@@ -701,6 +701,19 @@
       reactContainer.id = 'dv-rooms-react';
       inner.appendChild(reactContainer);
 
+      // Show a spinner while the lazy React chunk downloads.
+      // React's createRoot().render() replaces this once the component mounts.
+      if (!document.getElementById('dv-step2-spinner-style')) {
+        const styleEl = document.createElement('style');
+        styleEl.id = 'dv-step2-spinner-style';
+        styleEl.textContent = '@keyframes dv-spin{to{transform:rotate(360deg)}}'
+          + '.dv-step2-loading{width:32px;height:32px;border:3px solid #e5e7eb;'
+          + 'border-top-color:#6366f1;border-radius:50%;'
+          + 'animation:dv-spin .7s linear infinite;margin:32px auto;}';
+        document.head.appendChild(styleEl);
+      }
+      reactContainer.innerHTML = '<div class="dv-step2-loading" role="status" aria-label="Loading rooms step"></div>';
+
       // Validation error (set by footer button handlers below)
       const errDiv = document.createElement('div');
       errDiv.className = 'dv-err';
