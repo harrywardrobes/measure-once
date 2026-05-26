@@ -172,6 +172,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/admin/users',                                level: 'admin' },
   { method: 'GET',    path: '/api/admin/conflict-summary',                     level: 'admin' },
   { method: 'GET',    path: '/api/admin/conflict-digest-settings',             level: 'admin' },
+  { method: 'PATCH',  path: '/api/admin/conflict-digest-settings',             level: 'admin', body: {} },
   { method: 'POST',   path: '/api/admin/conflict-digest/send-now',             level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/audit-log',                            level: 'admin' },
   { method: 'GET',    path: '/api/admin/capabilities',                         level: 'admin' },

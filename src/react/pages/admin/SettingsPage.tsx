@@ -161,6 +161,8 @@ function StatusRow({ status, index, total, onMove }: {
 interface DigestSettings {
   lastSentAt: string | null;
   smtpConfigured: boolean;
+  staleDays: number;
+  minGapDays: number;
 }
 
 export function SettingsPage() {
@@ -177,6 +179,9 @@ export function SettingsPage() {
   const [addErr, setAddErr] = useState('');
   const [digestSettings, setDigestSettings] = useState<DigestSettings | null>(null);
   const [digestSending, setDigestSending] = useState(false);
+  const [digestStaleDays, setDigestStaleDays] = useState<string>('7');
+  const [digestMinGapDays, setDigestMinGapDays] = useState<string>('7');
+  const [digestThresholdSaving, setDigestThresholdSaving] = useState(false);
 
   const statusesRef = useRef<LeadStatus[]>([]);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -220,8 +225,34 @@ export function SettingsPage() {
     try {
       const data = await callApi('GET', '/api/admin/conflict-digest-settings') as DigestSettings;
       setDigestSettings(data);
+      setDigestStaleDays(String(data.staleDays ?? 7));
+      setDigestMinGapDays(String(data.minGapDays ?? 7));
     } catch {}
   }, []);
+
+  const saveDigestThresholds = useCallback(async () => {
+    const staleDaysVal   = parseInt(digestStaleDays, 10);
+    const minGapDaysVal  = parseInt(digestMinGapDays, 10);
+    if (!Number.isFinite(staleDaysVal)  || staleDaysVal  < 1 || staleDaysVal  > 365) {
+      showToast('Stale after must be between 1 and 365 days.', true); return;
+    }
+    if (!Number.isFinite(minGapDaysVal) || minGapDaysVal < 1 || minGapDaysVal > 365) {
+      showToast('Send at most every must be between 1 and 365 days.', true); return;
+    }
+    setDigestThresholdSaving(true);
+    try {
+      await callApi('PATCH', '/api/admin/conflict-digest-settings', {
+        staleDays: staleDaysVal,
+        minGapDays: minGapDaysVal,
+      });
+      setDigestSettings(d => d ? { ...d, staleDays: staleDaysVal, minGapDays: minGapDaysVal } : d);
+      showToast('Digest thresholds saved.');
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to save.', true);
+    } finally {
+      setDigestThresholdSaving(false);
+    }
+  }, [digestStaleDays, digestMinGapDays]);
 
   const sendDigestNow = useCallback(async () => {
     setDigestSending(true);
@@ -506,8 +537,8 @@ export function SettingsPage() {
         <CardContent>
           <Typography variant="h6" sx={{ mb: 0.5 }}>Conflict digest</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            A weekly email is automatically sent to admins listing team members whose onboarding
-            conflicts have been unresolved for 7 or more days.
+            An email is automatically sent to admins listing team members whose onboarding
+            conflicts have been unresolved for the configured number of days.
           </Typography>
 
           {digestSettings && !digestSettings.smtpConfigured && (
@@ -519,6 +550,39 @@ export function SettingsPage() {
               in your environment secrets to enable digest emails.
             </Alert>
           )}
+
+          <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <TextField
+              size="small"
+              label="Stale after (days)"
+              type="number"
+              value={digestStaleDays}
+              onChange={e => setDigestStaleDays(e.target.value)}
+              slotProps={{ htmlInput: { min: 1, max: 365, step: 1 } }}
+              sx={{ width: 170 }}
+              disabled={digestSettings === null}
+            />
+            <TextField
+              size="small"
+              label="Send at most every (days)"
+              type="number"
+              value={digestMinGapDays}
+              onChange={e => setDigestMinGapDays(e.target.value)}
+              slotProps={{ htmlInput: { min: 1, max: 365, step: 1 } }}
+              sx={{ width: 210 }}
+              disabled={digestSettings === null}
+            />
+            <Button
+              variant="outlined"
+              onClick={saveDigestThresholds}
+              disabled={digestThresholdSaving || digestSettings === null}
+              startIcon={digestThresholdSaving ? <CircularProgress size={14} color="inherit" /> : undefined}
+            >
+              {digestThresholdSaving ? 'Saving…' : 'Save'}
+            </Button>
+          </Stack>
+
+          <Divider sx={{ mb: 2 }} />
 
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
             <Box>
@@ -543,7 +607,7 @@ export function SettingsPage() {
           </Box>
           {digestSettings?.smtpConfigured && (
             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-              "Send now" bypasses the 7-day gate and sends immediately if there are stale conflicts.
+              "Send now" bypasses the send-gate and sends immediately if there are stale conflicts.
             </Typography>
           )}
         </CardContent>

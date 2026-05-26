@@ -1871,13 +1871,16 @@ async function setupAuth(app) {
 
   app.get('/api/admin/conflict-summary', isAuthenticated, requireAdmin, async (req, res) => {
     try {
+      const sd = await pool.query(`SELECT value FROM admin_settings WHERE key = 'conflict_digest_stale_days'`);
+      const staleDays = sd.rowCount > 0 ? Number(sd.rows[0].value) || 7 : 7;
       const r = await pool.query(
         `SELECT u.id, u.email, u.first_name, u.last_name,
                 ae.conflict_created_at, ae.pending_profile_updates
          FROM users u
          JOIN allowed_emails ae ON LOWER(u.email) = ae.email
          WHERE ae.pending_profile_updates IS NOT NULL
-           AND COALESCE(ae.conflict_created_at, u.updated_at, u.created_at) < NOW() - INTERVAL '7 days'`
+           AND COALESCE(ae.conflict_created_at, u.updated_at, u.created_at) < NOW() - ($1 || ' days')::INTERVAL`,
+        [staleDays]
       );
       res.json({ count: r.rowCount, users: r.rows });
     } catch (e) {
@@ -1888,11 +1891,47 @@ async function setupAuth(app) {
   app.get('/api/admin/conflict-digest-settings', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
-        `SELECT value FROM admin_settings WHERE key = 'last_conflict_digest_sent_at'`
+        `SELECT key, value FROM admin_settings
+         WHERE key IN ('last_conflict_digest_sent_at', 'conflict_digest_stale_days', 'conflict_digest_min_gap_days')`
       );
-      const lastSentAt = r.rowCount > 0 ? r.rows[0].value : null;
+      const byKey = Object.fromEntries(r.rows.map(row => [row.key, row.value]));
+      const lastSentAt = byKey['last_conflict_digest_sent_at'] ?? null;
+      const staleDays  = (byKey['conflict_digest_stale_days']   != null ? Number(byKey['conflict_digest_stale_days'])   : 7) || 7;
+      const minGapDays = (byKey['conflict_digest_min_gap_days'] != null ? Number(byKey['conflict_digest_min_gap_days']) : 7) || 7;
       const smtpConfigured = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-      res.json({ lastSentAt, smtpConfigured });
+      res.json({ lastSentAt, smtpConfigured, staleDays, minGapDays });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.patch('/api/admin/conflict-digest-settings', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const { staleDays, minGapDays } = req.body || {};
+      const updates = [];
+      if (staleDays !== undefined) {
+        const v = parseInt(staleDays, 10);
+        if (!Number.isFinite(v) || v < 1 || v > 365) {
+          return res.status(400).json({ error: 'staleDays must be an integer between 1 and 365.' });
+        }
+        updates.push({ key: 'conflict_digest_stale_days', value: v });
+      }
+      if (minGapDays !== undefined) {
+        const v = parseInt(minGapDays, 10);
+        if (!Number.isFinite(v) || v < 1 || v > 365) {
+          return res.status(400).json({ error: 'minGapDays must be an integer between 1 and 365.' });
+        }
+        updates.push({ key: 'conflict_digest_min_gap_days', value: v });
+      }
+      for (const { key, value } of updates) {
+        await pool.query(
+          `INSERT INTO admin_settings (key, value, updated_at)
+           VALUES ($1, to_jsonb($2::int), NOW())
+           ON CONFLICT (key) DO UPDATE SET value = to_jsonb($2::int), updated_at = NOW()`,
+          [key, value]
+        );
+      }
+      res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -2488,7 +2527,9 @@ const isAuthenticated = async (req, res, next) => {
 // trigger duplicate sends within the same week.
 
 const CONFLICT_DIGEST_INTERVAL_MS = 24 * 60 * 60 * 1000; // check daily
-const CONFLICT_DIGEST_MIN_GAP_MS  = 7 * 24 * 60 * 60 * 1000; // send at most weekly
+// CONFLICT_DIGEST_MIN_GAP_MS is the compile-time default; the runtime value is
+// read from admin_settings.conflict_digest_min_gap_days by runConflictDigestIfDue().
+const CONFLICT_DIGEST_MIN_GAP_MS  = 7 * 24 * 60 * 60 * 1000; // fallback default (7 days)
 
 async function sendConflictDigest() {
   const adminEmails = (process.env.ADMIN_EMAILS || '')
@@ -2498,15 +2539,19 @@ async function sendConflictDigest() {
   const transport = createMailTransport();
   if (!transport) return;
 
-  // Find users with unresolved conflicts older than 7 days.
+  const sd = await pool.query(`SELECT value FROM admin_settings WHERE key = 'conflict_digest_stale_days'`);
+  const staleDays = sd.rowCount > 0 ? Number(sd.rows[0].value) || 7 : 7;
+
+  // Find users with unresolved conflicts older than staleDays.
   const r = await pool.query(
     `SELECT u.email, u.first_name, u.last_name,
             COALESCE(ae.conflict_created_at, u.updated_at, u.created_at) AS conflict_since
      FROM users u
      JOIN allowed_emails ae ON LOWER(u.email) = ae.email
      WHERE ae.pending_profile_updates IS NOT NULL
-       AND COALESCE(ae.conflict_created_at, u.updated_at, u.created_at) < NOW() - INTERVAL '7 days'
-     ORDER BY conflict_since ASC`
+       AND COALESCE(ae.conflict_created_at, u.updated_at, u.created_at) < NOW() - ($1 || ' days')::INTERVAL
+     ORDER BY conflict_since ASC`,
+    [staleDays]
   );
   if (r.rowCount === 0) return false;
 
@@ -2537,7 +2582,7 @@ async function sendConflictDigest() {
     to: adminEmails.join(', '),
     subject,
     text: [
-      `${count} team member${count === 1 ? ' has' : 's have'} an onboarding conflict that has been unresolved for 7 or more days.`,
+      `${count} team member${count === 1 ? ' has' : 's have'} an onboarding conflict that has been unresolved for ${staleDays} or more days.`,
       '',
       listText,
       '',
@@ -2545,12 +2590,12 @@ async function sendConflictDigest() {
       `  ${adminUrl}`,
     ].join('\n'),
     html: `
-      <p>${count} team member${count === 1 ? ' has' : 's have'} an onboarding conflict that has been unresolved for <strong>7 or more days</strong>.</p>
+      <p>${count} team member${count === 1 ? ' has' : 's have'} an onboarding conflict that has been unresolved for <strong>${staleDays} or more days</strong>.</p>
       <ul>${listHtml}</ul>
       <p>Review and resolve conflicts in the <a href="${escapeHtml(adminUrl)}">admin panel → Team tab</a>.</p>
     `,
   });
-  console.log(`[conflict-digest] Sent weekly digest to ${adminEmails.length} admin(s) — ${count} conflict(s).`);
+  console.log(`[conflict-digest] Sent digest to ${adminEmails.length} admin(s) — ${count} conflict(s) (stale after ${staleDays} days).`);
   return true;
 }
 
@@ -2558,11 +2603,15 @@ async function runConflictDigestIfDue() {
   try {
     // Check whether enough time has passed since the last digest.
     const r = await pool.query(
-      `SELECT value FROM admin_settings WHERE key = 'last_conflict_digest_sent_at'`
+      `SELECT key, value FROM admin_settings
+       WHERE key IN ('last_conflict_digest_sent_at', 'conflict_digest_min_gap_days')`
     );
-    if (r.rowCount > 0) {
-      const lastSent = new Date(r.rows[0].value).getTime();
-      if (Date.now() - lastSent < CONFLICT_DIGEST_MIN_GAP_MS) return;
+    const byKey = Object.fromEntries(r.rows.map(row => [row.key, row.value]));
+    const minGapDays = byKey['conflict_digest_min_gap_days'] != null ? Number(byKey['conflict_digest_min_gap_days']) || 7 : 7;
+    const minGapMs   = minGapDays * 24 * 60 * 60 * 1000;
+    if (byKey['last_conflict_digest_sent_at']) {
+      const lastSent = new Date(byKey['last_conflict_digest_sent_at']).getTime();
+      if (Date.now() - lastSent < minGapMs) return;
     }
 
     const sent = await sendConflictDigest();
