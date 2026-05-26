@@ -4,13 +4,12 @@
  *
  * Verifies that every brand-colour, stage-colour, and radius CSS custom
  * property defined in src/react/theme.ts (BRAND_COLORS, STAGE_COLORS, RADIUS)
- * appears in BOTH of the canonical token sources:
+ * appears in public/tokens.css with the correct value.
  *
- *   1. public/tokens.css   — static :root block linked by every HTML page
- *   2. src/react/AppThemeProvider.tsx — GlobalStyles injection for React pages
- *
- * Token values in tokens.css are checked against theme.ts constants.
- * AppThemeProvider.tsx is presence-only (TypeScript ensures value correctness).
+ * AppThemeProvider.tsx no longer needs a separate check here because it
+ * derives its rootTokens entries automatically by looping over BRAND_COLORS,
+ * STAGE_COLORS, and RADIUS — any new token added to those constants will
+ * appear in the injected :root block without any change to AppThemeProvider.tsx.
  *
  * Usage:
  *   node scripts/check-color-radius-vars.mjs    # exits 1 on any mismatch
@@ -23,9 +22,8 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
-const TOKENS_PATH   = resolve(ROOT, 'public/tokens.css');
-const PROVIDER_PATH = resolve(ROOT, 'src/react/AppThemeProvider.tsx');
-const THEME_PATH    = resolve(ROOT, 'src/react/theme.ts');
+const TOKENS_PATH = resolve(ROOT, 'public/tokens.css');
+const THEME_PATH  = resolve(ROOT, 'src/react/theme.ts');
 
 function camelToKebab(name) {
   return name
@@ -40,14 +38,6 @@ function parseCssRootVars(css) {
   let m;
   while ((m = re.exec(css)) !== null) vars[m[1]] = m[2].trim();
   return vars;
-}
-
-function parseRootTokenKeys(tsx) {
-  const keys = new Set();
-  const re = /'(--[\w-]+)'\s*:/g;
-  let m;
-  while ((m = re.exec(tsx)) !== null) keys.add(m[1].slice(2));
-  return keys;
 }
 
 function parseBrandColors(ts) {
@@ -98,20 +88,18 @@ function parseRadius(ts) {
   return radii;
 }
 
-const tokensCss  = readFileSync(TOKENS_PATH,   'utf8');
-const tsx        = readFileSync(PROVIDER_PATH, 'utf8');
-const ts         = readFileSync(THEME_PATH,    'utf8');
+const tokensCss  = readFileSync(TOKENS_PATH, 'utf8');
+const ts         = readFileSync(THEME_PATH,  'utf8');
 
-const cssVars      = parseCssRootVars(tokensCss);
-const providerKeys = parseRootTokenKeys(tsx);
-const brandColors  = parseBrandColors(ts);
-const stageColors  = parseStageColors(ts);
-const radius       = parseRadius(ts);
+const cssVars     = parseCssRootVars(tokensCss);
+const brandColors = parseBrandColors(ts);
+const stageColors = parseStageColors(ts);
+const radius      = parseRadius(ts);
 
 const mismatches = [];
 let checked = 0;
 
-console.log('check-color-radius-vars: public/tokens.css + AppThemeProvider.tsx ↔ src/react/theme.ts\n');
+console.log('check-color-radius-vars: public/tokens.css ↔ src/react/theme.ts\n');
 
 // ── BRAND_COLORS ──────────────────────────────────────────────────────────────
 
@@ -128,9 +116,6 @@ for (const [tsKey, tsValue] of Object.entries(brandColors)) {
   } else {
     checked++;
   }
-
-  if (!providerKeys.has(varName))
-    mismatches.push(`  '--${varName}' missing in AppThemeProvider.tsx rootTokens`);
 }
 
 // ── STAGE_COLORS ──────────────────────────────────────────────────────────────
@@ -150,9 +135,6 @@ for (const [stageName, tsColor] of Object.entries(stageColors)) {
     } else {
       checked++;
     }
-
-    if (!providerKeys.has(varName))
-      mismatches.push(`  '--${varName}' missing in AppThemeProvider.tsx rootTokens`);
   }
 }
 
@@ -185,9 +167,6 @@ for (const [tsKey, tsValue] of Object.entries(radius)) {
   } else {
     checked++;
   }
-
-  if (!providerKeys.has(varName))
-    mismatches.push(`  '--${varName}' missing in AppThemeProvider.tsx rootTokens`);
 }
 
 // ── Report ────────────────────────────────────────────────────────────────────
@@ -195,11 +174,12 @@ for (const [tsKey, tsValue] of Object.entries(radius)) {
 console.log('');
 
 if (mismatches.length === 0) {
-  console.log(`✓ All ${checked} colour and radius variables are in sync across tokens.css, AppThemeProvider.tsx, and theme.ts.`);
+  console.log(`✓ All ${checked} colour and radius variables are in sync across tokens.css and theme.ts.`);
   process.exit(0);
 } else {
   console.error(`✗ ${mismatches.length} issue(s) found:\n`);
   mismatches.forEach(m => console.error(m));
-  console.error('\nFix: update public/tokens.css and/or src/react/AppThemeProvider.tsx to match src/react/theme.ts.');
+  console.error('\nFix: update public/tokens.css to match src/react/theme.ts.');
+  console.error('Note: AppThemeProvider.tsx derives its :root tokens automatically — no changes needed there.');
   process.exit(1);
 }

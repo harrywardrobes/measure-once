@@ -20,11 +20,23 @@ import { theme, BRAND_COLORS, STAGE_COLORS, RADIUS } from './theme';
  * values are derived at runtime from `src/react/theme.ts`, which is now the
  * single source of truth — no more manually-kept mirror in app-styles.css.
  *
+ * BRAND_COLORS, STAGE_COLORS, and RADIUS tokens are derived automatically by
+ * looping over the constants — adding a new entry to any of those objects in
+ * theme.ts is sufficient to make it appear in the :root block.
+ *
  * Every page / story should render its tree inside this provider — see
  * `src/react/README.md` for the convention.
  */
 
 const TYPO = theme.typography;
+
+/** camelCase → kebab-case, inserting a dash before digits that follow letters. */
+function camelToKebab(s: string): string {
+  return s
+    .replace(/([a-z])([A-Z])/g, '$1-$2')
+    .replace(/([a-zA-Z])(\d)/g, '$1-$2')
+    .toLowerCase();
+}
 
 const rootTokens = {
   'color-scheme': 'light',
@@ -33,37 +45,23 @@ const rootTokens = {
   '--header-h': 'calc(52px + env(safe-area-inset-top))',
   '--banner-h': '37px',
 
-  /* ── Brand colours ───────────────────────────────────────────────────────── */
-  '--paper':        BRAND_COLORS.paper,
-  '--paper-deep':   BRAND_COLORS.paperDeep,
-  '--stone':        BRAND_COLORS.stone,
-  '--stone-light':  BRAND_COLORS.stoneLight,
-  '--stone-deep':   BRAND_COLORS.stoneDeep,
-  '--orchid':       BRAND_COLORS.orchid,
-  '--orchid-deep':  BRAND_COLORS.orchidDeep,
-  '--orchid-soft':  BRAND_COLORS.orchidSoft,
-  '--orchid-tint':  BRAND_COLORS.orchidTint,
-  '--plum':         BRAND_COLORS.plum,
-  '--walnut':       BRAND_COLORS.walnut,
-  '--ink-1':        BRAND_COLORS.ink1,
-  '--ink-2':        BRAND_COLORS.ink2,
-  '--ink-3':        BRAND_COLORS.ink3,
-  '--ink-4':        BRAND_COLORS.ink4,
+  /* ── Brand colours (auto-derived from BRAND_COLORS in theme.ts) ──────────
+   *  camelCase key  →  --kebab-case var
+   *  e.g. orchidDeep → --orchid-deep, ink1 → --ink-1                        */
+  ...Object.fromEntries(
+    Object.entries(BRAND_COLORS).map(([k, v]) => [`--${camelToKebab(k)}`, v])
+  ),
 
   /* ── Shadows ─────────────────────────────────────────────────────────────── */
   '--shadow-sm': '0 1px 3px rgba(30,24,14,0.10), 0 1px 2px rgba(30,24,14,0.06)',
   '--shadow-md': '0 4px 12px rgba(30,24,14,0.12), 0 2px 4px rgba(30,24,14,0.08)',
   '--shadow-lg': '0 8px 24px rgba(30,24,14,0.14), 0 4px 8px rgba(30,24,14,0.08)',
 
-  /* ── Radius ──────────────────────────────────────────────────────────────── */
-  '--radius-xs':   `${RADIUS.xs}px`,
-  '--radius-sm':   `${RADIUS.sm}px`,
-  '--radius-md':   `${RADIUS.md}px`,
-  '--radius-lg':   `${RADIUS.lg}px`,
-  '--radius-xl':   `${RADIUS.xl}px`,
-  '--radius-2xl':  `${RADIUS['2xl']}px`,
-  '--radius-3xl':  `${RADIUS['3xl']}px`,
-  '--radius-pill': `${RADIUS.pill}px`,
+  /* ── Radius (auto-derived from RADIUS in theme.ts) ───────────────────────
+   *  key → --radius-<key>  e.g. xl → --radius-xl, 2xl → --radius-2xl       */
+  ...Object.fromEntries(
+    Object.entries(RADIUS).map(([k, v]) => [`--radius-${k}`, `${v}px`])
+  ),
 
   /* ── Z-index ladder ──────────────────────────────────────────────────────── */
   '--z-base':     1,
@@ -107,46 +105,14 @@ const rootTokens = {
   '--brand-accent-hover': '#5a1fad',
   '--brand-accent-ring':  'rgba(61,15,122,.12)',
 
-  /* ── Stage colours ───────────────────────────────────────────────────────── */
-  '--stage-sales-bg':    STAGE_COLORS.sales.bg,
-  '--stage-sales-light': STAGE_COLORS.sales.light,
-  '--stage-sales-text':  STAGE_COLORS.sales.text,
-
-  '--stage-designvisit-bg':    STAGE_COLORS.designvisit.bg,
-  '--stage-designvisit-light': STAGE_COLORS.designvisit.light,
-  '--stage-designvisit-text':  STAGE_COLORS.designvisit.text,
-
-  '--stage-survey-bg':    STAGE_COLORS.survey.bg,
-  '--stage-survey-light': STAGE_COLORS.survey.light,
-  '--stage-survey-text':  STAGE_COLORS.survey.text,
-
-  '--stage-order-bg':    STAGE_COLORS.order.bg,
-  '--stage-order-light': STAGE_COLORS.order.light,
-  '--stage-order-text':  STAGE_COLORS.order.text,
-
-  '--stage-workshop-bg':    STAGE_COLORS.workshop.bg,
-  '--stage-workshop-light': STAGE_COLORS.workshop.light,
-  '--stage-workshop-text':  STAGE_COLORS.workshop.text,
-
-  '--stage-packing-bg':    STAGE_COLORS.packing.bg,
-  '--stage-packing-light': STAGE_COLORS.packing.light,
-  '--stage-packing-text':  STAGE_COLORS.packing.text,
-
-  '--stage-delivery-bg':    STAGE_COLORS.delivery.bg,
-  '--stage-delivery-light': STAGE_COLORS.delivery.light,
-  '--stage-delivery-text':  STAGE_COLORS.delivery.text,
-
-  '--stage-installation-bg':    STAGE_COLORS.installation.bg,
-  '--stage-installation-light': STAGE_COLORS.installation.light,
-  '--stage-installation-text':  STAGE_COLORS.installation.text,
-
-  '--stage-aftercare-bg':    STAGE_COLORS.aftercare.bg,
-  '--stage-aftercare-light': STAGE_COLORS.aftercare.light,
-  '--stage-aftercare-text':  STAGE_COLORS.aftercare.text,
-
-  '--stage-customerservice-bg':    STAGE_COLORS.customerservice.bg,
-  '--stage-customerservice-light': STAGE_COLORS.customerservice.light,
-  '--stage-customerservice-text':  STAGE_COLORS.customerservice.text,
+  /* ── Stage colours (auto-derived from STAGE_COLORS in theme.ts) ──────────
+   *  For each stage key, bg / light / text sub-properties become
+   *  --stage-<key>-bg, --stage-<key>-light, --stage-<key>-text              */
+  ...Object.fromEntries(
+    Object.entries(STAGE_COLORS).flatMap(([stage, colors]) =>
+      (['bg', 'light', 'text'] as const).map(prop => [`--stage-${stage}-${prop}`, colors[prop]])
+    )
+  ),
 
   /* ── Typography scale ────────────────────────────────────────────────────── */
   '--typo-h1-font-size':   (TYPO.h1 as { fontSize: string }).fontSize,
@@ -203,7 +169,7 @@ const rootTokens = {
 
   /* ── Spacing unit ────────────────────────────────────────────────────────── */
   '--spacing-unit': 8,
-} as const;
+};
 
 export function AppThemeProvider({ children }: { children: React.ReactNode }) {
   return (

@@ -14,8 +14,10 @@ import { createTheme, type Theme } from '@mui/material/styles';
  * `palette.brand`, `palette.stage`, or `shape.radius` automatically shows
  * up on the page without further wiring.
  *
- * When adding a new token: update BRAND_COLORS / STAGE_COLORS / RADIUS below
- * AND add the matching `--<name>` entry to `rootTokens` in AppThemeProvider.tsx.
+ * When adding a new token: update BRAND_COLORS / STAGE_COLORS / RADIUS below.
+ * AppThemeProvider.tsx derives its rootTokens entries automatically by looping
+ * over those constants, so no manual --<name> entry is needed there.
+ * Also update public/tokens.css so non-React pages stay in sync.
  */
 
 // ── Brand colour scales ────────────────────────────────────────────────

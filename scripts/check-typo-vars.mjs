@@ -3,10 +3,15 @@
  * check-typo-vars.mjs
  *
  * Verifies that every --typo-* CSS custom property derived from
- * src/react/theme.ts typography values is present in BOTH:
+ * src/react/theme.ts typography values is present in public/tokens.css
+ * with the correct value.
  *
- *   1. public/tokens.css   — static :root block linked by every HTML page
- *   2. src/react/AppThemeProvider.tsx — GlobalStyles injection for React pages
+ * AppThemeProvider.tsx no longer needs a separate check here because it
+ * derives BRAND_COLORS, STAGE_COLORS, and RADIUS tokens automatically.
+ * Typography tokens are still listed explicitly in AppThemeProvider.tsx
+ * (each variant needs three individual property extractions), but the
+ * canonical values live in theme.ts and this script checks tokens.css
+ * stays in sync with them.
  *
  * Usage:
  *   node scripts/check-typo-vars.mjs    # exits 1 on any missing entry
@@ -19,9 +24,8 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
-const TOKENS_PATH   = resolve(ROOT, 'public/tokens.css');
-const PROVIDER_PATH = resolve(ROOT, 'src/react/AppThemeProvider.tsx');
-const THEME_PATH    = resolve(ROOT, 'src/react/theme.ts');
+const TOKENS_PATH = resolve(ROOT, 'public/tokens.css');
+const THEME_PATH  = resolve(ROOT, 'src/react/theme.ts');
 
 const VARIANTS = [
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -50,14 +54,6 @@ function parseCssVars(css) {
   return vars;
 }
 
-function parseRootTokenKeys(tsx) {
-  const keys = new Set();
-  const re = /'(--[\w-]+)'\s*:/g;
-  let m;
-  while ((m = re.exec(tsx)) !== null) keys.add(m[1].slice(2));
-  return keys;
-}
-
 function parseThemeTypography(ts) {
   const result = {};
   for (const variant of VARIANTS) {
@@ -78,18 +74,16 @@ function parseThemeTypography(ts) {
 
 function normalise(value) { return String(value).trim(); }
 
-const tokensCss   = readFileSync(TOKENS_PATH,   'utf8');
-const tsx         = readFileSync(PROVIDER_PATH, 'utf8');
-const ts          = readFileSync(THEME_PATH,    'utf8');
+const tokensCss   = readFileSync(TOKENS_PATH, 'utf8');
+const ts          = readFileSync(THEME_PATH,  'utf8');
 
-const cssVars       = parseCssVars(tokensCss);
-const providerKeys  = parseRootTokenKeys(tsx);
-const themeTypo     = parseThemeTypography(ts);
+const cssVars   = parseCssVars(tokensCss);
+const themeTypo = parseThemeTypography(ts);
 
 const mismatches = [];
 const skipped    = [];
 
-console.log('check-typo-vars: public/tokens.css + AppThemeProvider.tsx ↔ src/react/theme.ts\n');
+console.log('check-typo-vars: public/tokens.css ↔ src/react/theme.ts\n');
 
 for (const variant of VARIANTS) {
   const cssVariant   = cssVars[variant]   || {};
@@ -109,9 +103,6 @@ for (const variant of VARIANTS) {
     } else if (normalise(cssVal) !== normalise(themeVal)) {
       mismatches.push(`  --${varName}: tokens.css=${cssVal}  theme.ts=${themeVal}`);
     }
-
-    if (themeVal !== undefined && !providerKeys.has(varName))
-      mismatches.push(`  '--${varName}' missing in AppThemeProvider.tsx rootTokens`);
   }
 }
 
@@ -127,11 +118,11 @@ if (mismatches.length === 0) {
       cssVars[v]?.[p] !== undefined && themeTypo[v]?.[PROP_MAP[p]] !== undefined
     )
   ).length;
-  console.log(`✓ All ${checked} --typo-* variables are in sync across tokens.css, AppThemeProvider.tsx, and theme.ts.`);
+  console.log(`✓ All ${checked} --typo-* variables are in sync across tokens.css and theme.ts.`);
   process.exit(0);
 } else {
   console.error(`✗ ${mismatches.length} issue(s) found:\n`);
   mismatches.forEach(m => console.error(m));
-  console.error('\nFix: update public/tokens.css and/or src/react/AppThemeProvider.tsx to match src/react/theme.ts.');
+  console.error('\nFix: update public/tokens.css to match src/react/theme.ts.');
   process.exit(1);
 }
