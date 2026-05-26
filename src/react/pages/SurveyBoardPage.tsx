@@ -86,6 +86,8 @@ interface WindowGlobals {
   state?: StateGlobal;
   LEAD_STATUS_OPTIONS?: LeadStatusOption[];
   LEAD_SUBSTATUSES?: LeadSubstatus[];
+  loadWorkflow?: () => Promise<void>;
+  loadLeadStatuses?: () => Promise<void>;
   openCardSubstagePicker?: (evt: object, contactId: string, roomIdx: number) => void;
   openLeadStatusPicker?: (evt: object, contactId: string) => void;
   cardActionHandlerFor?: (
@@ -713,9 +715,19 @@ export function SurveyBoardPage() {
   }, [forceUpdate]);
 
   useEffect(() => {
+    const refresh = () => {
+      const w = window as unknown as WindowGlobals;
+      Promise.all([
+        w.loadWorkflow?.() ?? Promise.resolve(),
+        w.loadLeadStatuses?.() ?? Promise.resolve(),
+      ])
+        .then(() => forceUpdate())
+        .catch(() => forceUpdate());
+    };
+
     const onVisibility = () => {
       if (document.visibilityState !== 'visible') return;
-      forceUpdate();
+      refresh();
     };
     document.addEventListener('visibilitychange', onVisibility);
 
@@ -723,9 +735,9 @@ export function SurveyBoardPage() {
     let subBc: BroadcastChannel | null = null;
     if (typeof BroadcastChannel !== 'undefined') {
       bc = new BroadcastChannel('lead_statuses_changed');
-      bc.addEventListener('message', forceUpdate);
+      bc.addEventListener('message', refresh);
       subBc = new BroadcastChannel('lead_substatuses_changed');
-      subBc.addEventListener('message', forceUpdate);
+      subBc.addEventListener('message', refresh);
     }
 
     return () => {
