@@ -37,6 +37,7 @@ type Allowed = {
   approved_at?: string;
   protected?: boolean;
   metadata?: Record<string, string>;
+  pending_profile_updates?: Record<string, ProfileConflict> | null;
 };
 
 type JobRole = { name: string; privilege_level?: string }; // privilege-read-ok: data field managed by admin
@@ -787,6 +788,7 @@ export function AdminTeamPage() {
                     const m = a.metadata || {};
                     const name = [m.first_name, m.last_name].filter(Boolean).join(' ');
                     const ec = [m.ec_first_name, m.ec_last_name].filter(Boolean).join(' ');
+                    const hasConflicts = !!(a.pending_profile_updates && Object.keys(a.pending_profile_updates).length > 0);
                     return (
                       <TableRow
                         key={a.email}
@@ -797,8 +799,17 @@ export function AdminTeamPage() {
                         }}
                       >
                         <TableCell>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{name || a.email}</Typography>
-                          {name && <Typography variant="caption" color="text.secondary">{a.email}</Typography>}
+                          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>{name || a.email}</Typography>
+                              {name && <Typography variant="caption" color="text.secondary">{a.email}</Typography>}
+                            </Box>
+                            {hasConflicts && (
+                              <Tooltip title="This member changed details during onboarding that differ from what you entered. Click Edit to review.">
+                                <DifferenceIcon color="warning" fontSize="small" />
+                              </Tooltip>
+                            )}
+                          </Stack>
                         </TableCell>
                         <TableCell>
                           {[

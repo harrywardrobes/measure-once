@@ -1580,7 +1580,7 @@ async function setupAuth(app) {
   app.get('/api/admin/allowed', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
-        `SELECT email, approved_at, note, metadata FROM allowed_emails ORDER BY approved_at DESC`
+        `SELECT email, approved_at, note, metadata, pending_profile_updates FROM allowed_emails ORDER BY approved_at DESC`
       );
       const adminSet = getAdminEmails();
       res.json(r.rows.map(row => ({ ...row, protected: adminSet.has(row.email) })));
