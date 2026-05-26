@@ -22,6 +22,13 @@ interface LeadSubstatus {
   status_key: string;
   substatus_key: string;
   label?: string;
+  action_label?: string;
+}
+
+interface StageActionLabel {
+  stage_key: string;
+  status_key: string;
+  label: string;
 }
 
 type HandlerIndex = Record<string, CardActionHandlerData>;
@@ -55,6 +62,12 @@ export interface UseCardActionHandlersResult {
     leadStatusKey: string | undefined,
     hwSubstatusValue: string | undefined,
   ) => CardActionHandlerData | null;
+  resolveActionLabel: (
+    stageKey: string,
+    leadStatusKey: string | undefined,
+    substageId: string | undefined,
+    hwSubstatusValue: string | undefined,
+  ) => string;
   loading: boolean;
   error: string | null;
 }
@@ -67,17 +80,62 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
   const bySubstatusRef = useRef<Record<number, CardActionHandlerData>>({});
   const byIdRef = useRef<Record<number, CardActionHandlerData>>({});
   const substatusesRef = useRef<LeadSubstatus[]>([]);
+  // `${STATUS_KEY}|${SUBSTATUS_KEY}` → action_label (uppercase keys)
+  const substatusActionLabelMapRef = useRef<Record<string, string>>({});
+  // `${stage_key}|${status_key}` → label (lowercase keys)
+  const stageActionLabelMapRef = useRef<Record<string, string>>({});
 
   const [, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
 
+  const fetchSubstatuses = useCallback(async () => {
+    try {
+      const res = await fetch('/api/lead-substatuses');
+      if (!res.ok) {
+        console.warn('[useCardActionHandlers] substatuses fetch failed:', res.status);
+        return;
+      }
+      const substatuses: LeadSubstatus[] = await res.json();
+      substatusesRef.current = Array.isArray(substatuses) ? substatuses : [];
+      const actionMap: Record<string, string> = {};
+      for (const r of substatusesRef.current) {
+        if (!r.action_label) continue;
+        const k = `${String(r.status_key).toUpperCase()}|${String(r.substatus_key).toUpperCase()}`;
+        actionMap[k] = r.action_label;
+      }
+      substatusActionLabelMapRef.current = actionMap;
+    } catch (e) {
+      console.warn('[useCardActionHandlers] substatuses fetch error:', (e as Error).message);
+    }
+  }, []);
+
+  const fetchStageActionLabels = useCallback(async () => {
+    try {
+      const res = await fetch('/api/stage-action-labels');
+      if (!res.ok) {
+        console.warn('[useCardActionHandlers] stage-action-labels fetch failed:', res.status);
+        return;
+      }
+      const rows: StageActionLabel[] = await res.json();
+      const m: Record<string, string> = {};
+      for (const r of rows || []) {
+        const s = String(r.stage_key || '').toLowerCase();
+        const k = String(r.status_key || '').toLowerCase();
+        const label = String(r.label || '').trim();
+        if (s && label) m[`${s}|${k}`] = label;
+      }
+      stageActionLabelMapRef.current = m;
+    } catch (e) {
+      console.warn('[useCardActionHandlers] stage-action-labels fetch error:', (e as Error).message);
+    }
+  }, []);
+
   const fetchAll = useCallback(async () => {
     try {
-      // Fetch handlers and substatuses in parallel; treat each independently so
-      // a substatus failure does not prevent label-based handlers from working.
-      const [handlersRes, substatusesRes] = await Promise.all([
+      const [handlersRes] = await Promise.all([
         fetch('/api/card-action-handlers'),
-        fetch('/api/lead-substatuses'),
+        fetchSubstatuses(),
+        fetchStageActionLabels(),
       ]);
 
       if (!handlersRes.ok) throw new Error(`handlers ${handlersRes.status}`);
@@ -88,13 +146,6 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       bySubstatusRef.current = bySubstatus;
       byIdRef.current = byId;
 
-      if (substatusesRes.ok) {
-        const substatuses: LeadSubstatus[] = await substatusesRes.json();
-        substatusesRef.current = Array.isArray(substatuses) ? substatuses : [];
-      } else {
-        console.warn('[useCardActionHandlers] substatuses fetch failed:', substatusesRes.status);
-      }
-
       setError(null);
       setLoading(false);
       bump();
@@ -103,7 +154,7 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       setError((e as Error).message);
       setLoading(false);
     }
-  }, [bump]);
+  }, [bump, fetchSubstatuses, fetchStageActionLabels]);
 
   useEffect(() => {
     fetchAll();
@@ -119,6 +170,28 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       ch.close();
     };
   }, [fetchAll]);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const ch = new BroadcastChannel('stage_action_labels_changed');
+    const onMsg = () => fetchStageActionLabels().then(bump);
+    ch.addEventListener('message', onMsg);
+    return () => {
+      ch.removeEventListener('message', onMsg);
+      ch.close();
+    };
+  }, [fetchStageActionLabels, bump]);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const ch = new BroadcastChannel('lead_substatuses_changed');
+    const onMsg = () => fetchSubstatuses().then(bump);
+    ch.addEventListener('message', onMsg);
+    return () => {
+      ch.removeEventListener('message', onMsg);
+      ch.close();
+    };
+  }, [fetchSubstatuses, bump]);
 
   const cardActionHandlerFor = useCallback(
     (
@@ -148,6 +221,48 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [byLabelRef, bySubstatusRef, substatusesRef],
+  );
+
+  // Resolve the action-strip label for a card without calling any window globals.
+  // Priority mirrors workflow-core.js:
+  //   1. Sub-status action label (if contact has hw_lead_substatus matching the LS)
+  //   2. Per-LS stage action label (if contact has a lead status)
+  //   3. Per-substageId stage action label (legacy fallback, no LS)
+  //   4. Per-stage "no lead status" row (stage|'')
+  const resolveActionLabel = useCallback(
+    (
+      stageKey: string,
+      leadStatusKey: string | undefined,
+      substageId: string | undefined,
+      hwSubstatusValue: string | undefined,
+    ): string => {
+      // 1. Substatus action label
+      if (leadStatusKey && hwSubstatusValue) {
+        const sk = String(leadStatusKey).toUpperCase();
+        const v = String(hwSubstatusValue).toUpperCase();
+        const prefix = `${sk}__`;
+        if (v.startsWith(prefix)) {
+          const subKey = v.slice(prefix.length);
+          const fromSub = substatusActionLabelMapRef.current[`${sk}|${subKey}`];
+          if (fromSub) return fromSub;
+        }
+      }
+      const sKey = String(stageKey || '').toLowerCase();
+      const lsKey = String(leadStatusKey || '').toLowerCase();
+      // 2. Per-LS stage action label
+      if (lsKey) {
+        return stageActionLabelMapRef.current[`${sKey}|${lsKey}`] || '';
+      }
+      // 3. Per-substageId legacy fallback (lowercase to match map key format)
+      if (substageId) {
+        const fromSub = stageActionLabelMapRef.current[`${sKey}|${String(substageId).toLowerCase()}`];
+        if (fromSub) return fromSub;
+      }
+      // 4. Per-stage "no lead status" row
+      return stageActionLabelMapRef.current[`${sKey}|`] || '';
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [substatusActionLabelMapRef, stageActionLabelMapRef],
   );
 
   // Backwards-compat shims for pages that no longer load card-action-handlers.js
@@ -209,5 +324,5 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
     return () => cleanups.forEach((fn) => fn());
   }, [cardActionHandlerFor, fetchAll, byIdRef]);
 
-  return { cardActionHandlerFor, loading, error };
+  return { cardActionHandlerFor, resolveActionLabel, loading, error };
 }

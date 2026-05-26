@@ -86,15 +86,6 @@ interface WindowGlobals {
   loadLeadStatuses?: () => Promise<void>;
   openCardSubstagePicker?: (evt: object, contactId: string, roomIdx: number) => void;
   openLeadStatusPicker?: (evt: object, contactId: string) => void;
-  stageOrLeadStatusActionLabel?: (
-    stageKey: string,
-    leadStatusKey: string | undefined,
-    substageId: string | undefined,
-  ) => string;
-  substatusActionLabelLookup?: (
-    leadStatusKey: string | undefined,
-    hwSubstatusValue: string | undefined,
-  ) => string;
   __surveyBoardBootstrapFailed?: { code: string | undefined; message: string } | undefined;
 }
 
@@ -365,6 +356,7 @@ function SurveyCard({
   isManager,
   workflow,
   cardActionHandlerFor,
+  resolveActionLabel,
 }: {
   entry: BoardEntry;
   isManager: boolean;
@@ -374,6 +366,12 @@ function SurveyCard({
     leadStatusKey: string | undefined,
     hwSubstatusValue: string | undefined,
   ) => CardActionHandlerData | null;
+  resolveActionLabel: (
+    stageKey: string,
+    leadStatusKey: string | undefined,
+    substageId: string | undefined,
+    hwSubstatusValue: string | undefined,
+  ) => string;
 }) {
   const { contact, substageId, sourceId, stageTime, priority, roomIdx } = entry;
   const isTerminal = priority === 3;
@@ -402,18 +400,9 @@ function SurveyCard({
         .replace(/\b\w/g, (c: string) => c.toUpperCase())
     : '';
 
-  let actionLabel = '';
-  if (!isTerminal) {
-    if (cahName) {
-      actionLabel = cahName;
-    } else if (typeof w.substatusActionLabelLookup === 'function') {
-      actionLabel = w.substatusActionLabelLookup(leadStatusKey, hwSubstatusValue) || '';
-    }
-    if (!actionLabel && typeof w.stageOrLeadStatusActionLabel === 'function') {
-      actionLabel =
-        w.stageOrLeadStatusActionLabel(SURVEY_STAGE_KEY, leadStatusKey, substageId) || '';
-    }
-  }
+  const actionLabel = isTerminal
+    ? ''
+    : cahName || resolveActionLabel(SURVEY_STAGE_KEY, leadStatusKey, substageId, hwSubstatusValue);
 
   const actionTint = surveyColor?.light || '#fef3c7';
   const actionTextColor = surveyColor?.text || '#b45309';
@@ -667,7 +656,7 @@ export function SurveyBoardPage() {
   const [filterAnchor, setFilterAnchor] = useState<HTMLButtonElement | null>(null);
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const { isManager } = usePrivilege();
-  const { cardActionHandlerFor } = useCardActionHandlers();
+  const { cardActionHandlerFor, resolveActionLabel } = useCardActionHandlers();
   const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
 
   // Bootstrap-failure error state — fires when core.js bootstrap() throws and
@@ -1059,6 +1048,7 @@ export function SurveyBoardPage() {
               isManager={isManager}
               workflow={workflow}
               cardActionHandlerFor={cardActionHandlerFor}
+              resolveActionLabel={resolveActionLabel}
             />
           ))
         )}
