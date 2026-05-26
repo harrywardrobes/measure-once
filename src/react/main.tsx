@@ -255,3 +255,97 @@ if (document.readyState === 'loading') {
     },
   };
 };
+
+/**
+ * Imperative mounting function for the design-visit wizard Step 1 (Visit details).
+ * Called from card-action-handlers.js when the wizard starts or returns to Step 1.
+ *
+ * Async: dynamically imports DesignVisitStep1 so it lands in its own lazy
+ * chunk and does not inflate the always-loaded main.js bundle.
+ *
+ * Returns a Promise that resolves to a handle with:
+ *   update(newProps)  — re-render with updated catalogue data (BroadcastChannel refresh)
+ *   unmount()         — tear down the React tree when leaving Step 1
+ */
+(window as unknown as {
+  mountDesignVisitStep1: (
+    container: HTMLElement,
+    props: import('./components/DesignVisitStep1').DesignVisitStep1Props,
+  ) => Promise<{
+    update: (p: Partial<import('./components/DesignVisitStep1').DesignVisitStep1Props>) => void;
+    unmount: () => void;
+  }>;
+}).mountDesignVisitStep1 = async (container, props) => {
+  const { DesignVisitStep1 } = await import('./components/DesignVisitStep1');
+  const root = createRoot(container);
+  let current = { ...props };
+
+  function doRender() {
+    root.render(
+      <AppThemeProvider>
+        <IslandErrorBoundary islandId="dv-step1">
+          <DesignVisitStep1 {...current} />
+        </IslandErrorBoundary>
+      </AppThemeProvider>,
+    );
+  }
+
+  doRender();
+
+  return {
+    update(newProps: Partial<typeof current>) {
+      current = { ...current, ...newProps };
+      doRender();
+    },
+    unmount() {
+      root.unmount();
+    },
+  };
+};
+
+/**
+ * Imperative mounting function for the design-visit wizard Step 3 (Review & submit).
+ * Called from card-action-handlers.js when the wizard reaches Step 3.
+ *
+ * Async: dynamically imports DesignVisitStep3 so it lands in its own lazy
+ * chunk and does not inflate the always-loaded main.js bundle.
+ *
+ * Returns a Promise that resolves to a handle with:
+ *   update(newProps)  — re-render with updated catalogue/room data
+ *   unmount()         — tear down the React tree when leaving Step 3
+ */
+(window as unknown as {
+  mountDesignVisitStep3: (
+    container: HTMLElement,
+    props: import('./components/DesignVisitStep3').DesignVisitStep3Props,
+  ) => Promise<{
+    update: (p: Partial<import('./components/DesignVisitStep3').DesignVisitStep3Props>) => void;
+    unmount: () => void;
+  }>;
+}).mountDesignVisitStep3 = async (container, props) => {
+  const { DesignVisitStep3 } = await import('./components/DesignVisitStep3');
+  const root = createRoot(container);
+  let current = { ...props };
+
+  function doRender() {
+    root.render(
+      <AppThemeProvider>
+        <IslandErrorBoundary islandId="dv-step3">
+          <DesignVisitStep3 {...current} />
+        </IslandErrorBoundary>
+      </AppThemeProvider>,
+    );
+  }
+
+  doRender();
+
+  return {
+    update(newProps: Partial<typeof current>) {
+      current = { ...current, ...newProps };
+      doRender();
+    },
+    unmount() {
+      root.unmount();
+    },
+  };
+};

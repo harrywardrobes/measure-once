@@ -457,8 +457,10 @@
 
     // Wizard state — pre-populated from existingVisit when in edit mode
     let step = 1;
-    // Handle for the React root mounted at Step 2 (Rooms)
+    // Handles for the React roots mounted at each step
+    let _step1Handle = null;
     let _step2Handle = null;
+    let _step3Handle = null;
     // Whether any room photo is currently uploading (reported by the React step)
     let _step2Uploading = false;
     let rooms;
@@ -503,55 +505,6 @@
       .dv-wizard .dv-step-dot { flex:1;height:4px;border-radius:2px;background:#e5e7eb;transition:background .2s; }
       .dv-wizard .dv-step-dot.active { background:#8B2BFF; }
       .dv-wizard .dv-step-dot.done   { background:#c4b5fd; }
-      .dv-wizard label.dv-label { display:block;font-size:.78rem;font-weight:600;color:#4b5563;margin:12px 0 4px; }
-      .dv-wizard input[type=text],.dv-wizard input[type=number],.dv-wizard input[type=datetime-local],
-      .dv-wizard input[type=url],.dv-wizard select,.dv-wizard textarea {
-        width:100%;padding:9px 11px;border:1.5px solid #d1d5db;border-radius:8px;
-        font-size:.9rem;font-family:inherit;box-sizing:border-box;background:#fff; }
-      .dv-wizard input:focus,.dv-wizard select:focus,.dv-wizard textarea:focus {
-        outline:none;border-color:#8B2BFF; }
-      .dv-wizard .dv-grid2 { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
-      .dv-wizard .dv-grid3 { display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px; }
-      .dv-wizard .dv-room-card { border:1.5px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px; }
-      .dv-wizard .dv-room-header { display:flex;align-items:center;gap:8px;margin-bottom:10px; }
-      .dv-wizard .dv-room-title { font-weight:700;font-size:.9rem;color:#374151;flex:1; }
-      .dv-wizard .dv-rm-btn { padding:4px 10px;border-radius:7px;border:1.5px solid #d1d5db;
-        background:#fff;font-size:.8rem;cursor:pointer;color:#374151; }
-      .dv-wizard .dv-rm-btn:hover { background:#fef2f2;border-color:#fca5a5;color:#dc2626; }
-      .dv-wizard .dv-ord-btn { padding:4px 8px;border-radius:7px;border:1.5px solid #d1d5db;
-        background:#fff;font-size:.75rem;cursor:pointer;color:#6b7280;line-height:1; }
-      .dv-wizard .dv-ord-btn:hover:not(:disabled) { background:#f3f4f6; }
-      .dv-wizard .dv-ord-btn:disabled { opacity:.35;cursor:not-allowed; }
-      .dv-wizard .dv-add-room { width:100%;padding:10px;border:2px dashed #d1d5db;border-radius:10px;
-        background:transparent;font-size:.88rem;color:#6b7280;cursor:pointer;margin-top:4px; }
-      .dv-wizard .dv-add-room:hover { border-color:#8B2BFF;color:#8B2BFF; }
-      .dv-wizard .dv-photo-list { display:flex;flex-wrap:wrap;gap:8px;margin-top:6px; }
-      .dv-wizard .dv-photo-thumb { width:64px;height:64px;object-fit:cover;
-        border-radius:6px;border:1px solid #e5e7eb; }
-      .dv-wizard .dv-file-upload-wrap { position:relative; }
-      .dv-wizard .dv-photo-input { position:absolute;width:0;height:0;opacity:0;pointer-events:none; }
-      .dv-wizard .dv-file-upload-field { display:flex;align-items:stretch;border:1.5px solid #d1d5db;
-        border-radius:8px;overflow:hidden;background:#fff;cursor:pointer; }
-      .dv-wizard .dv-file-upload-field:focus-within { border-color:#8B2BFF; }
-      .dv-wizard .dv-file-upload-name { flex:1;padding:9px 11px;font-size:.82rem;color:#9ca3af;
-        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none; }
-      .dv-wizard .dv-file-upload-name.has-files { color:#374151; }
-      .dv-wizard .dv-file-upload-btn { padding:9px 14px;background:#f3f4f6;border-left:1.5px solid #d1d5db;
-        font-size:.82rem;font-weight:600;color:#374151;white-space:nowrap;cursor:pointer;
-        display:flex;align-items:center;user-select:none; }
-      .dv-wizard .dv-file-upload-btn:hover { background:#e5e7eb; }
-      .dv-wizard .dv-terms-box { background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;
-        padding:10px 12px;font-size:.78rem;color:#4b5563;max-height:120px;overflow-y:auto;
-        white-space:pre-wrap;margin-bottom:6px;line-height:1.5; }
-      .dv-wizard .dv-review-section { margin-bottom:18px; }
-      .dv-wizard .dv-review-label { font-size:.7rem;font-weight:700;text-transform:uppercase;
-        letter-spacing:.06em;color:#9ca3af;margin-bottom:8px; }
-      .dv-wizard .dv-review-row { display:flex;justify-content:space-between;font-size:.88rem;
-        padding:5px 0;border-bottom:1px solid #f3f4f6; }
-      .dv-wizard .dv-review-row:last-child { border-bottom:none; }
-      .dv-wizard .dv-review-row strong { color:#6b7280; }
-      .dv-wizard .dv-review-total { font-size:1rem;font-weight:700;text-align:right;
-        padding-top:10px;color:#1f2937; }
       .dv-wizard .dv-footer { display:flex;gap:10px;justify-content:flex-end;
         padding:14px 24px;border-top:1px solid #e5e7eb;flex-shrink:0;background:#fff; }
       .dv-wizard .dv-btn-back { padding:9px 18px;border-radius:8px;border:1.5px solid #d1d5db;
@@ -560,9 +513,6 @@
         background:#8B2BFF;color:#fff;font-size:.9rem;font-weight:600;cursor:pointer; }
       .dv-wizard .dv-btn-next:disabled { opacity:.55;cursor:not-allowed; }
       .dv-wizard .dv-err { color:#b91c1c;font-size:.82rem;margin-top:8px;min-height:18px; }
-      .dv-wizard .dv-checkbox-row { display:flex;align-items:flex-start;gap:8px;margin-top:10px; }
-      .dv-wizard .dv-checkbox-row input[type=checkbox] { width:auto;margin-top:2px;flex-shrink:0; }
-      .dv-wizard .dv-checkbox-row label { font-size:.82rem;color:#374151;margin:0; }
     `;
     if (!document.getElementById('dv-wizard-style')) {
       const s = document.createElement('style');
@@ -585,7 +535,9 @@
     const inner  = backdrop.querySelector('#dv-wiz-inner');
     const footer = backdrop.querySelector('#dv-wiz-footer');
     backdrop.querySelector('#dv-close-x').addEventListener('click', () => {
+      if (_step1Handle) { _step1Handle.unmount(); _step1Handle = null; }
       if (_step2Handle) { _step2Handle.unmount(); _step2Handle = null; }
+      if (_step3Handle) { _step3Handle.unmount(); _step3Handle = null; }
       backdrop.remove();
     });
 
@@ -603,8 +555,14 @@
             ]);
           } catch {}
           // Re-render current step with fresh data
-          if (step === 1) renderStep1();
-          else if (step === 2) {
+          if (step === 1) {
+            if (_step1Handle) {
+              // Update catalogue in the live React component — preserves typed fields.
+              _step1Handle.update({ handles, furnitureRanges });
+            } else {
+              renderStep1();
+            }
+          } else if (step === 2) {
             if (_step2Handle) {
               // Update doorStyles in the live React component — no full re-mount
               // needed, so room form state (including partially-typed fields) is
@@ -612,6 +570,10 @@
               _step2Handle.update({ doorStyles: doorStyles });
             } else {
               renderStep2();
+            }
+          } else if (step === 3) {
+            if (_step3Handle) {
+              _step3Handle.update({ handles, furnitureRanges, doorStyles });
             }
           }
         });
@@ -658,16 +620,6 @@
       </div>`;
     }
 
-    function _selOptions(items, selectedId, placeholder) {
-      return `<option value="">${_esc(placeholder)}</option>` +
-        items.map(i => `<option value="${i.id}" ${String(selectedId) === String(i.id) ? 'selected' : ''}>${_esc(i.name)}</option>`).join('');
-    }
-
-    function _dsOptions(selectedId) {
-      return `<option value="">— none —</option>` +
-        doorStyles.map(ds => `<option value="${ds.id}" ${String(selectedId) === String(ds.id) ? 'selected' : ''}>${_esc(ds.name)}</option>`).join('');
-    }
-
     function _renderFooter(leftBtn, rightBtns) {
       footer.innerHTML = '';
       if (leftBtn) { const b = document.createElement('button'); b.className = leftBtn.cls; b.textContent = leftBtn.label; b.addEventListener('click', leftBtn.fn); footer.appendChild(b); }
@@ -679,53 +631,52 @@
       }
     }
 
-    function renderStep1() {
-      inner.innerHTML = `
-        ${renderStepIndicator()}
-        <p style="font-size:.82rem;color:#6b7280;margin:0 0 16px;">Step 1 of 3 — Visit details</p>
-        <div class="dv-grid2">
-          <div>
-            <label class="dv-label">Visit date &amp; time</label>
-            <input type="datetime-local" id="dv-visit-date" value="${_esc(s1.visitDate)}">
-          </div>
-          <div>
-            <label class="dv-label">Duration (minutes)</label>
-            <input type="number" id="dv-duration" min="15" max="1440" step="15" value="${_esc(s1.duration)}">
-          </div>
-        </div>
-        <label class="dv-label">Location</label>
-        <input type="text" id="dv-location" placeholder="e.g. 12 Baker Street, London" value="${_esc(s1.location)}">
-        <label class="dv-label">Designer name</label>
-        <input type="text" id="dv-designer" placeholder="e.g. Sarah Jones" maxlength="200" value="${_esc(s1.designerName)}">
-        ${handles.length ? `
-          <label class="dv-label">Handle selection</label>
-          <select id="dv-handle">${_selOptions(handles, s1.handleId, '— select handle —')}</select>
-        ` : ''}
-        ${furnitureRanges.length ? `
-          <label class="dv-label">Furniture range</label>
-          <select id="dv-furniture">${_selOptions(furnitureRanges, s1.furnitureRangeId, '— select range —')}</select>
-        ` : ''}
-        ${termsText ? `
-          <label class="dv-label">Terms &amp; Conditions</label>
-          <div class="dv-terms-box">${_esc(termsText)}</div>
-        ` : ''}
-        <div class="dv-checkbox-row">
-          <input type="checkbox" id="dv-terms" ${s1.termsAccepted ? 'checked' : ''}>
-          <label for="dv-terms">Customer has read and accepted the terms &amp; conditions</label>
-        </div>
-        <div class="dv-err" id="dv-s1-err"></div>`;
+    async function renderStep1() {
+      // Unmount any existing React root from a prior renderStep1() call
+      // (e.g. navigating Back from Step 2 → Step 1 again).
+      if (_step1Handle) { _step1Handle.unmount(); _step1Handle = null; }
+
+      inner.innerHTML = '';
+
+      // Step indicator and subtitle
+      const headerEl = document.createElement('div');
+      headerEl.innerHTML = renderStepIndicator() +
+        '<p style="font-size:.82rem;color:#6b7280;margin:0 0 16px;">Step 1 of 3 \u2014 Visit details</p>';
+      inner.appendChild(headerEl);
+
+      // Container for the React island
+      const reactContainer = document.createElement('div');
+      reactContainer.id = 'dv-step1-react';
+      inner.appendChild(reactContainer);
+
+      // Validation error (set by footer button handler below)
+      const errDiv = document.createElement('div');
+      errDiv.className = 'dv-err';
+      errDiv.id = 'dv-s1-err';
+      inner.appendChild(errDiv);
+
+      if (typeof window.mountDesignVisitStep1 === 'function') {
+        _step1Handle = await window.mountDesignVisitStep1(reactContainer, {
+          initialData: { ...s1 },
+          handles: handles,
+          furnitureRanges: furnitureRanges,
+          termsText: termsText,
+          termsVersionNumber: termsVersionNumber,
+          onDataChange: function(data) { Object.assign(s1, data); },
+        });
+      } else {
+        console.error('[design-visit] mountDesignVisitStep1 not available — React bundle not loaded?');
+      }
+
       _renderFooter(null, [
-        { cls: 'dv-btn-next', label: 'Next: Rooms →', fn: () => {
+        { cls: 'dv-btn-next', label: 'Next: Rooms \u2192', fn: () => {
           const errEl = inner.querySelector('#dv-s1-err');
-          s1.visitDate        = inner.querySelector('#dv-visit-date')?.value || '';
-          s1.duration         = inner.querySelector('#dv-duration')?.value || String(defaultDuration);
-          s1.location         = inner.querySelector('#dv-location')?.value.trim() || '';
-          s1.designerName     = inner.querySelector('#dv-designer')?.value.trim() || '';
-          s1.handleId         = inner.querySelector('#dv-handle')?.value || '';
-          s1.furnitureRangeId = inner.querySelector('#dv-furniture')?.value || '';
-          s1.termsAccepted    = inner.querySelector('#dv-terms')?.checked || false;
-          if (!s1.termsAccepted) { errEl.textContent = 'Please confirm the customer has accepted the terms and conditions.'; return; }
+          if (!s1.termsAccepted) {
+            errEl.textContent = 'Please confirm the customer has accepted the terms and conditions.';
+            return;
+          }
           errEl.textContent = '';
+          if (_step1Handle) { _step1Handle.unmount(); _step1Handle = null; }
           step = 2; renderStep2();
         }},
       ]);
@@ -788,108 +739,53 @@
       ]);
     }
 
-    async function _saveRoomsFromDom() {
-      const cards = inner.querySelectorAll('.dv-room-card');
-      const reads = [];
-      cards.forEach(card => {
-        const idx = parseInt(card.dataset.ridx, 10);
-        if (!rooms[idx]) return;
-        rooms[idx].roomName      = card.querySelector('.dv-rn')?.value || '';
-        rooms[idx].doorStyleId   = card.querySelector('.dv-ds')?.value || '';
-        rooms[idx].widthMm       = parseInt(card.querySelector('.dv-wm')?.value, 10) || null;
-        rooms[idx].heightMm      = parseInt(card.querySelector('.dv-hm')?.value, 10) || null;
-        rooms[idx].depthMm       = parseInt(card.querySelector('.dv-dm')?.value, 10) || null;
-        rooms[idx].unitCount     = Math.max(1, parseInt(card.querySelector('.dv-uc')?.value, 10) || 1);
-        const priceStr           = card.querySelector('.dv-up')?.value.trim() || '0';
-        rooms[idx].unitPricePence = Math.round(parseFloat(priceStr) * 100) || 0;
-        rooms[idx].notes          = card.querySelector('.dv-rnotes')?.value || '';
-        // Read new photos from file input and upload each to the cloud
-        // bucket; the DB only ever stores the opaque key the server returns.
-        const fileInput = card.querySelector('.dv-photo-input');
-        if (fileInput && fileInput.files && fileInput.files.length > 0) {
-          for (const file of fileInput.files) {
-            reads.push(new Promise(resolve => {
-              const fr = new FileReader();
-              fr.onload = async () => {
-                try {
-                  const resp = await fetch('/api/design-visits/uploads', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ dataUrl: fr.result }),
-                  });
-                  const data = await resp.json();
-                  if (!resp.ok || !data.storageKey) throw new Error(data.error || 'Upload failed');
-                  if (!rooms[idx].images) rooms[idx].images = [];
-                  rooms[idx].images.push({
-                    storageKey: data.storageKey,
-                    mimeType:   data.mimeType || file.type,
-                    viewUrl:    data.viewUrl || '',
-                  });
-                } catch (err) {
-                  console.warn('[design-visit] photo upload failed:', err.message);
-                  // Surface a clean alert so the designer notices; the rest
-                  // of the wizard keeps working with whatever did upload.
-                  if (typeof window.toast === 'function') {
-                    window.toast('Photo upload failed: ' + (err.message || 'unknown'));
-                  }
-                }
-                resolve();
-              };
-              fr.onerror = resolve;
-              fr.readAsDataURL(file);
-            }));
-          }
-          // Clear the input so the same files aren't re-uploaded on the next
-          // _saveRoomsFromDom pass (e.g. when moving between rooms).
-          try { fileInput.value = ''; } catch {}
-        }
-      });
-      if (reads.length) await Promise.all(reads);
-    }
+    async function renderStep3() {
+      // Unmount any existing React root from a prior renderStep3() call
+      // (e.g. navigating Back from Step 3 → Step 2 → Step 3 again).
+      if (_step3Handle) { _step3Handle.unmount(); _step3Handle = null; }
 
-    function renderStep3() {
-      const handleName   = handles.find(h => String(h.id) === String(s1.handleId))?.name || '—';
-      const furnitureName = furnitureRanges.find(f => String(f.id) === String(s1.furnitureRangeId))?.name || '—';
-      let grandTotal = 0;
-      const roomRows = rooms.map(r => {
-        const ds   = doorStyles.find(d => String(d.id) === String(r.doorStyleId))?.name || '—';
-        const tot  = r.unitCount * r.unitPricePence;
-        grandTotal += tot;
-        return `<div class="dv-review-row">
-          <strong>${_esc(r.roomName)} <span style="font-weight:400;color:#9ca3af;">(${_esc(ds)}, ${r.unitCount} unit${r.unitCount !== 1 ? 's' : ''})</span></strong>
-          <span>£${(tot / 100).toFixed(2)}</span>
-        </div>`;
-      }).join('');
+      inner.innerHTML = '';
 
-      inner.innerHTML = `
-        ${renderStepIndicator()}
-        <p style="font-size:.82rem;color:#6b7280;margin:0 0 16px;">Step 3 of 3 — Review &amp; submit</p>
-        <div class="dv-review-section">
-          <div class="dv-review-label">Visit details</div>
-          ${s1.visitDate   ? `<div class="dv-review-row"><strong>Date</strong><span>${_esc(new Date(s1.visitDate).toLocaleString())}</span></div>` : ''}
-          <div class="dv-review-row"><strong>Duration</strong><span>${_esc(s1.duration)} min</span></div>
-          ${s1.location    ? `<div class="dv-review-row"><strong>Location</strong><span>${_esc(s1.location)}</span></div>` : ''}
-          ${s1.designerName ? `<div class="dv-review-row"><strong>Designer</strong><span>${_esc(s1.designerName)}</span></div>` : ''}
-          ${handles.length ? `<div class="dv-review-row"><strong>Handle</strong><span>${_esc(handleName)}</span></div>` : ''}
-          ${furnitureRanges.length ? `<div class="dv-review-row"><strong>Furniture range</strong><span>${_esc(furnitureName)}</span></div>` : ''}
-        </div>
-        <div class="dv-review-section">
-          <div class="dv-review-label">Room breakdown</div>
-          ${roomRows}
-          <div class="dv-review-total">Estimate total: £${(grandTotal / 100).toFixed(2)}</div>
-        </div>
-        ${termsText ? `<div class="dv-review-section">
-          <div class="dv-review-label">Terms &amp; Conditions</div>
-          <div class="dv-review-row"><strong>Accepted</strong><span style="color:#059669;">✓${termsVersionNumber != null ? ` &nbsp;<span style="display:inline-block;padding:1px 7px;border-radius:999px;background:#e5e7eb;color:#374151;font-size:.7rem;font-weight:700;">v${termsVersionNumber}</span>` : ''}</span></div>
-        </div>` : ''}
-        <div class="dv-err" id="dv-s3-err"></div>`;
+      // Step indicator and subtitle
+      const headerEl = document.createElement('div');
+      headerEl.innerHTML = renderStepIndicator() +
+        '<p style="font-size:.82rem;color:#6b7280;margin:0 0 16px;">Step 3 of 3 \u2014 Review &amp; submit</p>';
+      inner.appendChild(headerEl);
+
+      // Container for the React island
+      const reactContainer = document.createElement('div');
+      reactContainer.id = 'dv-step3-react';
+      inner.appendChild(reactContainer);
+
+      // Validation / submission error (set by footer button handler below)
+      const errDiv = document.createElement('div');
+      errDiv.className = 'dv-err';
+      errDiv.id = 'dv-s3-err';
+      inner.appendChild(errDiv);
+
+      if (typeof window.mountDesignVisitStep3 === 'function') {
+        _step3Handle = await window.mountDesignVisitStep3(reactContainer, {
+          step1Data: { ...s1 },
+          rooms: rooms,
+          handles: handles,
+          furnitureRanges: furnitureRanges,
+          doorStyles: doorStyles,
+          termsText: termsText,
+          termsVersionNumber: termsVersionNumber,
+        });
+      } else {
+        console.error('[design-visit] mountDesignVisitStep3 not available — React bundle not loaded?');
+      }
 
       _renderFooter(null, [
-        { cls: 'dv-btn-back', label: '← Back', fn: () => { step = 2; renderStep2(); }},
+        { cls: 'dv-btn-back', label: '\u2190 Back', fn: () => {
+          if (_step3Handle) { _step3Handle.unmount(); _step3Handle = null; }
+          step = 2; renderStep2();
+        }},
         { cls: 'dv-btn-next', id: 'dv-submit', label: editMode ? 'Save changes' : 'Submit visit', fn: async () => {
           const errEl = inner.querySelector('#dv-s3-err');
           const btn   = footer.querySelector('#dv-submit');
-          btn.disabled = true; btn.textContent = editMode ? 'Saving…' : 'Submitting…';
+          btn.disabled = true; btn.textContent = editMode ? 'Saving\u2026' : 'Submitting\u2026';
           errEl.textContent = '';
           try {
             const payload = {
