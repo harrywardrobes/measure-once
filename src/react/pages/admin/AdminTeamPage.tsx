@@ -928,9 +928,14 @@ export function AdminTeamPage() {
             return (
               <Alert severity="warning" icon={<DifferenceIcon />} sx={{ mb: 2 }}>
                 <AlertTitle>Onboarding discrepancies</AlertTitle>
-                <Typography variant="body2" sx={{ mb: 1.5 }}>
+                <Typography variant="body2" sx={{ mb: 0.75 }}>
                   This member changed the following details during onboarding. Choose which value to keep for each field — your choice will update the form below.
                 </Typography>
+                {editing.conflict_created_at && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+                    Pending since {fmtDateShort(editing.conflict_created_at)} ({fmtRelativeAge(editing.conflict_created_at)})
+                  </Typography>
+                )}
                 <Stack spacing={1.5}>
                   {Object.entries(conflicts).map(([field, conflict]) => {
                     const chosen = conflictChoices[field];
