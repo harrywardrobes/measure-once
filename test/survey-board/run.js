@@ -19,6 +19,10 @@
 //       shows the WarningAmberIcon, "HubSpot is currently unavailable" heading,
 //       and "Reload page" button; no survey cards are rendered.
 //       Firing 'survey-board-data-ready' clears the error and shows the board.
+//   (I) Stale-data Snackbar — end-to-end: intercept /api/contacts-all with
+//       X-Cache-Status: stale header → loadAllContacts dispatches
+//       survey-board-cache-status → SurveyBoardPage shows "Showing cached data"
+//       Snackbar → auto-dismisses after ~10 s.
 //
 // React mount timing note: SurveyBoardPage is a React.lazy chunk.  The browser
 // loads the chunk asynchronously after the module entry point executes.
@@ -1100,6 +1104,112 @@ async function main() {
       }
     }
 
+    // ── (I) Stale-data Snackbar — end-to-end: stale header → banner appears ──────
+    //
+    // Tests the full production path:
+    //   /api/contacts-all → X-Cache-Status: stale
+    //   → loadAllContacts() reads header → dispatches survey-board-cache-status
+    //   → SurveyBoardPage useEffect → setStaleData(true) → Snackbar visible
+    //
+    // Timing challenge: bootstrap calls loadAllContacts() before React mounts.
+    // Solution: hold the response until waitForReactMount() confirms the component
+    // has mounted, then release it with the stale header.
+    console.log('\n  [I] Stale-data Snackbar (E2E)');
+    {
+      let page;
+      try {
+        page = await browser.newPage();
+        page.on('pageerror', () => {});
+        page.on('console',   () => {});
+
+        // Gate: hold /api/contacts-all until React mounts.
+        let releaseContactsAll = null;
+        const contactsAllGate = new Promise(resolve => { releaseContactsAll = resolve; });
+
+        await page.setRequestInterception(true);
+        page.on('request', req => {
+          const u = req.url();
+          if (u.includes('/api/contacts-all')) {
+            // Hold the request; respond with stale header after React mounts.
+            contactsAllGate.then(() => {
+              req.respond({
+                status:      200,
+                contentType: 'application/json',
+                headers:     { 'X-Cache-Status': 'stale' },
+                body:        JSON.stringify({ results: [], totalPages: 1, page: 1, total: 0 }),
+              });
+            }).catch(() => {});
+          } else if (u.includes('/api/localdata/all')) {
+            req.respond({
+              status:      200,
+              contentType: 'application/json',
+              body:        JSON.stringify({}),
+            });
+          } else {
+            req.continue();
+          }
+        });
+
+        await injectSession(page, adminClient.cookie);
+        await page.goto(`${BASE}/survey`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+        // Wait for React to mount — listener for survey-board-cache-status is
+        // now registered in the component's useEffect.
+        const mounted = await waitForReactMount(page);
+        // Release the held /api/contacts-all response WITH the stale header.
+        // loadAllContacts() will now parse the header and dispatch the event.
+        releaseContactsAll();
+
+        if (!mounted) {
+          record('(I.1) E2E stale-header: board mounted before response released', 'mounted', 'timed out (20 s)', false);
+          record('(I.2) E2E stale-header: Snackbar appears (loadAllContacts → header → event)', 'skipped', 'board not mounted', false);
+          record('(I.3) E2E stale-header: Snackbar auto-dismisses after ~10 s', 'skipped', 'board not mounted', false);
+        } else {
+          record('(I.1) E2E stale-header: board mounted before response released', 'mounted', 'mounted', true);
+
+          // The Snackbar must appear once loadAllContacts dispatches the event.
+          const STALE_TEXT = 'Showing cached data \u2014 live results will load when HubSpot recovers';
+          const snackbarAppeared = await pollPage(page, (txt) => {
+            const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+            return alerts.some(el => (el.textContent || '').includes(txt)) ? 'visible' : null;
+          }, STALE_TEXT, 8000);
+
+          record(
+            '(I.2) E2E stale-header: Snackbar appears (loadAllContacts → header → event)',
+            `"${STALE_TEXT}" alert visible`,
+            snackbarAppeared === 'visible' ? 'visible' : 'did not appear within 8 s',
+            snackbarAppeared === 'visible',
+          );
+
+          if (snackbarAppeared === 'visible') {
+            // autoHideDuration is 10 s.  Poll until dismissed or 13 s elapses.
+            const dismissDeadline = Date.now() + 13000;
+            let gone = false;
+            while (Date.now() < dismissDeadline) {
+              const still = await page.evaluate((txt) => {
+                const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+                return alerts.some(el => (el.textContent || '').includes(txt));
+              }, STALE_TEXT).catch(() => true);
+              if (!still) { gone = true; break; }
+              await new Promise(r => setTimeout(r, 200));
+            }
+            record(
+              '(I.3) E2E stale-header: Snackbar auto-dismisses after ~10 s',
+              'dismissed within 13 s',
+              gone ? 'dismissed — autoHideDuration fired (good)' : 'still visible after 13 s (bad)',
+              gone,
+            );
+          } else {
+            record('(I.3) E2E stale-header: Snackbar auto-dismisses after ~10 s', 'skipped', 'Snackbar never appeared', false);
+          }
+        }
+      } catch (e) {
+        record('(I) E2E stale-header Snackbar', 'no error', `error: ${e.message}`, false, e.stack || '');
+      } finally {
+        if (page) await page.close().catch(() => {});
+      }
+    }
+
   } finally {
     if (browser) await browser.close().catch(() => {});
   }
@@ -1161,6 +1271,11 @@ async function writeReport(findings) {
     '  button, while no `[data-contact-id]` survey cards are rendered.',
     '  Recovery: dispatching `survey-board-data-ready` clears the error and',
     '  renders the board normally.',
+    '- **(I)** Stale-data Snackbar: intercepts `/api/contacts-all` to return',
+    '  `X-Cache-Status: stale`, confirms `loadAllContacts` dispatches',
+    '  `survey-board-cache-status`, and asserts the "Showing cached data" MUI',
+    '  info Snackbar appears then auto-dismisses after the 10 s',
+    '  `autoHideDuration`.',
     '',
     '## React mount timing',
     '',

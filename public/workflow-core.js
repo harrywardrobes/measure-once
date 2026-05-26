@@ -245,6 +245,7 @@ async function loadAllContacts() {
   _reapplyPendingLeadStatuses();
   state.filteredContacts = [...state.contacts];
   document.dispatchEvent(new CustomEvent('sales-board-cache-status', { detail: { stale: detectedStale } }));
+  document.dispatchEvent(new CustomEvent('survey-board-cache-status', { detail: { stale: detectedStale } }));
 }
 
 async function loadContactsPage({ page = 1, leadStatus = '', sort = 'newest' } = {}) {

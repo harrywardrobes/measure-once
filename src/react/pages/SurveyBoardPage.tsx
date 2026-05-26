@@ -728,6 +728,32 @@ export function SurveyBoardPage() {
     return () => document.removeEventListener('survey-board-bg-refresh-failed', onFail);
   }, []);
 
+  // Stale-data Snackbar — shown when loadAllContacts detects X-Cache-Status: stale.
+  // Clears automatically when the next load returns fresh data (detail.stale === false).
+  // Auto-dismisses after 10 s and can also be closed manually.
+  // Mirrors the bgRefreshFailed visibility-pause pattern: autoHideDuration is null
+  // while the tab is hidden so the MUI timer is suspended; restored to 10 s on focus.
+  const [staleData, setStaleData] = useState(false);
+  const [staleDataHideDuration, setStaleDataHideDuration] = useState<number | null>(10000);
+  const staleDataRef = useRef(false);
+  useEffect(() => { staleDataRef.current = staleData; }, [staleData]);
+  useEffect(() => {
+    const onVis = () => {
+      if (!staleDataRef.current) return;
+      setStaleDataHideDuration(document.hidden ? null : 10000);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+  useEffect(() => {
+    const onCacheStatus = (e: Event) => {
+      const detail = (e as CustomEvent<{ stale: boolean }>).detail;
+      setStaleData(detail?.stale === true);
+    };
+    document.addEventListener('survey-board-cache-status', onCacheStatus);
+    return () => document.removeEventListener('survey-board-cache-status', onCacheStatus);
+  }, []);
+
   useEffect(() => {
     const refresh = () => {
       const w = window as unknown as WindowGlobals;
@@ -1072,6 +1098,22 @@ export function SurveyBoardPage() {
           sx={{ minWidth: 280 }}
         >
           Couldn&apos;t refresh live data — fresh results will load on your next visit
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={staleData}
+        autoHideDuration={staleDataHideDuration}
+        onClose={() => setStaleData(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity="info"
+          onClose={() => setStaleData(false)}
+          variant="filled"
+          sx={{ minWidth: 280 }}
+        >
+          Showing cached data — live results will load when HubSpot recovers
         </Alert>
       </Snackbar>
     </Box>
