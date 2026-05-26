@@ -80,10 +80,19 @@ npm run watch:react  # rebuilds public/react/ on every src/react/ save
 Reload the browser manually after each rebuild. Useful when testing
 server-rendered pages or middleware that must run through Express.
 
-> **Note:** `npm start` (`prestart`) and `npm run dev` (`predev`) both run a
-> full `build:react` (typecheck + bundle + bundle-size check) before starting
-> the server, so the bundle is always fresh for production use. The two
-> watch-mode scripts above skip the size check to keep iteration fast.
+> **Note:** `npm start` (`prestart`) runs the full `build:react` (typecheck +
+> bundle + bundle-size check) before starting the server, so the bundle is
+> always fresh for production use.
+>
+> `npm run dev` (`predev`) is intentionally lighter:
+> - If `public/react/main.js` **already exists**, the build is skipped entirely
+>   so nodemon restarts are instant.
+> - If no bundle exists yet, only `vite build` runs (no typecheck, no
+>   bundle-size check) to get the dev server up as fast as possible.
+>
+> To rebuild React manually during development use:
+> - `npm run build:react:dev` — fast Vite-only rebuild (no typecheck/size check)
+> - `npm run build:react` — full CI-quality build (typecheck + size check)
 
 ## React island conventions
 - Material UI is the standard component framework; every mount is wrapped
