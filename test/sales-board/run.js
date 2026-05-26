@@ -807,6 +807,136 @@ async function main() {
       }
     }
 
+    // ── (H.4 / H.5) Stale-data Snackbar visibility-pause ─────────────────────
+    // Verifies that staleDataHideDuration is set to null while the tab is hidden
+    // (pausing the MUI timer) and restored to 10 s when the tab becomes visible
+    // again (allowing auto-dismiss).
+    //
+    // Uses the same held-response technique as probe H: the /api/contacts-all
+    // response is held until React mounts so the sales-board-cache-status
+    // listener is registered before loadAllContacts() dispatches its event.
+    // ALL subsequent contacts-all requests also return X-Cache-Status: stale so
+    // no competing { stale: false } event can close the banner mid-probe.
+    {
+      let page;
+      try {
+        page = await browser.newPage();
+        page.on('pageerror', () => {});
+        page.on('console',   () => {});
+
+        // Gate: hold the first /api/contacts-all response until React mounts.
+        let releaseStaleReq = null;
+        const staleGate = new Promise(resolve => { releaseStaleReq = resolve; });
+
+        await page.setRequestInterception(true);
+        page.on('request', req => {
+          const u = req.url();
+          if (u.includes('/api/contacts-all')) {
+            // All contacts-all requests return X-Cache-Status: stale so that
+            // loadAllContacts() always dispatches { stale: true } and never
+            // overrides the banner with { stale: false }.
+            staleGate.then(() => {
+              req.respond({
+                status:      200,
+                contentType: 'application/json',
+                headers:     { 'X-Cache-Status': 'stale' },
+                body:        JSON.stringify({ results: [], totalPages: 1, page: 1, total: 0 }),
+              });
+            }).catch(() => {});
+          } else if (u.includes('/api/localdata/all')) {
+            req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+          } else {
+            req.continue();
+          }
+        });
+
+        await injectSession(page, adminClient.cookie);
+        await page.goto(`${BASE}/sales`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+        // Wait for React to mount — listener for sales-board-cache-status is
+        // now registered in the component's useEffect.
+        const mounted = await waitForReactMount(page);
+        // Release the held /api/contacts-all response WITH the stale header.
+        releaseStaleReq();
+
+        if (!mounted) {
+          record('(H.4) Stale-data banner visibility-pause — board mounted', 'mounted', 'timed out (20 s)', false);
+          record('(H.5a) Stale-data banner paused while tab hidden (>10 s)', 'skipped', 'board not mounted', false);
+          record('(H.5b) Stale-data banner dismisses after tab returns visible', 'skipped', 'board not mounted', false);
+        } else {
+          record('(H.4) Stale-data banner visibility-pause — board mounted', 'mounted', 'mounted', true);
+
+          const STALE_TEXT = 'Showing cached data \u2014 live results will load when HubSpot recovers';
+
+          // Step 1: Wait for the stale banner to appear (loadAllContacts dispatches
+          // the event after parsing the stale header).
+          const snackbarAppeared = await pollPage(page, (txt) => {
+            const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+            return alerts.some(el => (el.textContent || '').includes(txt)) ? 'visible' : null;
+          }, STALE_TEXT, 8000);
+
+          if (snackbarAppeared !== 'visible') {
+            record('(H.5a) Stale-data banner paused while tab hidden (>10 s)', 'skipped', `banner=${snackbarAppeared} — never appeared`, false);
+            record('(H.5b) Stale-data banner dismisses after tab returns visible', 'skipped', 'banner never appeared', false);
+          } else {
+            // Step 2: Simulate the tab going hidden.
+            await page.evaluate(() => {
+              Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+              Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+              document.dispatchEvent(new Event('visibilitychange'));
+            });
+
+            // Step 3: Wait 11.5 s (> 10 s autoHideDuration).  If the pause were
+            // broken the Snackbar would have auto-dismissed by now.
+            await new Promise(r => setTimeout(r, 11500));
+
+            const stillVisible = await page.evaluate((txt) => {
+              const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+              return alerts.some(el => (el.textContent || '').includes(txt));
+            }, STALE_TEXT).catch(() => false);
+
+            record(
+              '(H.5a) Stale-data banner paused while tab hidden (>10 s)',
+              'still visible (timer paused)',
+              stillVisible ? 'still visible — timer paused (good)' : 'already dismissed — timer NOT paused (bad)',
+              stillVisible,
+            );
+
+            // Step 4: Restore the tab to visible.
+            await page.evaluate(() => {
+              Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+              Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+              document.dispatchEvent(new Event('visibilitychange'));
+            });
+
+            // Step 5: Snackbar must now auto-dismiss (10 s timer restarts).
+            // Allow up to 14 s (10 s autoHide + animation buffer).
+            const dismissDeadline = Date.now() + 14000;
+            let gone = false;
+            while (Date.now() < dismissDeadline) {
+              const still = await page.evaluate((txt) => {
+                const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
+                return alerts.some(el => (el.textContent || '').includes(txt));
+              }, STALE_TEXT).catch(() => true);
+              if (!still) { gone = true; break; }
+              await new Promise(r => setTimeout(r, 200));
+            }
+
+            record(
+              '(H.5b) Stale-data banner dismisses after tab returns visible',
+              'dismissed within 14 s of tab-show',
+              gone ? 'dismissed (good)' : 'still visible after 14 s (bad)',
+              gone,
+            );
+          }
+        }
+      } catch (e) {
+        record('(H.4/H.5) Stale-data banner visibility pause', 'no error', `error: ${e.message}`, false, e.stack || '');
+      } finally {
+        if (page) await page.close().catch(() => {});
+      }
+    }
+
     // ── (I) Stale-data Snackbar absent when X-Cache-Status is fresh or absent ──
     // Verifies the Snackbar does NOT appear when /api/contacts-all returns a
     // fresh (or absent) X-Cache-Status header.  Uses the same held-response
