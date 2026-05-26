@@ -38,8 +38,9 @@ import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
  * Integration points preserved from the previous implementation:
  *
  * - Outer element is `<nav class="bottom-nav" id="main-content">` so
- *   `public/app-styles.css` keeps finding it and the window-ui-smoke test
- *   selector (`nav.bottom-nav#main-content`) still matches.
+ *   the window-ui-smoke test selector (`nav.bottom-nav#main-content`)
+ *   still matches. No CSS in app-styles.css backs this class; MUI sx
+ *   owns all layout and colour.
  * - Each rendered action's root element keeps `id="bnav-<key>"` so the
  *   imperative capability gating in `public/core.js` and
  *   `public/admin.html` (which toggles `style.display` by element id)
