@@ -124,6 +124,7 @@ below except `test:hw-test-user:live`.
 
 | Script | Covers |
 | --- | --- |
+| `test:privilege-reads` | Static lint that blocks direct `.privilege_level` reads outside the canonical helpers. Scans all `.js` files under `public/` (excluding `core.js`, the compiled `react/`, and `storybook/` dirs) and all `.ts`/`.tsx` files under `src/react/` (excluding `usePrivilege.ts`, `usePrivilegeSync.ts`, and `*.stories.*` fixtures). A line is a violation when it contains `privilege_level`, is not a pure comment, lacks a `// privilege-read-ok: <reason>` suppression, and — for TypeScript — is not a bare property-type declaration. |
 | `test:privileges` | 5-actor × 123-route capability matrix, the adversarial probe checklist, and a headless `/login → / → /admin` UI smoke. Required Turnstile-tampering probes fail closed unless opted in via `PRIVTEST_USE_TURNSTILE_SECRET_KEY=1`. |
 | `test:lead-status-sync` | Customers-page filter dropdown updates via BroadcastChannel + `visibilitychange` after admin renames, count-suffix format, skeleton load/clear cycle, and sub-status chip live-rename via BC and visibilitychange. |
 | `test:lead-status-sync-customer-detail` | Per-contact tracker on customer-detail (rail order, current marker, sub-status panel) re-renders via BC + `visibilitychange` without full reload. |
