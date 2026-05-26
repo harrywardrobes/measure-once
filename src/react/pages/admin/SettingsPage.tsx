@@ -43,11 +43,6 @@ interface HubStatus {
   cooldownSecondsRemaining?: number;
 }
 
-interface DevContact {
-  id: string;
-  properties: Record<string, string | undefined>;
-}
-
 const W = window as unknown as Record<string, unknown>;
 
 function callApi(method: string, path: string, body?: unknown): Promise<unknown> {
@@ -170,9 +165,6 @@ export function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
   const [hubStatus, setHubStatus] = useState<HubStatus | null>(null);
-  const [devMode, setDevMode] = useState(false);
-  const [devContacts, setDevContacts] = useState<DevContact[]>([]);
-  const [devLoading, setDevLoading] = useState(false);
   const [newKey, setNewKey] = useState('');
   const [newStage, setNewStage] = useState('');
   const [newLabel, setNewLabel] = useState('');
@@ -271,37 +263,12 @@ export function SettingsPage() {
     }
   }, []);
 
-  const initDevSection = useCallback(async () => {
-    let dm = false;
-    try {
-      const d = await callApi('GET', '/api/admin/hubspot/dev-mode') as { devMode?: boolean };
-      dm = d?.devMode === true;
-    } catch {}
-    setDevMode(dm);
-    if (!dm) return;
-    setDevLoading(true);
-    try {
-      let contacts: DevContact[] = [];
-      let page = 1; let total = 1;
-      do {
-        const d = await callApi('GET', `/api/contacts-all?all=1&limit=100&page=${page}`) as { results?: DevContact[]; totalPages?: number };
-        if (!d) break;
-        contacts = contacts.concat(d.results || []);
-        total = d.totalPages || 1;
-        page++;
-      } while (page <= total);
-      setDevContacts(contacts.filter(c => c.properties?.hw_test_user === 'true'));
-    } catch {}
-    setDevLoading(false);
-  }, []);
-
   useEffect(() => {
     fetchHubStatus();
     fetchStatuses();
-    initDevSection();
     fetchDigestSettings();
     return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
-  }, [fetchHubStatus, fetchStatuses, initDevSection, fetchDigestSettings]);
+  }, [fetchHubStatus, fetchStatuses, fetchDigestSettings]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
@@ -416,16 +383,14 @@ export function SettingsPage() {
     W.addLeadStatus         = addStatus;
     W.loadLeadStatusesAdmin = fetchStatuses;
     W.loadHubspotStatus     = fetchHubStatus;
-    W.loadDevTestUsers      = initDevSection;
     return () => {
       delete W.saveAllLeadStatuses;
       delete W.moveLeadStatus;
       delete W.addLeadStatus;
       delete W.loadLeadStatusesAdmin;
       delete W.loadHubspotStatus;
-      delete W.loadDevTestUsers;
     };
-  }, [saveAll, moveStatus, addStatus, fetchStatuses, fetchHubStatus, initDevSection]);
+  }, [saveAll, moveStatus, addStatus, fetchStatuses, fetchHubStatus]);
 
   const badge = (() => {
     if (!hubStatus) return { text: 'Checking…', bg: '#f3f4f6', color: '#6b7280' };
@@ -613,40 +578,6 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      {devMode && (
-        <Card variant="outlined" id="dev-test-users-section">
-          <CardContent>
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="h6">Dev test users</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Contacts currently marked as dev test users in HubSpot (<code>hw_test_user = true</code>).
-                Toggling is done directly in HubSpot.
-              </Typography>
-            </Box>
-
-            <Box id="dev-test-users-list">
-              {devLoading ? (
-                <p className="admin-msg admin-msg--muted">Loading contacts…</p>
-              ) : !devContacts.length ? (
-                <p className="admin-msg admin-msg--muted">No dev test users found.</p>
-              ) : devContacts.map(c => {
-                const first = c.properties?.firstname || '';
-                const last  = c.properties?.lastname  || '';
-                const name  = [first, last].filter(Boolean).join(' ') || `Contact ${c.id}`;
-                const email = c.properties?.email || '';
-                return (
-                  <Box key={c.id} id={`dtu-row-${c.id}`} sx={{ display: 'flex', alignItems: 'center', py: 0.75, borderBottom: '1px solid #f3f4f6', gap: 1.5 }}>
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>{name}</Typography>
-                      {email && <Typography variant="caption" color="text.secondary">{email}</Typography>}
-                    </Box>
-                  </Box>
-                );
-              })}
-            </Box>
-          </CardContent>
-        </Card>
-      )}
     </Stack>
   );
 }

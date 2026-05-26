@@ -16,30 +16,6 @@ const DEV_ONLY_FEATURES: Array<{
   description: React.ReactNode;
 }> = [
   {
-    name: 'Dev test users',
-    location: 'Settings tab',
-    description: (
-      <>
-        A contact-by-contact toggle that marks individual HubSpot contacts as test data by setting
-        the <code className="adm-inline-code">hw_test_user</code> property. Excluded from
-        production because test-data labelling is only relevant during development and automated
-        testing — it should never be surfaced to a production admin.
-      </>
-    ),
-  },
-  {
-    name: 'Dev filter toggle',
-    location: 'Settings tab',
-    description: (
-      <>
-        A global on/off switch that limits all contact views to test users only (those with{' '}
-        <code className="adm-inline-code">hw_test_user = true</code>). Excluded from production
-        because real contact lists must never be filtered to test data only — enabling it in
-        production would hide all real customers from every view.
-      </>
-    ),
-  },
-  {
     name: 'Seed contacts cache',
     location: 'Internal API only',
     description: (
@@ -63,19 +39,6 @@ const DEV_ONLY_FEATURES: Array<{
         fresh HubSpot scan. Excluded from production because forcibly invalidating the shared cache
         in a live environment would cause unnecessary load on HubSpot and degrade response times
         for all users.
-      </>
-    ),
-  },
-  {
-    name: 'Backfill hw_test_user defaults',
-    location: 'Settings tab',
-    description: (
-      <>
-        A one-time API action that sets{' '}
-        <code className="adm-inline-code">hw_test_user = false</code> on all HubSpot contacts that
-        have no value for the property. Excluded from production because this mass-write
-        operation is only needed during initial development setup and would be a destructive
-        no-op against a live contact database.
       </>
     ),
   },
