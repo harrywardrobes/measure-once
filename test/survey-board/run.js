@@ -13,6 +13,8 @@
 //   (E) Filter button opens the substage popover; unchecking a substage hides
 //       matching cards; re-checking the substage shows them again
 //   (F) Action strip renders when cardActionHandlerFor returns a handler
+//   (F.2) Clicking the action strip fires dispatchCardActionHandler with the
+//       correct handler id and contact id
 //   (G) Snackbar visibility pause — refresh-failure Snackbar stays visible when
 //       the tab is hidden (timer paused), then dismisses after tab returns
 //   (H) Bootstrap-failure error state — dispatching 'survey-board-bootstrap-failed'
@@ -789,6 +791,7 @@ async function main() {
 
         if (!opened.cardReady) {
           record('(F) Action strip renders when handler configured', 'strip visible', 'timed out', false);
+          record('(F.2) Clicking the action strip opens the handler modal (show_message type) with contactId=sv-test-001', 'modal .cah-backdrop appears; data-card-action-contact-id=sv-test-001', 'skipped — card not ready', false);
         } else {
           // Dispatch a second event so React re-renders with the updated
           // cardActionHandlerFor function that was injected by seedSurveyBoard.
@@ -811,6 +814,93 @@ async function main() {
             stripInfo.found ? `text="${stripInfo.text}"` : 'strip not found in DOM',
             stripInfo.found && (stripInfo.text || '').includes('Book Survey'),
           );
+
+          // ── (F.2) Click the strip — verify the delegated listener opens a modal ─
+          // The capture-phase delegated listener in card-action-handlers.js calls
+          // the lexical dispatchCardActionHandler (inside the IIFE closure), so a
+          // window-level spy cannot intercept it.  Instead we re-seed with a
+          // 'show_message' handler type that the listener natively handles by
+          // calling openMessagePopup → a visible .cah-backdrop .cah-modal.
+          // Observing that modal appear is the real, correct proof that the click
+          // wiring in SurveyCard reaches the delegated listener end-to-end.
+          // We also assert data-card-action-contact-id on the strip is correct.
+          if (stripInfo.found) {
+            // Re-seed: swap handler type to 'show_message' so the delegated
+            // listener routes to openMessagePopup and opens a visible modal.
+            await page.evaluate(
+              ({ contacts, cache, workflow, lsOptions }) => {
+                window.state                   = window.state || {};
+                window.state.filteredContacts  = contacts;
+                window.state.contactStageCache = cache;
+                window.state.workflow          = workflow;
+                window.state.user              = { privilege_level: 'admin' };
+                window.LEAD_STATUS_OPTIONS     = lsOptions;
+                window.LEAD_SUBSTATUSES        = [];
+                window.cardActionHandlerFor = () => ({
+                  id: 999,
+                  type: 'show_message',
+                  config: { action_name: 'test_action', message: 'F2 click-wiring test' },
+                  bindings: [],
+                });
+                window.stageOrLeadStatusActionLabel = () => '';
+                window.substatusActionLabelLookup   = () => '';
+                document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
+              },
+              { contacts: CONTACTS, cache: CONTACT_STAGE_CACHE, workflow: WORKFLOW, lsOptions: LEAD_STATUS_OPTIONS },
+            );
+            await new Promise(r => setTimeout(r, 800));
+
+            // Read the strip's contact-id attribute before clicking.
+            const stripAttrs = await page.evaluate(() => {
+              const strip = document.querySelector('[data-card-action-handler-id="999"]');
+              if (!strip) return { found: false };
+              return {
+                found: true,
+                contactId:   strip.dataset.cardActionContactId   || '',
+                handlerType: strip.dataset.cardActionHandlerType || '',
+              };
+            });
+
+            if (!stripAttrs.found) {
+              record(
+                '(F.2) Clicking the action strip opens the handler modal (show_message type) with contactId=sv-test-001',
+                'modal .cah-backdrop appears; data-card-action-contact-id=sv-test-001',
+                'skipped — strip not found after show_message re-seed',
+                false,
+              );
+            } else {
+              // Click and poll for the modal to appear.
+              await page.evaluate(() => {
+                const strip = document.querySelector('[data-card-action-handler-id="999"]');
+                if (strip) strip.click();
+              });
+
+              const modalAppeared = await pollPage(page, () => {
+                const m = document.querySelector('.cah-backdrop .cah-modal');
+                return m ? 'visible' : null;
+              }, null, 4000);
+
+              // Clean up the modal so it does not interfere with probes G and H.
+              await page.evaluate(() => {
+                const bd = document.querySelector('.cah-backdrop');
+                if (bd) bd.remove();
+              });
+
+              record(
+                '(F.2) Clicking the action strip opens the handler modal (show_message type) with contactId=sv-test-001',
+                'modal .cah-backdrop appears; data-card-action-contact-id=sv-test-001',
+                `contactId=${stripAttrs.contactId} modalAppeared=${modalAppeared}`,
+                modalAppeared === 'visible' && stripAttrs.contactId === 'sv-test-001',
+              );
+            }
+          } else {
+            record(
+              '(F.2) Clicking the action strip opens the handler modal (show_message type) with contactId=sv-test-001',
+              'modal .cah-backdrop appears; data-card-action-contact-id=sv-test-001',
+              'skipped — strip not found by (F)',
+              false,
+            );
+          }
         }
       } catch (e) {
         record('(F) Action strip', 'no error', `error: ${e.message}`, false, e.stack || '');
@@ -1261,6 +1351,13 @@ async function writeReport(findings) {
     '- **(F)** Action strip: when `cardActionHandlerFor` returns a handler with',
     '  `action_name: \'book_survey\'`, the `[data-card-action-handler-id]` element',
     '  is present and shows "Book Survey" text',
+    '- **(F.2)** Action strip click: after re-seeding with a `show_message` handler (type',
+    '  the delegated listener in `card-action-handlers.js` natively routes to',
+    '  `openMessagePopup`), clicking the `[data-card-action-handler-id]` strip opens a',
+    '  `.cah-backdrop .cah-modal` in the DOM. Observing the modal proves the click wiring',
+    '  in SurveyCard → delegated listener → modal is intact end-to-end. The',
+    '  `data-card-action-contact-id` attribute on the strip is also asserted to equal',
+    '  `sv-test-001`. The modal is removed after the assertion to keep later probes clean.',
     '- **(G)** Snackbar visibility pause: dispatching `survey-board-bg-refresh-failed`',
     '  shows the warning Snackbar; simulating tab-hide proves the MUI',
     '  autoHideDuration timer is paused (Snackbar still visible after 9.5 s > 8 s),',
