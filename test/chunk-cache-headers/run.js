@@ -6,12 +6,16 @@
 //
 // Probes
 // ──────
-// [CHUNK]   GET /react/chunks/<hashed-chunk>.js
-//           → Cache-Control must contain "immutable"
-// [ASSETS]  GET /react/assets/<hashed-asset>.js  (if any exist in the build)
-//           → Cache-Control must contain "immutable"
-// [MAIN]    GET /react/main.js
-//           → Cache-Control must NOT contain "immutable"
+// [CHUNK]      GET /react/chunks/<hashed-chunk>.js
+//              → Cache-Control must contain "immutable"
+// [ASSETS]     GET /react/assets/<hashed-asset>.js  (if any exist in the build)
+//              → Cache-Control must contain "immutable"
+// [ASSETS-CSS] GET /react/assets/<hashed-asset>.css (if any exist in the build)
+//              → Cache-Control must contain "immutable"
+// [ASSETS-FONT] GET /react/assets/<hashed-font>.<ext> (if any exist in the build)
+//              → Cache-Control must contain "immutable"
+// [MAIN]       GET /react/main.js
+//              → Cache-Control must NOT contain "immutable"
 //
 // No Puppeteer, no seed users, no database writes needed.
 // The static-file routes are mounted before authentication, so GET requests
@@ -39,11 +43,26 @@ const REPORT_PATH = path.join(
 const CHUNKS_DIR = path.join(__dirname, '..', '..', 'public', 'react', 'chunks');
 const ASSETS_DIR = path.join(__dirname, '..', '..', 'public', 'react', 'assets');
 
+const FONT_EXTENSIONS = ['.woff2', '.woff', '.ttf', '.otf', '.eot'];
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function firstJsFile(dir) {
+function firstFileByExt(dir, ext) {
   try {
-    const entries = fs.readdirSync(dir).filter(f => f.endsWith('.js') && !f.endsWith('.map'));
+    const entries = fs.readdirSync(dir).filter(
+      f => f.endsWith(ext) && !f.endsWith('.map')
+    );
+    return entries.length > 0 ? entries[0] : null;
+  } catch {
+    return null;
+  }
+}
+
+function firstFontFile(dir) {
+  try {
+    const entries = fs.readdirSync(dir).filter(
+      f => FONT_EXTENSIONS.some(ext => f.endsWith(ext)) && !f.endsWith('.map')
+    );
     return entries.length > 0 ? entries[0] : null;
   } catch {
     return null;
@@ -74,8 +93,10 @@ async function main() {
 
   try {
     // ── preflight: verify build output exists ─────────────────────────────────
-    const chunkFile  = firstJsFile(CHUNKS_DIR);
-    const assetsFile = firstJsFile(ASSETS_DIR);
+    const chunkFile   = firstFileByExt(CHUNKS_DIR, '.js');
+    const assetsFile  = firstFileByExt(ASSETS_DIR, '.js');
+    const cssFile     = firstFileByExt(ASSETS_DIR, '.css');
+    const fontFile    = firstFontFile(ASSETS_DIR);
 
     if (!chunkFile) {
       console.error('[chunk-cache-headers] No .js files found in public/react/chunks/.');
@@ -99,7 +120,7 @@ async function main() {
       );
     }
 
-    // ── [ASSETS] hashed asset → must have immutable (if present) ─────────────
+    // ── [ASSETS] hashed asset JS → must have immutable (if present) ───────────
     if (assetsFile) {
       const url = `${BASE}/react/assets/${assetsFile}`;
       const { status, cacheControl } = await headRequest(url);
@@ -111,6 +132,34 @@ async function main() {
       );
     } else {
       console.log('[SKIP] [ASSETS] No .js files found in public/react/assets/ — skipped');
+    }
+
+    // ── [ASSETS-CSS] hashed CSS → must have immutable (if present) ───────────
+    if (cssFile) {
+      const url = `${BASE}/react/assets/${cssFile}`;
+      const { status, cacheControl } = await headRequest(url);
+      const hasImmutable = cacheControl.includes('immutable');
+      record(
+        'ASSETS-CSS', url,
+        status === 200 && hasImmutable,
+        `status=${status} Cache-Control="${cacheControl}" → immutable=${hasImmutable}`,
+      );
+    } else {
+      console.log('[SKIP] [ASSETS-CSS] No .css files found in public/react/assets/ — skipped');
+    }
+
+    // ── [ASSETS-FONT] hashed font → must have immutable (if present) ─────────
+    if (fontFile) {
+      const url = `${BASE}/react/assets/${fontFile}`;
+      const { status, cacheControl } = await headRequest(url);
+      const hasImmutable = cacheControl.includes('immutable');
+      record(
+        'ASSETS-FONT', url,
+        status === 200 && hasImmutable,
+        `status=${status} Cache-Control="${cacheControl}" → immutable=${hasImmutable}`,
+      );
+    } else {
+      console.log('[SKIP] [ASSETS-FONT] No font files found in public/react/assets/ — skipped');
     }
 
     // ── [MAIN] stable entry point → must NOT have immutable ──────────────────
@@ -132,8 +181,9 @@ async function main() {
   const lines = [
     '# chunk-cache-headers',
     '',
-    'Verifies that hashed React chunks are served with `immutable` Cache-Control',
-    'and that the stable `main.js` entry point is NOT served as immutable.',
+    'Verifies that hashed React chunks, assets, CSS files, and font files are',
+    'served with `immutable` Cache-Control, and that the stable `main.js` entry',
+    'point is NOT served as immutable.',
     '',
     '| probe | url | result | detail |',
     '| ----- | --- | ------ | ------ |',
