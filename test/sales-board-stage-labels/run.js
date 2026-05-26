@@ -391,6 +391,24 @@ async function main() {
       return;
     }
 
+    // Install spies for window.loadWorkflow and window.loadLeadStatuses so the
+    // test can assert that the re-fetch is triggered (not just forceUpdate).
+    // The SalesBoardPage refresh() function calls both via Promise.all before
+    // calling forceUpdate(), so without them the label update in production
+    // would read stale data cached from before the rename.
+    await salesTab.evaluate(() => {
+      window.__spyLoadWorkflow = 0;
+      window.__spyLoadLeadStatuses = 0;
+      window.loadWorkflow = () => {
+        window.__spyLoadWorkflow++;
+        return Promise.resolve();
+      };
+      window.loadLeadStatuses = () => {
+        window.__spyLoadLeadStatuses++;
+        return Promise.resolve();
+      };
+    });
+
     // Update the workflow label in the sales tab (simulates a background data
     // refresh that would occur after the admin renames a workflow stage).
     await updateSalesLabel(salesTab, LABEL_SALES_BC);
@@ -408,8 +426,9 @@ async function main() {
       new BroadcastChannel('lead_statuses_changed').postMessage('changed');
     });
 
-    // The BroadcastChannel listener in SalesBoardPage calls forceUpdate()
-    // which increments `tick`, causing a re-render that re-reads
+    // The BroadcastChannel listener in SalesBoardPage calls loadWorkflow() +
+    // loadLeadStatuses() via Promise.all, then forceUpdate() which increments
+    // `tick`, causing a re-render that re-reads
     // window.state.workflow.stages.sales.label.
     const bcUpdated = await waitForColumnText(salesTab, LABEL_SALES_BC, 8000);
     const textsAfterBc = await getColumnTexts(salesTab);
@@ -418,6 +437,28 @@ async function main() {
       `text "${LABEL_SALES_BC}" visible within 8 s`,
       `found=${bcUpdated} texts: ${JSON.stringify(textsAfterBc.slice(0, 8))}`,
       bcUpdated,
+    );
+
+    // Assert that the re-fetch functions were called — this guards the specific
+    // fix from task #983. If a future refactor removes the loadWorkflow() /
+    // loadLeadStatuses() calls and only keeps forceUpdate(), these assertions
+    // will catch the regression (the spies return Promise.resolve() so the
+    // component still renders; the spy counts reveal the missing calls).
+    const bcSpyCounts = await salesTab.evaluate(() => ({
+      loadWorkflow:     window.__spyLoadWorkflow     || 0,
+      loadLeadStatuses: window.__spyLoadLeadStatuses || 0,
+    }));
+    record(
+      'loadWorkflow called during BroadcastChannel refresh (task #983 re-fetch guard)',
+      'window.loadWorkflow called ≥ 1 time',
+      `called ${bcSpyCounts.loadWorkflow} time(s)`,
+      bcSpyCounts.loadWorkflow >= 1,
+    );
+    record(
+      'loadLeadStatuses called during BroadcastChannel refresh (task #983 re-fetch guard)',
+      'window.loadLeadStatuses called ≥ 1 time',
+      `called ${bcSpyCounts.loadLeadStatuses} time(s)`,
+      bcSpyCounts.loadLeadStatuses >= 1,
     );
 
     const staleGone = !textsAfterBc.includes(LABEL_SALES_ORIG);
@@ -473,6 +514,21 @@ async function main() {
     );
 
     if (preVisVisible) {
+      // Install spies before triggering the visibilitychange event so we can
+      // confirm loadWorkflow and loadLeadStatuses are called in that path too.
+      await visTab.evaluate(() => {
+        window.__spyLoadWorkflow = 0;
+        window.__spyLoadLeadStatuses = 0;
+        window.loadWorkflow = () => {
+          window.__spyLoadWorkflow++;
+          return Promise.resolve();
+        };
+        window.loadLeadStatuses = () => {
+          window.__spyLoadLeadStatuses++;
+          return Promise.resolve();
+        };
+      });
+
       // Update the workflow label without firing an event (the component
       // should only pick it up on the next visibilitychange→visible transition).
       await updateSalesLabel(visTab, LABEL_SALES_VIS);
@@ -506,6 +562,25 @@ async function main() {
         `text "${LABEL_SALES_VIS}" visible within 8 s`,
         `found=${visUpdated} texts: ${JSON.stringify(textsAfterVis.slice(0, 8))}`,
         visUpdated,
+      );
+
+      // Spy assertions for the visibilitychange path — mirrors the BC check
+      // above and guards the same task #983 re-fetch requirement.
+      const visSpyCounts = await visTab.evaluate(() => ({
+        loadWorkflow:     window.__spyLoadWorkflow     || 0,
+        loadLeadStatuses: window.__spyLoadLeadStatuses || 0,
+      }));
+      record(
+        'loadWorkflow called during visibilitychange refresh (task #983 re-fetch guard)',
+        'window.loadWorkflow called ≥ 1 time',
+        `called ${visSpyCounts.loadWorkflow} time(s)`,
+        visSpyCounts.loadWorkflow >= 1,
+      );
+      record(
+        'loadLeadStatuses called during visibilitychange refresh (task #983 re-fetch guard)',
+        'window.loadLeadStatuses called ≥ 1 time',
+        `called ${visSpyCounts.loadLeadStatuses} time(s)`,
+        visSpyCounts.loadLeadStatuses >= 1,
       );
 
       const staleAfterVis = textsAfterVis.includes(LABEL_SALES_BC);
@@ -572,16 +647,19 @@ async function writeReport(runId, findings) {
     '  `window.__reactIslandMount()` to remount `SalesBoardPage`, then seeds',
     '  `window.state.workflow` with known stage labels and dispatches',
     '  `sales-board-data-ready`.',
-    '- **(A) BroadcastChannel path**: updates `state.workflow.stages.sales.label`',
-    '  in the sales tab, posts `lead_statuses_changed` from a second same-browser',
-    '  tab, and asserts the column header reflects the updated label within 8 s.',
-    '  Exercises the `new BroadcastChannel("lead_statuses_changed")` listener in',
-    '  `SalesBoardPage` that calls `forceUpdate()`. Also verifies the stale label',
-    '  is gone and `window.__noReloadProof` is preserved (no page reload).',
-    '- **(B) visibilitychange path**: updates `state.workflow.stages.sales.label`,',
-    '  synthesises a hidden→visible visibilitychange event, and asserts the',
-    '  column header updates — exercising the `visibilitychange` handler in',
-    '  `SalesBoardPage` that also calls `forceUpdate()`.',
+    '- **(A) BroadcastChannel path**: installs `window.loadWorkflow` and',
+    '  `window.loadLeadStatuses` spies, updates',
+    '  `state.workflow.stages.sales.label`, posts `lead_statuses_changed` from',
+    '  a second same-browser tab, and asserts: (1) the column header reflects',
+    '  the updated label within 8 s; (2) both spy call-counts are ≥ 1 (guards',
+    '  the task #983 re-fetch requirement). Also verifies the stale label is',
+    '  gone and `window.__noReloadProof` is preserved (no page reload).',
+    '- **(B) visibilitychange path**: installs the same spies, updates',
+    '  `state.workflow.stages.sales.label`, synthesises a hidden→visible',
+    '  visibilitychange event, and asserts (1) the column header updates and',
+    '  (2) both spy call-counts are ≥ 1 — exercising the `visibilitychange`',
+    '  handler in `SalesBoardPage` that calls `loadWorkflow()` +',
+    '  `loadLeadStatuses()` then `forceUpdate()`.',
   ];
   const report = lines.join('\n') + '\n';
   const outFile = path.join(dir, 'sales-board-stage-labels.md');
