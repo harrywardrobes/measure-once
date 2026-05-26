@@ -31,11 +31,17 @@
 /* ── Reset ───────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
+/* The AppBar inside #app-header-mount is position:fixed (out of flow), leaving
+   the mount div at 0 height. overflow:hidden prevents margin-collapse between
+   it and adjacent content blocks. */
+#app-header-mount { height: 0; overflow: hidden; }
+
 /* ── Global utility ──────────────────────────────────────────────────────────── */
 /* Mirrors Tailwind's .hidden so non-Tailwind pages (e.g. admin.html) honour it. */
 .hidden { display: none; }
 
 body {
+  margin: 0;
   font-family: 'Open Sans', system-ui, sans-serif;
   background: var(--paper);
   color: var(--ink-1);
