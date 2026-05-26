@@ -26,6 +26,7 @@
 //   PRIVTEST_ALLOW_SHARED_DB=1 npm run test:duplicate-phone-warnings
 
 const fs   = require('fs');
+const http = require('http');
 const path = require('path');
 const { Pool } = require('pg');
 
@@ -62,6 +63,56 @@ const TEAM_DUP_LAST      = 'DupPhoneTeam';
 
 const TRADES_COMPANY_A   = 'PrivTest Dup-Phone Co A';
 const TRADES_COMPANY_B   = 'PrivTest Dup-Phone Co B';
+
+const CUSTOMER_LABEL     = 'PrivTest Customer Phone';
+const CUSTOMER_CONTACT_ID = 'privtest-dupphone-cust-001';
+
+// ── mock HubSpot server ───────────────────────────────────────────────────────
+// Minimal mock that serves POST /crm/v3/objects/contacts/search so
+// getSharedContactsCache() (used by GET /api/admin/phone-directory) returns
+// a seeded customer with CUSTOMER_DUP_PHONE.  All other endpoints return {}.
+function startMockHubspot(customerPhone, contactId, label) {
+  const [firstname, ...rest] = (label || 'PrivTest Customer').split(' ');
+  const lastname = rest.join(' ') || '';
+  const fixture = {
+    id: contactId,
+    properties: {
+      firstname,
+      lastname,
+      email: `${contactId}@privtest.invalid`,
+      phone: customerPhone,
+      mobilephone: '',
+    },
+  };
+
+  const server = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', c => (raw += c));
+    req.on('end', () => {
+      const url = req.url.split('?')[0];
+      if (req.method === 'POST' && url === '/crm/v3/objects/contacts/search') {
+        let body = {};
+        try { body = raw ? JSON.parse(raw) : {}; } catch {}
+        const requestedProps = Array.isArray(body.properties) ? body.properties : [];
+        const props = fixture.properties || {};
+        const filteredProps = requestedProps.length > 0
+          ? Object.fromEntries(requestedProps.map(p => [p, props[p] ?? '']))
+          : props;
+        const result = { id: fixture.id, properties: filteredProps };
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ results: [result], paging: null }));
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({}));
+    });
+  });
+
+  return new Promise(resolve => {
+    server.listen(0, '127.0.0.1', () => {
+      resolve({ server, port: server.address().port });
+    });
+  });
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function parseCookieKV(jar) {
@@ -188,11 +239,12 @@ async function main() {
   }
 
   const runId = Math.random().toString(36).slice(2, 8);
-  const TEAM_DUP_PHONE   = '0' + uniqueDigits(runId, 'team');     // 10 digits
-  const TRADES_DUP_PHONE = '0' + uniqueDigits(runId, 'trades');   // 10 digits
-  const TRADES_CO_PHONE  = '0' + uniqueDigits(runId, 'trades-co'); // 10 digits — for company-phone conflict
+  const TEAM_DUP_PHONE    = '0' + uniqueDigits(runId, 'team');      // 10 digits
+  const TRADES_DUP_PHONE  = '0' + uniqueDigits(runId, 'trades');    // 10 digits
+  const TRADES_CO_PHONE   = '0' + uniqueDigits(runId, 'trades-co'); // 10 digits — for company-phone conflict
+  const CUSTOMER_DUP_PHONE = '0' + uniqueDigits(runId, 'customer'); // 10 digits — for customer cross-section conflict
   console.log(`\n  duplicate-phone-warnings E2E  run=${runId}`);
-  console.log(`  Phones  team=${TEAM_DUP_PHONE}  trades=${TRADES_DUP_PHONE}  trades-co=${TRADES_CO_PHONE}`);
+  console.log(`  Phones  team=${TEAM_DUP_PHONE}  trades=${TRADES_DUP_PHONE}  trades-co=${TRADES_CO_PHONE}  customer=${CUSTOMER_DUP_PHONE}`);
   console.log(`  Using ${hasTestDb ? 'DATABASE_URL_TEST (isolated)' : 'shared DATABASE_URL (PRIVTEST_ALLOW_SHARED_DB=1)'}`);
 
   const pool = new Pool({ connectionString: connStr });
@@ -204,7 +256,18 @@ async function main() {
   const users = await seedUsers(pool, runId);
   console.log(`  Seeded users  admin=${users.admin.email}`);
 
-  const { child, logBuf } = spawnServer();
+  // Start a mock HubSpot server so the phone-directory customers section is
+  // populated with the seeded customer.  This lets the Trades modal show a
+  // cross-section conflict when the user types CUSTOMER_DUP_PHONE.
+  const mockHubspot = await startMockHubspot(CUSTOMER_DUP_PHONE, CUSTOMER_CONTACT_ID, CUSTOMER_LABEL);
+  console.log(`  Mock HubSpot on http://127.0.0.1:${mockHubspot.port}`);
+
+  const { child, logBuf } = spawnServer({
+    extraEnv: {
+      HUBSPOT_TOKEN:  'privtest-mock-hs-token',
+      HUBSPOT_API_URL: `http://127.0.0.1:${mockHubspot.port}`,
+    },
+  });
   let exited = false;
   child.on('exit', () => { exited = true; });
 
@@ -225,6 +288,7 @@ async function main() {
     if (teardownInFlight) return;
     teardownInFlight = true;
     try { if (!exited) child.kill('SIGTERM'); } catch {}
+    try { mockHubspot.server.close(); } catch {}
     try {
       await purgeFixtures(pool);
       await cleanupTestData(pool);
@@ -328,6 +392,23 @@ async function main() {
       `A=${TRADES_COMPANY_A} contact.phone=${TRADES_DUP_PHONE}, B=${TRADES_COMPANY_B} present`,
       `status=${r.status} bothPresent=${bothPresent} aHasContactPhone=${aHasContactPhone}`,
       bothPresent && aHasContactPhone,
+    );
+  }
+  {
+    const r = await adminClient.get('/api/admin/phone-directory');
+    const custHit = r.status === 200
+      && r.json
+      && Array.isArray(r.json.customers)
+      && r.json.customers.some(c =>
+          String(c.contactId) === CUSTOMER_CONTACT_ID
+          && c.phone === CUSTOMER_DUP_PHONE
+          && c.label === CUSTOMER_LABEL,
+        );
+    record(
+      'API: GET /api/admin/phone-directory includes the seeded customer entry',
+      `customers entry contactId=${CUSTOMER_CONTACT_ID} phone=${CUSTOMER_DUP_PHONE} label="${CUSTOMER_LABEL}"`,
+      `status=${r.status} found=${custHit}`,
+      custHit,
     );
   }
 
@@ -1193,6 +1274,200 @@ async function main() {
 
       await page.close();
     }
+
+    // ── (TRADES CUSTOMER – company-phone) type customer phone into #tf-company-phone ──
+    // Verifies the cross-section customer conflict path: a phone number that
+    // belongs to a HubSpot customer shows the customer conflict notice (naming
+    // the customer and linking to /customers/:id) inside #tf-company-phone-notice.
+    {
+      const page = await browser.newPage();
+      await page.setCacheEnabled(false);
+      page.on('pageerror', (e) => console.log('    [trades-cust-cophone pageerror]', String(e).slice(0, 200)));
+      await injectSession(page, adminClient.cookie);
+      await page.goto(`${BASE}/trades`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+
+      // Wait for trades list and phone directory to load (React TradesPage fetches
+      // /api/admin/phone-directory in a useEffect).
+      const loaded = await pollPage(page, () => {
+        const list = window._cpGetTradeContacts && window._cpGetTradeContacts();
+        return Array.isArray(list) && list.length >= 2;
+      }, null, 8000);
+      record(
+        'TRADES CUSTOMER CO-PHONE: /trades page loads with at least the seeded companies',
+        '_cpGetTradeContacts() returns >=2 entries',
+        `loaded=${!!loaded}`,
+        !!loaded,
+      );
+
+      // Allow the phone-directory fetch to complete (it runs concurrently with
+      // the trades list fetch, so an extra tick may be needed).
+      await new Promise(r => setTimeout(r, 800));
+
+      // Open the modal in Add Company mode.
+      await pollPage(page, () => typeof window.openTradesModal === 'function', null, 8000);
+      await page.evaluate(() => { window.openTradesModal(); });
+      const modalOpen = await pollPage(page, () => {
+        const m     = document.getElementById('trades-modal');
+        const input = document.getElementById('tf-company-phone');
+        return !!(m && m.classList.contains('trades-modal-open') && input);
+      }, null, 2000);
+      record(
+        'TRADES CUSTOMER CO-PHONE: openTradesModal() opens the modal with #tf-company-phone',
+        '#trades-modal.trades-modal-open and #tf-company-phone present',
+        `ready=${modalOpen}`,
+        modalOpen,
+      );
+
+      // Type the customer's phone into the company-phone field.
+      await setDialogInput(page, '#tf-company-phone', CUSTOMER_DUP_PHONE);
+
+      // Allow the debounce to resolve and the React state to update.
+      const noticeShown = await pollPage(page, () => {
+        const n = document.getElementById('tf-company-phone-notice');
+        if (!n || n.classList.contains('hidden')) return null;
+        const alert = n.querySelector('.MuiAlert-root');
+        return alert ? { text: (alert.textContent || '').trim() } : null;
+      }, null, 4000);
+      const custLabel = CUSTOMER_LABEL;
+      const noticeOk = !!noticeShown
+        && /phone number is already in use/i.test(noticeShown.text)
+        && new RegExp(custLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(noticeShown.text);
+      record(
+        'TRADES CUSTOMER CO-PHONE: #tf-company-phone-notice shows customer conflict alert naming the customer',
+        `MuiAlert inside #tf-company-phone-notice mentioning "phone number is already in use" + "${custLabel}"`,
+        noticeShown
+          ? `text=${JSON.stringify(noticeShown.text.slice(0, 200))}`
+          : 'no alert visible',
+        noticeOk,
+      );
+
+      // The notice should contain a link to /customers/:id.
+      const linkHref = await page.evaluate(() => {
+        const n = document.getElementById('tf-company-phone-notice');
+        if (!n || n.classList.contains('hidden')) return null;
+        const a = n.querySelector('a[href]');
+        return a ? a.getAttribute('href') : null;
+      });
+      const expectedHref = `/customers/${encodeURIComponent(CUSTOMER_CONTACT_ID)}`;
+      record(
+        'TRADES CUSTOMER CO-PHONE: customer conflict notice links to /customers/:id',
+        `<a href="${expectedHref}"> inside #tf-company-phone-notice`,
+        `href=${linkHref}`,
+        linkHref === expectedHref,
+      );
+
+      // Submit button must be disabled while the customer conflict stands.
+      const submitDisabledCust = await page.evaluate(() => {
+        const btn = document.getElementById('trades-submit-btn');
+        return btn ? btn.disabled : null;
+      });
+      record(
+        'TRADES CUSTOMER CO-PHONE: #trades-submit-btn is disabled while customer phone conflict stands',
+        'button.disabled === true',
+        `disabled=${submitDisabledCust}`,
+        submitDisabledCust === true,
+      );
+
+      // Clear the customer phone — notice must hide and submit must re-enable.
+      await setDialogInput(page, '#tf-company-phone', '');
+      const noticeClearedCust = await pollPage(page, () => {
+        const n = document.getElementById('tf-company-phone-notice');
+        return n ? n.classList.contains('hidden') : true;
+      }, null, 3000);
+      record(
+        'TRADES CUSTOMER CO-PHONE: #tf-company-phone-notice hides after clearing the customer phone',
+        '#tf-company-phone-notice has class "hidden"',
+        noticeClearedCust ? 'notice hidden' : 'notice still visible',
+        noticeClearedCust === true,
+      );
+
+      const submitReenabledCust = await page.evaluate(() => {
+        const btn = document.getElementById('trades-submit-btn');
+        return btn ? !btn.disabled : null;
+      });
+      record(
+        'TRADES CUSTOMER CO-PHONE: #trades-submit-btn re-enables after clearing the customer phone',
+        'button.disabled === false',
+        submitReenabledCust === null ? 'no button' : `disabled=${!submitReenabledCust}`,
+        submitReenabledCust === true,
+      );
+
+      await page.close();
+    }
+
+    // ── (TRADES CUSTOMER – contact-phone) type customer phone into #tf-cphone-0 ─
+    // Verifies the same cross-section path via the per-contact-slot phone field.
+    {
+      const page = await browser.newPage();
+      await page.setCacheEnabled(false);
+      page.on('pageerror', (e) => console.log('    [trades-cust-cphone pageerror]', String(e).slice(0, 200)));
+      await injectSession(page, adminClient.cookie);
+      await page.goto(`${BASE}/trades`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+
+      const loaded = await pollPage(page, () => {
+        const list = window._cpGetTradeContacts && window._cpGetTradeContacts();
+        return Array.isArray(list) && list.length >= 2;
+      }, null, 8000);
+      record(
+        'TRADES CUSTOMER CONTACT-PHONE: /trades page loads with at least the seeded companies',
+        '_cpGetTradeContacts() returns >=2 entries',
+        `loaded=${!!loaded}`,
+        !!loaded,
+      );
+
+      // Allow phone-directory fetch to settle.
+      await new Promise(r => setTimeout(r, 800));
+
+      // Open the modal in Add Company mode.
+      await pollPage(page, () => typeof window.openTradesModal === 'function', null, 8000);
+      await page.evaluate(() => { window.openTradesModal(); });
+      const modalOpen = await pollPage(page, () => {
+        const m = document.getElementById('trades-modal');
+        const input = document.getElementById('tf-cphone-0');
+        return !!(m && m.classList.contains('trades-modal-open') && input);
+      }, null, 2000);
+      record(
+        'TRADES CUSTOMER CONTACT-PHONE: openTradesModal() opens the modal with #tf-cphone-0',
+        '#trades-modal.trades-modal-open and #tf-cphone-0 present',
+        `ready=${modalOpen}`,
+        modalOpen,
+      );
+
+      // Type the customer's phone into the first contact-slot phone field.
+      await setDialogInput(page, '#tf-cphone-0', CUSTOMER_DUP_PHONE);
+
+      const noticeShown = await pollPage(page, () => {
+        const n = document.getElementById('tf-cphone-notice-0');
+        if (!n || n.classList.contains('hidden')) return null;
+        const alert = n.querySelector('.MuiAlert-root');
+        return alert ? { text: (alert.textContent || '').trim() } : null;
+      }, null, 4000);
+      const noticeOk = !!noticeShown
+        && /phone number is already in use/i.test(noticeShown.text)
+        && new RegExp(CUSTOMER_LABEL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(noticeShown.text);
+      record(
+        'TRADES CUSTOMER CONTACT-PHONE: #tf-cphone-notice-0 shows customer conflict alert naming the customer',
+        `MuiAlert inside #tf-cphone-notice-0 mentioning "phone number is already in use" + "${CUSTOMER_LABEL}"`,
+        noticeShown
+          ? `text=${JSON.stringify(noticeShown.text.slice(0, 200))}`
+          : 'no alert visible',
+        noticeOk,
+      );
+
+      // Submit button must be disabled while the customer contact-phone conflict stands.
+      const submitDisabled = await page.evaluate(() => {
+        const btn = document.getElementById('trades-submit-btn');
+        return btn ? btn.disabled : null;
+      });
+      record(
+        'TRADES CUSTOMER CONTACT-PHONE: #trades-submit-btn is disabled while customer conflict stands',
+        'button.disabled === true',
+        `disabled=${submitDisabled}`,
+        submitDisabled === true,
+      );
+
+      await page.close();
+    }
   } catch (e) {
     record('uncaught harness error', 'no exception', String(e), false);
   } finally {
@@ -1265,6 +1540,20 @@ async function writeReport(runId, findings) {
     '  via `data-trade-id`, and `#trades-submit-btn` is disabled. Then clears',
     '  the field, asserts the notice hides and the button re-enables, restores',
     '  the duplicate, and asserts clicking the link re-opens Company A in Edit mode.',
+    '- **(API: phone-directory customers)** Verifies that `GET /api/admin/phone-directory`',
+    '  returns a `customers` entry for the mock HubSpot customer (`contactId`,',
+    '  `phone`, `label`) when `HUBSPOT_TOKEN` is set and the mock server returns',
+    '  the fixture contact.',
+    '- **(TRADES CUSTOMER – company-phone)** Starts a local mock HubSpot server seeded',
+    '  with a customer whose phone = `CUSTOMER_DUP_PHONE`, opens the Trades Add',
+    '  modal, types `CUSTOMER_DUP_PHONE` into `#tf-company-phone`, and asserts',
+    '  `#tf-company-phone-notice` shows an MUI Alert naming the customer,',
+    '  `#trades-submit-btn` disables, and clearing the field hides the notice and',
+    '  re-enables submit. Also verifies the notice `<a>` links to',
+    '  `/customers/:contactId`.',
+    '- **(TRADES CUSTOMER – contact-phone)** Same cross-section path exercised via the',
+    '  per-contact-slot input (`#tf-cphone-0`): asserts `#tf-cphone-notice-0`',
+    '  shows an MUI Alert naming the customer and `#trades-submit-btn` disables.',
     '',
   ];
   const outPath = path.join(dir, 'duplicate-phone-warnings.md');
