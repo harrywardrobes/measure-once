@@ -469,6 +469,7 @@ function IdeaCard({
                         <IconButton
                           size="small"
                           onClick={() => setConfirmOpen(true)}
+                          data-testid="delete-idea-btn"
                           sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}
                         >
                           <DeleteIcon fontSize="small" />

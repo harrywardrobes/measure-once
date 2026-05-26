@@ -3351,15 +3351,15 @@ app.post('/api/ideas', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `INSERT INTO ideas (author_user_id, body) VALUES ($1, $2) RETURNING id, body, created_at`,
-      [req.user.id, body]
+      [req.user.claims?.sub, body]
     );
     const idea = rows[0];
-    const u = req.user;
+    const c = req.user.claims || {};
     res.status(201).json({
       id:            idea.id,
       body:          idea.body,
       created_at:    idea.created_at,
-      author_name:   [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || 'Unknown',
+      author_name:   [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email || 'Unknown',
       comment_count: 0,
       vote_count:    0,
       user_voted:    false,
@@ -3444,15 +3444,15 @@ app.post('/api/ideas/:id/comments', async (req, res) => {
     if (!ideaCheck.rows.length) return res.status(404).json({ error: 'Idea not found.' });
     const { rows } = await pool.query(
       `INSERT INTO idea_comments (idea_id, author_user_id, body) VALUES ($1, $2, $3) RETURNING id, body, created_at`,
-      [ideaId, req.user.id, body]
+      [ideaId, req.user.claims?.sub, body]
     );
     const comment = rows[0];
-    const u = req.user;
+    const c = req.user.claims || {};
     res.status(201).json({
       id:          comment.id,
       body:        comment.body,
       created_at:  comment.created_at,
-      author_name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || 'Unknown',
+      author_name: [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email || 'Unknown',
     });
   } catch (e) {
     console.error('POST /api/ideas/:id/comments error:', e.message);
