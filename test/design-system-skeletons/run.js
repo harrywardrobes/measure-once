@@ -1,14 +1,13 @@
 'use strict';
 // test/design-system-skeletons/run.js
 //
-// End-to-end test that confirms ProfilePageSkeleton, AdminTeamPageSkeleton,
-// AdminSettingsPageSkeleton, CardActionsPageSkeleton, and
-// ActionHandlersPageSkeleton are rendered in the design system gallery
-// (DesignSystemPage → Skeletons tab) when the page is opened as an admin.
+// End-to-end test that confirms all nine page skeletons are rendered in the
+// design system gallery (DesignSystemPage → Skeletons tab) when the page is
+// opened as an admin.
 //
-// All five skeletons are rendered with `forceVisible` in DesignSystemPage, so
-// they appear immediately without any network interaction.  No request
-// interception is needed.
+// All skeletons are rendered with `forceVisible` in DesignSystemPage, so they
+// appear immediately without any network interaction.  No request interception
+// is needed.
 //
 // Strategy:
 //   1. Boot the server with the privileges harness.
@@ -16,8 +15,11 @@
 //   3. Activate the #tab-designsystem panel via switchTab('designsystem').
 //   4. Wait for DesignSystemPage to mount (Suspense chunk loads).
 //   5. Click the MUI "Skeletons" tab within the design-system page.
-//   6. Assert that the ComponentShowcase entries for ProfilePageSkeleton and
-//      AdminTeamPageSkeleton each contain at least one .MuiSkeleton-root.
+//   6. Assert that the ComponentShowcase entries for PageLoadingSkeleton,
+//      CustomersPageSkeleton, CalendarPageSkeleton, HomePageSkeleton,
+//      ProfilePageSkeleton, AdminTeamPageSkeleton, AdminSettingsPageSkeleton,
+//      CardActionsPageSkeleton, and ActionHandlersPageSkeleton each contain at
+//      least one .MuiSkeleton-root.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:design-system-skeletons
@@ -334,6 +336,50 @@ async function main() {
       !!anySkeletonAppeared,
     );
 
+    // ── PageLoadingSkeleton ───────────────────────────────────────────────
+    console.log('\n  [PageLoadingSkeleton]');
+
+    const pageLoadingCount = await skeletonCountForComponent(page, 'PageLoadingSkeleton');
+    record(
+      'PageLoadingSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+      'count > 0 inside the PageLoadingSkeleton Paper wrapper',
+      `count=${pageLoadingCount}`,
+      pageLoadingCount > 0,
+    );
+
+    // ── CustomersPageSkeleton ─────────────────────────────────────────────
+    console.log('\n  [CustomersPageSkeleton]');
+
+    const customersCount = await skeletonCountForComponent(page, 'CustomersPageSkeleton');
+    record(
+      'CustomersPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+      'count > 0 inside the CustomersPageSkeleton Paper wrapper',
+      `count=${customersCount}`,
+      customersCount > 0,
+    );
+
+    // ── CalendarPageSkeleton ──────────────────────────────────────────────
+    console.log('\n  [CalendarPageSkeleton]');
+
+    const calendarCount = await skeletonCountForComponent(page, 'CalendarPageSkeleton');
+    record(
+      'CalendarPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+      'count > 0 inside the CalendarPageSkeleton Paper wrapper',
+      `count=${calendarCount}`,
+      calendarCount > 0,
+    );
+
+    // ── HomePageSkeleton ──────────────────────────────────────────────────
+    console.log('\n  [HomePageSkeleton]');
+
+    const homeCount = await skeletonCountForComponent(page, 'HomePageSkeleton');
+    record(
+      'HomePageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+      'count > 0 inside the HomePageSkeleton Paper wrapper',
+      `count=${homeCount}`,
+      homeCount > 0,
+    );
+
     // ── ProfilePageSkeleton ───────────────────────────────────────────────
     console.log('\n  [ProfilePageSkeleton]');
 
@@ -441,11 +487,15 @@ async function writeReport(runId, findings) {
     '  `DesignSystemPage` chunk has loaded and rendered.',
     '- **(tab click)** Finds the MUI Tab button with text "Skeletons" inside the',
     '  design-system panel (distinct from the outer admin tab bar) and clicks it.',
-    '- **(ProfilePageSkeleton)** Locates the `<h3>ProfilePageSkeleton</h3>`',
+    '- **(PageLoadingSkeleton)** Locates the `<h3>PageLoadingSkeleton</h3>`',
     '  heading rendered by `ComponentShowcase`, walks up to the nearest',
     '  `.MuiPaper-root` ancestor, and asserts that `.MuiSkeleton-root` elements',
     '  are present inside it.  The skeleton renders immediately because',
     '  `DesignSystemPage` passes `forceVisible` to the component.',
+    '- **(CustomersPageSkeleton)** Same pattern for `CustomersPageSkeleton`.',
+    '- **(CalendarPageSkeleton)** Same pattern for `CalendarPageSkeleton`.',
+    '- **(HomePageSkeleton)** Same pattern for `HomePageSkeleton`.',
+    '- **(ProfilePageSkeleton)** Same pattern for `ProfilePageSkeleton`.',
     '- **(AdminTeamPageSkeleton)** Same pattern for `AdminTeamPageSkeleton`.',
     '- **(AdminSettingsPageSkeleton)** Same pattern for `AdminSettingsPageSkeleton`.',
     '- **(CardActionsPageSkeleton)** Same pattern for `CardActionsPageSkeleton`.',
@@ -456,7 +506,7 @@ async function writeReport(runId, findings) {
     '## Notes',
     '',
     '- Requires `public/react/main.js`; run `npm run build:react` first.',
-    '- No request interception is needed because all skeletons use `forceVisible`',
+    '- No request interception is needed because all showcased skeletons use `forceVisible`',
     '  and render without any API calls.',
     '- The test targets the design-system gallery showcase, not the real',
     '  page-load Suspense skeletons.',
