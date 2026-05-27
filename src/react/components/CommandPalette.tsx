@@ -7,7 +7,6 @@ import InputBase from '@mui/material/InputBase';
 import Typography from '@mui/material/Typography';
 import ButtonBase from '@mui/material/ButtonBase';
 import Avatar from '@mui/material/Avatar';
-import CircularProgress from '@mui/material/CircularProgress';
 
 import SearchIcon from '@mui/icons-material/Search';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
@@ -181,7 +180,6 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [settings, setSettings] = useState<SearchSettings | null>(getCachedSearchSettings);
-  const [settingsLoading, setSettingsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -194,19 +192,12 @@ export function CommandPalette() {
   }, []);
 
   const doOpen = useCallback(() => {
-    if (getCachedSearchSettings() === null && !settingsLoading) {
-      setSettingsLoading(true);
-      loadSearchSettings().then(data => {
-        setSettings(data);
-        setSettingsLoading(false);
-      });
-    }
     const seed = location.pathname === '/customers' && window.state?.searchQuery
       ? window.state.searchQuery : '';
     setQuery(seed);
     setOpen(true);
     setTimeout(() => inputRef.current?.focus(), 30);
-  }, [settingsLoading]);
+  }, []);
 
   const doClose = useCallback(() => {
     setOpen(false);
@@ -369,7 +360,6 @@ export function CommandPalette() {
           inputProps={{ 'aria-label': 'Command palette search', autoComplete: 'off', autoCorrect: 'off', spellCheck: false }}
           sx={{ fontSize: '0.9375rem', '& input': { py: 0.25 } }}
         />
-        {settingsLoading && <CircularProgress size={14} sx={{ color: 'text.disabled', flexShrink: 0 }} />}
         <Box
           component="kbd"
           sx={{
