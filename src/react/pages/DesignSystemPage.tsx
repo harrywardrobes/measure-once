@@ -612,6 +612,105 @@ function AccessRequestGateDemo() {
   );
 }
 
+function AccessRequestGatePageDemo() {
+  return (
+    <Box
+      sx={{
+        width: '100%',
+        maxWidth: 420,
+        mx: 'auto',
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 3,
+        overflow: 'hidden',
+        bgcolor: 'background.paper',
+        pointerEvents: 'none',
+        userSelect: 'none',
+      }}
+    >
+      <Box sx={{ px: 3, pt: 4, pb: 3 }}>
+        <Box sx={{ textAlign: 'center', mb: 3 }}>
+          <Typography
+            sx={{
+              fontFamily: "'Anton', sans-serif",
+              fontSize: '1.35rem',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: '#0f172a',
+            }}
+          >
+            Measure Once
+          </Typography>
+        </Box>
+        <Typography variant="h6" sx={{ fontWeight: 700, textAlign: 'center', mb: 0.5 }}>
+          Request access
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 3 }}>
+          Enter your details below and we'll review your request.
+        </Typography>
+        <Stack spacing={2}>
+          <TextField label="Full name" size="small" fullWidth />
+          <TextField label="Email address" type="email" size="small" fullWidth />
+          <Box
+            sx={{
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+              minHeight: 65,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: 'grey.50',
+              color: 'text.disabled',
+              fontSize: '0.8rem',
+              my: '2px',
+              gap: 1,
+            }}
+          >
+            <Box
+              component="span"
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                bgcolor: 'grey.300',
+                fontSize: '0.6rem',
+                fontWeight: 700,
+                color: 'grey.600',
+                flexShrink: 0,
+              }}
+            >
+              CF
+            </Box>
+            Turnstile CAPTCHA widget
+          </Box>
+          <Button
+            variant="contained"
+            fullWidth
+            tabIndex={-1}
+            sx={{
+              bgcolor: '#200842',
+              '&:hover': { bgcolor: '#200842' },
+              fontWeight: 700,
+            }}
+          >
+            Request access
+          </Button>
+        </Stack>
+        <Typography variant="body2" sx={{ textAlign: 'center', mt: 2.5 }} color="text.secondary">
+          Already have access?{' '}
+          <Box component="span" sx={{ color: '#200842', fontWeight: 600 }}>
+            Sign in
+          </Box>
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
 function SnackbarDemo() {
   const [open, setOpen] = useState(false);
   return (
@@ -1822,9 +1921,9 @@ if (!sessionChecked) return <LoginPageSkeleton />;`}
         <>
           <Paper variant="outlined" sx={{ p: 2.5, mb: 2 }}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Full-page error and boundary states. These pages are rendered stand-alone (no nav
-              chrome) and centred on screen. Each preview is shown in a constrained frame so it
-              does not fill the entire viewport.
+              Full-page and full-screen states — error boundaries, access gates, and auth dialogs.
+              These components render stand-alone (no nav chrome) and are centred on screen. Each
+              preview is shown in a constrained frame so it does not fill the entire viewport.
             </Typography>
           </Paper>
 
@@ -1874,6 +1973,20 @@ if (!sessionChecked) return <LoginPageSkeleton />;`}
 
 // Rendered when the user's privilege level is below the route requirement:
 <Route path="/admin" element={isAdmin ? <AdminPage /> : <AccessRestrictedPage />} />`}
+          />
+
+          <ComponentShowcase
+            name="AccessRequestGate (form view)"
+            description="Full-screen dialog shown to unauthenticated visitors who want to request access. The form collects a name and email address and includes a Cloudflare Turnstile CAPTCHA widget slot (shown as a placeholder here — the live widget is injected at runtime when a siteKey is configured). Triggered globally via a `mo:show-access-gate` CustomEvent; other view states (confirmed, email conflict, pending, already approved) are demoed in the Feedback → Dialogs section."
+            demo={<AccessRequestGatePageDemo />}
+            code={`// The gate is mounted as a global React island.
+// Open the form view:
+window.dispatchEvent(new CustomEvent('mo:show-access-gate', { detail: {} }));
+
+// The Turnstile widget is rendered into #ts-access-gate when the
+// /api/turnstile-config endpoint returns { enabled: true, siteKey }.
+// When Turnstile is disabled the slot is hidden and the form submits
+// without a captchaToken.`}
           />
         </>
       )}
