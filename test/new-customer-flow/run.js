@@ -487,9 +487,9 @@ async function main() {
         const viewerPage = await newPageWithSession(browser, viewerClient.cookie);
         await viewerPage.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 25000 });
         await waitForCustomersMounted(viewerPage);
-        // Give useIsViewer's async /api/auth/user fetch time to settle
-        // before sampling.
-        await new Promise(r => setTimeout(r, 800));
+        // Wait for the auth state to be set before sampling — core.js bootstrap
+        // sets __moHeaderUser which useIsViewer depends on for its privilege check.
+        await pollPage(viewerPage, () => window.__moHeaderUser ? 'ok' : null, null, 5000);
         const viewerSnap = await viewerPage.evaluate(() => ({
           hasButton: !!document.getElementById('new-customer-btn'),
         }));

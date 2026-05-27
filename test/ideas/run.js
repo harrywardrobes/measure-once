@@ -112,8 +112,21 @@ async function openIdeasPage(browser, jar) {
     return window.__moHeaderUser ? 'ok' : null;
   }, 15000);
 
-  // Extra settle for React to re-render after privilege state update.
-  await new Promise(r => setTimeout(r, 500));
+  // Wait for React to flush the privilege-level update — poll until the mount's
+  // rendered HTML length stops changing, which confirms the re-render is done.
+  let _prevMountLen = -1;
+  {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      const len = await page.evaluate(() => {
+        const el = document.getElementById('ideas-page-mount');
+        return el ? el.innerHTML.length : 0;
+      }).catch(() => 0);
+      if (len > 0 && len === _prevMountLen) break;
+      _prevMountLen = len;
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
 
   page.__logs = pageLogs;
   return page;
@@ -480,7 +493,13 @@ async function main() {
         const el = document.getElementById('ideas-page-mount');
         return el && el.textContent && el.textContent.includes('Ideas') ? 'ok' : null;
       }, undefined, 15000);
-      await new Promise(r => setTimeout(r, 2500));
+      // Wait for the seeded idea card to appear before trying to click it.
+      await pollPage(adminPage, (body2) => {
+        const mount = document.getElementById('ideas-page-mount');
+        if (!mount) return null;
+        const cards = Array.from(mount.querySelectorAll('.MuiCard-root'));
+        return cards.some(c => c.textContent.includes(body2)) ? 'ok' : null;
+      }, idea2Body, 10000);
 
       // Find the card for idea2 and click its comment chip.
       const chipClicked = await adminPage.evaluate((body2) => {
@@ -595,10 +614,8 @@ async function main() {
       const user = window.__moHeaderUser;
       if (user) window.dispatchEvent(new CustomEvent('mo:user', { detail: user }));
     });
-    // Wait for React to re-render with isAdmin=true.
-    await new Promise(r => setTimeout(r, 500));
-
     // Poll for delete buttons — they render once isAdmin=true propagates to IdeaCard.
+    // No fixed delay needed: the pollPage below handles the wait.
     const deleteButtonCount = await pollPage(adminPage4, () => {
       const mount = document.getElementById('ideas-page-mount');
       const n = mount ? mount.querySelectorAll('[data-testid="delete-idea-btn"]').length : 0;
@@ -658,8 +675,22 @@ async function main() {
       const w = window;
       return w.__moHeaderUser ? 'ok' : null;
     }, undefined, 10000);
-    // Extra settle for React re-render.
-    await new Promise(r => setTimeout(r, 500));
+    // Poll until the mount's HTML length stabilises — confirms React has flushed
+    // the privilege-level update and the delete buttons (absent for members)
+    // won't appear after sampling.
+    let _prevMemberLen = -1;
+    {
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        const len = await memberPage.evaluate(() => {
+          const el = document.getElementById('ideas-page-mount');
+          return el ? el.innerHTML.length : 0;
+        }).catch(() => 0);
+        if (len > 0 && len === _prevMemberLen) break;
+        _prevMemberLen = len;
+        await new Promise(r => setTimeout(r, 100));
+      }
+    }
 
     const memberDeleteCount = await memberPage.evaluate(() => {
       const mount = document.getElementById('ideas-page-mount');

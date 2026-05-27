@@ -1498,7 +1498,18 @@ async function main() {
         await eBcAdminTab.setCacheEnabled(false);
         await injectSession(eBcAdminTab, adminClient.cookie);
         await eBcAdminTab.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 25000 });
-        await new Promise(r => setTimeout(r, 1000)); // let admin.html boot
+        // Poll for the admin.html window functions that the test relies on.
+        await (async () => {
+          const deadline = Date.now() + 12000;
+          while (Date.now() < deadline) {
+            const ready = await eBcAdminTab.evaluate(() =>
+              typeof window.openDvHandleEditor === 'function'
+              && typeof window.deleteDvItem === 'function',
+            ).catch(() => false);
+            if (ready) break;
+            await new Promise(r => setTimeout(r, 150));
+          }
+        })();
 
         // Helper: read + increment the listener counter for a catalogue type
         const readCount = (key) => eBcListenTab.evaluate(k => window.__dvBcCounts[k], key);
@@ -1514,7 +1525,7 @@ async function main() {
           }, itemName);
           await eBcAdminTab.evaluate(() => document.querySelector('#dvie-save')?.click());
           await pollPage(eBcAdminTab, () => !document.querySelector('#dvie-save') ? 'closed' : null, null, 8000);
-          await new Promise(r => setTimeout(r, 300));
+          // Modal is confirmed closed by the poll above — no extra delay needed.
         };
 
         // Helper: open the edit editor for an EXISTING item (PATCH flow)
@@ -1527,14 +1538,32 @@ async function main() {
           }, newName);
           await eBcAdminTab.evaluate(() => document.querySelector('#dvie-save')?.click());
           await pollPage(eBcAdminTab, () => !document.querySelector('#dvie-save') ? 'closed' : null, null, 8000);
-          await new Promise(r => setTimeout(r, 300));
+          // Modal is confirmed closed by the poll above — no extra delay needed.
         };
 
         // Helper: delete an item via admin.html UI (accepts the confirm() dialog)
         const deleteViaUI = async (type, id) => {
           eBcAdminTab.once('dialog', d => d.accept());
+          // Snapshot the sum of all BC listener counters before the delete
+          // so we can poll for any increment after api() resolves.
+          const _totalBefore = await eBcListenTab.evaluate(() => {
+            const c = window.__dvBcCounts || {};
+            return Object.values(c).reduce((s, v) => s + (Number(v) || 0), 0);
+          }).catch(() => -1);
           await eBcAdminTab.evaluate((t, id) => window.deleteDvItem(t, id), type, id);
-          await new Promise(r => setTimeout(r, 600)); // BC fires after api() resolves
+          // Poll until the total BC count increments — the DELETE api() call fires
+          // the BroadcastChannel message asynchronously before returning.
+          {
+            const deadline = Date.now() + 8000;
+            while (Date.now() < deadline) {
+              const cur = await eBcListenTab.evaluate(() => {
+                const c = window.__dvBcCounts || {};
+                return Object.values(c).reduce((s, v) => s + (Number(v) || 0), 0);
+              }).catch(() => _totalBefore);
+              if (cur > _totalBefore) break;
+              await new Promise(r => setTimeout(r, 150));
+            }
+          }
         };
 
         // ── Probe loop: handle / furniture / door-style ──────────────────────
@@ -1675,9 +1704,18 @@ async function main() {
         await injectSession(wizardTab, adminClient.cookie);
         await wizardTab.goto(`${BASE}/sales`, { waitUntil: 'domcontentloaded', timeout: 25000 });
 
-        // Wait for card-action-handlers.js to finish loading the handlers index
-        // (loadCardActionHandlers() is called automatically on boot).
-        await new Promise(r => setTimeout(r, 800));
+        // Poll for dispatchCardActionHandler to be defined — card-action-handlers.js
+        // exposes it after loadCardActionHandlers() completes on boot.
+        await (async () => {
+          const deadline = Date.now() + 12000;
+          while (Date.now() < deadline) {
+            const ready = await wizardTab.evaluate(
+              () => typeof window.dispatchCardActionHandler === 'function',
+            ).catch(() => false);
+            if (ready) break;
+            await new Promise(r => setTimeout(r, 150));
+          }
+        })();
 
         // Ensure at least one handle exists before opening the wizard so the
         // #dv-handle select renders (renderStep1 only emits the <select> when

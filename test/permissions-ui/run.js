@@ -282,8 +282,9 @@ async function main() {
       timeout: 25000,
     });
 
-    // Give the React bundle time to mount the initial tab.
-    await new Promise(r => setTimeout(r, 800));
+    // Wait for window.switchTab to be defined — the React bundle must have
+    // evaluated before we can activate the Permissions tab.
+    await pollPage(page, () => typeof window.switchTab === 'function' ? 'ok' : null, null, 10000);
 
     // ── Activate the Permissions tab ──────────────────────────────────────
     console.log('\n  [PERMISSIONS-TAB] Activating tab-permissions');

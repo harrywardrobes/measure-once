@@ -998,7 +998,7 @@ async function main() {
       await vcmWarnPage.keyboard.type(minuteStr); // min   (mm)
       // Toggle AM/PM by pressing 'a' or 'p'.
       await vcmWarnPage.keyboard.press(ampmKey === 'a' ? 'KeyA' : 'KeyP');
-      await new Promise(r => setTimeout(r, 500));
+      // The pollPage below waits for the alert — no fixed delay needed here.
 
       // Assert the warning Alert appeared.
       const vcmWarnAlert = await pollPage(vcmWarnPage, () => {

@@ -127,7 +127,21 @@ async function openAdminTeamPage(browser, jar) {
 
   // Wait for bootstrap so usePrivilege sees the admin level.
   await pollPage(page, () => window.__moHeaderUser ? 'ok' : null, 10000);
-  await new Promise(r => setTimeout(r, 500));
+  // Poll until the team panel's HTML length stabilises — confirms React has
+  // flushed the privilege update and the tab is fully rendered.
+  let _prevTeamLen = -1;
+  {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      const len = await page.evaluate(() => {
+        const p = document.getElementById('tab-team');
+        return p ? p.innerHTML.length : 0;
+      }).catch(() => 0);
+      if (len > 0 && len === _prevTeamLen) break;
+      _prevTeamLen = len;
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
 
   page.__logs = pageLogs;
   return page;
@@ -514,8 +528,14 @@ async function main() {
         record(UI_LABELS[2], 'admin value visible', 'dialog not opened', false);
         record(UI_LABELS[3], 'user value visible',  'dialog not opened', false);
       } else {
-        // Wait a beat for the Alert section to finish rendering.
-        await new Promise(r => setTimeout(r, 600));
+        // Poll for the "Onboarding discrepancies" Alert to finish rendering.
+        await pollPage(adminPage, () => {
+          const all = Array.from(document.querySelectorAll('*'));
+          return all.some(el =>
+            el.children.length < 8
+            && el.textContent && el.textContent.includes('Onboarding discrepancies')
+          ) ? 'ok' : null;
+        }, undefined, 8000);
 
         // Search for "Onboarding discrepancies" anywhere in the body.
         const alertText = await adminPage.evaluate(() => {
@@ -595,7 +615,6 @@ async function main() {
             const panel = document.getElementById('tab-team');
             return panel && panel.querySelector('table') ? 'ok' : null;
           }, 20000);
-          await new Promise(r => setTimeout(r, 1000));
 
           // Confirm the conflict user's row no longer has the DifferenceIcon badge.
           const badgeGone = await adminPage.evaluate((displayName) => {

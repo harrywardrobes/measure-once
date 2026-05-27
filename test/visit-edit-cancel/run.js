@@ -272,8 +272,8 @@ async function openVisitPage(browser, jar, { expectEditButtons = false } = {}) {
       // Visit cards are present — auth has had time to apply.
       return sec.querySelectorAll('[style*="border"]').length > 0 ? 'ok' : null;
     }, null, 4000);
-    // Small extra wait for auth settle.
-    await new Promise(r => setTimeout(r, 1500));
+    // The pollFor above already waits for visit cards, which confirms auth
+    // has settled — no additional fixed delay needed.
   }
 
   page.__logs = pageLogs;

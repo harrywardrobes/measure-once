@@ -255,10 +255,17 @@ async function main() {
       timeout: 20000,
     });
 
-    // Give the React bundle a tick to evaluate and self-mount. The MOUNTS
-    // table targets both tabs unconditionally, so both panels should be
-    // populated even before any tab button is clicked.
-    await new Promise(r => setTimeout(r, 800));
+    // Wait for window.switchTab to be defined — the admin.html script must
+    // have evaluated before we can call it. Polling is more reliable than a
+    // fixed delay because bundle evaluation time varies with load.
+    await (async () => {
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        const ready = await page.evaluate(() => typeof window.switchTab === 'function').catch(() => false);
+        if (ready) break;
+        await new Promise(r => setTimeout(r, 150));
+      }
+    })();
 
     // ── Search tab ───────────────────────────────────────────────────────
     await page.evaluate(() => {

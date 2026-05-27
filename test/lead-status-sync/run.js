@@ -83,6 +83,22 @@ async function injectSession(page, jar) {
   });
 }
 
+// Poll until the functions bootstrapFilter/bootstrapFilterAndSelect rely on are
+// defined in the page context.  workflow-core.js registers them synchronously
+// on evaluation; the React bundle exposes populateLeadStatusFilter after mount.
+// Replaces post-goto fixed delays throughout the test.
+async function waitForBootstrapFns(page, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ready = await page.evaluate(() =>
+      typeof loadLeadStatuses === 'function'
+      && typeof populateLeadStatusFilter === 'function',
+    ).catch(() => false);
+    if (ready) return;
+    await new Promise(r => setTimeout(r, 150));
+  }
+}
+
 // Call loadLeadStatuses() then populateLeadStatusFilter() inside the page's JS
 // context so the filter dropdown is populated even when HubSpot is absent (the
 // test server strips HUBSPOT_TOKEN, making contacts load return 503 — which
@@ -356,9 +372,9 @@ async function main() {
       timeout: 20000,
     });
 
-    // Give scripts a tick to execute (BroadcastChannel listener is registered
-    // synchronously after workflow-core.js evaluates).
-    await new Promise(r => setTimeout(r, 500));
+    // Wait for the page scripts to evaluate (loadLeadStatuses and
+    // populateLeadStatusFilter must be defined before bootstrapFilter runs).
+    await waitForBootstrapFns(customerTab);
 
     // Seed the filter baseline: call loadLeadStatuses() then
     // window.populateLeadStatusFilter() (from the React bundle) directly.
@@ -394,7 +410,8 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
     });
-    await new Promise(r => setTimeout(r, 300));
+    // BroadcastChannel is a native browser API — no scripts need to evaluate
+    // before we can post from this tab.
     await adminTab.evaluate(() => {
       new BroadcastChannel('lead_statuses_changed').postMessage('changed');
     });
@@ -436,7 +453,7 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
-    await new Promise(r => setTimeout(r, 500));
+    await waitForBootstrapFns(visTab);
     await bootstrapFilter(visTab);
 
     // Confirm BC-renamed label is the current state.
@@ -519,7 +536,7 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
-    await new Promise(r => setTimeout(r, 500));
+    await waitForBootstrapFns(countTab);
     await bootstrapFilter(countTab);
 
     const optsCount = await getFilterOptions(countTab);
@@ -743,7 +760,19 @@ async function main() {
       if (typeof loadLeadStatuses === 'function') await loadLeadStatuses();
       if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
     });
-    await new Promise(r => setTimeout(r, 200));
+    // Poll for the #lead-status-filter <select> to have at least one option,
+    // so the programmatic selection below is guaranteed to find it.
+    {
+      const deadline = Date.now() + 6000;
+      while (Date.now() < deadline) {
+        const hasOpts = await subSkelTab.evaluate((lsKey) => {
+          const sel = document.getElementById('lead-status-filter');
+          return sel && Array.from(sel.options).some(o => o.value === lsKey);
+        }, LS_KEY).catch(() => false);
+        if (hasOpts) break;
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
 
     // Select the test lead status programmatically.  Use the React-compatible
     // setter so the synthetic change event triggers setLeadStatus().
@@ -770,8 +799,21 @@ async function main() {
       selectedOk,
     );
 
-    // Give React a tick to re-render with the new leadStatus value.
-    await new Promise(r => setTimeout(r, 300));
+    // Poll for the sub-status skeleton to appear after React re-renders with the
+    // newly selected lead-status value.  Replaces the fixed 300 ms delay.
+    {
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        const hasSkel = await subSkelTab.evaluate(() => {
+          const skel = document.querySelector('[data-testid="substatus-skeleton"]');
+          if (!skel) return false;
+          const st = window.getComputedStyle(skel);
+          return st.display !== 'none' && st.visibility !== 'hidden';
+        }).catch(() => false);
+        if (hasSkel) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
+    }
 
     // ── assert sub-status skeleton is visible ──
     const subSkelVisible = await subSkelTab.evaluate(() => {
@@ -854,12 +896,12 @@ async function main() {
         waitUntil: 'domcontentloaded',
         timeout: 20000,
       });
-      // Wait for the React mount + initial /api/lead-substatuses to resolve.
-      await new Promise(r => setTimeout(r, 800));
+      // Wait for page scripts to evaluate before bootstrapping the filter.
+      await waitForBootstrapFns(chipBcTab);
 
       // Bootstrap the filter and select the test lead status so chips appear.
+      // waitForChipLabel below polls until the chip is visible — no extra delay needed.
       await bootstrapFilterAndSelect(chipBcTab, LS_KEY);
-      await new Promise(r => setTimeout(r, 400));
 
       // Assert the initial chip is visible with the original SS_LABEL.
       const chipFInit = await waitForChipLabel(chipBcTab, SS_LABEL, 5000);
@@ -883,11 +925,11 @@ async function main() {
       );
 
       // Load a page in adminTab so a BroadcastChannel is available, then post.
+      // BroadcastChannel is native — no scripts need to evaluate first.
       await chipAdminTab.goto(`${BASE}/customers`, {
         waitUntil: 'domcontentloaded',
         timeout: 15000,
       });
-      await new Promise(r => setTimeout(r, 300));
       await chipAdminTab.evaluate(() => {
         new BroadcastChannel('lead_substatuses_changed').postMessage('changed');
       });
@@ -938,10 +980,10 @@ async function main() {
         waitUntil: 'domcontentloaded',
         timeout: 20000,
       });
-      await new Promise(r => setTimeout(r, 800));
+      await waitForBootstrapFns(chipVisTab);
 
       await bootstrapFilterAndSelect(chipVisTab, LS_KEY);
-      await new Promise(r => setTimeout(r, 400));
+      // waitForChipLabel below polls until the chip is visible — no extra delay needed.
 
       // Confirm the chip now shows SS_LABEL_BC (the state left by section F).
       const chipGInit = await waitForChipLabel(chipVisTab, SS_LABEL_BC, 5000);
@@ -1037,7 +1079,7 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
-    await new Promise(r => setTimeout(r, 500));
+    await waitForBootstrapFns(sseListenerTab);
 
     // Seed the filter so the dropdown is populated with the current LABEL_VIS.
     await bootstrapFilter(sseListenerTab);
@@ -1163,7 +1205,7 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
-    await new Promise(r => setTimeout(r, 500));
+    await waitForBootstrapFns(iListenerTab);
     await bootstrapFilter(iListenerTab);
 
     // Confirm LABEL_SSE (from [H]) is the current state before the POST.

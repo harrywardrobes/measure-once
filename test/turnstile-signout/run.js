@@ -483,9 +483,8 @@ async function main() {
           );
         });
 
-        // Give renderTurnstileWidgets() a moment to run synchronously.
-        await new Promise(r => setTimeout(r, 500));
-
+        // waitForTurnstileIframe polls until the iframe appears — no fixed
+        // delay needed here.
         const iframeAfterRestore = await waitForTurnstileIframe(loginPage, 5000);
         record(UI_LABELS[3],
           '#turnstile-login has <iframe> after pageshow(persisted:true)',

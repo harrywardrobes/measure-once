@@ -482,7 +482,6 @@ async function main() {
           const urlUpdated = await waitForUrl(page, 'page=2');
           // Wait for results to reload (they briefly disappear during loading)
           await waitForResults(page, 12000);
-          await new Promise(r => setTimeout(r, 300)); // settle
 
           const page2Diag = await getDiagnostics(page);
           console.log('  Diag A (page 2):', JSON.stringify(page2Diag));
@@ -519,7 +518,16 @@ async function main() {
       const page = await newPage(browser, memberClient.cookie);
       await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 25000 });
       await waitForResults(page);
-      await new Promise(r => setTimeout(r, 300)); // let state settle
+      // Poll for the "Showing X–Y of Z" text — it renders after results load.
+      await pollPage(page, () => {
+        const selector = 'p, span, div';
+        const all = Array.from(document.querySelectorAll(selector));
+        for (const el of all) {
+          const t = el.textContent || '';
+          if (/Showing\s+\d+/.test(t) && /of\s+\d+/.test(t)) return 'ok';
+        }
+        return null;
+      }, null, 8000).catch(() => {});
 
       const txt = await getShowingText(page);
       const diag = await getDiagnostics(page);
@@ -559,7 +567,10 @@ async function main() {
             const el = document.getElementById('customers-sort-select');
             if (el) el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
           });
-          await new Promise(r => setTimeout(r, 300));
+          // Poll for the MUI listbox options to appear.
+          await pollPage(page, () =>
+            document.querySelectorAll('[role="option"]').length > 0 ? 'ok' : null,
+          null, 5000).catch(() => {});
 
           // Pick "Name A-Z" option from the opened MUI listbox
           const picked = await page.evaluate(() => {

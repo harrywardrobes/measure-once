@@ -131,8 +131,19 @@ async function openHome(browser, jar, calendarResp) {
     return el && el.textContent && el.textContent.length > 20 ? 'ok' : null;
   }, null, 20000);
 
-  // Additional settle time for async state updates (calendar fetch, etc.).
-  await new Promise(r => setTimeout(r, 3000));
+  // Wait for the calendar section to reach its final state — either an
+  // "Upcoming" heading (connected) or the section being absent (not connected).
+  await pollPage(page, () => {
+    const v = document.querySelector('#home-view');
+    if (!v) return null;
+    const text = v.textContent || '';
+    // Either the section is rendered with content, or it's absent (no-connect path).
+    // "Upcoming" appears when connected; absence of a loading spinner confirms settled.
+    const hasCalSection = text.includes('Upcoming');
+    const hasSpinner = !!v.querySelector('[role="progressbar"]');
+    if (hasCalSection || !hasSpinner) return 'ok';
+    return null;
+  }, null, 12000);
 
   page.__logs = pageLogs;
   return page;
@@ -343,8 +354,15 @@ async function main() {
       return el && (el.textContent || '').length > 30 ? 'ok' : null;
     }, null, 12000);
 
-    // Extra settle time so any async state updates finish.
-    await new Promise(r => setTimeout(r, 1000));
+    // Poll until the calendar section reaches its final state before sampling.
+    await pollPage(pageB, () => {
+      const v = document.querySelector('#home-view');
+      if (!v) return null;
+      const text = v.textContent || '';
+      const hasSpinner = !!v.querySelector('[role="progressbar"]');
+      if (text.includes('Upcoming') || !hasSpinner) return 'ok';
+      return null;
+    }, null, 10000);
 
     const homeTextB = await pageB.evaluate(() => {
       const el = document.querySelector('#home-view');

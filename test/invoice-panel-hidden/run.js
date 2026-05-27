@@ -249,9 +249,9 @@ async function main() {
       );
 
       if (resp && resp.ok()) {
-        // Wait briefly for React to mount
+        // Wait for React to mount — waitForReact polls for data-ds-rendered or
+        // [data-testid] markers; no additional fixed delay needed.
         await waitForReact(page);
-        await new Promise(r => setTimeout(r, 500));
 
         // (A) Old static #inv-panel must NOT be in the DOM
         const panelPresent = await page.evaluate(() => !!document.getElementById('inv-panel'));

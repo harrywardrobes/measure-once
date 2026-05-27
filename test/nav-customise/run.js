@@ -137,8 +137,22 @@ async function openPage(browser, jar, url) {
     return (hasSales || hasCalendar) ? 'ok' : null;
   }, null, 8000);
 
-  // Give loadNavPref() time to complete so bar reflects any persisted prefs.
-  await new Promise(r => setTimeout(r, 600));
+  // Wait for loadNavPref() to settle — poll until the nav bar's item list stops
+  // changing, which confirms async preference fetching and re-rendering is done.
+  let _prevNavIds = null;
+  {
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline) {
+      const cur = await page.evaluate(() => {
+        const nav = document.querySelector('nav.bottom-nav#main-content');
+        if (!nav) return null;
+        return JSON.stringify([...nav.querySelectorAll('[id^="bnav-"]')].map(e => e.id));
+      }).catch(() => null);
+      if (cur !== null && cur === _prevNavIds) break;
+      _prevNavIds = cur;
+      await new Promise(r => setTimeout(r, 100));
+    }
+  }
 
   page.__logs = pageLogs;
   return page;
