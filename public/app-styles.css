@@ -160,19 +160,6 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 }
 
 
-/* ── Spinner ─────────────────────────────────────────────────────────────────── */
-.spinner {
-  width: 18px; height: 18px;
-  border: 2.5px solid var(--stone);
-  border-top-color: var(--orchid);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  flex-shrink: 0;
-}
-@keyframes spin {
- to { transform: rotate(360deg); }
-}
-
 /* ── Scrollbars ──────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -948,96 +935,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .btn-primary:hover { background: var(--orchid-deep); }
 
-/* Section headings in workflow view */
-.section-heading {
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-4);
-  margin-bottom: 8px;
-}
-
-/* ── Access Gate ─────────────────────────────────────────────────────────── */
-.access-gate {
-  position: fixed; inset: 0; z-index: var(--z-tooltip);
-  display: flex; align-items: center; justify-content: center;
-  padding: 24px;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-}
-.access-card {
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
-  width: 100%; max-width: 420px;
-  padding: 32px;
-}
-.access-brand {
-  display: flex; align-items: center; gap: 10px;
-  margin-bottom: 24px;
-}
-.access-title {
-  font-size: 1.5rem; font-weight: 600;
-  color: #0f172a; margin: 0 0 8px;
-}
-.access-sub {
-  font-size: 0.9rem; color: #64748b;
-  margin: 0 0 20px; line-height: 1.5;
-}
-
-
-.access-submit {
-  margin-top: 4px;
-  background: #0f172a; color: #fff;
-  border: none; border-radius: 8px;
-  padding: 11px; font-size: 0.95rem; font-weight: 500;
-  cursor: pointer; transition: background 0.15s;
-}
-.access-submit:hover:not(:disabled) { background: #1e293b; }
-.access-submit:disabled { opacity: 0.6; cursor: not-allowed; }
-.access-confirmed-icon {
-  width: 48px; height: 48px;
-  border-radius: 50%;
-  background: #dcfce7;
-  color: #16a34a;
-  font-size: 1.4rem;
-  display: flex; align-items: center; justify-content: center;
-  margin-bottom: 16px;
-  font-weight: 700;
-}
-
-
-.access-footer {
-  margin-top: 20px; padding-top: 16px; border-top: 1px solid #e2e8f0;
-  font-size: 0.85rem; color: #64748b; text-align: center;
-}
-.access-footer a { color: #3b82f6; text-decoration: none; }
-.access-footer a:hover { text-decoration: underline; }
-
-
-.access-input {
-  display: block; width: 100%; box-sizing: border-box;
-  border: 1px solid #cbd5e1; border-radius: 8px;
-  padding: 10px 12px; font-size: 0.95rem; margin-bottom: 10px;
-  outline: none; transition: border-color 0.15s, box-shadow 0.15s;
-}
-.access-input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
-}
-.access-email-approved-msg {
-  background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;
-  border-radius: 8px; padding: 10px 13px; font-size: 0.88rem;
-  margin-bottom: 10px; line-height: 1.45;
-}
-.access-email-approved-msg a { color: #15803d; font-weight: 500; }
-.access-email-approved-msg a:hover { text-decoration: underline; }
-.access-req-error {
-  background: #fee2e2; color: #991b1b; border: 1px solid #fecaca;
-  border-radius: 8px; padding: 9px 12px; font-size: 0.88rem;
-  margin-top: 8px;
-}
-
 /* The header avatar (.header-avatar-btn / .header-avatar-dot / .header-avatar-img)
    moved to the React MUI GlobalHeader island — see
    src/react/components/GlobalHeader.tsx. */
@@ -1091,11 +988,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   transition: color 0.15s;
 }
 .contact-edit-btn:hover { color: var(--orchid); }
-
-/* ── Empty state (sales workflow panel) ──────────────────────────────────────── */
-
-
-#stage-filter        { font-size: 13px; }
 
 /* ── Sales tab: projects-style layout with overlay workflow panel ─────────────── */
 
