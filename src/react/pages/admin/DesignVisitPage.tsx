@@ -247,6 +247,8 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
                   accept="image/*"
                   disabled={saving}
                   uploadStatus={imageUploadStatus}
+                  resetDelay={2500}
+                  onStatusReset={() => setImageUploadStatus('idle')}
                   onChange={(files) => {
                     const file = files?.[0] ?? null;
                     setImageFile(file);

@@ -300,13 +300,10 @@ export function DesignVisitRoomsStep({
 
     const finalStatus: UploadStatus = hadError ? 'error' : 'success';
     // Bump key to reset the FileUploadField (clears selected-file display),
-    // then show success/error adornment briefly before returning to idle.
+    // then let resetDelay/onStatusReset on the field return it to idle.
     setFileKeyById(prev => ({ ...prev, [clientId]: (prev[clientId] ?? 0) + 1 }));
     setUploadStatusById(prev => ({ ...prev, [clientId]: finalStatus }));
     setUploadProgressById(prev => { const n = { ...prev }; delete n[clientId]; return n; });
-    setTimeout(() => {
-      setUploadStatusById(prev => ({ ...prev, [clientId]: 'idle' }));
-    }, 1500);
   }
 
   return (
@@ -536,6 +533,8 @@ export function DesignVisitRoomsStep({
               multiple
               uploadStatus={uploadStatus}
               progress={uploadProgress}
+              resetDelay={1500}
+              onStatusReset={() => setUploadStatusById(prev => ({ ...prev, [clientId]: 'idle' }))}
               onChange={files => handleFilesSelected(clientId, files)}
             />
 
