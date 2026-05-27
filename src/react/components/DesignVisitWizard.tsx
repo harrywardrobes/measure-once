@@ -251,6 +251,14 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const intermediateStatusFiredRef = useRef(false);
 
   /**
+   * Snapshot of step1 / rooms at the moment the wizard opened in edit mode.
+   * Used to detect whether the user has actually changed anything before
+   * showing the "Discard changes?" prompt.  Irrelevant in new-visit mode.
+   */
+  const initialStep1Ref = useRef<Step1Data>(makeDefaultStep1(defaultDuration, existingVisit));
+  const initialRoomsRef = useRef<RoomData[]>(normaliseRooms(existingVisit));
+
+  /**
    * Keys uploaded during this wizard session that haven't yet been committed
    * to a DB row via a successful submit.  Populated by DesignVisitRoomsStep
    * via onNewUpload; pruned when the user manually removes a photo (the step
@@ -394,15 +402,29 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     return step1Touched || roomsTouched;
   }
 
+  /** Returns true when the user has changed anything vs the pre-loaded values. */
+  function hasEditModeChanges(): boolean {
+    return (
+      JSON.stringify(step1) !== JSON.stringify(initialStep1Ref.current) ||
+      JSON.stringify(rooms) !== JSON.stringify(initialRoomsRef.current)
+    );
+  }
+
   const doClose = useCallback(() => {
     setOpen(false);
     setTimeout(onClose, 300);
   }, [onClose]);
 
   const handleClose = useCallback(() => {
-    if (!editMode && !committedRef.current && hasUnsavedDraftData()) {
-      setShowDiscardDialog(true);
-      return;
+    if (!committedRef.current) {
+      if (!editMode && hasUnsavedDraftData()) {
+        setShowDiscardDialog(true);
+        return;
+      }
+      if (editMode && hasEditModeChanges()) {
+        setShowDiscardDialog(true);
+        return;
+      }
     }
     doClose();
   }, [editMode, step1, rooms, doClose]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -686,11 +708,13 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         fullWidth
       >
         <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem' }}>
-          Discard your draft?
+          {editMode ? 'Discard your changes?' : 'Discard your draft?'}
         </DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: '.9rem', color: '#374151' }}>
-            You have unsaved room data. If you close now your draft will be lost.
+            {editMode
+              ? 'You have unsaved changes. If you close now your edits will be lost.'
+              : 'You have unsaved room data. If you close now your draft will be lost.'}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
@@ -709,12 +733,16 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           </Button>
           <Button
             onClick={() => {
-              // Capture draft data before clearing it so the undo closure
-              // can write it back if the user changes their mind.
+              // Capture current state before closing so the undo closure
+              // can restore it if the user changes their mind.
               const savedStep1 = step1;
               const savedRooms = rooms;
 
-              clearDraft(storageKey);
+              // In new-visit mode the draft lives in sessionStorage; clear it
+              // now so a page reload doesn't resurrect it.  In edit mode there
+              // is no sessionStorage draft — state lives only in React.
+              if (!editMode) clearDraft(storageKey);
+
               setShowDiscardDialog(false);
 
               // Close the drawer visually but keep the component mounted
@@ -734,7 +762,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
               }, 6200);
 
               showToastWithAction(
-                'Draft discarded',
+                editMode ? 'Changes discarded' : 'Draft discarded',
                 {
                   label: 'Undo',
                   onClick: () => {
@@ -743,9 +771,18 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                       clearTimeout(undoTimerRef.current);
                       undoTimerRef.current = null;
                     }
-                    // Restore the draft to sessionStorage so it survives any
-                    // future page reload, then re-open the drawer.
-                    saveDraft(storageKey, savedStep1, savedRooms);
+                    if (!editMode) {
+                      // Restore the draft to sessionStorage so it survives
+                      // any future page reload, then re-open the drawer.
+                      saveDraft(storageKey, savedStep1, savedRooms);
+                    } else {
+                      // In edit mode state is already in React — just restore
+                      // step1/rooms to what they were when the dialog opened
+                      // (in case an earlier setStep1/setRooms ran) and
+                      // re-open.  The refs are still live.
+                      setStep1(savedStep1);
+                      setRooms(savedRooms);
+                    }
                     setOpen(true);
                   },
                 },
