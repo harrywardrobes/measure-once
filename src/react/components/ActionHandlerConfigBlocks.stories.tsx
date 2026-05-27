@@ -50,14 +50,14 @@ function configBlockForType(type: string): React.ReactNode {
   }
 }
 
-function LiveAddActionFlowDemo({ initialType }: { initialType: string }) {
+function LiveAddActionFlowDemo({ initialType, slotLabel }: { initialType: string; slotLabel: string }) {
   const [type, setType] = useState(initialType);
   React.useEffect(() => { setType(initialType); }, [initialType]);
   return (
     <ModalChrome
       selectedType={type}
       onTypeChange={setType}
-      slotLabel="Survey booked · Default action"
+      slotLabel={slotLabel}
     >
       {configBlockForType(type)}
     </ModalChrome>
@@ -87,6 +87,7 @@ export const LiveAddActionFlow: Story = {
   name: 'Live — full Add action modal flow',
   args: {
     initialType: 'schedule_visit',
+    slotLabel: 'Survey booked · Default action',
   },
   argTypes: {
     initialType: {
@@ -98,9 +99,17 @@ export const LiveAddActionFlow: Story = {
         labels: Object.fromEntries(HANDLER_TYPES.map(t => [t.value, t.label])),
       },
     },
+    slotLabel: {
+      name: 'Slot label',
+      description: 'The card stage / slot label shown in the modal subtitle.',
+      control: { type: 'text' },
+    },
   },
-  render: (args: { initialType?: string }) => (
-    <LiveAddActionFlowDemo initialType={args.initialType ?? 'schedule_visit'} />
+  render: (args: { initialType?: string; slotLabel?: string }) => (
+    <LiveAddActionFlowDemo
+      initialType={args.initialType ?? 'schedule_visit'}
+      slotLabel={args.slotLabel ?? 'Survey booked · Default action'}
+    />
   ),
   parameters: {
     docs: {
