@@ -98,9 +98,14 @@ function fmtGbpDate(iso) {
 
 async function purgeFixtures(pool) {
   // Rooms cascade via FK on design_visit_id.
+  // Scope to created_by LIKE 'privtest-%' so that a broad DELETE on a shared
+  // DB never removes rows seeded by a concurrently-running suite or real data
+  // that happens to share the same contact_id.
   try {
     await pool.query(
-      `DELETE FROM design_visits WHERE contact_id IN ($1, $2)`,
+      `DELETE FROM design_visits
+        WHERE contact_id IN ($1, $2)
+          AND created_by LIKE 'privtest-%'`,
       [FAKE_CONTACT_ID, OTHER_FAKE_CONTACT_ID],
     );
   } catch {}

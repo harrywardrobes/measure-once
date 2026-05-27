@@ -106,9 +106,14 @@ async function pollPage(page, fn, arg, timeoutMs = 6000, intervalMs = 150) {
 
 // ── Fixture teardown ─────────────────────────────────────────────────────────
 async function purgeFixtures(pool) {
-  // Delete design visits for our fake contact (cascades to rooms and images)
+  // Delete design visits for our fake contact (cascades to rooms and images).
+  // Scope to created_by LIKE 'privtest-%' so that a broad DELETE on a shared
+  // DB never removes rows seeded by a concurrently-running suite or real data
+  // that happens to share the same contact_id.
   await pool.query(
-    `DELETE FROM design_visits WHERE contact_id = $1`,
+    `DELETE FROM design_visits
+      WHERE contact_id = $1
+        AND created_by LIKE 'privtest-%'`,
     [FAKE_CONTACT_ID]
   );
   // Delete catalogue items seeded by this run
