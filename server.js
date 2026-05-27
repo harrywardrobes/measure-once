@@ -2842,7 +2842,7 @@ app.get('/sales',    isAuthenticated, requireManagerOrAdminPage, (_req, res) => 
 app.get('/survey',   isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'survey.html'));
 });
-app.get('/projects', isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
+app.get('/projects', isAuthenticated, (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'projects.html'));
 });
 app.get('/invoices', isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
