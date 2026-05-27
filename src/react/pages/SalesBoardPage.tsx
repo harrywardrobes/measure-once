@@ -69,17 +69,20 @@ interface WorkflowDef {
 
 interface StateGlobal {
   filteredContacts?: Contact[];
-  contactStageCache?: Record<string, Room[]>;
   workflow?: WorkflowDef;
   user?: { privilege_level?: string }; // privilege-read-ok: global state shape declaration
 }
 
 interface WindowGlobals {
   state?: StateGlobal;
-  LEAD_STATUS_OPTIONS?: LeadStatusOption[];
   loadWorkflow?: () => Promise<void>;
   loadLeadStatuses?: () => Promise<void>;
   __salesBoardBootstrapFailed?: { code: string | undefined; message: string } | undefined;
+}
+
+interface SalesBoardWindowData {
+  state?: { contactStageCache?: Record<string, Room[]> };
+  LEAD_STATUS_OPTIONS?: LeadStatusOption[];
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -218,10 +221,12 @@ function substagePillColour(stageKey: string, substageId: string): { bg: string;
   return { bg: '#ccfbf1', text: '#0f766e' };
 }
 
-function columnForLeadStatus(ls: string): { column: string | null; terminal: boolean } {
+function columnForLeadStatus(
+  ls: string,
+  lsOptions: LeadStatusOption[],
+): { column: string | null; terminal: boolean } {
   if (!ls) return { column: null, terminal: false };
-  const opts = (window as unknown as WindowGlobals).LEAD_STATUS_OPTIONS;
-  const opt = opts ? opts.find((o) => o.value === ls) : null;
+  const opt = lsOptions.find((o) => o.value === ls) ?? null;
   const stage = opt?.stage;
   if (stage && STAGE_COLUMN_INFO[stage]) return STAGE_COLUMN_INFO[stage];
   return { column: HS_STATUS_COLUMN[ls] || null, terminal: false };
@@ -276,10 +281,12 @@ interface BoardEntry {
 
 // ── Data processing ────────────────────────────────────────────────────────────
 
-function buildEntriesForStage(contacts: PaginatedContact[], stageKey: string): BoardEntry[] {
-  const w = window as unknown as WindowGlobals;
-  const contactStageCache = w.state?.contactStageCache || {};
-  const lsOptions = w.LEAD_STATUS_OPTIONS || [];
+function buildEntriesForStage(
+  contacts: PaginatedContact[],
+  stageKey: string,
+  contactStageCache: Record<string, Room[]>,
+  lsOptions: LeadStatusOption[],
+): BoardEntry[] {
 
   const entries: BoardEntry[] = [];
   for (const contact of contacts) {
@@ -985,13 +992,17 @@ export function SalesBoardPage() {
     stage: 'designvisit', sortBy: 'newest', search: '', showArchived: false,
   });
 
+  const sbWindowData = window as unknown as SalesBoardWindowData;
+  const contactStageCache = sbWindowData.state?.contactStageCache ?? {};
+  const lsOptions = sbWindowData.LEAD_STATUS_OPTIONS ?? [];
+
   const salesEntries = useMemo(
-    () => buildEntriesForStage(salesHook.contacts, 'sales'),
+    () => buildEntriesForStage(salesHook.contacts, 'sales', contactStageCache, lsOptions),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [salesHook.contacts, tick],
   );
   const dvEntries = useMemo(
-    () => buildEntriesForStage(dvHook.contacts, 'designvisit'),
+    () => buildEntriesForStage(dvHook.contacts, 'designvisit', contactStageCache, lsOptions),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [dvHook.contacts, tick],
   );
