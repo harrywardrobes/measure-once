@@ -546,13 +546,23 @@ export function HomePage(): React.ReactElement {
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
 
   const [qbConnectedToast, setQbConnectedToast] = React.useState(false);
+  const [googleConnectedToast, setGoogleConnectedToast] = React.useState(false);
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    let changed = false;
     if (params.get('qb') === 'connected') {
       broadcastConnect();
       setQbConnectedToast(true);
       params.delete('qb');
+      changed = true;
+    }
+    if (params.get('connected') === 'true') {
+      setGoogleConnectedToast(true);
+      params.delete('connected');
+      changed = true;
+    }
+    if (changed) {
       const newSearch = params.toString();
       history.replaceState(null, '', newSearch ? `?${newSearch}` : window.location.pathname);
     }
@@ -673,6 +683,23 @@ export function HomePage(): React.ReactElement {
           {qbCompany
             ? `QuickBooks connected — ${qbCompany}`
             : 'QuickBooks connected successfully'}
+        </Alert>
+      </Snackbar>
+
+      {/* Google Calendar reconnect success toast */}
+      <Snackbar
+        open={googleConnectedToast}
+        autoHideDuration={6000}
+        onClose={() => setGoogleConnectedToast(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity="success"
+          onClose={() => setGoogleConnectedToast(false)}
+          variant="filled"
+          sx={{ minWidth: 280 }}
+        >
+          Google Calendar connected successfully
         </Alert>
       </Snackbar>
     </Box>
