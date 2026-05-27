@@ -12,6 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
+import { GET, POST, PATCH } from '../../utils/api';
 
 const STAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: '—' },
@@ -44,17 +45,6 @@ interface HubStatus {
 }
 
 const W = window as unknown as Record<string, unknown>;
-
-function callApi(method: string, path: string, body?: unknown): Promise<unknown> {
-  if (typeof W.api === 'function') {
-    return (W.api as (m: string, p: string, b?: unknown) => Promise<unknown>)(method, path, body);
-  }
-  return fetch(path, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  }).then(r => r.ok ? r.json() : r.json().then((e: { error?: string }) => { throw new Error(e.error || r.statusText); }));
-}
 
 function showToast(msg: string, err?: boolean) {
   if (typeof W.toast === 'function') (W.toast as (m: string, e?: boolean) => void)(msg, err);
@@ -194,7 +184,7 @@ export function SettingsPage() {
 
   const fetchStatuses = useCallback(async () => {
     try {
-      const data = await callApi('GET', '/api/admin/lead-statuses') as LeadStatus[];
+      const data = await GET<LeadStatus[]>('/api/admin/lead-statuses');
       const list = Array.isArray(data) ? data : [];
       setStatuses(list);
       statusesRef.current = list;
@@ -208,7 +198,7 @@ export function SettingsPage() {
   const fetchHubStatus = useCallback(async () => {
     if (cooldownRef.current) { clearInterval(cooldownRef.current); cooldownRef.current = null; }
     try {
-      const data = await callApi('GET', '/api/hubspot/status') as HubStatus;
+      const data = await GET<HubStatus>('/api/hubspot/status');
       setHubStatus(data);
       if (data.code === 'HUBSPOT_RATE_LIMIT' && (data.cooldownSecondsRemaining ?? 0) > 0) {
         const rem = { v: data.cooldownSecondsRemaining! };
@@ -229,7 +219,7 @@ export function SettingsPage() {
 
   const fetchDigestSettings = useCallback(async () => {
     try {
-      const data = await callApi('GET', '/api/admin/conflict-digest-settings') as DigestSettings;
+      const data = await GET<DigestSettings>('/api/admin/conflict-digest-settings');
       setDigestSettings(data);
       setDigestStaleDays(String(data.staleDays ?? 7));
       setDigestMinGapDays(String(data.minGapDays ?? 7));
@@ -238,7 +228,7 @@ export function SettingsPage() {
 
   const fetchPageFilterConfig = useCallback(async () => {
     try {
-      const data = await callApi('GET', '/api/admin/page-filter-config') as PageFilterConfig;
+      const data = await GET<PageFilterConfig>('/api/admin/page-filter-config');
       setPageFilterConfig(data);
       const draft: Record<string, string> = {};
       for (const [key, entry] of Object.entries(data)) {
@@ -257,7 +247,7 @@ export function SettingsPage() {
         const raw = pageFilterDraft[key] ?? String(entry.currentValue);
         payload[key] = entry.type === 'number' ? parseInt(raw, 10) : raw;
       }
-      await callApi('PATCH', '/api/admin/page-filter-config', payload);
+      await PATCH('/api/admin/page-filter-config', payload);
       showToast('Page defaults saved.');
       await fetchPageFilterConfig();
     } catch (e) {
@@ -278,7 +268,7 @@ export function SettingsPage() {
     }
     setDigestThresholdSaving(true);
     try {
-      await callApi('PATCH', '/api/admin/conflict-digest-settings', {
+      await PATCH('/api/admin/conflict-digest-settings', {
         staleDays: staleDaysVal,
         minGapDays: minGapDaysVal,
       });
@@ -294,7 +284,7 @@ export function SettingsPage() {
   const sendDigestNow = useCallback(async () => {
     setDigestSending(true);
     try {
-      const data = await callApi('POST', '/api/admin/conflict-digest/send-now') as { sent: boolean; lastSentAt: string | null };
+      const data = await POST<{ sent: boolean; lastSentAt: string | null }>('/api/admin/conflict-digest/send-now');
       if (data.sent) {
         setDigestSettings(d => d ? { ...d, lastSentAt: data.lastSentAt } : d);
         showToast('Digest sent — admins have been emailed.');
@@ -365,7 +355,7 @@ export function SettingsPage() {
     const msgs: string[] = [];
     for (const { key, diff, els, orig } of changes) {
       try {
-        const updated = await callApi('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(key)}`, diff) as LeadStatus;
+        const updated = await PATCH<LeadStatus>(`/api/admin/lead-statuses/${encodeURIComponent(key)}`, diff);
         const next = [...statusesRef.current];
         const i = next.findIndex(s => s.key === key);
         if (i !== -1) next[i] = updated;
@@ -393,8 +383,8 @@ export function SettingsPage() {
     const a = arr[idx], b = arr[si];
     try {
       await Promise.all([
-        callApi('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(a.key)}`, { sort_order: b.sort_order }),
-        callApi('PATCH', `/api/admin/lead-statuses/${encodeURIComponent(b.key)}`, { sort_order: a.sort_order }),
+        PATCH(`/api/admin/lead-statuses/${encodeURIComponent(a.key)}`, { sort_order: b.sort_order }),
+        PATCH(`/api/admin/lead-statuses/${encodeURIComponent(b.key)}`, { sort_order: a.sort_order }),
       ]);
       const next = [...arr];
       next[idx] = { ...b, sort_order: a.sort_order };
@@ -413,7 +403,7 @@ export function SettingsPage() {
     if (!l) { setAddErr('Display label is required.'); return; }
     setAddErr('');
     try {
-      const created = await callApi('POST', '/api/admin/lead-statuses', { key: k, label: l, stage: s }) as LeadStatus;
+      const created = await POST<LeadStatus>('/api/admin/lead-statuses', { key: k, label: l, stage: s });
       const next = [...statusesRef.current, created];
       setStatuses(next); statusesRef.current = next;
       setNewKey(''); setNewStage(''); setNewLabel('');

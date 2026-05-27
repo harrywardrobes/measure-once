@@ -4,6 +4,7 @@ import {
   Box, Button, Card, CardContent, CircularProgress, Divider, Stack, Typography,
 } from '@mui/material';
 import Alert from '@mui/material/Alert';
+import { GET, POST, PATCH, DELETE } from '../../utils/api';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -29,18 +30,6 @@ const _reloadRef: { fn: (() => Promise<void>) | null } = { fn: null };
 const _openEditorRef: { fn: ((type: string, existingId?: number) => void) | null } = { fn: null };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function callApi(method: string, path: string, body?: unknown): Promise<unknown> {
-  if (typeof W.api === 'function')
-    return (W.api as (m: string, p: string, b?: unknown) => Promise<unknown>)(method, path, body);
-  return fetch(path, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  }).then(r => r.ok ? r.json() : r.json().then((e: { error?: string }) => {
-    throw new Error(e.error || r.statusText);
-  }));
-}
 
 function showToast(msg: string, err?: boolean) {
   if (typeof W.toast === 'function') (W.toast as (m: string, e?: boolean) => void)(msg, err);
@@ -112,7 +101,7 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
       furniture:    '/api/admin/design-visit-furniture-ranges',
       'door-style': '/api/admin/design-visit-door-styles',
     };
-    callApi('GET', listUrl[type])
+    GET(listUrl[type])
       .then((list) => {
         const arr = Array.isArray(list) ? list as Array<Record<string, unknown>> : [];
         const item = arr.find(x => x.id === existingId) ?? null;
@@ -160,7 +149,6 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
       furniture:    existingId ? `/api/admin/design-visit-furniture-ranges/${existingId}` : '/api/admin/design-visit-furniture-ranges',
       'door-style': existingId ? `/api/admin/design-visit-door-styles/${existingId}` : '/api/admin/design-visit-door-styles',
     };
-    const method = existingId ? 'PATCH' : 'POST';
     const body: Record<string, unknown> = { name: nameVal };
     if (hasStyleSelect) {
       if (!existingId && !style) { setErrMsg('Style is required.'); setSaving(false); return; }
@@ -171,7 +159,7 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
 
     setSaving(true);
     try {
-      await callApi(method, urlMap[type], body);
+      await (existingId ? PATCH(urlMap[type], body) : POST(urlMap[type], body));
       showToast(existingId ? 'Saved.' : 'Added.');
       _broadcastDvCatalogueChange(type);
       await onSaved();
@@ -491,10 +479,10 @@ export function DesignVisitPage() {
 
   const fetchAll = useCallback(async () => {
     const [hR, fR, dR, tR] = await Promise.allSettled([
-      callApi('GET', '/api/admin/design-visit-handles'),
-      callApi('GET', '/api/admin/design-visit-furniture-ranges'),
-      callApi('GET', '/api/admin/design-visit-door-styles'),
-      callApi('GET', '/api/admin/design-visit-terms'),
+      GET('/api/admin/design-visit-handles'),
+      GET('/api/admin/design-visit-furniture-ranges'),
+      GET('/api/admin/design-visit-door-styles'),
+      GET('/api/admin/design-visit-terms'),
     ]);
     const firstRejection = [hR, fR, dR, tR].find(r => r.status === 'rejected');
     if (firstRejection) notifyApiError('database', (firstRejection as PromiseRejectedResult).reason);
@@ -557,8 +545,8 @@ export function DesignVisitPage() {
     const ep = endpointFor(type);
     try {
       await Promise.all([
-        callApi('PATCH', `${ep}/${a.id}`, { sort_order: bOrder }),
-        callApi('PATCH', `${ep}/${b.id}`, { sort_order: aOrder }),
+        PATCH(`${ep}/${a.id}`, { sort_order: bOrder }),
+        PATCH(`${ep}/${b.id}`, { sort_order: aOrder }),
       ]);
       const next = [...cache];
       const ai = next.findIndex(x => x.id === a.id);
@@ -585,7 +573,7 @@ export function DesignVisitPage() {
     if (!patches.length) return;
     try {
       await Promise.all(patches.map(p =>
-        callApi('PATCH', `${ep}/${p.id}`, { sort_order: p.newOrder }),
+        PATCH(`${ep}/${p.id}`, { sort_order: p.newOrder }),
       ));
       const next = cache.map(x => {
         const patch = patches.find(p => p.id === x.id);
@@ -604,7 +592,7 @@ export function DesignVisitPage() {
     if (!confirm('Delete this item? This cannot be undone.')) return;
     const ep = endpointFor(type);
     try {
-      await callApi('DELETE', `${ep}/${id}`);
+      await DELETE(`${ep}/${id}`);
       showToast('Deleted.');
       _broadcastDvCatalogueChange(type);
       await fetchAll();
@@ -618,7 +606,7 @@ export function DesignVisitPage() {
     const text = termsNewText.trim();
     if (!text) { setTermsErr('Terms text cannot be empty.'); return; }
     try {
-      await callApi('POST', '/api/admin/design-visit-terms', { text });
+      await POST('/api/admin/design-visit-terms', { text });
       setTermsEditorOpen(false);
       setTermsNewText('');
       setTermsErr('');

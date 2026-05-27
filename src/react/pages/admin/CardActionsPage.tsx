@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Button, Card, CardContent, CircularProgress, Stack, Typography } from '@mui/material';
 import { useToast } from '../../contexts/ToastContext';
+import { GET, POST, PATCH, PUT } from '../../utils/api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -45,18 +46,6 @@ interface NewSubRow  { id: number; lsKey: string; prefix: string; }
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const W = window as unknown as Record<string, unknown>;
-
-function callApi(method: string, path: string, body?: unknown): Promise<unknown> {
-  if (typeof W.api === 'function')
-    return (W.api as (m: string, p: string, b?: unknown) => Promise<unknown>)(method, path, body);
-  return fetch(path, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  }).then(r => r.ok ? r.json() : r.json().then((e: { error?: string }) => {
-    throw new Error(e.error || r.statusText);
-  }));
-}
 
 function buildModel(
   labels: CALabel[], statuses: LeadStatus[], substatuses: Substatus[],
@@ -194,10 +183,10 @@ export function CardActionsPage() {
   const fetchAll = useCallback(async () => {
     try {
       const [lbl, sta, sub, hdl] = await Promise.all([
-        callApi('GET', '/api/admin/stage-action-labels'),
-        callApi('GET', '/api/admin/lead-statuses'),
-        callApi('GET', '/api/admin/lead-substatuses'),
-        callApi('GET', '/api/admin/card-action-handlers'),
+        GET('/api/admin/stage-action-labels'),
+        GET('/api/admin/lead-statuses'),
+        GET('/api/admin/lead-substatuses'),
+        GET('/api/admin/card-action-handlers'),
       ]) as [CALabel[], LeadStatus[], Substatus[], Handler[]];
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
       setLabels(safeArr(lbl));
@@ -245,7 +234,7 @@ export function CardActionsPage() {
       if (!value) {
         if (original) {
           try {
-            await callApi('PUT', '/api/admin/stage-action-labels',
+            await PUT('/api/admin/stage-action-labels',
               { stage_key: input.dataset.stage, status_key: input.dataset.status, label: '' });
             input.dataset.original = ''; saved++;
           } catch (e) {
@@ -257,7 +246,7 @@ export function CardActionsPage() {
       }
       if (value === original) continue;
       try {
-        await callApi('PUT', '/api/admin/stage-action-labels',
+        await PUT('/api/admin/stage-action-labels',
           { stage_key: input.dataset.stage, status_key: input.dataset.status, label: value });
         input.dataset.original = value; saved++;
       } catch (e) {
@@ -287,8 +276,8 @@ export function CardActionsPage() {
         if (keyPrefix && !keySuffix) { if (label || action) { failed++; failures.push(`new sub-status (${lsKey}): type a suffix after ${keyPrefix}`); } continue; }
         if (!subKey || !label) { if (subKey || label || action) { failed++; failures.push(`new sub-status (${lsKey}): key and display label are required.`); } continue; }
         try {
-          const created = await callApi('POST', '/api/admin/lead-substatuses',
-            { status_key: lsKey, substatus_key: subKey, label, action_label: action, sort_order: 0 }) as Substatus;
+          const created = await POST<Substatus>('/api/admin/lead-substatuses',
+            { status_key: lsKey, substatus_key: subKey, label, action_label: action, sort_order: 0 });
           row.removeAttribute('data-sub-new');
           row.dataset.subId      = String(created.id);
           row.dataset.origKey    = created.substatus_key;
@@ -311,7 +300,7 @@ export function CardActionsPage() {
         if (!Object.keys(patch).length) continue;
         if (patch.label === '') { failed++; failures.push(`sub-status #${idStr}: label cannot be empty.`); continue; }
         try {
-          const updated = await callApi('PATCH', `/api/admin/lead-substatuses/${idStr}`, patch) as Substatus;
+          const updated = await PATCH<Substatus>(`/api/admin/lead-substatuses/${idStr}`, patch);
           row.dataset.origKey    = updated.substatus_key;
           row.dataset.origLabel  = updated.label;
           row.dataset.origAction = updated.action_label || '';
@@ -340,7 +329,7 @@ export function CardActionsPage() {
         const sub = substatusesRef.current.find(s => Number(s.id) === ids[i]);
         if ((sub?.sort_order ?? -1) === i) continue;
         try {
-          await callApi('PATCH', `/api/admin/lead-substatuses/${ids[i]}`, { sort_order: i });
+          await PATCH(`/api/admin/lead-substatuses/${ids[i]}`, { sort_order: i });
           if (sub) sub.sort_order = i;
           saved++;
         } catch (e) {
@@ -381,8 +370,8 @@ export function CardActionsPage() {
     const aOrder = a.sort_order, bOrder = b.sort_order;
     try {
       await Promise.all([
-        callApi('PATCH', `/api/admin/lead-substatuses/${a.id}`, { sort_order: bOrder }),
-        callApi('PATCH', `/api/admin/lead-substatuses/${b.id}`, { sort_order: aOrder }),
+        PATCH(`/api/admin/lead-substatuses/${a.id}`, { sort_order: bOrder }),
+        PATCH(`/api/admin/lead-substatuses/${b.id}`, { sort_order: aOrder }),
       ]);
       a.sort_order = bOrder; b.sort_order = aOrder;
       fetchAll();

@@ -4,19 +4,16 @@
  * `toast()`, `fmtDate()` helpers that used to live in `public/admin.html`.
  */
 
+import { GET, POST, PATCH, PUT, DELETE } from '../../utils/api';
+
 export async function api<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
-  const opts: RequestInit = {
-    method,
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    credentials: 'same-origin',
-  };
-  if (body !== undefined) opts.body = JSON.stringify(body);
-  const r = await fetch(path, opts);
-  if (r.status === 401) { window.location.href = '/'; return undefined as T; }
-  if (r.status === 403) throw Object.assign(new Error('Forbidden'), { forbidden: true });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error((data && (data.error || data.message)) || 'HTTP ' + r.status);
-  return data as T;
+  const m = method.toUpperCase();
+  if (m === 'GET') return GET<T>(path);
+  if (m === 'DELETE') return DELETE<T>(path);
+  if (m === 'PATCH') return PATCH<T>(path, body);
+  if (m === 'PUT') return PUT<T>(path, body);
+  if (m === 'POST') return POST<T>(path, body);
+  throw new Error(`Unsupported HTTP method: ${method}`);
 }
 
 export function toast(msg: string, isErr = false): void {

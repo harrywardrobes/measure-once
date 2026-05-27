@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 import { Box, Card, CardContent, Stack, Typography } from '@mui/material';
+import { GET, POST, PATCH, DELETE } from '../../utils/api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -85,17 +86,7 @@ const _toastRef:        { fn: ((m: string, err?: boolean) => void) | null } = { 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function callApi(method: string, path: string, body?: unknown): Promise<unknown> {
-  if (typeof W.api === 'function')
-    return (W.api as (m: string, p: string, b?: unknown) => Promise<unknown>)(method, path, body);
-  return fetch(path, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  }).then(r => r.ok ? r.json() : r.json().then((e: { error?: string }) => {
-    throw new Error(e.error || r.statusText);
-  }));
-}
+
 
 function showToast(msg: string, err?: boolean) {
   if (_toastRef.fn) _toastRef.fn(msg, err);
@@ -427,8 +418,8 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
   const doSave = async (payload: Record<string, unknown>) => {
     const errEl = wrap.querySelector('#cah-edit-err') as HTMLElement;
     try {
-      if (existing) await callApi('PATCH', `/api/admin/card-action-handlers/${existing.id}`, payload);
-      else          await callApi('POST',  '/api/admin/card-action-handlers', payload);
+      if (existing) await PATCH(`/api/admin/card-action-handlers/${existing.id}`, payload);
+      else          await POST('/api/admin/card-action-handlers', payload);
       wrap.remove();
       await _reloadAndBroadcast();
       showToast(existing ? 'Action updated.' : 'Action added.');
@@ -525,7 +516,7 @@ function openConflictResolver(
     errEl.textContent = '';
     btn.disabled = true; btn.textContent = 'Removing…';
     try {
-      await callApi('DELETE', `/api/admin/card-action-handlers/${id}`);
+      await DELETE(`/api/admin/card-action-handlers/${id}`);
       await _reloadAndBroadcast();
       showToast('Handler removed.');
       const remaining = _handlersForSlot(slot);
@@ -547,7 +538,7 @@ function openConflictResolver(
 async function _deleteHandler(id: number): Promise<void> {
   if (!confirm('Remove this action from the label?')) return;
   try {
-    await callApi('DELETE', `/api/admin/card-action-handlers/${id}`);
+    await DELETE(`/api/admin/card-action-handlers/${id}`);
     await _reloadAndBroadcast();
     showToast('Action removed.');
   } catch (e) {
@@ -612,11 +603,11 @@ export function ActionHandlersPage() {
   const fetchAll = useCallback(async () => {
     try {
       const [hdl, lbl, sub, sta, cfl] = await Promise.all([
-        callApi('GET', '/api/admin/card-action-handlers'),
-        callApi('GET', '/api/admin/stage-action-labels'),
-        callApi('GET', '/api/admin/lead-substatuses'),
-        callApi('GET', '/api/admin/lead-statuses'),
-        callApi('GET', '/api/admin/card-action-handlers/conflicts'),
+        GET('/api/admin/card-action-handlers'),
+        GET('/api/admin/stage-action-labels'),
+        GET('/api/admin/lead-substatuses'),
+        GET('/api/admin/lead-statuses'),
+        GET('/api/admin/card-action-handlers/conflicts'),
       ]) as [Handler[], CALabel[], Substatus[], LeadStatus[], ConflictData];
 
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
