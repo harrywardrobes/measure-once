@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
@@ -12,7 +11,7 @@ import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import { FileUploadField } from './FileUploadField';
+import { FileUploadField, UploadStatus } from './FileUploadField';
 
 export interface RoomImage {
   storageKey: string;
@@ -134,7 +133,7 @@ export function DesignVisitRoomsStep({
   });
 
   // Keyed by stable clientId — safe across reorder/remove operations.
-  const [uploadingById, setUploadingById] = useState<Record<string, boolean>>({});
+  const [uploadStatusById, setUploadStatusById] = useState<Record<string, UploadStatus>>({});
   // Bump to reset FileUploadField after each upload batch completes.
   const [fileKeyById, setFileKeyById] = useState<Record<string, number>>({});
 
@@ -148,9 +147,9 @@ export function DesignVisitRoomsStep({
   }, [rooms]);
 
   useEffect(() => {
-    const anyUploading = Object.values(uploadingById).some(Boolean);
+    const anyUploading = Object.values(uploadStatusById).some(s => s === 'uploading');
     onUploadingChangeRef.current?.(anyUploading);
-  }, [uploadingById]);
+  }, [uploadStatusById]);
 
   const draftKeyRef = useRef(draftKey);
   useEffect(() => { draftKeyRef.current = draftKey; }, [draftKey]);
@@ -172,7 +171,7 @@ export function DesignVisitRoomsStep({
 
   function removeRoom(clientId: string) {
     setRooms(prev => prev.filter(r => r.clientId !== clientId));
-    setUploadingById(prev => { const n = { ...prev }; delete n[clientId]; return n; });
+    setUploadStatusById(prev => { const n = { ...prev }; delete n[clientId]; return n; });
     setFileKeyById(prev => { const n = { ...prev }; delete n[clientId]; return n; });
   }
 
@@ -216,9 +215,10 @@ export function DesignVisitRoomsStep({
    */
   async function handleFilesSelected(clientId: string, files: FileList | null) {
     if (!files || !files.length) return;
-    setUploadingById(prev => ({ ...prev, [clientId]: true }));
+    setUploadStatusById(prev => ({ ...prev, [clientId]: 'uploading' }));
 
     const uploaded: RoomImage[] = [];
+    let hadError = false;
     for (const file of Array.from(files)) {
       try {
         const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -242,6 +242,7 @@ export function DesignVisitRoomsStep({
         onNewUpload?.(newImg.storageKey);
         uploaded.push(newImg);
       } catch (err: unknown) {
+        hadError = true;
         const msg = err instanceof Error ? err.message : 'unknown error';
         console.warn('[design-visit] photo upload failed:', msg);
         const w = window as { toast?: (m: string) => void };
@@ -263,16 +264,21 @@ export function DesignVisitRoomsStep({
       );
     }
 
-    // Bump key to reset the FileUploadField (clears selected-file display).
+    const finalStatus: UploadStatus = hadError ? 'error' : 'success';
+    // Bump key to reset the FileUploadField (clears selected-file display),
+    // then show success/error adornment briefly before returning to idle.
     setFileKeyById(prev => ({ ...prev, [clientId]: (prev[clientId] ?? 0) + 1 }));
-    setUploadingById(prev => ({ ...prev, [clientId]: false }));
+    setUploadStatusById(prev => ({ ...prev, [clientId]: finalStatus }));
+    setTimeout(() => {
+      setUploadStatusById(prev => ({ ...prev, [clientId]: 'idle' }));
+    }, 1500);
   }
 
   return (
     <Box>
       {rooms.map((room, idx) => {
         const { clientId, data } = room;
-        const uploading = uploadingById[clientId] ?? false;
+        const uploadStatus = uploadStatusById[clientId] ?? 'idle';
 
         return (
           <Box
@@ -486,23 +492,15 @@ export function DesignVisitRoomsStep({
               sx={{ mb: 1.5 }}
             />
 
-            {/* Photo upload — disabled while an upload is in progress for this room */}
+            {/* Photo upload — uploadStatus drives spinner/result adornment inside the field */}
             <FileUploadField
               key={fileKeyById[clientId] ?? 0}
               label="Photos (optional)"
               accept="image/*"
               multiple
-              disabled={uploading}
+              uploadStatus={uploadStatus}
               onChange={files => handleFilesSelected(clientId, files)}
             />
-            {uploading && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                <CircularProgress size={14} />
-                <Typography variant="caption" color="text.secondary">
-                  Uploading photos…
-                </Typography>
-              </Box>
-            )}
 
             {/* Already-uploaded / existing photo thumbnails */}
             {data.images && data.images.length > 0 && (

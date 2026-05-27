@@ -14,7 +14,7 @@ import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
-import { FileUploadField } from '../../components/FileUploadField';
+import { FileUploadField, UploadStatus } from '../../components/FileUploadField';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -71,6 +71,7 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
   const [loading, setLoading] = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [errMsg,  setErrMsg]  = useState('');
+  const [imageUploadStatus, setImageUploadStatus] = useState<UploadStatus>('idle');
 
   const [name,        setName]        = useState('');
   const [style,       setStyle]       = useState('');
@@ -90,7 +91,7 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
   useEffect(() => {
     if (!open) {
       setName(''); setStyle(''); setDescription(''); setImageUrl('');
-      setImageFile(null); setPreviewSrc(''); setErrMsg('');
+      setImageFile(null); setPreviewSrc(''); setErrMsg(''); setImageUploadStatus('idle');
       return;
     }
     if (!existingId) return;
@@ -132,12 +133,15 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
       const formData = new FormData();
       formData.append('image', imageFile);
       setSaving(true);
+      setImageUploadStatus('uploading');
       try {
         const res = await fetch(uploadUrlMap[type], { method: 'POST', body: formData });
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as {error?: string}).error || res.statusText); }
         const j = await res.json() as { url: string };
         finalImageUrl = j.url;
+        setImageUploadStatus('success');
       } catch (e) {
+        setImageUploadStatus('error');
         setErrMsg('Image upload failed: ' + (e as Error).message);
         setSaving(false);
         return;
@@ -241,9 +245,12 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
                 <FileUploadField
                   label="Image (optional)"
                   accept="image/*"
+                  disabled={saving}
+                  uploadStatus={imageUploadStatus}
                   onChange={(files) => {
                     const file = files?.[0] ?? null;
                     setImageFile(file);
+                    setImageUploadStatus('idle');
                   }}
                   helperText="Replace the current image by selecting a new file"
                 />
