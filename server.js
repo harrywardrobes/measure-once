@@ -142,7 +142,7 @@ const PAGE_ROUTES = {
   '/profile':   'profile.html',
 };
 
-// /trades, /admin, /sales, /projects, /invoices are protected — handled below after auth middleware is set up
+// /trades, /admin, /projects, /invoices are protected — handled below after auth middleware is set up
 for (const [route, file] of Object.entries(PAGE_ROUTES)) {
   app.get(route, (_req, res) => res.sendFile(path.join(__dirname, 'public', file)));
 }
@@ -158,8 +158,6 @@ app.get('/admin.html', (req, res) => res.redirect(301, '/admin'));
 
 // Redirect .html variants of privilege-restricted pages to their clean URL
 // so the single protected route below is the only entry point.
-app.get('/sales.html',    (req, res) => res.redirect(301, '/sales'));
-app.get('/survey.html',   (req, res) => res.redirect(301, '/survey'));
 app.get('/projects.html', (req, res) => res.redirect(301, '/projects'));
 app.get('/invoices.html', (req, res) => res.redirect(301, '/invoices'));
 
@@ -2876,12 +2874,6 @@ app.get('/access-restricted', isAuthenticated, (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'access-restricted.html'));
 });
 
-app.get('/sales',    isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'sales.html'));
-});
-app.get('/survey',   isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'survey.html'));
-});
 app.get('/projects', isAuthenticated, (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'projects.html'));
 });

@@ -229,12 +229,10 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
     const onLocaldataUpdated = () => {
       fetchContactStageCache()
         .then(() => {
-          document.dispatchEvent(new CustomEvent('sales-board-data-ready'));
-          document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
+          // board pages can listen for this event to respond
         })
         .catch(() => {
-          document.dispatchEvent(new CustomEvent('sales-board-bg-refresh-failed'));
-          document.dispatchEvent(new CustomEvent('survey-board-bg-refresh-failed'));
+          // nothing to forward
         });
     };
     document.addEventListener('localdata-updated', onLocaldataUpdated);

@@ -13,7 +13,6 @@ import {
   CalendarPageSkeleton,
   HomePageSkeleton,
   ProfilePageSkeleton,
-  SalesBoardPageSkeleton,
   AdminTeamPageSkeleton,
   AdminPermissionsPageSkeleton,
   AdminRequestsPageSkeleton,
@@ -52,8 +51,6 @@ const TradesPage         = React.lazy(() => import('./pages/TradesPage').then(m 
 const SearchSettingsPage = React.lazy(() => import('./pages/SearchSettingsPage').then(m => ({ default: m.SearchSettingsPage })));
 const WorkshopSettingsPage = React.lazy(() => import('./pages/WorkshopSettingsPage').then(m => ({ default: m.WorkshopSettingsPage })));
 const CustomersPage      = React.lazy(() => import('./pages/CustomersPage').then(m => ({ default: m.CustomersPage })));
-const SalesBoardPage     = React.lazy(() => import('./pages/SalesBoardPage').then(m => ({ default: m.SalesBoardPage })));
-const SurveyBoardPage    = React.lazy(() => import('./pages/SurveyBoardPage').then(m => ({ default: m.SurveyBoardPage })));
 const HomePage           = React.lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
 const CalendarPage       = React.lazy(() => import('./pages/CalendarPage').then(m => ({ default: m.CalendarPage })));
 const ProfilePage        = React.lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
@@ -173,8 +170,6 @@ const MOUNTS: Array<{
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },
   { id: 'tab-workshop',         render: () => <WorkshopSettingsPage /> },
   { id: 'tab-customers',        render: () => <CustomersPage />, fallback: <CustomersPageSkeleton /> },
-  { id: 'sales-board-mount',    render: () => <SalesBoardPage />, fallback: <SalesBoardPageSkeleton />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },
-  { id: 'survey-board-mount',   render: () => <SurveyBoardPage />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },
   { id: 'tab-team',             render: () => <AdminTeamPage />, fallback: <AdminTeamPageSkeleton /> },
   { id: 'tab-permissions',      render: () => <AdminPermissionsPage />, fallback: <AdminPermissionsPageSkeleton /> },
   { id: 'tab-requests',         render: () => <AdminRequestsPage />,   fallback: <AdminRequestsPageSkeleton /> },

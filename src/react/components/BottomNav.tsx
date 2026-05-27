@@ -15,10 +15,6 @@ import TuneIcon from '@mui/icons-material/Tune';
 import HomeIcon from '@mui/icons-material/Home';
 import { NavCustomiseDialog } from './NavCustomiseDialog';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
-import SellIcon from '@mui/icons-material/Sell';
-import SellOutlinedIcon from '@mui/icons-material/SellOutlined';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import SquareFootIcon from '@mui/icons-material/SquareFoot';
 import SquareFootOutlinedIcon from '@mui/icons-material/SquareFootOutlined';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
@@ -73,8 +69,6 @@ export type NavItem = {
 export const NAV: NavItem[] = [
   { key: 'home',      href: '/',          label: 'Home',      Icon: HomeIcon,             IconOutlined: HomeOutlinedIcon },
   { key: 'customers', href: '/customers', label: 'Customers', Icon: PeopleAltIcon,        IconOutlined: PeopleAltOutlinedIcon },
-  { key: 'sales',     href: '/sales',     label: 'Sales',     Icon: SellIcon,             IconOutlined: SellOutlinedIcon,          managerOnly: true },
-  { key: 'survey',   href: '/survey',   label: 'Survey',   Icon: AssignmentIcon,    IconOutlined: AssignmentOutlinedIcon,    managerOnly: true },
   { key: 'projects', href: '/projects', label: 'Projects', Icon: SquareFootIcon,    IconOutlined: SquareFootOutlinedIcon },
   { key: 'calendar', href: '/calendar', label: 'Calendar', Icon: CalendarMonthIcon, IconOutlined: CalendarMonthOutlinedIcon },
   { key: 'invoices', href: '/invoices', label: 'Invoices', Icon: ReceiptLongIcon,   IconOutlined: ReceiptLongOutlinedIcon,   managerOnly: true },
@@ -84,8 +78,6 @@ const DEFAULT_PRIMARY_KEYS = ['home', 'customers', 'calendar'];
 const BAR_SIZE = 3;
 
 function accentFor(key: string, theme: Theme): string {
-  if (key === 'sales')    return theme.palette.stage.sales.bg;
-  if (key === 'survey')   return theme.palette.stage.survey.bg;
   if (key === 'projects') return theme.palette.stage.order.bg;
   return theme.palette.primary.main;
 }
@@ -159,11 +151,10 @@ export function BottomNav() {
   });
   // Role-aware fallback used when the API returns no saved config (or when
   // the user has no job_role and the API fell back to the __default__ config).
-  // Managers see Home/Customers/Sales by default; non-managers see
-  // DEFAULT_PRIMARY_KEYS. Filtered to actually-visible items.
-  const defaultPrimaryKeys = (
-    isManager ? (['home', 'customers', 'sales'] as string[]) : DEFAULT_PRIMARY_KEYS
-  ).filter((k) => visibleNav.some((n) => n.key === k));
+  // Both managers and non-managers default to DEFAULT_PRIMARY_KEYS.
+  // Filtered to actually-visible items.
+  const defaultPrimaryKeys = DEFAULT_PRIMARY_KEYS
+    .filter((k) => visibleNav.some((n) => n.key === k));
 
   // Always reflects the latest defaultPrimaryKeys so the prefs-load callback
   // can use it even if isManager resolved after the effect ran.

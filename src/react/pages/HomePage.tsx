@@ -490,7 +490,7 @@ function ProjectsSection({
   if (active.length === 0) return null;
   return (
     <Box sx={{ mb: 3 }}>
-      <SectionHeader title="Active Projects" linkLabel="All customers" linkHref="/sales" />
+      <SectionHeader title="Active Projects" linkLabel="All customers" linkHref="/projects" />
       {active.map((c) => {
         const rooms = (roomsByContact[c.id] || []).filter(
           (r) => (r.roomStatus || 'active') === 'active',

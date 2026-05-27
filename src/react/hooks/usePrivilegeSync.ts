@@ -2,8 +2,6 @@ import { useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 const RESTRICTED_PATHS = new Set([
-  '/sales', '/sales.html',
-  '/survey', '/survey.html',
   '/projects', '/projects.html',
   '/invoices', '/invoices.html',
 ]);
