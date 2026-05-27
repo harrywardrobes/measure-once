@@ -19,6 +19,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import { ChangePasswordCard } from '../components/ChangePasswordDialog';
+import { Pill } from '../components/Pill';
 import { usePrivilege } from '../hooks/usePrivilege';
 
 type Profile = {
@@ -284,16 +285,9 @@ function IdentityCard({
             <Typography variant="h6" sx={{ fontWeight: 700 }} noWrap>{fullName}</Typography>
             <Typography variant="body2" color="text.secondary" noWrap>{profile.email || ''}</Typography>
             {profile.has_pending_photo ? (
-              <Typography
-                variant="caption"
-                sx={{
-                  display: 'inline-block', mt: 0.5, px: 1, py: 0.25,
-                  bgcolor: 'warning.light', color: 'warning.dark',
-                  borderRadius: 999, fontWeight: 600,
-                }}
-              >
-                Photo awaiting approval
-              </Typography>
+              <Box sx={{ mt: 0.5 }}>
+                <Pill variant="warn" label="Photo awaiting approval" />
+              </Box>
             ) : !photoSrc ? (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                 Upload a professional photo with a plain background
