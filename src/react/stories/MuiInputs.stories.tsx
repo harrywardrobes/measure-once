@@ -22,8 +22,10 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateRangePicker } from '@mui/x-date-pickers-pro/DateRangePicker';
+import { TimeRangePicker } from '@mui/x-date-pickers-pro/TimeRangePicker';
 import type { DateRange, RangePosition } from '@mui/x-date-pickers-pro/models';
 import type { FieldOwnerState } from '@mui/x-date-pickers/models';
+import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -543,6 +545,178 @@ export const DateRangePickerField: Story = {
               onChange={() => {}}
               disabled
               localeText={{ start: 'Delivery from', end: 'Delivery to' }}
+              slotProps={{
+                textField: {
+                  size: 'small',
+                  fullWidth: true,
+                  helperText: 'Locked after order confirmation.',
+                },
+              }}
+            />
+          </Box>
+        </Stack>
+      </LocalizationProvider>
+    );
+  },
+};
+
+export const TimePickerField: Story = {
+  name: 'TimePicker',
+  render: () => {
+    const [arrivalTime, setArrivalTime] = useState<Dayjs | null>(null);
+    const [startTime, setStartTime] = useState<Dayjs | null>(dayjs().hour(9).minute(0).second(0));
+    const [deliveryTime, setDeliveryTime] = useState<Dayjs | null>(null);
+
+    return (
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <Stack spacing={3} sx={{ maxWidth: 400 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>TimePicker</Typography>
+
+          <TimePicker
+            label="Arrival time"
+            value={arrivalTime}
+            onChange={(v) => setArrivalTime(v)}
+            slotProps={{
+              textField: {
+                helperText: arrivalTime
+                  ? `Arrives at ${arrivalTime.format('h:mm A')}`
+                  : 'Pick a time for the design visit',
+                fullWidth: true,
+              },
+            }}
+          />
+
+          <TimePicker
+            label="Start time (pre-filled)"
+            value={startTime}
+            onChange={(v) => setStartTime(v)}
+            slotProps={{
+              textField: {
+                helperText: startTime ? `Selected: ${startTime.format('h:mm A')}` : undefined,
+                fullWidth: true,
+              },
+            }}
+          />
+
+          <TimePicker
+            label="Delivery time (error)"
+            value={deliveryTime}
+            onChange={(v) => setDeliveryTime(v)}
+            slotProps={{
+              textField: {
+                error: deliveryTime === null,
+                helperText: deliveryTime === null ? 'A delivery time is required.' : undefined,
+                fullWidth: true,
+              },
+            }}
+          />
+
+          <TimePicker
+            label="Installation time (disabled)"
+            value={null}
+            onChange={() => {}}
+            disabled
+            slotProps={{
+              textField: {
+                helperText: 'Time is locked once the order is confirmed.',
+                fullWidth: true,
+              },
+            }}
+          />
+        </Stack>
+      </LocalizationProvider>
+    );
+  },
+};
+
+export const TimeRangePickerField: Story = {
+  name: 'TimeRangePicker',
+  render: () => {
+    const [visitRange, setVisitRange] = useState<DateRange<Dayjs>>([null, null]);
+    const [slotRange, setSlotRange] = useState<DateRange<Dayjs>>([
+      dayjs().hour(9).minute(0).second(0),
+      dayjs().hour(17).minute(0).second(0),
+    ]);
+    const [errRange, setErrRange] = useState<DateRange<Dayjs>>([null, null]);
+
+    const fmt = (d: Dayjs | null) => (d ? d.format('h:mm A') : '—');
+
+    const [errStart, errEnd] = errRange;
+    const bothSet = errStart !== null && errEnd !== null;
+    const rangeInvalid = bothSet && !errEnd.isAfter(errStart);
+
+    return (
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <Stack spacing={4} sx={{ maxWidth: 560 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>TimeRangePicker</Typography>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Default — schedule a design visit window</Typography>
+            <TimeRangePicker
+              value={visitRange}
+              onChange={(v) => setVisitRange(v)}
+              localeText={{ start: 'Visit start', end: 'Visit end' }}
+              slotProps={{ textField: { size: 'small', fullWidth: true } }}
+            />
+            {(visitRange[0] || visitRange[1]) && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block' }}>
+                Selected: {fmt(visitRange[0])} – {fmt(visitRange[1])}
+              </Typography>
+            )}
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Pre-filled — standard working hours</Typography>
+            <TimeRangePicker
+              value={slotRange}
+              onChange={(v) => setSlotRange(v)}
+              localeText={{ start: 'From', end: 'To' }}
+              slotProps={{ textField: { size: 'small', fullWidth: true } }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block' }}>
+              Slot: {fmt(slotRange[0])} – {fmt(slotRange[1])}
+            </Typography>
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Error / validation — end must be after start</Typography>
+            <TimeRangePicker
+              value={errRange}
+              onChange={(v) => setErrRange(v)}
+              localeText={{ start: 'Start time', end: 'End time' }}
+              slotProps={{
+                textField: (ownerState: FieldOwnerState) => {
+                  const pos = (ownerState as FieldOwnerState & { position?: RangePosition }).position;
+                  return {
+                    size: 'small' as const,
+                    fullWidth: true,
+                    error:
+                      (pos === 'start' && errStart === null) ||
+                      (pos === 'end' && errEnd === null) ||
+                      rangeInvalid,
+                    helperText:
+                      pos === 'start' && errStart === null
+                        ? 'Start time is required.'
+                        : pos === 'end' && errEnd === null
+                        ? 'End time is required.'
+                        : rangeInvalid
+                        ? pos === 'start'
+                          ? 'Must be before end time.'
+                          : 'Must be after start time.'
+                        : undefined,
+                  };
+                },
+              }}
+            />
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Disabled — locked installation slot</Typography>
+            <TimeRangePicker
+              value={[dayjs().hour(10).minute(0).second(0), dayjs().hour(14).minute(0).second(0)]}
+              onChange={() => {}}
+              disabled
+              localeText={{ start: 'Start', end: 'End' }}
               slotProps={{
                 textField: {
                   size: 'small',
