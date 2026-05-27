@@ -5,6 +5,12 @@ import Button from '@mui/material/Button';
 import { BRAND_COLORS } from '../theme';
 
 interface AccessRestrictedPageProps {
+  /**
+   * Gallery-embedding flag. Pass `true` to suppress full-viewport layout when
+   * rendering inside the Design System gallery.
+   * This page uses the simple boolean variant of the convention.
+   * See `src/react/types/gallery.ts` for the full embedding convention.
+   */
   embedded?: boolean;
 }
 

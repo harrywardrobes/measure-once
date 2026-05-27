@@ -10,6 +10,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import DoNotDisturbAltIcon from '@mui/icons-material/DoNotDisturbAlt';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import type { GalleryEmbedded } from '../types/gallery';
 
 type TW = { render: (el: Element, opts: object) => string; getResponse: (id: string) => string; reset: (id: string) => void };
 
@@ -406,7 +407,7 @@ function AlreadyApprovedView() {
  * inline inside a card frame instead of a Dialog, and skips the Turnstile
  * fetch (showing a placeholder widget instead).
  */
-export interface AccessRequestGateEmbeddedPreview {
+export interface AccessRequestGateEmbeddedPreview extends GalleryEmbedded {
   /** Which view state to display. Defaults to 'form'. */
   view?: ViewState;
 }

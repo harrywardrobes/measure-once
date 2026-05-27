@@ -20,6 +20,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import { BRAND_COLORS } from '../theme';
+import type { GalleryEmbedded } from '../types/gallery';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -167,12 +168,12 @@ function SupersededBanner() {
 }
 
 // ── Embedded / gallery config ─────────────────────────────────────────────────
-// `embedded` is the canonical prop for signalling gallery embedding across all
-// full-page components. For simple boolean pages (NotFoundPage,
-// AccessRestrictedPage) pass `embedded` as a bare boolean. For pages with rich
-// gallery state (like this one) pass an `EmbeddedPreview` object instead.
+// See `src/react/types/gallery.ts` for the full convention. `embedded` is the
+// canonical prop name for gallery embedding across all full-page components.
+// This page uses a rich preview object so the gallery can control which UI
+// state is shown without a real token or API call.
 
-export interface EmbeddedPreview {
+export interface EmbeddedPreview extends GalleryEmbedded {
   state: PageState;
   successKind?: SuccessKind;
   data?: SignOffData;

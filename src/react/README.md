@@ -70,16 +70,25 @@ Full-page components shown in Storybook stories use a single canonical
 prop name — **`embedded`** — to signal that they are running inside a
 story rather than at their real URL.
 
-- Simple error/boundary pages (`NotFoundPage`, `AccessRestrictedPage`):
-  `embedded?: boolean` — just pass the bare boolean to suppress the
-  full-viewport layout.
-- Pages with rich preview state (`DesignVisitSignOffPage`): pass an
-  `EmbeddedPreview` object (exported from the page file) so the story
-  can control which UI state is shown without a real token or API call.
+The authoritative type definitions and detailed instructions live in
+**`src/react/types/gallery.ts`** — read that file before adding a new
+embeddable component.
+
+Two patterns exist:
+
+- **Simple boolean** — `NotFoundPage`, `AccessRestrictedPage`:
+  `embedded?: boolean`. The bare `true` suppresses full-viewport layout.
+- **Rich preview object** — `DesignVisitSignOffPage` (`EmbeddedPreview`),
+  `AccessRequestGate` (`AccessRequestGateEmbeddedPreview`): the interface
+  extends `GalleryEmbedded` (from `src/react/types/gallery.ts`) so the
+  gallery can control which UI state is displayed without a real token or
+  API call.
 
 **Always use `embedded` (not `preview`, `inGallery`, etc.) for this
-purpose.** Stories in `src/react/stories/Pages.stories.tsx` pass it
-consistently for all page components.
+purpose.** Rich preview types must extend `GalleryEmbedded` and be
+exported from the component file so `DesignSystemPage` can import them
+without a circular dependency. Stories in `src/react/stories/Pages.stories.tsx`
+pass it consistently for all page components.
 
 ## Adding a new page mount
 
