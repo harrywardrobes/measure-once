@@ -44,15 +44,5 @@
 
   <script type="module" src="/react/main.js"></script>
 
-  <script>
-    // Simple back navigation fallback used by any non-React code that calls goBack().
-    // CustomerDetailPage renders its own back button and does not use this function.
-    async function goBack() {
-      location.href = '/customers';
-    }
-    // Auth and data fetching are handled by the React CustomerDetailPage
-    // (via AppBootstrapProvider + its own React bootstrap). No legacy
-    // bootstrap() call needed here.
-  </script>
 </body>
 </html>
