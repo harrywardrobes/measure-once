@@ -94,6 +94,10 @@ export function StandaloneInvoicesPage() {
 
   useEffect(() => { triggerLoad(); }, [triggerLoad]);
 
+  // True while the store hasn't resolved yet: covers both an in-progress fetch
+  // and the brief initial render before the useEffect above fires triggerLoad().
+  const isLoading = loading || (!qb.statusKnown && !qb.loaded && !loadError);
+
   const [filter, setFilter] = useState<'all' | 'overdue' | 'outstanding'>('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState<number>(() => loadPage());
@@ -175,7 +179,7 @@ export function StandaloneInvoicesPage() {
   const allVisibleIds = visible.map(inv => inv.id);
 
   // ── Not connected ─────────────────────────────────────────────────────────
-  if (!loading && qb.statusKnown && !connected) {
+  if (!isLoading && qb.statusKnown && !connected) {
     return (
       <Box sx={{ maxWidth: 480, mx: 'auto', py: 10, textAlign: 'center', px: 2 }}>
         <Box sx={{ mb: 2, opacity: 0.35 }}>
@@ -199,7 +203,7 @@ export function StandaloneInvoicesPage() {
   }
 
   // ── Error ─────────────────────────────────────────────────────────────────
-  if (!loading && loadError) {
+  if (!isLoading && loadError) {
     const isDbError = errorCode === 'DB_ERROR';
     const msg = isDbError
       ? 'The database could not be reached. Check your connection and try again.'
@@ -230,7 +234,7 @@ export function StandaloneInvoicesPage() {
       }}>
         <Box>
           <Typography variant="h6" sx={{ fontWeight: 700 }}>Outstanding Invoices</Typography>
-          {loading ? (
+          {isLoading ? (
             <Skeleton width={180} height={14} sx={{ mt: 0.5 }} />
           ) : (
             <Typography variant="caption" color="text.secondary">
@@ -242,10 +246,10 @@ export function StandaloneInvoicesPage() {
           )}
         </Box>
         <Stack direction="row" spacing={1}>
-          <Button size="small" variant="outlined" startIcon={<RefreshIcon />} onClick={loadInvoices} disabled={loading} color="inherit">
+          <Button size="small" variant="outlined" startIcon={<RefreshIcon />} onClick={loadInvoices} disabled={isLoading} color="inherit">
             Refresh
           </Button>
-          {isAdmin && !loading && connected && (
+          {isAdmin && !isLoading && connected && (
             <Button
               size="small"
               variant="outlined"
@@ -260,14 +264,14 @@ export function StandaloneInvoicesPage() {
       </Box>
 
       {/* Overdue alert */}
-      {!loading && overdueCount > 0 && (
+      {!isLoading && overdueCount > 0 && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           {overdueCount} overdue invoice{overdueCount !== 1 ? 's' : ''} — total outstanding: {fmtGBP(sorted.filter(inv => ['overdue','open','partial'].includes(invoiceStatus(inv))).reduce((s, inv) => s + (inv.balance ?? 0), 0))}
         </Alert>
       )}
 
       {/* Filter bar + search */}
-      {(!loading || invoices.length > 0) && (
+      {(!isLoading || invoices.length > 0) && (
         <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
           <Box sx={{ display: 'flex', p: 0.5, bgcolor: 'action.hover', borderRadius: 2, width: 'fit-content' }}>
             <ToggleButtonGroup
@@ -309,7 +313,7 @@ export function StandaloneInvoicesPage() {
       )}
 
       {/* Invoice list */}
-      {loading ? (
+      {isLoading ? (
         <SkeletonRows />
       ) : visible.length === 0 ? (
         <Box sx={{ py: 10, textAlign: 'center' }}>
