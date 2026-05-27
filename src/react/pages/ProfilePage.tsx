@@ -72,10 +72,10 @@ async function jpost<T>(path: string, body: unknown): Promise<T> {
 }
 
 export function ProfilePage(): React.ReactElement {
-  // The React island mounts before core.js bootstrap() finishes populating
-  // window.state.user. Seed from the global, listen for the `mo:user` event
-  // bootstrap fires, AND as a last-resort fall back to fetching /api/auth/user
-  // directly so this page never depends on event timing.
+  // The React island mounts before core.js bootstrap() finishes. Seed from
+  // getAppUser() (reads the global header user object), listen for the
+  // `mo:user` event that bootstrap fires, AND as a last-resort fall back to
+  // fetching /api/auth/user directly so this page never depends on event timing.
   const { isAdmin } = usePrivilege();
   const [appUser, setAppUser] = React.useState<AppUser | null>(() => getAppUser());
   const [profile, setProfile] = React.useState<Profile | null>(null);

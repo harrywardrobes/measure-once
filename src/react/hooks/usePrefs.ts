@@ -30,9 +30,8 @@ function fetchPrefs(): Promise<Prefs> {
  * - Viewer-role users skip the network fetch (they have no writable prefs).
  *
  * This is the React equivalent of the `ensurePrefs` / `patchPref` helpers in
- * `public/core.js` (which write into `window.state.prefs`). Prefer this hook
- * inside React components; `state.prefs` remains populated for vanilla-JS
- * bridges until core.js is retired.
+ * `public/core.js`. Prefer this hook inside React components; the core.js
+ * helpers remain available for vanilla-JS bridges until core.js is retired.
  */
 export function usePrefs(): UsePrefsResult {
   const { privilegeLevel } = useAuth();
