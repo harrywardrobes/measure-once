@@ -365,7 +365,8 @@ function HandlerEditorModal({
   const showSdv = handlerType === 'start_design_visit';
   const showDw  = handlerType === 'schedule_delivery_window';
   const showIs  = handlerType === 'schedule_installation_slot';
-  const showJson = !(showSv || showMsg || showSdv || showDw || showIs);
+  const showNoConfig = handlerType === 'add_design_visit_to_calendar' || handlerType === 'summarise_phone_call';
+  const showJson = !(showSv || showMsg || showSdv || showDw || showIs || showNoConfig);
 
   const buildPayload = (): Record<string, unknown> | null => {
     setEditError('');
@@ -574,6 +575,13 @@ function HandlerEditorModal({
                 addToGoogleCalendar={isVal.addToGoogleCalendar}
                 onChange={setIsVal}
               />
+            )}
+
+            {/* Placeholder for handler types that have no configurable settings */}
+            {showNoConfig && (
+              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                No additional configuration required for this action type.
+              </Typography>
             )}
 
             {/* JSON fallback for types without a dedicated config block */}
