@@ -242,6 +242,7 @@ export function InvoiceDetailDrawer({
         }),
       }).then(res => res.json());
       if (r.error) throw new Error(r.error);
+      // Optimistic patch so the UI responds immediately while the re-fetch is in flight.
       setInv(prev => prev ? {
         ...prev,
         syncToken: r.syncToken,
@@ -253,6 +254,16 @@ export function InvoiceDetailDrawer({
       clearDraft(inv.id);
       onSaved?.();
       setSaveMsg({ text: 'Saved', ok: true });
+      // Re-fetch from the server to pick up any server-computed fields
+      // (Balance due, Total, etc.) that the local patch doesn't cover.
+      // Guard: only apply the response if the drawer is still showing the
+      // same invoice — prevents a stale re-fetch from overwriting a
+      // subsequently navigated-to invoice.
+      const savedId = inv.id;
+      fetch(`/api/quickbooks/invoice/${savedId}`)
+        .then(res => res.json())
+        .then(fresh => { if (!fresh.error) setInv(prev => prev?.id === savedId ? fresh : prev); })
+        .catch(() => { /* non-fatal — optimistic patch is already applied */ });
     } catch (e: unknown) {
       notifyApiError('quickbooks', e);
       setSaveMsg({ text: (e as Error).message || 'Save failed', ok: false });
