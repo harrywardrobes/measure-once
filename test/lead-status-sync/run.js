@@ -114,33 +114,33 @@ async function bootstrapFilter(page) {
 // Poll the #lead-status-filter <select> until an <option> whose text starts
 // with `label` appears, or until `timeoutMs` elapses.
 async function waitForFilterLabel(page, label, timeoutMs = 6000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const found = await page.evaluate((lbl) => {
+  return !!(await pollUntil(
+    page,
+    (lbl) => {
       const sel = document.getElementById('lead-status-filter');
-      if (!sel) return false;
-      return Array.from(sel.options).some(o => o.textContent.startsWith(lbl));
-    }, label);
-    if (found) return true;
-    await new Promise(r => setTimeout(r, 150));
-  }
-  return false;
+      if (!sel) return null;
+      return Array.from(sel.options).some(o => o.textContent.startsWith(lbl)) ? true : null;
+    },
+    timeoutMs,
+    150,
+    [label],
+  ));
 }
 
 // Poll the #lead-status-filter <select> until no <option> whose text starts
 // with `label` remains, or until `timeoutMs` elapses.
 async function waitForFilterLabelGone(page, label, timeoutMs = 6000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const found = await page.evaluate((lbl) => {
+  return !!(await pollUntil(
+    page,
+    (lbl) => {
       const sel = document.getElementById('lead-status-filter');
-      if (!sel) return false;
-      return Array.from(sel.options).some(o => o.textContent.startsWith(lbl));
-    }, label);
-    if (!found) return true;
-    await new Promise(r => setTimeout(r, 150));
-  }
-  return false;
+      if (!sel) return null;
+      return Array.from(sel.options).some(o => o.textContent.startsWith(lbl)) ? null : true;
+    },
+    timeoutMs,
+    150,
+    [label],
+  ));
 }
 
 async function getFilterOptions(page) {
@@ -154,16 +154,16 @@ async function getFilterOptions(page) {
 // Poll .MuiChip-label elements until one whose text includes `label` is
 // found, or until `timeoutMs` elapses.
 async function waitForChipLabel(page, label, timeoutMs = 7000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const found = await page.evaluate((lbl) => {
+  return !!(await pollUntil(
+    page,
+    (lbl) => {
       const chips = document.querySelectorAll('.MuiChip-label');
-      return Array.from(chips).some(c => c.textContent.includes(lbl));
-    }, label);
-    if (found) return true;
-    await new Promise(r => setTimeout(r, 150));
-  }
-  return false;
+      return Array.from(chips).some(c => c.textContent.includes(lbl)) ? true : null;
+    },
+    timeoutMs,
+    150,
+    [label],
+  ));
 }
 
 // Populate the lead-status dropdown then programmatically select `lsKey` so
@@ -761,17 +761,16 @@ async function main() {
     });
     // Poll for the #lead-status-filter <select> to have at least one option,
     // so the programmatic selection below is guaranteed to find it.
-    {
-      const deadline = Date.now() + 6000;
-      while (Date.now() < deadline) {
-        const hasOpts = await subSkelTab.evaluate((lsKey) => {
-          const sel = document.getElementById('lead-status-filter');
-          return sel && Array.from(sel.options).some(o => o.value === lsKey);
-        }, LS_KEY).catch(() => false);
-        if (hasOpts) break;
-        await new Promise(r => setTimeout(r, 150));
-      }
-    }
+    await pollUntil(
+      subSkelTab,
+      (lsKey) => {
+        const sel = document.getElementById('lead-status-filter');
+        return (sel && Array.from(sel.options).some(o => o.value === lsKey)) ? true : null;
+      },
+      6000,
+      150,
+      [LS_KEY],
+    );
 
     // Select the test lead status programmatically.  Use the React-compatible
     // setter so the synthetic change event triggers setLeadStatus().
@@ -800,19 +799,17 @@ async function main() {
 
     // Poll for the sub-status skeleton to appear after React re-renders with the
     // newly selected lead-status value.  Replaces the fixed 300 ms delay.
-    {
-      const deadline = Date.now() + 5000;
-      while (Date.now() < deadline) {
-        const hasSkel = await subSkelTab.evaluate(() => {
-          const skel = document.querySelector('[data-testid="substatus-skeleton"]');
-          if (!skel) return false;
-          const st = window.getComputedStyle(skel);
-          return st.display !== 'none' && st.visibility !== 'hidden';
-        }).catch(() => false);
-        if (hasSkel) break;
-        await new Promise(r => setTimeout(r, 100));
-      }
-    }
+    await pollUntil(
+      subSkelTab,
+      () => {
+        const skel = document.querySelector('[data-testid="substatus-skeleton"]');
+        if (!skel) return null;
+        const st = window.getComputedStyle(skel);
+        return (st.display !== 'none' && st.visibility !== 'hidden') ? true : null;
+      },
+      5000,
+      100,
+    );
 
     // ── assert sub-status skeleton is visible ──
     const subSkelVisible = await subSkelTab.evaluate(() => {
