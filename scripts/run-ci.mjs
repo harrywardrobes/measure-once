@@ -92,6 +92,7 @@ const STEPS = [
   'test:conflict-digest-settings:ci',
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',
+  'test:storybook-output-clean',
 ];
 
 /**
