@@ -8,6 +8,7 @@ export interface ProjectContact {
     lastname?: string;
     email?: string;
     closedate?: string;
+    lastmodifieddate?: string;
   };
 }
 
@@ -17,6 +18,7 @@ export interface ProjectRoom {
   roomStatus?: string;
   assignedFitterId?: string | null;
   installStart?: string | null;
+  statusId?: string;
 }
 
 export interface ProjectPlatformUser {
@@ -29,6 +31,7 @@ export interface ProjectPlatformUser {
 
 export interface ProjectWorkflowStage {
   label?: string;
+  statuses?: Array<{ id: string; label: string }>;
 }
 
 export interface ProjectWorkflowDef {

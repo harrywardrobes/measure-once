@@ -4,14 +4,18 @@ import {
   Avatar,
   Box,
   Button,
+  Checkbox,
+  Chip,
   CircularProgress,
   Dialog,
   DialogContent,
   DialogTitle,
   Divider,
+  FormControlLabel,
   IconButton,
   List,
   ListItemButton,
+  Popover,
   Skeleton,
   Snackbar,
   Typography,
@@ -20,6 +24,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckIcon from '@mui/icons-material/Check';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { BRAND_COLORS, RADIUS, STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
@@ -59,6 +64,47 @@ const STAGE_LABEL_FALLBACK: Record<string, string> = {
   installation: 'Installation',
   aftercare: 'Aftercare',
 };
+
+// ── Filter-persistence helpers ─────────────────────────────────────────────────
+
+const PROJECTS_STALENESS_KEY = 'projectsStalenessActive';
+const PROJECTS_SUBSTAGE_KEY = 'projectsHiddenSubstages';
+const PROJECTS_STALENESS_DAYS = 30;
+
+const STALENESS_STAGES = new Set(['sales', 'designvisit']);
+
+function loadStalenessActive(): boolean {
+  try {
+    return localStorage.getItem(PROJECTS_STALENESS_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveStalenessActive(active: boolean): void {
+  try {
+    localStorage.setItem(PROJECTS_STALENESS_KEY, String(active));
+  } catch { /* ignore */ }
+}
+
+function loadHiddenSubstagesForStage(stageKey: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(PROJECTS_SUBSTAGE_KEY);
+    const parsed: Record<string, string[]> = raw ? JSON.parse(raw) : {};
+    return new Set<string>(parsed[stageKey] || []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function saveHiddenSubstagesForStage(stageKey: string, hidden: Set<string>): void {
+  try {
+    const raw = localStorage.getItem(PROJECTS_SUBSTAGE_KEY);
+    const parsed: Record<string, string[]> = raw ? JSON.parse(raw) : {};
+    parsed[stageKey] = [...hidden];
+    localStorage.setItem(PROJECTS_SUBSTAGE_KEY, JSON.stringify(parsed));
+  } catch { /* ignore */ }
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -119,13 +165,29 @@ function computeRows(
   filter: string,
   sortBy: SortKey,
   currentUserId: string | undefined,
+  stalenessActive?: boolean,
+  stalenessDays?: number,
+  hiddenSubstages?: Set<string>,
 ): ProjectRow[] {
   const myRooms = filter === '__mine__';
   const stageKey = myRooms ? '' : filter;
 
+  // Pre-compute staleness cutoff
+  const staleCutoffMs =
+    stalenessActive && STALENESS_STAGES.has(stageKey)
+      ? Date.now() - (stalenessDays ?? PROJECTS_STALENESS_DAYS) * 86400000
+      : null;
+
   const rows: ProjectRow[] = [];
 
   for (const contact of contacts) {
+    // Staleness filter: skip contacts recently modified when the filter is active
+    if (staleCutoffMs !== null) {
+      const lmd = contact.properties?.lastmodifieddate;
+      const lmdMs = lmd ? new Date(lmd).getTime() : 0;
+      if (lmdMs > staleCutoffMs) continue;
+    }
+
     const cached = stageCache[contact.id];
     if (!cached || cached.length === 0) continue;
 
@@ -133,7 +195,12 @@ function computeRows(
       .map((r, idx) => ({ ...r, roomIdx: idx }))
       .filter((r) => (r.roomStatus || 'active') === 'active')
       .filter((r) => !stageKey || r.stageKey === stageKey)
-      .filter((r) => !myRooms || r.assignedFitterId === currentUserId);
+      .filter((r) => !myRooms || r.assignedFitterId === currentUserId)
+      .filter((r) => {
+        if (!stageKey || !hiddenSubstages?.size) return true;
+        if (r.stageKey !== stageKey) return true;
+        return !r.statusId || !hiddenSubstages.has(r.statusId);
+      });
 
     if (!activeRooms.length) continue;
     rows.push({ contact, rooms: activeRooms });
@@ -670,6 +737,13 @@ export function ProjectsPage() {
   const [staleDismissed, setStaleDismissed] = useState(false);
   const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null);
 
+  // ── Staleness filter ──────────────────────────────────────────────────────
+  const [stalenessActive, setStalenessActive] = useState<boolean>(loadStalenessActive);
+
+  // ── Substage filter ───────────────────────────────────────────────────────
+  const [hiddenSubstages, setHiddenSubstages] = useState<Set<string>>(new Set());
+  const [substageFilterAnchor, setSubstageFilterAnchor] = useState<HTMLElement | null>(null);
+
   // ── Room-assignments stale banner (DOM-managed, mirrors open-leads approach) ─
   // Creates / removes #room-stale-banner imperatively so no per-page HTML markup
   // is required and any page that runs this effect gets the banner automatically.
@@ -732,13 +806,30 @@ export function ProjectsPage() {
   }, [prefsLoading, prefs]);
 
 
+  // ── Load hidden substages from localStorage when stage filter changes ──────
+  useEffect(() => {
+    if (filter && filter !== '__mine__') {
+      setHiddenSubstages(loadHiddenSubstagesForStage(filter));
+    } else {
+      setHiddenSubstages(new Set());
+    }
+    setSubstageFilterAnchor(null);
+  }, [filter]);
+
   const myRooms = filter === '__mine__';
   const stageKeyFilter = myRooms ? '' : filter;
   const groupingEnabled = groupBy && !stageKeyFilter && !myRooms;
 
+  // ── Available substages for the active stage ──────────────────────────────
+  const availableSubstages = useMemo(() => {
+    if (!filter || filter === '__mine__') return [];
+    const stage = workflow?.stages?.[filter];
+    return (stage?.statuses || []) as Array<{ id: string; label: string }>;
+  }, [filter, workflow]);
+
   const rows = useMemo(
-    () => computeRows(contacts, stageCache, filter, sortBy, currentUserId),
-    [contacts, stageCache, filter, sortBy, currentUserId],
+    () => computeRows(contacts, stageCache, filter, sortBy, currentUserId, stalenessActive, PROJECTS_STALENESS_DAYS, hiddenSubstages),
+    [contacts, stageCache, filter, sortBy, currentUserId, stalenessActive, hiddenSubstages],
   );
 
   // ── Stage tabs ─────────────────────────────────────────────────────────────
@@ -764,6 +855,24 @@ export function ProjectsPage() {
     setGroupBy(next);
     void patchPref('projectGroupByStage', next);
   }, [groupBy, patchPref]);
+
+  const handleStalenessToggle = useCallback(() => {
+    const next = !stalenessActive;
+    setStalenessActive(next);
+    saveStalenessActive(next);
+  }, [stalenessActive]);
+
+  const toggleSubstage = useCallback((id: string) => {
+    setHiddenSubstages((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      if (filter && filter !== '__mine__') {
+        saveHiddenSubstagesForStage(filter, next);
+      }
+      return next;
+    });
+  }, [filter]);
 
   // ── Fitter picker ──────────────────────────────────────────────────────────
   const handleOpenPicker = useCallback((contactId: string, roomIdx: number) => {
@@ -989,7 +1098,7 @@ export function ProjectsPage() {
         />
       </PageFilterBar>
 
-      {/* Sort / group bar */}
+      {/* Sort / group / extra-filters bar */}
       <PageFilterBar
         sx={{
           p: '8px 16px',
@@ -1010,6 +1119,136 @@ export function ProjectsPage() {
           label="Sort by"
           minWidth={130}
         />
+
+        {/* Staleness toggle chip — visible only for Sales / Design Visit */}
+        {STALENESS_STAGES.has(stageKeyFilter) && (
+          <Chip
+            label={`Stale >${PROJECTS_STALENESS_DAYS}d`}
+            size="small"
+            variant={stalenessActive ? 'filled' : 'outlined'}
+            onClick={handleStalenessToggle}
+            title={stalenessActive ? 'Showing contacts not updated in the last 30 days — click to clear' : 'Filter to contacts not updated in the last 30 days'}
+            sx={{
+              fontSize: '0.72rem',
+              height: 24,
+              fontWeight: 600,
+              cursor: 'pointer',
+              bgcolor: stalenessActive ? '#fef3c7' : undefined,
+              color: stalenessActive ? '#92400e' : undefined,
+              borderColor: stalenessActive ? '#fde68a' : BRAND_COLORS.stone,
+              '& .MuiChip-label': { px: '8px' },
+              '&:hover': {
+                bgcolor: stalenessActive ? '#fde68a' : BRAND_COLORS.stone,
+              },
+            }}
+          />
+        )}
+
+        {/* Substage filter button + popover — visible only when stage has substages */}
+        {availableSubstages.length > 0 && (
+          <>
+            <Box
+              component="button"
+              onClick={(e: React.MouseEvent<HTMLButtonElement>) =>
+                setSubstageFilterAnchor(substageFilterAnchor ? null : e.currentTarget)
+              }
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                color: substageFilterAnchor || hiddenSubstages.size > 0 ? '#fff' : BRAND_COLORS.ink3,
+                background: substageFilterAnchor || hiddenSubstages.size > 0 ? BRAND_COLORS.plum : 'transparent',
+                border: `1.5px solid ${substageFilterAnchor || hiddenSubstages.size > 0 ? BRAND_COLORS.plum : BRAND_COLORS.stone}`,
+                borderRadius: `${RADIUS.pill}px`,
+                px: '10px',
+                py: '3px',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+                WebkitTapHighlightColor: 'transparent',
+                '&:hover': {
+                  background: substageFilterAnchor || hiddenSubstages.size > 0 ? BRAND_COLORS.plum : BRAND_COLORS.stone,
+                  color: substageFilterAnchor || hiddenSubstages.size > 0 ? '#fff' : BRAND_COLORS.ink2,
+                },
+              }}
+            >
+              <FilterListIcon sx={{ fontSize: 13 }} />
+              <span>Substages</span>
+              {hiddenSubstages.size > 0 && (
+                <Box
+                  component="span"
+                  sx={{
+                    fontSize: '0.65rem',
+                    fontWeight: 700,
+                    bgcolor: 'rgba(255,255,255,0.25)',
+                    borderRadius: '999px',
+                    px: '5px',
+                    py: '1px',
+                    ml: '2px',
+                  }}
+                >
+                  {hiddenSubstages.size} hidden
+                </Box>
+              )}
+            </Box>
+            <Popover
+              open={Boolean(substageFilterAnchor)}
+              anchorEl={substageFilterAnchor}
+              onClose={() => setSubstageFilterAnchor(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+              slotProps={{
+                paper: {
+                  sx: {
+                    mt: '6px',
+                    minWidth: 168,
+                    p: 1.5,
+                    border: `1.5px solid ${BRAND_COLORS.stone}`,
+                    borderRadius: 1.5,
+                  },
+                },
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{
+                  display: 'block',
+                  fontWeight: 700,
+                  color: BRAND_COLORS.ink4,
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  fontSize: '0.68rem',
+                  mb: 1,
+                }}
+              >
+                Show substages
+              </Typography>
+              {availableSubstages.map((opt) => (
+                <FormControlLabel
+                  key={opt.id}
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={!hiddenSubstages.has(opt.id)}
+                      onChange={() => toggleSubstage(opt.id)}
+                      sx={{ py: 0.25, '& .MuiSvgIcon-root': { fontSize: 16 } }}
+                    />
+                  }
+                  label={opt.label}
+                  sx={{
+                    display: 'flex',
+                    m: 0,
+                    '& .MuiFormControlLabel-label': { fontSize: '0.8rem', fontWeight: 500 },
+                  }}
+                />
+              ))}
+            </Popover>
+          </>
+        )}
+
         <Box
           component="button"
           disabled={!!(stageKeyFilter || myRooms)}
