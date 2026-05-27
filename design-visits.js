@@ -9,7 +9,7 @@ const nodemailer = require('nodemailer');
 const path      = require('path');
 const fs        = require('fs');
 const multer    = require('multer');
-const { isAuthenticated, requireAdmin, requirePrivilege } = require('./auth');
+const { isAuthenticated, requireAdmin, requirePrivilege, getReqPrivilege } = require('./auth');
 const dvUploads = require('./design-visit-uploads');
 
 const HANDLES_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'handles');
@@ -366,6 +366,16 @@ async function ensureDesignVisitTables() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS dvri_room_id_idx ON design_visit_room_images (room_id)`);
+
+  // Tracks opaque storage keys that have been uploaded but not yet saved to a visit,
+  // so that the delete endpoint can verify the caller owns the key.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS design_visit_pending_uploads (
+      storage_key TEXT PRIMARY KEY,
+      created_by  TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
 
   // Add terms_condition_version_id FK column if not present (idempotent migration)
   await pool.query(`
@@ -1234,12 +1244,21 @@ router.get('/api/design-visit-door-styles', isAuthenticated, async (req, res) =>
 router.get('/api/design-visits', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   try {
     const contactId = req.query.contactId;
+    const callerPrivilege = getReqPrivilege(req);
+    const isMemberOnly = callerPrivilege === 'member';
+    const callerId = req.user?.claims?.sub;
+    const conditions = [];
     const params = [];
-    let where = '';
     if (contactId !== undefined && contactId !== null && String(contactId).length) {
       params.push(String(contactId));
-      where = `WHERE dv.contact_id = $1`;
+      conditions.push(`dv.contact_id = $${params.length}`);
     }
+    // Members may only see their own visits; managers and admins see all.
+    if (isMemberOnly) {
+      params.push(String(callerId));
+      conditions.push(`dv.created_by = $${params.length}`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const r = await pool.query(`
       SELECT dv.*, dvh.name AS handle_name, dvfr.name AS furniture_range_name,
              tcv.version_number AS terms_version_number,
@@ -1273,12 +1292,25 @@ router.get('/api/design-visits/in-progress', isAuthenticated, requirePrivilege('
       ),
     ).slice(0, 100);
     if (!contactIds.length) return res.json([]);
-    const r = await pool.query(
-      `SELECT id, contact_id FROM design_visits
-       WHERE contact_id = ANY($1) AND status = 'draft'
-       ORDER BY created_at DESC`,
-      [contactIds],
-    );
+    const callerPrivilege = getReqPrivilege(req);
+    const isMemberOnly = callerPrivilege === 'member';
+    const callerId = req.user?.claims?.sub;
+    let r;
+    if (isMemberOnly) {
+      r = await pool.query(
+        `SELECT id, contact_id FROM design_visits
+         WHERE contact_id = ANY($1) AND status = 'draft' AND created_by = $2
+         ORDER BY created_at DESC`,
+        [contactIds, String(callerId)],
+      );
+    } else {
+      r = await pool.query(
+        `SELECT id, contact_id FROM design_visits
+         WHERE contact_id = ANY($1) AND status = 'draft'
+         ORDER BY created_at DESC`,
+        [contactIds],
+      );
+    }
     const seen = new Set();
     const result = [];
     for (const row of r.rows) {
@@ -1299,6 +1331,14 @@ router.get('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
   try {
     const visit = await loadVisitWithRooms(id);
     if (!visit) return res.status(404).json({ error: 'Not found' });
+    // Members may only read their own visits; managers and admins may read all.
+    const callerPrivilege = getReqPrivilege(req);
+    if (callerPrivilege === 'member') {
+      const callerId = req.user?.claims?.sub;
+      if (visit.created_by !== String(callerId)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    }
     res.json(visit);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1359,6 +1399,36 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
       ]
     );
     const visitId = vr.rows[0].id;
+
+    // For member callers, verify they own every opaque cloud-storage key being
+    // submitted. Keys must be present in design_visit_pending_uploads with
+    // created_by matching the caller — this is the immutable record minted by
+    // POST /api/design-visits/uploads. This prevents a member from attaching a
+    // leaked foreign key to their visit and then using the DELETE endpoint to
+    // destroy another user's object.
+    const postCallerPrivilege = getReqPrivilege(req);
+    if (postCallerPrivilege === 'member') {
+      const opaqueKeys = [];
+      for (const rm of rooms) {
+        for (const img of (Array.isArray(rm.images) ? rm.images : [])) {
+          const raw = String(img.storageKey || img.storage_key || img.url || '');
+          if (dvUploads.isOpaqueKey(raw)) opaqueKeys.push(raw);
+        }
+      }
+      if (opaqueKeys.length) {
+        const owned = await client.query(
+          `SELECT storage_key FROM design_visit_pending_uploads
+           WHERE storage_key = ANY($1) AND created_by = $2`,
+          [opaqueKeys, String(userId)],
+        );
+        const ownedSet = new Set(owned.rows.map(r => r.storage_key));
+        const foreign = opaqueKeys.filter(k => !ownedSet.has(k));
+        if (foreign.length) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'Forbidden: one or more image keys were not uploaded by this user' });
+        }
+      }
+    }
 
     // Insert rooms
     for (let i = 0; i < rooms.length; i++) {
@@ -1432,6 +1502,21 @@ router.patch('/api/design-visits/:id', isAuthenticated, requirePrivilege('member
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   const { location, notes, visitDate, durationMin, handleId, furnitureRangeId } = req.body;
   try {
+    const callerPrivilege = getReqPrivilege(req);
+    const isMemberOnly = callerPrivilege === 'member';
+    const callerId = req.user?.claims?.sub;
+    // Members may only patch their own draft visits; managers and admins may patch any.
+    const ownerClause = isMemberOnly ? `AND created_by = $8` : '';
+    const params = [
+      location     ? String(location).slice(0, 500) : null,
+      notes        ? String(notes).slice(0, 4000)   : null,
+      visitDate    ? new Date(visitDate).toISOString() : null,
+      durationMin  ? parseInt(durationMin, 10) || null : null,
+      handleId     ? parseInt(handleId, 10) || null : null,
+      furnitureRangeId ? parseInt(furnitureRangeId, 10) || null : null,
+      id,
+    ];
+    if (isMemberOnly) params.push(String(callerId));
     const r = await pool.query(`
       UPDATE design_visits SET
         location           = COALESCE($1, location),
@@ -1441,17 +1526,9 @@ router.patch('/api/design-visits/:id', isAuthenticated, requirePrivilege('member
         handle_id          = COALESCE($5, handle_id),
         furniture_range_id = COALESCE($6, furniture_range_id),
         updated_at         = NOW()
-      WHERE id = $7 AND status = 'draft'
+      WHERE id = $7 AND status = 'draft' ${ownerClause}
       RETURNING id`,
-      [
-        location     ? String(location).slice(0, 500) : null,
-        notes        ? String(notes).slice(0, 4000)   : null,
-        visitDate    ? new Date(visitDate).toISOString() : null,
-        durationMin  ? parseInt(durationMin, 10) || null : null,
-        handleId     ? parseInt(handleId, 10) || null : null,
-        furnitureRangeId ? parseInt(furnitureRangeId, 10) || null : null,
-        id,
-      ]
+      params
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Visit not found or not in draft status' });
     res.json({ success: true });
@@ -1489,13 +1566,19 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
     await client.query('BEGIN');
 
     const cur = await client.query(
-      `SELECT status FROM design_visits WHERE id=$1 FOR UPDATE`, [id]
+      `SELECT status, created_by FROM design_visits WHERE id=$1 FOR UPDATE`, [id]
     );
     if (!cur.rows.length) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Visit not found' });
     }
     const status = cur.rows[0].status;
+    // Members may only replace their own visits; managers and admins may replace any.
+    const callerPrivilegeForPut = getReqPrivilege(req);
+    if (callerPrivilegeForPut === 'member' && cur.rows[0].created_by !== String(userId)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     if (status !== 'submitted' && status !== 'revision_requested' && status !== 'draft') {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: `Cannot edit visit in status: ${status}` });
@@ -1544,6 +1627,41 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
         id,
       ]
     );
+
+    // For member callers, verify they own every opaque cloud-storage key in the
+    // updated rooms. Newly uploaded keys must be in design_visit_pending_uploads
+    // with created_by = callerId. Keys that were already attached to a visit
+    // owned by this caller (round-tripped from a previous GET) are also allowed,
+    // because the caller already had write access to those keys when the visit
+    // was originally saved.
+    if (callerPrivilegeForPut === 'member') {
+      const opaqueKeys = [];
+      for (const rm of rooms) {
+        for (const img of (Array.isArray(rm.images) ? rm.images : [])) {
+          const raw = String(img.storageKey || img.storage_key || img.url || '');
+          if (dvUploads.isOpaqueKey(raw)) opaqueKeys.push(raw);
+        }
+      }
+      if (opaqueKeys.length) {
+        const owned = await client.query(
+          `SELECT storage_key FROM design_visit_pending_uploads
+           WHERE storage_key = ANY($1) AND created_by = $2
+           UNION
+           SELECT dvri.storage_key
+           FROM design_visit_room_images dvri
+           JOIN design_visit_rooms dvr ON dvr.id = dvri.room_id
+           JOIN design_visits dv       ON dv.id  = dvr.design_visit_id
+           WHERE dvri.storage_key = ANY($1) AND dv.created_by = $2`,
+          [opaqueKeys, String(userId)],
+        );
+        const ownedSet = new Set(owned.rows.map(r => r.storage_key));
+        const foreign = opaqueKeys.filter(k => !ownedSet.has(k));
+        if (foreign.length) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'Forbidden: one or more image keys were not uploaded by this user' });
+        }
+      }
+    }
 
     // Replace all rooms (cascades to images)
     await client.query(`DELETE FROM design_visit_rooms WHERE design_visit_id=$1`, [id]);
@@ -1709,8 +1827,13 @@ router.post('/api/design-visits/:id/submit', isAuthenticated, requirePrivilege('
     return res.status(429).json({ error: 'Too many requests.' });
   }
   try {
-    const vr = await pool.query(`SELECT status FROM design_visits WHERE id=$1`, [id]);
+    const vr = await pool.query(`SELECT status, created_by FROM design_visits WHERE id=$1`, [id]);
     if (!vr.rows.length) return res.status(404).json({ error: 'Visit not found' });
+    // Members may only submit their own visits; managers and admins may submit any.
+    const callerPrivilege = getReqPrivilege(req);
+    if (callerPrivilege === 'member' && vr.rows[0].created_by !== String(userId)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     const status = vr.rows[0].status;
     if (status !== 'draft' && status !== 'revision_requested') {
       return res.status(400).json({ error: `Cannot submit from status: ${status}` });
@@ -1998,6 +2121,15 @@ router.post('/api/design-visits/uploads', isAuthenticated, requirePrivilege('mem
     const dataUrl = String(req.body?.dataUrl || '');
     if (!dataUrl) return res.status(400).json({ error: 'dataUrl is required' });
     const out = await dvUploads.uploadFromDataUrl(dataUrl);
+    // Record the uploader so the delete endpoint can enforce ownership.
+    const callerId = req.user?.claims?.sub;
+    if (dvUploads.isOpaqueKey(out.storageKey)) {
+      await pool.query(
+        `INSERT INTO design_visit_pending_uploads (storage_key, created_by)
+         VALUES ($1, $2) ON CONFLICT (storage_key) DO NOTHING`,
+        [out.storageKey, String(callerId)],
+      ).catch(err => console.warn('[design-visits] pending upload insert failed (non-fatal):', err.message));
+    }
     return res.json({
       storageKey: out.storageKey,
       mimeType:   out.mimeType,
@@ -2023,8 +2155,32 @@ router.delete('/api/design-visits/uploads/:storageKey', isAuthenticated, require
     // Not a bucket key — nothing to do. Return 204 so the client doesn't retry.
     return res.status(204).send();
   }
+  // Verify ownership: managers and admins may delete any key; members may only
+  // delete keys they personally uploaded, as recorded in design_visit_pending_uploads.
+  // The "belongs to my visit" heuristic is intentionally NOT used here because a
+  // member could attach a foreign key to their own visit (via POST/PUT) and then
+  // pass that check to destroy another user's object.
+  const callerPrivilege = getReqPrivilege(req);
+  if (callerPrivilege === 'member') {
+    const callerId = String(req.user?.claims?.sub);
+    try {
+      const pending = await pool.query(
+        `SELECT 1 FROM design_visit_pending_uploads WHERE storage_key=$1 AND created_by=$2`,
+        [key, callerId],
+      );
+      if (!pending.rows.length) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    } catch (e) {
+      console.warn('[design-visits] upload ownership check failed:', e.message);
+      return res.status(500).json({ error: 'Ownership check failed' });
+    }
+  }
   try {
     await dvUploads.deleteOpaqueKey(key);
+    // Clean up the pending-upload tracking row if it exists.
+    pool.query(`DELETE FROM design_visit_pending_uploads WHERE storage_key=$1`, [key])
+      .catch(err => console.warn('[design-visits] pending upload cleanup failed (non-fatal):', err.message));
     const kp = key.slice(0, 40);
     console.log(`[design-visits] upload delete ok key=${kp} user=${req.user?.email || '?'}`);
     return res.status(204).send();
