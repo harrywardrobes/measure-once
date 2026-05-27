@@ -78,6 +78,28 @@ export const MainView: Story = {
   ),
 };
 
+export const MainNoRooms: Story = {
+  name: 'Main — no rooms',
+  render: () => (
+    <DesignVisitSignOffPage
+      embedded={{
+        state: 'main',
+        data: { ...SAMPLE_DATA, rooms: [] },
+      }}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Edge case where the server returns an empty rooms array — valid for a visit ' +
+          'that has no room data recorded yet. The rooms table and photo section should ' +
+          'gracefully degrade or show an empty state.',
+      },
+    },
+  },
+};
+
 export const MainWithPhotos: Story = {
   name: 'Main — with room photos',
   render: () => (
