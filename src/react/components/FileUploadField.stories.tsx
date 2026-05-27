@@ -113,6 +113,24 @@ export const UploadInProgress: Story = {
   render: () => <UploadInProgressDemo />,
 };
 
+export const UploadInProgressIndeterminate: Story = {
+  name: 'Upload in progress (indeterminate)',
+  render: () => (
+    <Box sx={{ maxWidth: 480 }}>
+      <FileUploadField
+        label="Design drawings"
+        accept=".pdf,.dwg"
+        value="floor-plan-v2.pdf"
+        uploading
+        helperText="Uploading…"
+      />
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+        Upload size unknown — indeterminate progress bar shown.
+      </Typography>
+    </Box>
+  ),
+};
+
 export const ErrorFallback: Story = {
   name: 'Error fallback (upload failed)',
   render: () => (

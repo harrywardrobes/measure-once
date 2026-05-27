@@ -138,10 +138,10 @@ export function FileUploadField({
           </InputAdornment>
         }
       />
-      {hasProgress && (
+      {uploading && (
         <LinearProgress
-          variant="determinate"
-          value={progress}
+          variant={hasProgress ? 'determinate' : 'indeterminate'}
+          value={hasProgress ? progress : undefined}
           sx={{ mt: 0.5, borderRadius: 1 }}
         />
       )}
