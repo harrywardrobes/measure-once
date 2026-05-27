@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { loadSearchSettings, getCachedSearchSettings } from '../lib/searchSettings';
+import { loadSearchSettings } from '../lib/searchSettings';
 import type { SearchSettings } from '../lib/searchSettings';
 import Dialog from '@mui/material/Dialog';
 import Box from '@mui/material/Box';
@@ -179,15 +179,16 @@ function ResultItem({ icon, avatar, label, sub, category, onClick, itemRef }: Re
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [settings, setSettings] = useState<SearchSettings | null>(getCachedSearchSettings);
+  const [settings, setSettings] = useState<SearchSettings | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (settings !== null) return;
     loadSearchSettings().then(data => {
       setSettings(data);
     });
-  }, []);
+  }, [settings]);
 
   const doOpen = useCallback(() => {
     const seed = location.pathname === '/customers' && window.state?.searchQuery
