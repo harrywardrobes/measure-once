@@ -1,0 +1,120 @@
+{/* HandlerConfigBlocks.mdx — guide for action handler config blocks */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as OverviewStories from '../../components/ActionHandlerConfigBlocks.stories';
+import * as ScheduleVisitStories from './ScheduleVisitConfig.stories';
+import * as ShowMessageStories from './ShowMessageConfig.stories';
+import * as StartDesignVisitStories from './StartDesignVisitConfig.stories';
+import * as DeliveryWindowStories from './DeliveryWindowConfig.stories';
+import * as InstallationSlotStories from './InstallationSlotConfig.stories';
+
+<Meta title="Features/ActionHandlerConfigBlocks/Guide" />
+
+# Action Handler Config Blocks
+
+Handler config blocks are the inline form panels that appear inside the **Add action** /
+**Change action** editor modal on the [Action Handlers admin tab](/admin#tab-action-handlers).
+Each block is rendered when an admin selects a particular handler type from the type
+dropdown, and it lets them configure the behaviour that fires when an operator clicks the
+corresponding card-action strip on the customer pipeline board.
+
+There are five handler types. Each maps to its own config block component in
+`src/react/pages/admin/HandlerConfigBlocks.tsx`.
+
+---
+
+## Handler types at a glance
+
+| Handler type | Component | Config keys | Side effects when clicked |
+|---|---|---|---|
+| **Schedule visit** | `ScheduleVisitConfig` | `visitType`, `defaultDurationMin`\*, `addToGoogleCalendar` | Opens the scheduling modal pre-set to the chosen visit type and duration |
+| **Show message** | `ShowMessageConfig` | `title`\*, `message` | Displays a read-only popup — no API call, no status change |
+| **Start design visit wizard** | `StartDesignVisitConfig` | `defaultDurationMin`, `intermediateLeadStatus`\*, `submittedLeadStatus`\*, `termsAndConditions`\*, `addToGoogleCalendar` | Opens the multi-step design visit wizard; sets lead status on open and again on submit (see two-phase flow below) |
+| **Schedule delivery window** | `DeliveryWindowConfig` | `defaultTitle`\*, `addToGoogleCalendar` | Opens the delivery-window picker modal |
+| **Schedule installation slot** | `InstallationSlotConfig` | `defaultDurationMin`\*, `defaultTitle`\*, `addToGoogleCalendar` | Opens the installation-slot picker modal pre-filled with the saved duration |
+
+\* Optional field — the block still saves and works if this value is left blank.
+
+---
+
+## Two-phase status flow (StartDesignVisit only)
+
+`StartDesignVisitConfig` is the only handler type with two lead-status selectors. This
+reflects the two distinct moments in the design-visit lifecycle where the contact's
+pipeline status should change:
+
+1. **In-progress status** (`intermediateLeadStatus`) — applied the moment the operator
+   opens the design visit wizard. Use this to mark the contact as "design visit in
+   progress" so other team members can see work is underway.
+
+2. **Submitted status** (`submittedLeadStatus`) — applied when the operator submits the
+   completed design visit form. This can be a top-level lead status **or** a sub-status;
+   the dropdown groups both options under separate headings.
+
+Both fields are optional. You can configure either, both, or neither depending on your
+pipeline conventions.
+
+<Canvas of={StartDesignVisitStories.Prefilled} />
+
+---
+
+## All five blocks — side by side
+
+<Canvas of={OverviewStories.AllBlocksSideBySide} />
+
+---
+
+## ScheduleVisit
+
+Lets the admin choose the visit type (Survey, Installation, Remedial, Workshop, Design
+visit, or Other), an optional default duration in minutes (5–1440), and whether to
+create a Google Calendar event automatically.
+
+<Canvas of={ScheduleVisitStories.Blank} />
+<Canvas of={ScheduleVisitStories.Prefilled} />
+
+---
+
+## ShowMessage
+
+The simplest handler type — no scheduling, no status change. The admin writes a plain-text
+message (required, ≤2000 chars) and an optional popup title (≤120 chars). When an operator
+clicks the card-action strip, the message is shown verbatim in a popup dialog and nothing
+else happens.
+
+<Canvas of={ShowMessageStories.Blank} />
+<Canvas of={ShowMessageStories.Prefilled} />
+
+---
+
+## StartDesignVisit
+
+The most configurable handler type. In addition to the two-phase status fields described
+above, the admin can set a default duration (minutes) for the visit, paste in optional
+Terms & Conditions text (≤4000 chars, shown to the customer on the sign-off page), and
+toggle Google Calendar creation.
+
+<Canvas of={StartDesignVisitStories.Blank} />
+<Canvas of={StartDesignVisitStories.WithTermsAndConditions} />
+
+---
+
+## DeliveryWindow
+
+Opens a date/time range picker so the operator can record when a delivery is expected.
+Config is minimal: an optional default event title (≤120 chars) and the Google Calendar
+toggle.
+
+<Canvas of={DeliveryWindowStories.Blank} />
+<Canvas of={DeliveryWindowStories.Prefilled} />
+
+---
+
+## InstallationSlot
+
+Similar to DeliveryWindow but designed for booking an installation. The operator picks a
+start time; the saved default duration is pre-filled in the picker. Config keys: optional
+default duration (5–1440 min), optional default title (≤120 chars), and the Google
+Calendar toggle.
+
+<Canvas of={InstallationSlotStories.Blank} />
+<Canvas of={InstallationSlotStories.Prefilled} />
