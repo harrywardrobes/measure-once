@@ -123,6 +123,7 @@ export interface InvoiceDetailDrawerProps {
   onClose: () => void;
   onNavigate: (id: string) => void;
   isAdmin: boolean;
+  onSaved?: () => void;
 }
 
 interface EditState {
@@ -133,7 +134,7 @@ interface EditState {
 }
 
 export function InvoiceDetailDrawer({
-  open, invId, allIds, onClose, onNavigate, isAdmin,
+  open, invId, allIds, onClose, onNavigate, isAdmin, onSaved,
 }: InvoiceDetailDrawerProps) {
   const { notifyApiError } = useConnectionToast();
   const [inv, setInv]         = useState<InvoiceDetail | null>(null);
@@ -250,6 +251,7 @@ export function InvoiceDetailDrawer({
       } : prev);
       setEdit(prev => ({ ...prev, dirty: false }));
       clearDraft(inv.id);
+      onSaved?.();
       setSaveMsg({ text: 'Saved', ok: true });
     } catch (e: unknown) {
       notifyApiError('quickbooks', e);
@@ -257,7 +259,7 @@ export function InvoiceDetailDrawer({
     } finally {
       setSaving(false);
     }
-  }, [inv, saving, edit, notifyApiError]);
+  }, [inv, saving, edit, notifyApiError, onSaved]);
 
   const handleSend = useCallback(async () => {
     if (!inv || sending) return;

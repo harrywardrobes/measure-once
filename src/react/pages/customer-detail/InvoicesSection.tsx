@@ -162,6 +162,7 @@ export function InvoicesSection({ contact, qb }: Props) {
         onClose={closeDrawer}
         onNavigate={id => { setDrawerInvId(id); window.location.hash = `inv-${id}`; }}
         isAdmin={isAdmin}
+        onSaved={() => qb.refresh()}
       />
     </>
   );
