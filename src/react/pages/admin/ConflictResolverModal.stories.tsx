@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
+import { within, userEvent, expect, waitFor } from '@storybook/test';
 import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 
@@ -324,5 +325,19 @@ export const RemoveInteraction: Story = {
           'the admin sees in production when only one handler remains.',
       },
     },
+  },
+  play: async () => {
+    const body = within(document.body);
+
+    const dialog = await body.findByRole('dialog');
+    const removeButtons = await within(dialog).findAllByRole('button', { name: 'Remove' });
+    await userEvent.click(removeButtons[0]);
+
+    await within(dialog).findByRole('button', { name: 'Removing…' });
+
+    await waitFor(
+      () => expect(body.queryByRole('dialog')).not.toBeInTheDocument(),
+      { timeout: 3000 },
+    );
   },
 };
