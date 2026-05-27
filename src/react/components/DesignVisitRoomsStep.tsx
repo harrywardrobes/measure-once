@@ -42,6 +42,10 @@ export interface DesignVisitRoomsStepProps {
   doorStyles: DoorStyleOption[];
   onRoomsChange: (rooms: RoomData[]) => void;
   onUploadingChange?: (isUploading: boolean) => void;
+  /** Called with each storage key immediately after a successful upload. */
+  onNewUpload?: (storageKey: string) => void;
+  /** Called with a storage key when a photo is removed (the DELETE is already fired by the step). */
+  onImageRemoved?: (storageKey: string) => void;
 }
 
 /**
@@ -88,6 +92,8 @@ export function DesignVisitRoomsStep({
   doorStyles,
   onRoomsChange,
   onUploadingChange,
+  onNewUpload,
+  onImageRemoved,
 }: DesignVisitRoomsStepProps) {
   const [rooms, setRooms] = useState<InternalRoom[]>(() => {
     const src = initialRooms.length ? initialRooms : [{}];
@@ -140,7 +146,9 @@ export function DesignVisitRoomsStep({
       })
     );
     if (removedKey) {
-      fetch(`/api/design-visits/uploads/${encodeURIComponent(removedKey)}`, { method: 'DELETE' })
+      const key = removedKey;
+      onImageRemoved?.(key);
+      fetch(`/api/design-visits/uploads/${encodeURIComponent(key)}`, { method: 'DELETE' })
         .catch(err => console.warn('[design-visit] photo delete failed:', err));
     }
   }
@@ -185,11 +193,13 @@ export function DesignVisitRoomsStep({
         });
         const data = await resp.json();
         if (!resp.ok || !data.storageKey) throw new Error(data.error || 'Upload failed');
-        uploaded.push({
+        const newImg: RoomImage = {
           storageKey: data.storageKey,
           mimeType: data.mimeType || file.type,
           viewUrl: data.viewUrl || '',
-        });
+        };
+        onNewUpload?.(newImg.storageKey);
+        uploaded.push(newImg);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'unknown error';
         console.warn('[design-visit] photo upload failed:', msg);

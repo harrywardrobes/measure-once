@@ -195,6 +195,18 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose }: Desi
 
   const intermediateStatusFiredRef = useRef(false);
 
+  /**
+   * Keys uploaded during this wizard session that haven't yet been committed
+   * to a DB row via a successful submit.  Populated by DesignVisitRoomsStep
+   * via onNewUpload; pruned when the user manually removes a photo (the step
+   * already fires the DELETE in that case) and cleared wholesale after a
+   * successful submission.  On wizard unmount the cleanup effect deletes any
+   * remaining keys so orphaned uploads don't linger in storage.
+   */
+  const pendingUploadKeysRef = useRef<Set<string>>(new Set());
+  /** Flipped to true after a successful submit so the cleanup effect is a no-op. */
+  const committedRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -256,6 +268,18 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose }: Desi
     if (!editMode) saveDraft(storageKey, step1, rooms);
   }, [step1, rooms, editMode, storageKey]);
 
+  useEffect(() => {
+    return () => {
+      if (committedRef.current) return;
+      const keysToDelete = Array.from(pendingUploadKeysRef.current);
+      if (!keysToDelete.length) return;
+      for (const key of keysToDelete) {
+        fetch(`/api/design-visits/uploads/${encodeURIComponent(key)}`, { method: 'DELETE' })
+          .catch(err => console.warn('[design-visit] abandon-cleanup delete failed:', err));
+      }
+    };
+  }, []);
+
   const handleClose = useCallback(() => {
     setOpen(false);
     setTimeout(onClose, 300);
@@ -310,6 +334,8 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose }: Desi
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || (editMode ? 'Save failed' : 'Submission failed'));
+      committedRef.current = true;
+      pendingUploadKeysRef.current.clear();
       clearDraft(storageKey);
       setOpen(false);
       setTimeout(() => {
@@ -402,6 +428,8 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose }: Desi
                 doorStyles={doorStyles}
                 onRoomsChange={setRooms}
                 onUploadingChange={setUploading}
+                onNewUpload={key => pendingUploadKeysRef.current.add(key)}
+                onImageRemoved={key => pendingUploadKeysRef.current.delete(key)}
               />
             )}
 
