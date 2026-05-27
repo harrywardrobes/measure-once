@@ -1,6 +1,45 @@
 import React, { useState, useCallback } from 'react';
-import { Visit } from './types';
+import { Visit, STAGE_COLOURS, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
+
+const VISIT_TYPE_LABELS: Record<string, string> = {
+  design:       'Design visit',
+  survey:       'Survey',
+  installation: 'Installation slot',
+  delivery:     'Delivery window',
+  remedial:     'Remedial',
+  workshop:     'Workshop',
+  other:        'Other',
+};
+
+function visitTypeLabel(type?: string): string {
+  if (!type) return 'Visit';
+  return VISIT_TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
+}
+
+function VisitTypeBadge({ type }: { type?: string }) {
+  if (!type) return null;
+  const idx = STAGE_KEYS.indexOf(type);
+  const colours = idx >= 0 ? STAGE_COLOURS[idx] : null;
+  const bg   = colours ? colours.light : 'var(--status-neutral-bg)';
+  const text = colours ? colours.text  : 'var(--ink-3)';
+  return (
+    <span style={{
+      display: 'inline-block',
+      fontSize: '0.68rem',
+      fontWeight: 600,
+      letterSpacing: '0.04em',
+      textTransform: 'uppercase',
+      padding: '1px 7px',
+      borderRadius: 'var(--radius-sm)',
+      background: bg,
+      color: text,
+      marginBottom: 5,
+    }}>
+      {visitTypeLabel(type)}
+    </span>
+  );
+}
 
 const sxHeader: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 };
 const sxHeaderLabel: React.CSSProperties = { fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' };
@@ -45,8 +84,9 @@ export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, load
         <div style={sxStack}>
           {upcomingVisits.map(v => (
             <div key={v.id} style={sxItem}>
+              <VisitTypeBadge type={v.type} />
               <div style={{ ...sxText, fontWeight: 500 }}>
-                {v.title || v.type || 'Visit'}
+                {v.title || visitTypeLabel(v.type)}
               </div>
               <div style={sxMeta}>
                 <span style={sxDate}>{fmtVisitRange(v.startAt, v.endAt)}</span>
@@ -80,7 +120,8 @@ export function PastVisitsSection({ pastVisits, loadingVisits }: Pick<Props, 'pa
           <div style={sxStack}>
             {recent.map(v => (
               <div key={v.id} style={sxItem}>
-                <div style={sxText}>{v.title || v.type || 'Visit'}</div>
+                <VisitTypeBadge type={v.type} />
+                <div style={sxText}>{v.title || visitTypeLabel(v.type)}</div>
                 <div style={sxMeta}>
                   <span style={sxDate}>{fmtVisitRange(v.startAt, v.endAt)}</span>
                 </div>
@@ -88,7 +129,8 @@ export function PastVisitsSection({ pastVisits, loadingVisits }: Pick<Props, 'pa
             ))}
             {expanded && rest.map(v => (
               <div key={v.id} style={sxItem}>
-                <div style={sxText}>{v.title || v.type || 'Visit'}</div>
+                <VisitTypeBadge type={v.type} />
+                <div style={sxText}>{v.title || visitTypeLabel(v.type)}</div>
                 <div style={sxMeta}>
                   <span style={sxDate}>{fmtVisitRange(v.startAt, v.endAt)}</span>
                 </div>
