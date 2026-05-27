@@ -135,7 +135,7 @@
       contactEmail: el.dataset.cardActionContactEmail || '',
     };
     const handler = _findHandlerById(id) || { id, type, config: {} };
-    dispatchCardActionHandler(handler, ctx);
+    dispatchCardActionHandler(handler, ctx, el);
   }, true);
 
   function _findHandlerById(id) {
@@ -144,11 +144,11 @@
     return null;
   }
 
-  function dispatchCardActionHandler(handler, ctx) {
+  function dispatchCardActionHandler(handler, ctx, triggerEl) {
     if (handler.type === 'add_design_visit_to_calendar') return openDesignVisitModal(handler, ctx);
     if (handler.type === 'summarise_phone_call')        return openPhoneSummaryModal(handler, ctx);
     if (handler.type === 'show_message')                return openMessagePopup(handler, ctx);
-    if (handler.type === 'start_design_visit')          return openDesignVisitWizard(handler, ctx);
+    if (handler.type === 'start_design_visit')          return openDesignVisitWizard(handler, ctx, undefined, triggerEl);
     console.warn('Unknown card action handler type:', handler.type);
   }
 
@@ -196,6 +196,14 @@
     .cah-modal .cah-checkbox-row { display:flex; align-items:center; gap:8px; margin-top:10px; }
     .cah-modal .cah-checkbox-row input { width:auto; }
     .cah-modal .cah-checkbox-row label { margin:0; }
+    @keyframes cah-spin { to { transform:rotate(360deg); } }
+    [data-cah-loading] { pointer-events:none; opacity:0.7; position:relative; }
+    [data-cah-loading]::after {
+      content:''; display:inline-block; width:12px; height:12px;
+      border:2px solid currentColor; border-top-color:transparent;
+      border-radius:50%; animation:cah-spin .65s linear infinite;
+      margin-left:6px; vertical-align:middle; opacity:0.8;
+    }
   `;
 
   let _styleInjected = false;
@@ -418,7 +426,7 @@
   //   Step 1 — Visit details (date/time, location, handle, furniture range, T&C)
   //   Step 2 — Rooms (add/remove rooms with door style, dimensions, units, price)
   //   Step 3 — Review + submit
-  async function openDesignVisitWizard(handler, ctx, existingVisit) {
+  async function openDesignVisitWizard(handler, ctx, existingVisit, triggerEl) {
     _injectStyle();
     const cfg = handler.config || {};
     const defaultDuration = cfg.defaultDurationMin || 90;
@@ -427,6 +435,10 @@
     const contactEmail    = ctx?.contactEmail || ctx?.contact_email || '';
     const editMode        = !!(existingVisit && existingVisit.id);
     const editVisitId     = editMode ? existingVisit.id : null;
+
+    // Show a loading indicator on the trigger button while catalogue data loads.
+    if (triggerEl) triggerEl.setAttribute('data-cah-loading', '1');
+    const _clearTriggerLoading = () => { if (triggerEl) triggerEl.removeAttribute('data-cah-loading'); };
 
     // Apply in-progress lead status as soon as the wizard opens (non-fatal).
     // Skipped in edit mode — the visit was already past that stage.
@@ -454,6 +466,9 @@
       const tr = await fetch('/api/design-visit-terms');
       if (tr.ok) { const td = await tr.json(); termsText = td.terms || ''; termsVersionNumber = td.versionNumber || null; }
     } catch {}
+
+    // Catalogue data loaded — clear the trigger button loading state.
+    _clearTriggerLoading();
 
     // Wizard state — pre-populated from existingVisit when in edit mode
     let step = 1;
