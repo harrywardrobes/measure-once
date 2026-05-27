@@ -15,6 +15,7 @@ import Tooltip from '@mui/material/Tooltip';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EventIcon from '@mui/icons-material/Event';
 import { Visit, STAGE_COLOURS, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { DELETE as apiDELETE } from '../../utils/api';
@@ -98,6 +99,39 @@ function fmtVisitRange(start: string, end: string): string {
 
 function isEditable(type?: string): boolean {
   return type !== 'design';
+}
+
+function gcalLink(eventId: string): string {
+  return `https://calendar.google.com/calendar/event?eid=${btoa(eventId)}`;
+}
+
+function GCalLink({ eventId }: { eventId: string }) {
+  return (
+    <Tooltip title="Open in Google Calendar">
+      <a
+        href={gcalLink(eventId)}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Open in Google Calendar"
+        data-testid="gcal-link"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 3,
+          fontSize: '0.72rem',
+          color: 'var(--orchid)',
+          textDecoration: 'none',
+          fontWeight: 500,
+          marginTop: 4,
+        }}
+        onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline')}
+        onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none')}
+      >
+        <EventIcon sx={{ fontSize: '0.85rem' }} />
+        Open in Calendar
+      </a>
+    </Tooltip>
+  );
 }
 
 interface CancelDialogProps {
@@ -270,6 +304,7 @@ export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, load
                     <span style={sxDate}>{fmtVisitRange(v.startAt, v.endAt)}</span>
                     {v.location && <><span style={sxMetaSep}>·</span><span>{v.location}</span></>}
                   </div>
+                  {v.googleEventId && <GCalLink eventId={v.googleEventId} />}
                 </div>
                 {canEdit && isEditable(v.type) && (
                   <div style={{ display: 'flex', gap: 2, flexShrink: 0, marginTop: -2 }}>
@@ -384,6 +419,7 @@ export function PastVisitsSection({ pastVisits, loadingVisits }: Pick<Props, 'pa
                 <div style={sxMeta}>
                   <span style={sxDate}>{fmtVisitRange(v.startAt, v.endAt)}</span>
                 </div>
+                {v.googleEventId && <GCalLink eventId={v.googleEventId} />}
               </div>
             ))}
             {expanded && rest.map(v => (
@@ -393,6 +429,7 @@ export function PastVisitsSection({ pastVisits, loadingVisits }: Pick<Props, 'pa
                 <div style={sxMeta}>
                   <span style={sxDate}>{fmtVisitRange(v.startAt, v.endAt)}</span>
                 </div>
+                {v.googleEventId && <GCalLink eventId={v.googleEventId} />}
               </div>
             ))}
           </div>
