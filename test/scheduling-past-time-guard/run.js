@@ -464,13 +464,13 @@ async function main() {
         const btn = past && [...past.querySelectorAll('button')].find(b => b.textContent.trim() === 'Go back');
         if (btn) btn.click();
       });
-      await new Promise(r => setTimeout(r, 300));
-      const isAfterGoBack = await isPage.evaluate(() => {
+      const isAfterGoBack = await pollPage(isPage, () => {
         const dialogs = [...document.querySelectorAll('[role=dialog]')];
         const pastGone   = !dialogs.some(d => d.textContent.includes('Schedule in the past?'));
         const formStillOpen = dialogs.some(d => !!d.querySelector('[data-testid=cah-primary]'));
+        if (!pastGone) return null;
         return { pastGone, formStillOpen };
-      });
+      }, null, 5000);
       record(
         '[IS-BACK] "Go back" dismisses dialog; scheduling form stays open',
         'past-confirm gone, primary button still present',
@@ -600,13 +600,13 @@ async function main() {
         const btn = past && [...past.querySelectorAll('button')].find(b => b.textContent.trim() === 'Go back');
         if (btn) btn.click();
       });
-      await new Promise(r => setTimeout(r, 300));
-      const dwAfterGoBack = await dwPage.evaluate(() => {
+      const dwAfterGoBack = await pollPage(dwPage, () => {
         const dialogs = [...document.querySelectorAll('[role=dialog]')];
         const pastGone      = !dialogs.some(d => d.textContent.includes('Schedule in the past?'));
         const formStillOpen = dialogs.some(d => !!d.querySelector('[data-testid=cah-primary]'));
+        if (!pastGone) return null;
         return { pastGone, formStillOpen };
-      });
+      }, null, 5000);
       record(
         '[DW-BACK] "Go back" dismisses dialog; scheduling form stays open',
         'past-confirm gone, primary button still present',
@@ -733,13 +733,13 @@ async function main() {
         const btn = past && [...past.querySelectorAll('button')].find(b => b.textContent.trim() === 'Go back');
         if (btn) btn.click();
       });
-      await new Promise(r => setTimeout(r, 300));
-      const vcmAfterGoBack = await vcmPage.evaluate(() => {
+      const vcmAfterGoBack = await pollPage(vcmPage, () => {
         const dialogs = [...document.querySelectorAll('[role=dialog]')];
         const pastGone      = !dialogs.some(d => d.textContent.includes('Schedule in the past?'));
         const formStillOpen = dialogs.some(d => !!d.querySelector('[data-testid=cah-primary]'));
+        if (!pastGone) return null;
         return { pastGone, formStillOpen };
-      });
+      }, null, 5000);
       record(
         '[VCM-BACK] "Go back" dismisses dialog; scheduling form stays open',
         'past-confirm gone, primary button still present',
