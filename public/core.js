@@ -372,7 +372,7 @@ async function bootstrap() {
         msg = `Failed to load: ${escHtml(e.message)}`;
         action = `<button onclick="location.reload()" class="mt-2 mo-error-action underline text-xs">Retry</button>`;
       }
-      target.innerHTML = `<div class="p-4 text-sm text-red-500">${msg}${action ? `<br>${action}` : ''}</div>`;
+      target.innerHTML = `<div class="p-4 text-sm mo-error-msg">${msg}${action ? `<br>${action}` : ''}</div>`;
     }
   }
   return true;
