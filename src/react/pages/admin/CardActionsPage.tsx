@@ -4,7 +4,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, ListItemText,
 } from '@mui/material';
 import { useToast } from '../../contexts/ToastContext';
-import { GET, POST, PATCH, PUT } from '../../utils/api';
+import { GET, POST, PATCH, PUT, DELETE } from '../../utils/api';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -195,6 +195,16 @@ export function CardActionsPage() {
 
   const confirmClear = useCallback((slots: ClearSlot[]): Promise<boolean> => {
     return new Promise(resolve => setClearConfirm({ slots, resolve }));
+  }, []);
+
+  type DeleteSubSlot = { substatusId: number; label: string; boundHandlers: Handler[] };
+  const [deleteSubConfirm, setDeleteSubConfirm] = useState<{
+    slot: DeleteSubSlot;
+    resolve: (confirmed: boolean) => void;
+  } | null>(null);
+
+  const confirmDeleteSub = useCallback((slot: DeleteSubSlot): Promise<boolean> => {
+    return new Promise(resolve => setDeleteSubConfirm({ slot, resolve }));
   }, []);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -403,6 +413,29 @@ export function CardActionsPage() {
     if (stageKey) setCollapsed(prev => { const n = new Set(prev); n.delete(stageKey); return n; });
   }, []);
 
+  const deleteCardActionSubstatus = useCallback(async (id: number) => {
+    const sub = substatusesRef.current.find(s => Number(s.id) === id);
+    if (!sub) return;
+    const bound = handlersForSlot(handlers, '', '', id);
+    if (bound.length) {
+      const confirmed = await confirmDeleteSub({ substatusId: id, label: sub.label, boundHandlers: bound });
+      setDeleteSubConfirm(null);
+      if (!confirmed) return;
+    }
+    try {
+      const result = await DELETE<{ ok: boolean; hubspotSyncWarning?: string }>(
+        `/api/admin/lead-substatuses/${id}`,
+      );
+      if (result.hubspotSyncWarning) {
+        setSyncWarning('Sub-status deleted locally, but the HubSpot property sync failed. Use the Re-sync button in the Settings tab to retry.');
+      }
+      try { new BroadcastChannel('lead_substatuses_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
+      fetchAll();
+    } catch (e) {
+      showToast(`Failed to delete sub-status: ${(e as Error).message}`, true);
+    }
+  }, [handlers, confirmDeleteSub, fetchAll, showToast]);
+
   const moveCardActionSubstatus = useCallback(async (id: number, direction: 'up' | 'down') => {
     const me = substatusesRef.current.find(s => Number(s.id) === id);
     if (!me) return;
@@ -429,17 +462,19 @@ export function CardActionsPage() {
   }, [fetchAll, showToast]);
 
   useEffect(() => {
-    W.loadCardActionsAdmin    = fetchAll;
-    W.saveAllCardActionLabels = saveAllCardActionLabels;
-    W.addCardActionSubstatus  = addCardActionSubstatus;
-    W.moveCardActionSubstatus = (id: number, dir: 'up' | 'down') => moveCardActionSubstatus(id, dir);
+    W.loadCardActionsAdmin        = fetchAll;
+    W.saveAllCardActionLabels     = saveAllCardActionLabels;
+    W.addCardActionSubstatus      = addCardActionSubstatus;
+    W.moveCardActionSubstatus     = (id: number, dir: 'up' | 'down') => moveCardActionSubstatus(id, dir);
+    W.deleteCardActionSubstatus   = (id: number) => deleteCardActionSubstatus(id);
     return () => {
       delete W.loadCardActionsAdmin;
       delete W.saveAllCardActionLabels;
       delete W.addCardActionSubstatus;
       delete W.moveCardActionSubstatus;
+      delete W.deleteCardActionSubstatus;
     };
-  }, [fetchAll, saveAllCardActionLabels, addCardActionSubstatus, moveCardActionSubstatus]);
+  }, [fetchAll, saveAllCardActionLabels, addCardActionSubstatus, moveCardActionSubstatus, deleteCardActionSubstatus]);
 
   useEffect(() => {
     W.flashResolvedSlot = (stageKey: string, statusKey: string, substatusId: number | null) => {
@@ -593,6 +628,13 @@ export function CardActionsPage() {
                                       lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
                                     }}>✓ Resolved</span>
                                   )}
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost adm-ca-sub-delete"
+                                    title="Delete this sub-status"
+                                    onClick={() => deleteCardActionSubstatus(sub.id)}
+                                    style={{ marginLeft: 'auto', color: '#b91c1c', opacity: 0.7, flexShrink: 0 }}
+                                  >✕</button>
                                 </div>
                               );
                             })}
@@ -672,6 +714,46 @@ export function CardActionsPage() {
               onClick={() => { clearConfirm.resolve(true); setClearConfirm(null); }}
             >
               Clear label anyway
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {deleteSubConfirm && (
+        <Dialog
+          open
+          onClose={() => { deleteSubConfirm.resolve(false); setDeleteSubConfirm(null); }}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Handler still bound to this sub-status</DialogTitle>
+          <DialogContent>
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              The sub-status you're deleting has a handler bound to it.
+              {' '}If you proceed, the handler will still exist but won't be triggered by any card — it will show as an unlabelled binding in the Action handlers tab.
+            </Alert>
+            <List dense disablePadding>
+              <ListItem disableGutters>
+                <ListItemText
+                  primary={`"${deleteSubConfirm.slot.label}"`}
+                  secondary={`Bound handler${deleteSubConfirm.slot.boundHandlers.length > 1 ? 's' : ''}: ${deleteSubConfirm.slot.boundHandlers.map(h => h.name || h.type).join(', ')}`}
+                />
+              </ListItem>
+            </List>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+              To avoid orphaning the handler, cancel and remove its binding first in the <strong>Action handlers</strong> tab.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => { deleteSubConfirm.resolve(false); setDeleteSubConfirm(null); }}>
+              Cancel
+            </Button>
+            <Button
+              color="error"
+              variant="contained"
+              onClick={() => { deleteSubConfirm.resolve(true); setDeleteSubConfirm(null); }}
+            >
+              Delete anyway
             </Button>
           </DialogActions>
         </Dialog>
