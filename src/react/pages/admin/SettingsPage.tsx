@@ -545,6 +545,28 @@ export function SettingsPage() {
             </span>
           </Box>
 
+          {hubStatus?.connected && !webhookLoading && webhookStatus !== null &&
+            webhookStatus.subscriptions.filter(s => s.active).length === 0 && (
+            <Alert
+              severity="info"
+              sx={{ mt: 1.5 }}
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => {
+                    document.getElementById('hubspot-webhooks-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
+                >
+                  Set up
+                </Button>
+              }
+            >
+              No webhook subscription is active — lead status changes in HubSpot won't appear instantly.
+              Register a webhook for real-time sync.
+            </Alert>
+          )}
+
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mt: 1.5, p: 1.25, borderRadius: 1, border: 1, borderColor: 'divider' }}>
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>Re-sync sub-statuses to HubSpot</Typography>
@@ -633,7 +655,7 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card variant="outlined">
+      <Card variant="outlined" id="hubspot-webhooks-card">
         <CardContent>
           <Typography variant="h6" sx={{ mb: 0.5 }}>HubSpot Webhooks</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
