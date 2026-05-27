@@ -64,6 +64,9 @@ export function AdminRequestsPage() {
   const [photoRejecting, setPhotoRejecting] = useState<Record<string, boolean>>({});
   const [tradeActing, setTradeActing] = useState<Record<number, 'approving' | 'rejecting'>>({});
 
+  // Reject photo dialog
+  const [rejectPhotoTarget, setRejectPhotoTarget] = useState<string | null>(null);
+
   // Reject access-request dialog
   const [rejectReqTarget, setRejectReqTarget] = useState<number | null>(null);
   const [reqRejecting, setReqRejecting] = useState<Record<number, boolean>>({});
@@ -254,7 +257,12 @@ export function AdminRequestsPage() {
     xhr.send();
   }
   function rejectPhoto(id: string) {
-    if (!confirm('Reject this photo? The user will need to submit a new one.')) return;
+    setRejectPhotoTarget(id);
+  }
+  function confirmRejectPhoto() {
+    if (rejectPhotoTarget === null) return;
+    const id = rejectPhotoTarget;
+    setRejectPhotoTarget(null);
     setPhotoRejecting(r => ({ ...r, [id]: true }));
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `/api/admin/photo-requests/${id}/reject`);
@@ -527,6 +535,18 @@ export function AdminRequestsPage() {
           </Card>
         );
       })}
+
+      {/* Reject photo dialog */}
+      <Dialog open={rejectPhotoTarget !== null} onClose={() => setRejectPhotoTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Reject photo</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">Reject this photo? The user will need to submit a new one.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRejectPhotoTarget(null)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={confirmRejectPhoto}>Reject</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Reject access-request dialog */}
       <Dialog open={rejectReqTarget !== null} onClose={() => setRejectReqTarget(null)} maxWidth="xs" fullWidth>
