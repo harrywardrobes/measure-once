@@ -280,6 +280,18 @@ const ROUTES = [
   { method: 'GET',    path: '/api/admin/terms-conditions/versions',            level: 'admin' },
   { method: 'POST',   path: '/api/admin/terms-conditions/versions',            level: 'admin', body: {} },
 
+  // ── HubSpot webhook (task #1449) ──────────────────────────────────────────
+  // The receiver is public (HubSpot POSTs without a session; gated by HMAC).
+  { method: 'POST',   path: '/api/hubspot/webhook',                            level: 'public', body: [] },
+  // SSE push endpoint — authenticated so only logged-in tabs receive events.
+  // The matrix GET will receive 200 + text/event-stream; the test harness
+  // treats a non-401/403 for authenticated actors as "authorized-as-expected".
+  { method: 'GET',    path: '/api/hubspot/webhook-events',                     level: 'auth' },
+  // Admin subscription management.
+  { method: 'GET',    path: '/api/admin/hubspot-webhook',                      level: 'admin' },
+  { method: 'POST',   path: '/api/admin/hubspot-webhook',                      level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/hubspot-webhook',                      level: 'admin' },
+
   // ── Logout MUST be last per actor (it destroys the session). The run.js
   // matrix loop is route-outer/actor-inner, so this row fires once per actor
   // after every other route has already been measured. Subsequent matrix

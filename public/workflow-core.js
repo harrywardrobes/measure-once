@@ -588,6 +588,68 @@ if (typeof BroadcastChannel !== 'undefined') {
   });
 }
 
+// ── HubSpot webhook SSE listener ──────────────────────────────────────────────
+// When the server receives a HubSpot webhook (e.g. a lead status changed
+// directly in HubSpot), it pushes an SSE event here. We bust the client-side
+// contact cache and trigger a re-render so boards refresh without a full reload.
+// Only opens the SSE connection on pages that have board UI (i.e. pages that
+// load workflow-core.js: sales, survey, customers, customer-detail).
+(function _initHsWebhookSse() {
+  if (typeof EventSource === 'undefined') return;
+  let _sseSource = null;
+  let _reconnectTimer = null;
+  let _reconnectDelay = 2000;
+
+  function _connect() {
+    if (_sseSource) { _sseSource.close(); _sseSource = null; }
+    try {
+      _sseSource = new EventSource('/api/hubspot/webhook-events');
+      _sseSource.addEventListener('message', (e) => {
+        let payload;
+        try { payload = JSON.parse(e.data); } catch { return; }
+        if (payload.type === 'hs_lead_status_changed') {
+          // Reload contacts from the server (cache already busted server-side),
+          // refresh lead-status counts, then trigger re-renders on all boards.
+          const rerender = () => {
+            document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
+            if (typeof renderEnquiryList === 'function') renderEnquiryList();
+            if (typeof renderSurveyList === 'function') renderSurveyList();
+            // Notify React boards (SalesBoardPage / SurveyBoardPage) via the
+            // BroadcastChannel they already listen to — triggers refresh() →
+            // loadWorkflow() + loadLeadStatuses() + forceUpdate().
+            try { const _bc = new BroadcastChannel('lead_statuses_changed'); _bc.postMessage({ ts: Date.now(), src: 'hs_webhook' }); _bc.close(); } catch { /* ignore */ }
+          };
+          const loadFn = typeof loadAllContacts === 'function'
+            ? loadAllContacts()
+            : typeof loadContactsPage === 'function'
+              ? loadContactsPage({ page: (state && state.currentPage) || 1 })
+              : Promise.resolve();
+          Promise.all([
+            loadFn,
+            typeof loadLeadStatusCounts === 'function' ? loadLeadStatusCounts() : Promise.resolve(),
+          ]).then(rerender).catch(rerender);
+        }
+      });
+      _sseSource.addEventListener('open', () => {
+        _reconnectDelay = 2000;
+      });
+      _sseSource.addEventListener('error', () => {
+        _sseSource.close();
+        _sseSource = null;
+        // Reconnect with capped exponential backoff.
+        clearTimeout(_reconnectTimer);
+        _reconnectTimer = setTimeout(() => {
+          _reconnectDelay = Math.min(_reconnectDelay * 2, 60000);
+          _connect();
+        }, _reconnectDelay);
+      });
+    } catch { /* SSE not supported or already shut down */ }
+  }
+
+  // Delay the initial connection slightly so the page auth session is established.
+  setTimeout(_connect, 500);
+})();
+
 // ── Filters ───────────────────────────────────────────────────────────────────
 function applySearchFilter(contacts) {
   const q = (state.searchQuery || '').toLowerCase();

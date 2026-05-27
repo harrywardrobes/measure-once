@@ -42,6 +42,21 @@ const DEV_ONLY_FEATURES: Array<{
       </>
     ),
   },
+  {
+    name: 'HubSpot webhook — signature verification bypass',
+    location: 'Settings tab → HubSpot Webhooks panel / POST /api/hubspot/webhook',
+    description: (
+      <>
+        The webhook receiver endpoint (
+        <code className="adm-inline-code">POST /api/hubspot/webhook</code>) is active in all
+        environments, but when <code className="adm-inline-code">HUBSPOT_CLIENT_SECRET</code> is{' '}
+        absent the HMAC-SHA256 signature check is <strong>skipped with a console warning</strong>{' '}
+        rather than rejecting the request. This lets developers trigger the webhook manually (e.g.{' '}
+        via curl) without setting up a real HubSpot app. In production the secret must be set — if
+        it is absent, the endpoint returns 400 and discards every incoming request.
+      </>
+    ),
+  },
 ];
 
 export function DevEnvironmentPage() {

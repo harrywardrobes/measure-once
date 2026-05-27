@@ -4,6 +4,7 @@ const axios = require('axios').create({ timeout: 10000 });
 const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction, getReqPrivilege, scheduleConflictDigest } = require('./auth');
 const {
   hubspotMutationLimiter,
@@ -51,6 +52,83 @@ app.use('/__mockup', (req, res) => {
   proxy.on('error', () => res.status(502).send('Mockup sandbox not running'));
   req.pipe(proxy, { end: true });
 });
+
+// ── HubSpot webhook receiver (raw body needed for HMAC) ───────────────────────
+// Registered BEFORE express.json() so the raw Buffer is available for
+// signature verification. A separate express.raw() middleware is applied
+// inline to this single route only.
+const _hsWebhookSseClients = new Set();
+
+app.post('/api/hubspot/webhook',
+  express.raw({ type: '*/*', limit: '2mb' }),
+  (req, res) => {
+    const secret = process.env.HUBSPOT_CLIENT_SECRET;
+    if (!secret) {
+      if (process.env.NODE_ENV === 'production') {
+        console.warn('[hs-webhook] HUBSPOT_CLIENT_SECRET not set — rejecting webhook (production)');
+        return res.status(400).json({ error: 'Webhook signature verification not configured.' });
+      }
+      // Dev/staging: skip verification with a warning.
+      console.warn('[hs-webhook] HUBSPOT_CLIENT_SECRET not set — skipping signature verification (non-production dev convenience)');
+    } else {
+      // Verify HubSpot v3 HMAC signature.
+      // Spec: HMAC-SHA256 of "{METHOD}{full URL}{raw body}{timestamp}", base64-encoded.
+      const sigHeader = req.headers['x-hubspot-signature-v3'];
+      const tsHeader  = req.headers['x-hubspot-request-timestamp'];
+      if (!sigHeader || !tsHeader) {
+        return res.status(400).json({ error: 'Missing HubSpot signature headers.' });
+      }
+      const ts = parseInt(tsHeader, 10);
+      if (isNaN(ts) || Math.abs(Date.now() - ts) > 5 * 60 * 1000) {
+        return res.status(400).json({ error: 'Request timestamp out of range — possible replay.' });
+      }
+      const rawBody  = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const fullUrl  = `${protocol}://${req.get('host')}${req.originalUrl}`;
+      const toSign   = `POST${fullUrl}${rawBody.toString('utf8')}${tsHeader}`;
+      const expected = crypto.createHmac('sha256', secret).update(toSign).digest('base64');
+      const expBuf = Buffer.from(expected);
+      const sigBuf = Buffer.from(sigHeader);
+      if (expBuf.length !== sigBuf.length || !crypto.timingSafeEqual(expBuf, sigBuf)) {
+        return res.status(400).json({ error: 'Signature mismatch.' });
+      }
+    }
+
+    let events;
+    try {
+      const bodyStr = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '[]';
+      const parsed  = JSON.parse(bodyStr);
+      events = Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return res.status(400).json({ error: 'Invalid JSON payload.' });
+    }
+
+    // Collect contact IDs where a relevant lead-status property changed.
+    const WATCHED_PROPS = new Set(['hs_lead_status', 'hw_lead_substatus']);
+    const affectedIds   = new Set();
+    for (const ev of events) {
+      if (ev.subscriptionType === 'contact.propertyChange' &&
+          WATCHED_PROPS.has(ev.propertyName) && ev.objectId) {
+        affectedIds.add(String(ev.objectId));
+      }
+    }
+
+    if (affectedIds.size > 0) {
+      // Bust server-side caches so the next poll returns fresh data.
+      bustSharedCache();
+      _invalidateLeadStatusCountsCache();
+      _invalidateOpenLeadsCache();
+
+      // Push a lightweight SSE event to all connected browser tabs.
+      const sseMsg = `data: ${JSON.stringify({ type: 'hs_lead_status_changed', contactIds: [...affectedIds] })}\n\n`;
+      for (const client of _hsWebhookSseClients) {
+        try { client.write(sseMsg); } catch { _hsWebhookSseClients.delete(client); }
+      }
+    }
+
+    res.status(200).json({ ok: true, affected: affectedIds.size });
+  }
+);
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '25mb' }));
@@ -732,7 +810,6 @@ const GOOGLE_SCOPES = [
 ];
 
 // ── Auth Routes ───────────────────────────────────────────────────────────────
-const crypto = require('crypto');
 
 app.get('/auth/google', isAuthenticated, (req, res) => {
   const state = crypto.randomBytes(16).toString('hex');
@@ -825,6 +902,159 @@ app.get('/api/hubspot/status', async (req, res) => {
       return res.json({ connected: false, code: 'HUBSPOT_RATE_LIMIT' });
     }
     res.json({ connected: false, code: 'HUBSPOT_ERROR' });
+  }
+});
+
+// ── HubSpot: Webhook SSE stream ───────────────────────────────────────────────
+// Authenticated endpoint — browser tabs connect here to receive push
+// notifications when a HubSpot webhook fires and busts the lead-status cache.
+// Each connected response is held open and written to by the webhook handler.
+app.get('/api/hubspot/webhook-events', isAuthenticated, (req, res) => {
+  // Clients that don't explicitly accept SSE (e.g. health-checks, privilege
+  // matrix probes that send Accept: application/json) get a plain 200 so
+  // the connection is closed immediately rather than held open forever.
+  if (!String(req.headers['accept'] || '').includes('text/event-stream')) {
+    return res.status(200).json({ ok: true, info: 'SSE endpoint — connect with EventSource' });
+  }
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  // Send a connected confirmation so the client can tell the SSE stream is live.
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+  _hsWebhookSseClients.add(res);
+  req.on('close', () => _hsWebhookSseClients.delete(res));
+});
+
+// ── HubSpot: Webhook subscription management (admin only) ─────────────────────
+// Helpers for the admin Settings UI — lets an admin register or unregister the
+// HubSpot webhook subscriptions without leaving the app.
+// Requires: HUBSPOT_APP_ID (private app numeric ID) + the existing bearer token.
+
+function _getWebhookBaseUrl(req) {
+  if (process.env.WEBHOOK_BASE_URL) return process.env.WEBHOOK_BASE_URL.replace(/\/$/, '');
+  const replitDomain = process.env.REPLIT_DEV_DOMAIN;
+  if (replitDomain) return `https://${replitDomain}`;
+  return `${req.headers['x-forwarded-proto'] || req.protocol || 'https'}://${req.get('host')}`;
+}
+
+const HS_WATCHED_PROPS = ['hs_lead_status', 'hw_lead_substatus'];
+
+// GET /api/admin/hubspot-webhook — returns webhook config status
+app.get('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req, res) => {
+  const hasSecret      = !!process.env.HUBSPOT_CLIENT_SECRET;
+  const appId          = process.env.HUBSPOT_APP_ID;
+  const webhookBaseUrl = _getWebhookBaseUrl(req);
+  const webhookUrl     = `${webhookBaseUrl}/api/hubspot/webhook`;
+
+  if (!appId) {
+    return res.json({ hasSecret, appIdConfigured: false, webhookUrl, subscriptions: [], configuredWebhookUrl: null });
+  }
+
+  try {
+    const [subsResp, settingsResp] = await Promise.allSettled([
+      axios.get(`${HS}/webhooks/v3/${encodeURIComponent(appId)}/subscriptions`, { headers: hsHeaders(), timeout: 10000 }),
+      axios.get(`${HS}/webhooks/v3/${encodeURIComponent(appId)}/settings`,      { headers: hsHeaders(), timeout: 10000 }),
+    ]);
+    const subs     = subsResp.status === 'fulfilled'     ? (subsResp.value.data?.results || [])           : [];
+    const settings = settingsResp.status === 'fulfilled' ? settingsResp.value.data                         : null;
+    const relevant = subs.filter(s =>
+      s.eventType === 'contact.propertyChange' && HS_WATCHED_PROPS.includes(s.propertyName)
+    );
+    return res.json({
+      hasSecret,
+      appIdConfigured: true,
+      webhookUrl,
+      configuredWebhookUrl: settings?.webhookUrl || null,
+      subscriptions: relevant,
+    });
+  } catch (e) {
+    if (e.response?.status === 404) {
+      return res.json({ hasSecret, appIdConfigured: true, webhookUrl, subscriptions: [] });
+    }
+    return res.status(502).json({ error: e.response?.data?.message || e.message });
+  }
+});
+
+// POST /api/admin/hubspot-webhook — register subscriptions + set webhook URL
+app.post('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req, res) => {
+  const appId = process.env.HUBSPOT_APP_ID;
+  if (!appId) return res.status(400).json({ error: 'HUBSPOT_APP_ID is not configured.' });
+  if (!process.env.HUBSPOT_CLIENT_SECRET) {
+    return res.status(400).json({ error: 'HUBSPOT_CLIENT_SECRET is not configured — webhook signature verification would be disabled. Set the secret before registering.' });
+  }
+
+  const webhookUrl = _getWebhookBaseUrl(req) + '/api/hubspot/webhook';
+
+  try {
+    // 1. Configure the webhook URL at the app level.
+    await axios.put(
+      `${HS}/webhooks/v3/${encodeURIComponent(appId)}/settings`,
+      { webhookUrl, maxConcurrentRequests: 10 },
+      { headers: hsHeaders(), timeout: 10000 }
+    );
+
+    // 2. Fetch existing subscriptions to avoid duplicates.
+    let existing = [];
+    try {
+      const r = await axios.get(
+        `${HS}/webhooks/v3/${encodeURIComponent(appId)}/subscriptions`,
+        { headers: hsHeaders(), timeout: 10000 }
+      );
+      existing = r.data?.results || [];
+    } catch { /* treat as no existing subscriptions */ }
+
+    const existingProps = new Set(
+      existing.filter(s => s.eventType === 'contact.propertyChange').map(s => s.propertyName)
+    );
+
+    // 3. Create subscriptions for any watched property not yet registered.
+    const created = [];
+    for (const prop of HS_WATCHED_PROPS) {
+      if (existingProps.has(prop)) continue;
+      const r = await axios.post(
+        `${HS}/webhooks/v3/${encodeURIComponent(appId)}/subscriptions`,
+        { eventType: 'contact.propertyChange', propertyName: prop, active: true },
+        { headers: hsHeaders(), timeout: 10000 }
+      );
+      created.push(r.data);
+    }
+
+    const allSubs = [...existing.filter(s => HS_WATCHED_PROPS.includes(s.propertyName)), ...created];
+    return res.json({ ok: true, webhookUrl, subscriptions: allSubs, created: created.length });
+  } catch (e) {
+    console.error('[hs-webhook] POST /api/admin/hubspot-webhook error:', e.response?.data || e.message);
+    return res.status(502).json({ error: e.response?.data?.message || e.message });
+  }
+});
+
+// DELETE /api/admin/hubspot-webhook — unregister subscriptions for watched properties
+app.delete('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req, res) => {
+  const appId = process.env.HUBSPOT_APP_ID;
+  if (!appId) return res.status(400).json({ error: 'HUBSPOT_APP_ID is not configured.' });
+
+  try {
+    const r = await axios.get(
+      `${HS}/webhooks/v3/${encodeURIComponent(appId)}/subscriptions`,
+      { headers: hsHeaders(), timeout: 10000 }
+    );
+    const toDelete = (r.data?.results || []).filter(
+      s => s.eventType === 'contact.propertyChange' && HS_WATCHED_PROPS.includes(s.propertyName)
+    );
+
+    await Promise.all(toDelete.map(s =>
+      axios.delete(
+        `${HS}/webhooks/v3/${encodeURIComponent(appId)}/subscriptions/${encodeURIComponent(s.id)}`,
+        { headers: hsHeaders(), timeout: 10000 }
+      ).catch(err => console.warn('[hs-webhook] delete subscription error:', err.response?.data || err.message))
+    ));
+
+    return res.json({ ok: true, deleted: toDelete.length });
+  } catch (e) {
+    console.error('[hs-webhook] DELETE /api/admin/hubspot-webhook error:', e.response?.data || e.message);
+    return res.status(502).json({ error: e.response?.data?.message || e.message });
   }
 });
 

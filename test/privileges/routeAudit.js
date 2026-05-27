@@ -59,6 +59,9 @@ const PUBLIC_PATH_ALLOWLIST = [
   // BEFORE the global /api isAuthenticated gate in server.js, so this
   // route is intentionally public and gated by the signature in `sig`.
   /^\/api\/design-visit-images\/:[^/]+$/,
+  // HubSpot webhook receiver — must be public so HubSpot can POST to it
+  // without a session. Gated instead by HMAC-SHA256 signature verification.
+  '/api/hubspot/webhook',
 ];
 
 function isPublicPath(pattern) {

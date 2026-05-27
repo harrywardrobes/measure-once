@@ -14,7 +14,9 @@ import {
 import SendIcon from '@mui/icons-material/Send';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SyncIcon from '@mui/icons-material/Sync';
-import { GET, POST, PATCH } from '../../utils/api';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
+import { GET, POST, PATCH, DELETE } from '../../utils/api';
 
 const STAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: '—' },
@@ -152,6 +154,21 @@ interface DigestSettings {
   minGapDays: number;
 }
 
+interface WebhookSubscription {
+  id: string | number;
+  eventType: string;
+  propertyName: string;
+  active: boolean;
+}
+
+interface WebhookStatus {
+  hasSecret: boolean;
+  appIdConfigured: boolean;
+  webhookUrl: string;
+  configuredWebhookUrl: string | null;
+  subscriptions: WebhookSubscription[];
+}
+
 interface PageFilterConfigEntry {
   label: string;
   type: 'number' | 'json';
@@ -177,6 +194,10 @@ export function SettingsPage() {
   const [digestStaleDays, setDigestStaleDays] = useState<string>('7');
   const [digestMinGapDays, setDigestMinGapDays] = useState<string>('7');
   const [digestThresholdSaving, setDigestThresholdSaving] = useState(false);
+
+  const [webhookStatus, setWebhookStatus] = useState<WebhookStatus | null>(null);
+  const [webhookLoading, setWebhookLoading] = useState(true);
+  const [webhookActing, setWebhookActing] = useState(false);
 
   const [pageFilterConfig, setPageFilterConfig] = useState<PageFilterConfig | null>(null);
   const [pageFilterDraft, setPageFilterDraft] = useState<Record<string, string>>({});
@@ -230,6 +251,44 @@ export function SettingsPage() {
       setDigestMinGapDays(String(data.minGapDays ?? 7));
     } catch {}
   }, []);
+
+  const fetchWebhookStatus = useCallback(async () => {
+    setWebhookLoading(true);
+    try {
+      const data = await GET<WebhookStatus>('/api/admin/hubspot-webhook');
+      setWebhookStatus(data);
+    } catch {
+      setWebhookStatus(null);
+    } finally {
+      setWebhookLoading(false);
+    }
+  }, []);
+
+  const registerWebhook = useCallback(async () => {
+    setWebhookActing(true);
+    try {
+      await POST('/api/admin/hubspot-webhook');
+      showToast('Webhook subscriptions registered.');
+      await fetchWebhookStatus();
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to register webhook.', true);
+    } finally {
+      setWebhookActing(false);
+    }
+  }, [fetchWebhookStatus]);
+
+  const unregisterWebhook = useCallback(async () => {
+    setWebhookActing(true);
+    try {
+      await DELETE('/api/admin/hubspot-webhook');
+      showToast('Webhook subscriptions removed.');
+      await fetchWebhookStatus();
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to remove webhook.', true);
+    } finally {
+      setWebhookActing(false);
+    }
+  }, [fetchWebhookStatus]);
 
   const fetchPageFilterConfig = useCallback(async () => {
     try {
@@ -319,12 +378,13 @@ export function SettingsPage() {
     fetchHubStatus();
     fetchStatuses();
     fetchDigestSettings();
+    fetchWebhookStatus();
     fetchPageFilterConfig();
     fetch('/storybook/index.html', { method: 'HEAD' })
       .then((r) => setStorybookBuilt(r.ok))
       .catch(() => setStorybookBuilt(false));
     return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
-  }, [fetchHubStatus, fetchStatuses, fetchDigestSettings, fetchPageFilterConfig]);
+  }, [fetchHubStatus, fetchStatuses, fetchDigestSettings, fetchWebhookStatus, fetchPageFilterConfig]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
@@ -570,6 +630,125 @@ export function SettingsPage() {
             {addErr && <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>{addErr}</Typography>}
             <div id="ls-add-error" style={{ display: 'none' }} />
           </Box>
+        </CardContent>
+      </Card>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 0.5 }}>HubSpot Webhooks</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Register a real-time webhook so lead status changes made directly in HubSpot appear in
+            the Sales, Design Visit, and Survey boards within seconds — without waiting for the
+            5-minute cache to expire. Requires{' '}
+            <Box component="code" sx={{ fontSize: '0.8em' }}>HUBSPOT_CLIENT_SECRET</Box> and{' '}
+            <Box component="code" sx={{ fontSize: '0.8em' }}>HUBSPOT_APP_ID</Box> to be set in
+            your environment secrets.
+          </Typography>
+
+          {webhookLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1 }}>
+              <CircularProgress size={16} />
+              <Typography variant="body2" color="text.secondary">Checking webhook status…</Typography>
+            </Box>
+          ) : webhookStatus === null ? (
+            <Alert severity="error" sx={{ mb: 2 }}>Could not load webhook status.</Alert>
+          ) : (
+            <Stack spacing={2}>
+              {/* Secret / App ID configuration status */}
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.5, py: 0.75, borderRadius: 1, border: 1, borderColor: 'divider', flex: 1 }}>
+                  {webhookStatus.hasSecret
+                    ? <CheckCircleOutlinedIcon sx={{ fontSize: 16, color: 'success.main', flexShrink: 0 }} />
+                    : <ErrorOutlinedIcon sx={{ fontSize: 16, color: 'warning.main', flexShrink: 0 }} />}
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>HUBSPOT_CLIENT_SECRET</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.8rem' }}>
+                      {webhookStatus.hasSecret ? 'Configured' : 'Not set'}
+                    </Typography>
+                  </Box>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.5, py: 0.75, borderRadius: 1, border: 1, borderColor: 'divider', flex: 1 }}>
+                  {webhookStatus.appIdConfigured
+                    ? <CheckCircleOutlinedIcon sx={{ fontSize: 16, color: 'success.main', flexShrink: 0 }} />
+                    : <ErrorOutlinedIcon sx={{ fontSize: 16, color: 'warning.main', flexShrink: 0 }} />}
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>HUBSPOT_APP_ID</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.8rem' }}>
+                      {webhookStatus.appIdConfigured ? 'Configured' : 'Not set'}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Stack>
+
+              {(!webhookStatus.hasSecret || !webhookStatus.appIdConfigured) && (
+                <Alert severity="warning">
+                  Set{!webhookStatus.hasSecret && !webhookStatus.appIdConfigured
+                    ? ' HUBSPOT_CLIENT_SECRET and HUBSPOT_APP_ID'
+                    : !webhookStatus.hasSecret
+                      ? ' HUBSPOT_CLIENT_SECRET'
+                      : ' HUBSPOT_APP_ID'}{' '}
+                  in your environment secrets to enable webhook registration.
+                </Alert>
+              )}
+
+              {/* Subscription status */}
+              <Divider />
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Subscription status</Typography>
+                {webhookStatus.subscriptions.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">No active subscriptions — boards use pull-based refresh only.</Typography>
+                ) : (
+                  <Stack spacing={0.5}>
+                    {webhookStatus.subscriptions.map(s => (
+                      <Box key={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CheckCircleOutlinedIcon sx={{ fontSize: 14, color: s.active ? 'success.main' : 'warning.main', flexShrink: 0 }} />
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                          {s.propertyName}
+                          {!s.active && <Box component="span" sx={{ ml: 1, color: 'warning.main' }}>(paused)</Box>}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                )}
+              </Box>
+
+              {/* Webhook receiver URL */}
+              {webhookStatus.webhookUrl && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Webhook receiver URL</Typography>
+                  <Box component="code" sx={{ fontSize: '0.78rem', wordBreak: 'break-all', color: 'text.primary' }}>
+                    {webhookStatus.webhookUrl}
+                  </Box>
+                </Box>
+              )}
+
+              {/* Action buttons */}
+              <Divider />
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                <Button
+                  variant="contained"
+                  onClick={registerWebhook}
+                  disabled={webhookActing || !webhookStatus.appIdConfigured || !webhookStatus.hasSecret}
+                  startIcon={webhookActing ? <CircularProgress size={14} color="inherit" /> : undefined}
+                  title={!webhookStatus.appIdConfigured ? 'HUBSPOT_APP_ID must be configured' : !webhookStatus.hasSecret ? 'HUBSPOT_CLIENT_SECRET must be configured' : undefined}
+                >
+                  {webhookActing ? 'Working…' : 'Register / refresh'}
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={unregisterWebhook}
+                  disabled={webhookActing || !webhookStatus.appIdConfigured || !webhookStatus.hasSecret || webhookStatus.subscriptions.length === 0}
+                  startIcon={webhookActing ? <CircularProgress size={14} color="inherit" /> : undefined}
+                >
+                  Unregister
+                </Button>
+                <Button variant="text" onClick={fetchWebhookStatus} disabled={webhookLoading || webhookActing}>
+                  Refresh status
+                </Button>
+              </Box>
+            </Stack>
+          )}
         </CardContent>
       </Card>
 
