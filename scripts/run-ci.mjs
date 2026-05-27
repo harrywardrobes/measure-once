@@ -64,6 +64,7 @@ const STEPS = [
   'test:calendar-page:ci',
   'test:bottom-nav-lint',
   'test:nav-key-sync',
+  'test:hubspot-credentials',
   'test:hubspot-429-retry:ci',
   'test:hubspot-429-retry-contacts:ci',
   'test:icon-lint',
