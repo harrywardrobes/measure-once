@@ -62,6 +62,26 @@ const DEV_ONLY_FEATURES: Array<{
     },
   },
   {
+    name: 'Bust project-contacts cache',
+    location: 'Internal API only',
+    description: (
+      <>
+        Internal API endpoint (
+        <code className="adm-inline-code">POST /api/admin/test/bust-project-contacts-cache</code>)
+        used by automated tests to expire the server-side project-contacts cache (used by the
+        Projects page to load cards for all pipeline stages). Sets{' '}
+        <code className="adm-inline-code">fetchedAt = 0</code> so the next request triggers a
+        fresh HubSpot fetch while keeping stale data available as a fallback. Excluded from
+        production to avoid causing unnecessary HubSpot load.
+      </>
+    ),
+    action: {
+      kind: 'copy',
+      value: 'curl -X POST "$REPLIT_DEV_DOMAIN/api/admin/test/bust-project-contacts-cache"',
+      label: 'Copy curl snippet',
+    },
+  },
+  {
     name: 'Storybook dev server',
     location: 'Port 6006 — npm run watch:storybook',
     action: {

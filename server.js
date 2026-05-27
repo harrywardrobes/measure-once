@@ -118,6 +118,7 @@ app.post('/api/hubspot/webhook',
       bustSharedCache();
       _invalidateLeadStatusCountsCache();
       _invalidateOpenLeadsCache();
+      _invalidateProjectContactsCache();
 
       // Push a lightweight SSE event to all connected browser tabs.
       const sseMsg = `data: ${JSON.stringify({ type: 'hs_lead_status_changed', contactIds: [...affectedIds] })}\n\n`;
@@ -354,6 +355,7 @@ app.use('/api', (req, res, next) => {
 app.use('/api/pipeline', requireHubspotToken);
 app.use('/api/account', requireHubspotToken);
 app.use('/api/open-leads', requireHubspotToken);
+app.use('/api/project-contacts', requireHubspotToken);
 app.use('/api/contacts-all', requireHubspotToken);
 app.use('/api/workflow-stages', requireHubspotToken);
 app.use('/api/localdata', requireHubspotToken);
@@ -1359,6 +1361,17 @@ function _invalidateOpenLeadsCache() {
   _openLeadsCache = null;
 }
 
+// ── Project-Contacts in-memory cache (single-flight + 60 s TTL) ──────────────
+// Fetches contacts across ALL pipeline stages (not just OPEN_DEAL). Used by
+// the Projects page to show cards for every configured lead-status key.
+// Invalidated on any hs_lead_status mutation or lead_status_config change.
+const PROJECT_CONTACTS_TTL_MS = 60_000;
+let _projectContactsCache    = null; // { results, total, fetchedAt }
+let _projectContactsInFlight = null;
+function _invalidateProjectContactsCache() {
+  _projectContactsCache = null;
+}
+
 async function _fetchLeadStatusCounts() {
   const { rows: statusRows } = await pool.query(
     'SELECT key FROM lead_status_config WHERE is_null_row IS NOT TRUE ORDER BY sort_order ASC, key ASC'
@@ -1522,6 +1535,90 @@ app.get('/api/open-leads', async (req, res) => {
     }
     res.setHeader('X-Cache-Status', 'stale');
     return res.json({ results: _openLeadsCache.results, total: _openLeadsCache.total });
+  }
+
+  const e = outcome.err;
+  const status = e.response?.status;
+  if (status === 401 || status === 403) {
+    return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+  }
+  if (status === 429) {
+    return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+  }
+  res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+});
+
+// ── HubSpot: Project Contacts (contacts across all pipeline stages) ───────────
+app.get('/api/project-contacts', async (req, res) => {
+  // Fresh cache hit — return immediately.
+  if (_projectContactsCache && Date.now() - _projectContactsCache.fetchedAt < PROJECT_CONTACTS_TTL_MS) {
+    res.setHeader('X-Cache-Status', 'fresh');
+    res.setHeader('X-Cache-Age', String(Math.round((Date.now() - _projectContactsCache.fetchedAt) / 1000)));
+    return res.json({ results: _projectContactsCache.results, total: _projectContactsCache.total });
+  }
+
+  // Single-flight: all concurrent cold-cache callers share one HubSpot fan-out.
+  if (!_projectContactsInFlight) {
+    _projectContactsInFlight = (async () => {
+      try {
+        // Fetch all configured lead-status keys from the DB so the query
+        // spans every pipeline stage, not just OPEN_DEAL.
+        const { rows: statusRows } = await pool.query(
+          'SELECT key FROM lead_status_config WHERE is_null_row IS NOT TRUE ORDER BY sort_order ASC, key ASC'
+        );
+        const keys = statusRows.map(r => r.key);
+
+        // If no keys are configured fall back to an empty result set so the
+        // Projects page renders empty rather than erroring.
+        if (!keys.length) {
+          _projectContactsCache = { results: [], total: 0, fetchedAt: Date.now() };
+          return { ok: true, results: [], total: 0 };
+        }
+
+        const allResults = [];
+        let after = undefined;
+        do {
+          const body = {
+            filterGroups: [{
+              filters: [
+                { propertyName: 'hs_lead_status', operator: 'IN', values: keys },
+              ]
+            }],
+            properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'hw_lead_substatus', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
+            sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
+            limit: 100
+          };
+          if (after) body.after = after;
+          const r = await hubspotSearchWithRetry(body);
+          allResults.push(...(r.data.results || []));
+          after = r.data.paging?.next?.after;
+        } while (after);
+
+        _projectContactsCache = { results: allResults, total: allResults.length, fetchedAt: Date.now() };
+        return { ok: true, results: allResults, total: allResults.length };
+      } catch (err) {
+        console.error('[project-contacts] HubSpot fetch error (status=%s): %s', err.response?.status || 'network', err.message);
+        return { ok: false, err };
+      } finally {
+        setImmediate(() => { _projectContactsInFlight = null; });
+      }
+    })();
+  }
+
+  const outcome = await _projectContactsInFlight;
+
+  if (outcome.ok) {
+    res.setHeader('X-Cache-Status', 'fresh');
+    return res.json({ results: outcome.results, total: outcome.total });
+  }
+
+  // Fetch failed — serve stale cache if available rather than surfacing an error.
+  if (_projectContactsCache) {
+    if (process.env.DEBUG_HUBSPOT) {
+      console.warn('[project-contacts] HubSpot fetch failed; serving stale cache age=%dms', Date.now() - _projectContactsCache.fetchedAt);
+    }
+    res.setHeader('X-Cache-Status', 'stale');
+    return res.json({ results: _projectContactsCache.results, total: _projectContactsCache.total });
   }
 
   const e = outcome.err;
@@ -1735,6 +1832,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status')) {
       _invalidateLeadStatusCountsCache();
       _invalidateOpenLeadsCache();
+      _invalidateProjectContactsCache();
     }
     res.json(patchResp.data);
   } catch (e) {
@@ -4163,6 +4261,7 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
     );
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
+    _invalidateProjectContactsCache();
     res.status(201).json(rows[0]);
     const _lscSseMsg = `data: ${JSON.stringify({ type: 'lead_statuses_changed' })}\n\n`;
     for (const client of _hsWebhookSseClients) {
@@ -4249,6 +4348,7 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
     );
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
+    _invalidateProjectContactsCache();
     res.json(rows[0]);
     const _lscSseMsg = `data: ${JSON.stringify({ type: 'lead_statuses_changed' })}\n\n`;
     for (const client of _hsWebhookSseClients) {
@@ -4450,6 +4550,7 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
     await pool.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
+    _invalidateProjectContactsCache();
     res.json({ ok: true });
     const _lscSseMsg = `data: ${JSON.stringify({ type: 'lead_statuses_changed' })}\n\n`;
     const _lsscSseMsg = `data: ${JSON.stringify({ type: 'lead_substatuses_changed' })}\n\n`;
@@ -4750,6 +4851,18 @@ app.post('/api/admin/test/bust-open-leads-cache', isAuthenticated, requireAdmin,
   }
   if (_openLeadsCache) _openLeadsCache.fetchedAt = 0;
   res.json({ ok: true, hadCache: _openLeadsCache !== null });
+});
+
+// ── Dev-only: expire the project-contacts fresh cache ────────────────────────
+// Mirrors the open-leads bust endpoint. Sets fetchedAt = 0 so the TTL check
+// fails on the next request without clearing the cached data (preserving the
+// stale-fallback path). Only available when NODE_ENV !== 'production'.
+app.post('/api/admin/test/bust-project-contacts-cache', isAuthenticated, requireAdmin, (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  if (_projectContactsCache) _projectContactsCache.fetchedAt = 0;
+  res.json({ ok: true, hadCache: _projectContactsCache !== null });
 });
 
 // ── Dev-only: reset the lead-status-counts rate-limit cooldown ───────────────

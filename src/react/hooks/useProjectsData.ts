@@ -117,7 +117,7 @@ export function useProjectsData(): ProjectsData {
     (async () => {
       try {
         const [leadsRes, workflowRes, localdataRes, usersRes] = await Promise.all([
-          fetch('/api/open-leads', { headers: { Accept: 'application/json' } }),
+          fetch('/api/project-contacts', { headers: { Accept: 'application/json' } }),
           fetch('/api/workflow', { headers: { Accept: 'application/json' } }),
           fetch('/api/localdata/all', { headers: { Accept: 'application/json' } }),
           fetch('/api/platform-users', { headers: { Accept: 'application/json' } }),
@@ -148,8 +148,8 @@ export function useProjectsData(): ProjectsData {
           pendingRoomStaleRef.current = null;
         }
 
-        // /api/open-leads returns { results, total } where results is the HubSpot
-        // contacts array.
+        // /api/project-contacts returns { results, total } where results is the
+        // HubSpot contacts array (all pipeline stages, not just OPEN_DEAL).
         const rawContacts: ProjectContact[] = leadsData.results || [];
         const rawCache: Record<string, ProjectRoom[]> = {};
 
