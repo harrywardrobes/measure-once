@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useCurrentUser } from './useCurrentUser';
+import { useAuth } from '../contexts/AuthContext';
 
 const RESTRICTED_PATHS = new Set([
   '/sales', '/sales.html',
@@ -20,7 +20,7 @@ const RESTRICTED_PATHS = new Set([
  * layer stays consistent after any SPA-style navigation.
  */
 export function usePrivilegeSync(): void {
-  const { user, loading } = useCurrentUser();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
     if (loading) return;

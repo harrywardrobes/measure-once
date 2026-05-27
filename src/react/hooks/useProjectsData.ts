@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useCurrentUser } from './useCurrentUser';
+import { useAuth } from '../contexts/AuthContext';
 
 export interface ProjectContact {
   id: string;
@@ -55,7 +55,7 @@ declare global {
 }
 
 export function useProjectsData(): ProjectsData {
-  const { user } = useCurrentUser();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [contacts, setContacts] = useState<ProjectContact[]>([]);

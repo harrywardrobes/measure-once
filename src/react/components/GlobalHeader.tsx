@@ -14,7 +14,8 @@ import SyncIcon from '@mui/icons-material/Sync';
 import EventIcon from '@mui/icons-material/Event';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import StorageIcon from '@mui/icons-material/Storage';
-import { useCurrentUser } from '../hooks/useCurrentUser';
+import type { CurrentUser } from '../hooks/useCurrentUser';
+import { useAuth } from '../contexts/AuthContext';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrivilegeSync } from '../hooks/usePrivilegeSync';
 import { useServiceStatuses, type ConnectionService, type ServiceStatus } from '../context/ConnectionToastContext';
@@ -30,7 +31,7 @@ declare global {
   }
 }
 
-function resolvePhotoSrc(user: NonNullable<ReturnType<typeof useCurrentUser>['user']>): string | null {
+function resolvePhotoSrc(user: CurrentUser): string | null {
   if (!user) return null;
   let src = user.has_custom_photo && user.id
     ? `/api/users/${encodeURIComponent(user.id)}/photo`
@@ -41,7 +42,7 @@ function resolvePhotoSrc(user: NonNullable<ReturnType<typeof useCurrentUser>['us
   return src;
 }
 
-function resolveInitials(user: NonNullable<ReturnType<typeof useCurrentUser>['user']>): string {
+function resolveInitials(user: CurrentUser): string {
   return [user?.first_name, user?.last_name]
     .filter(Boolean)
     .map((s) => (s as string)[0])
@@ -151,7 +152,7 @@ function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps) {
 
 export function GlobalHeader() {
   const [path, setPath] = useState<string>(() => window.location.pathname);
-  const { user } = useCurrentUser();
+  const { user } = useAuth();
   const [pendingCount, setPendingCount] = useState<number>(0);
   const serviceStatuses = useServiceStatuses();
 

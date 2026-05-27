@@ -28,6 +28,11 @@ function fetchCurrentUser(): Promise<CurrentUser | null> {
   return _promise;
 }
 
+/**
+ * @deprecated Use `useAuth()` from `../contexts/AuthContext` instead.
+ * This hook bypasses the shared AuthContext and does its own fetch deduplication.
+ * It is retained so vanilla-JS bridges that dispatch `mo:user` events continue to work.
+ */
 export function useCurrentUser(): { user: CurrentUser | null; loading: boolean } {
   const [user, setUser] = useState<CurrentUser | null>(() => window.__moHeaderUser || null);
   const [loading, setLoading] = useState<boolean>(() => !window.__moHeaderUser);
