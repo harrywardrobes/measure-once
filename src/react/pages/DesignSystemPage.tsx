@@ -108,6 +108,7 @@ import { SortSelect } from '../components/SortSelect';
 import { DesignVisitSignOffPage } from './DesignVisitSignOffPage';
 import { NotFoundPage } from './NotFoundPage';
 import { AccessRestrictedPage } from './AccessRestrictedPage';
+import { AccessRequestGate } from '../components/AccessRequestGate';
 import {
   PageLoadingSkeleton,
   CustomersPageSkeleton,
@@ -573,25 +574,41 @@ function DialogDemo() {
   );
 }
 
+type GateViewState = 'form' | 'confirmed' | 'email_conflict' | 'pending' | 'already_approved';
+
 function AccessRequestGateDemo() {
-  const views: Array<{ label: string; view: string }> = [
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<GateViewState>('form');
+
+  const views: Array<{ label: string; view: GateViewState }> = [
     { label: 'Form (default)', view: 'form' },
     { label: 'Confirmed', view: 'confirmed' },
     { label: 'Email conflict', view: 'email_conflict' },
     { label: 'Pending', view: 'pending' },
     { label: 'Already approved', view: 'already_approved' },
   ];
-  const dispatch = (view: string) => {
-    window.dispatchEvent(new CustomEvent('mo:show-access-gate', { detail: { view } }));
-  };
+
   return (
-    <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-      {views.map(({ label, view }) => (
-        <Button key={view} variant="outlined" size="small" onClick={() => dispatch(view)}>
-          {label}
-        </Button>
-      ))}
-    </Stack>
+    <>
+      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+        {views.map(({ label, view: v }) => (
+          <Button
+            key={v}
+            variant="outlined"
+            size="small"
+            onClick={() => { setView(v); setOpen(true); }}
+          >
+            {label}
+          </Button>
+        ))}
+      </Stack>
+      <AccessRequestGate
+        open={open}
+        onClose={() => setOpen(false)}
+        initialView={view}
+        forceNoTurnstile
+      />
+    </>
   );
 }
 
@@ -1401,7 +1418,7 @@ export function DesignSystemPage() {
           />
           <ComponentShowcase
             name="AccessRequestGate"
-            description="Full-screen dialog that collects an access request or displays a status view (confirmed, email conflict, pending, already approved). Triggered by dispatching a `mo:show-access-gate` CustomEvent. The gate is mounted globally as a React island — use the buttons below to preview each view state."
+            description="Full-screen dialog that collects an access request or displays a status view (confirmed, email conflict, pending, already approved). Triggered by dispatching a `mo:show-access-gate` CustomEvent. The gate is mounted globally as a React island — use the buttons below to preview each view state. The Form view includes a Turnstile CAPTCHA widget when configured; a placeholder is shown in this gallery preview."
             demo={<AccessRequestGateDemo />}
             code={`// Open the form (default)
 window.dispatchEvent(new CustomEvent('mo:show-access-gate', { detail: {} }));
@@ -1414,7 +1431,15 @@ window.dispatchEvent(new CustomEvent('mo:show-access-gate', {
 // Resolve from URL params (used on the login/request-access page)
 window.dispatchEvent(new CustomEvent('mo:show-access-gate', {
   detail: { urlParams: new URLSearchParams(location.search) },
-}));`}
+}));
+
+// Controlled / embedded usage with CAPTCHA placeholder (gallery / preview contexts)
+<AccessRequestGate
+  open={open}
+  onClose={() => setOpen(false)}
+  initialView="form"
+  forceNoTurnstile   // skips the real Cloudflare widget; shows a styled placeholder instead
+/>`}
           />
           <ComponentShowcase
             name="Snackbar"

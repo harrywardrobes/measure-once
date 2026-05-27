@@ -9,12 +9,13 @@ import Typography from '@mui/material/Typography';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import DoNotDisturbAltIcon from '@mui/icons-material/DoNotDisturbAlt';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 type TW = { render: (el: Element, opts: object) => string; getResponse: (id: string) => string; reset: (id: string) => void };
 
 const WIDGET_EL_ID = 'ts-access-gate';
 
-function useSingleTurnstile() {
+function useSingleTurnstile(forceNoTurnstile?: boolean) {
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [token, setToken] = useState('');
   const [hasError, setHasError] = useState(false);
@@ -23,6 +24,7 @@ function useSingleTurnstile() {
   const attempted = useRef(false);
 
   const renderWidget = useCallback(() => {
+    if (forceNoTurnstile) return;
     const tw = (window as unknown as { turnstile?: TW }).turnstile;
     const key = siteKeyRef.current;
     if (!key || !tw || attempted.current) return;
@@ -42,9 +44,14 @@ function useSingleTurnstile() {
       'unsupported-callback': () => setHasError(true),
     });
     widgetId.current = id;
-  }, []);
+  }, [forceNoTurnstile]);
 
   useEffect(() => {
+    if (forceNoTurnstile) {
+      setSiteKey('preview');
+      setToken('preview-token');
+      return;
+    }
     fetch('/api/turnstile-config').then(r => r.json()).then(cfg => {
       if (cfg?.enabled && cfg?.siteKey) {
         siteKeyRef.current = cfg.siteKey;
@@ -63,15 +70,16 @@ function useSingleTurnstile() {
         }
       }
     }).catch(() => {});
-  }, [renderWidget]);
+  }, [forceNoTurnstile, renderWidget]);
 
   const resetWidget = useCallback(() => {
+    if (forceNoTurnstile) return;
     const tw = (window as unknown as { turnstile?: TW }).turnstile;
     const id = widgetId.current;
     setToken('');
     setHasError(false);
     if (id != null && tw) tw.reset(id);
-  }, []);
+  }, [forceNoTurnstile]);
 
   return { siteKey, token, hasError, resetWidget, renderWidget };
 }
@@ -147,6 +155,50 @@ function GateStatusBadge({ state }: { state: ViewState }) {
   );
 }
 
+function TurnstilePlaceholder() {
+  return (
+    <Box
+      sx={{
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
+        bgcolor: 'grey.50',
+        px: 2,
+        py: 1.25,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        minHeight: 65,
+      }}
+    >
+      <Box
+        sx={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          border: '2px dashed',
+          borderColor: 'grey.400',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          color: 'grey.400',
+        }}
+      >
+        <LockOutlinedIcon sx={{ fontSize: 16 }} />
+      </Box>
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', lineHeight: 1.3 }}>
+          CAPTCHA widget
+        </Typography>
+        <Typography variant="caption" color="text.disabled" sx={{ lineHeight: 1.3 }}>
+          Preview only — Turnstile loads in production
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
 interface FormViewProps {
   onConfirmed: () => void;
   siteKey: string | null;
@@ -154,9 +206,10 @@ interface FormViewProps {
   captchaError: boolean;
   onRenderWidget: () => void;
   onResetWidget: () => void;
+  forceNoTurnstile?: boolean;
 }
 
-function FormView({ onConfirmed, siteKey, captchaToken, captchaError, onRenderWidget, onResetWidget }: FormViewProps) {
+function FormView({ onConfirmed, siteKey, captchaToken, captchaError, onRenderWidget, onResetWidget, forceNoTurnstile }: FormViewProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
@@ -238,8 +291,12 @@ function FormView({ onConfirmed, siteKey, captchaToken, captchaError, onRenderWi
           disabled={loading}
           slotProps={{ htmlInput: { 'aria-label': 'Email address' } }}
         />
-        {siteKey && (
-          <div id={WIDGET_EL_ID} style={{ margin: '4px 0 2px', minHeight: 65 }} />
+        {forceNoTurnstile ? (
+          <TurnstilePlaceholder />
+        ) : (
+          siteKey && (
+            <div id={WIDGET_EL_ID} style={{ margin: '4px 0 2px', minHeight: 65 }} />
+          )
         )}
         {error && (
           <Typography variant="body2" color="error" role="alert">
@@ -344,25 +401,53 @@ function AlreadyApprovedView() {
   );
 }
 
-export function AccessRequestGate() {
-  const [open, setOpen] = useState(false);
-  const [view, setView] = useState<ViewState>('form');
-  const { siteKey, token: captchaToken, hasError: captchaError, resetWidget, renderWidget } = useSingleTurnstile();
+export interface AccessRequestGateProps {
+  /**
+   * When true, skips the real Turnstile fetch and renders a styled placeholder
+   * widget instead. Use this in gallery/preview contexts where the actual
+   * Cloudflare CAPTCHA widget should not be loaded.
+   */
+  forceNoTurnstile?: boolean;
+  /**
+   * Controlled open state. When provided the component does not listen for the
+   * `mo:show-access-gate` CustomEvent — the parent is responsible for open/close.
+   */
+  open?: boolean;
+  /** Called when the dialog should close (controlled mode only). */
+  onClose?: () => void;
+  /** Initial view when using controlled mode. Defaults to 'form'. */
+  initialView?: ViewState;
+}
+
+export function AccessRequestGate({ forceNoTurnstile, open: openProp, onClose, initialView = 'form' }: AccessRequestGateProps = {}) {
+  const controlled = openProp !== undefined;
+  const [openState, setOpenState] = useState(false);
+  const [view, setView] = useState<ViewState>(initialView);
+  const { siteKey, token: captchaToken, hasError: captchaError, resetWidget, renderWidget } = useSingleTurnstile(forceNoTurnstile);
 
   useEffect(() => {
+    if (controlled) return;
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<ShowParams>).detail;
       const nextView = detail?.view ?? resolveInitialView(detail?.urlParams);
       setView(nextView);
-      setOpen(true);
+      setOpenState(true);
     };
     window.addEventListener('mo:show-access-gate', handler);
     return () => window.removeEventListener('mo:show-access-gate', handler);
-  }, []);
+  }, [controlled]);
+
+  useEffect(() => {
+    if (controlled) setView(initialView);
+  }, [controlled, initialView]);
+
+  const open = controlled ? (openProp ?? false) : openState;
+  const handleClose = controlled ? onClose : undefined;
 
   return (
     <Dialog
       open={open}
+      onClose={handleClose}
       slotProps={{ paper: { sx: { width: '100%', maxWidth: 420, borderRadius: 3, p: 1 } } }}
     >
       <DialogContent sx={{ pt: 3 }}>
@@ -375,6 +460,7 @@ export function AccessRequestGate() {
             captchaError={captchaError}
             onRenderWidget={renderWidget}
             onResetWidget={resetWidget}
+            forceNoTurnstile={forceNoTurnstile}
           />
         )}
         {view === 'confirmed' && <ConfirmedView />}
