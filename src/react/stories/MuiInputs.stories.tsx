@@ -21,10 +21,14 @@ import Typography from '@mui/material/Typography';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DateRangePicker } from '@mui/x-date-pickers-pro/DateRangePicker';
+import type { DateRange, RangePosition } from '@mui/x-date-pickers-pro/models';
+import type { FieldOwnerState } from '@mui/x-date-pickers/models';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SearchIcon from '@mui/icons-material/Search';
+import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 
 const meta: Meta = {
@@ -443,6 +447,111 @@ export const DatePickerField: Story = {
               },
             }}
           />
+        </Stack>
+      </LocalizationProvider>
+    );
+  },
+};
+
+export const DateRangePickerField: Story = {
+  name: 'DateRangePicker',
+  render: () => {
+    const [visitRange, setVisitRange] = useState<DateRange<Dayjs>>([null, null]);
+    const [filtRange, setFiltRange] = useState<DateRange<Dayjs>>([
+      dayjs().startOf('month'),
+      dayjs().endOf('month'),
+    ]);
+    const [errRange, setErrRange] = useState<DateRange<Dayjs>>([null, null]);
+
+    const fmt = (d: Dayjs | null) => (d ? d.format('DD MMM YYYY') : '—');
+
+    const [errStart, errEnd] = errRange;
+    const bothSet = errStart !== null && errEnd !== null;
+    const rangeInvalid = bothSet && errStart.isAfter(errEnd);
+
+    return (
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <Stack spacing={4} sx={{ maxWidth: 560 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>DateRangePicker</Typography>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Default — schedule a site visit window</Typography>
+            <DateRangePicker
+              value={visitRange}
+              onChange={(newValue) => setVisitRange(newValue)}
+              localeText={{ start: 'Visit start', end: 'Visit end' }}
+              slotProps={{
+                textField: { size: 'small', fullWidth: true },
+              }}
+            />
+            {(visitRange[0] || visitRange[1]) && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block' }}>
+                Selected: {fmt(visitRange[0])} – {fmt(visitRange[1])}
+              </Typography>
+            )}
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Pre-filled — filter reports by date range</Typography>
+            <DateRangePicker
+              value={filtRange}
+              onChange={(newValue) => setFiltRange(newValue)}
+              localeText={{ start: 'From', end: 'To' }}
+              slotProps={{ textField: { size: 'small', fullWidth: true } }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block' }}>
+              Showing: {fmt(filtRange[0])} – {fmt(filtRange[1])}
+            </Typography>
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Error / validation state — both fields required</Typography>
+            <DateRangePicker
+              value={errRange}
+              onChange={(newValue) => setErrRange(newValue)}
+              localeText={{ start: 'Start date', end: 'End date' }}
+              slotProps={{
+                textField: (ownerState: FieldOwnerState) => {
+                  const pos = (ownerState as FieldOwnerState & { position?: RangePosition }).position;
+                  return {
+                    size: 'small' as const,
+                    fullWidth: true,
+                    error:
+                      (pos === 'start' && errStart === null) ||
+                      (pos === 'end' && errEnd === null) ||
+                      rangeInvalid,
+                    helperText:
+                      pos === 'start' && errStart === null
+                        ? 'Start date is required.'
+                        : pos === 'end' && errEnd === null
+                        ? 'End date is required.'
+                        : rangeInvalid
+                        ? pos === 'start'
+                          ? 'Must be before end date.'
+                          : 'Must be after start date.'
+                        : undefined,
+                  };
+                },
+              }}
+            />
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Disabled — locked delivery window</Typography>
+            <DateRangePicker
+              value={[dayjs('2026-06-10'), dayjs('2026-06-17')]}
+              onChange={() => {}}
+              disabled
+              localeText={{ start: 'Delivery from', end: 'Delivery to' }}
+              slotProps={{
+                textField: {
+                  size: 'small',
+                  fullWidth: true,
+                  helperText: 'Locked after order confirmation.',
+                },
+              }}
+            />
+          </Box>
         </Stack>
       </LocalizationProvider>
     );
