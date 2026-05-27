@@ -117,7 +117,7 @@ export function InvoicesSection({ contact, qb }: Props) {
           <p style={{ fontSize: '0.875rem', fontStyle: 'italic', padding: '0 4px', color: 'var(--stone-deep)' }}>Loading invoices…</p>
         )}
         {qb.loadError && (
-          <p style={{ fontSize: '0.875rem', padding: '0 4px', color: '#ef4444' }}>{qb.error || 'Failed to load invoices.'}</p>
+          <p style={{ fontSize: '0.875rem', padding: '0 4px', color: 'var(--status-danger)' }}>{qb.error || 'Failed to load invoices.'}</p>
         )}
         {qb.loaded && matched.length === 0 && (
           <p style={{ fontSize: '0.875rem', fontStyle: 'italic', padding: '0 4px', color: 'var(--stone-deep)' }}>No invoices found for this customer.</p>

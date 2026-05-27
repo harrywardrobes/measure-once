@@ -121,20 +121,20 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
         <span style={sxHeaderLabel}>Design visits</span>
       </div>
       {actionError && (
-        <p style={{ fontSize: '0.85rem', color: '#b91c1c', padding: '4px 0' }}>{actionError}</p>
+        <p style={{ fontSize: '0.85rem', color: 'var(--status-danger-text)', padding: '4px 0' }}>{actionError}</p>
       )}
       <div id="design-visits-list" style={{ fontSize: '0.875rem', color: 'var(--stone-deep)' }}>
         {loading && (
           <p style={{ fontSize: '0.85rem', padding: '4px 0', fontStyle: 'italic' }}>Loading…</p>
         )}
         {!loading && error && (
-          <p style={{ fontSize: '0.85rem', color: '#b91c1c', padding: '4px 0' }}>Could not load design visits.</p>
+          <p style={{ fontSize: '0.85rem', color: 'var(--status-danger-text)', padding: '4px 0' }}>Could not load design visits.</p>
         )}
         {!loading && !error && visits.length === 0 && (
           <p style={{ fontSize: '0.85rem', padding: '4px 0', fontStyle: 'italic' }}>No design visits yet.</p>
         )}
         {!loading && !error && visits.map(v => {
-          const st = DESIGN_VISIT_STATUS_LABELS[v.status] || { label: v.status || 'Unknown', bg: '#e5e7eb', fg: '#374151' };
+          const st = DESIGN_VISIT_STATUS_LABELS[v.status] || { label: v.status || 'Unknown', bg: 'var(--stone-light)', fg: 'var(--ink-2)' };
           const when     = fmtDesignVisitWhen(v.visit_date || v.created_at);
           const totalGbp = fmtGbp(Number(v.estimate_total_pence) || 0);
           const canRevise = v.status === 'submitted' || v.status === 'signed_off';
@@ -190,7 +190,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
                     </button>
                   )}
                   {isAdmin && (
-                    <button style={{ ...sxSecondaryBtn, color: '#b91c1c' }}
+                    <button style={{ ...sxSecondaryBtn, color: 'var(--status-danger-text)' }}
                       onClick={() => handleDelete(v.id)}>
                       Delete
                     </button>
@@ -200,11 +200,11 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
 
               {isExp && (
                 <div id={`design-visit-detail-${v.id}`} style={{
-                  fontSize: '0.8rem', background: '#f8fafc', border: '1px solid #e2e8f0',
+                  fontSize: '0.8rem', background: 'var(--surface-muted)', border: '1px solid var(--border-soft)',
                   borderRadius: 8, padding: '10px 12px',
                 }}>
                   {!det || det.loading ? 'Loading…' : det.error ? (
-                    <span style={{ color: '#b91c1c' }}>{det.error}</span>
+                    <span style={{ color: 'var(--status-danger-text)' }}>{det.error}</span>
                   ) : det.data ? (
                     <DesignVisitDetail visit={det.data} />
                   ) : null}
@@ -225,7 +225,7 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
 
   return (
     <>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 8, color: '#475569' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 8, color: 'var(--ink-3)' }}>
         {visit.handle_name          && <span><strong>Handle:</strong> {visit.handle_name}</span>}
         {visit.furniture_range_name && <span><strong>Furniture range:</strong> {visit.furniture_range_name}</span>}
         {visit.location             && <span><strong>Location:</strong> {visit.location}</span>}
@@ -233,7 +233,7 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
       {rooms.length > 0 ? (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
           <thead>
-            <tr style={{ background: '#f1f5f9', color: '#475569' }}>
+            <tr style={{ background: 'var(--surface-muted)', color: 'var(--ink-3)' }}>
               <th style={{ textAlign: 'left', padding: '4px 8px' }}>Room</th>
               <th style={{ textAlign: 'left', padding: '4px 8px' }}>Style</th>
               <th style={{ textAlign: 'left', padding: '4px 8px' }}>Dimensions</th>
@@ -247,27 +247,27 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
               const dims  = [r.width_mm, r.height_mm, r.depth_mm].filter(Boolean).join(' × ');
               return (
                 <tr key={i}>
-                  <td style={{ padding: '4px 8px', borderTop: '1px solid #e2e8f0' }}>{r.room_name || ''}</td>
-                  <td style={{ padding: '4px 8px', borderTop: '1px solid #e2e8f0' }}>{r.door_style_name || '—'}</td>
-                  <td style={{ padding: '4px 8px', borderTop: '1px solid #e2e8f0' }}>{dims ? `${dims} mm` : '—'}</td>
-                  <td style={{ padding: '4px 8px', borderTop: '1px solid #e2e8f0', textAlign: 'right' }}>{r.unit_count}</td>
-                  <td style={{ padding: '4px 8px', borderTop: '1px solid #e2e8f0', textAlign: 'right' }}>£{fmtGbp(total)}</td>
+                  <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)' }}>{r.room_name || ''}</td>
+                  <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)' }}>{r.door_style_name || '—'}</td>
+                  <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)' }}>{dims ? `${dims} mm` : '—'}</td>
+                  <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)', textAlign: 'right' }}>{r.unit_count}</td>
+                  <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)', textAlign: 'right' }}>£{fmtGbp(total)}</td>
                 </tr>
               );
             })}
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={4} style={{ padding: '6px 8px', fontWeight: 600, borderTop: '2px solid #cbd5e1' }}>Estimate total</td>
-              <td style={{ padding: '6px 8px', fontWeight: 600, textAlign: 'right', borderTop: '2px solid #cbd5e1' }}>£{fmtGbp(grand)}</td>
+              <td colSpan={4} style={{ padding: '6px 8px', fontWeight: 600, borderTop: '2px solid var(--border-strong)' }}>Estimate total</td>
+              <td style={{ padding: '6px 8px', fontWeight: 600, textAlign: 'right', borderTop: '2px solid var(--border-strong)' }}>£{fmtGbp(grand)}</td>
             </tr>
           </tfoot>
         </table>
       ) : (
-        <p style={{ fontStyle: 'italic', color: '#64748b' }}>No rooms recorded.</p>
+        <p style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>No rooms recorded.</p>
       )}
       {visit.notes         && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}><strong>Notes:</strong> {visit.notes}</div>}
-      {visit.revision_note && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap', color: '#991b1b' }}><strong>Revision note:</strong> {visit.revision_note}</div>}
+      {visit.revision_note && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap', color: 'var(--status-danger-text)' }}><strong>Revision note:</strong> {visit.revision_note}</div>}
     </>
   );
 }
