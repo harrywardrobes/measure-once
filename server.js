@@ -18,6 +18,7 @@ const {
 const qbRoutes = require('./quickbooks');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
+const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable } = require('./customer-info');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
@@ -165,6 +166,10 @@ app.get('/invoices.html', (req, res) => res.redirect(301, '/invoices'));
 // Public design-visit sign-off page (no auth required — token-gated)
 app.get('/design-visit/sign-off', (_req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'design-visit-signoff.html')));
+
+// Public customer-info form page (no auth required — token-gated)
+app.get('/customer-info/:token', (_req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'customer-info.html')));
 
 // Public auth pages (no Replit/OIDC anymore — email + password handled in-app).
 app.get('/login', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
@@ -327,6 +332,7 @@ function requireHubspotToken(req, res, next) {
 app.use(qbRoutes);
 app.use(visitsRouter);
 app.use(designVisitsRouter);
+app.use(customerInfoRouter);
 
 // Auth gate for all /api/* routes (whitelist endpoints reachable while
 // signed-out: login, account requests, the public set-password flow).
@@ -345,6 +351,8 @@ app.use('/api', (req, res, next) => {
   if (AUTH_WHITELIST.has(req.path)) return next();
   // Public design-visit sign-off routes (/api/design-visits/sign-off/:token)
   if (/^\/design-visits\/sign-off\/[^/]+$/.test(req.path)) return next();
+  // Public customer-info routes (/api/customer-info/:token and /api/customer-info/:token/photos)
+  if (/^\/customer-info\/[^/]+(\/photos)?$/.test(req.path)) return next();
   return isAuthenticated(req, res, next);
 });
 app.use('/api', (req, res, next) => {
@@ -5465,6 +5473,10 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
     }
     return { value: out };
   },
+  // No required config keys — the form link and email are generated at send time.
+  upload_photos_and_info(_cfg) {
+    return { value: {} };
+  },
 };
 
 const CARD_ACTION_HANDLER_TYPES = new Set(
@@ -6320,6 +6332,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  WhatsApp messages table setup failed:', e.message); }
     try { await ensureDesignVisitTables(); console.log('  Design visit tables ready'); }
     catch (e) { console.error('  Design visit tables setup failed:', e.message); }
+    try { await ensureCustomerInfoSubmissionsTable(); console.log('  Customer info submissions table ready'); }
+    catch (e) { console.error('  Customer info submissions table setup failed:', e.message); }
     try { await ensurePageFilterConfigTable(); console.log('  Page filter config table ready'); }
     catch (e) { console.error('  Page filter config table setup failed:', e.message); }
     scheduleConflictDigest();

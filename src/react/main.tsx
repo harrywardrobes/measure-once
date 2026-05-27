@@ -68,6 +68,7 @@ const CustomerDetailPage     = React.lazy(() => import('./pages/CustomerDetailPa
 const StandaloneInvoicesPage = React.lazy(() => import('./pages/StandaloneInvoicesPage').then(m => ({ default: m.StandaloneInvoicesPage })));
 const ProjectsPage           = React.lazy(() => import('./pages/ProjectsPage').then(m => ({ default: m.ProjectsPage })));
 const DesignVisitSignOffPage     = React.lazy(() => import('./pages/DesignVisitSignOffPage').then(m => ({ default: m.DesignVisitSignOffPage })));
+const CustomerInfoPage           = React.lazy(() => import('./pages/CustomerInfoPage').then(m => ({ default: m.CustomerInfoPage })));
 const NotFoundPage               = React.lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 const AccessRestrictedPage       = React.lazy(() => import('./pages/AccessRestrictedPage').then(m => ({ default: m.AccessRestrictedPage })));
 
@@ -81,6 +82,7 @@ const CONN_TOAST_EXCLUDED = new Set([
   'set-password-root',
   'onboarding-root',
   'dv-signoff-mount',
+  'customer-info-mount',
 ]);
 
 /**
@@ -184,6 +186,7 @@ const MOUNTS: Array<{
   { id: 'invoices-page-mount',    render: () => <StandaloneInvoicesPage /> },
   { id: 'projects-view',          render: () => <ProjectsPage />, fallback: <ProjectsPageSkeleton /> },
   { id: 'dv-signoff-mount',           render: () => <DesignVisitSignOffPage /> },
+  { id: 'customer-info-mount',        render: () => <CustomerInfoPage /> },
   { id: 'not-found-root',             render: () => <NotFoundPage /> },
   { id: 'access-restricted-root',     render: () => <AccessRestrictedPage /> },
 ];

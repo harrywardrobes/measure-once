@@ -9,6 +9,7 @@ import { TasksSection } from './customer-detail/TasksSection';
 import { InvoicesSection } from './customer-detail/InvoicesSection';
 import { UpcomingVisitsSection, PastVisitsSection } from './customer-detail/VisitsSections';
 import { DesignVisitsList } from './customer-detail/DesignVisitsList';
+import { CustomerInfoSubmissionsRail } from './customer-detail/CustomerInfoSubmissionsRail';
 import { GoogleEmailSection } from './customer-detail/GoogleEmailSection';
 import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSection';
 import {
@@ -601,6 +602,9 @@ export function CustomerDetailPage() {
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="workflow-inner">
+
+        {/* Customer info submissions (upload_photos_and_info handler) */}
+        <CustomerInfoSubmissionsRail contactId={contactId} />
 
         {/* Design visits: always rendered (test harness compat) */}
         <DesignVisitsList

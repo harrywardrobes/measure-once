@@ -48,11 +48,13 @@ const HANDLER_TYPE_LABELS: Record<string, string> = {
   start_design_visit:           'Start design visit wizard',
   schedule_delivery_window:     'Schedule delivery window',
   schedule_installation_slot:   'Schedule installation slot',
+  upload_photos_and_info:       'Upload photos & info',
 };
 
 export const NO_CONFIG_HANDLER_TYPES: ReadonlySet<string> = new Set([
   'add_design_visit_to_calendar',
   'summarise_phone_call',
+  'upload_photos_and_info',
 ]);
 
 const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
@@ -113,6 +115,13 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     '• If the operator ticks "Also add to my Google Calendar", a matching event is also created in their personal Google Calendar.\n' +
     '• No HubSpot record is changed by this action.\n' +
     'Config keys: defaultDurationMin (5–1440), defaultTitle (≤120 chars), addToGoogleCalendar (bool).',
+  upload_photos_and_info:
+    'Clicking the action on a card opens a confirmation modal showing the customer\'s name and email.\n' +
+    '• On confirmation, an email is sent to the customer with a unique, time-limited link to a public form.\n' +
+    '• The form collects: contact details (with optional corrections), address, number of rooms, photo uploads, and free-text notes.\n' +
+    '• On submission: the customer sees a thank-you screen; an admin notification email is sent with all submitted info; a thank-you email is sent to the customer; HubSpot lead status is updated to AWAITING_PHOTOS with sub-status AWPH_RECEIVED.\n' +
+    '• Submissions are visible on the customer\'s detail page in the "Customer Info" rail.\n' +
+    '• No config keys required.',
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ export const HANDLER_TYPES = [
   { value: 'start_design_visit',           label: 'Start design visit wizard' },
   { value: 'schedule_delivery_window',     label: 'Schedule delivery window' },
   { value: 'schedule_installation_slot',   label: 'Schedule installation slot' },
+  { value: 'upload_photos_and_info',       label: 'Upload photos & info' },
 ];
 
 export const FIXTURE_LEAD_STATUSES: LeadStatusOption[] = [
