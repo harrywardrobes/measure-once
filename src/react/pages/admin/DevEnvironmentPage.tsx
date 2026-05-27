@@ -1,5 +1,6 @@
-import React from 'react';
-import { Alert, Box, Card, CardContent, Chip, Stack, Typography } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { Alert, Box, Button, Card, CardContent, Chip, Stack, Typography } from '@mui/material';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 
 /**
  * Admin → Dev environment tab (#tab-devenv, hidden in production).
@@ -14,6 +15,7 @@ const DEV_ONLY_FEATURES: Array<{
   name: string;
   location: string;
   description: React.ReactNode;
+  action?: { href: string; label: string; availableKey?: string };
 }> = [
   {
     name: 'Seed contacts cache',
@@ -45,6 +47,11 @@ const DEV_ONLY_FEATURES: Array<{
   {
     name: 'Storybook dev server',
     location: 'Port 6006 — npm run watch:storybook',
+    action: {
+      href: '/storybook/',
+      label: 'Open design-system gallery',
+      availableKey: 'storybook',
+    },
     description: (
       <>
         A local Storybook dev server with Hot Module Replacement for iterating on the design-system
@@ -75,6 +82,19 @@ const DEV_ONLY_FEATURES: Array<{
 ];
 
 export function DevEnvironmentPage() {
+  const [storybookAvailable, setStorybookAvailable] = useState<boolean>(false);
+
+  useEffect(() => {
+    fetch('/storybook/', { method: 'HEAD' })
+      .then((res) => setStorybookAvailable(res.ok))
+      .catch(() => setStorybookAvailable(false));
+  }, []);
+
+  function isActionVisible(action: { availableKey?: string }): boolean {
+    if (action.availableKey === 'storybook') return storybookAvailable;
+    return true;
+  }
+
   return (
     <Stack spacing={2}>
       <Alert severity="warning" variant="outlined">
@@ -123,6 +143,20 @@ export function DevEnvironmentPage() {
                 <Typography variant="body2" color="text.secondary">
                   {f.description}
                 </Typography>
+                {f.action && isActionVisible(f.action) && (
+                  <Box sx={{ mt: 1.5 }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      href={f.action.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      endIcon={<OpenInNewIcon />}
+                    >
+                      {f.action.label}
+                    </Button>
+                  </Box>
+                )}
               </Box>
             ))}
           </Stack>
