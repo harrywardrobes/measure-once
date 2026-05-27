@@ -15,6 +15,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 import { ContactsPagination } from '../components/ContactsPagination';
 import {
   InvoiceDetailDrawer,
@@ -90,6 +91,8 @@ function SkeletonRows() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function StandaloneInvoicesPage() {
+  useConnectionCheck();
+  const { notifyApiError } = useConnectionToast();
   const { isAdmin } = usePrivilege();
 
   const [status, setStatus]       = useState<QBStatus | null>(null);
@@ -120,12 +123,13 @@ export function StandaloneInvoicesPage() {
       const data = await res.json().catch(() => ({ connected: false })) as QBStatus;
       setStatus(data);
       return data;
-    } catch {
+    } catch (e) {
+      notifyApiError('quickbooks', e);
       const fallback: QBStatus = { connected: false };
       setStatus(fallback);
       return fallback;
     }
-  }, []);
+  }, [notifyApiError]);
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
@@ -143,11 +147,12 @@ export function StandaloneInvoicesPage() {
       }
       setInvoices(data.invoices || []);
     } catch (e: unknown) {
+      notifyApiError('quickbooks', e);
       setError((e as Error).message || 'Failed to load invoices');
     } finally {
       setLoading(false);
     }
-  }, [loadStatus]);
+  }, [loadStatus, notifyApiError]);
 
   useEffect(() => { loadInvoices(); }, [loadInvoices]);
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { flushSync } from 'react-dom';
+import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 import { CustomerDetailHeader } from './customer-detail/CustomerDetailHeader';
 import { LeadStatusRail } from './customer-detail/LeadStatusRail';
 import { RoomsTabs } from './customer-detail/RoomsTabs';
@@ -67,6 +68,8 @@ const initialQB: QBState = {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export function CustomerDetailPage() {
+  useConnectionCheck();
+  const { notifyApiError } = useConnectionToast();
   const contactId = getContactId();
 
   const [contact,      setContact]      = useState<Contact | null>(null);
@@ -292,13 +295,14 @@ export function CustomerDetailPage() {
       fetchWhatsApp();
       fetchQBStatus();
     } catch (e: unknown) {
+      notifyApiError('hubspot', e);
       const msg = e instanceof Error ? e.message : 'unknown error';
       setError(`Failed to load customer: ${msg}`);
     } finally {
       setLoading(false);
     }
   }, [contactId, fetchContact, fetchDesignVisits, fetchGoogleEmails, fetchLeadStatuses,
-      fetchLeadSubstatuses, fetchQBStatus, fetchVisits, fetchWhatsApp]);
+      fetchLeadSubstatuses, fetchQBStatus, fetchVisits, fetchWhatsApp, notifyApiError]);
 
   // ── Global bridges (for test compat + workflow-core.js interop) ────────────
 
@@ -461,12 +465,17 @@ export function CustomerDetailPage() {
   // ── Save rooms/notes ───────────────────────────────────────────────────────
 
   const saveRoomsAndNotes = useCallback(async (nextRooms: Room[], nextNotes: string): Promise<void> => {
-    await fetch(`/api/contacts/${contactId}/localdata`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rooms: nextRooms, notes: nextNotes }),
-    });
-  }, [contactId]);
+    try {
+      await fetch(`/api/contacts/${contactId}/localdata`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rooms: nextRooms, notes: nextNotes }),
+      });
+    } catch (e: unknown) {
+      notifyApiError('database', e);
+      throw e;
+    }
+  }, [contactId, notifyApiError]);
 
   // ── Substatus change ───────────────────────────────────────────────────────
 
@@ -488,8 +497,8 @@ export function CustomerDetailPage() {
           ...(checked ? { hs_lead_status: statusValue } : {}),
         }),
       });
-    } catch { setContact(contact); }
-  }, [contact, contactId]);
+    } catch (e) { notifyApiError('hubspot', e); setContact(contact); }
+  }, [contact, contactId, notifyApiError]);
 
   // ── Room select ────────────────────────────────────────────────────────────
 

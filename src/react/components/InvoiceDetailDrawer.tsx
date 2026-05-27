@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useConnectionToast } from '../context/ConnectionToastContext';
 import {
   Box,
   Button,
@@ -140,6 +141,7 @@ interface EditState {
 export function InvoiceDetailDrawer({
   open, invId, allIds, onClose, onNavigate, isAdmin,
 }: InvoiceDetailDrawerProps) {
+  const { notifyApiError } = useConnectionToast();
   const [inv, setInv]         = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
@@ -256,11 +258,12 @@ export function InvoiceDetailDrawer({
       clearDraft(inv.id);
       setSaveMsg({ text: 'Saved', ok: true });
     } catch (e: unknown) {
+      notifyApiError('quickbooks', e);
       setSaveMsg({ text: (e as Error).message || 'Save failed', ok: false });
     } finally {
       setSaving(false);
     }
-  }, [inv, saving, edit]);
+  }, [inv, saving, edit, notifyApiError]);
 
   const handleSend = useCallback(async () => {
     if (!inv || sending) return;
@@ -275,11 +278,12 @@ export function InvoiceDetailDrawer({
       if (r.error) throw new Error(r.error);
       setSaveMsg({ text: `Sent to ${edit.email || inv.email}`, ok: true });
     } catch (e: unknown) {
+      notifyApiError('quickbooks', e);
       setSaveMsg({ text: (e as Error).message || 'Send failed', ok: false });
     } finally {
       setSending(false);
     }
-  }, [inv, sending, edit.email]);
+  }, [inv, sending, edit.email, notifyApiError]);
 
   const handleDiscard = useCallback(() => {
     if (!inv) return;

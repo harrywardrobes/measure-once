@@ -1,5 +1,6 @@
 import React from 'react';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 import {
   Alert,
   Box,
@@ -148,6 +149,8 @@ const SYNC_PROVIDERS = [
 // ── Calendar Page ────────────────────────────────────────────────────────────
 
 export function CalendarPage(): React.ReactElement {
+  useConnectionCheck();
+  const { notifyApiError } = useConnectionToast();
   const { isViewer } = usePrivilege();
   const [cursor, setCursor] = React.useState<Date>(() => startOfDay(new Date()));
   const [showWorkshop, setShowWorkshop] = React.useState<boolean>(true);
@@ -206,6 +209,7 @@ export function CalendarPage(): React.ReactElement {
       })
       .catch((e: Error & { code?: string }) => {
         if (cancelled) return;
+        notifyApiError('google', e);
         setError({ msg: e.message, db: e.code === 'DB_ERROR' });
         setLoading(false);
       });

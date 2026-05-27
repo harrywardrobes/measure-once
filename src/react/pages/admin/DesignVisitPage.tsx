@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useConnectionCheck, useConnectionToast } from '../../context/ConnectionToastContext';
 import {
   Box, Button, Card, CardContent, CircularProgress, Divider, Stack, Typography,
 } from '@mui/material';
@@ -77,6 +78,7 @@ interface DvItemEditorDialogProps {
 }
 
 function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItemEditorDialogProps) {
+  const { notifyApiError } = useConnectionToast();
   const [loading, setLoading] = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [errMsg,  setErrMsg]  = useState('');
@@ -175,6 +177,7 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
       await onSaved();
       onClose();
     } catch (e) {
+      notifyApiError('database', e);
       setErrMsg((e as Error).message || 'Save failed.');
     } finally {
       setSaving(false);
@@ -468,6 +471,8 @@ function TermsDisplay({ terms }: { terms: DvTerms[] }) {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function DesignVisitPage() {
+  useConnectionCheck();
+  const { notifyApiError } = useConnectionToast();
   const [handles,    setHandles]    = useState<DvHandle[]>([]);
   const [furniture,  setFurniture]  = useState<DvFurniture[]>([]);
   const [doorStyles, setDoorStyles] = useState<DvDoorStyle[]>([]);
@@ -491,6 +496,8 @@ export function DesignVisitPage() {
       callApi('GET', '/api/admin/design-visit-door-styles'),
       callApi('GET', '/api/admin/design-visit-terms'),
     ]);
+    const firstRejection = [hR, fR, dR, tR].find(r => r.status === 'rejected');
+    if (firstRejection) notifyApiError('database', (firstRejection as PromiseRejectedResult).reason);
     const h = hR.status === 'fulfilled' ? hR.value : [];
     const f = fR.status === 'fulfilled' ? fR.value : [];
     const d = dR.status === 'fulfilled' ? dR.value : [];
@@ -499,7 +506,7 @@ export function DesignVisitPage() {
     setFurniture(Array.isArray(f) ? f as DvFurniture[] : []);
     setDoorStyles(Array.isArray(d) ? d as DvDoorStyle[] : []);
     setTerms(Array.isArray(t) ? t as DvTerms[] : []);
-  }, []);
+  }, [notifyApiError]);
 
   useEffect(() => {
     _reloadRef.fn = fetchAll;
@@ -561,9 +568,10 @@ export function DesignVisitPage() {
       setterFor(type)(next as never);
       _broadcastDvCatalogueChange(type);
     } catch (e) {
+      notifyApiError('database', e);
       showToast(`Failed to reorder: ${(e as Error).message}`, true);
     }
-  }, [itemsFor, setterFor, endpointFor]);
+  }, [itemsFor, setterFor, endpointFor, notifyApiError]);
 
   const reorderItems = useCallback(async (type: string, newOrderIds: number[]) => {
     const cache = itemsFor(type);
@@ -586,10 +594,11 @@ export function DesignVisitPage() {
       setterFor(type)(next as never);
       _broadcastDvCatalogueChange(type);
     } catch (e) {
+      notifyApiError('database', e);
       showToast(`Failed to reorder: ${(e as Error).message}`, true);
       fetchAll();
     }
-  }, [itemsFor, setterFor, endpointFor, fetchAll]);
+  }, [itemsFor, setterFor, endpointFor, fetchAll, notifyApiError]);
 
   const deleteItem = useCallback(async (type: string, id: number) => {
     if (!confirm('Delete this item? This cannot be undone.')) return;
@@ -600,9 +609,10 @@ export function DesignVisitPage() {
       _broadcastDvCatalogueChange(type);
       await fetchAll();
     } catch (e) {
+      notifyApiError('database', e);
       showToast('Delete failed: ' + (e as Error).message, true);
     }
-  }, [endpointFor, fetchAll]);
+  }, [endpointFor, fetchAll, notifyApiError]);
 
   const publishTerms = useCallback(async () => {
     const text = termsNewText.trim();
@@ -616,9 +626,10 @@ export function DesignVisitPage() {
       try { new BroadcastChannel('design_visit_terms_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
       await fetchAll();
     } catch (e) {
+      notifyApiError('database', e);
       setTermsErr((e as Error).message || 'Publish failed.');
     }
-  }, [termsNewText, fetchAll]);
+  }, [termsNewText, fetchAll, notifyApiError]);
 
   const handleCols: Array<{ field: keyof DvHandle; label: string }> = [
     { field: 'name', label: 'Name' },

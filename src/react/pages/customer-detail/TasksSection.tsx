@@ -6,6 +6,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import { HubSpotTask, stageColour, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
+import { useConnectionToast } from '../../context/ConnectionToastContext';
 
 interface Workflow {
   stages?: Record<string, { label: string }>;
@@ -34,6 +35,7 @@ function getTaskUrgency(tasks: HubSpotTask[]): string | null {
 }
 
 export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Props) {
+  const { notifyApiError } = useConnectionToast();
   const { isViewer } = usePrivilege();
 
   const [showAddTask, setShowAddTask] = useState(false);
@@ -71,12 +73,13 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
       setStageKey('');
       setShowAddTask(false);
     } catch (e: unknown) {
+      notifyApiError('hubspot', e);
       const msg = e instanceof Error ? e.message : 'error';
       setError(`Failed to create task: ${msg}`);
     } finally {
       setSaving(false);
     }
-  }, [contactId, dueDate, stageKey, subject, tasks, onTasksChange]);
+  }, [contactId, dueDate, stageKey, subject, tasks, onTasksChange, notifyApiError]);
 
   const toggleTaskDone = useCallback(async (taskId: string, currentlyDone: boolean) => {
     const newStatus = currentlyDone ? 'NOT_STARTED' : 'COMPLETED';
@@ -91,10 +94,11 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
         body: JSON.stringify({ hs_task_status: newStatus, contactId }),
       });
       if (!r.ok) throw new Error(`${r.status}`);
-    } catch {
+    } catch (e) {
+      notifyApiError('hubspot', e);
       onTasksChange(tasks);
     }
-  }, [contactId, tasks, onTasksChange]);
+  }, [contactId, tasks, onTasksChange, notifyApiError]);
 
   const deleteTask = useCallback(async (taskId: string) => {
     const removed = tasks.find(t => t.id === taskId);
@@ -110,14 +114,15 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
         body: JSON.stringify({ contactId }),
       });
       if (!r.ok) throw new Error(`${r.status}`);
-    } catch {
+    } catch (e) {
+      notifyApiError('hubspot', e);
       if (removed) {
         const restore = [...next];
         restore.splice(idx, 0, removed);
         onTasksChange(restore);
       }
     }
-  }, [contactId, tasks, onTasksChange]);
+  }, [contactId, tasks, onTasksChange, notifyApiError]);
 
   return (
     <div id="tasks-section" className="mb-6">
