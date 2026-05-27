@@ -632,6 +632,18 @@ export function CustomersPage(): React.ReactElement {
 
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
+  const [customersPageSize, setCustomersPageSize] = React.useState<number | undefined>(undefined);
+
+  React.useEffect(() => {
+    fetch('/api/page-filter-config', { headers: { Accept: 'application/json' } })
+      .then(r => r.ok ? r.json() : null)
+      .then((cfg: { customers_page_size?: number } | null) => {
+        if (!cfg) return;
+        const ps = cfg.customers_page_size;
+        if (typeof ps === 'number' && ps > 0) setCustomersPageSize(ps);
+      })
+      .catch(() => {});
+  }, []);
   // autoHideDuration is set to null while the document is hidden so the MUI
   // Snackbar timer is paused (Page Visibility API). Restored to 8 s when the
   // tab returns to the foreground.
@@ -692,7 +704,7 @@ export function CustomersPage(): React.ReactElement {
     page,
     setPage,
   } = usePaginatedContacts(
-    { initialPage: initial.page, leadStatus, substatus, stage: stageFilter, sortBy, search, showArchived, refreshNonce },
+    { initialPage: initial.page, leadStatus, substatus, stage: stageFilter, sortBy, search, showArchived, refreshNonce, pageSize: customersPageSize },
     { onFetchSuccess: scheduleCounts },
   );
 
@@ -1220,7 +1232,7 @@ export function CustomersPage(): React.ReactElement {
           totalPages={totalPages}
           total={total}
           visibleCount={visibleContacts.length}
-          pageLimit={PAGINATED_CONTACTS_PAGE_LIMIT}
+          pageLimit={customersPageSize ?? PAGINATED_CONTACTS_PAGE_LIMIT}
           onPageChange={setPage}
         />
 

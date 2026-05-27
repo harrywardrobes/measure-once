@@ -30,6 +30,8 @@ export type UsePaginatedContactsParams = {
   search: string;
   showArchived: boolean;
   refreshNonce?: number;
+  staleAfterDays?: number;
+  pageSize?: number;
 };
 
 export type UsePaginatedContactsResult = {
@@ -60,7 +62,7 @@ export function usePaginatedContacts(
   params: UsePaginatedContactsParams,
   options?: UsePaginatedContactsOptions,
 ): UsePaginatedContactsResult {
-  const { initialPage, leadStatus, substatus, stage, sortBy, search, showArchived, refreshNonce } = params;
+  const { initialPage, leadStatus, substatus, stage, sortBy, search, showArchived, refreshNonce, staleAfterDays, pageSize } = params;
 
   const onFetchSuccessRef = React.useRef(options?.onFetchSuccess);
   onFetchSuccessRef.current = options?.onFetchSuccess;
@@ -72,7 +74,7 @@ export function usePaginatedContacts(
 
   // Track the previous filter fingerprint (everything except page) so we know
   // when to reset page to 1.
-  const prevFiltersRef = React.useRef({ leadStatus, substatus, stage, sortBy, search, showArchived, refreshNonce });
+  const prevFiltersRef = React.useRef({ leadStatus, substatus, stage, sortBy, search, showArchived, refreshNonce, staleAfterDays, pageSize });
   const filtersChanged =
     prevFiltersRef.current.leadStatus !== leadStatus ||
     prevFiltersRef.current.substatus !== substatus ||
@@ -80,10 +82,12 @@ export function usePaginatedContacts(
     prevFiltersRef.current.sortBy !== sortBy ||
     prevFiltersRef.current.search !== search ||
     prevFiltersRef.current.showArchived !== showArchived ||
-    prevFiltersRef.current.refreshNonce !== refreshNonce;
+    prevFiltersRef.current.refreshNonce !== refreshNonce ||
+    prevFiltersRef.current.staleAfterDays !== staleAfterDays ||
+    prevFiltersRef.current.pageSize !== pageSize;
 
   if (filtersChanged) {
-    prevFiltersRef.current = { leadStatus, substatus, stage, sortBy, search, showArchived, refreshNonce };
+    prevFiltersRef.current = { leadStatus, substatus, stage, sortBy, search, showArchived, refreshNonce, staleAfterDays, pageSize };
     if (page !== 1) {
       // Schedule synchronous state update before render commits. This avoids a
       // stale-page fetch: by updating page in the same render pass (via the
@@ -140,12 +144,14 @@ export function usePaginatedContacts(
       setContactsStale(false);
     }
 
-    const qs = new URLSearchParams({ page: String(effectivePage), limit: String(PAGINATED_CONTACTS_PAGE_LIMIT) });
+    const limit = pageSize && pageSize > 0 ? pageSize : PAGINATED_CONTACTS_PAGE_LIMIT;
+    const qs = new URLSearchParams({ page: String(effectivePage), limit: String(limit) });
     if (leadStatus) qs.set('leadStatus', leadStatus);
     if (stage) qs.set('stage', stage);
     if (sortBy && sortBy !== 'newest') qs.set('sort', sortBy);
     if (search) qs.set('q', search);
     if (showArchived) qs.set('archived', '1');
+    if (staleAfterDays !== undefined) qs.set('staleAfterDays', String(staleAfterDays));
 
     (async () => {
       try {
@@ -190,7 +196,7 @@ export function usePaginatedContacts(
     return () => {
       cancelled = true;
     };
-  }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, refreshNonce]);
+  }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, refreshNonce, staleAfterDays, pageSize]);
 
   return { contacts, total, totalPages, loading, error, contactsStale, page: effectivePage, setPage };
 }

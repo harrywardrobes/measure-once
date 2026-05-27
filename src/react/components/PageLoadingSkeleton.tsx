@@ -582,6 +582,37 @@ export function AdminSettingsPageSkeleton({ forceVisible }: { forceVisible?: boo
           </Stack>
         </Box>
       </Box>
+
+      {/* Page defaults card */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        {/* Heading + Save button */}
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+          <Box>
+            <MuiSkeleton variant="text" width={130} height={28} sx={{ mb: 0.5 }} />
+            <MuiSkeleton variant="text" width="70%" height={16} />
+          </Box>
+          <MuiSkeleton variant="rounded" width={72} height={36} sx={{ flexShrink: 0 }} />
+        </Stack>
+
+        {/* Sales board section */}
+        <MuiSkeleton variant="text" width={100} height={18} sx={{ mb: 1.5 }} />
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
+          <MuiSkeleton variant="rounded" width={220} height={56} />
+          <MuiSkeleton variant="rounded" width={200} height={56} />
+        </Stack>
+
+        <Box sx={{ my: 2, borderTop: '1px solid', borderColor: 'divider' }} />
+
+        {/* Surveys board section */}
+        <MuiSkeleton variant="text" width={110} height={18} sx={{ mb: 1.5 }} />
+        <MuiSkeleton variant="rounded" width={200} height={56} sx={{ mb: 2 }} />
+
+        <Box sx={{ my: 2, borderTop: '1px solid', borderColor: 'divider' }} />
+
+        {/* Customers list section */}
+        <MuiSkeleton variant="text" width={120} height={18} sx={{ mb: 1.5 }} />
+        <MuiSkeleton variant="rounded" width={200} height={56} />
+      </Box>
     </Stack>
   );
 }

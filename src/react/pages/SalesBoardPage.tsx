@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Button, Card, CircularProgress, Snackbar, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, Chip, CircularProgress, Snackbar, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { STAGE_COLORS } from '../theme';
@@ -160,7 +160,7 @@ const STAGE_COLUMN_INFO: Record<string, { column: string; terminal: boolean }> =
   CUSTOMER_SERVICE: { column: 'designvisit', terminal: true },
 };
 
-const FOUR_WEEKS_MS = 4 * 7 * 24 * 60 * 60 * 1000;
+const DEFAULT_STALENESS_DAYS = 28;
 const MOBILE_COL_KEY = 'salesBoardActiveColumn';
 
 // Dispatched by sales.js after it loads/reloads contact data so this
@@ -287,12 +287,10 @@ function buildEntriesForStage(contacts: PaginatedContact[], stageKey: string): B
   const w = window as unknown as WindowGlobals;
   const contactStageCache = w.state?.contactStageCache || {};
   const lsOptions = w.LEAD_STATUS_OPTIONS || [];
-  const excludedLsSet = new Set(lsOptions.filter((o) => o.excluded_from_sales).map((o) => o.value));
 
   const entries: BoardEntry[] = [];
   for (const contact of contacts) {
     const ls = (contact.properties?.hs_lead_status || '').toUpperCase();
-    if (excludedLsSet.has(ls)) continue;
 
     const cached = contactStageCache[contact.id];
     const createdate = parseInt(contact.properties?.createdate || '0', 10);
@@ -890,6 +888,30 @@ export function SalesBoardPage() {
     };
   }, [forceUpdate]);
 
+  // ── Page filter config — load sales staleness default and page size ────────
+  const [configuredStalenessDays, setConfiguredStalenessDays] = useState<number>(DEFAULT_STALENESS_DAYS);
+  const [salesPageSize, setSalesPageSize] = useState<number | undefined>(undefined);
+  // staleAfterDays: undefined = use server default (chip on), 0 = disabled (chip dismissed)
+  const [staleAfterDays, setStaleAfterDays] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/page-filter-config', { headers: { Accept: 'application/json' } })
+      .then(r => r.ok ? r.json() : null)
+      .then((cfg: { sales_staleness_days?: number; sales_page_size?: number } | null) => {
+        if (cancelled || !cfg) return;
+        const days = cfg.sales_staleness_days;
+        if (typeof days === 'number' && days > 0) setConfiguredStalenessDays(days);
+        const ps = cfg.sales_page_size;
+        if (typeof ps === 'number' && ps > 0) setSalesPageSize(ps);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // Active cutoff: when the chip is on, use the configured days; when dismissed, use 0 (no filter)
+  const activeStaleDays = staleAfterDays !== undefined ? staleAfterDays : configuredStalenessDays;
+
   // ── usePaginatedContacts: one call per column ─────────────────────────────
   // The server filters contacts by stage so each column fetches only what it
   // needs. Room/substage data is still read from window.state.contactStageCache
@@ -898,21 +920,16 @@ export function SalesBoardPage() {
   const salesHook = usePaginatedContacts({
     initialPage: 1, leadStatus: '', substatus: '',
     stage: 'sales', sortBy: 'newest', search: '', showArchived: false,
+    staleAfterDays: activeStaleDays,
+    pageSize: salesPageSize,
   });
   const dvHook = usePaginatedContacts({
     initialPage: 1, leadStatus: '', substatus: '',
     stage: 'designvisit', sortBy: 'newest', search: '', showArchived: false,
   });
 
-  const staleCutoff = Date.now() - FOUR_WEEKS_MS;
   const salesEntries = useMemo(
-    () => buildEntriesForStage(salesHook.contacts, 'sales')
-      .filter((e) => {
-        const raw = e.contact.properties?.lastmodifieddate;
-        if (!raw) return true;
-        const lmd = new Date(raw).getTime();
-        return !isNaN(lmd) && lmd >= staleCutoff;
-      }),
+    () => buildEntriesForStage(salesHook.contacts, 'sales'),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [salesHook.contacts, tick],
   );
@@ -924,6 +941,10 @@ export function SalesBoardPage() {
 
   const hookByStage = { sales: salesHook, designvisit: dvHook } as const;
   const entriesByStage = { sales: salesEntries, designvisit: dvEntries } as const;
+  const pageLimitByStage = {
+    sales: salesPageSize ?? PAGINATED_CONTACTS_PAGE_LIMIT,
+    designvisit: PAGINATED_CONTACTS_PAGE_LIMIT,
+  } as const;
 
   const workflow = (window as unknown as WindowGlobals).state?.workflow;
 
@@ -1087,6 +1108,19 @@ export function SalesBoardPage() {
               </Box>
             </Box>
 
+            {/* Staleness chip — only visible in the Sales column */}
+            {sk === 'sales' && activeStaleDays > 0 && (
+              <Box sx={{ px: 1.5, py: 0.75, borderBottom: '1px solid', borderBottomColor: 'divider', bgcolor: 'background.paper' }}>
+                <Chip
+                  label={`Modified ≤ ${activeStaleDays} days`}
+                  size="small"
+                  variant="outlined"
+                  onDelete={() => setStaleAfterDays(0)}
+                  sx={{ fontSize: '0.72rem', height: 22 }}
+                />
+              </Box>
+            )}
+
             {/* Card list */}
             <Box
               sx={{
@@ -1129,7 +1163,7 @@ export function SalesBoardPage() {
                     totalPages={hook.totalPages}
                     total={hook.total}
                     visibleCount={entries.length}
-                    pageLimit={PAGINATED_CONTACTS_PAGE_LIMIT}
+                    pageLimit={pageLimitByStage[sk]}
                     onPageChange={hook.setPage}
                   />
                 </Box>

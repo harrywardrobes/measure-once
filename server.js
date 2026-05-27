@@ -990,6 +990,42 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
 
     let contacts = rawContacts;
 
+    // Server-side excluded_from_sales filter — only applied for Sales-board
+    // requests (stage === 'sales').  Customers, Surveys, and other consumers
+    // of this endpoint must see all lead statuses regardless of this flag.
+    const stageParamEarly = (req.query.stage || '').trim();
+    if (stageParamEarly === 'sales') {
+      try {
+        const { rows: excludedRows } = await pool.query(
+          'SELECT key FROM lead_status_config WHERE excluded_from_sales = TRUE'
+        );
+        const excludedKeys = new Set(excludedRows.map(r => r.key));
+        if (excludedKeys.size > 0) {
+          contacts = contacts.filter(c => {
+            const ls = (c.properties?.hs_lead_status || '').toUpperCase();
+            return !excludedKeys.has(ls);
+          });
+        }
+      } catch (dbErr) {
+        console.warn('[contacts-all] could not load excluded lead statuses:', dbErr.message);
+      }
+    }
+
+    // Staleness filter — exclude contacts not modified within the cutoff window
+    const staleAfterDaysRaw = req.query.staleAfterDays;
+    if (staleAfterDaysRaw !== undefined) {
+      const staleAfterDays = parseInt(staleAfterDaysRaw, 10);
+      if (Number.isFinite(staleAfterDays) && staleAfterDays > 0) {
+        const cutoff = Date.now() - staleAfterDays * 24 * 60 * 60 * 1000;
+        contacts = contacts.filter(c => {
+          const raw = c.properties?.lastmodifieddate;
+          if (!raw) return true;
+          const ms = new Date(raw).getTime();
+          return !isNaN(ms) && ms >= cutoff;
+        });
+      }
+    }
+
     if (leadStatus) {
       if (leadStatus === '__no_status__') {
         contacts = contacts.filter(c => !c.properties?.hs_lead_status);
@@ -4008,6 +4044,126 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
   }
 });
 
+// ── Page filter config ────────────────────────────────────────────────────────
+// Generic key/value config table for per-page defaults that admins can tune
+// without a code deploy. Defaults are seeded on boot.
+
+const PAGE_FILTER_CONFIG_DEFAULTS = {
+  sales_staleness_days:              { value: 28,   label: 'Sales board — staleness cutoff (days)',       type: 'number', min: 1, max: 365 },
+  sales_page_size:                   { value: 25,   label: 'Sales board — default page size',             type: 'number', min: 5, max: 100 },
+  surveys_page_size:                 { value: 25,   label: 'Surveys board — default page size',           type: 'number', min: 5, max: 100 },
+  customers_page_size:               { value: 25,   label: 'Customers list — default page size',          type: 'number', min: 5, max: 100 },
+  surveys_hidden_substages_default:  { value: '[]', label: 'Surveys board — hidden substages (JSON)',    type: 'json'                      },
+};
+
+async function ensurePageFilterConfigTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS page_filter_config (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  for (const [key, def] of Object.entries(PAGE_FILTER_CONFIG_DEFAULTS)) {
+    await pool.query(
+      `INSERT INTO page_filter_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING`,
+      [key, String(def.value)]
+    );
+  }
+}
+
+let _pageFilterConfigCache = null;
+let _pageFilterConfigCachedAt = 0;
+const PAGE_FILTER_CONFIG_TTL_MS = 60_000;
+
+function _invalidatePageFilterConfig() {
+  _pageFilterConfigCache = null;
+  _pageFilterConfigCachedAt = 0;
+}
+
+async function getPageFilterConfig() {
+  if (_pageFilterConfigCache && Date.now() - _pageFilterConfigCachedAt < PAGE_FILTER_CONFIG_TTL_MS) {
+    return _pageFilterConfigCache;
+  }
+  const { rows } = await pool.query('SELECT key, value FROM page_filter_config');
+  const config = {};
+  for (const [key, def] of Object.entries(PAGE_FILTER_CONFIG_DEFAULTS)) {
+    const row = rows.find(r => r.key === key);
+    const raw = row ? row.value : String(def.value);
+    config[key] = def.type === 'number' ? parseInt(raw, 10) : raw;
+  }
+  _pageFilterConfigCache = config;
+  _pageFilterConfigCachedAt = Date.now();
+  return config;
+}
+
+// GET /api/page-filter-config — public (authenticated) read of current values
+// Returns a flat key→value map so pages can read their defaults without
+// needing admin privilege. Only the numeric/string values are exposed; the
+// metadata (label, min, max) lives in the admin endpoint below.
+app.get('/api/page-filter-config', isAuthenticated, async (req, res) => {
+  try {
+    const config = await getPageFilterConfig();
+    res.json(config);
+  } catch (e) {
+    console.error('GET /api/page-filter-config error:', e.message);
+    res.status(500).json({ error: 'Could not load page filter config.' });
+  }
+});
+
+// GET /api/admin/page-filter-config — return all settings with metadata
+app.get('/api/admin/page-filter-config', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const config = await getPageFilterConfig();
+    const result = {};
+    for (const [key, def] of Object.entries(PAGE_FILTER_CONFIG_DEFAULTS)) {
+      result[key] = { ...def, currentValue: config[key] };
+    }
+    res.json(result);
+  } catch (e) {
+    console.error('GET /api/admin/page-filter-config error:', e.message);
+    res.status(500).json({ error: 'Could not load page filter config.' });
+  }
+});
+
+// PATCH /api/admin/page-filter-config — update one or more settings
+app.patch('/api/admin/page-filter-config', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const updates = req.body || {};
+    const allowed = new Set(Object.keys(PAGE_FILTER_CONFIG_DEFAULTS));
+    const results = {};
+    for (const [key, val] of Object.entries(updates)) {
+      if (!allowed.has(key)) continue;
+      const def = PAGE_FILTER_CONFIG_DEFAULTS[key];
+      let coerced;
+      if (def.type === 'number') {
+        coerced = parseInt(val, 10);
+        if (!Number.isFinite(coerced) || coerced < (def.min ?? 1) || coerced > (def.max ?? 999)) {
+          return res.status(400).json({ error: `${key}: value out of range (${def.min}–${def.max}).` });
+        }
+      } else {
+        coerced = String(val);
+        if (def.type === 'json') {
+          try { JSON.parse(coerced); } catch {
+            return res.status(400).json({ error: `${key}: invalid JSON.` });
+          }
+        }
+      }
+      await pool.query(
+        `INSERT INTO page_filter_config (key, value, updated_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [key, String(coerced)]
+      );
+      results[key] = coerced;
+    }
+    _invalidatePageFilterConfig();
+    res.json(results);
+  } catch (e) {
+    console.error('PATCH /api/admin/page-filter-config error:', e.message);
+    res.status(500).json({ error: 'Could not update page filter config.' });
+  }
+});
+
 // Admin: delete a status row (null sentinel is protected)
 app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async (req, res) => {
   const key = req.params.key;
@@ -5453,6 +5609,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Design visit tables setup failed:', e.message); }
     try { await ensureDbEditorAuditTable(); console.log('  DB editor audit table ready'); }
     catch (e) { console.error('  DB editor audit table setup failed:', e.message); }
+    try { await ensurePageFilterConfigTable(); console.log('  Page filter config table ready'); }
+    catch (e) { console.error('  Page filter config table setup failed:', e.message); }
     scheduleConflictDigest();
   });
 })();

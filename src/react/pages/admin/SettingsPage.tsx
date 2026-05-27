@@ -160,6 +160,16 @@ interface DigestSettings {
   minGapDays: number;
 }
 
+interface PageFilterConfigEntry {
+  label: string;
+  type: 'number' | 'json';
+  min?: number;
+  max?: number;
+  currentValue: number | string;
+}
+
+type PageFilterConfig = Record<string, PageFilterConfigEntry>;
+
 export function SettingsPage() {
   const [statuses, setStatuses] = useState<LeadStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,6 +184,10 @@ export function SettingsPage() {
   const [digestStaleDays, setDigestStaleDays] = useState<string>('7');
   const [digestMinGapDays, setDigestMinGapDays] = useState<string>('7');
   const [digestThresholdSaving, setDigestThresholdSaving] = useState(false);
+
+  const [pageFilterConfig, setPageFilterConfig] = useState<PageFilterConfig | null>(null);
+  const [pageFilterDraft, setPageFilterDraft] = useState<Record<string, string>>({});
+  const [pageFilterSaving, setPageFilterSaving] = useState(false);
 
   const statusesRef = useRef<LeadStatus[]>([]);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -222,6 +236,37 @@ export function SettingsPage() {
     } catch {}
   }, []);
 
+  const fetchPageFilterConfig = useCallback(async () => {
+    try {
+      const data = await callApi('GET', '/api/admin/page-filter-config') as PageFilterConfig;
+      setPageFilterConfig(data);
+      const draft: Record<string, string> = {};
+      for (const [key, entry] of Object.entries(data)) {
+        draft[key] = String(entry.currentValue);
+      }
+      setPageFilterDraft(draft);
+    } catch {}
+  }, []);
+
+  const savePageFilterConfig = useCallback(async () => {
+    if (!pageFilterConfig) return;
+    setPageFilterSaving(true);
+    try {
+      const payload: Record<string, number | string> = {};
+      for (const [key, entry] of Object.entries(pageFilterConfig)) {
+        const raw = pageFilterDraft[key] ?? String(entry.currentValue);
+        payload[key] = entry.type === 'number' ? parseInt(raw, 10) : raw;
+      }
+      await callApi('PATCH', '/api/admin/page-filter-config', payload);
+      showToast('Page defaults saved.');
+      await fetchPageFilterConfig();
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to save page defaults.', true);
+    } finally {
+      setPageFilterSaving(false);
+    }
+  }, [pageFilterConfig, pageFilterDraft, fetchPageFilterConfig]);
+
   const saveDigestThresholds = useCallback(async () => {
     const staleDaysVal   = parseInt(digestStaleDays, 10);
     const minGapDaysVal  = parseInt(digestMinGapDays, 10);
@@ -267,8 +312,9 @@ export function SettingsPage() {
     fetchHubStatus();
     fetchStatuses();
     fetchDigestSettings();
+    fetchPageFilterConfig();
     return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
-  }, [fetchHubStatus, fetchStatuses, fetchDigestSettings]);
+  }, [fetchHubStatus, fetchStatuses, fetchDigestSettings, fetchPageFilterConfig]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
@@ -574,6 +620,124 @@ export function SettingsPage() {
             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
               "Send now" bypasses the send-gate and sends immediately if there are stale conflicts.
             </Typography>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
+            <Box>
+              <Typography variant="h6" sx={{ mb: 0.5 }}>Page defaults</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Default settings for each page. Changes take effect on the next page load — no restart needed.
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              onClick={savePageFilterConfig}
+              disabled={pageFilterSaving || pageFilterConfig === null}
+              startIcon={pageFilterSaving ? <CircularProgress size={14} color="inherit" /> : undefined}
+              sx={{ flexShrink: 0 }}
+            >
+              {pageFilterSaving ? 'Saving…' : 'Save'}
+            </Button>
+          </Box>
+
+          {pageFilterConfig === null ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1 }}>
+              <CircularProgress size={16} />
+              <Typography variant="body2" color="text.secondary">Loading…</Typography>
+            </Box>
+          ) : (
+            <Stack spacing={3}>
+              {/* Sales board */}
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>Sales board</Typography>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                  <TextField
+                    size="small"
+                    label="Staleness cutoff (days)"
+                    type="number"
+                    value={pageFilterDraft['sales_staleness_days'] ?? '28'}
+                    onChange={e => setPageFilterDraft(d => ({ ...d, sales_staleness_days: e.target.value }))}
+                    slotProps={{ htmlInput: { min: 1, max: 365, step: 1 } }}
+                    helperText="Contacts not modified within this window are hidden. Set to a high number to show all."
+                    sx={{ width: 220 }}
+                  />
+                  <TextField
+                    size="small"
+                    label="Default page size"
+                    type="number"
+                    value={pageFilterDraft['sales_page_size'] ?? '25'}
+                    onChange={e => setPageFilterDraft(d => ({ ...d, sales_page_size: e.target.value }))}
+                    slotProps={{ htmlInput: { min: 5, max: 100, step: 1 } }}
+                    helperText="Contacts shown per page in each column."
+                    sx={{ width: 200 }}
+                  />
+                </Stack>
+              </Box>
+
+              <Divider />
+
+              {/* Surveys board */}
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>Surveys board</Typography>
+                <Stack spacing={2}>
+                  <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                    <TextField
+                      size="small"
+                      label="Default page size"
+                      type="number"
+                      value={pageFilterDraft['surveys_page_size'] ?? '25'}
+                      onChange={e => setPageFilterDraft(d => ({ ...d, surveys_page_size: e.target.value }))}
+                      slotProps={{ htmlInput: { min: 5, max: 100, step: 1 } }}
+                      helperText="Contacts shown per page."
+                      sx={{ width: 200 }}
+                    />
+                  </Stack>
+                  <TextField
+                    size="small"
+                    label="Hidden substages (JSON array)"
+                    multiline
+                    minRows={2}
+                    value={pageFilterDraft['surveys_hidden_substages_default'] ?? (pageFilterConfig?.['surveys_hidden_substages_default']?.currentValue ?? '[]')}
+                    onChange={e => setPageFilterDraft(d => ({ ...d, surveys_hidden_substages_default: e.target.value }))}
+                    helperText='Substage IDs to hide by default, e.g. ["substage-id-1","substage-id-2"]. Must be valid JSON.'
+                    sx={{ maxWidth: 480 }}
+                  />
+                </Stack>
+              </Box>
+
+              <Divider />
+
+              {/* Customers list */}
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>Customers list</Typography>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                  <TextField
+                    size="small"
+                    label="Default page size"
+                    type="number"
+                    value={pageFilterDraft['customers_page_size'] ?? '25'}
+                    onChange={e => setPageFilterDraft(d => ({ ...d, customers_page_size: e.target.value }))}
+                    slotProps={{ htmlInput: { min: 5, max: 100, step: 1 } }}
+                    helperText="Contacts shown per page."
+                    sx={{ width: 200 }}
+                  />
+                </Stack>
+              </Box>
+
+              <Divider />
+
+              {/* Customer profile / Design visits — placeholder */}
+              <Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Customer profile / Design visits</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  No configurable defaults yet — settings for the design visit list will appear here in a future update.
+                </Typography>
+              </Box>
+            </Stack>
           )}
         </CardContent>
       </Card>

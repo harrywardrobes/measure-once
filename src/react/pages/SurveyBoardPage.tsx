@@ -783,6 +783,21 @@ export function SurveyBoardPage() {
     };
   }, [forceUpdate]);
 
+  // ── Page filter config — load surveys page size ───────────────────────────
+  const [surveysPageSize, setSurveysPageSize] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/page-filter-config', { headers: { Accept: 'application/json' } })
+      .then(r => r.ok ? r.json() : null)
+      .then((cfg: { surveys_page_size?: number } | null) => {
+        if (cancelled || !cfg) return;
+        const ps = cfg.surveys_page_size;
+        if (typeof ps === 'number' && ps > 0) setSurveysPageSize(ps);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   // ── usePaginatedContacts: survey column ─────────────────────────────────
   // Server filters to contacts with a room in the survey stage.  Room/substage
   // data is augmented client-side from window.state.contactStageCache; tick
@@ -790,6 +805,7 @@ export function SurveyBoardPage() {
   const surveyHook = usePaginatedContacts({
     initialPage: 1, leadStatus: '', substatus: '',
     stage: 'survey', sortBy: 'newest', search: '', showArchived: false,
+    pageSize: surveysPageSize,
   });
 
   const allEntries = useMemo(
@@ -1076,7 +1092,7 @@ export function SurveyBoardPage() {
               totalPages={surveyHook.totalPages}
               total={surveyHook.total}
               visibleCount={visibleEntries.length}
-              pageLimit={PAGINATED_CONTACTS_PAGE_LIMIT}
+              pageLimit={surveysPageSize ?? PAGINATED_CONTACTS_PAGE_LIMIT}
               onPageChange={surveyHook.setPage}
             />
           </Box>
