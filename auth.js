@@ -2,6 +2,7 @@
 // Sessions are still managed by passport + connect-pg-simple, and req.user
 // keeps its shape (`{ claims: { sub, email, ... }, expires_at, privilege_level,
 // onboarding_status }`) so the rest of the app continues to work unchanged.
+const fs = require('fs');
 const session = require('express-session');
 const rateLimit = require('express-rate-limit');
 const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
@@ -103,6 +104,19 @@ async function getBootstrapAdminHash() {
 }
 
 function createMailTransport() {
+  if (process.env.MAIL_TRANSPORT_FILE_OVERRIDE) {
+    const fpath = process.env.MAIL_TRANSPORT_FILE_OVERRIDE;
+    return {
+      sendMail(opts) {
+        return new Promise((resolve, reject) => {
+          try {
+            fs.appendFileSync(fpath, JSON.stringify(opts) + '\n');
+            resolve({ messageId: `override-${Date.now()}` });
+          } catch (e) { reject(e); }
+        });
+      },
+    };
+  }
   if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,

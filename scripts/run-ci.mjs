@@ -43,6 +43,7 @@ const STEPS = [
   'test:card-action-handlers:ci',
   'test:design-visit-qb-resubmit:ci',
   'test:design-visit-submitter-name:ci',
+  'test:photo-approval-notification:ci',
   'test:start-design-visit:ci',
   'test:design-visit:ci',
   'test:design-visit-list:ci',
