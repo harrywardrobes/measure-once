@@ -64,6 +64,10 @@ export function AdminRequestsPage() {
   const [photoRejecting, setPhotoRejecting] = useState<Record<string, boolean>>({});
   const [tradeActing, setTradeActing] = useState<Record<number, 'approving' | 'rejecting'>>({});
 
+  // Reject trade dialog
+  const [rejectTradeTarget, setRejectTradeTarget] = useState<number | null>(null);
+  const [rejectTradeReason, setRejectTradeReason] = useState('');
+
   // Approve modal
   const [approving, setApproving] = useState<Req | null>(null);
   const [approveRole, setApproveRole] = useState('');
@@ -275,13 +279,18 @@ export function AdminRequestsPage() {
       setTradeActing(s => { const n = { ...s }; delete n[id]; return n; });
     }
   }
-  async function rejectTrade(id: number) {
+  function rejectTrade(id: number) {
     if (tradeActing[id]) return;
-    const reason = prompt('Optional: enter a reason for rejection (leave blank to skip)');
-    if (reason === null) return;
+    setRejectTradeTarget(id);
+    setRejectTradeReason('');
+  }
+  async function confirmRejectTrade() {
+    if (rejectTradeTarget === null) return;
+    const id = rejectTradeTarget;
+    setRejectTradeTarget(null);
     setTradeActing(s => ({ ...s, [id]: 'rejecting' }));
     try {
-      await api('POST', `/api/admin/trades/submissions/${id}/reject`, { reason: reason || '' });
+      await api('POST', `/api/admin/trades/submissions/${id}/reject`, { reason: rejectTradeReason.trim() });
       toast('Submission rejected');
       emitAdminChange('trades');
     } catch (e: unknown) {
@@ -500,6 +509,28 @@ export function AdminRequestsPage() {
           </Card>
         );
       })}
+
+      {/* Reject trade dialog */}
+      <Dialog open={rejectTradeTarget !== null} onClose={() => setRejectTradeTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Reject trade submission</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={2}
+            label="Reason (optional)"
+            placeholder="Leave blank to skip"
+            value={rejectTradeReason}
+            onChange={(e) => setRejectTradeReason(e.target.value)}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRejectTradeTarget(null)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={confirmRejectTrade}>Reject</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Approve dialog */}
       <Dialog open={!!approving} onClose={() => !approveBusy && setApproving(null)} maxWidth="sm" fullWidth>
