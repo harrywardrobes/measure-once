@@ -3,6 +3,10 @@ import { useAuth } from '../contexts/AuthContext';
 
 export interface ProjectContact {
   id: string;
+  /** Set to true when the contact has room data but its hs_lead_status is
+   *  absent or not present in lead_status_config.  The card is still shown
+   *  on the Projects board but carries an amber "Unknown status" badge. */
+  _statusUnknown?: boolean;
   properties?: {
     firstname?: string;
     lastname?: string;

@@ -229,6 +229,9 @@ const ROUTES = [
   // Admin-only read endpoints elsewhere in server.js. These rows exist so the
   // matrix records a member→403 (and viewer→403) cell for each — closing the
   // PRIV-00-style gap that surfaced on /api/admin/card-action-handlers.
+  { method: 'GET',    path: '/api/admin/substatus-clear-failures',            level: 'admin' },
+  { method: 'POST',   path: '/api/admin/substatus-clear-failures/retry',       level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/substatus-clear-failures/0',           level: 'admin' },
   { method: 'GET',    path: '/api/admin/lead-statuses',                        level: 'admin' },
   { method: 'GET',    path: '/api/admin/stage-action-labels',                  level: 'admin' },
   { method: 'GET',    path: '/api/admin/hubspot/dev-mode',                     level: 'admin' },

@@ -1594,6 +1594,26 @@ app.get('/api/project-contacts', async (req, res) => {
           after = r.data.paging?.next?.after;
         } while (after);
 
+        // Surface contacts that have room data (measure_once_rooms) but whose
+        // hs_lead_status is absent or not in the configured key set.  These
+        // contacts would otherwise disappear from the Projects board silently.
+        // We read from the shared contacts cache (already in memory for
+        // /api/localdata/all) to avoid an extra HubSpot round-trip.
+        try {
+          const returnedIdSet = new Set(allResults.map(r => r.id));
+          const { contacts: allCached } = await getSharedContactsCache();
+          for (const contact of allCached) {
+            if (returnedIdSet.has(contact.id)) continue;
+            if (!contact.properties?.measure_once_rooms) continue;
+            // Contact has room data but wasn't matched by the IN-filter —
+            // its status is absent or unconfigured.
+            allResults.push({ ...contact, _statusUnknown: true });
+          }
+        } catch {
+          // Shared cache unavailable (first boot / HubSpot down) — skip
+          // the orphan check rather than blocking the whole response.
+        }
+
         _projectContactsCache = { results: allResults, total: allResults.length, fetchedAt: Date.now() };
         return { ok: true, results: allResults, total: allResults.length };
       } catch (err) {

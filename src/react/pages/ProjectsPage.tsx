@@ -587,9 +587,32 @@ function ProjectCard({
             </Typography>
           )}
         </Box>
-        <Typography sx={{ fontSize: '0.72rem', fontWeight: 500, color: BRAND_COLORS.ink4, letterSpacing: '0.02em', mt: '2px' }}>
-          #{contact.id}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: '2px' }}>
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 500, color: BRAND_COLORS.ink4, letterSpacing: '0.02em' }}>
+            #{contact.id}
+          </Typography>
+          {contact._statusUnknown && (
+            <Box
+              component="span"
+              title="This contact's HubSpot lead status is missing or not configured in the pipeline. Check HubSpot or the Lead Status admin settings."
+              sx={{
+                fontSize: '0.62rem',
+                fontWeight: 700,
+                px: '6px',
+                py: '1px',
+                borderRadius: '999px',
+                background: '#fef3c7',
+                color: '#92400e',
+                border: '1px solid #fde68a',
+                letterSpacing: '0.02em',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              Unknown status
+            </Box>
+          )}
+        </Box>
       </Box>
 
       {/* Room rows */}
@@ -950,6 +973,15 @@ export function ProjectsPage() {
   const rows = useMemo(
     () => computeRows(contacts, stageCache, filter, sortBy, currentUserId, stalenessActive, PROJECTS_STALENESS_DAYS, hiddenSubstages),
     [contacts, stageCache, filter, sortBy, currentUserId, stalenessActive, hiddenSubstages],
+  );
+
+  // ── Unknown-status banner ──────────────────────────────────────────────────
+  // Count contacts with room data whose hs_lead_status is absent or not in
+  // config.  A dismissible amber banner lets the team know without hiding cards.
+  const [unknownStatusDismissed, setUnknownStatusDismissed] = useState(false);
+  const unknownStatusCount = useMemo(
+    () => contacts.filter((c) => c._statusUnknown && stageCache[c.id]?.length).length,
+    [contacts, stageCache],
   );
 
   // ── Stage tabs ─────────────────────────────────────────────────────────────
@@ -1411,6 +1443,37 @@ export function ProjectsPage() {
           Group by stage
         </Box>
       </PageFilterBar>
+
+      {/* Unknown-status warning banner */}
+      {unknownStatusCount > 0 && !unknownStatusDismissed && (
+        <Box
+          role="alert"
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            px: '16px',
+            py: '8px',
+            background: '#fffbeb',
+            borderBottom: `1px solid #fde68a`,
+            flexShrink: 0,
+          }}
+        >
+          <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#92400e', flex: 1 }}>
+            {unknownStatusCount === 1
+              ? '1 project card has a missing or unconfigured HubSpot lead status — it is still visible but may need attention.'
+              : `${unknownStatusCount} project cards have a missing or unconfigured HubSpot lead status — they are still visible but may need attention.`}
+          </Typography>
+          <IconButton
+            size="small"
+            aria-label="dismiss"
+            onClick={() => setUnknownStatusDismissed(true)}
+            sx={{ color: '#92400e', p: '2px', flexShrink: 0 }}
+          >
+            <CloseIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        </Box>
+      )}
 
       {/* Scrollable content area */}
       <Box
