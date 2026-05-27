@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
@@ -9,7 +9,10 @@ import DialogTitle from '@mui/material/DialogTitle';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
 import IconButton from '@mui/material/IconButton';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
+import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { Visit, STAGE_COLOURS, STAGE_KEYS } from './types';
@@ -28,6 +31,13 @@ const VISIT_TYPE_LABELS: Record<string, string> = {
   workshop:     'Workshop',
   other:        'Other',
 };
+
+const CREATABLE_VISIT_TYPES = [
+  { type: 'survey',   label: 'Survey' },
+  { type: 'remedial', label: 'Remedial' },
+  { type: 'workshop', label: 'Workshop' },
+  { type: 'other',    label: 'Other visit' },
+];
 
 function visitTypeLabel(type?: string): string {
   if (!type) return 'Visit';
@@ -140,6 +150,13 @@ function CancelVisitDialog({ visit, onClose, onConfirm, deleting }: CancelDialog
   );
 }
 
+function contactDisplayName(contact: Props['contact']): string {
+  const p = contact.properties;
+  const parts = [p.firstname, p.lastname].filter(Boolean);
+  if (parts.length) return parts.join(' ');
+  return p.email || '';
+}
+
 export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, loadingVisits, onRefresh }: Omit<Props, 'pastVisits'>) {
   const { isAdmin, isManager } = usePrivilege();
   const canEdit = isAdmin || isManager;
@@ -147,6 +164,10 @@ export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, load
   const [editVisit, setEditVisit] = useState<Visit | null>(null);
   const [cancelVisit, setCancelVisit] = useState<Visit | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [createType, setCreateType] = useState<string | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const addBtnRef = useRef<HTMLButtonElement>(null);
 
   const handleEditClose = useCallback(() => setEditVisit(null), []);
   const handleEditSaved = useCallback(() => {
@@ -188,10 +209,48 @@ export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, load
     }
   }, [cancelVisit, onRefresh]);
 
+  const contactName = contactDisplayName(contact);
+
   return (
     <div id="upcoming-visits-section" style={{ marginBottom: 20 }}>
       <div style={sxHeader}>
         <span style={sxHeaderLabel}>Upcoming visits</span>
+        {canEdit && (
+          <>
+            <Button
+              ref={addBtnRef}
+              size="small"
+              variant="outlined"
+              startIcon={<AddIcon fontSize="inherit" />}
+              onClick={e => setMenuAnchor(e.currentTarget)}
+              data-testid="add-visit-btn"
+              sx={{ fontSize: '0.75rem', py: 0.25, px: 1 }}
+            >
+              Add visit
+            </Button>
+            <Menu
+              anchorEl={menuAnchor}
+              open={Boolean(menuAnchor)}
+              onClose={() => setMenuAnchor(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            >
+              {CREATABLE_VISIT_TYPES.map(({ type, label }) => (
+                <MenuItem
+                  key={type}
+                  onClick={() => {
+                    setMenuAnchor(null);
+                    setCreateType(type);
+                  }}
+                  data-testid={`add-visit-type-${type}`}
+                  dense
+                >
+                  {label}
+                </MenuItem>
+              ))}
+            </Menu>
+          </>
+        )}
       </div>
       {loadingVisits && <p style={sxMuted}>Loading…</p>}
       {!loadingVisits && upcomingVisits.length === 0 && (
@@ -265,10 +324,26 @@ export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, load
 
       {editVisit && editVisit.type !== 'delivery' && editVisit.type !== 'installation' && (
         <GenericVisitEditModal
+          mode="edit"
           visit={editVisit}
           open
           onClose={handleEditClose}
           onSaved={handleEditSaved}
+        />
+      )}
+
+      {createType && (
+        <GenericVisitEditModal
+          mode="create"
+          visitType={createType}
+          contactId={contactId}
+          contactName={contactName || undefined}
+          open
+          onClose={() => setCreateType(null)}
+          onSaved={() => {
+            setCreateType(null);
+            onRefresh?.();
+          }}
         />
       )}
 

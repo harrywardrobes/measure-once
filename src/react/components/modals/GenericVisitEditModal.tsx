@@ -17,7 +17,7 @@ import type { DateRange } from '@mui/x-date-pickers-pro/models';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { Visit } from '../../pages/customer-detail/types';
-import { PATCH } from '../../utils/api';
+import { PATCH, POST } from '../../utils/api';
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
   design:       'Design visit',
@@ -34,30 +34,60 @@ function visitTypeLabel(type?: string): string {
   return VISIT_TYPE_LABELS[type] ?? type.charAt(0).toUpperCase() + type.slice(1);
 }
 
-interface Props {
+interface EditProps {
+  mode?: 'edit';
   visit: Visit;
   open: boolean;
   onClose: () => void;
   onSaved?: () => void;
 }
 
-export function GenericVisitEditModal({ visit, open, onClose, onSaved }: Props) {
-  const label = visitTypeLabel(visit.type);
+interface CreateProps {
+  mode: 'create';
+  visitType: string;
+  contactId: string;
+  contactName?: string;
+  open: boolean;
+  onClose: () => void;
+  onSaved?: () => void;
+}
 
-  const [title, setTitle] = useState(visit.title || label);
-  const [range, setRange] = useState<DateRange<Dayjs>>([
-    dayjs(visit.startAt),
-    dayjs(visit.endAt),
-  ]);
-  const [location, setLocation] = useState(visit.location || '');
-  const [notes, setNotes] = useState(visit.notes || '');
-  const [updateGcal, setUpdateGcal] = useState(!!visit.googleEventId);
+type Props = EditProps | CreateProps;
+
+export function GenericVisitEditModal(props: Props) {
+  const isCreate = props.mode === 'create';
+  const isEdit = !isCreate;
+
+  const visitType = isCreate ? props.visitType : props.visit.type;
+  const label = visitTypeLabel(visitType);
+
+  const contactName = isCreate ? props.contactName : props.visit.customerName;
+  const contactId   = isCreate ? props.contactId   : props.visit.customerId;
+
+  const defaultTitle = isCreate
+    ? (contactName ? `${label} — ${contactName}` : label)
+    : (isEdit ? (props.visit.title || label) : label);
+
+  const initialStart = isCreate
+    ? dayjs().add(24, 'hour').startOf('hour')
+    : dayjs(props.visit.startAt);
+  const initialEnd = isCreate
+    ? initialStart.add(2, 'hour')
+    : dayjs(props.visit.endAt);
+
+  const [title, setTitle] = useState(defaultTitle);
+  const [range, setRange] = useState<DateRange<Dayjs>>([initialStart, initialEnd]);
+  const [location, setLocation] = useState(isCreate ? '' : (props.visit.location || ''));
+  const [notes, setNotes] = useState(isCreate ? '' : (props.visit.notes || ''));
+  const [gcalChecked, setGcalChecked] = useState(
+    isCreate ? true : !!(props.visit.googleEventId)
+  );
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   function handleClose() {
     setError('');
-    onClose();
+    props.onClose();
   }
 
   async function handleSubmit() {
@@ -71,38 +101,74 @@ export function GenericVisitEditModal({ visit, open, onClose, onSaved }: Props) 
     setSubmitting(true);
     const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
     try {
-      await PATCH(`/api/visits/${visit.id}`, {
-        type: visit.type,
-        title: title.trim(),
-        customerId: visit.customerId || null,
-        customerName: visit.customerName || null,
-        startAt: start.toDate().toISOString(),
-        endAt: end.toDate().toISOString(),
-        location: location.trim() || null,
-        notes: notes.trim() || null,
-      });
+      if (isCreate) {
+        await POST('/api/visits', {
+          type: visitType,
+          title: title.trim(),
+          customerId: contactId || null,
+          customerName: contactName || null,
+          startAt: start.toDate().toISOString(),
+          endAt: end.toDate().toISOString(),
+          location: location.trim() || null,
+          notes: notes.trim() || null,
+        });
 
-      if (updateGcal && visit.googleEventId) {
-        try {
-          await PATCH(`/api/events/${visit.googleEventId}`, {
-            summary: title.trim(),
-            description: notes.trim() || '',
-            location: location.trim() || '',
-            start: { dateTime: start.toDate().toISOString() },
-            end: { dateTime: end.toDate().toISOString() },
-          });
-        } catch (gcalErr) {
-          const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
-          w.showToast?.(`${label} updated; Google Calendar update failed: ${msg}`, true);
-          handleClose();
-          onSaved?.();
-          return;
+        if (gcalChecked) {
+          try {
+            await POST('/api/events', {
+              summary: title.trim(),
+              description: notes.trim() || '',
+              location: location.trim() || '',
+              start: { dateTime: start.toDate().toISOString() },
+              end: { dateTime: end.toDate().toISOString() },
+            });
+          } catch (gcalErr) {
+            const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
+            w.showToast?.(`${label} scheduled; Google Calendar add failed: ${msg}`, true);
+            handleClose();
+            props.onSaved?.();
+            return;
+          }
         }
-      }
 
-      w.showToast?.(`${label} updated`, false);
-      handleClose();
-      onSaved?.();
+        w.showToast?.(`${label} scheduled`, false);
+        handleClose();
+        props.onSaved?.();
+      } else {
+        const visit = props.visit;
+        await PATCH(`/api/visits/${visit.id}`, {
+          type: visit.type,
+          title: title.trim(),
+          customerId: visit.customerId || null,
+          customerName: visit.customerName || null,
+          startAt: start.toDate().toISOString(),
+          endAt: end.toDate().toISOString(),
+          location: location.trim() || null,
+          notes: notes.trim() || null,
+        });
+
+        if (gcalChecked && visit.googleEventId) {
+          try {
+            await PATCH(`/api/events/${visit.googleEventId}`, {
+              summary: title.trim(),
+              description: notes.trim() || '',
+              location: location.trim() || '',
+              start: { dateTime: start.toDate().toISOString() },
+              end: { dateTime: end.toDate().toISOString() },
+            });
+          } catch (gcalErr) {
+            const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
+            w.showToast?.(`${label} updated; Google Calendar update failed: ${msg}`, true);
+            handleClose();
+            props.onSaved?.();
+            return;
+          }
+        }
+
+        w.showToast?.(`${label} updated`, false);
+        handleClose();
+        props.onSaved?.();
+      }
     } catch (e) {
       setError('Could not save: ' + (e instanceof Error ? e.message : 'error'));
     } finally {
@@ -110,13 +176,19 @@ export function GenericVisitEditModal({ visit, open, onClose, onSaved }: Props) 
     }
   }
 
-  const dialogTitle = visit.customerName
-    ? `Edit ${label.toLowerCase()} for ${visit.customerName}`
-    : `Edit ${label.toLowerCase()}`;
+  const dialogTitle = isCreate
+    ? (contactName ? `Schedule ${label.toLowerCase()} for ${contactName}` : `Schedule ${label.toLowerCase()}`)
+    : (contactName ? `Edit ${label.toLowerCase()} for ${contactName}` : `Edit ${label.toLowerCase()}`);
+
+  const gcalLabel = isCreate
+    ? 'Also add to my Google Calendar'
+    : 'Also update my Google Calendar event';
+
+  const showGcal = isCreate || !!(props.visit.googleEventId);
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Dialog open={open} onClose={submitting ? undefined : handleClose} maxWidth="sm" fullWidth>
+      <Dialog open={props.open} onClose={submitting ? undefined : handleClose} maxWidth="sm" fullWidth>
         <DialogTitle>{dialogTitle}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -152,17 +224,17 @@ export function GenericVisitEditModal({ visit, open, onClose, onSaved }: Props) 
               fullWidth
               size="small"
             />
-            {visit.googleEventId && (
+            {showGcal && (
               <FormControlLabel
                 control={
                   <Checkbox
-                    checked={updateGcal}
-                    onChange={e => setUpdateGcal(e.target.checked)}
+                    checked={gcalChecked}
+                    onChange={e => setGcalChecked(e.target.checked)}
                     size="small"
                     disabled={submitting}
                   />
                 }
-                label="Also update my Google Calendar event"
+                label={gcalLabel}
               />
             )}
             {error && (
@@ -179,7 +251,9 @@ export function GenericVisitEditModal({ visit, open, onClose, onSaved }: Props) 
             startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : undefined}
             data-testid="generic-visit-save"
           >
-            {submitting ? 'Saving…' : 'Save changes'}
+            {submitting
+              ? (isCreate ? 'Scheduling…' : 'Saving…')
+              : (isCreate ? 'Schedule' : 'Save changes')}
           </Button>
         </DialogActions>
       </Dialog>
