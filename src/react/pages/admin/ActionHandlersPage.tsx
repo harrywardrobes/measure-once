@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -134,6 +135,7 @@ interface ActionSlot {
   stage_key?: string; status_key?: string;
   substatus_id?: number;
   label: string; rowLabel: string;
+  hasLabel?: boolean;
 }
 interface ActionGroup { ls: { key: string; label: string; isNullRow: boolean }; slots: ActionSlot[]; }
 interface ActionStage { stage: { key: string; label: string }; groups: ActionGroup[]; }
@@ -224,8 +226,8 @@ function _buildActionSlotGroups(): ActionStage[] {
     const lsSubs = subs.filter(s => String(s.status_key).toUpperCase() === String(ls.key).toUpperCase())
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-    if (dflt || hasHandler || lsSubs.length > 0) {
-      slots.push({ kind: 'ls', stage_key: stageKey, status_key: lsKeyLower, label: dflt || ls.label, rowLabel: 'Default action' });
+    if (dflt || hasHandler) {
+      slots.push({ kind: 'ls', stage_key: stageKey, status_key: lsKeyLower, label: dflt || ls.label, rowLabel: 'Default action', hasLabel: !!dflt });
     }
     for (const sub of lsSubs) {
       const action = (sub.action_label || '').trim();
@@ -1077,6 +1079,15 @@ export function ActionHandlersPage() {
                                 <td className="adm-handlers-cell adm-handlers-cell--slot">
                                   <div className="adm-handlers-slot-label">{slot.label}</div>
                                   <div className="adm-handlers-slot-sub">{slot.rowLabel}</div>
+                                  {slot.kind === 'ls' && slot.hasLabel === false && handler && (
+                                    <Chip
+                                      data-testid="no-label-warning"
+                                      color="warning"
+                                      size="small"
+                                      label="No action label — add one in Card Actions"
+                                      sx={{ mt: 0.5 }}
+                                    />
+                                  )}
                                 </td>
                                 <td className="adm-handlers-cell">
                                   {handler

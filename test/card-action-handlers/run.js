@@ -2477,15 +2477,15 @@ async function main() {
 
     // ── (I) Fallback slot visibility ──────────────────────────────────────────
     //
-    // Regression guard for task #1722: a lead status that has sub-statuses but
-    // no default action label and no bound handler must still render a
-    // "Default action" slot row in the Action Handlers tab.
+    // Updated for task #1734: slots with no action label AND no bound handler
+    // are now hidden entirely.  The old `lsSubs.length > 0` clause (task #1722)
+    // has been removed from _buildActionSlotGroups() — a lead status with only
+    // un-labelled sub-statuses and no handler must NOT appear in the slot list.
     //
-    // Before the fix, the condition in processLs() was `dflt || hasHandler`
-    // only — omitting `lsSubs.length > 0` — so the slot was invisible whenever
-    // both dflt and hasHandler were falsy, even if sub-statuses existed.  The
-    // fix added the third clause; this probe guards against a regression.
-    console.log('\n  [I] Fallback slot visibility (task #1722 regression guard)');
+    // Probe (I): assert the "Default action" slot is ABSENT for a lead status
+    // that has sub-statuses (with empty action_label) but no stage-action label
+    // and no bound handler.
+    console.log('\n  [I] No-label/no-handler slot is hidden (task #1734)');
 
     // Seed the lead_status_config row.
     const FALLBACK_STATUS_LABEL = 'PrivTest Fallback Slot';
@@ -2499,15 +2499,14 @@ async function main() {
              stage               = EXCLUDED.stage`,
       [LBL_KEY_FALLBACK_STATUS, FALLBACK_STATUS_LABEL],
     );
-    // Insert a sub-status with an empty action_label — the condition that was
-    // previously hiding the Default action slot.
+    // Insert a sub-status with an empty action_label.
     await pool.query(
       `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order)
        VALUES ($1, $2, 'PrivTest fallback sub', '', 9996)
        ON CONFLICT DO NOTHING`,
       [LBL_KEY_FALLBACK_STATUS, 'PRIVTEST_FALLBACK_SUB'],
     );
-    console.log(`  Seeded lead_status_config key=${LBL_KEY_FALLBACK_STATUS} with one empty-action_label sub-status`);
+    console.log(`  Seeded lead_status_config key=${LBL_KEY_FALLBACK_STATUS} with one empty-action_label sub-status (no handler, no label)`);
 
     // Open a fresh admin tab and switch to the Action Handlers panel.
     const fallbackTab = await browser.newPage();
@@ -2534,37 +2533,83 @@ async function main() {
         ? loadCardActionHandlersAdmin() : Promise.resolve();
       return Promise.all([p1, p2]);
     });
+    // Give React a moment to render.
+    await new Promise(r => setTimeout(r, 800));
 
-    // Poll for a "Default action" slot sub-label inside the group whose heading
-    // matches our seeded status label.  The slot is rendered as:
-    //   <div class="adm-handlers-slot-sub">Default action</div>
-    // inside a <div class="adm-handlers-group"> whose
-    //   <div class="adm-handlers-group-head"> contains FALLBACK_STATUS_LABEL.
-    const fallbackSlotVisible = await pollPage(
-      fallbackTab,
-      (statusLabel) => {
-        const wrap = document.getElementById('card-action-handlers-wrap');
-        if (!wrap) return null;
-        const groups = wrap.querySelectorAll('.adm-handlers-group');
-        for (const grp of groups) {
-          const head = grp.querySelector('.adm-handlers-group-head');
-          if (!head || !head.textContent.includes(statusLabel)) continue;
-          const subs = grp.querySelectorAll('.adm-handlers-slot-sub');
-          for (const sub of subs) {
-            if (sub.textContent.trim() === 'Default action') return 'found';
-          }
-        }
-        return null;
-      },
-      FALLBACK_STATUS_LABEL,
-      10000,
-    );
+    // Assert the group for this status is NOT present (no label, no handler).
+    const noLabelNoHandlerGroupAbsent = await fallbackTab.evaluate((statusLabel) => {
+      const wrap = document.getElementById('card-action-handlers-wrap');
+      if (!wrap) return 'wrap-missing';
+      const groups = wrap.querySelectorAll('.adm-handlers-group');
+      for (const grp of groups) {
+        const head = grp.querySelector('.adm-handlers-group-head');
+        if (head && head.textContent.includes(statusLabel)) return 'found';
+      }
+      return 'absent';
+    }, FALLBACK_STATUS_LABEL);
     record(
-      '(I) "Default action" slot visible for a lead status with subs but no label or handler',
-      '"Default action" slot row rendered in #card-action-handlers-wrap group for the status',
-      `result=${fallbackSlotVisible}`,
-      fallbackSlotVisible === 'found',
+      '(I) Group for no-label/no-handler lead status is hidden',
+      '"absent" — group for FALLBACK_STATUS_LABEL must not appear in the slot list',
+      `result=${noLabelNoHandlerGroupAbsent}`,
+      noLabelNoHandlerGroupAbsent === 'absent',
     );
+
+    // ── (J) Bound-but-unlabelled slot shows warning chip ─────────────────────
+    //
+    // When a handler is bound to a slot that has no stage-action label the row
+    // must appear (because hasHandler=true) AND carry a
+    // [data-testid="no-label-warning"] chip explaining the handler won't fire
+    // until a label is added in Card Actions.
+    console.log('\n  [J] Bound-but-unlabelled slot shows no-label-warning chip');
+
+    // Bind a handler to LBL_KEY_FALLBACK_STATUS (still has no stage-action label).
+    const createFallbackHandlerRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'privtest-fallback-unlabelled',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [{ stage_key: 'sales', status_key: LBL_KEY_FALLBACK_STATUS.toLowerCase() }],
+    });
+    const fallbackHandlerId = createFallbackHandlerRes.json?.id;
+    record(
+      '(J.setup) POST handler bound to unlabelled slot',
+      'status=201 with numeric id',
+      `status=${createFallbackHandlerRes.status} id=${fallbackHandlerId}`,
+      createFallbackHandlerRes.status === 201 && Number.isInteger(fallbackHandlerId),
+    );
+
+    if (fallbackHandlerId) {
+      // Reload the Action Handlers panel in the same fallback tab.
+      await fallbackTab.evaluate(() => {
+        if (typeof loadCardActionHandlersAdmin === 'function') loadCardActionHandlersAdmin();
+      });
+
+      // Poll for the warning chip.
+      const warningChipVisible = await pollPage(
+        fallbackTab,
+        (statusLabel) => {
+          const wrap = document.getElementById('card-action-handlers-wrap');
+          if (!wrap) return null;
+          const groups = wrap.querySelectorAll('.adm-handlers-group');
+          for (const grp of groups) {
+            const head = grp.querySelector('.adm-handlers-group-head');
+            if (!head || !head.textContent.includes(statusLabel)) continue;
+            if (grp.querySelector('[data-testid="no-label-warning"]')) return 'found';
+          }
+          return null;
+        },
+        FALLBACK_STATUS_LABEL,
+        8000,
+      );
+      record(
+        '(J) [data-testid="no-label-warning"] chip visible for bound-but-unlabelled slot',
+        '"found" — warning chip must appear inside the group for FALLBACK_STATUS_LABEL',
+        `result=${warningChipVisible}`,
+        warningChipVisible === 'found',
+      );
+
+      // Clean up the handler.
+      await adminClient.delete(`/api/admin/card-action-handlers/${fallbackHandlerId}`);
+    }
 
     await fallbackTab.close();
 
@@ -2712,15 +2757,22 @@ async function writeReport(runId, findings) {
     '  still opens even though the PATCH naturally returns 503 in this harness',
     '  (HUBSPOT_TOKEN stripped → `requireHubspotToken` rejects).  This exercises',
     '  the `.catch` / non-ok branch in `public/card-action-handlers.js` 388–395.',
-    '- **(I) Fallback slot visibility** (task #1722 regression guard): a lead',
-    '  status row (stage=SALES) is seeded in `lead_status_config` together with',
-    '  one `lead_substatuses` row whose `action_label` is empty — no stage-action',
+    '- **(I) No-label/no-handler slot is hidden** (task #1734): a lead status',
+    '  row (stage=SALES) is seeded in `lead_status_config` together with one',
+    '  `lead_substatuses` row whose `action_label` is empty — no stage-action',
     '  label entry and no bound handler.  A fresh admin tab switches to the',
-    '  Action Handlers panel; the probe polls `#card-action-handlers-wrap` and',
-    '  asserts that a `.adm-handlers-slot-sub` element with text',
-    '  `"Default action"` is present inside the group headed by the seeded',
-    '  status label.  Guards the `lsSubs.length > 0` clause in `processLs()`',
-    '  (`ActionHandlersPage.tsx` line 227) against a silent regression.',
+    '  Action Handlers panel; the probe asserts the group for that status is',
+    '  ABSENT from `#card-action-handlers-wrap`.  Guards the tightened',
+    '  `if (dflt || hasHandler)` guard in `_buildActionSlotGroups()` against',
+    '  regression (the old `lsSubs.length > 0` clause was intentionally removed',
+    '  by task #1734 so that slots with no label and no handler stay hidden).',
+    '- **(J) Bound-but-unlabelled slot shows warning chip** (task #1734): a',
+    '  handler is POSTed and bound to the same status (which has no stage-action',
+    '  label).  The probe reloads the panel in the same tab and polls until a',
+    '  `[data-testid="no-label-warning"]` chip is visible inside the group for',
+    '  that status.  Confirms the warning path in `ActionHandlersPage.tsx` fires',
+    '  when `slot.hasLabel === false && handler !== null`.  The handler is',
+    '  deleted as part of cleanup.',
     '',
     '## Notes',
     '',
