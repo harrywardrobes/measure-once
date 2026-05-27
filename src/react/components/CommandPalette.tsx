@@ -153,7 +153,7 @@ export function CommandPalette() {
   const [settings, setSettings] = useState<SearchSettings | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const { invoices: qbInvoices } = useQBInvoices();
+  const { invoices: qbInvoices, loading: invoicesLoading } = useQBInvoices();
   const { contacts: searchedContacts, loading: contactsLoading } = useContactSearch(query, open);
 
   useEffect(() => {
@@ -408,7 +408,22 @@ export function CommandPalette() {
           </>
         )}
 
-        {matchedInvoices.length > 0 && (
+        {invoicesLoading && (
+          <>
+            <Typography sx={SECTION_LABEL_SX}>Invoices</Typography>
+            {[0, 1, 2].map(i => (
+              <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2, py: 1 }}>
+                <Skeleton variant="rounded" width={20} height={20} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Skeleton variant="text" width="50%" height={18} />
+                  <Skeleton variant="text" width="30%" height={14} />
+                </Box>
+              </Box>
+            ))}
+          </>
+        )}
+
+        {!invoicesLoading && matchedInvoices.length > 0 && (
           <>
             <Typography sx={SECTION_LABEL_SX}>Invoices</Typography>
             {matchedInvoices.map(inv => {
