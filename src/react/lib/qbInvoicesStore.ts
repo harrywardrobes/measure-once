@@ -8,13 +8,26 @@
  *
  * Fetch lifecycle:
  *  - `triggerLoad()` is idempotent — if a fetch is already in progress or
- *    has succeeded, subsequent calls are no-ops.
+ *    has succeeded (and the cache is still fresh), subsequent calls are no-ops.
  *  - `refresh()` forces a new fetch regardless of current state.
  *  - No fetch fires automatically on import; consumers must call
  *    `triggerLoad()` (or `refresh()`) to initiate the first load.
+ *
+ * Cross-tab sync:
+ *  - After a successful fetch, a `BroadcastChannel` message is posted so that
+ *    other open tabs can re-fetch and stay current.
+ *  - BroadcastChannel messages are never received by the tab that sent them,
+ *    so there is no risk of an infinite refresh loop.
+ *  - A 5-minute TTL also acts as a safety net: `triggerLoad()` treats data
+ *    older than CACHE_TTL_MS as expired and issues a background re-fetch even
+ *    without an explicit cross-tab signal.
  */
 
 import type { InvoiceSummary } from '../components/InvoiceDetailDrawer';
+
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const BC_CHANNEL_NAME = 'qb-invoices-sync';
+const BC_MSG_REFRESHED = 'refreshed';
 
 export interface QBInvoicesState {
   connected: boolean;
@@ -41,6 +54,7 @@ const INITIAL_STATE: QBInvoicesState = {
 };
 
 let _state: QBInvoicesState = { ...INITIAL_STATE };
+let _lastFetchedAt: number | null = null;
 const _listeners = new Set<() => void>();
 
 function _setState(update: Partial<QBInvoicesState> | ((prev: QBInvoicesState) => Partial<QBInvoicesState>)) {
@@ -58,7 +72,23 @@ export function subscribe(listener: () => void): () => void {
   return () => { _listeners.delete(listener); };
 }
 
-async function _doFetch(): Promise<void> {
+let _bc: BroadcastChannel | null = null;
+
+function _getChannel(): BroadcastChannel | null {
+  if (typeof BroadcastChannel === 'undefined') return null;
+  if (!_bc) {
+    _bc = new BroadcastChannel(BC_CHANNEL_NAME);
+    _bc.onmessage = (ev: MessageEvent<{ type: string }>) => {
+      if (ev.data?.type === BC_MSG_REFRESHED && !_state.loading) {
+        void _doFetch();
+      }
+    };
+  }
+  return _bc;
+}
+
+/** Returns `true` when the fetch completed successfully (invoices loaded or 403 no-access). */
+async function _doFetch(): Promise<boolean> {
   _setState({ loading: true, loadError: false, error: null, errorCode: null });
 
   try {
@@ -69,7 +99,7 @@ async function _doFetch(): Promise<void> {
 
     if (!status.connected) {
       _setState({ connected: false, statusKnown: true, loading: false });
-      return;
+      return true;
     }
 
     _setState({ connected: true, company: status.company || null, statusKnown: true });
@@ -78,7 +108,8 @@ async function _doFetch(): Promise<void> {
 
     if (invRes.status === 403) {
       _setState({ loading: false, loaded: true, invoices: [] });
-      return;
+      _lastFetchedAt = Date.now();
+      return true;
     }
 
     const data = await invRes.json().catch(() => ({})) as {
@@ -94,10 +125,12 @@ async function _doFetch(): Promise<void> {
         error: data.error || `Server error ${invRes.status}`,
         errorCode: data.code || null,
       });
-      return;
+      return false;
     }
 
     _setState({ loading: false, loaded: true, invoices: data.invoices || [] });
+    _lastFetchedAt = Date.now();
+    return true;
   } catch (e: unknown) {
     _setState({
       loading: false,
@@ -105,7 +138,13 @@ async function _doFetch(): Promise<void> {
       error: (e instanceof Error ? e.message : null) || 'Failed to load invoices',
       errorCode: null,
     });
+    return false;
   }
+}
+
+function _isCacheExpired(): boolean {
+  if (_lastFetchedAt === null) return true;
+  return Date.now() - _lastFetchedAt > CACHE_TTL_MS;
 }
 
 /**
@@ -113,19 +152,29 @@ async function _doFetch(): Promise<void> {
  * Safe to call from multiple components — only one fetch will fire.
  *
  * Note: if a previous fetch failed (`loadError: true`), this will retry.
- * Only an in-progress fetch (`loading: true`) or a successful one
- * (`loaded: true`) prevents a new request.
+ * Only an in-progress fetch (`loading: true`) or a fresh successful one
+ * (`loaded: true` and cache not expired) prevents a new request.
+ *
+ * Initialises the BroadcastChannel listener on first call so that
+ * cross-tab invalidation is active whenever any component uses the store.
  */
 export function triggerLoad(): void {
-  if (_state.loading || _state.loaded) return;
+  _getChannel();
+  if (_state.loading) return;
+  if (_state.loaded && !_isCacheExpired()) return;
   void _doFetch();
 }
 
 /**
  * Force a fresh fetch regardless of current cache state.
+ * Notifies other open tabs via BroadcastChannel only when the fetch succeeds,
+ * so transient network errors don't trigger unnecessary re-fetches elsewhere.
  */
 export function refresh(): void {
-  void _doFetch();
+  _getChannel();
+  void _doFetch().then((succeeded) => {
+    if (succeeded) _getChannel()?.postMessage({ type: BC_MSG_REFRESHED });
+  });
 }
 
 /**
