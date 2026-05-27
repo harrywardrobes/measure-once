@@ -86,7 +86,7 @@ async function pollFor(page, fn, arg, timeoutMs = 8000, intervalMs = 150) {
 async function purgeFixtures(pool) {
   try {
     await pool.query(
-      `DELETE FROM visits WHERE customer_id = $1`,
+      `DELETE FROM visits WHERE customer_id = $1 AND created_by LIKE 'privtest-%'`,
       [FAKE_CONTACT_ID],
     );
   } catch {}
