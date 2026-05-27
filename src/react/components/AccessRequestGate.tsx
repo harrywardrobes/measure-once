@@ -401,6 +401,16 @@ function AlreadyApprovedView() {
   );
 }
 
+/**
+ * Pass to `embedded` in gallery/preview contexts. Renders the gate content
+ * inline inside a card frame instead of a Dialog, and skips the Turnstile
+ * fetch (showing a placeholder widget instead).
+ */
+export interface AccessRequestGateEmbeddedPreview {
+  /** Which view state to display. Defaults to 'form'. */
+  view?: ViewState;
+}
+
 export interface AccessRequestGateProps {
   /**
    * When true, skips the real Turnstile fetch and renders a styled placeholder
@@ -417,16 +427,25 @@ export interface AccessRequestGateProps {
   onClose?: () => void;
   /** Initial view when using controlled mode. Defaults to 'form'. */
   initialView?: ViewState;
+  /**
+   * Gallery embedding. When provided the gate renders its content inline inside
+   * a card frame (no Dialog, no CustomEvent listener, no real Turnstile fetch).
+   * Use this in the Design System gallery instead of a CustomEvent dispatch or a
+   * hand-rolled duplicate of the component's markup.
+   */
+  embedded?: AccessRequestGateEmbeddedPreview;
 }
 
-export function AccessRequestGate({ forceNoTurnstile, open: openProp, onClose, initialView = 'form' }: AccessRequestGateProps = {}) {
+export function AccessRequestGate({ forceNoTurnstile, open: openProp, onClose, initialView = 'form', embedded }: AccessRequestGateProps = {}) {
   const controlled = openProp !== undefined;
+  const isEmbedded = embedded !== undefined;
+  const effectiveForceNoTurnstile = forceNoTurnstile || isEmbedded;
   const [openState, setOpenState] = useState(false);
-  const [view, setView] = useState<ViewState>(initialView);
-  const { siteKey, token: captchaToken, hasError: captchaError, resetWidget, renderWidget } = useSingleTurnstile(forceNoTurnstile);
+  const [view, setView] = useState<ViewState>(embedded?.view ?? initialView);
+  const { siteKey, token: captchaToken, hasError: captchaError, resetWidget, renderWidget } = useSingleTurnstile(effectiveForceNoTurnstile);
 
   useEffect(() => {
-    if (controlled) return;
+    if (controlled || isEmbedded) return;
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<ShowParams>).detail;
       const nextView = detail?.view ?? resolveInitialView(detail?.urlParams);
@@ -435,7 +454,7 @@ export function AccessRequestGate({ forceNoTurnstile, open: openProp, onClose, i
     };
     window.addEventListener('mo:show-access-gate', handler);
     return () => window.removeEventListener('mo:show-access-gate', handler);
-  }, [controlled]);
+  }, [controlled, isEmbedded]);
 
   useEffect(() => {
     if (controlled) setView(initialView);
@@ -444,6 +463,48 @@ export function AccessRequestGate({ forceNoTurnstile, open: openProp, onClose, i
   const open = controlled ? (openProp ?? false) : openState;
   const handleClose = controlled ? onClose : undefined;
 
+  const content = (
+    <>
+      {BRAND_MARK}
+      {view === 'form' && (
+        <FormView
+          onConfirmed={() => setView('confirmed')}
+          siteKey={siteKey}
+          captchaToken={captchaToken}
+          captchaError={captchaError}
+          onRenderWidget={renderWidget}
+          onResetWidget={resetWidget}
+          forceNoTurnstile={effectiveForceNoTurnstile}
+        />
+      )}
+      {view === 'confirmed' && <ConfirmedView />}
+      {view === 'email_conflict' && <EmailConflictView />}
+      {view === 'pending' && <PendingView />}
+      {view === 'already_approved' && <AlreadyApprovedView />}
+    </>
+  );
+
+  if (isEmbedded) {
+    return (
+      <Box
+        sx={{
+          width: '100%',
+          maxWidth: 420,
+          mx: 'auto',
+          bgcolor: 'background.paper',
+          borderRadius: 3,
+          p: 1,
+          pointerEvents: 'none',
+          userSelect: 'none',
+        }}
+      >
+        <Box sx={{ pt: 3, px: 2, pb: 2 }}>
+          {content}
+        </Box>
+      </Box>
+    );
+  }
+
   return (
     <Dialog
       open={open}
@@ -451,22 +512,7 @@ export function AccessRequestGate({ forceNoTurnstile, open: openProp, onClose, i
       slotProps={{ paper: { sx: { width: '100%', maxWidth: 420, borderRadius: 3, p: 1 } } }}
     >
       <DialogContent sx={{ pt: 3 }}>
-        {BRAND_MARK}
-        {view === 'form' && (
-          <FormView
-            onConfirmed={() => setView('confirmed')}
-            siteKey={siteKey}
-            captchaToken={captchaToken}
-            captchaError={captchaError}
-            onRenderWidget={renderWidget}
-            onResetWidget={resetWidget}
-            forceNoTurnstile={forceNoTurnstile}
-          />
-        )}
-        {view === 'confirmed' && <ConfirmedView />}
-        {view === 'email_conflict' && <EmailConflictView />}
-        {view === 'pending' && <PendingView />}
-        {view === 'already_approved' && <AlreadyApprovedView />}
+        {content}
       </DialogContent>
     </Dialog>
   );
