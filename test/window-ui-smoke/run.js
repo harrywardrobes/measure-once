@@ -3,20 +3,15 @@
 //
 // Smoke test: shared chrome includes must be present on every dashboard page.
 //
-// public/components.js attaches `window.UI = { skeletonLine,
-// renderEmptyState, renderTabBar, … }` and is included via an explicit
-// `<script src="/components.js">` tag after `/chrome.js` on every dashboard
-// HTML page. public/chrome.js attaches `window.getShortcut` and
+// public/chrome.js attaches `window.getShortcut` and
 // `window.handleAccessRequestSubmit`, and synchronously injects the top-nav
 // header mount (`#app-header-mount`, populated by the React GlobalHeader
 // island in /react/main.js) plus — on non-admin pages — the bottom-nav
 // mount (`nav.bottom-nav#main-content`). If a new page is added in the
-// future and the maintainer forgets either `<script src="/chrome.js">` or
-// `<script src="/components.js">`, anything that calls those helpers /
-// touches the chrome DOM will silently throw `ReferenceError` or render
+// future and the maintainer forgets `<script src="/chrome.js">`, anything
+// that touches the chrome DOM will silently throw `ReferenceError` or render
 // without the shared chrome. This test visits each dashboard route with an
 // admin session and asserts that:
-//   - `typeof window.UI === 'object'` with all four helpers
 //   - `typeof window.getShortcut === 'function'`
 //   - `typeof window.handleAccessRequestSubmit === 'function'`
 //   - `#app-header-mount` exists in the DOM
@@ -47,10 +42,9 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
-// Dashboard routes that include components.js. /customers/:id is also a real
-// page but the task spec only lists the top-level routes; covering the listed
-// 11 is sufficient to catch a missing script tag on any of the shared
-// chrome/components includes.
+// Dashboard routes. /customers/:id is also a real page but the task spec only
+// lists the top-level routes; covering the listed 11 is sufficient to catch a
+// missing script tag on any of the shared chrome includes.
 const ROUTES = [
   '/',
   '/customers',
@@ -64,8 +58,6 @@ const ROUTES = [
   '/admin',
   '/profile',
 ];
-
-const REQUIRED_HELPERS = ['skeletonLine', 'renderEmptyState', 'renderTabBar'];
 
 function parseCookieKV(jar) {
   if (!jar) return null;
@@ -108,7 +100,7 @@ async function main() {
     }
   }
 
-  // ── DB safety check (mirror lead-status-sync) ────────────────────────────
+  // ── DB safety check ──────────────────────────────────────────────────────
   const dbUrl = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL;
   if (!dbUrl) {
     console.error('Set DATABASE_URL_TEST or DATABASE_URL before running.');
@@ -156,7 +148,7 @@ async function main() {
       const page = await browser.newPage();
       // Swallow runtime errors from per-page bootstrap (HubSpot is stripped in
       // the test server so many fetches 503) — we only care about whether the
-      // shared components.js script tag executed.
+      // shared chrome.js script tag executed.
       page.on('pageerror', () => {});
       page.on('console', () => {});
       try {
@@ -168,21 +160,14 @@ async function main() {
         const status = resp ? resp.status() : 0;
         if (!resp || !resp.ok()) {
           record(`${route} — page loads (HTTP 200)`, 200, status, false,
-            'Page did not return 200; window.UI check skipped.');
+            'Page did not return 200; chrome globals check skipped.');
           continue;
         }
 
-        // Wait briefly for the synchronous components.js <script> to evaluate.
-        // It's a tiny IIFE included right after chrome.js so should be ready
-        // by DOMContentLoaded, but poll for up to 5s to be safe across pages
-        // with heavy inline init code.
+        // Wait briefly for the synchronous chrome.js <script> to evaluate.
         const adminPage = isAdminRoute(route);
         const ready = await page.waitForFunction(
-          (helpers, adminPage) => {
-            if (typeof window.UI !== 'object' || window.UI === null) return false;
-            for (const h of helpers) {
-              if (typeof window.UI[h] !== 'function') return false;
-            }
+          (adminPage) => {
             if (typeof window.getShortcut !== 'function') return false;
             if (typeof window.handleAccessRequestSubmit !== 'function') return false;
             if (!document.querySelector('#app-header-mount')) return false;
@@ -190,37 +175,18 @@ async function main() {
             return true;
           },
           { timeout: 5000 },
-          REQUIRED_HELPERS,
           adminPage,
         ).then(() => true).catch(() => false);
 
         // Always re-evaluate to record per-symbol pass/fail for the report.
-        const observed = await page.evaluate((helpers) => {
-          const out = {
-            typeofUI: typeof window.UI,
-            uiMissing: [],
+        const observed = await page.evaluate(() => {
+          return {
             getShortcut: typeof window.getShortcut,
             handleAccessRequestSubmit: typeof window.handleAccessRequestSubmit,
             hasHeader: !!document.querySelector('#app-header-mount'),
             hasBottomNav: !!document.querySelector('nav.bottom-nav#main-content'),
           };
-          if (out.typeofUI === 'object' && window.UI) {
-            out.uiMissing = helpers.filter(h => typeof window.UI[h] !== 'function');
-          } else {
-            out.uiMissing = helpers.slice();
-          }
-          return out;
-        }, REQUIRED_HELPERS).catch(e => ({ error: String(e) }));
-
-        const uiOk = observed && observed.typeofUI === 'object'
-          && Array.isArray(observed.uiMissing) && observed.uiMissing.length === 0;
-        record(
-          `${route} — window.UI defined with required helpers`,
-          `object with ${REQUIRED_HELPERS.join(', ')}`,
-          uiOk ? 'present' : JSON.stringify({ typeofUI: observed?.typeofUI, missing: observed?.uiMissing }),
-          !!uiOk,
-          uiOk ? '' : 'Likely missing <script src="/components.js"> after chrome.js in the page HTML.',
-        );
+        }).catch(e => ({ error: String(e) }));
 
         const getShortcutOk = observed && observed.getShortcut === 'function';
         record(
@@ -317,8 +283,6 @@ async function writeReport(findings) {
     '',
     'Visits each dashboard route below with an admin session and asserts:',
     '',
-    '- `window.UI` is an object with `skeletonLine`, `renderEmptyState`,',
-    '  `renderTabBar` (from `public/components.js`)',
     '- `window.getShortcut` is a function (from `public/chrome.js`)',
     '- `window.handleAccessRequestSubmit` is a function (from `public/chrome.js`)',
     '- `#app-header-mount` is mounted (injected by `public/chrome.js`,',
@@ -334,9 +298,8 @@ async function writeReport(findings) {
     '',
     '- `public/chrome.js` — top-nav header, bottom-nav, `window.getShortcut`,',
     '  `window.handleAccessRequestSubmit`',
-    '- `public/components.js` — defines `window.UI`',
-    '- Each dashboard HTML page in `public/` includes both via explicit',
-    '  `<script>` tags; this smoke catches a missing tag on any of them.',
+    '- Each dashboard HTML page in `public/` includes it via an explicit',
+    '  `<script>` tag; this smoke catches a missing tag on any of them.',
   ];
   const outPath = path.join(dir, 'window-ui-smoke.md');
   fs.writeFileSync(outPath, lines.join('\n'));

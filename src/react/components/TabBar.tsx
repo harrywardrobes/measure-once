@@ -1,14 +1,12 @@
 import React from 'react';
 
 /**
- * <TabBar/> — React equivalent of `UI.renderTabBar` in `public/components.js`.
+ * <TabBar/> — replaces the retired `UI.renderTabBar` helper.
  *
- * Renders the same `.ui-tabbar` markup with `.ui-tabbar-btn` buttons and the
- * `.tab-badge` badge span so it reuses the existing CSS in `public/app-styles.css`.
- * When the legacy helper is finally retired, this component is the drop-in
- * replacement. Unlike the vanilla helper (which takes a global function name
- * so it can survive an `innerHTML` round-trip), the React version takes a
- * normal `onSelect` callback.
+ * Renders a `.ui-tabbar` with `.ui-tabbar-btn` buttons and optional `.tab-badge`
+ * spans, reusing the existing CSS in `public/app-styles.css`. Unlike the old
+ * vanilla helper (which required a global function name to survive an
+ * `innerHTML` round-trip), this component takes a normal `onSelect` callback.
  */
 export interface TabBarTab {
   key: string;

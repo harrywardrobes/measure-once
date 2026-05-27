@@ -1,12 +1,10 @@
 import React from 'react';
 
 /**
- * <EmptyState/> — React equivalent of `UI.renderEmptyState` in
- * `public/components.js`.
+ * <EmptyState/> — replaces the retired `UI.renderEmptyState` helper.
  *
- * Renders the same `.ui-empty` markup (with optional `--compact` modifier) so
- * it reuses the existing CSS in `public/app-styles.css`. When the legacy helper is
- * finally retired, this component is the drop-in replacement.
+ * Renders a `.ui-empty` div (with optional `--compact` modifier) that reuses
+ * the existing CSS in `public/app-styles.css`.
  */
 export interface EmptyStateProps {
   message: React.ReactNode;

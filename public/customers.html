@@ -20,14 +20,12 @@
     Minimal HTML shell for the Customers page. All page UI (filters, search,
     list, pagination, lead-status sync) is rendered into #tab-customers by
     the React island (src/react/pages/CustomersPage.tsx, registered in
-    src/react/main.tsx). chrome.js + components.js are still loaded so the
-    shared app header / bottom nav appears on this page like every other
-    dashboard page.
+    src/react/main.tsx). chrome.js is loaded so the shared app header /
+    bottom nav appears on this page like every other dashboard page.
   -->
   <a href="#tab-customers" class="skip-link">Skip to customer list</a>
 
   <script src="/chrome.js"></script>
-  <script src="/components.js"></script>
 
   <main id="tab-customers"></main>
 

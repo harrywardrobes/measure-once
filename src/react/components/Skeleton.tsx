@@ -1,11 +1,10 @@
 import React from 'react';
 
 /**
- * <Skeleton/> — React equivalent of `UI.skeletonLine` in `public/components.js`.
+ * <Skeleton/> — replaces the retired `UI.skeletonLine` helper.
  *
- * Renders the same `.skeleton-line` markup so it reuses the existing CSS in
- * `public/app-styles.css`. When the legacy helper is finally retired, this
- * component is the drop-in replacement.
+ * Renders a `.skeleton-line` div that reuses the existing CSS in
+ * `public/app-styles.css`.
  */
 export interface SkeletonProps {
   width?: number | string;

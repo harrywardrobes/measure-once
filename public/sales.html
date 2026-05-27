@@ -26,7 +26,6 @@
   </div>
 
   <script src="/chrome.js"></script>
-  <script src="/components.js"></script>
   <script type="module" src="/react/main.js"></script>
   <script>
     // Paint a lightweight loading skeleton into the mount point so the board
@@ -34,8 +33,20 @@
     // Uses inline styles only — no legacy CSS class dependencies.
     (function paintSalesBoardSkeleton() {
       const mount = document.getElementById('sales-board-mount');
-      if (!mount || !window.UI || typeof UI.skeletonLine !== 'function') return;
-      const line = UI.skeletonLine;
+      if (!mount) return;
+      function line(width, height, opts) {
+        var o = opts || {};
+        var cls = o.className ? ' ' + o.className : '';
+        var sizeOmitted = (width == null || width === '') && (height == null || height === '');
+        var parts = [];
+        if (!sizeOmitted) {
+          parts.push('width:' + (width == null || width === '' ? '100%' : (typeof width === 'number' ? width + 'px' : String(width))));
+          parts.push('height:' + (height == null || height === '' ? '10px' : (typeof height === 'number' ? height + 'px' : String(height))));
+        }
+        if (o.style) parts.push(String(o.style));
+        var styleAttr = parts.length ? ' style="' + parts.join(';') + '"' : '';
+        return '<div class="skeleton-line' + cls + '"' + styleAttr + '></div>';
+      }
       const cardStyle = 'background:#F6F1E7;border-radius:8px;border:1px solid #D9D2C2;box-shadow:0 1px 3px rgba(0,0,0,0.07);overflow:hidden;margin-bottom:12px;pointer-events:none';
       const bodyStyle = 'padding:10px 12px 8px';
       const nameRowStyle = 'display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px';

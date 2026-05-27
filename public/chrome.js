@@ -1,10 +1,5 @@
 // Shared chrome: skip link, toast-live, access gate, header, bottom nav, invoice panel.
 // Runs synchronously so chrome is in the DOM before bootstrap() looks for it.
-//
-// Shared UI helpers (window.UI from /components.js) are loaded via an explicit
-// <script src="/components.js"> tag in every dashboard HTML page (placed right
-// after chrome.js). Keeping it explicit per page — rather than document.write —
-// avoids browser deferred-load suppression and keeps script ordering obvious.
 
 /**
  * Returns a platform-aware keyboard shortcut string.
