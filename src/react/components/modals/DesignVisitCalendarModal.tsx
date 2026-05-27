@@ -95,6 +95,7 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
   const [submitting, setSubmitting] = useState(false);
   const [startDtWasReset, setStartDtWasReset] = useState(restoredStartIsStale);
   const [startTimeWarning, setStartTimeWarning] = useState(false);
+  const [pastConfirmOpen, setPastConfirmOpen] = useState(false);
 
   useEffect(() => {
     saveDraft(key, { title, duration, location, notes, addGcal, startDt: startDt?.toISOString() });
@@ -131,16 +132,9 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
     onClose();
   }
 
-  async function handleSubmit() {
-    setError('');
-    if (!title.trim()) { setError('Title is required.'); return; }
-    if (!startDt || !startDt.isValid()) { setError('Start time is required.'); return; }
+  async function doSubmit() {
+    if (!startDt || !startDt.isValid()) return;
     const durationInt = parseInt(duration, 10);
-    if (!Number.isInteger(durationInt) || durationInt < 5) {
-      setError('Duration must be ≥ 5 minutes.');
-      return;
-    }
-
     const start = startDt.toDate();
     const end = new Date(start.getTime() + durationInt * 60000);
 
@@ -189,8 +183,54 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
     }
   }
 
+  function handleSubmit() {
+    setError('');
+    if (!title.trim()) { setError('Title is required.'); return; }
+    if (!startDt || !startDt.isValid()) { setError('Start time is required.'); return; }
+    const durationInt = parseInt(duration, 10);
+    if (!Number.isInteger(durationInt) || durationInt < 5) {
+      setError('Duration must be ≥ 5 minutes.');
+      return;
+    }
+
+    if (startDt.isBefore(dayjs())) {
+      setPastConfirmOpen(true);
+      return;
+    }
+
+    void doSubmit();
+  }
+
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <Dialog
+        open={pastConfirmOpen}
+        onClose={() => setPastConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Schedule in the past?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            This time has already passed — schedule anyway?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPastConfirmOpen(false)}>Go back</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            data-testid="cah-past-confirm"
+            onClick={() => {
+              setPastConfirmOpen(false);
+              void doSubmit();
+            }}
+          >
+            Schedule anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog open={open} onClose={handleDismiss} maxWidth="xs" fullWidth>
         <DialogTitle>
           {ctx.contactName ? `Schedule design visit for ${ctx.contactName}` : 'Schedule design visit'}
