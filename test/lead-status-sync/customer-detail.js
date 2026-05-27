@@ -323,9 +323,14 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
-    // Give the customer-detail DOMContentLoaded handler a chance to run and
-    // 503 on /api/contacts/:id — then we own the DOM.
-    await new Promise(r => setTimeout(r, 700));
+    // Poll until the page bootstrap functions are defined, which means the
+    // DOMContentLoaded handler has run and the initial /api/contacts/:id call
+    // has had time to settle (503 under the stripped HUBSPOT_TOKEN).
+    await waitFor(detailTab, () =>
+      typeof state !== 'undefined' &&
+      typeof renderWorkflowStages === 'function' &&
+      typeof loadLeadStatuses === 'function',
+    {}, 10000);
 
     const { renderToken: initialToken } = await bootstrapTracker(detailTab, KEY_A, '');
 
@@ -391,7 +396,8 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
     });
-    await new Promise(r => setTimeout(r, 300));
+    // Poll until the customers page has bootstrapped enough to use BroadcastChannel.
+    await waitFor(senderTab, () => typeof state !== 'undefined', {}, 8000);
 
     const patchA = await adminClient.patch(
       `/api/admin/lead-statuses/${encodeURIComponent(KEY_A)}`,
@@ -647,7 +653,9 @@ async function main() {
     await detailTab.evaluate(() => {
       if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
     });
-    await new Promise(r => setTimeout(r, 300));
+    // Poll until the pill is present in the header.
+    await waitFor(detailTab, () =>
+      !!document.querySelector('#workflow-header .lead-status-badge'), {}, 5000);
 
     // Enable request interception so:
     //   GET  /api/contacts/:id → returns mocked contact (avoids 503 noise)
@@ -775,8 +783,14 @@ async function main() {
           return '';
         }, KEY_A);
 
-        // Allow the async PATCH (intercepted above) to fire.
-        await new Promise(r => setTimeout(r, 1500));
+        // Poll (Node-side) until the intercepted PATCH request has been captured.
+        await (async () => {
+          const deadline = Date.now() + 5000;
+          while (Date.now() < deadline) {
+            if (patchedBodies.length > 0) break;
+            await new Promise(r => setTimeout(r, 100));
+          }
+        })();
 
         record(
           'clicking sub-status row fires exactly one PATCH request',
@@ -801,7 +815,9 @@ async function main() {
         await detailTab.evaluate(() => {
           if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
         });
-        await new Promise(r => setTimeout(r, 400));
+        // Poll until the pill shows a .ls-pill-parent span (sub-status selected).
+        await waitFor(detailTab, () =>
+          !!document.querySelector('#workflow-header .lead-status-badge .ls-pill-parent'), {}, 5000);
 
         const pillLabel = await detailTab.evaluate(() => {
           const pill = document.querySelector('#workflow-header .lead-status-badge');
@@ -847,7 +863,8 @@ async function main() {
         await senderTab2.setCacheEnabled(false);
         await injectSession(senderTab2, adminClient.cookie);
         await senderTab2.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 15000 });
-        await new Promise(r => setTimeout(r, 300));
+        // Poll until the customers page has bootstrapped enough to use BroadcastChannel.
+        await waitFor(senderTab2, () => typeof state !== 'undefined', {}, 8000);
 
         await senderTab2.evaluate(() => {
           new BroadcastChannel('lead_substatuses_changed').postMessage('changed');
@@ -961,8 +978,14 @@ async function main() {
             if (btn) btn.click();
           });
 
-          // Allow the async PATCH (intercepted above) to fire.
-          await new Promise(r => setTimeout(r, 1500));
+          // Poll (Node-side) until the intercepted PATCH request has been captured.
+          await (async () => {
+            const deadline = Date.now() + 5000;
+            while (Date.now() < deadline) {
+              if (patchedBodies.length > 0) break;
+              await new Promise(r => setTimeout(r, 100));
+            }
+          })();
 
           record(
             'clicking "Clear status" fires exactly one PATCH request',
@@ -989,7 +1012,9 @@ async function main() {
           await detailTab.evaluate(() => {
             if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
           });
-          await new Promise(r => setTimeout(r, 400));
+          // Poll until the pill transitions to the lsb-empty (no status) state.
+          await waitFor(detailTab, () =>
+            !!document.querySelector('#workflow-header .lead-status-badge.lsb-empty'), {}, 5000);
 
           const emptyPill = await detailTab.evaluate(() => {
             const pill = document.querySelector('#workflow-header .lead-status-badge');
@@ -1089,8 +1114,17 @@ async function main() {
       // renderWorkflowHeader dispatcher.
       if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
     });
-    // Give React time to fetch + re-render.
-    await new Promise(r => setTimeout(r, 800));
+    // Poll until React has fetched the contact and rendered the pill with the
+    // expected initial sub-status label (avoids an arbitrary fixed delay for
+    // the async fetchContact() → re-render cycle).
+    await waitFor(detailTab, (args) => {
+      const pill = document.querySelector('#workflow-header .lead-status-badge');
+      if (!pill) return false;
+      const parentSpan = pill.querySelector('.ls-pill-parent');
+      let primary = pill.textContent.trim();
+      if (parentSpan) primary = primary.slice(0, primary.length - parentSpan.textContent.length).trim();
+      return primary === args.label;
+    }, { label: CHIP_BC_LABEL }, 10000);
 
     // Capture the render token to verify no full-page reload occurs.
     const chipToken = await detailTab.evaluate(() => window.__renderToken);
@@ -1128,7 +1162,8 @@ async function main() {
     await senderTab3.setCacheEnabled(false);
     await injectSession(senderTab3, adminClient.cookie);
     await senderTab3.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await new Promise(r => setTimeout(r, 300));
+    // Poll until the customers page has bootstrapped enough to use BroadcastChannel.
+    await waitFor(senderTab3, () => typeof state !== 'undefined', {}, 8000);
 
     await senderTab3.evaluate(() => {
       new BroadcastChannel('lead_substatuses_changed').postMessage('changed');
@@ -1276,8 +1311,13 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
-    // Wait for the page bootstrap to settle before injecting the test mounts.
-    await new Promise(r => setTimeout(r, 900));
+    // Poll until the page bootstrap functions are defined (DOMContentLoaded +
+    // initial /api/contacts/:id call settled under the stripped HUBSPOT_TOKEN).
+    await waitFor(viewerTab, () =>
+      typeof state !== 'undefined' &&
+      typeof renderWorkflowStages === 'function' &&
+      typeof loadLeadStatuses === 'function',
+    {}, 10000);
 
     // Re-establish the workflow-header mount + contact state and render the
     // pill (mirrors what the real page does after selectContact() succeeds).
@@ -1294,7 +1334,9 @@ async function main() {
       }
       if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
     });
-    await new Promise(r => setTimeout(r, 300));
+    // Poll until the pill is present in the viewer's header.
+    await waitFor(viewerTab, () =>
+      !!document.querySelector('#workflow-header .lead-status-badge'), {}, 5000);
 
     const viewerPill = await viewerTab.evaluate(() => {
       const pill = document.querySelector('#workflow-header .lead-status-badge');
@@ -1326,6 +1368,10 @@ async function main() {
     // Belt-and-braces: click the pill anyway and confirm no picker popup.
     if (viewerPill.present) {
       await viewerTab.click('#workflow-header .lead-status-badge').catch(() => {});
+      // Intentional fixed wait: this is a negative assertion (picker must NOT
+      // open). A poll-loop would return immediately when nothing appears, so a
+      // brief fixed window is required to give the picker a realistic chance to
+      // appear before we assert its absence.
       await new Promise(r => setTimeout(r, 500));
       const pickerOpenedForViewer = await viewerTab.evaluate(() =>
         !!document.getElementById('card-picker-popup'));

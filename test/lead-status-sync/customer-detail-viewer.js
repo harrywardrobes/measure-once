@@ -48,6 +48,16 @@ const LABEL_B     = 'PrivTest Viewer Status B';
 const CONTACT_ID  = '999999999';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+async function waitFor(page, predFn, args = {}, timeoutMs = 7000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ok = await page.evaluate(predFn, args);
+    if (ok) return true;
+    await new Promise(r => setTimeout(r, 150));
+  }
+  return false;
+}
+
 function parseCookieKV(jar) {
   if (!jar) return null;
   const idx = jar.indexOf('=');
@@ -231,12 +241,19 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
-    // Let the page's DOMContentLoaded handler run and 503 on /api/contacts/:id.
-    await new Promise(r => setTimeout(r, 900));
+    // Poll until the page bootstrap functions are defined (DOMContentLoaded +
+    // initial /api/contacts/:id call settled under the stripped HUBSPOT_TOKEN).
+    await waitFor(page, () =>
+      typeof state !== 'undefined' &&
+      typeof renderWorkflowHeader === 'function' &&
+      typeof loadLeadStatuses === 'function',
+    {}, 10000);
 
     // Render the workflow header with viewer-role state.
     await bootstrapHeader(page, KEY_A, 'viewer');
-    await new Promise(r => setTimeout(r, 300));
+    // Poll until the pill is present in the header.
+    await waitFor(page, () =>
+      !!document.querySelector('#workflow-header .lead-status-badge'), {}, 5000);
 
     // ── assertions ─────────────────────────────────────────────────────────
     const pillInfo = await page.evaluate(() => {
@@ -270,6 +287,10 @@ async function main() {
     // Click the pill anyway and confirm the unified picker does NOT open.
     if (pillInfo.present) {
       await page.click('#workflow-header .lead-status-badge').catch(() => {});
+      // Intentional fixed wait: this is a negative assertion (picker must NOT
+      // open). A poll-loop would return immediately when nothing appears, so a
+      // brief fixed window is required to give the picker a realistic chance to
+      // appear before we assert its absence.
       await new Promise(r => setTimeout(r, 500));
       const pickerOpened = await page.evaluate(() =>
         !!document.getElementById('card-picker-popup'));

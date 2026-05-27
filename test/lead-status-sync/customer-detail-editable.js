@@ -50,6 +50,16 @@ const LABEL_B    = 'PrivTest Editable Status B';
 const CONTACT_ID = '999999998';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+async function waitFor(page, predFn, args = {}, timeoutMs = 7000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ok = await page.evaluate(predFn, args);
+    if (ok) return true;
+    await new Promise(r => setTimeout(r, 150));
+  }
+  return false;
+}
+
 function parseCookieKV(jar) {
   if (!jar) return null;
   const idx = jar.indexOf('=');
@@ -92,7 +102,9 @@ async function bootstrapHeader(page, lsKey, role) {
 async function probeEditableRole(page, role, lsKey, record) {
   // Re-bootstrap for the current role so state is clean.
   await bootstrapHeader(page, lsKey, role);
-  await new Promise(r => setTimeout(r, 300));
+  // Poll until the pill is present in the header.
+  await waitFor(page, () =>
+    !!document.querySelector('#workflow-header .lead-status-badge'), {}, 5000);
 
   const pillInfo = await page.evaluate(() => {
     const pill = document.querySelector('#workflow-header .lead-status-badge');
@@ -122,8 +134,8 @@ async function probeEditableRole(page, role, lsKey, record) {
     const pill = await page.$('#workflow-header .lead-status-badge');
     if (pill) {
       await pill.click();
-      // Wait for the MUI Popover to render (it mounts into a portal at body level).
-      await new Promise(r => setTimeout(r, 600));
+      // Poll until the MUI Popover portal mounts at body level.
+      await page.waitForSelector('[class*="MuiPopover-root"]', { timeout: 6000 }).catch(() => {});
     }
 
     const pickerResult = await page.evaluate(() => {
@@ -145,7 +157,9 @@ async function probeEditableRole(page, role, lsKey, record) {
 
     // Close the picker by pressing Escape for a clean state.
     await page.keyboard.press('Escape');
-    await new Promise(r => setTimeout(r, 200));
+    // Poll until the MUI Popover has closed before the next probe.
+    await waitFor(page, () =>
+      !document.querySelector('[class*="MuiPopover-root"]'), {}, 3000);
   }
 }
 
@@ -290,7 +304,13 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
-    await new Promise(r => setTimeout(r, 900));
+    // Poll until the page bootstrap functions are defined (DOMContentLoaded +
+    // initial /api/contacts/:id call settled under the stripped HUBSPOT_TOKEN).
+    await waitFor(managerPage, () =>
+      typeof state !== 'undefined' &&
+      typeof renderWorkflowHeader === 'function' &&
+      typeof loadLeadStatuses === 'function',
+    {}, 10000);
 
     await probeEditableRole(managerPage, 'manager', KEY_A, record);
 
@@ -320,7 +340,13 @@ async function main() {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
-    await new Promise(r => setTimeout(r, 900));
+    // Poll until the page bootstrap functions are defined (DOMContentLoaded +
+    // initial /api/contacts/:id call settled under the stripped HUBSPOT_TOKEN).
+    await waitFor(adminPage, () =>
+      typeof state !== 'undefined' &&
+      typeof renderWorkflowHeader === 'function' &&
+      typeof loadLeadStatuses === 'function',
+    {}, 10000);
 
     await probeEditableRole(adminPage, 'admin', KEY_A, record);
 
