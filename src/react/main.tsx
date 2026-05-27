@@ -47,7 +47,6 @@ const LoginPage          = React.lazy(() => import('./pages/auth/LoginPage').the
 const SetPasswordPage    = React.lazy(() => import('./pages/auth/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })));
 const OnboardingPage     = React.lazy(() => import('./pages/auth/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
 const TradesPage         = React.lazy(() => import('./pages/TradesPage').then(m => ({ default: m.TradesPage })));
-const DesignSystemPage   = React.lazy(() => import('./pages/DesignSystemPage').then(m => ({ default: m.DesignSystemPage })));
 const SearchSettingsPage = React.lazy(() => import('./pages/SearchSettingsPage').then(m => ({ default: m.SearchSettingsPage })));
 const WorkshopSettingsPage = React.lazy(() => import('./pages/WorkshopSettingsPage').then(m => ({ default: m.WorkshopSettingsPage })));
 const CustomersPage      = React.lazy(() => import('./pages/CustomersPage').then(m => ({ default: m.CustomersPage })));
@@ -120,9 +119,9 @@ function withTheme(
  * filename so admin.html can `<script>` it directly without a manifest.
  *
  * Mount strategy: we look for known mount points and render each that
- * exists. Today the admin Design System tab (`#tab-designsystem`) and the
- * admin Search settings tab (`#tab-search`) are on React; future ports add
- * their own `#tab-…` ids to the MOUNTS table below.
+ * exists. The admin Search settings tab (`#tab-search`) and other tabs
+ * are on React; future ports add their own `#tab-…` ids to the MOUNTS
+ * table below.
  *
  * The vite-dev playground (`src/react/index.html`) provides a `#root`
  * element so `npm run dev:react` still gives a standalone preview.
@@ -152,7 +151,6 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'tab-calendar',         render: () => <CalendarPage />, fallback: <CalendarPageSkeleton /> },
   { id: 'profile-view',         render: () => <ProfilePage />,  fallback: <ProfilePageSkeleton /> },
   { id: 'admin-mui-tabs-mount', render: () => <AdminTabsBar /> },
-  { id: 'tab-designsystem',     render: () => <DesignSystemPage /> },
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },
   { id: 'tab-workshop',         render: () => <WorkshopSettingsPage /> },
   { id: 'tab-customers',        render: () => <CustomersPage />, fallback: <CustomersPageSkeleton /> },
@@ -221,18 +219,11 @@ function mount() {
   const mountedAny = mountKnown() > 0;
   if (mountedAny) return;
 
-  // Vite dev-only standalone playground.
-  const root = document.getElementById('root');
-  if (root) {
-    createRoot(root).render(withTheme(<DesignSystemPage />, 'root'));
-    return;
-  }
-
   // No mount points exist yet — admin.html renders #tab-search /
-  // #tab-designsystem / #tab-workshop into #page asynchronously after its
-  // data fetches resolve, then calls window.__reactIslandMount()
-  // synchronously right after setting #page.innerHTML so the React panels
-  // render in the same tick. Nothing else to do here.
+  // #tab-workshop into #page asynchronously after its data fetches resolve,
+  // then calls window.__reactIslandMount() synchronously right after setting
+  // #page.innerHTML so the React panels render in the same tick.
+  // Nothing else to do here.
 }
 
 (window as unknown as { __reactIslandMount?: () => void }).__reactIslandMount = () => {

@@ -77,7 +77,6 @@ const STEPS = [
   'test:trades:ci',
   'test:sales-board-stage-labels:ci',
   'test:sales-board-error-state:ci',
-  'test:design-system-skeletons:ci',
   'test:chunk-cache-headers:ci',
   'test:customers-pagination:ci',
   'test:calendar-empty-state:ci',

@@ -124,8 +124,6 @@
     "test:sales-board-stage-labels:ci": "node scripts/with-test-db.js test/sales-board-stage-labels/run.js",
     "test:sales-board-error-state": "node test/sales-board-error-state/run.js",
     "test:sales-board-error-state:ci": "node scripts/with-test-db.js test/sales-board-error-state/run.js",
-    "test:design-system-skeletons": "node test/design-system-skeletons/run.js",
-    "test:design-system-skeletons:ci": "node scripts/with-test-db.js test/design-system-skeletons/run.js",
     "test:chunk-cache-headers": "node test/chunk-cache-headers/run.js",
     "test:chunk-cache-headers:ci": "node scripts/with-test-db.js test/chunk-cache-headers/run.js",
     "test:customers-pagination": "node test/customers-pagination/run.js",

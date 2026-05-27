@@ -12,6 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { GET, POST, PATCH } from '../../utils/api';
 
 const STAGE_OPTIONS: Array<{ value: string; label: string }> = [
@@ -162,6 +163,7 @@ type PageFilterConfig = Record<string, PageFilterConfigEntry>;
 
 export function SettingsPage() {
   const [statuses, setStatuses] = useState<LeadStatus[]>([]);
+  const [storybookBuilt, setStorybookBuilt] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
   const [hubStatus, setHubStatus] = useState<HubStatus | null>(null);
@@ -303,6 +305,9 @@ export function SettingsPage() {
     fetchStatuses();
     fetchDigestSettings();
     fetchPageFilterConfig();
+    fetch('/storybook/index.html', { method: 'HEAD' })
+      .then((r) => setStorybookBuilt(r.ok))
+      .catch(() => setStorybookBuilt(false));
     return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
   }, [fetchHubStatus, fetchStatuses, fetchDigestSettings, fetchPageFilterConfig]);
 
@@ -728,6 +733,33 @@ export function SettingsPage() {
                 </Typography>
               </Box>
             </Stack>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 0.5 }}>Design System</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Browse component documentation, design tokens, and UI patterns in Storybook.
+          </Typography>
+          {storybookBuilt === false ? (
+            <Typography variant="body2" color="text.disabled">
+              Storybook not built — run{' '}
+              <Box component="code" sx={{ fontSize: '0.8em' }}>npm run build:storybook</Box>{' '}
+              to enable.
+            </Typography>
+          ) : (
+            <Button
+              variant="outlined"
+              href="/storybook/"
+              target="_blank"
+              rel="noopener noreferrer"
+              endIcon={<OpenInNewIcon />}
+              disabled={storybookBuilt === null}
+            >
+              Open Design System
+            </Button>
           )}
         </CardContent>
       </Card>

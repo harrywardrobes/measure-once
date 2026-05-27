@@ -33,11 +33,10 @@
 <script src="/components.js"></script>
 <script src="/core.js"></script>
 <!--
-  Design System tab and Search settings tab are React islands
-  (src/react/pages/{DesignSystemPage,SearchSettingsPage}.tsx) built by
+  Search settings tab and other admin tabs are React islands built by
   `npm run build:react` into /react/main.js. The script self-mounts into
-  #tab-designsystem and #tab-search when it loads, so switchTab(…) no longer
-  needs a render call for those tabs.
+  each #tab-* panel when it loads, so switchTab(…) no longer needs a
+  render call for those tabs.
 -->
 <script type="module" src="/react/main.js"></script>
 <script>
@@ -161,7 +160,6 @@
         <button class="tab-btn"        data-tab="designvisit"   onclick="switchTab('designvisit')">Design visit</button>
         <button class="tab-btn"        data-tab="search"        onclick="switchTab('search')">Search</button>
         <button class="tab-btn"        data-tab="workshop"    onclick="switchTab('workshop')">Workshop</button>
-        <button class="tab-btn"        data-tab="designsystem" onclick="switchTab('designsystem')">Design system</button>
         <button class="tab-btn"        data-tab="devenv"      onclick="switchTab('devenv')" id="tab-btn-devenv" hidden>Dev environment</button>
       </div>
 
@@ -200,9 +198,6 @@
       <!-- WORKSHOP — React island (src/react/pages/WorkshopSettingsPage.tsx). -->
       <div class="tab-panel" id="tab-workshop"></div>
 
-      <!-- DESIGN SYSTEM -->
-      <div class="tab-panel" id="tab-designsystem"></div>
-
       <!-- DEV ENVIRONMENT (hidden in production)
         ============================================================
         MAINTAINER NOTE — KEEP THIS PANEL UP TO DATE
@@ -235,7 +230,7 @@
     // waiting on its MutationObserver fallback. See src/react/main.tsx.
     try { window.__reactIslandMount && window.__reactIslandMount(); } catch (_) {}
 
-    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'workshop', 'designsystem', 'devenv'];
+    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'workshop', 'devenv'];
     let savedTab;
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) switchTab(savedTab);

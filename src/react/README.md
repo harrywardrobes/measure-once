@@ -8,16 +8,19 @@ server serves it as static assets.
 ## How everything fits together
 
 - `main.tsx` — the single entry point. It finds known mount points
-  (`#tab-designsystem`, `#tab-search`, `#tab-workshop`, …) and renders
-  each that exists, wrapping every mount in `AppThemeProvider` so the
-  shared MUI theme + `ScopedCssBaseline` apply automatically.
+  (`#tab-search`, `#tab-workshop`, …) and renders each that exists,
+  wrapping every mount in `AppThemeProvider` so the shared MUI theme +
+  `ScopedCssBaseline` apply automatically.
 - `theme.ts` — the MUI theme. Close to MUI defaults today; intentionally
   minimal so we can refine it later without rewriting every page.
 - `AppThemeProvider.tsx` — combines `ThemeProvider` and
   `ScopedCssBaseline`. The baseline is scoped (not global) because the
   legacy vanilla pages around the React island depend on their own
   `public/app-styles.css` baseline.
-- `pages/` — one file per mounted page (e.g. `DesignSystemPage.tsx`).
+- `pages/` — one file per mounted page.
+- `stories/` — Storybook stories for components, design tokens, and pages.
+  Run `npm run build:storybook` (or `npm run storybook`) and open
+  `/storybook/` to browse the design system gallery.
 - `components/mui/` — thin wrappers around MUI primitives that we re-use
   across pages. Add a wrapper only when we genuinely need shared
   defaults — don't pre-build the world.
@@ -33,8 +36,14 @@ server serves it as static assets.
 2. If two or more pages need the same defaults, add a wrapper under
    `components/mui/<Name>.tsx`. Keep it thin — extend the MUI props type
    and forward unknown props through.
-3. Add a Storybook story next to it (`<Name>.stories.tsx`) when the
-   component has interesting variants.
+3. Add a Storybook story (`<Name>.stories.tsx` or in `src/react/stories/`)
+   when the component has interesting variants or is part of the design
+   system reference. Run `npm run storybook` to view live, or link to
+   `/storybook/` via the **Design System** card in the admin Settings tab.
+
+   **Convention:** new significant components must have a Storybook story.
+   This is the canonical design system gallery, replacing the former
+   admin Design System tab.
 
 ## Shared shell mounts
 
@@ -55,22 +64,22 @@ collapses (`&:empty { display: none }`). When changing this contract,
 audit consumers — currently only `pages/CustomersPage.tsx` portals into
 `#page-heading-action`.
 
-## Gallery embedding convention
+## Storybook embedding convention
 
-Full-page components shown in the Design System gallery use a single
-canonical prop name — **`embedded`** — to signal that they are running
-inside the gallery rather than at their real URL.
+Full-page components shown in Storybook stories use a single canonical
+prop name — **`embedded`** — to signal that they are running inside a
+story rather than at their real URL.
 
 - Simple error/boundary pages (`NotFoundPage`, `AccessRestrictedPage`):
   `embedded?: boolean` — just pass the bare boolean to suppress the
   full-viewport layout.
-- Pages with rich gallery state (`DesignVisitSignOffPage`): pass an
-  `EmbeddedPreview` object (exported from the page file) so the gallery
+- Pages with rich preview state (`DesignVisitSignOffPage`): pass an
+  `EmbeddedPreview` object (exported from the page file) so the story
   can control which UI state is shown without a real token or API call.
 
 **Always use `embedded` (not `preview`, `inGallery`, etc.) for this
-purpose.** The gallery (`DesignSystemPage`) passes it consistently for
-all page components.
+purpose.** Stories in `src/react/stories/Pages.stories.tsx` pass it
+consistently for all page components.
 
 ## Adding a new page mount
 
