@@ -10,7 +10,8 @@ import { AppThemeProvider } from '../src/react/AppThemeProvider';
  * Every story is wrapped in `AppThemeProvider` so MUI components render
  * with the same theme they will see in production.
  */
-import '../public/style.css';
+import '../public/app-styles.css';
+import '../public/tokens.css';
 import '../public/tailwind.css';
 
 const preview: Preview = {

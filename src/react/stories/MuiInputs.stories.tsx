@@ -1,22 +1,31 @@
 import React, { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import FormHelperText from '@mui/material/FormHelperText';
 import FormLabel from '@mui/material/FormLabel';
 import IconButton from '@mui/material/IconButton';
+import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
+import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import SearchIcon from '@mui/icons-material/Search';
+import type { Dayjs } from 'dayjs';
 
 const meta: Meta = {
   title: 'Inputs/MUI Inputs',
@@ -180,4 +189,262 @@ export const IconButtons: Story = {
       </Box>
     </Stack>
   ),
+};
+
+const STAGE_OPTIONS = [
+  { value: 'sales',        label: 'Sales' },
+  { value: 'designvisit',  label: 'Design Visit' },
+  { value: 'survey',       label: 'Survey' },
+  { value: 'order',        label: 'Order' },
+  { value: 'workshop',     label: 'Workshop' },
+  { value: 'delivery',     label: 'Delivery' },
+  { value: 'installation', label: 'Installation' },
+];
+
+export const SelectField: Story = {
+  name: 'Select',
+  render: () => {
+    const [stage, setStage] = useState('sales');
+    const [status, setStatus] = useState('');
+    const [size, setSize] = useState<string[]>(['medium']);
+
+    return (
+      <Stack spacing={3} sx={{ maxWidth: 400 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>Select</Typography>
+
+        <FormControl fullWidth>
+          <InputLabel id="stage-label">Project stage</InputLabel>
+          <Select
+            labelId="stage-label"
+            value={stage}
+            label="Project stage"
+            onChange={(e) => setStage(e.target.value)}
+          >
+            {STAGE_OPTIONS.map((o) => (
+              <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+            ))}
+          </Select>
+          <FormHelperText>Current value: {stage}</FormHelperText>
+        </FormControl>
+
+        <FormControl fullWidth error={status === ''}>
+          <InputLabel id="status-label">Lead status</InputLabel>
+          <Select
+            labelId="status-label"
+            value={status}
+            label="Lead status"
+            displayEmpty
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <MenuItem value=""><em>None</em></MenuItem>
+            <MenuItem value="new_lead">New Lead</MenuItem>
+            <MenuItem value="contacted">Contacted</MenuItem>
+            <MenuItem value="qualified">Qualified</MenuItem>
+            <MenuItem value="closed_won">Closed Won</MenuItem>
+            <MenuItem value="closed_lost">Closed Lost</MenuItem>
+          </Select>
+          {status === '' && <FormHelperText>A lead status is required.</FormHelperText>}
+        </FormControl>
+
+        <FormControl fullWidth>
+          <InputLabel id="size-label">Room sizes (multi-select)</InputLabel>
+          <Select
+            labelId="size-label"
+            multiple
+            value={size}
+            label="Room sizes (multi-select)"
+            onChange={(e) => {
+              const val = e.target.value;
+              setSize(typeof val === 'string' ? val.split(',') : val);
+            }}
+            renderValue={(selected) => (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {selected.map((v) => <Chip key={v} label={v} size="small" />)}
+              </Box>
+            )}
+          >
+            {['small', 'medium', 'large', 'extra-large'].map((v) => (
+              <MenuItem key={v} value={v}>{v}</MenuItem>
+            ))}
+          </Select>
+          <FormHelperText>Hold Ctrl / Cmd to select multiple values</FormHelperText>
+        </FormControl>
+
+        <FormControl fullWidth disabled>
+          <InputLabel id="disabled-label">Disabled select</InputLabel>
+          <Select labelId="disabled-label" value="survey" label="Disabled select">
+            <MenuItem value="survey">Survey</MenuItem>
+          </Select>
+          <FormHelperText>This field cannot be changed.</FormHelperText>
+        </FormControl>
+      </Stack>
+    );
+  },
+};
+
+const TEAM_MEMBERS = [
+  { id: '1', label: 'Alice Johnson', role: 'Designer' },
+  { id: '2', label: 'Bob Smith',    role: 'Surveyor' },
+  { id: '3', label: 'Carol White',  role: 'Sales' },
+  { id: '4', label: 'David Brown',  role: 'Installer' },
+  { id: '5', label: 'Eve Davis',    role: 'Manager' },
+];
+
+const POSTCODE_OPTIONS = [
+  'SW1A 1AA', 'SW1A 2AA', 'EC1A 1BB', 'W1A 0AX', 'WC2N 5DU',
+  'E1 6AN',   'N1 9GU',   'SE1 7PB',  'W2 1JB',   'NW1 4RY',
+];
+
+export const AutocompleteField: Story = {
+  name: 'Autocomplete',
+  render: () => {
+    const [assignee, setAssignee] = useState<{ id: string; label: string; role: string } | null>(null);
+    const [postcode, setPostcode] = useState<string | null>(null);
+    const [tags, setTags] = useState<string[]>(['renovation', 'urgent']);
+
+    return (
+      <Stack spacing={3} sx={{ maxWidth: 400 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>Autocomplete</Typography>
+
+        <Autocomplete
+          options={TEAM_MEMBERS}
+          value={assignee}
+          onChange={(_, v) => setAssignee(v)}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Assigned to"
+              helperText={assignee ? `Role: ${assignee.role}` : 'Start typing to search team members'}
+            />
+          )}
+          renderOption={(props, option) => (
+            <Box component="li" {...props} key={option.id}>
+              <Box>
+                <Typography variant="body2">{option.label}</Typography>
+                <Typography variant="caption" color="text.secondary">{option.role}</Typography>
+              </Box>
+            </Box>
+          )}
+        />
+
+        <Autocomplete
+          options={POSTCODE_OPTIONS}
+          value={postcode}
+          onChange={(_, v) => setPostcode(v)}
+          freeSolo
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Postcode"
+              helperText="Type to filter or enter a custom postcode"
+            />
+          )}
+        />
+
+        <Autocomplete<string, true, false, false>
+          multiple
+          options={['renovation', 'urgent', 'new-build', 'extension', 'loft', 'kitchen', 'bathroom']}
+          value={tags}
+          onChange={(_, v) => setTags(v)}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Tags"
+              helperText="Add one or more tags to this contact"
+            />
+          )}
+        />
+
+        <Autocomplete
+          options={TEAM_MEMBERS}
+          disabled
+          renderInput={(params) => (
+            <TextField {...params} label="Assigned to (disabled)" helperText="Assignment is locked." />
+          )}
+        />
+
+        <Autocomplete
+          options={TEAM_MEMBERS}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Assigned to (error)"
+              error
+              helperText="An assignee is required before submitting."
+            />
+          )}
+        />
+      </Stack>
+    );
+  },
+};
+
+export const DatePickerField: Story = {
+  name: 'DatePicker',
+  render: () => {
+    const [visitDate, setVisitDate] = useState<Dayjs | null>(null);
+    const [followUpDate, setFollowUpDate] = useState<Dayjs | null>(null);
+    const [orderDate, setOrderDate] = useState<Dayjs | null>(null);
+
+    return (
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <Stack spacing={3} sx={{ maxWidth: 400 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>DatePicker</Typography>
+
+          <DatePicker
+            label="Design visit date"
+            value={visitDate}
+            onChange={(v) => setVisitDate(v)}
+            slotProps={{
+              textField: {
+                helperText: visitDate
+                  ? `Selected: ${visitDate.format('DD MMM YYYY')}`
+                  : 'Pick a date for the design visit',
+                fullWidth: true,
+              },
+            }}
+          />
+
+          <DatePicker
+            label="Follow-up date"
+            value={followUpDate}
+            onChange={(v) => setFollowUpDate(v)}
+            disablePast
+            slotProps={{
+              textField: {
+                helperText: 'Must be today or a future date',
+                fullWidth: true,
+              },
+            }}
+          />
+
+          <DatePicker
+            label="Order placed (error)"
+            value={orderDate}
+            onChange={(v) => setOrderDate(v)}
+            slotProps={{
+              textField: {
+                error: orderDate === null,
+                helperText: orderDate === null ? 'Order date is required.' : undefined,
+                fullWidth: true,
+              },
+            }}
+          />
+
+          <DatePicker
+            label="Installation date (disabled)"
+            value={null}
+            onChange={() => {}}
+            disabled
+            slotProps={{
+              textField: {
+                helperText: 'Date is locked once the order is confirmed.',
+                fullWidth: true,
+              },
+            }}
+          />
+        </Stack>
+      </LocalizationProvider>
+    );
+  },
 };
