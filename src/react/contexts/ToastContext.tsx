@@ -6,17 +6,26 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import Button from '@mui/material/Button';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
+
+interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
 
 interface ToastMessage {
   id: number;
   msg: string;
   isError: boolean;
+  action?: ToastAction;
+  duration?: number;
 }
 
 interface ToastContextValue {
   showToast: (msg: string, isError?: boolean) => void;
+  showToastWithAction: (msg: string, action: ToastAction, options?: { duration?: number }) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -42,10 +51,25 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts(prev => [...prev, { id, msg, isError }]);
   }, []);
 
-  const handleClose = useCallback((_: unknown, reason?: string) => {
-    if (reason === 'clickaway') return;
+  const showToastWithAction = useCallback(
+    (msg: string, action: ToastAction, options?: { duration?: number }) => {
+      const id = ++_globalIdCounter;
+      setToasts(prev => [
+        ...prev,
+        { id, msg, isError: false, action, duration: options?.duration },
+      ]);
+    },
+    [],
+  );
+
+  const dismissCurrent = useCallback(() => {
     setToasts(prev => prev.slice(1));
   }, []);
+
+  const handleClose = useCallback((_: unknown, reason?: string) => {
+    if (reason === 'clickaway') return;
+    dismissCurrent();
+  }, [dismissCurrent]);
 
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
@@ -62,22 +86,43 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const actionNode = current?.action ? (
+    <Button
+      size="small"
+      onClick={() => {
+        current.action!.onClick();
+        dismissCurrent();
+      }}
+      sx={{
+        color: '#fff',
+        fontWeight: 700,
+        textTransform: 'none',
+        fontSize: '.82rem',
+        ml: 1,
+        '&:hover': { background: 'rgba(255,255,255,.15)' },
+      }}
+    >
+      {current.action.label}
+    </Button>
+  ) : undefined;
+
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={{ showToast, showToastWithAction }}>
       {children}
       {current && (
         <Snackbar
           key={current.id}
           open
-          autoHideDuration={3500}
+          autoHideDuration={current.duration ?? 3500}
           onClose={handleClose}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
           sx={{ zIndex: 'var(--z-toast, 9500)' }}
         >
           <Alert
-            onClose={() => setToasts(prev => prev.slice(1))}
+            onClose={dismissCurrent}
             severity={current.isError ? 'error' : 'success'}
             variant="filled"
+            action={actionNode}
             sx={{ width: '100%', minWidth: 240 }}
           >
             {current.msg}
@@ -86,6 +131,26 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       )}
     </ToastContext.Provider>
   );
+}
+
+/**
+ * Returns the full toast context value from the nearest ToastProvider.
+ * Falls back to window.toast / console.log if no provider is mounted.
+ */
+export function useToastContext(): ToastContextValue {
+  const ctx = useContext(ToastContext);
+  if (ctx) return ctx;
+  const fallbackShowToast = (msg: string, isError?: boolean) => {
+    const w = window as unknown as { toast?: (m: string, e?: boolean) => void };
+    if (typeof w.toast === 'function') w.toast(msg, isError);
+  };
+  return {
+    showToast: fallbackShowToast,
+    showToastWithAction: (msg: string, action: ToastAction) => {
+      fallbackShowToast(msg);
+      console.log('[toast action available]', action.label);
+    },
+  };
 }
 
 /**

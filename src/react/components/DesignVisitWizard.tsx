@@ -11,6 +11,7 @@ import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
+import { useToastContext } from '../contexts/ToastContext';
 import { DesignVisitStep1, type Step1Data, type CatalogueItem } from './DesignVisitStep1';
 import { DesignVisitRoomsStep, type RoomData, type DoorStyleOption } from './DesignVisitRoomsStep';
 import { DesignVisitStep3 } from './DesignVisitStep3';
@@ -245,6 +246,8 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const [submitError, setSubmitError] = useState('');
   const [uploading, setUploading]   = useState(false);
 
+  const { showToastWithAction } = useToastContext();
+
   const intermediateStatusFiredRef = useRef(false);
 
   /**
@@ -258,6 +261,21 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const pendingUploadKeysRef = useRef<Set<string>>(new Set());
   /** Flipped to true after a successful submit so the cleanup effect is a no-op. */
   const committedRef = useRef(false);
+
+  /**
+   * Timer handle for the post-discard undo window.  Cleared on component
+   * unmount so a dangling timeout never fires after the wizard is gone.
+   */
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current !== null) {
+        clearTimeout(undoTimerRef.current);
+        undoTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -690,9 +708,48 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           </Button>
           <Button
             onClick={() => {
+              // Capture draft data before clearing it so the undo closure
+              // can write it back if the user changes their mind.
+              const savedStep1 = step1;
+              const savedRooms = rooms;
+
               clearDraft(storageKey);
               setShowDiscardDialog(false);
-              doClose();
+
+              // Close the drawer visually but keep the component mounted
+              // during the undo window so we can re-open it without
+              // re-initialising all state from scratch.
+              setOpen(false);
+
+              // Cancel any previously running undo timer (defensive).
+              if (undoTimerRef.current !== null) {
+                clearTimeout(undoTimerRef.current);
+              }
+
+              // After the undo window expires, fully unmount the wizard.
+              undoTimerRef.current = setTimeout(() => {
+                undoTimerRef.current = null;
+                onClose();
+              }, 6200);
+
+              showToastWithAction(
+                'Draft discarded',
+                {
+                  label: 'Undo',
+                  onClick: () => {
+                    // Cancel the pending full-close.
+                    if (undoTimerRef.current !== null) {
+                      clearTimeout(undoTimerRef.current);
+                      undoTimerRef.current = null;
+                    }
+                    // Restore the draft to sessionStorage so it survives any
+                    // future page reload, then re-open the drawer.
+                    saveDraft(storageKey, savedStep1, savedRooms);
+                    setOpen(true);
+                  },
+                },
+                { duration: 6000 },
+              );
             }}
             variant="contained"
             sx={{
