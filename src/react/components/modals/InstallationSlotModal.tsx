@@ -179,7 +179,12 @@ export function InstallationSlotModal(props: Props) {
         props.onSaved?.();
       }
     } catch (e) {
-      setError('Could not save: ' + (e instanceof Error ? e.message : 'error'));
+      const code = (e as { code?: string }).code;
+      if (code === 'START_IN_PAST') {
+        setError('That time has already passed — please choose a future time.');
+      } else {
+        setError('Could not save: ' + (e instanceof Error ? e.message : 'error'));
+      }
     } finally {
       setSubmitting(false);
     }

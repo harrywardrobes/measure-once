@@ -966,8 +966,13 @@ function VisitModal(props: {
         });
       }
       onSaved();
-    } catch {
-      showToast('Failed to save visit', true);
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code === 'START_IN_PAST') {
+        showToast('That time has already passed — please choose a future time.', true);
+      } else {
+        showToast('Failed to save visit', true);
+      }
     } finally {
       setSaving(false);
     }

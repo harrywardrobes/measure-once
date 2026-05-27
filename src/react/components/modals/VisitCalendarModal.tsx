@@ -135,7 +135,12 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
       handleClose();
       (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
     } catch (e) {
-      setError('Could not save: ' + (e instanceof Error ? e.message : 'error'));
+      const code = (e as { code?: string }).code;
+      if (code === 'START_IN_PAST') {
+        setError('That time has already passed — please choose a future time.');
+      } else {
+        setError('Could not save: ' + (e instanceof Error ? e.message : 'error'));
+      }
     } finally {
       setSubmitting(false);
     }
