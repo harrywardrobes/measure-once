@@ -361,6 +361,34 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
           </label>
         </div>
       </div>
+      <div id="cah-dw-block" class="hidden adm-block-mt12">
+        <div>
+          <label class="adm-modal-label adm-modal-label--first">Default title <span class="adm-optional">(optional, ≤120 chars)</span></label>
+          <input id="cah-dw-title" type="text" class="field adm-field-sm" maxlength="120" placeholder="e.g. Delivery window" value="${esc(String(config.defaultTitle || ''))}">
+        </div>
+        <div class="adm-mt-8">
+          <label class="adm-checkbox-row">
+            <input type="checkbox" id="cah-dw-google" ${config.addToGoogleCalendar !== false ? 'checked' : ''}>
+            Also add to Google Calendar
+          </label>
+        </div>
+      </div>
+      <div id="cah-is-block" class="hidden adm-block-mt12">
+        <div>
+          <label class="adm-modal-label adm-modal-label--first">Default duration (min) <span class="adm-optional">(optional, 5–1440)</span></label>
+          <input id="cah-is-duration" type="number" class="field adm-field-sm" min="5" max="1440" step="5" value="${esc(String(config.defaultDurationMin || 240))}">
+        </div>
+        <div class="adm-mt-10">
+          <label class="adm-modal-label adm-modal-label--first">Default title <span class="adm-optional">(optional, ≤120 chars)</span></label>
+          <input id="cah-is-title" type="text" class="field adm-field-sm" maxlength="120" placeholder="e.g. Installation" value="${esc(String(config.defaultTitle || ''))}">
+        </div>
+        <div class="adm-mt-8">
+          <label class="adm-checkbox-row">
+            <input type="checkbox" id="cah-is-google" ${config.addToGoogleCalendar !== false ? 'checked' : ''}>
+            Also add to Google Calendar
+          </label>
+        </div>
+      </div>
       <div id="cah-cfg-block" class="adm-block-mt12">
         <label class="adm-modal-label adm-modal-label--first">Advanced configuration (JSON, optional)</label>
         <textarea id="cah-config" class="field adm-field-mono-xs" rows="4">${esc(JSON.stringify(config, null, 2))}</textarea>
@@ -387,6 +415,8 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
   const svBlock      = wrap.querySelector('#cah-sv-block')        as HTMLElement;
   const msgBlock     = wrap.querySelector('#cah-msg-block')       as HTMLElement;
   const sdvBlock     = wrap.querySelector('#cah-sdv-block')       as HTMLElement;
+  const dwBlock      = wrap.querySelector('#cah-dw-block')        as HTMLElement;
+  const isBlock      = wrap.querySelector('#cah-is-block')        as HTMLElement;
   const cfgBlock     = wrap.querySelector('#cah-cfg-block')       as HTMLElement;
   const msgTitle     = wrap.querySelector('#cah-msg-title')       as HTMLInputElement;
   const msgBody      = wrap.querySelector('#cah-msg-body')        as HTMLTextAreaElement;
@@ -405,10 +435,14 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
     descEl.textContent = HANDLER_TYPE_DESCRIPTIONS[t] || '';
     const isMsg = t === 'show_message', isSdv = t === 'start_design_visit';
     const isSv  = t === 'schedule_visit';
+    const isDw  = t === 'schedule_delivery_window';
+    const isIs  = t === 'schedule_installation_slot';
     svBlock.style.display  = isSv            ? '' : 'none';
     msgBlock.style.display = isMsg           ? '' : 'none';
     sdvBlock.style.display = isSdv           ? '' : 'none';
-    cfgBlock.style.display = (isMsg || isSdv || isSv) ? 'none' : '';
+    dwBlock.style.display  = isDw            ? '' : 'none';
+    isBlock.style.display  = isIs            ? '' : 'none';
+    cfgBlock.style.display = (isMsg || isSdv || isSv || isDw || isIs) ? 'none' : '';
   };
   renderForType();
   typeSel.addEventListener('change', () => { conflictBox.style.display = 'none'; renderForType(); });
@@ -464,6 +498,24 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
       if (lsInter) cfg.intermediateLeadStatus = lsInter;
       if (lsSub)   cfg.submittedLeadStatus    = lsSub;
       if (terms)   cfg.termsAndConditions     = terms;
+      cfg.addToGoogleCalendar = gcal;
+    } else if (tp === 'schedule_delivery_window') {
+      const titleV = (wrap.querySelector('#cah-dw-title') as HTMLInputElement).value.trim();
+      const gcal   = (wrap.querySelector('#cah-dw-google') as HTMLInputElement).checked;
+      cfg = {};
+      if (titleV) cfg.defaultTitle = titleV;
+      cfg.addToGoogleCalendar = gcal;
+    } else if (tp === 'schedule_installation_slot') {
+      const durRaw = (wrap.querySelector('#cah-is-duration') as HTMLInputElement).value.trim();
+      const durVal = durRaw ? parseInt(durRaw, 10) : NaN;
+      const titleV = (wrap.querySelector('#cah-is-title') as HTMLInputElement).value.trim();
+      const gcal   = (wrap.querySelector('#cah-is-google') as HTMLInputElement).checked;
+      if (durRaw && (isNaN(durVal) || durVal < 5 || durVal > 1440)) {
+        errEl.textContent = 'Default duration must be between 5 and 1440 minutes.'; return null;
+      }
+      cfg = {};
+      if (durRaw && !isNaN(durVal)) cfg.defaultDurationMin = durVal;
+      if (titleV) cfg.defaultTitle = titleV;
       cfg.addToGoogleCalendar = gcal;
     } else {
       const cfgTxt = (wrap.querySelector('#cah-config') as HTMLTextAreaElement).value.trim() || '{}';
