@@ -1547,3 +1547,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .admin-page .adm-field-file   { font-size: .85rem; padding: 4px; }
 .admin-page .adm-field-resize { font-size: .85rem; resize: vertical; }
 .admin-page .adm-field-name   { font-size: .88rem; }
+
+/* Error-banner action links/buttons (replaces Tailwind text-blue-600). */
+.mo-error-action { color: var(--orchid); }

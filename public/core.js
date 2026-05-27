@@ -355,22 +355,22 @@ async function bootstrap() {
       let msg, action;
       if (e.code === 'HUBSPOT_AUTH') {
         msg = 'Could not connect to HubSpot — the API token is invalid or expired. An admin needs to update the <strong>HUBSPOT_ACCESS_TOKEN</strong> in the environment settings and restart the app.';
-        action = `<a href="/settings" class="mt-2 inline-block text-blue-600 underline text-xs">Go to Settings</a>`;
+        action = `<a href="/settings" class="mt-2 inline-block mo-error-action underline text-xs">Go to Settings</a>`;
       } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
         msg = 'HubSpot rate limit reached.';
-        action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Try again</button>`;
+        action = `<button onclick="location.reload()" class="mt-2 mo-error-action underline text-xs">Try again</button>`;
       } else if (e.code === 'DB_ERROR') {
         msg = 'The list couldn\'t be loaded — there was a problem reaching the database.';
-        action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button>`;
+        action = `<button onclick="location.reload()" class="mt-2 mo-error-action underline text-xs">Retry</button>`;
       } else if (e.code === 'HUBSPOT_UNAVAILABLE') {
         msg = 'HubSpot is currently unavailable. This is usually temporary.';
-        action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Try again</button>`;
+        action = `<button onclick="location.reload()" class="mt-2 mo-error-action underline text-xs">Try again</button>`;
       } else if (e.code === 'HUBSPOT_ERROR' || e.code) {
         msg = 'Could not load data from HubSpot. This may be a temporary issue.';
-        action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button>`;
+        action = `<button onclick="location.reload()" class="mt-2 mo-error-action underline text-xs">Retry</button>`;
       } else {
         msg = `Failed to load: ${escHtml(e.message)}`;
-        action = `<button onclick="location.reload()" class="mt-2 text-blue-600 underline text-xs">Retry</button>`;
+        action = `<button onclick="location.reload()" class="mt-2 mo-error-action underline text-xs">Retry</button>`;
       }
       target.innerHTML = `<div class="p-4 text-sm text-red-500">${msg}${action ? `<br>${action}` : ''}</div>`;
     }
