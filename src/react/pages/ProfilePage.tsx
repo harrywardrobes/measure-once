@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
@@ -199,6 +200,12 @@ function IdentityCard({
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [uploadProgress, setUploadProgress] = React.useState<number | undefined>(undefined);
+  const [photoSuccess, setPhotoSuccess] = React.useState(false);
+  const successTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => { if (successTimerRef.current) clearTimeout(successTimerRef.current); };
+  }, []);
 
   const onFile = (file: File) => {
     setErrorMsg(null);
@@ -251,6 +258,10 @@ function IdentityCard({
         setErrorMsg(msg);
       } else {
         setPendingData(null);
+        if (fileRef.current) fileRef.current.value = '';
+        setPhotoSuccess(true);
+        if (successTimerRef.current) clearTimeout(successTimerRef.current);
+        successTimerRef.current = setTimeout(() => setPhotoSuccess(false), 2500);
         showToast('Photo submitted for approval');
         onReload();
       }
@@ -288,16 +299,20 @@ function IdentityCard({
               <>
                 <IconButton
                   size="small"
-                  onClick={() => fileRef.current?.click()}
+                  onClick={() => { if (!photoSuccess) fileRef.current?.click(); }}
                   aria-label={profile.has_custom_photo ? 'Change photo' : 'Upload photo'}
                   sx={{
                     position: 'absolute', right: -4, bottom: -4,
-                    bgcolor: 'background.paper', boxShadow: 1,
+                    bgcolor: photoSuccess ? 'success.main' : 'background.paper',
+                    boxShadow: 1,
                     width: 26, height: 26,
-                    '&:hover': { bgcolor: 'background.paper' },
+                    transition: 'background-color 0.2s',
+                    '&:hover': { bgcolor: photoSuccess ? 'success.dark' : 'background.paper' },
                   }}
                 >
-                  <PhotoCameraIcon sx={{ fontSize: 14 }} />
+                  {photoSuccess
+                    ? <CheckCircleIcon sx={{ fontSize: 14, color: 'common.white' }} />
+                    : <PhotoCameraIcon sx={{ fontSize: 14 }} />}
                 </IconButton>
                 <input
                   ref={fileRef}
