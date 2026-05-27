@@ -133,7 +133,7 @@ interface ActionSlot {
 interface ActionGroup { ls: { key: string; label: string; isNullRow: boolean }; slots: ActionSlot[]; }
 interface ActionStage { stage: { key: string; label: string }; groups: ActionGroup[]; }
 
-// ── Module-level state refs (for use by DOM-appending modal functions) ────────
+// ── Module-level state refs (shared between component and window exposures) ────
 
 const W = window as unknown as Record<string, unknown>;
 const _nonce = Math.random().toString(36).slice(2);
@@ -144,20 +144,15 @@ const _substatusesRef:  { current: Substatus[]  }                      = { curre
 const _statusesRef:     { current: LeadStatus[] }                      = { current: [] };
 const _toastRef:        { fn: ((m: string, err?: boolean) => void) | null } = { fn: null };
 
-// Ref to open the handler editor from outside the React tree (e.g. window exposure)
+// Refs to open modals from outside the React tree (e.g. window exposure)
 const _openEditorRef: { fn: ((slot: ActionSlot, existing?: Handler | null) => void) | null } = { fn: null };
+const _openConflictResolverRef: { fn: ((stageKey: string | null, statusKey: string | null, substatusId: number | null) => void) | null } = { fn: null };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function showToast(msg: string, err?: boolean) {
   if (_toastRef.fn) _toastRef.fn(msg, err);
   else if (typeof W.toast === 'function') (W.toast as (m: string, e?: boolean) => void)(msg, err);
-}
-
-function esc(s: unknown): string {
-  return (s == null ? '' : String(s))
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function _handlersForSlot(slot: Partial<ActionSlot>): Handler[] {
@@ -657,87 +652,139 @@ function HandlerEditorModal({
   );
 }
 
-function openConflictResolver(
-  stageKey: string | null,
-  statusKey: string | null,
-  substatusId: number | null,
-): void {
+// ── ConflictResolverModal ─────────────────────────────────────────────────────
+
+interface ConflictResolverModalProps {
+  stageKey:    string | null;
+  statusKey:   string | null;
+  substatusId: number | null;
+  handlers:    Handler[];
+  statuses:    LeadStatus[];
+  substatuses: Substatus[];
+  onClose:     () => void;
+}
+
+function ConflictResolverModal({
+  stageKey,
+  statusKey,
+  substatusId,
+  handlers,
+  statuses,
+  substatuses,
+  onClose,
+}: ConflictResolverModalProps) {
   const slot: Partial<ActionSlot> = substatusId != null
     ? { substatus_id: Number(substatusId) }
     : { stage_key: stageKey || '', status_key: statusKey || '' };
 
-  const handlers = _handlersForSlot(slot);
-  if (!handlers.length) return;
+  const conflicting = handlers.filter(h => h.bindings?.some(b => {
+    if (slot.substatus_id != null) return Number(b.substatus_id) === slot.substatus_id;
+    if (b.substatus_id != null) return false;
+    return (b.stage_key  || '').toLowerCase() === (slot.stage_key  || '').toLowerCase()
+        && (b.status_key || '').toLowerCase() === (slot.status_key || '').toLowerCase();
+  }));
 
   let slotDesc: string;
   if (substatusId != null) {
-    const sub = _substatusesRef.current.find(s => Number(s.id) === Number(substatusId));
-    slotDesc = sub ? `sub-status "${esc(sub.label || sub.substatus_key)}"` : `sub-status #${substatusId}`;
+    const sub = substatuses.find(s => Number(s.id) === Number(substatusId));
+    slotDesc = sub ? `sub-status "${sub.label || sub.substatus_key}"` : `sub-status #${substatusId}`;
   } else {
-    const ls = _statusesRef.current.find(s => s.key === statusKey);
-    slotDesc = ls ? `"${esc(ls.label)}"` : `${esc(stageKey)} / ${esc(statusKey)}`;
+    const ls = statuses.find(s => s.key === statusKey);
+    slotDesc = ls ? `"${ls.label}"` : `${stageKey} / ${statusKey}`;
   }
 
-  const rowsHtml = handlers.map(h => {
-    const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
-    const desc    = HANDLER_TYPE_DESCRIPTIONS[h.type] || '';
-    return `
-      <div class="ca-conflict-row adm-conflict-row" data-handler-id="${h.id}">
-        <div class="adm-conflict-row-body">
-          <div class="adm-conflict-row-title">
-            <span aria-hidden="true" class="adm-conflict-row-icon">⚡</span>${esc(typeLbl)}
-          </div>
-          ${desc ? `<div class="adm-conflict-row-desc">${esc(desc)}</div>` : ''}
-        </div>
-        <button type="button" class="btn btn-ghost ca-conflict-remove-btn adm-conflict-remove" data-handler-id="${h.id}">Remove</button>
-      </div>`;
-  }).join('');
+  const [removingId, setRemovingId] = useState<number | null>(null);
+  const [errorMsg,   setErrorMsg]   = useState('');
 
-  const wrap = document.createElement('div');
-  wrap.className = 'js-modal-scrim';
-  wrap.innerHTML = `
-    <div class="adm-modal-card">
-      <h3 class="adm-modal-title adm-modal-title--big">Fix conflicting handlers</h3>
-      <p class="adm-modal-sub">
-        The slot ${slotDesc} has <strong>${handlers.length} handlers</strong> bound to it.
-        Remove all but one to resolve the conflict.
-      </p>
-      <div class="adm-modal-list" id="ca-conflict-list">${rowsHtml}</div>
-      <div id="ca-conflict-err" class="adm-err-line"></div>
-      <div class="adm-modal-actions">
-        <button class="btn btn-ghost" id="ca-conflict-close">Close</button>
-      </div>
-    </div>`;
+  useEffect(() => {
+    if (conflicting.length === 0) onClose();
+  }, [conflicting.length, onClose]);
 
-  document.body.appendChild(wrap);
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  wrap.querySelector('#ca-conflict-close')!.addEventListener('click', () => wrap.remove());
-
-  wrap.querySelector('#ca-conflict-list')!.addEventListener('click', async e => {
-    const btn = (e.target as Element).closest<HTMLButtonElement>('.ca-conflict-remove-btn');
-    if (!btn) return;
-    const id = Number(btn.dataset.handlerId);
-    const errEl = wrap.querySelector('#ca-conflict-err') as HTMLElement;
-    errEl.textContent = '';
-    btn.disabled = true; btn.textContent = 'Removing…';
+  const handleRemove = async (id: number) => {
+    setRemovingId(id);
+    setErrorMsg('');
     try {
       await DELETE(`/api/admin/card-action-handlers/${id}`);
       await _reloadAndBroadcast();
       showToast('Handler removed.');
       const remaining = _handlersForSlot(slot);
       if (remaining.length <= 1) {
-        wrap.remove();
+        onClose();
         _flashResolvedBadge(slot);
-      } else {
-        const row = wrap.querySelector(`.ca-conflict-row[data-handler-id="${id}"]`);
-        if (row) row.remove();
-        btn.disabled = false; btn.textContent = 'Remove';
       }
     } catch (err) {
-      errEl.textContent = 'Remove failed: ' + ((err as Error).message || 'unknown error');
-      btn.disabled = false; btn.textContent = 'Remove';
+      setErrorMsg('Remove failed: ' + ((err as Error).message || 'unknown error'));
+    } finally {
+      setRemovingId(null);
     }
-  });
+  };
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Fix conflicting handlers</DialogTitle>
+      <DialogContent dividers>
+        <Typography variant="body2" sx={{ mb: 2 }}>
+          The slot {slotDesc} has <strong>{conflicting.length} handlers</strong> bound to it.
+          Remove all but one to resolve the conflict.
+        </Typography>
+        <Stack spacing={1}>
+          {conflicting.map(h => {
+            const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
+            const desc    = HANDLER_TYPE_DESCRIPTIONS[h.type] || '';
+            const isRemoving = removingId === h.id;
+            return (
+              <Box
+                key={h.id}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 1,
+                  p: 1.5,
+                  borderRadius: 1,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    <span aria-hidden="true">⚡</span>{' '}{typeLbl}
+                  </Typography>
+                  {desc && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', mt: 0.25, whiteSpace: 'pre-wrap' }}
+                    >
+                      {desc}
+                    </Typography>
+                  )}
+                </Box>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="error"
+                  disabled={isRemoving || removingId != null}
+                  onClick={() => handleRemove(h.id)}
+                  sx={{ flexShrink: 0 }}
+                >
+                  {isRemoving ? 'Removing…' : 'Remove'}
+                </Button>
+              </Box>
+            );
+          })}
+        </Stack>
+        {errorMsg && (
+          <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+            {errorMsg}
+          </Typography>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
 }
 
 async function _deleteHandler(id: number): Promise<void> {
@@ -791,17 +838,19 @@ function HandlerSummary({ h }: { h: Handler }) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface EditorOpenState { slot: ActionSlot; existing: Handler | null; }
+interface ConflictResolverOpenState { stageKey: string | null; statusKey: string | null; substatusId: number | null; }
 
 export function ActionHandlersPage() {
   const toast = useToast();
-  const [handlers,    setHandlers]    = useState<Handler[]>([]);
-  const [labels,      setLabels]      = useState<CALabel[]>([]);
-  const [substatuses, setSubstatuses] = useState<Substatus[]>([]);
-  const [statuses,    setStatuses]    = useState<LeadStatus[]>([]);
-  const [conflicts,   setConflicts]   = useState<ConflictData>({ total: 0, conflicts: [] });
-  const [dismissed,   setDismissed]   = useState('');
-  const [loading,     setLoading]     = useState(true);
-  const [editorOpen,  setEditorOpen]  = useState<EditorOpenState | null>(null);
+  const [handlers,              setHandlers]              = useState<Handler[]>([]);
+  const [labels,                setLabels]                = useState<CALabel[]>([]);
+  const [substatuses,           setSubstatuses]           = useState<Substatus[]>([]);
+  const [statuses,              setStatuses]              = useState<LeadStatus[]>([]);
+  const [conflicts,             setConflicts]             = useState<ConflictData>({ total: 0, conflicts: [] });
+  const [dismissed,             setDismissed]             = useState('');
+  const [loading,               setLoading]               = useState(true);
+  const [editorOpen,            setEditorOpen]            = useState<EditorOpenState | null>(null);
+  const [conflictResolverOpen,  setConflictResolverOpen]  = useState<ConflictResolverOpenState | null>(null);
   const everLoaded = useRef(false);
 
   useEffect(() => { _toastRef.fn = toast; return () => { _toastRef.fn = null; }; }, [toast]);
@@ -868,13 +917,17 @@ export function ActionHandlersPage() {
 
   useEffect(() => {
     _openEditorRef.fn = (slot, existing) => setEditorOpen({ slot, existing: existing ?? null });
+    _openConflictResolverRef.fn = (stageKey, statusKey, substatusId) =>
+      setConflictResolverOpen({ stageKey, statusKey, substatusId });
     W.loadCardActionHandlersAdmin   = fetchAll;
     W.openHandlerEditor             = (slot: ActionSlot, existing?: Handler | null) =>
       _openEditorRef.fn?.(slot, existing);
-    W.openConflictResolver          = openConflictResolver;
+    W.openConflictResolver          = (stageKey: string | null, statusKey: string | null, substatusId: number | null) =>
+      _openConflictResolverRef.fn?.(stageKey, statusKey, substatusId);
     W.refreshHandlerConflictsBanner = fetchAll;
     return () => {
       _openEditorRef.fn = null;
+      _openConflictResolverRef.fn = null;
       delete W.loadCardActionHandlersAdmin;
       delete W.openHandlerEditor;
       delete W.openConflictResolver;
@@ -968,7 +1021,7 @@ export function ActionHandlersPage() {
                           )}.
                         </div>
                         <button type="button" className="btn adm-cab-fix-btn" data-cah-fix
-                          onClick={() => openConflictResolver(args[0], args[1], args[2])}>
+                          onClick={() => setConflictResolverOpen({ stageKey: args[0], statusKey: args[1], substatusId: args[2] })}>
                           Fix
                         </button>
                       </li>
@@ -1054,6 +1107,20 @@ export function ActionHandlersPage() {
           substatuses={substatuses}
           onClose={() => setEditorOpen(null)}
           onSaved={handleEditorSaved}
+        />
+      )}
+
+      {/* Conflict resolver modal — rendered in React, outside the card */}
+      {conflictResolverOpen && (
+        <ConflictResolverModal
+          key={`cr-${conflictResolverOpen.substatusId ?? ''}-${conflictResolverOpen.stageKey ?? ''}-${conflictResolverOpen.statusKey ?? ''}`}
+          stageKey={conflictResolverOpen.stageKey}
+          statusKey={conflictResolverOpen.statusKey}
+          substatusId={conflictResolverOpen.substatusId}
+          handlers={handlers}
+          statuses={statuses}
+          substatuses={substatuses}
+          onClose={() => setConflictResolverOpen(null)}
         />
       )}
     </Stack>
