@@ -136,10 +136,34 @@ interface DrawerDemoProps {
   startId?: string;
 }
 
-function DrawerDemo({ isAdmin, startId = 'inv-002' }: DrawerDemoProps) {
+function DrawerAlwaysOpen({ isAdmin, startId = 'inv-002' }: DrawerDemoProps) {
   const originalFetch = useRef(window.fetch);
-  const [open, setOpen] = useState(true);
   const [invId, setInvId] = useState<string | null>(startId);
+
+  useEffect(() => {
+    stubWindowHelpers();
+    window.fetch = mockFetch(INVOICE_MAP) as typeof window.fetch;
+    return () => {
+      window.fetch = originalFetch.current;
+    };
+  }, []);
+
+  return (
+    <InvoiceDetailDrawer
+      open={true}
+      invId={invId}
+      allIds={ALL_IDS}
+      onClose={() => {}}
+      onNavigate={(id) => setInvId(id)}
+      isAdmin={isAdmin}
+    />
+  );
+}
+
+function DrawerInteractive({ isAdmin, startId = 'inv-002' }: DrawerDemoProps) {
+  const originalFetch = useRef(window.fetch);
+  const [open, setOpen] = useState(false);
+  const [invId, setInvId] = useState<string | null>(null);
 
   useEffect(() => {
     stubWindowHelpers();
@@ -153,7 +177,7 @@ function DrawerDemo({ isAdmin, startId = 'inv-002' }: DrawerDemoProps) {
     <Box sx={{ p: 3 }}>
       {!open && (
         <Button variant="contained" onClick={() => { setInvId(startId); setOpen(true); }}>
-          Re-open drawer
+          Open invoice drawer
         </Button>
       )}
       <InvoiceDetailDrawer
@@ -170,7 +194,7 @@ function DrawerDemo({ isAdmin, startId = 'inv-002' }: DrawerDemoProps) {
 
 export const AdminView: Story = {
   name: 'Admin view — full actions',
-  render: () => <DrawerDemo isAdmin />,
+  render: () => <DrawerAlwaysOpen isAdmin />,
   parameters: {
     docs: {
       description: {
@@ -178,7 +202,7 @@ export const AdminView: Story = {
           'Admin user sees the full drawer: line-item table, editable due date / customer email / memo ' +
           'fields with dirty-state highlighting, a Save changes button, and the Send to customer action. ' +
           'Navigation arrows cycle through three distinct invoices (paid → open → partial). ' +
-          'The drawer opens immediately on load.',
+          'The drawer is open immediately — no click required.',
       },
     },
   },
@@ -186,14 +210,14 @@ export const AdminView: Story = {
 
 export const MemberView: Story = {
   name: 'Member view — read-only',
-  render: () => <DrawerDemo isAdmin={false} />,
+  render: () => <DrawerAlwaysOpen isAdmin={false} />,
   parameters: {
     docs: {
       description: {
         story:
           'Non-admin (member) sees the invoice summary and line items but the "Edit invoice" section ' +
           'and the "Send to customer" button are hidden. Only the Download PDF link is available. ' +
-          'The drawer opens immediately on load.',
+          'The drawer is open immediately — no click required.',
       },
     },
   },
@@ -201,14 +225,29 @@ export const MemberView: Story = {
 
 export const PaidInvoice: Story = {
   name: 'Paid invoice — balance £0',
-  render: () => <DrawerDemo isAdmin startId="inv-001" />,
+  render: () => <DrawerAlwaysOpen isAdmin startId="inv-001" />,
   parameters: {
     docs: {
       description: {
         story:
           'Invoice where `balance` is 0 — the "Balance due" field renders £0.00 ' +
           'and `invoiceStatus` returns `"paid"`. No overdue-red highlighting on the due date. ' +
-          'The drawer opens immediately on load.',
+          'The drawer is open immediately — no click required.',
+      },
+    },
+  },
+};
+
+export const Interactive: Story = {
+  name: 'Interactive — trigger button',
+  render: () => <DrawerInteractive isAdmin />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Demonstrates the trigger-button flow: click "Open invoice drawer" to open the panel, ' +
+          'then close it with the × button or backdrop click. Use this variant to test open/close ' +
+          'animation and the entry interaction.',
       },
     },
   },
