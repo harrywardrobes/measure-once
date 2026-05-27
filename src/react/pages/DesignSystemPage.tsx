@@ -1107,6 +1107,42 @@ const OPTIONS = [
   label="Sort"
 />`}
       />
+
+      <ComponentShowcase
+        name="Combined example"
+        description="A realistic PageFilterBar integrating all three filter components together — the pattern used on CustomersPage and ProjectsPage. StageTabGroup occupies the left, FilterChipRow grows to fill available space, and SortSelect sits flush to the right. All three share a single state scope."
+        demo={
+          <Stack spacing={1.5} sx={{ width: '100%' }}>
+            <PageFilterBar sx={{ px: 2, py: 1, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider', width: '100%' }}>
+              <StageTabGroup value={stage} onChange={setStage} tabs={DEMO_TABS} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <FilterChipRow chips={DEMO_CHIPS} value={chip} onChange={setChip} />
+              </Box>
+              <SortSelect value={sort} onChange={setSort} options={DEMO_SORT_OPTIONS} />
+            </PageFilterBar>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              Stage: <strong>{stage}</strong> · Filter: <strong>{chip === '' ? 'all' : chip}</strong> · Sort: <strong>{sort}</strong>
+            </Typography>
+          </Stack>
+        }
+        code={`import { Box } from '@mui/material';
+import { PageFilterBar } from '../components/PageFilterBar';
+import { StageTabGroup } from '../components/StageTabGroup';
+import { FilterChipRow } from '../components/FilterChipRow';
+import { SortSelect } from '../components/SortSelect';
+
+const [stage, setStage] = useState('all');
+const [chip, setChip] = useState('');
+const [sort, setSort] = useState('name-asc');
+
+<PageFilterBar sx={{ px: 2, py: 1 }}>
+  <StageTabGroup value={stage} onChange={setStage} tabs={TABS} />
+  <Box sx={{ flex: 1, minWidth: 0 }}>
+    <FilterChipRow chips={CHIPS} value={chip} onChange={setChip} />
+  </Box>
+  <SortSelect value={sort} onChange={setSort} options={OPTIONS} />
+</PageFilterBar>`}
+      />
     </>
   );
 }
