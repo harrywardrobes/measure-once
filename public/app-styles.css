@@ -264,45 +264,6 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
   flex-shrink: 0;
 }
 
-/* ── Card picker popup (stage / status) ──────────────────────────────────────── */
-.card-picker-popup {
-  position: fixed;
-  z-index: var(--z-modal);
-  background: var(--paper);
-  border: 1px solid var(--stone);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  padding: 4px;
-  min-width: 140px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.card-picker-opt {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 8px 12px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--ink-2);
-  background: none;
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.1s;
-}
-.card-picker-opt:hover { background: var(--paper-deep); }
-.card-picker-opt--clear { color: var(--ink-3); border-bottom: 1px solid var(--border); margin-bottom: 2px; padding-bottom: 10px; }
-.card-picker-opt--clear:hover { background: #fee2e2; color: #b91c1c; }
-.card-picker-opt--disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
-.card-picker-opt--disabled:hover { background: transparent; color: var(--ink-3); }
-.card-picker-opt--active { font-weight: 600; background: var(--paper-deep); cursor: default; pointer-events: none; }
-.card-picker-opt--active:hover { background: var(--paper-deep); }
-.card-picker-opt--sub { padding-left: 26px; font-size: 0.74rem; font-weight: 400; color: var(--ink-3); }
-.card-picker-opt--sub:hover { color: var(--ink-2); }
-.card-picker-opt--sub.card-picker-opt--active { color: var(--ink-2); font-weight: 600; }
 .ls-pill-parent { font-size: 0.7em; opacity: 0.65; font-weight: 400; margin-left: 3px; }
 
 
