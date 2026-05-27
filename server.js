@@ -4536,6 +4536,53 @@ async function clearOrphanedSubstatusesForDeletedStatus(deletedKey) {
   }
 }
 
+// After a sub-status is deleted, find all HubSpot contacts that still carry
+// it as hw_lead_substatus and clear the stale value.  Runs fire-and-forget.
+async function clearOrphanedSubstatusesForDeletedSubstatus(deletedSubstatusKey) {
+  if (!deletedSubstatusKey) return;
+  if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
+  const label = `[clear-orphaned-substatuses substatus_key=${deletedSubstatusKey}]`;
+  try {
+    let cleared = 0;
+    let failed = 0;
+    let after;
+    do {
+      const body = {
+        filterGroups: [{
+          filters: [
+            { propertyName: 'hw_lead_substatus', operator: 'EQ', value: deletedSubstatusKey },
+          ],
+        }],
+        properties: ['hw_lead_substatus'],
+        limit: 100,
+      };
+      if (after) body.after = after;
+      const r = await hubspotSearchWithRetry(body);
+      const contacts = r.data.results || [];
+      after = r.data.paging?.next?.after;
+      for (const contact of contacts) {
+        const cid = contact.id;
+        try {
+          await hubspotRequestWithRetry(
+            'patch',
+            `${HS}/crm/v3/objects/contacts/${encodeURIComponent(cid)}`,
+            { properties: { hw_lead_substatus: '' } }
+          );
+          cleared++;
+        } catch (patchErr) {
+          failed++;
+          console.warn(`${label} PATCH contact ${cid} failed:`, patchErr.response?.data?.message || patchErr.message);
+        }
+      }
+    } while (after);
+    if (cleared > 0 || failed > 0) {
+      console.log(`${label} cleared=${cleared} failed=${failed}`);
+    }
+  } catch (e) {
+    console.warn(`${label} search failed:`, e.response?.data?.message || e.message);
+  }
+}
+
 app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
@@ -5090,10 +5137,11 @@ app.delete('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asy
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id.' });
   try {
     const { rows } = await pool.query(
-      `DELETE FROM lead_substatuses WHERE id = $1 RETURNING id`,
+      `DELETE FROM lead_substatuses WHERE id = $1 RETURNING id, substatus_key`,
       [id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Sub-status not found.' });
+    const deletedSubstatusKey = rows[0].substatus_key;
     let hubspotSyncWarning;
     try {
       await syncLeadSubstatusesToHubSpot();
@@ -5102,6 +5150,7 @@ app.delete('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asy
       console.warn('  hw_lead_substatus sync failed after delete:', hubspotSyncWarning);
     }
     res.json(hubspotSyncWarning ? { ok: true, hubspotSyncWarning } : { ok: true });
+    clearOrphanedSubstatusesForDeletedSubstatus(deletedSubstatusKey).catch(e => console.warn('Orphaned substatus clear (substatus delete) failed:', e.message));
   } catch (e) {
     console.error('DELETE /api/admin/lead-substatuses error:', e.message);
     res.status(500).json({ error: 'Could not delete sub-status.' });
