@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import SyncIcon from '@mui/icons-material/Sync';
 import { GET, POST, PATCH } from '../../utils/api';
 
 const STAGE_OPTIONS: Array<{ value: string; label: string }> = [
@@ -181,6 +182,8 @@ export function SettingsPage() {
   const [pageFilterDraft, setPageFilterDraft] = useState<Record<string, string>>({});
   const [pageFilterSaving, setPageFilterSaving] = useState(false);
 
+  const [syncingHubspot, setSyncingHubspot] = useState(false);
+
   const statusesRef = useRef<LeadStatus[]>([]);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -258,6 +261,18 @@ export function SettingsPage() {
       setPageFilterSaving(false);
     }
   }, [pageFilterConfig, pageFilterDraft, fetchPageFilterConfig]);
+
+  const syncSubstatusesToHubSpot = useCallback(async () => {
+    setSyncingHubspot(true);
+    try {
+      await POST('/api/admin/lead-substatuses/sync-hubspot');
+      showToast('Sub-statuses synced to HubSpot successfully.');
+    } catch (e) {
+      showToast((e as Error).message || 'HubSpot sync failed.', true);
+    } finally {
+      setSyncingHubspot(false);
+    }
+  }, []);
 
   const saveDigestThresholds = useCallback(async () => {
     const staleDaysVal   = parseInt(digestStaleDays, 10);
@@ -468,6 +483,25 @@ export function SettingsPage() {
             <span id="hubspot-status-badge" style={{ padding: '2px 10px', borderRadius: 999, fontSize: '.75rem', fontWeight: 600, background: badge.bg, color: badge.color, transition: 'background .2s,color .2s' }}>
               {badge.text}
             </span>
+          </Box>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mt: 1.5, p: 1.25, borderRadius: 1, border: 1, borderColor: 'divider' }}>
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>Re-sync sub-statuses to HubSpot</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Push the current sub-status list to HubSpot as <Box component="code" sx={{ fontSize: '0.8em' }}>hw_lead_substatus</Box> enumeration options. Use this to recover from a sync failure.
+              </Typography>
+            </Box>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={syncingHubspot ? <CircularProgress size={14} color="inherit" /> : <SyncIcon />}
+              disabled={syncingHubspot}
+              onClick={syncSubstatusesToHubSpot}
+              sx={{ flexShrink: 0 }}
+            >
+              {syncingHubspot ? 'Syncing…' : 'Re-sync now'}
+            </Button>
           </Box>
 
           <Divider sx={{ my: 3 }} />

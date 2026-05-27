@@ -144,20 +144,20 @@ export const IconButtons: Story = {
   render: () => (
     <Stack spacing={2}>
       <Typography variant="h6" sx={{ fontWeight: 700 }}>IconButton</Typography>
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <IconButton aria-label="search"><SearchIcon /></IconButton>
         <IconButton aria-label="edit"><EditIcon /></IconButton>
         <IconButton aria-label="delete" color="error"><DeleteIcon /></IconButton>
         <IconButton aria-label="more"><MoreVertIcon /></IconButton>
       </Stack>
       <Typography variant="subtitle2">Sizes</Typography>
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <IconButton size="small" aria-label="small"><EditIcon fontSize="small" /></IconButton>
         <IconButton size="medium" aria-label="medium"><EditIcon /></IconButton>
         <IconButton size="large" aria-label="large"><EditIcon fontSize="large" /></IconButton>
       </Stack>
       <Typography variant="subtitle2">Colours</Typography>
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
         <IconButton color="primary" aria-label="primary"><SearchIcon /></IconButton>
         <IconButton color="secondary" aria-label="secondary"><SearchIcon /></IconButton>
         <IconButton color="error" aria-label="error"><DeleteIcon /></IconButton>

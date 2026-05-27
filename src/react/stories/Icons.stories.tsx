@@ -128,7 +128,7 @@ export const AllGroups: Story = {
 
       <Box sx={{ mb: 4 }}>
         <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>Icon sizes</Typography>
-        <Stack direction="row" spacing={3} alignItems="center">
+        <Stack direction="row" spacing={3} sx={{ alignItems: 'center' }}>
           <Box sx={{ textAlign: 'center' }}>
             <SearchIcon fontSize="small" />
             <Typography variant="caption" sx={{ display: 'block', fontFamily: 'monospace' }}>small</Typography>
@@ -146,7 +146,7 @@ export const AllGroups: Story = {
 
       <Box>
         <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>Icon colours</Typography>
-        <Stack direction="row" spacing={2} flexWrap="wrap">
+        <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
           {(['primary', 'secondary', 'action', 'error', 'warning', 'success', 'info', 'disabled'] as const).map((color) => (
             <Box key={color} sx={{ textAlign: 'center' }}>
               <SearchIcon color={color} />

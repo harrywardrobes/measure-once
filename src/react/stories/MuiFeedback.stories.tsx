@@ -114,7 +114,7 @@ function SnackbarDemo() {
 
   return (
     <>
-      <Stack direction="row" spacing={1} flexWrap="wrap">
+      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
         <Button variant="outlined" color="success" onClick={() => show('success')}>Success toast</Button>
         <Button variant="outlined" color="error" onClick={() => show('error')}>Error toast</Button>
         <Button variant="outlined" color="info" onClick={() => show('info')}>Info toast</Button>

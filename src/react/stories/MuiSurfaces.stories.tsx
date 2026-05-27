@@ -100,7 +100,7 @@ export const Cards: Story = {
         />
         <Divider />
         <CardContent>
-          <Stack direction="row" spacing={1} flexWrap="wrap">
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             <Chip label="Design visit booked" size="small" color="primary" variant="outlined" />
             <Chip label="Survey pending" size="small" />
           </Stack>

@@ -4581,10 +4581,14 @@ app.post('/api/admin/lead-substatuses', isAuthenticated, requireAdmin, async (re
        RETURNING id, status_key, substatus_key, label, action_label, sort_order, updated_at`,
       [value.status_key, value.substatus_key, value.label, value.action_label || '', value.sort_order ?? 0]
     );
-    syncLeadSubstatusesToHubSpot().catch(e =>
-      console.warn('  hw_lead_substatus sync failed after create:', e.response?.data?.message || e.message)
-    );
-    res.status(201).json(rows[0]);
+    let hubspotSyncWarning;
+    try {
+      await syncLeadSubstatusesToHubSpot();
+    } catch (se) {
+      hubspotSyncWarning = se.response?.data?.message || se.message || 'HubSpot sync failed.';
+      console.warn('  hw_lead_substatus sync failed after create:', hubspotSyncWarning);
+    }
+    res.status(201).json(hubspotSyncWarning ? { ...rows[0], hubspotSyncWarning } : rows[0]);
   } catch (e) {
     if (e.code === '23505') {
       return res.status(409).json({ error: 'A sub-status with that key already exists for this lead status.' });
@@ -4616,16 +4620,54 @@ app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asyn
       params
     );
     if (!rows.length) return res.status(404).json({ error: 'Sub-status not found.' });
-    syncLeadSubstatusesToHubSpot().catch(e =>
-      console.warn('  hw_lead_substatus sync failed after update:', e.response?.data?.message || e.message)
-    );
-    res.json(rows[0]);
+    let hubspotSyncWarning;
+    try {
+      await syncLeadSubstatusesToHubSpot();
+    } catch (se) {
+      hubspotSyncWarning = se.response?.data?.message || se.message || 'HubSpot sync failed.';
+      console.warn('  hw_lead_substatus sync failed after update:', hubspotSyncWarning);
+    }
+    res.json(hubspotSyncWarning ? { ...rows[0], hubspotSyncWarning } : rows[0]);
   } catch (e) {
     if (e.code === '23505') {
       return res.status(409).json({ error: 'A sub-status with that key already exists for this lead status.' });
     }
     console.error('PATCH /api/admin/lead-substatuses error:', e.message);
     res.status(500).json({ error: 'Could not update sub-status.' });
+  }
+});
+
+app.delete('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id.' });
+  try {
+    const { rows } = await pool.query(
+      `DELETE FROM lead_substatuses WHERE id = $1 RETURNING id`,
+      [id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Sub-status not found.' });
+    let hubspotSyncWarning;
+    try {
+      await syncLeadSubstatusesToHubSpot();
+    } catch (se) {
+      hubspotSyncWarning = se.response?.data?.message || se.message || 'HubSpot sync failed.';
+      console.warn('  hw_lead_substatus sync failed after delete:', hubspotSyncWarning);
+    }
+    res.json(hubspotSyncWarning ? { ok: true, hubspotSyncWarning } : { ok: true });
+  } catch (e) {
+    console.error('DELETE /api/admin/lead-substatuses error:', e.message);
+    res.status(500).json({ error: 'Could not delete sub-status.' });
+  }
+});
+
+app.post('/api/admin/lead-substatuses/sync-hubspot', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    await syncLeadSubstatusesToHubSpot();
+    res.json({ ok: true });
+  } catch (e) {
+    const msg = e.response?.data?.message || e.message || 'HubSpot sync failed.';
+    console.warn('  hw_lead_substatus manual re-sync failed:', msg);
+    res.status(502).json({ error: msg });
   }
 });
 

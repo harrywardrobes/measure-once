@@ -62,7 +62,7 @@ export const StackStory: Story = {
 
       <Box>
         <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>Stack — row with divider</Typography>
-        <Stack direction="row" spacing={2} divider={<Divider orientation="vertical" flexItem />} alignItems="center">
+        <Stack direction="row" spacing={2} divider={<Divider orientation="vertical" flexItem />} sx={{ alignItems: 'center' }}>
           <Typography variant="body2">Sales</Typography>
           <Typography variant="body2">Design Visit</Typography>
           <Typography variant="body2">Survey</Typography>
