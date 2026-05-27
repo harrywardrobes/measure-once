@@ -770,6 +770,19 @@
       reactContainer.id = 'dv-step3-react';
       inner.appendChild(reactContainer);
 
+      // Show a spinner while the lazy React chunk downloads.
+      // React's createRoot().render() replaces this once the component mounts.
+      if (!document.getElementById('dv-step3-spinner-style')) {
+        const styleEl = document.createElement('style');
+        styleEl.id = 'dv-step3-spinner-style';
+        styleEl.textContent = '@keyframes dv-spin3{to{transform:rotate(360deg)}}'
+          + '.dv-step3-loading{width:32px;height:32px;border:3px solid #e5e7eb;'
+          + 'border-top-color:#6366f1;border-radius:50%;'
+          + 'animation:dv-spin3 .7s linear infinite;margin:32px auto;}';
+        document.head.appendChild(styleEl);
+      }
+      reactContainer.innerHTML = '<div class="dv-step3-loading" role="status" aria-label="Loading review step"></div>';
+
       // Validation / submission error (set by footer button handler below)
       const errDiv = document.createElement('div');
       errDiv.className = 'dv-err';
