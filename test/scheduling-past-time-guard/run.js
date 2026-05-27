@@ -91,6 +91,12 @@ const HANDLER_NAME_VCM = 'PrivTest scheduling-past-time visit calendar handler';
 // Numeric ID required by customer-detail bootstrap (validates /^\d+$/)
 const FAKE_CONTACT_ID = '989800001641';
 
+// Privtest-prefixed so purgeFixtures can scope DELETEs on visits by
+// customer_id, preventing stale rows from accumulating on a shared database
+// across runs. Visits created via POST /api/visits store the user's integer
+// database PK (req.user.claims.sub) as created_by — not an email — so a
+// `created_by LIKE 'privtest-%'` guard would match nothing. The unique
+// customer_id strings below are the correct and sufficient scope predicate.
 const FAKE_CONTACT_ID_IS  = 'privtest-sptg-is-001';
 const FAKE_CONTACT_ID_DW  = 'privtest-sptg-dw-001';
 const FAKE_CONTACT_ID_VCM = 'privtest-sptg-vcm-001';
