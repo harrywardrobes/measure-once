@@ -57,7 +57,12 @@ export function CustomerDetailHeader({
   const customerNum = props.customer_number || '';
   const cityLine   = [city, zip].filter(Boolean).join(' ');
 
-  const rawStatus   = props.hs_lead_status || '';
+  const rawStatus       = props.hs_lead_status || '';
+  const hwSubstatusVal  = props.hw_lead_substatus || '';
+  const photosReceived  =
+    rawStatus === 'AWAITING_PHOTOS' &&
+    typeof hwSubstatusVal === 'string' &&
+    hwSubstatusVal.includes('AWPH_RECEIVED');
   const currentSub  = currentSubstatusFor(contact, leadSubstatuses);
 
   const pillContent = (() => {
@@ -157,6 +162,25 @@ export function CustomerDetailHeader({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+            {photosReceived && (
+              <span
+                title="Customer has submitted their photos and info — ready to review."
+                style={{
+                  fontSize: '0.62rem',
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: '999px',
+                  background: '#dcfce7',
+                  color: '#166534',
+                  border: '1px solid #bbf7d0',
+                  letterSpacing: '0.02em',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                Photos received
+              </span>
+            )}
             <span
               className={`lead-status-badge${pillContent.empty ? ' lsb-empty' : ''}${canEdit ? ' lsb-clickable' : ''}`}
               title={pillContent.title}
