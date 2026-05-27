@@ -349,7 +349,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose }: Desi
       anchor="right"
       open={open}
       onClose={handleClose}
-      slotProps={{ paper: { sx: { width: 'min(680px, 100vw)', display: 'flex', flexDirection: 'column' } } }}
+      slotProps={{ paper: { sx: { width: 'min(680px, 100vw)', display: 'flex', flexDirection: 'column' }, className: 'dv-wizard' } }}
     >
       {/* Header */}
       <Box

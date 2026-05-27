@@ -266,7 +266,8 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
   );
 
   // Backwards-compat shims for pages that no longer load card-action-handlers.js
-  // (currently sales.html which now loads card-action-modals.js instead).
+  // (sales.html no longer loads card-action-modals.js either — it relies entirely
+  // on the React bundle for dispatch and click delegation).
   //
   // window.cardActionHandlerFor — label/substatus lookup used by test probes and
   // vanilla-JS call-sites.  Only set when card-action-handlers.js hasn't already
@@ -274,19 +275,28 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
   // logic is tested directly by the test suite).
   //
   // window.cardActionHandlerById — id-keyed lookup used by the click-delegation
-  // handler in card-action-modals.js so it can retrieve the full config (e.g.
+  // handler (registered below) so it can retrieve the full config (e.g.
   // intermediateLeadStatus) without maintaining its own duplicate index.
   //
   // window.loadCardActionHandlers — async re-fetch trigger.  The test suite calls
   // this to force the in-page index to update after creating new handlers mid-test.
   // Only set when card-action-handlers.js hasn't already claimed the name.
   //
-  // window.dispatchCardActionHandler — modal dispatch.  The TypeScript
+  // window.dispatchCardActionHandler — modal dispatch shim.  The TypeScript
   // implementation lives in src/react/utils/dispatchCardActionHandler.ts; we
   // expose it on window so test probes (start-design-visit, design-visit) can
   // call it directly on the sales page without going through a React onClick.
-  // card-action-modals.js registers a fallback copy only when this hook hasn't
-  // already claimed the name.
+  //
+  // window.cardActionHandlerAttrs — attr-string helper (test probe E.2).
+  // Generates data-card-action-handler-* attribute strings for eq-card-action
+  // elements injected by vanilla-JS rendering helpers.
+  //
+  // window.enquiryRowHtml — card-strip HTML helper (test probe E.3).
+  // Builds the outer .eq-card HTML including the action-strip div.
+  //
+  // Click delegation — handles clicks on [data-card-action-handler-id] elements
+  // (test-injected or vanilla-JS-rendered strips on the sales page).  Registered
+  // here so card-action-modals.js is no longer needed on sales.html.
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>;
     const cleanups: (() => void)[] = [];
@@ -321,8 +331,151 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       });
     }
 
+    // cardActionHandlerAttrs — test probe E.2.
+    // Only register when card-action-handlers.js hasn't already claimed the name.
+    if (typeof w.cardActionHandlerAttrs !== 'function') {
+      const safe = (s: unknown) =>
+        String(s == null ? '' : s)
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/</g, '&lt;');
+
+      const cardActionHandlerAttrs = (
+        stageKey: string,
+        leadStatusKey: string,
+        hwSubstatusValue: string | null,
+        ctx: { contactId?: string; contactName?: string; contactEmail?: string },
+      ) => {
+        const h =
+          typeof w.cardActionHandlerFor === 'function'
+            ? (w.cardActionHandlerFor as typeof cardActionHandlerFor)(
+                stageKey,
+                leadStatusKey,
+                hwSubstatusValue ?? undefined,
+              )
+            : null;
+        if (!h) return '';
+        return (
+          ` data-card-action-handler-id="${h.id}"` +
+          ` data-card-action-handler-type="${safe(h.type)}"` +
+          (h.config?.action_name
+            ? ` data-card-action-name="${safe(h.config.action_name)}"`
+            : '') +
+          (ctx?.contactId ? ` data-card-action-contact-id="${safe(ctx.contactId)}"` : '') +
+          (ctx?.contactName
+            ? ` data-card-action-contact-name="${safe(ctx.contactName)}"`
+            : '') +
+          (ctx?.contactEmail
+            ? ` data-card-action-contact-email="${safe(ctx.contactEmail)}"`
+            : '')
+        );
+      };
+
+      w.cardActionHandlerAttrs = cardActionHandlerAttrs;
+      cleanups.push(() => {
+        if (w.cardActionHandlerAttrs === cardActionHandlerAttrs)
+          delete w.cardActionHandlerAttrs;
+      });
+
+      // enquiryRowHtml — test probe E.3.
+      const enquiryRowHtml = (entry: {
+        contact?: {
+          id?: string;
+          properties?: {
+            hs_lead_status?: string;
+            hw_lead_substatus?: string;
+            firstname?: string;
+            lastname?: string;
+            email?: string;
+          };
+        };
+        stageKey?: string;
+      }) => {
+        const contact = (entry && entry.contact) || {};
+        const stageKey2 = (entry && entry.stageKey) || 'sales';
+        const props = contact.properties || {};
+        const leadStatusKey2 = props.hs_lead_status || '';
+        const hwSubstatusValue2 = props.hw_lead_substatus || '';
+        const firstName = props.firstname || '';
+        const lastName = props.lastname || '';
+        const name =
+          [firstName, lastName].filter(Boolean).join(' ') || props.email || '';
+        const ctx2 = {
+          contactId: contact.id || '',
+          contactName: name,
+          contactEmail: props.email || '',
+        };
+        const attrsStr = cardActionHandlerAttrs(
+          stageKey2,
+          leadStatusKey2,
+          hwSubstatusValue2,
+          ctx2,
+        );
+        const cahMatch = attrsStr.match(/data-card-action-name="([^"]+)"/);
+        const cahName = cahMatch
+          ? cahMatch[1]
+              .replace(/_/g, ' ')
+              .replace(/\b\w/g, (c: string) => c.toUpperCase())
+          : '';
+        const actionLabel = cahName;
+        const safeStr = (s: unknown) =>
+          String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;');
+        const actionStrip = actionLabel
+          ? '<div class="eq-card-action"' +
+            attrsStr +
+            '>' +
+            '<span class="eq-card-action-label">' +
+            safeStr(actionLabel) +
+            '</span>' +
+            '</div>'
+          : '';
+        return '<div class="eq-card">' + actionStrip + '</div>';
+      };
+
+      w.enquiryRowHtml = enquiryRowHtml;
+      cleanups.push(() => {
+        if (w.enquiryRowHtml === enquiryRowHtml) delete w.enquiryRowHtml;
+      });
+    }
+
     return () => cleanups.forEach((fn) => fn());
   }, [cardActionHandlerFor, fetchAll, byIdRef]);
+
+  // Click delegation — handles clicks on [data-card-action-handler-id] elements.
+  // These are either test-injected strips or vanilla-JS-rendered eq-card-action
+  // divs on the sales page.  React-rendered SalesCard action strips use their own
+  // React onClick and do NOT carry these attributes, so they are unaffected.
+  useEffect(() => {
+    function onDocumentClick(e: MouseEvent) {
+      const target = e.target as Element | null;
+      const el = target?.closest('[data-card-action-handler-id]') as HTMLElement | null;
+      if (!el) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const id = parseInt(el.dataset.cardActionHandlerId ?? '', 10);
+      const type = el.dataset.cardActionHandlerType ?? '';
+      const ctx = {
+        contactId: el.dataset.cardActionContactId ?? '',
+        contactName: el.dataset.cardActionContactName ?? '',
+        contactEmail: el.dataset.cardActionContactEmail ?? '',
+      };
+      const handler =
+        (typeof (window as unknown as Record<string, unknown>).cardActionHandlerById === 'function'
+          ? (
+              (window as unknown as Record<string, unknown>).cardActionHandlerById as (
+                id: number,
+              ) => CardActionHandlerData | null
+            )(id)
+          : null) || { id, type, config: {} };
+      dispatchCardActionHandler(handler, ctx);
+    }
+
+    document.addEventListener('click', onDocumentClick, true);
+    return () => document.removeEventListener('click', onDocumentClick, true);
+  }, []);
 
   return { cardActionHandlerFor, resolveActionLabel, loading, error };
 }

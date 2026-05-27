@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AppThemeProvider } from './AppThemeProvider';
 import { loadSearchSettings } from './lib/searchSettings';
 import { IslandErrorBoundary } from './components/IslandErrorBoundary';
+import { CardActionModalsHost } from './components/CardActionModalsHost';
 import { ConnectionToastProvider } from './context/ConnectionToastContext';
 import {
   PageLoadingSkeleton,
@@ -202,7 +203,20 @@ function mountKnown(): number {
   return count;
 }
 
+function initCardActionModalsHost() {
+  if (document.getElementById('card-action-modals-host')) return;
+  const container = document.createElement('div');
+  container.id = 'card-action-modals-host';
+  document.body.appendChild(container);
+  createRoot(container).render(
+    <AppThemeProvider>
+      <CardActionModalsHost />
+    </AppThemeProvider>,
+  );
+}
+
 function mount() {
+  initCardActionModalsHost();
   const mountedAny = mountKnown() > 0;
   if (mountedAny) return;
 
@@ -280,45 +294,3 @@ loadSearchSettings();
   };
 };
 
-/**
- * Imperative entry point for the full Design Visit wizard (Steps 1–3).
- * Called from card-action-modals.js when a `start_design_visit` handler fires.
- *
- * Async: dynamically imports DesignVisitWizard so it lands in its own lazy
- * chunk and does not inflate the always-loaded main.js bundle.
- *
- * The wizard manages its own Drawer, step state, catalogue fetching, draft
- * persistence, and submit logic.  The caller only needs to supply the handler
- * config, contact context, and (in edit mode) the existing visit record.
- */
-(window as unknown as {
-  openDesignVisitWizard: (
-    handler: import('./components/DesignVisitWizard').DesignVisitWizardHandler,
-    ctx: import('./components/DesignVisitWizard').DesignVisitWizardCtx,
-    existingVisit?: import('./components/DesignVisitWizard').ExistingVisit | null,
-  ) => void;
-}).openDesignVisitWizard = async (handler, ctx, existingVisit) => {
-  const { DesignVisitWizard } = await import('./components/DesignVisitWizard');
-  const container = document.createElement('div');
-  document.body.appendChild(container);
-
-  const root = createRoot(container);
-
-  function unmount() {
-    root.unmount();
-    container.remove();
-  }
-
-  root.render(
-    <AppThemeProvider>
-      <IslandErrorBoundary islandId="dv-wizard">
-        <DesignVisitWizard
-          handler={handler}
-          ctx={ctx}
-          existingVisit={existingVisit}
-          onClose={unmount}
-        />
-      </IslandErrorBoundary>
-    </AppThemeProvider>,
-  );
-};

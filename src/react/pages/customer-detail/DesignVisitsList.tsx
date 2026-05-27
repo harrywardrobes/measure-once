@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { DesignVisit, DesignVisitRoom, DESIGN_VISIT_STATUS_LABELS, fmtDesignVisitWhen, fmtGbp } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
+import { DesignVisitWizard, type DesignVisitWizardHandler, type DesignVisitWizardCtx, type ExistingVisit } from '../../components/DesignVisitWizard';
 
 interface Props {
   contactId: string;
@@ -16,10 +17,17 @@ interface DetailState {
   error: string | null;
 }
 
+interface WizardState {
+  handler: DesignVisitWizardHandler;
+  ctx: DesignVisitWizardCtx;
+  existingVisit: ExistingVisit | null;
+}
+
 export function DesignVisitsList({ contactId, visits, loading, error, onRefresh }: Props) {
   const { isAdmin } = usePrivilege();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [details, setDetails] = useState<Record<number, DetailState>>({});
+  const [wizardState, setWizardState] = useState<WizardState | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const toggleExpanded = useCallback(async (id: number) => {
@@ -74,27 +82,28 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
     window.showBottomConfirm('Delete this design visit? This cannot be undone.', doDelete);
   }, [isAdmin, onRefresh]);
 
-  const handleEdit = useCallback(async (id: number) => {
-    const g = window as unknown as Record<string, unknown>;
-    if (typeof g.openDesignVisitWizard !== 'function') {
-      const gst = g as unknown as { showToast?: (m: string, e: boolean) => void };
-      if (typeof gst.showToast === 'function') gst.showToast('Edit wizard is not available on this page.', true);
-      return;
-    }
+  const handleEdit = useCallback((id: number) => {
     const v = visits.find(x => x.id === id);
     if (!v || !['submitted', 'revision_requested', 'draft'].includes(v.status)) return;
     const detail = details[id]?.data || v;
-    const ctx = {
+    const ctx: DesignVisitWizardCtx = {
       contactId:    detail.contact_id || contactId,
       contactName:  detail.contact_name  || '',
       contactEmail: detail.contact_email || '',
     };
-    (g.openDesignVisitWizard as (cfg: unknown, ctx: unknown, visit: unknown) => void)(
-      { config: {} }, ctx, detail,
-    );
+    setWizardState({ handler: { config: {} }, ctx, existingVisit: detail as unknown as ExistingVisit });
   }, [visits, details, contactId]);
 
   return (
+    <>
+    {wizardState && (
+      <DesignVisitWizard
+        handler={wizardState.handler}
+        ctx={wizardState.ctx}
+        existingVisit={wizardState.existingVisit}
+        onClose={() => { setWizardState(null); onRefresh(); }}
+      />
+    )}
     <div id="design-visits-section" className="mb-5">
       <div className="notes-header">
         <span className="notes-header-label">Design visits</span>
@@ -191,6 +200,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
         })}
       </div>
     </div>
+    </>
   );
 }
 

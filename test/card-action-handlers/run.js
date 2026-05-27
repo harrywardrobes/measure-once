@@ -906,7 +906,7 @@ async function main() {
     const dvModalOpened = await pollPage(
       salesTab,
       () => {
-        const m = document.querySelector('.cah-backdrop .cah-modal');
+        const m = document.querySelector('[role=dialog]');
         if (!m) return null;
         return {
           hasDatetime: !!m.querySelector('input#cah-dv-start[type="datetime-local"]'),
@@ -942,12 +942,12 @@ async function main() {
       const cb = document.querySelector('#cah-dv-google');
       if (cb && cb.checked) cb.click();
     });
-    await salesTab.click('.cah-backdrop .cah-primary');
+    await salesTab.click('[data-testid=cah-primary]');
 
     // Wait for the request to fire and the modal to close (or 6 s).
     await pollPage(
       salesTab,
-      () => !document.querySelector('.cah-backdrop'),
+      () => !document.querySelector('[data-testid=cah-primary]'),
       null,
       6000,
     );
@@ -1018,7 +1018,7 @@ async function main() {
     const pcModalOpened = await pollPage(
       salesTab,
       () => {
-        const m = document.querySelector('.cah-backdrop .cah-modal');
+        const m = document.querySelector('[role=dialog]');
         if (!m) return null;
         return {
           hasTextarea:  !!m.querySelector('textarea#cah-pc-summary'),
@@ -1046,9 +1046,12 @@ async function main() {
     salesTab.on('request', pcReqListener);
 
     await salesTab.evaluate(() => {
-      document.querySelector('#cah-pc-summary').value = 'PrivTest call summary body — discussed scope and next steps.';
+      const el = document.querySelector('#cah-pc-summary');
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      nativeSetter.call(el, 'PrivTest call summary body — discussed scope and next steps.');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await salesTab.click('.cah-backdrop .cah-primary');
+    await salesTab.click('[data-testid=cah-primary]');
 
     // Wait for the network request to fire (give a generous window — the route
     // returns 503 quickly because HUBSPOT_TOKEN is stripped by the harness, but
@@ -1798,13 +1801,13 @@ async function main() {
     // H.2 — wizard opens despite the PATCH failure path.
     const wizardOpened = await pollPage(
       salesTab,
-      () => document.querySelector('.dv-wizard-backdrop .dv-wizard') ? 'open' : null,
+      () => document.querySelector('.dv-wizard') ? 'open' : null,
       null,
       6000,
     );
     record(
       '(H.2) wizard opens even though PATCH /api/contacts/:id returns non-2xx',
-      '.dv-wizard-backdrop .dv-wizard present (HUBSPOT_TOKEN-stripped harness → PATCH 503)',
+      '.dv-wizard present (HUBSPOT_TOKEN-stripped harness → PATCH 503)',
       `result=${wizardOpened}`,
       wizardOpened === 'open',
     );
@@ -1828,10 +1831,11 @@ async function main() {
 
     // Close the wizard so we leave the page clean for any later probes.
     await salesTab.evaluate(() => {
-      const btn = document.querySelector('.dv-wizard-backdrop .dv-wizard-close');
-      if (btn) btn.click();
-      const bd = document.querySelector('.dv-wizard-backdrop');
-      if (bd) bd.remove();
+      const panel = document.querySelector('.dv-wizard');
+      if (panel) {
+        const btn = panel.querySelector('button[aria-label="Close"]');
+        if (btn) btn.click();
+      }
     });
 
     await salesTab.close();

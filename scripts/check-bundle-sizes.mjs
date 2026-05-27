@@ -42,7 +42,7 @@
  *
  *   Chunk pattern          Threshold   Measured at introduction
  *   ─────────────────────  ─────────   ────────────────────────
- *   main.js                  20 kB     7.6 kB
+ *   main.js                  35 kB     26.6 kB  (raised in task #1403: modals migrated from card-action-modals.js)
  *   vendor-react-*           58 kB     44.5 kB  (react + react-dom + scheduler)
  *   vendor-emotion-*         14 kB     10.5 kB  (@emotion/*)
  *   vendor-mui-*            136 kB    104.4 kB  (@mui/material + @mui/system + …)
@@ -82,7 +82,7 @@ const THRESHOLDS = [
     prefix: 'main.js',
     label: 'main (entry)',
     alwaysLoaded: true,
-    threshold: 20 * 1024,       // 20 kB — mount runtime + shell UI
+    threshold: 35 * 1024,       // 35 kB — mount runtime + shell UI + card-action modals (raised task #1403)
   },
   // More-specific vendor-* prefixes must come before any shorter prefix.
   {
