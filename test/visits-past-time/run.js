@@ -11,6 +11,8 @@
 //   (C) A startAt in the future is accepted — returns 200.
 //   (D1) startAt 4 min in the past (inside 5-min grace) → 200
 //   (D2) startAt 6 min in the past (outside 5-min grace) → 422
+//   (E) type:'delivery' — past startAt → 422; future → 200
+//   (F) type:'installation' — past startAt → 422; future → 200
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:visits-past-time
@@ -80,9 +82,9 @@ function pastIso(offsetMinutes) {
   return new Date(Date.now() - offsetMinutes * 60 * 1000).toISOString();
 }
 
-function visitBody(startIso) {
+function visitBody(startIso, type = 'design') {
   return {
-    type:         'design',
+    type,
     startAt:      startIso,
     endAt:        new Date(new Date(startIso).getTime() + 60 * 60 * 1000).toISOString(),
     customerId:   null,
@@ -216,6 +218,44 @@ async function main() {
       '422 + code:START_IN_PAST',
       `status=${rOut.status} code=${rOut.json?.code}`,
       rOut.status === 422 && rOut.json?.code === 'START_IN_PAST',
+    );
+  }
+
+  // ── (E) delivery type: past → 422; future → 200 ──────────────────────────
+  {
+    const rPast = await client.post('/api/visits', visitBody(pastIso(10), 'delivery'));
+    record(
+      '(E1) type:delivery startAt 10 min past → 422 START_IN_PAST',
+      '422 + code:START_IN_PAST',
+      `status=${rPast.status} code=${rPast.json?.code}`,
+      rPast.status === 422 && rPast.json?.code === 'START_IN_PAST',
+    );
+
+    const rFuture = await client.post('/api/visits', visitBody(futureIso(30), 'delivery'));
+    record(
+      '(E2) type:delivery startAt 30 min future → 200',
+      '200 + id present',
+      `status=${rFuture.status} id=${rFuture.json?.id}`,
+      rFuture.status === 200 && rFuture.json && typeof rFuture.json.id === 'number',
+    );
+  }
+
+  // ── (F) installation type: past → 422; future → 200 ──────────────────────
+  {
+    const rPast = await client.post('/api/visits', visitBody(pastIso(10), 'installation'));
+    record(
+      '(F1) type:installation startAt 10 min past → 422 START_IN_PAST',
+      '422 + code:START_IN_PAST',
+      `status=${rPast.status} code=${rPast.json?.code}`,
+      rPast.status === 422 && rPast.json?.code === 'START_IN_PAST',
+    );
+
+    const rFuture = await client.post('/api/visits', visitBody(futureIso(30), 'installation'));
+    record(
+      '(F2) type:installation startAt 30 min future → 200',
+      '200 + id present',
+      `status=${rFuture.status} id=${rFuture.json?.id}`,
+      rFuture.status === 200 && rFuture.json && typeof rFuture.json.id === 'number',
     );
   }
 
