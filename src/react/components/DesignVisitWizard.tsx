@@ -1,7 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
@@ -184,6 +189,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
 
   const [open, setOpen] = useState(true);
   const [step, setStep] = useState(1);
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
   /**
    * Image storageKeys found in the sessionStorage draft when this wizard
@@ -195,6 +201,17 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const [orphanedDraftKeys] = useState<string[]>(() =>
     editMode ? [] : extractOrphanedDraftKeys(storageKey)
   );
+
+  /**
+   * True when a sessionStorage draft was restored at mount (no orphaned images).
+   * Used to show a one-time "Restoring your draft from last time" notice.
+   * Declared after orphanedDraftKeys so the initializer can safely read it.
+   */
+  const [showDraftNotice, setShowDraftNotice] = useState<boolean>(() => {
+    if (editMode) return false;
+    if (orphanedDraftKeys.length > 0) return false;
+    return loadDraft(draftKey(contactId, editVisitId)) !== null;
+  });
 
   const [step1, setStep1] = useState<Step1Data>(() => {
     // When the prior session was interrupted (orphaned uploads detected) we
@@ -338,10 +355,31 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     };
   }, []);
 
-  const handleClose = useCallback(() => {
+  function hasMeaningfulRoomData(): boolean {
+    return rooms.some(
+      r =>
+        r.roomName.trim() !== '' ||
+        r.doorStyleId !== '' ||
+        r.widthMm !== null ||
+        r.heightMm !== null ||
+        r.depthMm !== null ||
+        r.unitPricePence > 0 ||
+        r.notes.trim() !== ''
+    );
+  }
+
+  const doClose = useCallback(() => {
     setOpen(false);
     setTimeout(onClose, 300);
   }, [onClose]);
+
+  const handleClose = useCallback(() => {
+    if (!editMode && !committedRef.current && (step >= 2 || hasMeaningfulRoomData())) {
+      setShowDiscardDialog(true);
+      return;
+    }
+    doClose();
+  }, [editMode, step, rooms, doClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function advanceToStep2() {
     if (!step1.termsAccepted) {
@@ -458,6 +496,15 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
 
       {/* Body */}
       <Box sx={{ flex: 1, overflowY: 'auto', p: '20px 24px' }}>
+        {showDraftNotice && (
+          <Alert
+            severity="info"
+            onClose={() => setShowDraftNotice(false)}
+            sx={{ mb: '16px', fontSize: '.82rem' }}
+          >
+            Restoring your draft from last time.
+          </Alert>
+        )}
         {catalogueLoading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
             <CircularProgress size={28} />
@@ -605,6 +652,53 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           </Box>
         </Box>
       )}
+      {/* Discard draft confirmation */}
+      <Dialog
+        open={showDiscardDialog}
+        onClose={() => setShowDiscardDialog(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem' }}>
+          Discard your draft?
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: '.9rem', color: '#374151' }}>
+            You have unsaved room data. If you close now your draft will be lost.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button
+            onClick={() => setShowDiscardDialog(false)}
+            variant="outlined"
+            sx={{
+              borderColor: '#d1d5db',
+              color: '#374151',
+              fontWeight: 600,
+              textTransform: 'none',
+              '&:hover': { borderColor: '#9ca3af', background: '#f9fafb' },
+            }}
+          >
+            Keep editing
+          </Button>
+          <Button
+            onClick={() => {
+              clearDraft(storageKey);
+              setShowDiscardDialog(false);
+              doClose();
+            }}
+            variant="contained"
+            sx={{
+              background: '#dc2626',
+              fontWeight: 600,
+              textTransform: 'none',
+              '&:hover': { background: '#b91c1c' },
+            }}
+          >
+            Discard
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Drawer>
   );
 }
