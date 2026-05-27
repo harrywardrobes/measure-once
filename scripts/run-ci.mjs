@@ -49,6 +49,7 @@ const STEPS = [
   'test:start-design-visit:ci',
   'test:design-visit:ci',
   'test:design-visit-list:ci',
+  'test:visit-edit-cancel:ci',
   'test:dv-catalogue-admin:ci',
   'test:dv-catalogue-image-upload:ci',
   'test:dv-catalogue-reorder:ci',
