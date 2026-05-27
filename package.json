@@ -76,6 +76,8 @@
     "test:design-visit-hubspot-retry:ci": "node scripts/with-test-db.js test/design-visit-hubspot-retry/run.js",
     "gc:design-visit-photos": "node scripts/gc-design-visit-photos.mjs",
     "gc:design-visit-photos:dry-run": "node scripts/gc-design-visit-photos.mjs --dry-run",
+    "test:visits-past-time": "node test/visits-past-time/run.js",
+    "test:visits-past-time:ci": "node scripts/with-test-db.js test/visits-past-time/run.js",
     "test:phone-directory": "node test/phone-directory/run.js",
     "test:phone-directory:ci": "node scripts/with-test-db.js test/phone-directory/run.js",
     "test:phone-directory-customers": "node test/phone-directory/run-customers.js",

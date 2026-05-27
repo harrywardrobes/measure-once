@@ -62,6 +62,7 @@ const STEPS = [
   'test:hubspot-429-retry-contacts:ci',
   'test:icon-lint',
   'test:design-visit-hubspot-retry:ci',
+  'test:visits-past-time:ci',
   'test:phone-directory:ci',
   'test:phone-directory-customers:ci',
   'test:contacts-all-stale-fallback:ci',

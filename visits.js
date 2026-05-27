@@ -83,6 +83,13 @@ function validatePayload(body) {
   };
 }
 
+// Maximum number of minutes a visit's startAt may be in the past before the
+// server rejects it. Override via VISITS_PAST_GRACE_MINUTES env var (integer).
+const PAST_TIME_GRACE_MS = (() => {
+  const raw = parseInt(process.env.VISITS_PAST_GRACE_MINUTES || '5', 10);
+  return (Number.isFinite(raw) && raw >= 0 ? raw : 5) * 60 * 1000;
+})();
+
 // Per-user POST rate limit: max 30 visits created per 10-minute sliding window
 const VISITS_RATE_WINDOW_MS = 10 * 60 * 1000;
 const VISITS_RATE_LIMIT     = 30;
@@ -134,6 +141,13 @@ router.post('/api/visits', isAuthenticated, requirePrivilege('member'), async (r
   }
   const v = validatePayload(req.body);
   if (v.error) return res.status(400).json({ error: v.error });
+  const startMs = new Date(v.startAt).getTime();
+  if (startMs < Date.now() - PAST_TIME_GRACE_MS) {
+    return res.status(422).json({
+      error: 'Visit start time is in the past. Please choose a future time.',
+      code:  'START_IN_PAST',
+    });
+  }
   try {
     const r = await pool.query(
       `INSERT INTO visits
