@@ -94,6 +94,17 @@ export function StandaloneInvoicesPage() {
 
   useEffect(() => { triggerLoad(); }, [triggerLoad]);
 
+  useEffect(() => {
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('mo_invoices');
+      bc.onmessage = (e: MessageEvent) => {
+        if (e.data?.type === 'invoice-saved') loadInvoices();
+      };
+    } catch { /* BroadcastChannel not available */ }
+    return () => { bc?.close(); };
+  }, [loadInvoices]);
+
   // True while the store hasn't resolved yet: covers both an in-progress fetch
   // and the brief initial render before the useEffect above fires triggerLoad().
   const isLoading = loading || (!qb.statusKnown && !qb.loaded && !loadError);

@@ -77,6 +77,17 @@ export function InvoicesSection({ contact, qb }: Props) {
   }, [qb.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('mo_invoices');
+      bc.onmessage = (e: MessageEvent) => {
+        if (e.data?.type === 'invoice-saved') qb.refresh();
+      };
+    } catch { /* BroadcastChannel not available */ }
+    return () => { bc?.close(); };
+  }, [qb.refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     function handlePopState() {
       const hash = window.location.hash;
       if (hash.startsWith('#inv-')) {

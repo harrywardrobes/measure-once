@@ -252,6 +252,11 @@ export function InvoiceDetailDrawer({
       } : prev);
       setEdit(prev => ({ ...prev, dirty: false }));
       clearDraft(inv.id);
+      try {
+        const bc = new BroadcastChannel('mo_invoices');
+        bc.postMessage({ type: 'invoice-saved', id: inv.id });
+        bc.close();
+      } catch { /* BroadcastChannel not available (e.g. some test envs) */ }
       onSaved?.();
       setSaveMsg({ text: 'Saved', ok: true });
       // Re-fetch from the server to pick up any server-computed fields
