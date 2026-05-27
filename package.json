@@ -16,6 +16,7 @@
     "build:react": "node scripts/generate-tokens-css.mjs && npm run typecheck && vite build && node scripts/check-bundle-sizes.mjs",
     "bundle-sizes": "node scripts/check-bundle-sizes.mjs",
     "storybook": "storybook dev -p 6006",
+    "watch:storybook": "storybook dev -p 6006",
     "build:storybook": "storybook build -o public/storybook",
     "test:privileges": "node test/privileges/run.js",
     "test:privileges:ci": "node scripts/with-test-db.js test/privileges/run.js",

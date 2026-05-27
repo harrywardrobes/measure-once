@@ -82,6 +82,23 @@ npm run watch:react  # rebuilds public/react/ on every src/react/ save
 Reload the browser manually after each rebuild. Useful when testing
 server-rendered pages or middleware that must run through Express.
 
+### Option C — Storybook dev server (for story/design-system work)
+Use this when actively editing stories in `src/react/stories/` and you want
+the Design System gallery to update automatically:
+
+```
+# Terminal 1 — Express API server (optional, only needed for API-backed stories)
+npm run dev          # nodemon on 5000
+
+# Terminal 2 — Storybook dev server with HMR
+npm run watch:storybook  # http://0.0.0.0:6006, auto-reloads on story changes
+```
+
+Open the gallery on **port 6006**. Every save to `src/react/stories/` or any
+component it imports reflects instantly via Hot Module Replacement. This has
+no effect on `public/storybook/` (the static build served by Express at
+`/storybook/`) — run `npm run build:storybook` to refresh that.
+
 > **Note:** Both `npm start` (`prestart`) and `npm run dev` (`predev`) skip the
 > React build when `public/react/main.js` **already exists**, so Replit workflow
 > restarts and nodemon restarts are instant for server-side-only changes.
