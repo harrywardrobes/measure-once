@@ -164,7 +164,7 @@ export function stageColour(stageKey: string): StageColour {
 }
 
 export const DESIGN_VISIT_STATUS_LABELS: Record<string, { label: string; bg: string; fg: string }> = {
-  draft:              { label: 'Draft',               bg: '#f3f4f6',                    fg: '#374151'                   },
+  draft:              { label: 'Draft',               bg: 'var(--status-neutral-bg)',   fg: 'var(--status-neutral-text)' },
   submitted:          { label: 'Submitted',           bg: 'var(--stage-order-light)',   fg: 'var(--stage-order-text)'   },
   signed_off:         { label: 'Signed off',          bg: 'var(--stage-packing-light)', fg: 'var(--stage-packing-text)' },
   revision_requested: { label: 'Revision requested',  bg: 'var(--stage-workshop-light)',fg: 'var(--stage-workshop-text)'},

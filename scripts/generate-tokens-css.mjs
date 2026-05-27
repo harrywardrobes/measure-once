@@ -66,6 +66,30 @@ function parseStageColors(ts) {
   return stages;
 }
 
+function parseStatusColors(ts) {
+  const declMatch = ts.match(/export\s+const\s+STATUS_COLORS[^=]*=\s*\{/);
+  if (!declMatch) return {};
+  const start = declMatch.index + declMatch[0].length;
+  let depth = 1, i = start;
+  while (i < ts.length && depth > 0) {
+    if (ts[i] === '{') depth++;
+    else if (ts[i] === '}') depth--;
+    i++;
+  }
+  const block = ts.slice(start, i - 1);
+  const statuses = {};
+  const entryRe = /(\w+)\s*:\s*\{([^}]+)\}/g;
+  let entry;
+  while ((entry = entryRe.exec(block)) !== null) {
+    const key   = entry[1];
+    const props = entry[2];
+    const bgM   = props.match(/bg\s*:\s*'(#[0-9a-fA-F]{3,8})'/);
+    const textM = props.match(/text\s*:\s*'(#[0-9a-fA-F]{3,8})'/);
+    if (bgM && textM) statuses[key] = { bg: bgM[1], text: textM[1] };
+  }
+  return statuses;
+}
+
 function parseRadius(ts) {
   const blockMatch = ts.match(/export\s+const\s+RADIUS\s*=\s*\{([^}]+)\}/s);
   if (!blockMatch) throw new Error('RADIUS not found in theme.ts');
@@ -103,11 +127,12 @@ function parseTypography(ts) {
 
 // ── Parse theme.ts ───────────────────────────────────────────────────────────
 
-const ts          = readFileSync(THEME_PATH, 'utf8');
-const brandColors = parseBrandColors(ts);
-const stageColors = parseStageColors(ts);
-const radius      = parseRadius(ts);
-const typography  = parseTypography(ts);
+const ts           = readFileSync(THEME_PATH, 'utf8');
+const brandColors  = parseBrandColors(ts);
+const stageColors  = parseStageColors(ts);
+const statusColors = parseStatusColors(ts);
+const radius       = parseRadius(ts);
+const typography   = parseTypography(ts);
 
 // ── Emit helpers ─────────────────────────────────────────────────────────────
 
@@ -127,6 +152,13 @@ const brandLines = Object.entries(brandColors).map(([key, value]) =>
 const radiusLines = Object.entries(radius).map(([key, value]) =>
   col(`radius-${key}`, `${value}px`)
 );
+
+// ── Build status-colour section (theme-sourced tokens, e.g. neutral) ─────────
+
+const statusColorLines = Object.entries(statusColors).map(([key, colors]) => {
+  const w = 24;
+  return [col(`status-${key}-bg`, colors.bg, w), col(`status-${key}-text`, colors.text, w)].join('\n');
+});
 
 // ── Build stage-colour section ───────────────────────────────────────────────
 
@@ -224,6 +256,7 @@ ${radiusLines.join('\n')}
   --status-warn-bg:       #fef9c3;
   --status-warn-border:   #fde047;
   --status-warn-text:     #713f12;
+${statusColorLines.join('\n')}
 
   /* ── Brand action accents ────────────────────────────────────────────────── */
   --brand-accent:       #3d0f7a;

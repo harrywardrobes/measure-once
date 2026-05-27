@@ -40,6 +40,11 @@ export const BRAND_COLORS = {
   ink4:       '#97927F',
 } as const;
 
+// ── Status pill neutral colours ────────────────────────────────────────
+export const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  neutral: { bg: '#f3f4f6', text: '#374151' },
+};
+
 // ── Stage / semantic colours (lead-status pills, nav, badges) ──────────
 export interface StageColor { bg: string; light: string; text: string; }
 
