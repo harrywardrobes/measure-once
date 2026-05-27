@@ -107,8 +107,8 @@ function canEditPrivilege()   { const p = getPrivilegeLevel(); return p === 'man
 // ── API helpers ───────────────────────────────────────────────────────────────
 // @deprecated — React components should import GET/POST/PATCH/PUT/DELETE from
 // src/react/utils/api.ts instead of using these window globals. These remain for
-// vanilla-JS pages (workflow-core.js, workflow.js, card-action-handlers.js)
-// during migration and will be removed when those files are ported to React.
+// vanilla-JS pages (workflow.js, card-action-handlers.js) during migration and
+// will be removed when those files are ported to React.
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body !== undefined) opts.body = JSON.stringify(body);
@@ -298,4 +298,70 @@ function renderAuthStatus() {
   // it so stale markup doesn't leak through while the React island mounts.
   const legacy = document.getElementById('auth-status');
   if (legacy) legacy.innerHTML = '';
+}
+
+// ── Lead-status window bridge ─────────────────────────────────────────────────
+// Synchronous stubs for window.loadLeadStatuses / window.populateLeadStatusFilter
+// so test code can call them before the lazy CustomersPage React chunk loads.
+// When the chunk evaluates it overwrites these with the full React-integrated
+// versions; data fetched by the stub is mirrored in window.__shimLeadStatuses so
+// the real populateLeadStatusFilter (which reads store.statuses) can seed its
+// store from the shim on first load.
+(function () {
+  var shim = { statuses: [], nullLabel: 'No status', loaded: false };
+  window.__shimLeadStatuses = shim;
+
+  window.loadLeadStatuses = async function () {
+    try {
+      var res = await fetch('/api/lead-statuses', { credentials: 'same-origin' });
+      if (!res.ok) return;
+      var rows = await res.json();
+      if (!Array.isArray(rows)) return;
+      var nullRow = rows.find(function (r) { return r.is_null_row; });
+      if (nullRow) shim.nullLabel = nullRow.label || 'No status';
+      shim.statuses = rows.filter(function (r) { return !r.is_null_row; });
+      shim.loaded = true;
+    } catch (_) {}
+  };
+
+  window.populateLeadStatusFilter = function () {
+    var sel = document.getElementById('lead-status-filter');
+    if (!sel) return;
+    var opts = ['<option value="">All statuses</option>'];
+    var nullCount = 0;
+    var nullAttrs = nullCount === 0 ? ' disabled' : '';
+    opts.push('<option value="__no_status__"' + nullAttrs + '>' + escHtml(shim.nullLabel) + ' (' + nullCount + ')</option>');
+    for (var i = 0; i < shim.statuses.length; i++) {
+      var s = shim.statuses[i];
+      if (s.excluded_from_sales) continue;
+      opts.push('<option value="' + escHtml(s.key) + '">' + escHtml(s.label) + ' (0)</option>');
+    }
+    sel.innerHTML = opts.join('');
+  };
+})();
+
+// ── Room-cache helper (used by workflow.js) ───────────────────────────────────
+// Derives a lightweight cache entry for the currently-selected contact from
+// state.allRooms (the full room objects) and stores it in state.contactStageCache.
+// Moved here from workflow-core.js; workflow.js is the only caller.
+function updateRoomCache() {
+  if (!state.selectedContactId) return;
+  state.contactStageCache[state.selectedContactId] = state.allRooms.map(r => {
+    const stageKey = r.stageKey || 'sales';
+    // Derive the current substage from completedStatuses (last completed in stage
+    // order). Fall back to the legacy r.statusId field for un-normalised rooms.
+    const doneIds = (r.completedStatuses || {})[stageKey] || [];
+    const stageStatuses = state.workflow?.stages?.[stageKey]?.statuses || [];
+    const lastCompleted = [...stageStatuses].reverse().find(s => doneIds.includes(s.id));
+    const currentSubstageId = lastCompleted?.id || r.statusId || null;
+    return {
+      room: r.room, stageKey, roomStatus: r.roomStatus || 'active',
+      statusId: currentSubstageId,
+      sourceId: r.sourceId || null,
+      assignedFitterId: r.assignedFitterId || null,
+      installStart: r.installStart || null,
+      stageDates: r.stageDates || null,
+      substateDates: r.substateDates || null,
+    };
+  });
 }

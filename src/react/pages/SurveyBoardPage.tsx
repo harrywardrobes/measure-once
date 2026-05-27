@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useWorkflowData } from '../context/WorkflowDataContext';
 import {
   Alert,
   Box,
@@ -15,7 +16,6 @@ import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useCardActionHandlers, CardActionHandlerData } from '../hooks/useCardActionHandlers';
@@ -76,21 +76,6 @@ interface WorkflowDef {
   stages?: Record<string, WorkflowStage>;
 }
 
-interface StateGlobal {
-  filteredContacts?: Contact[];
-  contactStageCache?: Record<string, Room[]>;
-  workflow?: WorkflowDef;
-}
-
-interface WindowGlobals {
-  state?: StateGlobal;
-  LEAD_STATUS_OPTIONS?: LeadStatusOption[];
-  LEAD_SUBSTATUSES?: LeadSubstatus[];
-  loadWorkflow?: () => Promise<void>;
-  loadLeadStatuses?: () => Promise<void>;
-  __surveyBoardBootstrapFailed?: { code: string | undefined; message: string } | undefined;
-}
-
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const SURVEY_STAGE_KEY = 'survey';
@@ -133,8 +118,6 @@ const STAGE_LABEL_FALLBACK: Record<string, string> = {
   designvisit: 'Design Visit',
   survey:      'Survey',
 };
-
-const DATA_READY_EVENT = 'survey-board-data-ready';
 
 // ── BoardEntry type ────────────────────────────────────────────────────────────
 
@@ -234,10 +217,7 @@ function saveHiddenSubstages(hidden: Set<string>): void {
 
 // ── Data processing ────────────────────────────────────────────────────────────
 
-function buildSurveyEntries(contacts: PaginatedContact[]): BoardEntry[] {
-  const w = window as unknown as WindowGlobals;
-  const contactStageCache = w.state?.contactStageCache || {};
-
+function buildSurveyEntries(contacts: PaginatedContact[], contactStageCache: Record<string, Room[]>): BoardEntry[] {
   const entries: BoardEntry[] = [];
 
   for (const contact of contacts) {
@@ -403,7 +383,6 @@ function SurveyCard({
   const surveyStatuses: Array<{ id: string; label?: string }> =
     (workflow?.stages?.[SURVEY_STAGE_KEY]?.statuses as Array<{ id: string; label?: string }>) || [];
 
-  const w = window as unknown as WindowGlobals;
   const handler = cardActionHandlerFor(SURVEY_STAGE_KEY, leadStatusKey, hwSubstatusValue);
 
   const openContinueDesigning = useCallback(
@@ -735,40 +714,12 @@ function hexToRgb(hex: string): string {
 // ── SurveyBoardPage ────────────────────────────────────────────────────────────
 
 export function SurveyBoardPage() {
-  const [tick, setTick] = useState(0);
   const [hiddenSubstages, setHiddenSubstages] = useState<Set<string>>(loadHiddenSubstages);
   const [filterAnchor, setFilterAnchor] = useState<HTMLButtonElement | null>(null);
   const filterBtnRef = useRef<HTMLButtonElement>(null);
   const { isManager } = usePrivilege();
   const { cardActionHandlerFor, resolveActionLabel } = useCardActionHandlers();
-  const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
-
-  // Bootstrap-failure error state — fires when core.js bootstrap() throws and
-  // dispatches 'survey-board-bootstrap-failed' instead of writing to #survey-view
-  // innerHTML (which would orphan this React tree).
-  // Read the window flag synchronously as the initial value so the component
-  // shows the error immediately even when the event fired before this chunk
-  // finished loading (race condition: bootstrap can fail before React mounts).
-  const [bootstrapFailed, setBootstrapFailed] = useState(
-    () => !!(window as unknown as WindowGlobals).__surveyBoardBootstrapFailed,
-  );
-  useEffect(() => {
-    const onBootstrapFail = () => setBootstrapFailed(true);
-    document.addEventListener('survey-board-bootstrap-failed', onBootstrapFail);
-    return () => document.removeEventListener('survey-board-bootstrap-failed', onBootstrapFail);
-  }, []);
-
-  useEffect(() => {
-    const onReady = () => {
-      // Clear the window flag so a successful reload after a failure doesn't
-      // immediately re-show the error on the next mount.
-      (window as unknown as WindowGlobals).__surveyBoardBootstrapFailed = undefined;
-      setBootstrapFailed(false);
-      forceUpdate();
-    };
-    document.addEventListener(DATA_READY_EVENT, onReady);
-    return () => document.removeEventListener(DATA_READY_EVENT, onReady);
-  }, [forceUpdate]);
+  const { contactStageCache, workflow } = useWorkflowData();
 
   // Retry-failure Snackbar with Page Visibility pause — mirrors the pattern
   // in SalesBoardPage.tsx.  autoHideDuration is set to null while the document
@@ -817,38 +768,6 @@ export function SurveyBoardPage() {
     return () => document.removeEventListener('survey-board-cache-status', onCacheStatus);
   }, []);
 
-  useEffect(() => {
-    const refresh = () => {
-      const w = window as unknown as WindowGlobals;
-      Promise.all([
-        w.loadWorkflow?.() ?? Promise.resolve(),
-        w.loadLeadStatuses?.() ?? Promise.resolve(),
-      ])
-        .then(() => forceUpdate())
-        .catch(() => forceUpdate());
-    };
-
-    const onVisibility = () => {
-      if (document.visibilityState !== 'visible') return;
-      refresh();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-
-    let bc: BroadcastChannel | null = null;
-    let subBc: BroadcastChannel | null = null;
-    if (typeof BroadcastChannel !== 'undefined') {
-      bc = new BroadcastChannel('lead_statuses_changed');
-      bc.addEventListener('message', refresh);
-      subBc = new BroadcastChannel('lead_substatuses_changed');
-      subBc.addEventListener('message', refresh);
-    }
-
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibility);
-      if (bc) bc.close();
-      if (subBc) subBc.close();
-    };
-  }, [forceUpdate]);
 
   // ── Page filter config — load surveys page size ───────────────────────────
   const [surveysPageSize, setSurveysPageSize] = useState<number | undefined>(undefined);
@@ -866,9 +785,8 @@ export function SurveyBoardPage() {
   }, []);
 
   // ── usePaginatedContacts: survey column ─────────────────────────────────
-  // Server filters to contacts with a room in the survey stage.  Room/substage
-  // data is augmented client-side from window.state.contactStageCache; tick
-  // keeps the useMemo in sync when room data refreshes without forcing a refetch.
+  // Server filters to contacts with a room in the survey stage.
+  // Room/substage data comes from WorkflowDataContext.contactStageCache.
   const surveyHook = usePaginatedContacts({
     initialPage: 1, leadStatus: '', substatus: '',
     stage: 'survey', sortBy: 'newest', search: '', showArchived: false,
@@ -876,11 +794,9 @@ export function SurveyBoardPage() {
   });
 
   const allEntries = useMemo(
-    () => buildSurveyEntries(surveyHook.contacts),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [surveyHook.contacts, tick],
+    () => buildSurveyEntries(surveyHook.contacts, contactStageCache as unknown as Record<string, Room[]>),
+    [surveyHook.contacts, contactStageCache],
   );
-  const workflow = (window as unknown as WindowGlobals).state?.workflow;
 
   const visibleEntries = useMemo(
     () => allEntries.filter((e) => !hiddenSubstages.has(e.substageId)),
@@ -918,7 +834,7 @@ export function SurveyBoardPage() {
 
   const surveyColor = STAGE_COLORS[SURVEY_STAGE_KEY];
   const accent = STAGE_ACCENT[SURVEY_STAGE_KEY];
-  const label = getStageLabel(SURVEY_STAGE_KEY, workflow);
+  const label = getStageLabel(SURVEY_STAGE_KEY, workflow ?? undefined);
   const count = surveyHook.total;
 
   const hiddenCount = hiddenSubstages.size;
@@ -933,48 +849,6 @@ export function SurveyBoardPage() {
       return next;
     });
   };
-
-  if (bootstrapFailed) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          p: 4,
-          bgcolor: 'background.default',
-        }}
-      >
-        <Box
-          sx={{
-            maxWidth: 420,
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 2,
-          }}
-        >
-          <WarningAmberIcon sx={{ fontSize: 48, color: 'warning.main', opacity: 0.8 }} />
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            HubSpot is currently unavailable
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            The survey board couldn&apos;t load because HubSpot couldn&apos;t be reached.
-            This is usually a temporary issue.
-          </Typography>
-          <Button
-            variant="contained"
-            onClick={() => window.location.reload()}
-            sx={{ mt: 1 }}
-          >
-            Reload page
-          </Button>
-        </Box>
-      </Box>
-    );
-  }
 
   return (
     <Box
@@ -1167,7 +1041,7 @@ export function SurveyBoardPage() {
               key={e.contact.id}
               entry={e}
               isManager={isManager}
-              workflow={workflow}
+              workflow={workflow ?? undefined}
               cardActionHandlerFor={cardActionHandlerFor}
               resolveActionLabel={resolveActionLabel}
               draftVisitId={draftVisitIds[e.contact.id] ?? null}

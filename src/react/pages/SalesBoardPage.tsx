@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Box, Button, Card, Chip, CircularProgress, Snackbar, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
+import { useWorkflowData } from '../context/WorkflowDataContext';
 import { usePaginatedContacts, PaginatedContact, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
 import { ContactsPagination } from '../components/ContactsPagination';
 import { useCardActionHandlers, CardActionHandlerData } from '../hooks/useCardActionHandlers';
@@ -67,23 +67,6 @@ interface WorkflowDef {
   stages?: Record<string, WorkflowStage>;
 }
 
-interface StateGlobal {
-  filteredContacts?: Contact[];
-  workflow?: WorkflowDef;
-  user?: { privilege_level?: string }; // privilege-read-ok: global state shape declaration
-}
-
-interface WindowGlobals {
-  state?: StateGlobal;
-  loadWorkflow?: () => Promise<void>;
-  loadLeadStatuses?: () => Promise<void>;
-  __salesBoardBootstrapFailed?: { code: string | undefined; message: string } | undefined;
-}
-
-interface SalesBoardWindowData {
-  state?: { contactStageCache?: Record<string, Room[]> };
-  LEAD_STATUS_OPTIONS?: LeadStatusOption[];
-}
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -158,10 +141,6 @@ const STAGE_COLUMN_INFO: Record<string, { column: string; terminal: boolean }> =
 
 const DEFAULT_STALENESS_DAYS = 28;
 const MOBILE_COL_KEY = 'salesBoardActiveColumn';
-
-// Dispatched by sales.js after it loads/reloads contact data so this
-// component re-renders with the latest state.
-const DATA_READY_EVENT = 'sales-board-data-ready';
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
@@ -826,7 +805,6 @@ function SalesCard({
 // ── SalesBoardPage ─────────────────────────────────────────────────────────────
 
 export function SalesBoardPage() {
-  const [tick, setTick] = useState(0);
   const [activeColumn, setActiveColumn] = useState<ColumnKey>(() => {
     try {
       const saved = localStorage.getItem(MOBILE_COL_KEY);
@@ -837,8 +815,12 @@ export function SalesBoardPage() {
   });
   const { isManager } = usePrivilege();
   const { cardActionHandlerFor, resolveActionLabel } = useCardActionHandlers();
-  const forceUpdate = useCallback(() => setTick((t) => t + 1), []);
   const { notifyApiError } = useConnectionToast();
+  const {
+    contactStageCache,
+    leadStatuses: lsOptions,
+    workflow,
+  } = useWorkflowData();
   useConnectionCheck();
 
   // Retry-failure Snackbar with Page Visibility pause — mirrors the pattern
@@ -866,20 +848,6 @@ export function SalesBoardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Bootstrap-failure error state — fires when core.js bootstrap() throws and
-  // dispatches 'sales-board-bootstrap-failed' instead of writing to #sales-view
-  // innerHTML (which would orphan this React tree).
-  // Read the window flag synchronously as the initial value so the component
-  // shows the error immediately even when the event fired before this chunk
-  // finished loading (race condition: bootstrap can fail before React mounts).
-  const [bootstrapFailed, setBootstrapFailed] = useState(
-    () => !!(window as unknown as WindowGlobals).__salesBoardBootstrapFailed,
-  );
-  useEffect(() => {
-    const onBootstrapFail = () => setBootstrapFailed(true);
-    document.addEventListener('sales-board-bootstrap-failed', onBootstrapFail);
-    return () => document.removeEventListener('sales-board-bootstrap-failed', onBootstrapFail);
-  }, []);
 
   // Stale-data Snackbar — shown when loadAllContacts detects X-Cache-Status: stale.
   // Clears automatically when the next load returns fresh data (detail.stale === false).
@@ -907,50 +875,6 @@ export function SalesBoardPage() {
     return () => document.removeEventListener('sales-board-cache-status', onCacheStatus);
   }, []);
 
-  useEffect(() => {
-    const onReady = () => {
-      // Clear the window flag so a successful reload after a failure doesn't
-      // immediately re-show the error on the next mount.
-      (window as unknown as WindowGlobals).__salesBoardBootstrapFailed = undefined;
-      setBootstrapFailed(false);
-      forceUpdate();
-    };
-    document.addEventListener(DATA_READY_EVENT, onReady);
-    return () => document.removeEventListener(DATA_READY_EVENT, onReady);
-  }, [forceUpdate]);
-
-  useEffect(() => {
-    const refresh = () => {
-      const w = window as unknown as WindowGlobals;
-      Promise.all([
-        w.loadWorkflow?.() ?? Promise.resolve(),
-        w.loadLeadStatuses?.() ?? Promise.resolve(),
-      ])
-        .then(() => forceUpdate())
-        .catch(() => forceUpdate());
-    };
-
-    const onVisibility = () => {
-      if (document.visibilityState !== 'visible') return;
-      refresh();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-
-    let bc: BroadcastChannel | null = null;
-    let subBc: BroadcastChannel | null = null;
-    if (typeof BroadcastChannel !== 'undefined') {
-      bc = new BroadcastChannel('lead_statuses_changed');
-      bc.addEventListener('message', refresh);
-      subBc = new BroadcastChannel('lead_substatuses_changed');
-      subBc.addEventListener('message', refresh);
-    }
-
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibility);
-      if (bc) bc.close();
-      if (subBc) subBc.close();
-    };
-  }, [forceUpdate]);
 
   // ── Page filter config — load sales staleness default and page size ────────
   const [configuredStalenessDays, setConfiguredStalenessDays] = useState<number>(DEFAULT_STALENESS_DAYS);
@@ -978,9 +902,7 @@ export function SalesBoardPage() {
 
   // ── usePaginatedContacts: one call per column ─────────────────────────────
   // The server filters contacts by stage so each column fetches only what it
-  // needs. Room/substage data is still read from window.state.contactStageCache
-  // (populated by the legacy JS bootstrap); tick is a useMemo dependency so
-  // entry derivation re-runs when room data refreshes without forcing a refetch.
+  // needs. Room/substage data comes from WorkflowDataContext.contactStageCache.
   const salesHook = usePaginatedContacts({
     initialPage: 1, leadStatus: '', substatus: '',
     stage: 'sales', sortBy: 'newest', search: '', showArchived: false,
@@ -992,19 +914,13 @@ export function SalesBoardPage() {
     stage: 'designvisit', sortBy: 'newest', search: '', showArchived: false,
   });
 
-  const sbWindowData = window as unknown as SalesBoardWindowData;
-  const contactStageCache = sbWindowData.state?.contactStageCache ?? {};
-  const lsOptions = sbWindowData.LEAD_STATUS_OPTIONS ?? [];
-
   const salesEntries = useMemo(
-    () => buildEntriesForStage(salesHook.contacts, 'sales', contactStageCache, lsOptions),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [salesHook.contacts, tick],
+    () => buildEntriesForStage(salesHook.contacts, 'sales', contactStageCache as unknown as Record<string, Room[]>, lsOptions as unknown as LeadStatusOption[]),
+    [salesHook.contacts, contactStageCache, lsOptions],
   );
   const dvEntries = useMemo(
-    () => buildEntriesForStage(dvHook.contacts, 'designvisit', contactStageCache, lsOptions),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dvHook.contacts, tick],
+    () => buildEntriesForStage(dvHook.contacts, 'designvisit', contactStageCache as unknown as Record<string, Room[]>, lsOptions as unknown as LeadStatusOption[]),
+    [dvHook.contacts, contactStageCache, lsOptions],
   );
 
   // ── Draft visit detection ─────────────────────────────────────────────────
@@ -1048,8 +964,6 @@ export function SalesBoardPage() {
     designvisit: PAGINATED_CONTACTS_PAGE_LIMIT,
   } as const;
 
-  const workflow = (window as unknown as WindowGlobals).state?.workflow;
-
   const switchColumn = (col: ColumnKey) => {
     setActiveColumn(col);
     try {
@@ -1058,48 +972,6 @@ export function SalesBoardPage() {
       /* ignore */
     }
   };
-
-  if (bootstrapFailed) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          p: 4,
-          bgcolor: 'background.default',
-        }}
-      >
-        <Box
-          sx={{
-            maxWidth: 420,
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 2,
-          }}
-        >
-          <WarningAmberIcon sx={{ fontSize: 48, color: 'warning.main', opacity: 0.8 }} />
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            HubSpot is currently unavailable
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            The sales board couldn&apos;t load because HubSpot couldn&apos;t be reached.
-            This is usually a temporary issue.
-          </Typography>
-          <Button
-            variant="contained"
-            onClick={() => window.location.reload()}
-            sx={{ mt: 1 }}
-          >
-            Reload page
-          </Button>
-        </Box>
-      </Box>
-    );
-  }
 
   return (
     <>
@@ -1120,11 +992,11 @@ export function SalesBoardPage() {
         const count = hook.total;
         const accent = STAGE_ACCENT[sk];
         const stageColor = STAGE_COLORS[sk] || STAGE_COLORS.sales;
-        const label = getStageLabel(sk, workflow);
+        const label = getStageLabel(sk, workflow ?? undefined);
         const isLastCol = colIdx === SALES_TAB_STAGES.length - 1;
 
         const otherColumn = SALES_TAB_STAGES[1 - colIdx];
-        const otherLabel = getStageLabel(otherColumn, workflow);
+        const otherLabel = getStageLabel(otherColumn, workflow ?? undefined);
         const isActiveOnMobile = activeColumn === sk;
 
         return (
@@ -1252,7 +1124,7 @@ export function SalesBoardPage() {
                     key={e.contact.id}
                     entry={e}
                     isManager={isManager}
-                    workflow={workflow}
+                    workflow={workflow ?? undefined}
                     cardActionHandlerFor={cardActionHandlerFor}
                     resolveActionLabel={resolveActionLabel}
                     draftVisitId={draftVisitIds[e.contact.id] ?? null}

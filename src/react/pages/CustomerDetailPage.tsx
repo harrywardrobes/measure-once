@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
+import { useWorkflowData } from '../context/WorkflowDataContext';
 import { CustomerDetailHeader } from './customer-detail/CustomerDetailHeader';
 import { LeadStatusRail } from './customer-detail/LeadStatusRail';
 import { RoomsTabs } from './customer-detail/RoomsTabs';
@@ -49,7 +50,7 @@ function normaliseRooms(raw: unknown[]): Room[] {
 }
 
 async function apiFetch<T>(url: string): Promise<T> {
-  const r = await fetch(url);
+  const r = await fetch(url, { cache: 'no-store' });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json() as Promise<T>;
 }
@@ -65,9 +66,9 @@ export function CustomerDetailPage() {
   const [rooms,        setRooms]        = useState<Room[]>([]);
   const [notes,        setNotes]        = useState('');
   const [tasks,        setTasks]        = useState<HubSpotTask[]>([]);
+  const { leadSubstatuses: leadSubs } = useWorkflowData();
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
   const [nullLsLabel,  setNullLsLabel]  = useState('No status');
-  const [leadSubs,     setLeadSubs]     = useState<LeadSubstatus[]>([]);
   const [lsLoaded,     setLsLoaded]     = useState(false);
   const [focusedLs,    setFocusedLs]    = useState<string | null>(null);
   const [selectedRoom, setSelectedRoom] = useState(0);
@@ -115,27 +116,17 @@ export function CustomerDetailPage() {
           excluded_from_sales: !!r.excluded_from_sales,
           stage: r.stage || null,
         }));
-      flushSync(() => {
-        setLeadStatuses(opts);
-        setNullLsLabel(nullLabel);
-        setLsLoaded(true);
-      });
       // Keep globals in sync
       const g = window as unknown as Record<string, unknown>;
       g.LEAD_STATUS_OPTIONS    = opts;
       g.LEAD_STATUSES_LOADED   = true;
       g.NULL_LEAD_STATUS_LABEL = nullLabel;
+      setLeadStatuses(opts);
+      setNullLsLabel(nullLabel);
+      setLsLoaded(true);
     } catch { setLsLoaded(true); }
   }, []);
 
-  const fetchLeadSubstatuses = useCallback(async () => {
-    try {
-      const rows = await apiFetch<LeadSubstatus[]>('/api/lead-substatuses');
-      if (!Array.isArray(rows)) return;
-      flushSync(() => setLeadSubs(rows));
-      (window as unknown as Record<string, unknown>).LEAD_SUBSTATUSES = rows;
-    } catch { /* noop */ }
-  }, []);
 
   const fetchContact = useCallback(async (): Promise<Contact | null> => {
     const c = await apiFetch<Contact>(`/api/contacts/${contactId}`);
@@ -227,7 +218,7 @@ export function CustomerDetailPage() {
     setError(null);
     try {
       const [, c] = await Promise.all([
-        Promise.all([fetchLeadStatuses(), fetchLeadSubstatuses()]),
+        fetchLeadStatuses(),
         fetchContact().catch(e => { throw e; }),
       ]);
       if (!c) { setError('Customer not found.'); setLoading(false); return; }
@@ -279,7 +270,7 @@ export function CustomerDetailPage() {
       setLoading(false);
     }
   }, [contactId, fetchContact, fetchDesignVisits, fetchGoogleEmails, fetchLeadStatuses,
-      fetchLeadSubstatuses, fetchVisits, fetchWhatsApp, notifyApiError]);
+      fetchVisits, fetchWhatsApp, notifyApiError]);
 
   // ── Global bridges (for test compat + workflow-core.js interop) ────────────
 
@@ -338,71 +329,46 @@ export function CustomerDetailPage() {
         .finally(() => setDvLoading(false));
     };
 
-    // Capture the originals from workflow-core.js before overwriting them.
-    // Those functions populate module-level LEAD_STATUS_OPTIONS and
-    // LEAD_SUBSTATUSES that the unified picker popup reads. We must call them
-    // in addition to the React fetch so the picker has data too.
-    const origLoadStatuses    = typeof g.loadLeadStatuses    === 'function' ? g.loadLeadStatuses    as () => Promise<void> : null;
-    const origLoadSubstatuses = typeof g.loadLeadSubstatuses === 'function' ? g.loadLeadSubstatuses as () => Promise<void> : null;
-
-    g.loadLeadStatuses    = () => Promise.all([fetchLeadStatuses(),    origLoadStatuses    ? origLoadStatuses()    : Promise.resolve()]);
-    g.loadLeadSubstatuses = () => Promise.all([fetchLeadSubstatuses(), origLoadSubstatuses ? origLoadSubstatuses() : Promise.resolve()]);
+    // WorkflowDataContext now owns LEAD_STATUS_OPTIONS and LEAD_SUBSTATUSES
+    // globally; these window shims are kept for the vanilla-JS picker popup
+    // that still reads them directly.
+    g.loadLeadStatuses    = () => fetchLeadStatuses();
     g.__setFocusedLeadStatus = (k: string) => flushSync(() => setFocusedLs(k));
-
-    // Register with workflow-core.js dispatcher if available
-    if (typeof (g.registerWorkflowHeaderRenderer) === 'function') {
-      (g.registerWorkflowHeaderRenderer as (fn: () => void) => void)(() => {
-        void fetchContact().then(c => { if (c) setContact(c); }).catch(() => {});
-      });
-    }
-    if (typeof (g.registerWorkflowStagesRenderer) === 'function') {
-      (g.registerWorkflowStagesRenderer as (fn: () => void) => void)(() => {
-        void fetchLeadStatuses();
-        void fetchLeadSubstatuses();
-      });
-    }
 
     return () => {
       delete g.renderWorkflowHeader;
       delete g.renderWorkflowStages;
       delete g.renderDesignVisits;
       delete g.loadLeadStatuses;
-      delete g.loadLeadSubstatuses;
       delete g.__setFocusedLeadStatus;
     };
-  }, [contactId, fetchContact, fetchDesignVisits, fetchLeadStatuses, fetchLeadSubstatuses]);
+  }, [contactId, fetchContact, fetchDesignVisits, fetchLeadStatuses]);
+
 
   // ── BroadcastChannel + visibilitychange subscriptions ─────────────────────
 
   useEffect(() => {
-    let lsCh: BroadcastChannel | null  = null;
-    let subCh: BroadcastChannel | null = null;
+    let lsCh: BroadcastChannel | null = null;
 
     if (typeof BroadcastChannel !== 'undefined') {
       lsCh = new BroadcastChannel('lead_statuses_changed');
       lsCh.addEventListener('message', () => {
         void fetchLeadStatuses();
       });
-      subCh = new BroadcastChannel('lead_substatuses_changed');
-      subCh.addEventListener('message', () => {
-        void fetchLeadSubstatuses();
-      });
     }
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         void fetchLeadStatuses();
-        void fetchLeadSubstatuses();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       lsCh?.close();
-      subCh?.close();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [fetchLeadStatuses, fetchLeadSubstatuses]);
+  }, [fetchLeadStatuses]);
 
   // ── Re-fetch emails when Google connects mid-session ───────────────────────
 
@@ -432,6 +398,91 @@ export function CustomerDetailPage() {
     window.addEventListener('mo:google-auth-disconnected', handler);
     return () => window.removeEventListener('mo:google-auth-disconnected', handler);
   }, []);
+
+  // ── Lead-status quick-set window bridge ─────────────────────────────────────
+  // window.quickSetLeadStatus / window._quickSetLeadStatusWithSub are called by
+  // LeadStatusPicker (src/react/components/pickers/LeadStatusPicker.tsx) via
+  // window globals to update contact state and fire the PATCH. A ref is used so
+  // the closures always read the latest contact without recreating on each render.
+
+  const contactRef = useRef<Contact | null>(null);
+  useEffect(() => { contactRef.current = contact; }, [contact]);
+
+  useEffect(() => {
+    const g = window as unknown as Record<string, unknown>;
+
+    g.quickSetLeadStatus = async (cId: unknown, newStatus: unknown) => {
+      const id = String(cId);
+      if (id !== contactId) return;
+      const c = contactRef.current;
+      const prevStatus    = c?.properties?.hs_lead_status    || '';
+      const prevSubstatus = c?.properties?.hw_lead_substatus || '';
+      const subBelongsToPrev = prevStatus
+        ? prevSubstatus.toUpperCase().startsWith(`${prevStatus.toUpperCase()}__`)
+        : false;
+      const clearSub = subBelongsToPrev;
+      if (prevStatus === String(newStatus) && !clearSub) return;
+
+      const updated: Contact = {
+        ...(c as Contact),
+        properties: {
+          ...(c?.properties || {}),
+          hs_lead_status:    String(newStatus),
+          ...(clearSub ? { hw_lead_substatus: '' } : {}),
+        },
+      };
+      setContact(updated);
+      contactRef.current = updated;
+      const st = (window as unknown as Record<string, unknown>).state as Record<string, unknown> | undefined;
+      if (st) st.selectedContact = updated;
+
+      const body: Record<string, string> = { hs_lead_status: String(newStatus) };
+      if (clearSub) body.hw_lead_substatus = '';
+      try {
+        await fetch(`/api/contacts/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } catch { /* noop — error toast handled by callers if needed */ }
+    };
+
+    g._quickSetLeadStatusWithSub = async (cId: unknown, statusKey: unknown, substatusKey: unknown) => {
+      const id = String(cId);
+      if (id !== contactId) return;
+      const c = contactRef.current;
+      const newHw         = `${String(statusKey).toUpperCase()}__${String(substatusKey).toUpperCase()}`;
+      const prevStatus    = c?.properties?.hs_lead_status    || '';
+      const prevSubstatus = c?.properties?.hw_lead_substatus || '';
+      if (prevStatus === String(statusKey) && prevSubstatus === newHw) return;
+
+      const updated: Contact = {
+        ...(c as Contact),
+        properties: {
+          ...(c?.properties || {}),
+          hs_lead_status:    String(statusKey),
+          hw_lead_substatus: newHw,
+        },
+      };
+      setContact(updated);
+      contactRef.current = updated;
+      const st = (window as unknown as Record<string, unknown>).state as Record<string, unknown> | undefined;
+      if (st) st.selectedContact = updated;
+
+      try {
+        await fetch(`/api/contacts/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hs_lead_status: String(statusKey), hw_lead_substatus: newHw }),
+        });
+      } catch { /* noop */ }
+    };
+
+    return () => {
+      delete g.quickSetLeadStatus;
+      delete g._quickSetLeadStatusWithSub;
+    };
+  }, [contactId, setContact]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Boot ───────────────────────────────────────────────────────────────────
 

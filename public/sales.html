@@ -92,53 +92,5 @@
   </script>
 
   <script src="/legacy-shim.js"></script>
-  <script src="/workflow-core.js"></script>
-  <script>
-    // Data-bridge event wiring for SalesBoardPage (inlined from sales.js).
-    // Overrides the open-leads loader so the page init fetches ALL contacts.
-    registerOpenLeadsLoader(loadAllContacts);
-    // Notify the React SalesBoardPage whenever fresh data is available.
-    document.addEventListener('mo:contacts-changed', function salesBoardNotifyReact() {
-      document.dispatchEvent(new CustomEvent('sales-board-data-ready'));
-    });
-    registerProjectsViewRenderer(function salesProjectsViewNotifyReact() {
-      document.dispatchEvent(new CustomEvent('sales-board-data-ready'));
-    });
-    // Reload contacts and workflow on background data changes, then notify React.
-    document.addEventListener('localdata-updated', async () => {
-      try {
-        await Promise.all([loadAllContacts(), loadWorkflowStages()]);
-        state.filteredContacts = [...state.contacts];
-        document.dispatchEvent(new CustomEvent('sales-board-data-ready'));
-      } catch (e) {
-        console.error('[SalesBoard] background refresh failed', e);
-        document.dispatchEvent(new CustomEvent('sales-board-bg-refresh-failed'));
-      }
-    });
-  </script>
-  <script>
-    // Load workflow data for the Sales board. Auth redirect and onboarding
-    // gating are handled by AppBootstrapProvider in the React tree.
-    document.addEventListener('DOMContentLoaded', async () => {
-      try {
-        await loadWorkflow();
-        await Promise.all([
-          loadOpenLeads(),        // overridden above to loadAllContacts
-          loadWorkflowStages(),
-          loadLeadStatuses(),
-          loadStageActionLabels(),
-          loadLeadSubstatuses(),
-        ]);
-        populateStageFilter();
-        document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
-      } catch (e) {
-        console.error('[sales] page init failed', e);
-        window.__salesBoardBootstrapFailed = { code: e.code, message: e.message };
-        document.dispatchEvent(new CustomEvent('sales-board-bootstrap-failed', {
-          detail: { code: e.code, message: e.message },
-        }));
-      }
-    });
-  </script>
 </body>
 </html>

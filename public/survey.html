@@ -28,50 +28,6 @@
   <script type="module" src="/react/main.js"></script>
 
   <script src="/legacy-shim.js"></script>
-  <script src="/workflow-core.js"></script>
   <script src="/card-action-handlers.js"></script>
-  <script>
-    // Data-bridge event wiring for SurveyBoardPage (inlined from survey.js).
-    // Overrides the open-leads loader so the page init fetches ALL contacts.
-    registerOpenLeadsLoader(loadAllContacts);
-    // Notify the React SurveyBoardPage whenever fresh data is available.
-    document.addEventListener('mo:contacts-changed', function surveyBoardNotifyReact() {
-      document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
-    });
-    // Reload contacts and workflow on background data changes, then notify React.
-    document.addEventListener('localdata-updated', async () => {
-      try {
-        await Promise.all([loadAllContacts(), loadWorkflowStages()]);
-        state.filteredContacts = [...state.contacts];
-        document.dispatchEvent(new CustomEvent('survey-board-data-ready'));
-      } catch (_err) {
-        document.dispatchEvent(new CustomEvent('survey-board-bg-refresh-failed'));
-      }
-    });
-  </script>
-  <script>
-    // Load workflow data for the Survey board. Auth redirect and onboarding
-    // gating are handled by AppBootstrapProvider in the React tree.
-    document.addEventListener('DOMContentLoaded', async () => {
-      try {
-        await loadWorkflow();
-        await Promise.all([
-          loadOpenLeads(),        // overridden above to loadAllContacts
-          loadWorkflowStages(),
-          loadLeadStatuses(),
-          loadStageActionLabels(),
-          loadLeadSubstatuses(),
-        ]);
-        populateStageFilter();
-        document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
-      } catch (e) {
-        console.error('[survey] page init failed', e);
-        window.__surveyBoardBootstrapFailed = { code: e.code, message: e.message };
-        document.dispatchEvent(new CustomEvent('survey-board-bootstrap-failed', {
-          detail: { code: e.code, message: e.message },
-        }));
-      }
-    });
-  </script>
 </body>
 </html>

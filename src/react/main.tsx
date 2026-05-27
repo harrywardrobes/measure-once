@@ -5,6 +5,7 @@ import { loadSearchSettings } from './lib/searchSettings';
 import { IslandErrorBoundary } from './components/IslandErrorBoundary';
 import { CardActionModalsHost } from './components/CardActionModalsHost';
 import { ConnectionToastProvider } from './context/ConnectionToastContext';
+import { WorkflowDataProvider } from './context/WorkflowDataContext';
 import { openCardActionModal } from './utils/cardActionModalRegistry';
 import {
   PageLoadingSkeleton,
@@ -101,6 +102,10 @@ function withTheme(
   node: React.ReactElement,
   islandId: string,
   fallback: React.ReactElement = <PageLoadingSkeleton />,
+  // Optional wrapper applied around the Suspense boundary (inside IslandErrorBoundary)
+  // so the wrapper's useEffect hooks fire as soon as the island mounts — before the
+  // lazy page chunk loads and the Suspense skeleton is replaced.
+  preSuspenseWrap?: (children: React.ReactNode) => React.ReactElement,
 ): React.ReactElement {
   const withBootstrap = (
     <AppBootstrapProvider islandId={islandId}>{node}</AppBootstrapProvider>
@@ -108,10 +113,12 @@ function withTheme(
   const inner = CONN_TOAST_EXCLUDED.has(islandId)
     ? withBootstrap
     : <ConnectionToastProvider>{withBootstrap}</ConnectionToastProvider>;
+  const suspensed = <Suspense fallback={fallback}>{inner}</Suspense>;
+  const wrapped = preSuspenseWrap ? preSuspenseWrap(suspensed) : suspensed;
   return (
     <AppThemeProvider>
       <IslandErrorBoundary islandId={islandId}>
-        <Suspense fallback={fallback}>{inner}</Suspense>
+        {wrapped}
       </IslandErrorBoundary>
     </AppThemeProvider>
   );
@@ -140,7 +147,12 @@ function withTheme(
  * and are invisible to users. Keep page-level structural ids (app-body,
  * *-page-body, etc.) distinct from the React mount ids listed below.
  */
-const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: React.ReactElement }> = [
+const MOUNTS: Array<{
+  id: string;
+  render: () => React.ReactElement;
+  fallback?: React.ReactElement;
+  preSuspenseWrap?: (children: React.ReactNode) => React.ReactElement;
+}> = [
   { id: 'login-root',           render: () => <LoginPage /> },
   { id: 'set-password-root',    render: () => <SetPasswordPage /> },
   { id: 'onboarding-root',      render: () => <OnboardingPage /> },
@@ -158,8 +170,8 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },
   { id: 'tab-workshop',         render: () => <WorkshopSettingsPage /> },
   { id: 'tab-customers',        render: () => <CustomersPage />, fallback: <CustomersPageSkeleton /> },
-  { id: 'sales-board-mount',    render: () => <SalesBoardPage />, fallback: <SalesBoardPageSkeleton /> },
-  { id: 'survey-board-mount',   render: () => <SurveyBoardPage /> },
+  { id: 'sales-board-mount',    render: () => <SalesBoardPage />, fallback: <SalesBoardPageSkeleton />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },
+  { id: 'survey-board-mount',   render: () => <SurveyBoardPage />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },
   { id: 'tab-team',             render: () => <AdminTeamPage />, fallback: <AdminTeamPageSkeleton /> },
   { id: 'tab-permissions',      render: () => <AdminPermissionsPage />, fallback: <AdminPermissionsPageSkeleton /> },
   { id: 'tab-requests',         render: () => <AdminRequestsPage />,   fallback: <AdminRequestsPageSkeleton /> },
@@ -170,7 +182,7 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'tab-designvisit',      render: () => <DesignVisitPage /> },
   { id: 'tab-devenv',           render: () => <DevEnvironmentPage /> },
   { id: 'ideas-page-mount',       render: () => <IdeasPage /> },
-  { id: 'customer-detail-root',   render: () => <CustomerDetailPage /> },
+  { id: 'customer-detail-root',   render: () => <CustomerDetailPage />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },
   { id: 'invoices-page-mount',    render: () => <StandaloneInvoicesPage /> },
   { id: 'projects-view',          render: () => <ProjectsPage />, fallback: <ProjectsPageSkeleton /> },
   { id: 'dv-signoff-mount',           render: () => <DesignVisitSignOffPage /> },
@@ -193,7 +205,7 @@ function mountKnown(): number {
     if (el.dataset.dsRendered === '1') { count++; continue; }
     el.dataset.dsRendered = '1';
     try {
-      createRoot(el).render(withTheme(m.render(), m.id, m.fallback));
+      createRoot(el).render(withTheme(m.render(), m.id, m.fallback, m.preSuspenseWrap));
     } catch (err) {
       // Synchronous throw during initial render() — extremely rare, but if
       // it happens we want a visible message rather than a blank panel.

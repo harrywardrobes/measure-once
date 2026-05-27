@@ -48,8 +48,8 @@ function substatusesForStatus(statusKey: string): LeadSubstatus[] {
     .slice()
     .sort(
       (a, b) =>
-        (a.sort_order ?? 0) - (b.sort_order ?? 0) ||
-        String(a.substatus_key).localeCompare(String(b.substatus_key)),
+        (b.sort_order ?? 0) - (a.sort_order ?? 0) ||
+        String(b.substatus_key).localeCompare(String(a.substatus_key)),
     );
 }
 
@@ -70,6 +70,8 @@ function PickerButton({
   isClear,
   isSub,
   onClick,
+  extraClass,
+  leadStatusKey,
 }: {
   label: string;
   isActive?: boolean;
@@ -77,12 +79,16 @@ function PickerButton({
   isClear?: boolean;
   isSub?: boolean;
   onClick?: () => void;
+  extraClass?: string;
+  leadStatusKey?: string;
 }) {
   return (
     <Box
       component="button"
       disabled={isDisabled}
       onClick={onClick}
+      className={extraClass}
+      data-lead-status={leadStatusKey}
       sx={{
         display: 'block',
         width: '100%',
@@ -214,6 +220,7 @@ export function LeadStatusPicker({
       transformOrigin={{ vertical: 'top', horizontal: 'left' }}
       slotProps={{
         paper: {
+          id: 'card-picker-popup',
           sx: {
             mt: 0.5,
             minWidth: 200,
@@ -242,6 +249,7 @@ export function LeadStatusPicker({
             isClear
             isDisabled={!liveStatus}
             onClick={liveStatus ? handleClear : undefined}
+            extraClass="card-picker-opt card-picker-opt--clear"
           />
           {statuses.map(({ value, label }) => {
             const subs = showSubstatuses ? substatusesForStatus(value) : [];
@@ -254,6 +262,8 @@ export function LeadStatusPicker({
                   label={label}
                   isActive={parentIsActive}
                   onClick={() => handleSelect(value)}
+                  extraClass="card-picker-opt"
+                  leadStatusKey={value}
                 />
                 {showSubstatuses &&
                   subs.map((sub) => {
@@ -267,6 +277,7 @@ export function LeadStatusPicker({
                         isActive={subIsActive}
                         isSub
                         onClick={() => handleSelectWithSub(value, sub.substatus_key)}
+                        extraClass="card-picker-opt card-picker-opt--sub"
                       />
                     );
                   })}

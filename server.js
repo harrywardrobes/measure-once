@@ -4857,6 +4857,10 @@ app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asyn
       hubspotSyncWarning = se.response?.data?.message || se.message || 'HubSpot sync failed.';
       console.warn('  hw_lead_substatus sync failed after update:', hubspotSyncWarning);
     }
+    const sseMsg = `data: ${JSON.stringify({ type: 'lead_substatuses_changed' })}\n\n`;
+    for (const client of _hsWebhookSseClients) {
+      try { client.write(sseMsg); } catch { _hsWebhookSseClients.delete(client); }
+    }
     res.json(hubspotSyncWarning ? { ...rows[0], hubspotSyncWarning } : rows[0]);
   } catch (e) {
     if (e.code === '23505') {

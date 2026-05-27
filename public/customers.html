@@ -29,14 +29,14 @@
   <main id="tab-customers"></main>
 
   <!--
-    legacy-shim.js / workflow-core.js are loaded so the React Customers island
-    can reuse the legacy `state.contactUrgencyCache` + `getTaskUrgency` helpers.
-    QB invoices are now fetched directly by the React useQBInvoices() hook.
+    legacy-shim.js / invoices-core.js are loaded so the React Customers island
+    can reuse the legacy `state.qb.invoices` cache. CustomersPage.tsx defines
+    its own stageColour / matchInvoicesForContact / getTaskUrgency fallbacks.
     bootstrap() is NOT called — the React island fetches its own data and
     auth is handled by AppBootstrapProvider in the React tree.
   -->
   <script src="/legacy-shim.js"></script>
-  <script src="/workflow-core.js"></script>
+  <script src="/invoices-core.js"></script>
 
   <script type="module" src="/react/main.js"></script>
 </body>
