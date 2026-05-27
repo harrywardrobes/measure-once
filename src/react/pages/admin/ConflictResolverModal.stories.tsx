@@ -221,6 +221,23 @@ export const TwoConflictingHandlers: Story = {
       },
     },
   },
+  play: async () => {
+    const body = within(document.body);
+
+    const dialog = await body.findByRole('dialog');
+    const removeButtons = await within(dialog).findAllByRole('button', { name: 'Remove' });
+    await userEvent.click(removeButtons[0]);
+
+    await waitFor(
+      () => expect(body.queryAllByRole('button', { name: 'Remove' }).length).toBeLessThanOrEqual(1),
+      { timeout: 3000 },
+    );
+
+    await waitFor(
+      () => expect(body.queryByRole('dialog')).not.toBeInTheDocument(),
+      { timeout: 3000 },
+    );
+  },
 };
 
 export const ThreeConflictingHandlersSubstatus: Story = {
@@ -236,6 +253,30 @@ export const ThreeConflictingHandlersSubstatus: Story = {
       },
     },
   },
+  play: async () => {
+    const body = within(document.body);
+
+    const dialog = await body.findByRole('dialog');
+
+    const firstRemove = await within(dialog).findAllByRole('button', { name: 'Remove' });
+    await userEvent.click(firstRemove[0]);
+
+    await waitFor(
+      async () => {
+        const btns = within(dialog).queryAllByRole('button', { name: 'Remove' });
+        expect(btns).toHaveLength(2);
+      },
+      { timeout: 3000 },
+    );
+
+    const secondRemove = within(dialog).getAllByRole('button', { name: 'Remove' });
+    await userEvent.click(secondRemove[0]);
+
+    await waitFor(
+      () => expect(body.queryByRole('dialog')).not.toBeInTheDocument(),
+      { timeout: 3000 },
+    );
+  },
 };
 
 export const RemoveError: Story = {
@@ -250,6 +291,20 @@ export const RemoveError: Story = {
           'allowing the admin to retry.',
       },
     },
+  },
+  play: async () => {
+    const body = within(document.body);
+
+    const dialog = await body.findByRole('dialog');
+    const removeButtons = await within(dialog).findAllByRole('button', { name: 'Remove' });
+    await userEvent.click(removeButtons[0]);
+
+    await within(dialog).findByText(/Remove failed/);
+
+    await waitFor(() => {
+      const btns = within(dialog).getAllByRole('button', { name: 'Remove' });
+      btns.forEach(btn => expect(btn).not.toBeDisabled());
+    }, { timeout: 3000 });
   },
 };
 
