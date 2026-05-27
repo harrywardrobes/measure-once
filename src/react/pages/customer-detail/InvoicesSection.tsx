@@ -31,10 +31,35 @@ function matchInvoices(contact: Contact, invoices: InvoiceSummary[]): InvoiceSum
   });
 }
 
+function InvoiceSkeletonRows() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {[48, 38, 52].map((w, i) => (
+        <div key={i} style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 12, padding: '4px 4px 6px',
+          borderBottom: '1px solid var(--stone)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+            <div className="inv-skeleton-pulse" style={{ width: `${w}%`, height: 13, borderRadius: 4 }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+            <div className="inv-skeleton-pulse" style={{ width: 50, height: 13, borderRadius: 4 }} />
+            <div className="inv-skeleton-pulse" style={{ width: 46, height: 20, borderRadius: 999 }} />
+            <div className="inv-skeleton-pulse" style={{ width: 48, height: 13, borderRadius: 4 }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function InvoicesSection({ contact, qb }: Props) {
   const { isAdmin } = usePrivilege();
   const [drawerOpen, setDrawerOpen]   = useState(false);
   const [drawerInvId, setDrawerInvId] = useState<string | null>(null);
+
+  const isLoadingState = qb.loading || (!qb.statusKnown && !qb.loaded && !qb.loadError);
 
   const matched = qb.loaded ? matchInvoices(contact, qb.invoices) : [];
   const allIds  = matched.map(inv => inv.id);
@@ -68,8 +93,7 @@ export function InvoicesSection({ contact, qb }: Props) {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  if (!qb.statusKnown) return null;
-  if (!qb.connected) return null;
+  if (!isLoadingState && qb.statusKnown && !qb.connected) return null;
 
   function openDrawer(invId: string) {
     setDrawerInvId(invId);
@@ -92,9 +116,7 @@ export function InvoicesSection({ contact, qb }: Props) {
           )}
         </div>
 
-        {qb.loading && (
-          <p style={{ fontSize: '0.875rem', fontStyle: 'italic', padding: '0 4px', color: 'var(--stone-deep)' }}>Loading invoices…</p>
-        )}
+        {isLoadingState && <InvoiceSkeletonRows />}
         {qb.loadError && (
           <p style={{ fontSize: '0.875rem', padding: '0 4px', color: 'var(--status-danger)' }}>{qb.error || 'Failed to load invoices.'}</p>
         )}

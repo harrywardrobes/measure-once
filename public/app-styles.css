@@ -432,6 +432,13 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 /* ── Customer-detail invoice row hover ─────────────────────────────────────── */
 .inv-row:hover { background: var(--paper-deep); }
 
+/* ── Customer-detail invoice skeleton rows ─────────────────────────────────── */
+.inv-skeleton-pulse {
+  background: linear-gradient(90deg, var(--stone-light) 25%, var(--paper) 50%, var(--stone-light) 75%);
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
 /* ── Task section button hover/active states ───────────────────────────────── */
 #add-task-btn:hover { background: var(--orchid-tint); }
 .task-save-btn:hover:not(:disabled) { filter: brightness(0.92); }
