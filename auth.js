@@ -229,6 +229,39 @@ async function sendSetPasswordEmail(email, token, { resend = false, reset = fals
   }
 }
 
+async function notifyUserOfPhotoApproval(email) {
+  const transport = createMailTransport();
+  if (!transport) {
+    console.warn(`  SMTP not configured — skipping photo-approval email for ${email}.`);
+    return;
+  }
+  const profileUrl = `${appBaseUrl()}/profile`;
+  const from = buildFromHeader();
+  const replyTo = buildReplyTo();
+  try {
+    await transport.sendMail({
+      from,
+      replyTo,
+      to: email,
+      subject: 'Your profile photo has been approved — Measure Once',
+      text: [
+        'Your profile photo submission has been reviewed and approved.',
+        '',
+        'Your new photo is now live on your profile:',
+        `  ${profileUrl}`,
+      ].join('\n'),
+      html: `
+        <p>Your profile photo submission has been reviewed and <strong>approved</strong>.</p>
+        <p>Your new photo is now live on your profile:</p>
+        <p><a href="${profileUrl}">${profileUrl}</a></p>
+      `,
+    });
+    console.log(`  Photo-approval email sent to ${email}`);
+  } catch (err) {
+    console.error('  Failed to send photo-approval email:', err.message);
+  }
+}
+
 async function notifyUserOfPhotoRejection(email) {
   const transport = createMailTransport();
   if (!transport) {
@@ -2494,6 +2527,9 @@ async function setupAuth(app) {
       );
       if (r.rowCount === 0) return res.status(404).json({ error: 'No pending photo found.' });
       await logAdminAction(req.user?.claims?.email || req.user?.email || null, 'approve_profile_photo', r.rows[0].email, 'Profile photo approved');
+      notifyUserOfPhotoApproval(r.rows[0].email).catch(err =>
+        console.error('  Photo-approval notification error:', err.message)
+      );
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
