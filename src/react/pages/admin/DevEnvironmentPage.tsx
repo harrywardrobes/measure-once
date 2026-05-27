@@ -43,6 +43,21 @@ const DEV_ONLY_FEATURES: Array<{
     ),
   },
   {
+    name: 'Storybook dev server',
+    location: 'Port 6006 — npm run watch:storybook',
+    description: (
+      <>
+        A local Storybook dev server with Hot Module Replacement for iterating on the design-system
+        gallery (<code className="adm-inline-code">src/react/stories/</code>). Start it with{' '}
+        <code className="adm-inline-code">npm run watch:storybook</code> and open the gallery on{' '}
+        <strong>port 6006</strong>. This is a build-time development tool — it has no equivalent in
+        the published app. The static Storybook build served by Express at{' '}
+        <code className="adm-inline-code">/storybook/</code> is updated separately via{' '}
+        <code className="adm-inline-code">npm run build:storybook</code>.
+      </>
+    ),
+  },
+  {
     name: 'HubSpot webhook — signature verification bypass',
     location: 'Settings tab → HubSpot Webhooks panel / POST /api/hubspot/webhook',
     description: (
