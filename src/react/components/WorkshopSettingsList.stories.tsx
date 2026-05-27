@@ -10,7 +10,8 @@ const SAMPLE: WorkshopSetting[] = [
 ];
 
 const meta: Meta<typeof WorkshopSettingsList> = {
-  title: 'UI/WorkshopSettingsList',
+  title: 'Components/WorkshopSettingsList',
+  tags: ['autodocs'],
   component: WorkshopSettingsList,
   parameters: { layout: 'padded' },
   decorators: [

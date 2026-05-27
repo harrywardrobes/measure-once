@@ -3,7 +3,8 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { PageFilterBar } from './PageFilterBar';
 
 const meta: Meta<typeof PageFilterBar> = {
-  title: 'Filter & Toolbar/PageFilterBar',
+  title: 'Components/Filters/PageFilterBar',
+  tags: ['autodocs'],
   component: PageFilterBar,
   parameters: {
     layout: 'padded',

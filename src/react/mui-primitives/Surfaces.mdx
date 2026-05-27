@@ -1,0 +1,46 @@
+{/* mui-primitives/Surfaces.mdx */}
+import { Meta } from '@storybook/blocks';
+
+<Meta title="MUI Primitives/Surfaces" />
+
+# Surfaces
+
+Covers MUI surface components: `Paper`, `Card`, `CardContent`, `CardActions`,
+`Accordion`, and `AppBar`.
+
+## Usage guidelines
+
+### Paper
+
+`<Paper>` is the go-to surface for contained content sections. Use
+`variant="outlined"` (no shadow) for most data panels, and `elevation={1}` for
+elements that need subtle lift (e.g. dropdown menus).
+
+```tsx
+<Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+  Panel content
+</Paper>
+```
+
+### Card / CardContent / CardActions
+
+Use `<Card>` when both a header area and an actions row are needed. The project-card
+in the Projects view is built with a custom shell rather than `<Card>` — see
+**Features/Pages/ProjectCard** for reference. Avoid `Card` if only a bordered container
+is needed; `<Paper variant="outlined">` is lighter.
+
+### Accordion
+
+Use `<Accordion>` sparingly — only when content must be progressively disclosed and
+a tab or drawer would be disproportionate. Avoid nested accordions.
+
+### AppBar
+
+Handled by the `GlobalHeader` component. Do not add a second `<AppBar>` on any page;
+use `PageHeadingPanel` for page-level headings instead.
+
+## Common pitfalls
+
+- **Card inside Card** — creates ambiguous visual hierarchy; redesign with a flat list or a drawer.
+- **Paper with `elevation` and `variant="outlined"` together** — MUI ignores elevation when `variant="outlined"` is set; pick one.
+- **Custom box shadows via `sx={{ boxShadow: '...' }}`** — always use a `theme.shadows[n]` value or `elevation` prop to stay on-theme.

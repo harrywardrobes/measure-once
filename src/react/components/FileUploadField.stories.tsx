@@ -5,7 +5,8 @@ import Typography from '@mui/material/Typography';
 import { FileUploadField } from './FileUploadField';
 
 const meta: Meta<typeof FileUploadField> = {
-  title: 'Inputs/FileUploadField',
+  title: 'Components/FileUploadField',
+  tags: ['autodocs'],
   component: FileUploadField,
   parameters: { layout: 'padded' },
   argTypes: {

@@ -1,0 +1,36 @@
+{/* GlobalHeader.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as GlobalHeaderStories from './GlobalHeader.stories';
+
+<Meta title="Components/Navigation/GlobalHeader/Guide" />
+
+# GlobalHeader
+
+The fixed top app bar rendered on every page. Shows back navigation, the search
+shortcut, service-status indicator badges for HubSpot, Google, and QuickBooks, and
+role-gated shortcut buttons. Admin users see additional Admin panel and Design system
+icon buttons.
+
+## When to use
+
+This component is mounted globally (once per page layout) by the React island. It is not
+a composable primitive — every page automatically gets a `GlobalHeader`.
+
+## When not to use
+
+- Do not render `GlobalHeader` inside a story, dialog, or nested panel — it assumes a
+  full-page context with a fixed `z-index`.
+- Do not add custom content to `GlobalHeader` via props — use `PageHeadingPanel` for
+  page-level action areas.
+
+## Do / Don't
+
+**Do:** keep the service-status `ConnectionToastContext` provider in the component tree
+above `GlobalHeader` so badge state updates propagate correctly.
+
+**Don't:** add page-specific navigation or action buttons to `GlobalHeader` — keep it
+global and predictable.
+
+---
+
+<Canvas of={GlobalHeaderStories.AdminView} />

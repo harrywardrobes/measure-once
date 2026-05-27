@@ -1,0 +1,34 @@
+{/* StageTabGroup.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as StageTabGroupStories from './StageTabGroup.stories';
+
+<Meta title="Components/Filters/StageTabGroup/Guide" />
+
+# StageTabGroup
+
+A horizontally scrollable group of pipeline-stage tab buttons styled with the
+`STAGE_COLORS` tokens. Each tab uses the stage's `bg` / `light` / `text` colour set
+so the active tab is immediately identifiable by both colour and underline indicator.
+
+## When to use
+
+- On the Projects page and any page that lets users filter by pipeline stage.
+
+## When not to use
+
+- For non-stage tabs — use `TabBar` for generic section tabs that don't need stage
+  colour coding.
+- When stage colours are not relevant to the context — generic chip filters (`FilterChipRow`)
+  are less visually heavy.
+
+## Do / Don't
+
+**Do:** derive the stages array from the canonical stage config so the tab group stays
+in sync with any stage renames or additions.
+
+**Don't:** hardcode stage colours in JSX — always use the `STAGE_COLORS` tokens from
+`theme.ts` so updates propagate automatically.
+
+---
+
+<Canvas of={StageTabGroupStories.Default} />

@@ -12,7 +12,8 @@ const SAMPLE_TABS = [
 ];
 
 const meta: Meta<typeof StageTabGroup> = {
-  title: 'Filter & Toolbar/StageTabGroup',
+  title: 'Components/Filters/StageTabGroup',
+  tags: ['autodocs'],
   component: StageTabGroup,
   parameters: {
     layout: 'padded',

@@ -1,0 +1,35 @@
+{/* SearchActionList.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as SearchActionListStories from './SearchActionList.stories';
+
+<Meta title="Components/SearchActionList/Guide" />
+
+# SearchActionList
+
+A drag-and-drop reorderable list of toggleable actions used in the command-palette
+settings panel. Each row has a label, category tag, optional hint, an enable/disable
+toggle, and a drag handle.
+
+## When to use
+
+- In admin settings panels where users need to customise a list of available actions
+  (e.g. command-palette quick actions).
+
+## When not to use
+
+- For arbitrary list data — this component is purpose-built for the action-toggle/reorder
+  UX pattern. For general lists use MUI `<List>`.
+- When items do not need to be reordered or toggled — use a plain `<List>` with
+  `ListItem` rows.
+
+## Do / Don't
+
+**Do:** persist the order and enabled state via the `onReorder` and `onToggle` callbacks —
+the component is uncontrolled for drag state but expects the parent to own the canonical list.
+
+**Don't:** pass a very large list (> 50 items) without virtual scrolling — the drag UX
+degrades at large list sizes.
+
+---
+
+<Canvas of={SearchActionListStories.Default} />

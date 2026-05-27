@@ -1,0 +1,34 @@
+{/* TabBar.mdx — component documentation */}
+import { Meta, Canvas, Controls } from '@storybook/blocks';
+import * as TabBarStories from './TabBar.stories';
+
+<Meta title="Components/TabBar/Guide" />
+
+# TabBar
+
+A horizontally scrolling tab bar using MUI `Tabs`. Provides a consistent styled
+indicator, scroll buttons, and keyboard navigation for section switching.
+
+## When to use
+
+- For switching between two or more distinct content sections within a page or panel.
+- When all section labels are known upfront and fit on one line or scroll horizontally.
+
+## When not to use
+
+- For navigation between pages — use the `BottomNav` or the global sidebar.
+- When there are more than ~7 tabs — consider a `<Select>` dropdown instead to avoid
+  excessive horizontal scrolling.
+- For toggling a single boolean — use a `Toggle` instead.
+
+## Do / Don't
+
+**Do:** keep tab labels short (1–3 words) so they fit without truncation.
+
+**Don't:** nest a `TabBar` inside another `TabBar` — use a different information
+architecture (e.g. a sidebar + panel) if two levels of tabs are needed.
+
+---
+
+<Canvas of={TabBarStories.Default} />
+<Controls of={TabBarStories.Default} />

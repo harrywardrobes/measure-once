@@ -1,0 +1,47 @@
+{/* mui-primitives/Feedback.mdx */}
+import { Meta } from '@storybook/blocks';
+
+<Meta title="MUI Primitives/Feedback" />
+
+# Feedback
+
+Covers MUI feedback components: `Alert`, `CircularProgress`, `LinearProgress`,
+`Dialog`, `Snackbar`, `Skeleton`, and `Backdrop`.
+
+## Usage guidelines
+
+### Alert
+
+Use `<Alert severity="…">` for inline error, warning, info, and success messages.
+Prefer `severity="error"` for form validation failures and API errors shown within a
+page section. Prefer `<Snackbar>` / `window.showBottomUndo` for brief transient feedback.
+
+```tsx
+<Alert severity="warning">QuickBooks is not connected.</Alert>
+```
+
+### CircularProgress / LinearProgress
+
+Use `<CircularProgress size={20} />` inside buttons to show in-flight state. Use
+`<LinearProgress />` for indeterminate page-level loading when a skeleton placeholder
+is not available. See **Components/Skeletons/PageSkeletons** for the recommended
+skeleton-first approach.
+
+### Dialog
+
+For modals, prefer the app's existing dialog patterns (e.g. `BottomActionBar` for
+destructive confirmations, or existing `*Modal` components in `components/modals/`).
+Only use a raw `<Dialog>` for genuinely new interactions not covered by existing
+components.
+
+### Skeleton
+
+Use the app's `<Skeleton>` wrapper (see **Components/Skeleton**) for single-line
+skeleton placeholders, and the `PageLoadingSkeleton` / `*PageSkeleton` components for
+full-page shapes (see **Components/Skeletons/PageSkeletons**).
+
+## Common pitfalls
+
+- **Loading spinners blocking the whole page** — prefer skeleton placeholders which
+  preserve layout during load (lower perceived latency).
+- **Dialog without accessible title** — always include `<DialogTitle>`.

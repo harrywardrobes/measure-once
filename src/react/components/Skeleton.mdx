@@ -1,0 +1,34 @@
+{/* Skeleton.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as SkeletonStories from './Skeleton.stories';
+
+<Meta title="Components/Skeleton/Guide" />
+
+# Skeleton
+
+A pulsing placeholder used while content is loading. Reduces perceived latency by
+preserving the layout shape before data arrives.
+
+## When to use
+
+- For individual fields, headings, or lines within a component that fetches async data.
+- In combination with the page-level skeleton components in `PageLoadingSkeleton.tsx`
+  (see **Components/Skeletons/PageSkeletons**) for full-page loading states.
+
+## When not to use
+
+- After data has loaded — remove skeletons promptly; stale placeholders confuse users.
+- For a list of known-finite items — use a `CircularProgress` spinner if the list is small
+  and loads quickly (< 300 ms), or a skeleton if it may take longer.
+
+## Do / Don't
+
+**Do:** match the skeleton dimensions (width, height) as closely as possible to the
+real content to minimise layout shift when content arrives.
+
+**Don't:** show a skeleton for longer than the actual load time — if an API call
+consistently returns in < 100 ms, skip the skeleton entirely to avoid a flash.
+
+---
+
+<Canvas of={SkeletonStories.LoadingBlock} />

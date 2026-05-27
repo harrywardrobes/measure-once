@@ -1,0 +1,44 @@
+{/* mui-primitives/Navigation.mdx */}
+import { Meta } from '@storybook/blocks';
+
+<Meta title="MUI Primitives/Navigation" />
+
+# Navigation
+
+Covers MUI navigation components: `Tabs` / `Tab`, `Drawer`, `AppBar`, `BottomNavigation`,
+`Breadcrumbs`, `Menu` / `MenuItem`, and `Link`.
+
+## Usage guidelines
+
+### Tabs / Tab
+
+Use `<Tabs>` for page-level section switching (e.g. the admin panel tabs). Use the
+app's `TabBar` component (see **Components/TabBar**) for the standard styled tab bar —
+it wraps MUI Tabs with the correct indicator colour and scroll behaviour.
+
+### Drawer
+
+Use `<Drawer anchor="bottom">` for mobile action sheets, `anchor="right"` for detail
+panels (e.g. `InvoiceDetailDrawer`). Always manage open/close state in a parent
+component, not inside the Drawer itself.
+
+### AppBar
+
+Use the app's `GlobalHeader` component (see **Components/Navigation/GlobalHeader**)
+rather than a raw `<AppBar>` — it handles auth state, admin shortcuts, and service
+status badges.
+
+### BottomNavigation
+
+Use the app's `BottomNav` component (see **Components/Navigation/BottomNav**) — it
+handles the 4-item constraint, the overflow drawer, and role-aware tab sets.
+
+### Menu / MenuItem
+
+Use `<Menu>` for contextual action menus triggered by an `<IconButton>`. Keep menu
+items short (≤ 3 words) and provide a keyboard-accessible trigger.
+
+## Common pitfalls
+
+- **Raw `<a href>` inside React** — use MUI `<Link>` or the router's `<Link>` so styles stay consistent.
+- **`Drawer` without `disableScrollLock`** — on mobile this can cause jitter; set it when the drawer is not full-screen.

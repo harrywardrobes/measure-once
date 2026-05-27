@@ -1,0 +1,49 @@
+{/* mui-primitives/Inputs.mdx */}
+import { Meta } from '@storybook/blocks';
+
+<Meta title="MUI Primitives/Inputs" />
+
+# Inputs
+
+Covers MUI input components: `TextField`, `Select`, `Checkbox`, `Switch`, `Button`,
+`IconButton`, `Autocomplete`, and `DateTimePicker`.
+
+## Usage guidelines
+
+### TextField
+
+Use `TextField` for all free-text inputs. Always set `size="small"` in compact forms
+(modals, drawers) and `size="medium"` in full-page forms. Always provide a `label`
+**and** an `id` so the label and input are properly linked for screen readers.
+
+```tsx
+<TextField size="small" label="First name" id="first-name" />
+```
+
+### Select
+
+Prefer the app's `SortSelect` wrapper (see **Components/Filters/SortSelect**) for
+sort dropdowns — it handles `labelId` derivation automatically. For general selects,
+use MUI's `FormControl + InputLabel + Select` triad; never a bare `<select>` element.
+
+### Button
+
+For primary and ghost actions, use the app's `Button` component
+(see **Components/Button**) rather than MUI's raw `<Button>` directly. This ensures
+the variant tokens (`primary`, `ghost`, `approve`) stay consistent.
+
+### DateTimePicker
+
+Use `@mui/x-date-pickers/DateTimePicker` with `LocalizationProvider` wrapping the
+tree. The `DesignVisitStep1` wizard demonstrates the correct setup.
+
+### Autocomplete
+
+Use when users need to search and select from a large or dynamic option list.
+Keep `freeSolo={false}` for validated lists.
+
+## Common pitfalls
+
+- **Missing `label` / `id`** — breaks screen readers and floating labels.
+- **Raw `<input>` or `<select>`** — always wrap in MUI components for consistent styling.
+- **Custom styling over `sx`** — prefer `sx` and theme overrides; avoid `style={}` (see `test:inline-styles`).

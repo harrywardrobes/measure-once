@@ -1,0 +1,49 @@
+{/* mui-primitives/Layout.mdx */}
+import { Meta } from '@storybook/blocks';
+
+<Meta title="MUI Primitives/Layout" />
+
+# Layout
+
+Covers MUI layout components: `Box`, `Stack`, `Grid`, `Container`, `Paper`, and `Card`.
+
+## Usage guidelines
+
+### Box
+
+`<Box>` is the primary layout primitive. Use the `sx` prop for spacing, flex, and
+positioning rather than CSS classes or inline `style={}` attributes.
+
+```tsx
+<Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+  {children}
+</Box>
+```
+
+### Stack
+
+Use `<Stack spacing={…} direction="row">` instead of a `<Box sx={{ display: 'flex',
+gap: … }}>` whenever children should be laid out as a uniform row or column — it
+is more readable and handles responsive direction changes cleanly.
+
+### Paper
+
+Use `<Paper variant="outlined">` for bordered card shells and `<Paper elevation={n}>`
+when a drop shadow is needed. Prefer `elevation={1}` or `elevation={2}` — higher
+values look inconsistent with the overall flat aesthetic.
+
+### Grid
+
+Use `<Grid container>` / `<Grid item>` for multi-column responsive layouts. Prefer
+`<Stack>` + `flexWrap` for simpler one-dimensional layouts.
+
+### Container
+
+Use `<Container maxWidth="lg">` to constrain page width on wide screens. Avoid on
+full-bleed pages (e.g. the admin panel which manages its own width).
+
+## Common pitfalls
+
+- **Inline `style={}`** — fails `test:inline-styles`; use `sx`.
+- **Deeply nested `<Grid>` inside `<Box sx={{ display: 'flex' }}>` ** — pick one layout model.
+- **`<Card>` instead of `<Paper>`** — `Card` adds extra padding assumptions; use `Paper` for raw shells.

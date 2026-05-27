@@ -2,7 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { BottomNav, NAV } from './BottomNav';
 
 const meta: Meta<typeof BottomNav> = {
-  title: 'UI/BottomNav',
+  title: 'Components/Navigation/BottomNav',
+  tags: ['autodocs'],
   component: BottomNav,
   parameters: {
     layout: 'fullscreen',

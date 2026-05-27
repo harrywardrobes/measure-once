@@ -3,7 +3,8 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { TabBar } from './TabBar';
 
 const meta: Meta<typeof TabBar> = {
-  title: 'UI/TabBar',
+  title: 'Components/TabBar',
+  tags: ['autodocs'],
   component: TabBar,
   parameters: { layout: 'padded' },
 };

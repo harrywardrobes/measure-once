@@ -1,0 +1,35 @@
+{/* SortSelect.mdx — component documentation */}
+import { Meta, Canvas, Controls } from '@storybook/blocks';
+import * as SortSelectStories from './SortSelect.stories';
+
+<Meta title="Components/Filters/SortSelect/Guide" />
+
+# SortSelect
+
+A standard MUI outlined `Select` for sort-order dropdowns. Derives a unique
+`labelId` from the `label` prop automatically, so multiple instances on the same
+page stay accessible without manual ID management.
+
+## When to use
+
+- For sort-order controls in list pages and filter toolbars.
+- When the user needs to choose one ordering from a small set of named options.
+
+## When not to use
+
+- For filtering by a discrete category — use `FilterChipRow` instead (chips are more
+  scannable for ≤ 8 options).
+- When the option list is long and searchable — use MUI `Autocomplete` instead.
+
+## Do / Don't
+
+**Do:** set `minWidth` to match the longest option label so the select never truncates
+its current value.
+
+**Don't:** use a bare MUI `<Select>` for sort controls — `SortSelect` handles the
+`FormControl + InputLabel + Select` triad consistently with correct `labelId` pairing.
+
+---
+
+<Canvas of={SortSelectStories.Interactive} />
+<Controls of={SortSelectStories.Default} />

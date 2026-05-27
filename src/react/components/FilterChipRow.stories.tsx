@@ -12,7 +12,8 @@ const LEAD_STATUS_CHIPS = [
 ];
 
 const meta: Meta<typeof FilterChipRow> = {
-  title: 'Filter & Toolbar/FilterChipRow',
+  title: 'Components/Filters/FilterChipRow',
+  tags: ['autodocs'],
   component: FilterChipRow,
   parameters: {
     layout: 'padded',

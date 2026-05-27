@@ -1,0 +1,39 @@
+{/* Welcome.mdx — top-level landing page for the Measure Once design system */}
+import { Meta } from '@storybook/blocks';
+
+<Meta title="Welcome" />
+
+# Measure Once — Design System
+
+Welcome to the **Measure Once design system handbook**. This Storybook is the single source of
+truth for UI components, design tokens, and usage guidelines used across the Measure Once
+dashboard.
+
+## Who it's for
+
+- **Designers** — browse tokens (colours, typography, spacing, radii), see all component
+  variants in one place, and check do/don't guidance before proposing changes.
+- **Developers** — find live prop tables, co-located source files, and implementation notes
+  for every component. The prop tables are auto-generated from TypeScript types, so they
+  always match production.
+- **PMs & stakeholders** — use the Features section to see exactly how complex flows (design
+  visits, invoices, project cards) look across their various states without needing a full
+  test environment.
+
+## How to navigate
+
+The sidebar is organised into five sections:
+
+| Section | What's inside |
+|---|---|
+| **Foundations** | Design tokens (colours, typography, spacing, radii) and the icon reference |
+| **MUI Primitives** | Approved MUI components with usage guidelines for this codebase |
+| **Components** | Every reusable component with auto-generated prop tables and MDX docs |
+| **Features** | Page-level and feature-level stories (design visits, invoices, project cards, etc.) |
+
+## Deeper reading
+
+- Component source lives in `src/react/components/` — each story file sits next to its component.
+- Icon rules: `src/react/ICONS.md`
+- Full React island conventions: `src/react/README.md`
+- Design tokens: `src/react/theme.ts`

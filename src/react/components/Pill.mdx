@@ -1,0 +1,36 @@
+{/* Pill.mdx — component documentation */}
+import { Meta, Canvas, Controls } from '@storybook/blocks';
+import * as PillStories from './Pill.stories';
+
+<Meta title="Components/Pill/Guide" />
+
+# Pill
+
+A compact inline status badge with five semantic colour variants. Used to communicate
+record states (active, blocked, pending, new) in list rows, card headers, and detail panels.
+
+## When to use
+
+- To show the status of a record or entity inline with its label.
+- When a colour-coded label needs to convey success / error / warning / info semantics.
+
+## When not to use
+
+- For lead-status or pipeline-stage indicators — use the `DesignVisitStatusPill` or
+  the lead-status badge rendered by `_renderWorkflowHeaderImpl` instead.
+- For filter chips — use `FilterChipRow` (see **Components/Filters/FilterChipRow**).
+- As an action target (clickable chip) — Pill is display-only; use MUI `<Chip>` with an
+  `onClick` handler for interactive chips.
+
+## Do / Don't
+
+**Do:** choose the variant that matches semantic meaning — `success` for active/completed,
+`danger` for blocked/failed, `warn` for pending/at-risk, `info` for new/unread.
+
+**Don't:** use colour alone to convey meaning — always include a text label so the status
+is legible to colour-blind users.
+
+---
+
+<Canvas of={PillStories.AllVariants} />
+<Controls of={PillStories.Neutral} />

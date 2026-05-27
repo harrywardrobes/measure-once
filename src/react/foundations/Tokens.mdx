@@ -1,0 +1,84 @@
+{/* foundations/Tokens.mdx — design token guidance */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as TokenStories from '../Tokens.stories';
+
+<Meta title="Foundations/Tokens/Docs" />
+
+# Design Tokens
+
+Design tokens are the named constants that define the visual language of Measure Once —
+colours, typography, spacing, and radii. Using tokens instead of hardcoded values ensures
+that visual changes propagate consistently across the whole UI.
+
+## When to use tokens
+
+**Always prefer tokens over hardcoded values.** Hard-coded hex colours, pixel sizes, and
+border-radius values make the UI drift over time and break dark-mode or theme overrides.
+
+Reach for a token whenever you are setting:
+
+- A colour (`background`, `color`, `border-color`, `fill`)
+- A border radius
+- Spacing that relates to the 8 px grid
+- A typographic style
+
+## How to reference tokens
+
+### In React / `sx` prop
+
+```tsx
+// Palette colours via MUI theme
+sx={{ color: 'text.primary', bgcolor: 'background.paper' }}
+
+// Brand tokens — available on theme.palette.brand.*
+sx={{ color: 'brand.orchid', bgcolor: 'brand.paper' }}
+
+// Stage colours — available on theme.palette.stage.*
+sx={{ color: (t) => t.palette.stage.sales.text }}
+
+// Radii tokens — available on theme.radius.*
+sx={{ borderRadius: (t) => `${t.radius.md}px` }}
+```
+
+### In CSS / Tailwind
+
+All brand and stage tokens are emitted as CSS custom properties by `scripts/generate-tokens-css.mjs`
+and loaded via `public/tokens.css`. Use them in any CSS file:
+
+```css
+.my-element {
+  color: var(--orchid);
+  background: var(--stage-sales-light);
+  border-radius: var(--radius-md);
+}
+```
+
+### Avoid
+
+- `sx={{ color: '#5C4A8A' }}` — hardcoded hex
+- `sx={{ borderRadius: '8px' }}` — hardcoded radius
+- Reaching into `BRAND_COLORS` or `STAGE_COLORS` directly in JSX — use `theme.palette.brand.*` or `theme.palette.stage.*` instead so overrides work.
+
+---
+
+## Token reference
+
+### Brand Colours
+
+<Canvas of={TokenStories.BrandColours} />
+
+### Stage Colours
+
+<Canvas of={TokenStories.StageColours} />
+
+### Typography
+
+<Canvas of={TokenStories.TypographyScale} />
+
+### Spacing
+
+<Canvas of={TokenStories.SpacingScale} />
+
+### Radii
+
+<Canvas of={TokenStories.RadiiTokens} />

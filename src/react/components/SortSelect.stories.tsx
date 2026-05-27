@@ -11,7 +11,8 @@ const SORT_OPTIONS = [
 ];
 
 const meta: Meta<typeof SortSelect> = {
-  title: 'Filter & Toolbar/SortSelect',
+  title: 'Components/Filters/SortSelect',
+  tags: ['autodocs'],
   component: SortSelect,
   parameters: {
     layout: 'centered',

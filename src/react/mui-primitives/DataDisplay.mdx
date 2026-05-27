@@ -1,0 +1,48 @@
+{/* mui-primitives/DataDisplay.mdx */}
+import { Meta } from '@storybook/blocks';
+
+<Meta title="MUI Primitives/Data Display" />
+
+# Data Display
+
+Covers MUI data-display components: `Typography`, `Chip`, `Avatar`, `Badge`,
+`Divider`, `List` / `ListItem`, `Table`, `Tooltip`, and `DataGrid`.
+
+## Usage guidelines
+
+### Typography
+
+Always use `<Typography variant="…">` — never raw `<h1>`, `<p>`, `<span>`, or `<small>`
+tags in React components. The variant scale is documented in **Foundations/Tokens**.
+
+```tsx
+<Typography variant="h5" sx={{ fontWeight: 700 }}>Section heading</Typography>
+<Typography variant="body2" color="text.secondary">Supporting copy</Typography>
+```
+
+### Chip
+
+Use `<Chip>` for status tags, lead-status labels, and filter pills. For filter-row
+chips, use the app's `FilterChipRow` component (see **Components/Filters/FilterChipRow**)
+which handles scrolling and active-state toggling. For status/stage indicators, use the
+app's `Pill` component (see **Components/Pill**).
+
+### Tooltip
+
+Always add `<Tooltip title="…">` around icon-only buttons so keyboard and screen-reader
+users know the action. Keep tooltip copy short (≤ 5 words).
+
+### Table
+
+Use `<Table size="small">` in admin panels. Always include `<TableHead>` with descriptive
+column labels. For large datasets consider using a virtual scroll or pagination.
+
+### Divider
+
+Use `<Divider />` to separate content sections within a card or panel. Avoid using a
+border on the container and a `Divider` at the same time.
+
+## Common pitfalls
+
+- **Raw HTML text elements** inside React components — always use `Typography`.
+- **Chips with inline `style={}`** — fails `test:inline-styles`; use `sx` instead.

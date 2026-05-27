@@ -11,7 +11,8 @@ const SAMPLE: SearchAction[] = [
 ];
 
 const meta: Meta<typeof SearchActionList> = {
-  title: 'UI/SearchActionList',
+  title: 'Components/SearchActionList',
+  tags: ['autodocs'],
   component: SearchActionList,
   parameters: { layout: 'padded' },
   decorators: [

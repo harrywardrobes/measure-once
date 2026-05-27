@@ -1,0 +1,37 @@
+{/* EmptyState.mdx — component documentation */}
+import { Meta, Canvas, Controls } from '@storybook/blocks';
+import * as EmptyStateStories from './EmptyState.stories';
+
+<Meta title="Components/EmptyState/Guide" />
+
+# EmptyState
+
+A centred placeholder shown when a list or panel has no content. Provides a consistent
+"nothing here yet" message that keeps the UI from feeling broken.
+
+## When to use
+
+- When a data list, table, or rail returns zero results.
+- After a filter that yields no matches.
+- On a freshly created account before any data has been added.
+
+## When not to use
+
+- While data is still loading — show a `Skeleton` instead.
+- When the absence of data is expected and unimportant — simply render nothing rather
+  than drawing attention to it.
+
+## Do / Don't
+
+**Do:** write action-oriented copy that tells the user what to do next, e.g.
+*"No customers yet — add one from the Customers tab."*
+
+**Don't:** just say "No data found" — it's unhelpful and sounds like an error.
+
+Use `compact={true}` inside narrow rails or side panels where the full-height centred
+version would push content out of view.
+
+---
+
+<Canvas of={EmptyStateStories.Default} />
+<Controls of={EmptyStateStories.Default} />

@@ -1,0 +1,36 @@
+{/* FilterChipRow.mdx — component documentation */}
+import { Meta, Canvas, Controls } from '@storybook/blocks';
+import * as FilterChipRowStories from './FilterChipRow.stories';
+
+<Meta title="Components/Filters/FilterChipRow/Guide" />
+
+# FilterChipRow
+
+A horizontally scrollable row of MUI `Chip` filter buttons. The active chip uses
+`variant="filled"` with `color="primary"`; inactive chips use `variant="outlined"`.
+An empty-string `value` represents "no filter / show all".
+
+## When to use
+
+- For filtering a list by a set of discrete named categories (e.g. lead status, stage).
+- When counts per category are available and worth showing inline.
+
+## When not to use
+
+- When the filter options are numerous or hierarchical — use a `<Select>` or
+  `PageFilterBar` with a `StageTabGroup` instead.
+- When the filter operates across multiple dimensions simultaneously — use a full filter
+  panel (popover or drawer) rather than chips.
+
+## Do / Don't
+
+**Do:** always include an "All" chip (key `""`, label `"All"`) as the first option so
+users can clear the filter without hunting for a "Clear" button.
+
+**Don't:** show counts that are stale or out of sync with the current data — fetch
+counts reactively so chips stay accurate.
+
+---
+
+<Canvas of={FilterChipRowStories.Interactive} />
+<Controls of={FilterChipRowStories.Default} />

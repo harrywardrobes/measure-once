@@ -1,0 +1,65 @@
+{/* foundations/Icons.mdx — icon usage rules */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as IconStories from '../Icons.stories';
+
+<Meta title="Foundations/Icons/Docs" />
+
+# Icons
+
+Measure Once uses **Material Icons** exclusively. All icons must be imported as named
+exports from `@mui/icons-material` — never use inline `<svg>` elements or other icon
+libraries in React components.
+
+## The rule
+
+```tsx
+// ✅ Correct
+import SearchIcon from '@mui/icons-material/Search';
+import DeleteIcon from '@mui/icons-material/Delete';
+
+// ❌ Never do this
+import { FaSearch } from 'react-icons/fa';  // wrong library
+// <svg xmlns="..."><path .../></svg>        // inline SVG
+```
+
+The `test:icon-lint` CI check enforces this automatically — any `*Icon` identifier
+used as a JSX element or bare value must be imported from `@mui/icons-material`.
+
+## Finding an icon name
+
+1. Browse the [MUI Icons gallery](https://mui.com/material-ui/material-icons/) and search by keyword.
+2. Click the icon you want — the copy panel shows the import name (e.g. `DeleteOutlineIcon`).
+3. Use the **outlined** variant for inactive/secondary states and the **filled** variant for
+   active/primary states (matches the BottomNav pattern).
+
+## Sizing icons
+
+Use the `fontSize` prop rather than `width`/`height` or `sx={{ fontSize: ... }}`:
+
+```tsx
+<SearchIcon fontSize="small" />   {/* 20 px */}
+<SearchIcon fontSize="medium" />  {/* 24 px — default */}
+<SearchIcon fontSize="large" />   {/* 35 px */}
+```
+
+For non-standard sizes, use `sx={{ fontSize: '18px' }}` as a last resort. Do not
+wrap an icon in a `<Box sx={{ width: 24 }}>` just to size it.
+
+## Icon colours
+
+Prefer semantic colour props over hard-coded values:
+
+```tsx
+<CheckCircleIcon color="success" />
+<ErrorIcon color="error" />
+<WarningIcon color="warning" />
+<InfoIcon color="info" />
+<DeleteIcon color="action" />  {/* theme.palette.action.active */}
+<DeleteIcon color="disabled" />
+```
+
+---
+
+## Icon reference
+
+<Canvas of={IconStories.AllGroups} />

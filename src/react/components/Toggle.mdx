@@ -1,0 +1,35 @@
+{/* Toggle.mdx — component documentation */}
+import { Meta, Canvas, Controls } from '@storybook/blocks';
+import * as ToggleStories from './Toggle.stories';
+
+<Meta title="Components/Toggle/Guide" />
+
+# Toggle
+
+A labelled on/off switch for boolean settings. Wraps MUI `Switch` with a consistent
+label layout and controlled state interface.
+
+## When to use
+
+- For persistent boolean settings in settings panels and admin configuration forms.
+- When the effect is immediate and does not require a confirmation step.
+
+## When not to use
+
+- For actions that have side effects requiring confirmation — use a `Button` + `BottomActionBar`
+  confirm flow instead.
+- When the user is choosing between two named options (not on/off) — use a `<Select>` or
+  radio group.
+
+## Do / Don't
+
+**Do:** label the toggle clearly with what the *enabled* state means, e.g. *"Allow
+calendar access"* not *"Calendar access toggle"*.
+
+**Don't:** use a toggle for destructive or irreversible changes — a confirm dialog is
+safer UX for those cases.
+
+---
+
+<Canvas of={ToggleStories.Default} />
+<Controls of={ToggleStories.Default} />

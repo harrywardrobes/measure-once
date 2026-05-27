@@ -1,0 +1,36 @@
+{/* PageFilterBar.mdx — component documentation */}
+import { Meta, Canvas, Controls } from '@storybook/blocks';
+import * as PageFilterBarStories from './PageFilterBar.stories';
+
+<Meta title="Components/Filters/PageFilterBar/Guide" />
+
+# PageFilterBar
+
+A thin horizontal layout wrapper for filter toolbar controls. Provides a consistent
+gap, horizontal overflow scrolling, and hidden scrollbars. Children can be any
+combination of `FilterChipRow`, `StageTabGroup`, `SortSelect`, or custom controls.
+
+## When to use
+
+- As the outer container for any page-level filter toolbar.
+- Whenever you need to group multiple filter controls in a horizontal row that
+  scrolls gracefully on small screens.
+
+## When not to use
+
+- As a general layout container — it is specifically for filter toolbars and applies
+  `overflow-x: auto` with hidden scrollbars.
+- When only a single child is needed — a `<Box sx={{ px: 2 }}>` wrapper is simpler.
+
+## Do / Don't
+
+**Do:** pass `sx={{ px: 2, py: 1 }}` to add horizontal padding when the bar sits
+directly against the page edge.
+
+**Don't:** put non-filter content (headings, action buttons) inside `PageFilterBar` —
+use `PageHeadingPanel` for those.
+
+---
+
+<Canvas of={PageFilterBarStories.Default} />
+<Controls of={PageFilterBarStories.Default} />

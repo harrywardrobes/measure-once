@@ -1,0 +1,35 @@
+{/* Button.mdx — component documentation */}
+import { Meta, Canvas, Controls } from '@storybook/blocks';
+import * as ButtonStories from './Button.stories';
+
+<Meta title="Components/Button/Guide" />
+
+# Button
+
+A styled action button with three semantic variants. Wraps an HTML `<button>` element with
+consistent padding, border-radius, and focus styles from the design token system.
+
+## When to use
+
+- For primary page-level actions (save, submit, create) — use `variant="primary"`.
+- For secondary or destructive actions alongside a primary — use `variant="ghost"`.
+- For approval workflows (approve a request, confirm sign-off) — use `variant="approve"`.
+
+## When not to use
+
+- For navigation links — use a plain MUI `<Link>` or anchor instead.
+- Inside a `<BottomActionBar>` — the bar has its own button styling.
+- For icon-only actions — use an MUI `<IconButton>` with a `<Tooltip>`.
+
+## Do / Don't
+
+**Do:** disable the button and show a loading label while an async action is in flight
+— this prevents double-submission and gives the user clear feedback.
+
+**Don't:** remove the `disabled` state after a click and leave the UI with no visual
+feedback. Always reflect loading / error / success state explicitly.
+
+---
+
+<Canvas of={ButtonStories.Default} />
+<Controls of={ButtonStories.Default} />

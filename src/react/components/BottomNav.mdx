@@ -1,0 +1,36 @@
+{/* BottomNav.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as BottomNavStories from './BottomNav.stories';
+
+<Meta title="Components/Navigation/BottomNav/Guide" />
+
+# BottomNav
+
+Fixed bottom navigation bar for mobile. Shows exactly 4 items: 3 role-relevant
+primary tabs plus a "More" button. Tapping "More" opens a bottom `Drawer` listing the
+remaining tabs. The active tab is highlighted whether it is in the bar or the drawer.
+
+## When to use
+
+This component is mounted globally (once per page) by the React island system. It is not
+intended to be used as a composable building block — there should only ever be one
+`BottomNav` on any page.
+
+## When not to use
+
+- On desktop — the component is hidden above the `sm` breakpoint where the `GlobalHeader`
+  navigation takes over.
+- For custom navigation structures — the tab set and "More" overflow logic are
+  role-aware and hardcoded; do not try to pass custom tabs.
+
+## Do / Don't
+
+**Do:** ensure `window.__moHeaderUser` is set before `BottomNav` mounts so the
+role-aware tab set resolves correctly.
+
+**Don't:** render `BottomNav` more than once on a page — it uses a fixed position and
+a portal-based `Drawer`; two instances would stack incorrectly.
+
+---
+
+<Canvas of={BottomNavStories.MemberHomeSelected} />

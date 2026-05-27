@@ -1,0 +1,44 @@
+{/* BottomActionBar.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as BottomActionBarStories from './BottomActionBar.stories';
+
+<Meta title="Components/Navigation/BottomActionBar/Guide" />
+
+# BottomActionBar
+
+A globally mounted fixed bottom bar triggered by the `window` API. Supports three
+modes: **Undo** (auto-dismisses after 5 s), **Confirm** (shows Cancel + Confirm),
+and **Unsaved changes** (shows Discard + Save & leave).
+
+Mount this component once globally; trigger it from anywhere in the app using:
+
+```ts
+window.showBottomUndo(message, onUndo);
+window.showBottomConfirm(message, onConfirm);
+window.showUnsavedChangesBar(onSave, onDiscard);
+window.closeBottomBar();
+```
+
+## When to use
+
+- After a destructive or irreversible action that allows a short undo window.
+- Before navigating away from a page with unsaved changes.
+- To ask for confirmation before committing a consequential mutation.
+
+## When not to use
+
+- For non-reversible destructive actions — use a `Dialog` with explicit confirmation so
+  the user can read the consequence before committing.
+- For success toasts — use a brief `<Snackbar>` instead.
+
+## Do / Don't
+
+**Do:** always call `window.closeBottomBar()` in both the confirm and cancel/discard
+branches so the bar never gets stuck open.
+
+**Don't:** stack multiple bar states — only one state is shown at a time; showing a
+second bar replaces the first.
+
+---
+
+<Canvas of={BottomActionBarStories.UndoMode} />
