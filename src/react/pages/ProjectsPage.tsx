@@ -24,6 +24,7 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { BRAND_COLORS, RADIUS, STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrefs } from '../hooks/usePrefs';
+import { useQBInvoices } from '../hooks/useQBInvoices';
 import { InvoiceDetailDrawer, fmtGBP as fmtGBPShared } from '../components/InvoiceDetailDrawer';
 import { PageFilterBar } from '../components/PageFilterBar';
 import { StageTabGroup } from '../components/StageTabGroup';
@@ -61,18 +62,7 @@ const STAGE_LABEL_FALLBACK: Record<string, string> = {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-interface QBState {
-  statusKnown?: boolean;
-  loading?: boolean;
-  connected?: boolean;
-  loaded?: boolean;
-  invoices?: Array<{ id: string; balance: number }>;
-}
-
-interface WindowGlobals {
-  state?: { qb?: QBState };
-  matchInvoicesForContact?: (contact: ProjectContact) => Array<{ id: string; balance: number }>;
-}
+type QBState = import('../hooks/useQBInvoices').QBInvoicesResult;
 
 type SortKey = 'stage' | 'name' | 'date' | 'install';
 
@@ -339,9 +329,15 @@ function InvoiceBadge({
 
   if (!qb.connected) return null;
 
-  const w = window as unknown as WindowGlobals;
-  const invs =
-    typeof w.matchInvoicesForContact === 'function' ? w.matchInvoicesForContact(contact) : [];
+  const contactEmail = (contact.properties?.email || '').toLowerCase().trim();
+  const contactNameStr = getContactName(contact).toLowerCase().trim();
+  const invs = (qb.invoices || []).filter(inv => {
+    const invEmail    = (inv.email        || '').toLowerCase().trim();
+    const invCustomer = (inv.customerName || '').toLowerCase().trim();
+    if (contactEmail && invEmail    && contactEmail    === invEmail)    return true;
+    if (contactNameStr && invCustomer && invCustomer === contactNameStr) return true;
+    return false;
+  });
   if (!invs.length) return null;
 
   const total = invs.reduce((s, inv) => s + inv.balance, 0);
@@ -721,8 +717,7 @@ export function ProjectsPage() {
     setInvDrawerOpen(true);
   }, []);
 
-  // QB state — read from window globals (populated by invoices-core.js when loaded)
-  const qb = (window as unknown as WindowGlobals).state?.qb;
+  const qb = useQBInvoices();
 
   const { prefs, loading: prefsLoading, patchPref } = usePrefs();
 

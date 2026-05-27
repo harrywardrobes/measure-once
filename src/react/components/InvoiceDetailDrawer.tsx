@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useConnectionToast } from '../context/ConnectionToastContext';
+import { fmtGBP as _fmtGBP, fmtQBDate as _fmtQBDate } from '../utils/formatters';
 import {
   Box,
   Button,
@@ -94,21 +95,14 @@ export function clearDraft(invId: string) {
   } catch { /* ignore */ }
 }
 
-// ── Formatting helpers ─────────────────────────────────────────────────────────
+// ── Formatting helpers (re-exported from shared utils) ─────────────────────────
 
-export function fmtGBP(amount?: number | null): string {
-  if (amount == null) return '—';
-  return '£' + Number(amount).toLocaleString('en-GB', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+export function fmtGBP(amount?: number | string | null): string {
+  return _fmtGBP(amount);
 }
 
 export function fmtDate(iso?: string | null): string {
-  if (!iso) return '—';
-  const [y, m, d] = iso.split('-');
-  const date = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
-  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return _fmtQBDate(iso) || '—';
 }
 
 export function invoiceStatus(inv: Pick<InvoiceSummary, 'balance' | 'totalAmt' | 'dueDate'>): 'paid' | 'overdue' | 'partial' | 'open' {

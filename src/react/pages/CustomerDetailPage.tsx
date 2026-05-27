@@ -12,9 +12,10 @@ import { GoogleEmailSection } from './customer-detail/GoogleEmailSection';
 import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSection';
 import {
   Contact, Room, HubSpotTask, LeadStatus, LeadSubstatus,
-  DesignVisit, Visit, GoogleEmail, WhatsAppMessage, QBInvoice,
+  DesignVisit, Visit, GoogleEmail, WhatsAppMessage,
   contactName,
 } from './customer-detail/types';
+import { useQBInvoices } from '../hooks/useQBInvoices';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -53,18 +54,6 @@ async function apiFetch<T>(url: string): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-// ── QBState ────────────────────────────────────────────────────────────────────
-
-interface QBState {
-  connected: boolean; statusKnown: boolean; loading: boolean;
-  loaded: boolean; loadError: boolean; error: string | null;
-  company: string | null; invoices: QBInvoice[];
-}
-const initialQB: QBState = {
-  connected: false, statusKnown: false, loading: false,
-  loaded: false, loadError: false, error: null, company: null, invoices: [],
-};
-
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export function CustomerDetailPage() {
@@ -83,7 +72,7 @@ export function CustomerDetailPage() {
   const [focusedLs,    setFocusedLs]    = useState<string | null>(null);
   const [selectedRoom, setSelectedRoom] = useState(0);
   const [workflow,     setWorkflow]     = useState<{ stages?: Record<string, { label: string }> } | null>(null);
-  const [qb,           setQB]           = useState<QBState>(initialQB);
+  const qb = useQBInvoices();
 
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState<string | null>(null);
@@ -225,18 +214,6 @@ export function CustomerDetailPage() {
     finally { setWaLoading(false); }
   }, [contactId]);
 
-  const fetchQBStatus = useCallback(async () => {
-    try {
-      const st = await apiFetch<{ connected?: boolean; company?: string }>('/api/quickbooks/status');
-      setQB(prev => ({ ...prev, connected: !!st.connected, company: st.company || null, statusKnown: true }));
-      if (st.connected) {
-        setQB(prev => ({ ...prev, loading: true }));
-        const inv = await apiFetch<{ invoices?: QBInvoice[] }>('/api/quickbooks/invoices');
-        setQB(prev => ({ ...prev, loading: false, loaded: true, invoices: inv.invoices || [] }));
-      }
-    } catch { setQB(prev => ({ ...prev, statusKnown: true, connected: false })); }
-  }, []);
-
   // ── Main bootstrap ─────────────────────────────────────────────────────────
 
   const bootstrap = useCallback(async () => {
@@ -293,7 +270,6 @@ export function CustomerDetailPage() {
       fetchVisits();
       if (c.properties.email) fetchGoogleEmails(c.properties.email);
       fetchWhatsApp();
-      fetchQBStatus();
     } catch (e: unknown) {
       notifyApiError('hubspot', e);
       const msg = e instanceof Error ? e.message : 'unknown error';
@@ -302,7 +278,7 @@ export function CustomerDetailPage() {
       setLoading(false);
     }
   }, [contactId, fetchContact, fetchDesignVisits, fetchGoogleEmails, fetchLeadStatuses,
-      fetchLeadSubstatuses, fetchQBStatus, fetchVisits, fetchWhatsApp, notifyApiError]);
+      fetchLeadSubstatuses, fetchVisits, fetchWhatsApp, notifyApiError]);
 
   // ── Global bridges (for test compat + workflow-core.js interop) ────────────
 

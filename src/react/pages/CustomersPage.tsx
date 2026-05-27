@@ -1,9 +1,11 @@
 import React from 'react';
+import { fmtGBP } from '../utils/formatters';
+import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 import { usePaginatedContacts, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
 import { ContactsPagination } from '../components/ContactsPagination';
-import { InvoiceDetailDrawer } from '../components/InvoiceDetailDrawer';
+import { InvoiceDetailDrawer, type InvoiceSummary as QBInvoice } from '../components/InvoiceDetailDrawer';
 import { createPortal } from 'react-dom';
 import {
   Alert,
@@ -80,13 +82,6 @@ type Room = {
 
 type WorkflowDef = {
   stages?: Record<string, { label?: string }>;
-};
-
-type QBInvoice = {
-  id: string;
-  customerName?: string;
-  email?: string;
-  balance: number;
 };
 
 type Urgency = 'red' | 'orange' | null;
@@ -434,13 +429,6 @@ function matchInvoicesForContact(contact: Contact, invoices: QBInvoice[]): QBInv
   });
 }
 
-function fmtGBP(n: number): string {
-  return (
-    '£' +
-    Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  );
-}
-
 function QBBadge({
   invoices,
   onOpen,
@@ -615,7 +603,7 @@ export function CustomersPage(): React.ReactElement {
 
   const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
   const [roomsByContact, setRoomsByContact] = React.useState<Record<string, Room[]>>({});
-  const [qbInvoices, setQbInvoices] = React.useState<QBInvoice[]>([]);
+  const { invoices: qbInvoices } = useQBInvoices();
   const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
 
   // Invoice drawer state
@@ -851,28 +839,6 @@ export function CustomersPage(): React.ReactElement {
         }
       })
       .catch(() => {});
-
-    // QB invoices: only attempt when QuickBooks is connected.
-    (async () => {
-      try {
-        const status = await apiGet<{ connected?: boolean }>('/api/quickbooks/status');
-        if (!status.connected || cancelled) return;
-        const data = await apiGet<{ invoices?: QBInvoice[] }>('/api/quickbooks/invoices');
-        if (cancelled) return;
-        const invs = data.invoices || [];
-        setQbInvoices(invs);
-        const legacy = (
-          window as unknown as { state?: { qb?: { invoices?: QBInvoice[]; loaded?: boolean; connected?: boolean } } }
-        ).state;
-        if (legacy && legacy.qb) {
-          legacy.qb.invoices = invs;
-          legacy.qb.loaded = true;
-          legacy.qb.connected = true;
-        }
-      } catch {
-        /* QB not configured / not connected — leave badges hidden */
-      }
-    })();
 
     return () => {
       cancelled = true;

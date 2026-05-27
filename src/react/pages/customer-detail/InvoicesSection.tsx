@@ -1,52 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { Contact, QBInvoice } from './types';
+import { Contact } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
-import { InvoiceDetailDrawer } from '../../components/InvoiceDetailDrawer';
-
-interface QBState {
-  connected: boolean;
-  statusKnown: boolean;
-  loading: boolean;
-  loaded: boolean;
-  loadError: boolean;
-  error: string | null;
-  company: string | null;
-  invoices: QBInvoice[];
-}
+import { InvoiceDetailDrawer, type InvoiceSummary } from '../../components/InvoiceDetailDrawer';
+import { fmtQBDate, fmtGBP } from '../../utils/formatters';
+import type { QBInvoicesState } from '../../hooks/useQBInvoices';
 
 interface Props {
   contact: Contact;
-  qb: QBState;
+  qb: QBInvoicesState;
 }
 
-function fmtQBDate(iso?: string): string {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-');
-  return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10))
-    .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function fmtGBP(amount?: number): string {
-  if (amount == null) return '—';
-  return `£${Number(amount).toFixed(2)}`;
-}
-
-function statusPill(inv: QBInvoice): React.ReactNode {
-  const balance = Number(inv.Balance ?? 0);
-  const total   = Number(inv.TotalAmt ?? 0);
+function statusPill(inv: InvoiceSummary): React.ReactNode {
+  const balance = Number(inv.balance ?? 0);
+  const total   = Number(inv.totalAmt ?? 0);
   if (balance <= 0) return <span className="inv-pill inv-pill-paid">Paid</span>;
   if (balance < total) return <span className="inv-pill inv-pill-partial">Part paid</span>;
-  const due = inv.DueDate ? new Date(inv.DueDate) : null;
+  const due = inv.dueDate ? new Date(inv.dueDate) : null;
   if (due && due < new Date()) return <span className="inv-pill inv-pill-overdue">Overdue</span>;
   return <span className="inv-pill inv-pill-open">Outstanding</span>;
 }
 
-function matchInvoices(contact: Contact, invoices: QBInvoice[]): QBInvoice[] {
+function matchInvoices(contact: Contact, invoices: InvoiceSummary[]): InvoiceSummary[] {
   const email   = (contact.properties.email || '').toLowerCase();
   const company = (contact.properties.company || '').toLowerCase();
   return invoices.filter(inv => {
-    const invEmail   = (inv.BillEmail?.Address || '').toLowerCase();
-    const invCompany = (inv.CustomerRef?.name  || '').toLowerCase();
+    const invEmail   = (inv.email        || '').toLowerCase();
+    const invCompany = (inv.customerName || '').toLowerCase();
     return (email && invEmail && invEmail === email)
       || (company && invCompany && invCompany.includes(company));
   });
@@ -58,7 +37,7 @@ export function InvoicesSection({ contact, qb }: Props) {
   const [drawerInvId, setDrawerInvId] = useState<string | null>(null);
 
   const matched = qb.loaded ? matchInvoices(contact, qb.invoices) : [];
-  const allIds  = matched.map(inv => inv.Id);
+  const allIds  = matched.map(inv => inv.id);
 
   useEffect(() => {
     if (!qb.loaded) return;
@@ -126,23 +105,23 @@ export function InvoicesSection({ contact, qb }: Props) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {matched.map(inv => (
               <div
-                key={inv.Id}
+                key={inv.id}
                 className="inv-row"
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '4px 4px 6px', cursor: 'pointer', borderRadius: 4, borderBottom: '1px solid var(--stone)' }}
-                onClick={() => openDrawer(inv.Id)}
+                onClick={() => openDrawer(inv.id)}
                 role="button"
                 tabIndex={0}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openDrawer(inv.Id); }}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openDrawer(inv.id); }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--ink-4)' }}>#{inv.DocNumber}</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--ink-4)' }}>#{inv.docNumber}</span>
                   {statusPill(inv)}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, fontSize: '0.75rem', color: 'var(--ink-4)' }}>
-                  <span>{fmtQBDate(inv.TxnDate)}</span>
-                  <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{fmtGBP(inv.TotalAmt)}</span>
-                  {inv.Balance != null && Number(inv.Balance) > 0 && (
-                    <span style={{ color: 'var(--stone-deep)' }}>due {fmtGBP(inv.Balance)}</span>
+                  <span>{fmtQBDate(inv.txnDate)}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{fmtGBP(inv.totalAmt)}</span>
+                  {inv.balance != null && Number(inv.balance) > 0 && (
+                    <span style={{ color: 'var(--stone-deep)' }}>due {fmtGBP(inv.balance)}</span>
                   )}
                   <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/>

@@ -15,7 +15,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { usePrivilege } from '../hooks/usePrivilege';
-import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
+import { useConnectionCheck } from '../context/ConnectionToastContext';
 import { ContactsPagination } from '../components/ContactsPagination';
 import {
   InvoiceDetailDrawer,
@@ -24,15 +24,9 @@ import {
   fmtDate,
   invoiceStatus,
 } from '../components/InvoiceDetailDrawer';
+import { useQBInvoices } from '../hooks/useQBInvoices';
 
 type _Icons = typeof RefreshIcon | typeof SearchIcon | typeof WarningAmberIcon;
-
-// ── API types (camelCase from server) ─────────────────────────────────────────
-
-interface QBStatus {
-  connected: boolean;
-  company?: string;
-}
 
 // ── Pagination ────────────────────────────────────────────────────────────────
 
@@ -92,14 +86,10 @@ function SkeletonRows() {
 
 export function StandaloneInvoicesPage() {
   useConnectionCheck();
-  const { notifyApiError } = useConnectionToast();
   const { isAdmin } = usePrivilege();
 
-  const [status, setStatus]       = useState<QBStatus | null>(null);
-  const [invoices, setInvoices]   = useState<InvoiceSummary[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const qb = useQBInvoices();
+  const { connected, company, invoices, loading, loadError, error, errorCode, refresh: loadInvoices } = qb;
 
   const [filter, setFilter] = useState<'all' | 'overdue' | 'outstanding'>('all');
   const [search, setSearch] = useState('');
@@ -117,52 +107,12 @@ export function StandaloneInvoicesPage() {
     }
   }, []);
 
-  const loadStatus = useCallback(async (): Promise<QBStatus> => {
-    try {
-      const res  = await fetch('/api/quickbooks/status');
-      const data = await res.json().catch(() => ({ connected: false })) as QBStatus;
-      setStatus(data);
-      return data;
-    } catch (e) {
-      notifyApiError('quickbooks', e);
-      const fallback: QBStatus = { connected: false };
-      setStatus(fallback);
-      return fallback;
-    }
-  }, [notifyApiError]);
-
-  const loadInvoices = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setErrorCode(null);
-    try {
-      const st = await loadStatus();
-      if (!st.connected) { setLoading(false); return; }
-      const res  = await fetch('/api/quickbooks/invoices');
-      const data = await res.json().catch(() => ({})) as { invoices?: InvoiceSummary[]; error?: string; code?: string };
-      if (!res.ok || data.error) {
-        setError(data.error || `Server error ${res.status}`);
-        setErrorCode(data.code || null);
-        return;
-      }
-      setInvoices(data.invoices || []);
-    } catch (e: unknown) {
-      notifyApiError('quickbooks', e);
-      setError((e as Error).message || 'Failed to load invoices');
-    } finally {
-      setLoading(false);
-    }
-  }, [loadStatus, notifyApiError]);
-
-  useEffect(() => { loadInvoices(); }, [loadInvoices]);
-
   const handleDisconnect = useCallback(() => {
     window.showBottomConfirm('Disconnect QuickBooks? Invoice data will no longer be visible.', async () => {
       await fetch('/auth/quickbooks/disconnect', { method: 'POST' }).catch(() => {});
-      setStatus({ connected: false });
-      setInvoices([]);
+      loadInvoices();
     });
-  }, []);
+  }, [loadInvoices]);
 
   const openPanel = useCallback((id: string) => {
     setPanelInvId(id);
@@ -218,7 +168,7 @@ export function StandaloneInvoicesPage() {
   const allVisibleIds = visible.map(inv => inv.id);
 
   // ── Not connected ─────────────────────────────────────────────────────────
-  if (!loading && status && !status.connected) {
+  if (!loading && qb.statusKnown && !connected) {
     return (
       <Box sx={{ maxWidth: 480, mx: 'auto', py: 10, textAlign: 'center', px: 2 }}>
         <Box sx={{ mb: 2, opacity: 0.35 }}>
@@ -242,7 +192,7 @@ export function StandaloneInvoicesPage() {
   }
 
   // ── Error ─────────────────────────────────────────────────────────────────
-  if (!loading && error) {
+  if (!loading && loadError) {
     const isDbError = errorCode === 'DB_ERROR';
     const msg = isDbError
       ? 'The database could not be reached. Check your connection and try again.'
@@ -277,7 +227,7 @@ export function StandaloneInvoicesPage() {
             <Skeleton width={180} height={14} sx={{ mt: 0.5 }} />
           ) : (
             <Typography variant="caption" color="text.secondary">
-              {status?.company || 'QuickBooks'}
+              {company || 'QuickBooks'}
               {visible.length > 0 && (
                 ` · ${visible.length} invoice${visible.length !== 1 ? 's' : ''} · ${fmtGBP(totalBalance)} total`
               )}
@@ -288,7 +238,7 @@ export function StandaloneInvoicesPage() {
           <Button size="small" variant="outlined" startIcon={<RefreshIcon />} onClick={loadInvoices} disabled={loading} color="inherit">
             Refresh
           </Button>
-          {isAdmin && !loading && status?.connected && (
+          {isAdmin && !loading && connected && (
             <Button
               size="small"
               variant="outlined"

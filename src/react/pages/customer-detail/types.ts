@@ -107,19 +107,6 @@ export interface Visit {
   assigneeRole?: string;
 }
 
-export interface QBInvoice {
-  Id: string;
-  DocNumber?: string;
-  TxnDate?: string;
-  DueDate?: string;
-  Balance?: number;
-  TotalAmt?: number;
-  CustomerRef?: { name?: string; value?: string };
-  BillEmail?: { Address?: string };
-  EmailStatus?: string;
-  TxnStatus?: string;
-}
-
 export interface GoogleEmail {
   id: string;
   from?: string;

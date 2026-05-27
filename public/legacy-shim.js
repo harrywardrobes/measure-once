@@ -42,11 +42,6 @@ let _dealsFilter = function() {};
 function filterDeals(query) { _dealsFilter(query); }
 function registerDealsFilter(fn) { _dealsFilter = fn; }
 
-// invoices-core-owned loader. Pages that don't load invoices-core.js
-// (calendar, profile, trades) keep the no-op.
-let _qbInvoicesLoader = async function() {};
-async function loadQBInvoices() { return _qbInvoicesLoader(); }
-function registerQBInvoicesLoader(fn) { _qbInvoicesLoader = fn; }
 function closeInvoicePanel() { /* legacy no-op — panel migrated to React InvoiceDetailDrawer */ }
 
 // ── App State ─────────────────────────────────────────────────────────────────

@@ -13,6 +13,8 @@ import {
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { EmptyState } from '../components/EmptyState';
+import { useQBInvoices } from '../hooks/useQBInvoices';
+import type { InvoiceSummary } from '../components/InvoiceDetailDrawer';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
 type _Icons = typeof RefreshIcon | typeof WarningAmberIcon;
@@ -36,16 +38,6 @@ type CalendarResp = {
   error?: string;
   code?: string;
 };
-
-type QBInvoice = {
-  id: string;
-  customerName?: string;
-  balance: number;
-  dueDate?: string;
-};
-
-type QBStatus = { connected?: boolean };
-type QBInvoicesResp = { invoices?: QBInvoice[]; error?: string; code?: string };
 
 type Contact = {
   id: string;
@@ -397,7 +389,7 @@ function InvoicesSection({
   loading: boolean;
   error: boolean;
   errorMsg: string | null;
-  invoices: QBInvoice[];
+  invoices: InvoiceSummary[];
   todayMs: number;
   onRetry: () => void;
 }) {
@@ -548,10 +540,7 @@ export function HomePage(): React.ReactElement {
   const [calConnected, setCalConnected] = React.useState(false);
   const [calEvents, setCalEvents] = React.useState<CalendarEvent[]>([]);
 
-  const [qbLoading, setQbLoading] = React.useState(true);
-  const [qbError, setQbError] = React.useState(false);
-  const [qbErrorMsg, setQbErrorMsg] = React.useState<string | null>(null);
-  const [qbInvoices, setQbInvoices] = React.useState<QBInvoice[]>([]);
+  const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, refresh: loadInvoices } = useQBInvoices();
 
   const [projectsLoading, setProjectsLoading] = React.useState(true);
   const [contacts, setContacts] = React.useState<Contact[]>([]);
@@ -591,37 +580,6 @@ export function HomePage(): React.ReactElement {
       .finally(() => setCalLoading(false));
   }, []);
 
-  const loadInvoices = React.useCallback(() => {
-    setQbLoading(true);
-    setQbError(false);
-    setQbErrorMsg(null);
-    jget<QBStatus>('/api/quickbooks/status')
-      .then((status) => {
-        if (!status?.connected) {
-          setQbInvoices([]);
-          setQbLoading(false);
-          return null;
-        }
-        return jget<QBInvoicesResp>('/api/quickbooks/invoices').then((data) => {
-          if (data?.error) throw new Error(data.error);
-          setQbInvoices(data?.invoices || []);
-          setQbLoading(false);
-        });
-      })
-      .catch((e: Error) => {
-        // Admins-only endpoint; non-admins get 403 — treat as "no invoices".
-        const msg = e?.message || '';
-        if (/HTTP 403/i.test(msg) || /forbidden/i.test(msg)) {
-          setQbInvoices([]);
-          setQbError(false);
-        } else {
-          setQbError(true);
-          setQbErrorMsg(msg || 'QuickBooks returned an unexpected error.');
-        }
-        setQbLoading(false);
-      });
-  }, []);
-
   const loadProjects = React.useCallback(() => {
     setProjectsLoading(true);
     Promise.all([
@@ -644,9 +602,8 @@ export function HomePage(): React.ReactElement {
   React.useEffect(() => {
     loadTasks();
     loadCalendar();
-    loadInvoices();
     loadProjects();
-  }, [loadTasks, loadCalendar, loadInvoices, loadProjects]);
+  }, [loadTasks, loadCalendar, loadProjects]);
 
   return (
     <Box

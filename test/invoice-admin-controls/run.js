@@ -1,15 +1,20 @@
 'use strict';
 // test/invoice-admin-controls/run.js
 //
-// End-to-end test confirming that the invoice edit section and "Send to
-// customer" button in public/invoices-core.js are gated by admin privilege:
+// API privilege gate test confirming that all QuickBooks invoice endpoints
+// require admin privilege:
 //
-//   - A manager-level user sees neither the "Edit invoice" section nor the
-//     "Send to customer" button in the invoice detail panel.
-//   - An admin user sees both controls.
+//   - A manager-level user gets HTTP 403 on every QB invoice route.
+//   - An unauthenticated request gets HTTP 401 / redirect.
+//   - An admin user gets a non-403 response (200, 404, or QB-auth error
+//     is all acceptable — what matters is the gate is not 403).
 //
-// The guard in renderInvoicePanelBody() (task-900) is:
-//   (state.user?.privilege_level ?? 'member') === 'admin'
+// Routes tested (all require requireAdmin middleware in quickbooks.js):
+//   GET  /api/quickbooks/invoices
+//   GET  /api/quickbooks/invoice/:id
+//   POST /api/quickbooks/invoice/:id
+//   GET  /api/quickbooks/invoice/:id/pdf
+//   POST /api/quickbooks/invoice/:id/send
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:invoice-admin-controls
@@ -30,84 +35,23 @@ const {
   BASE,
 } = require('../privileges/harness');
 
-let puppeteer = null;
-try { puppeteer = require('puppeteer'); } catch {}
-
 require('dotenv').config();
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function parseCookieKV(jar) {
-  if (!jar) return null;
-  const idx = jar.indexOf('=');
-  if (idx < 0) return null;
-  return { name: jar.slice(0, idx), value: jar.slice(idx + 1) };
+async function apiGet(path, cookie) {
+  const headers = cookie ? { cookie } : {};
+  const res = await fetch(`${BASE}${path}`, { headers, redirect: 'manual' });
+  return res.status;
 }
 
-async function injectSession(page, jar) {
-  const kv = parseCookieKV(jar);
-  if (!kv) return;
-  const { hostname } = new URL(BASE);
-  await page.setCookie({
-    name: kv.name, value: kv.value,
-    domain: hostname, path: '/', httpOnly: true,
+async function apiPost(path, cookie, body = {}) {
+  const headers = { 'content-type': 'application/json' };
+  if (cookie) headers.cookie = cookie;
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST', headers, body: JSON.stringify(body), redirect: 'manual',
   });
-}
-
-// Poll for a truthy result from `fn` evaluated inside the page.
-async function pollPage(page, fn, arg, timeoutMs = 8000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const got = await page.evaluate(fn, arg);
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return page.evaluate(fn, arg);
-}
-
-// A minimal fake invoice that satisfies renderInvoicePanelBody()'s template.
-const FAKE_INVOICE = {
-  id:           'test-inv-001',
-  docNumber:    'INV-TEST-001',
-  customerName: 'Test Customer',
-  txnDate:      '2025-01-15',
-  dueDate:      '2025-02-15',
-  balance:      '1200.00',
-  totalAmt:     '1200.00',
-  email:        'customer@example.com',
-  memo:         '',
-  lines: [
-    { detailType: 'SalesItemLineDetail', description: 'Test item', qty: 1, unitPrice: 1200, amount: 1200 },
-  ],
-};
-
-// Inject state.qb.panel and call renderInvoicePanelBody() inside the page,
-// then return an object describing which admin controls are present.
-async function probeAdminControls(page) {
-  return page.evaluate((fakeInv) => {
-    // Ensure the panel body element exists (injected by chrome.js).
-    const body = document.getElementById('inv-panel-body');
-    if (!body) return { error: 'inv-panel-body not found' };
-
-    // Inject the fake invoice into state.
-    if (typeof state === 'undefined') return { error: 'state not defined' };
-    state.qb.panel = fakeInv;
-    state.qb.panelContext = null; // single-invoice mode (no nav arrows)
-
-    // Call the render function.
-    if (typeof renderInvoicePanelBody !== 'function') {
-      return { error: 'renderInvoicePanelBody not defined' };
-    }
-    renderInvoicePanelBody();
-
-    // Inspect the rendered output for the two admin-gated elements.
-    const editSection = !!body.querySelector('#inv-save-btn');
-    const sendBtn     = !!body.querySelector('#inv-send-btn');
-    const editHeader  = Array.from(body.querySelectorAll('h3'))
-      .some(h => h.textContent.trim() === 'Edit invoice');
-
-    return { editSection, sendBtn, editHeader, userPrivilege: state.user?.privilege_level ?? null };
-  }, FAKE_INVOICE);
+  return res.status;
 }
 
 // ── report ────────────────────────────────────────────────────────────────────
@@ -117,7 +61,7 @@ async function writeReport(findings) {
   fs.mkdirSync(dir, { recursive: true });
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const lines = [
-    '# Invoice admin controls — privilege gate test',
+    '# QB invoice API — privilege gate test',
     '',
     `- Date: ${new Date().toISOString()}`,
     `- Command: \`npm run test:invoice-admin-controls\``,
@@ -137,19 +81,18 @@ async function writeReport(findings) {
     '',
     '## What is tested',
     '',
-    'Loads `/invoices` as a **manager** and as an **admin**, injects a fake',
-    'invoice object into `state.qb.panel`, calls `renderInvoicePanelBody()`,',
-    'and asserts:',
+    'Sends HTTP requests as manager, unauthenticated, and admin to all five',
+    'QuickBooks invoice endpoints in quickbooks.js and asserts that:',
     '',
-    '- Manager: `#inv-save-btn` absent, `#inv-send-btn` absent,',
-    '  "Edit invoice" `<h3>` absent.',
-    '- Admin: `#inv-save-btn` present, `#inv-send-btn` present,',
-    '  "Edit invoice" `<h3>` present.',
+    '- Manager: every route returns 403.',
+    '- Unauthenticated: every route returns 401 or a redirect (3xx).',
+    '- Admin: every route returns something other than 403 (200, 404, or a',
+    '  QB-not-connected error are all acceptable — the gate itself is what',
+    '  is tested, not the QB backend behaviour).',
     '',
     '## Relevant files',
     '',
-    '- `public/invoices-core.js` — `renderInvoicePanelBody()` (lines ~422, ~455)',
-    '- `public/chrome.js` — injects `#inv-panel-body` and panel DOM',
+    '- `quickbooks.js` — all five `requireAdmin`-gated invoice routes',
   ];
   const outPath = path.join(dir, 'invoice-admin-controls.md');
   fs.writeFileSync(outPath, lines.join('\n'));
@@ -158,8 +101,18 @@ async function writeReport(findings) {
 
 // ── main ──────────────────────────────────────────────────────────────────────
 
+const FAKE_ID = 'test-inv-000';
+
+const ROUTES = [
+  { method: 'GET',  path: `/api/quickbooks/invoices` },
+  { method: 'GET',  path: `/api/quickbooks/invoice/${FAKE_ID}` },
+  { method: 'POST', path: `/api/quickbooks/invoice/${FAKE_ID}` },
+  { method: 'GET',  path: `/api/quickbooks/invoice/${FAKE_ID}/pdf` },
+  { method: 'POST', path: `/api/quickbooks/invoice/${FAKE_ID}/send` },
+];
+
 async function main() {
-  console.log('\n  invoice-admin-controls  privilege gate E2E\n');
+  console.log('\n  invoice-admin-controls  QB API privilege gate\n');
 
   const findings = [];
   function record(name, expected, observed, ok, detail = '') {
@@ -187,20 +140,6 @@ async function main() {
     process.exit(2);
   }
 
-  // ── React bundle check ─────────────────────────────────────────────────────
-  const bundlePath = path.resolve(__dirname, '..', '..', 'public', 'react', 'main.js');
-  if (!fs.existsSync(bundlePath)) {
-    console.error('\n  ✘ public/react/main.js is missing — run `npm run build:react` first.\n');
-    process.exit(2);
-  }
-
-  if (!puppeteer) {
-    record('puppeteer available', 'require("puppeteer") resolves', 'module not installed', false);
-    await writeReport(findings);
-    process.exit(1);
-    return;
-  }
-
   const pool = new Pool({ connectionString: dbUrl });
   setPool(pool);
 
@@ -208,7 +147,7 @@ async function main() {
   await cleanupTestData(pool);
 
   const users = await seedUsers(pool, runId);
-  console.log(`  Seeded  manager=${users.manager.email}  admin=${users.admin.email}`);
+  console.log(`  Seeded  member=${users.member.email}  manager=${users.manager.email}  admin=${users.admin.email}`);
 
   const { child, logBuf } = spawnServer();
   let exited = false;
@@ -240,185 +179,75 @@ async function main() {
     return;
   }
 
-  const { findChromium } = require('../shared/find-chromium');
-  const executablePath = findChromium() || undefined;
-
-  let browser;
   try {
-    browser = await puppeteer.launch({
-      headless: true,
-      executablePath,
-      defaultViewport: { width: 1280, height: 900 },
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
-  } catch (e) {
-    record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
-    await writeReport(findings);
-    await cleanupAndExit(1);
-    return;
-  }
+    // ── Authenticate actors ────────────────────────────────────────────────
+    const [memberClient, managerClient, adminClient] = await Promise.all([
+      login(users.member.email, users.member.password),
+      login(users.manager.email, users.manager.password),
+      login(users.admin.email, users.admin.password),
+    ]);
 
-  try {
-    // ── Scenario A: manager — admin controls must be absent ─────────────────
-    {
-      const managerClient = await login(users.manager.email, users.manager.password);
-      const page = await browser.newPage();
-      await page.setCacheEnabled(false);
-      page.on('pageerror', (e) => console.log('    [manager pageerror]', String(e).slice(0, 200)));
-      page.on('console', (m) => {
-        if (m.type() === 'error') console.log('    [manager console.error]', m.text().slice(0, 200));
-      });
-
-      await injectSession(page, managerClient.cookie);
-      const resp = await page.goto(`${BASE}/invoices`, { waitUntil: 'domcontentloaded', timeout: 20000 });
-
+    // ── Scenario A: unauthenticated → 401 or 3xx ─────────────────────────
+    console.log('\n  [A] Unauthenticated requests');
+    for (const route of ROUTES) {
+      const status = route.method === 'POST'
+        ? await apiPost(route.path, null)
+        : await apiGet(route.path, null);
+      const ok = status === 401 || (status >= 300 && status < 400);
       record(
-        'MANAGER: /invoices page loads (HTTP 200)',
-        '200',
-        String(resp ? resp.status() : 0),
-        resp && resp.ok(),
+        `UNAUTH: ${route.method} ${route.path} → 401 or 3xx`,
+        '401 or 3xx',
+        String(status),
+        ok,
       );
-
-      if (!resp || !resp.ok()) {
-        await page.close();
-      } else {
-        // Wait for state.user to be populated by bootstrap().
-        const userReady = await pollPage(page, () => {
-          return typeof state !== 'undefined'
-            && state.user
-            && state.user.privilege_level === 'manager';
-        }, null, 10000);
-
-        record(
-          'MANAGER: state.user.privilege_level === "manager" after bootstrap',
-          'manager',
-          userReady ? 'manager' : 'not populated',
-          !!userReady,
-        );
-
-        // Also wait for chrome.js to have injected the panel body.
-        const panelBodyReady = await pollPage(page, () => {
-          return !!document.getElementById('inv-panel-body');
-        }, null, 5000);
-
-        record(
-          'MANAGER: #inv-panel-body present in DOM (injected by chrome.js)',
-          'present',
-          panelBodyReady ? 'present' : 'absent',
-          !!panelBodyReady,
-        );
-
-        const result = await probeAdminControls(page);
-
-        if (result.error) {
-          record('MANAGER: renderInvoicePanelBody() runs without error', 'no error', result.error, false);
-        } else {
-          record(
-            'MANAGER: "Edit invoice" section header absent',
-            'absent',
-            result.editHeader ? 'present' : 'absent',
-            !result.editHeader,
-          );
-          record(
-            'MANAGER: #inv-save-btn (Save changes) absent',
-            'absent',
-            result.editSection ? 'present' : 'absent',
-            !result.editSection,
-          );
-          record(
-            'MANAGER: #inv-send-btn (Send to customer) absent',
-            'absent',
-            result.sendBtn ? 'present' : 'absent',
-            !result.sendBtn,
-          );
-        }
-
-        await page.close();
-      }
     }
 
-    // ── Scenario B: admin — admin controls must be present ──────────────────
-    {
-      const adminClient = await login(users.admin.email, users.admin.password);
-      const page = await browser.newPage();
-      await page.setCacheEnabled(false);
-      page.on('pageerror', (e) => console.log('    [admin pageerror]', String(e).slice(0, 200)));
-      page.on('console', (m) => {
-        if (m.type() === 'error') console.log('    [admin console.error]', m.text().slice(0, 200));
-      });
-
-      await injectSession(page, adminClient.cookie);
-      const resp = await page.goto(`${BASE}/invoices`, { waitUntil: 'domcontentloaded', timeout: 20000 });
-
+    // ── Scenario B: member → 403 ──────────────────────────────────────────
+    console.log('\n  [B] Member requests');
+    for (const route of ROUTES) {
+      const status = route.method === 'POST'
+        ? await apiPost(route.path, memberClient.cookie)
+        : await apiGet(route.path, memberClient.cookie);
       record(
-        'ADMIN: /invoices page loads (HTTP 200)',
-        '200',
-        String(resp ? resp.status() : 0),
-        resp && resp.ok(),
+        `MEMBER: ${route.method} ${route.path} → 403`,
+        '403',
+        String(status),
+        status === 403,
       );
-
-      if (!resp || !resp.ok()) {
-        await page.close();
-      } else {
-        // Wait for state.user to be populated by bootstrap().
-        const userReady = await pollPage(page, () => {
-          return typeof state !== 'undefined'
-            && state.user
-            && state.user.privilege_level === 'admin';
-        }, null, 10000);
-
-        record(
-          'ADMIN: state.user.privilege_level === "admin" after bootstrap',
-          'admin',
-          userReady ? 'admin' : 'not populated',
-          !!userReady,
-        );
-
-        // Wait for chrome.js to have injected the panel body.
-        const panelBodyReady = await pollPage(page, () => {
-          return !!document.getElementById('inv-panel-body');
-        }, null, 5000);
-
-        record(
-          'ADMIN: #inv-panel-body present in DOM (injected by chrome.js)',
-          'present',
-          panelBodyReady ? 'present' : 'absent',
-          !!panelBodyReady,
-        );
-
-        const result = await probeAdminControls(page);
-
-        if (result.error) {
-          record('ADMIN: renderInvoicePanelBody() runs without error', 'no error', result.error, false);
-        } else {
-          record(
-            'ADMIN: "Edit invoice" section header present',
-            'present',
-            result.editHeader ? 'present' : 'absent',
-            !!result.editHeader,
-          );
-          record(
-            'ADMIN: #inv-save-btn (Save changes) present',
-            'present',
-            result.editSection ? 'present' : 'absent',
-            !!result.editSection,
-          );
-          record(
-            'ADMIN: #inv-send-btn (Send to customer) present',
-            'present',
-            result.sendBtn ? 'present' : 'absent',
-            !!result.sendBtn,
-          );
-        }
-
-        await page.close();
-      }
     }
+
+    // ── Scenario C: manager → 403 ─────────────────────────────────────────
+    console.log('\n  [C] Manager requests');
+    for (const route of ROUTES) {
+      const status = route.method === 'POST'
+        ? await apiPost(route.path, managerClient.cookie)
+        : await apiGet(route.path, managerClient.cookie);
+      record(
+        `MANAGER: ${route.method} ${route.path} → 403`,
+        '403',
+        String(status),
+        status === 403,
+      );
+    }
+
+    // ── Scenario D: admin → not 403 ───────────────────────────────────────
+    console.log('\n  [D] Admin requests (gate must pass — QB not connected is OK)');
+    for (const route of ROUTES) {
+      const status = route.method === 'POST'
+        ? await apiPost(route.path, adminClient.cookie)
+        : await apiGet(route.path, adminClient.cookie);
+      const ok = status !== 403;
+      record(
+        `ADMIN: ${route.method} ${route.path} → not 403`,
+        'not 403',
+        String(status),
+        ok,
+      );
+    }
+
   } catch (e) {
     record('test harness', 'no error', `error: ${e.message}`, false,
       (logBuf || []).slice(-20).join(''));
-  } finally {
-    if (browser) await browser.close().catch(() => {});
   }
 
   const pass = findings.filter(f => f.ok).length;
