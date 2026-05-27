@@ -1885,7 +1885,7 @@ if (!sessionChecked) return <LoginPageSkeleton />;`}
           <Paper variant="outlined" sx={{ p: 2.5, mb: 2 }}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               The customer-facing sign-off page (<code>DesignVisitSignOffPage</code>) has six
-              distinct states. Each is shown below using the <code>preview</code> prop so no
+              distinct states. Each is shown below using the <code>embedded</code> prop so no
               real token or API call is needed. The page renders inside a max-width frame that
               matches its production layout.
             </Typography>
@@ -1949,14 +1949,14 @@ if (!sessionChecked) return <LoginPageSkeleton />;`}
                     bgcolor: '#f9fafb',
                   }}
                 >
-                  <DesignVisitSignOffPage preview={preview} />
+                  <DesignVisitSignOffPage embedded={preview} />
                 </Box>
               }
               code={`import { DesignVisitSignOffPage } from './DesignVisitSignOffPage';
 
 // In production the component reads the token from the URL and fetches data itself.
-// The preview prop is only used in the Design System gallery.
-<DesignVisitSignOffPage preview={{ state: '${preview.state}'${'successKind' in preview ? `, successKind: '${preview.successKind}'` : ''} }} />`}
+// The embedded prop is only used in the Design System gallery.
+<DesignVisitSignOffPage embedded={{ state: '${preview.state}'${'successKind' in preview ? `, successKind: '${preview.successKind}'` : ''} }} />`}
             />
           ))}
         </>

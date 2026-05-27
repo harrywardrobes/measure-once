@@ -166,9 +166,13 @@ function SupersededBanner() {
   );
 }
 
-// ── Preview / gallery config ──────────────────────────────────────────────────
+// ── Embedded / gallery config ─────────────────────────────────────────────────
+// `embedded` is the canonical prop for signalling gallery embedding across all
+// full-page components. For simple boolean pages (NotFoundPage,
+// AccessRestrictedPage) pass `embedded` as a bare boolean. For pages with rich
+// gallery state (like this one) pass an `EmbeddedPreview` object instead.
 
-export interface SignOffPreview {
+export interface EmbeddedPreview {
   state: PageState;
   successKind?: SuccessKind;
   data?: SignOffData;
@@ -178,14 +182,14 @@ export interface SignOffPreview {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function DesignVisitSignOffPage({ preview }: { preview?: SignOffPreview } = {}) {
-  const [pageState, setPageState] = useState<PageState>(preview?.state ?? 'loading');
-  const [data, setData] = useState<SignOffData | null>(preview?.data ?? null);
-  const [errorTitle, setErrorTitle] = useState(preview?.errorTitle ?? 'Link not valid');
+export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPreview } = {}) {
+  const [pageState, setPageState] = useState<PageState>(embedded?.state ?? 'loading');
+  const [data, setData] = useState<SignOffData | null>(embedded?.data ?? null);
+  const [errorTitle, setErrorTitle] = useState(embedded?.errorTitle ?? 'Link not valid');
   const [errorSub, setErrorSub] = useState(
-    preview?.errorSub ?? 'This link may have already been used. Please contact us if you need a new one.',
+    embedded?.errorSub ?? 'This link may have already been used. Please contact us if you need a new one.',
   );
-  const [successKind, setSuccessKind] = useState<SuccessKind>(preview?.successKind ?? 'approved');
+  const [successKind, setSuccessKind] = useState<SuccessKind>(embedded?.successKind ?? 'approved');
 
   const [approving, setApproving] = useState(false);
   const [approveErr, setApproveErr] = useState('');
@@ -200,7 +204,7 @@ export function DesignVisitSignOffPage({ preview }: { preview?: SignOffPreview }
   const tokenRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (preview) return;
+    if (embedded) return;
 
     const token = new URLSearchParams(window.location.search).get('token');
     tokenRef.current = token;

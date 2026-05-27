@@ -55,6 +55,23 @@ collapses (`&:empty { display: none }`). When changing this contract,
 audit consumers — currently only `pages/CustomersPage.tsx` portals into
 `#page-heading-action`.
 
+## Gallery embedding convention
+
+Full-page components shown in the Design System gallery use a single
+canonical prop name — **`embedded`** — to signal that they are running
+inside the gallery rather than at their real URL.
+
+- Simple error/boundary pages (`NotFoundPage`, `AccessRestrictedPage`):
+  `embedded?: boolean` — just pass the bare boolean to suppress the
+  full-viewport layout.
+- Pages with rich gallery state (`DesignVisitSignOffPage`): pass an
+  `EmbeddedPreview` object (exported from the page file) so the gallery
+  can control which UI state is shown without a real token or API call.
+
+**Always use `embedded` (not `preview`, `inGallery`, etc.) for this
+purpose.** The gallery (`DesignSystemPage`) passes it consistently for
+all page components.
+
 ## Adding a new page mount
 
 1. Create `pages/<Name>Page.tsx`. Wrap the page's top-level layout in
