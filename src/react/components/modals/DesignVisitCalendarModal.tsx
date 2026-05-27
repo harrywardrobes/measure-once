@@ -31,6 +31,7 @@ interface DraftState {
   location: string;
   notes: string;
   addGcal: boolean;
+  startDt?: string;
 }
 
 function draftKey(handlerId: string | number, contactId: string | number | null | undefined): string {
@@ -74,7 +75,12 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
   const key = draftKey(handler.id, ctx.contactId);
   const draft = loadDraft(key);
 
-  const initialStart = dayjs().add(24, 'hour').startOf('hour');
+  const freshStart = dayjs().add(24, 'hour').startOf('hour');
+  const restoredStart = draft.startDt ? dayjs(draft.startDt) : null;
+  const initialStart =
+    restoredStart && restoredStart.isValid() && restoredStart.isAfter(dayjs())
+      ? restoredStart
+      : freshStart;
 
   const [title, setTitle] = useState(draft.title ?? defaultTitle);
   const [startDt, setStartDt] = useState<Dayjs | null>(initialStart);
@@ -86,8 +92,8 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    saveDraft(key, { title, duration, location, notes, addGcal });
-  }, [key, title, duration, location, notes, addGcal]);
+    saveDraft(key, { title, duration, location, notes, addGcal, startDt: startDt?.toISOString() });
+  }, [key, title, duration, location, notes, addGcal, startDt]);
 
   function handleDismiss() {
     setError('');
