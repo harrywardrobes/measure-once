@@ -121,44 +121,11 @@ function isViewerPrivilege()  { return getPrivilegeLevel() === 'viewer'; }
 function isAdminPrivilege()   { return getPrivilegeLevel() === 'admin'; }
 function canEditPrivilege()   { const p = getPrivilegeLevel(); return p === 'manager' || p === 'admin'; }
 
-// ── User prefs helpers ────────────────────────────────────────────────────────
-// @deprecated — React components should use the usePrefs() hook from
-// src/react/hooks/usePrefs.ts instead. These functions remain for vanilla-JS
-// pages during migration; state.prefs is kept populated for bridge access.
-// Fetched once per session; cached in state.prefs. Individual keys are updated
-// with patchPref() which keeps the local cache in sync and fire-and-forgets the
-// server write so callers don't have to await it for UI responsiveness.
-
-async function ensurePrefs() {
-  if (state._prefsLoaded) return state.prefs;
-  if (getPrivilegeLevel() === 'viewer') {
-    state.prefs = {};
-    state._prefsLoaded = true;
-    return state.prefs;
-  }
-  try {
-    state.prefs = await GET('/api/users/me/prefs');
-  } catch {
-    state.prefs = {};
-  }
-  state._prefsLoaded = true;
-  return state.prefs;
-}
-
-async function patchPref(key, value) {
-  if (!state.prefs) state.prefs = {};
-  state.prefs[key] = value;
-  try {
-    await PATCH_REQ('/api/users/me/prefs', { [key]: value });
-  } catch (e) {
-    console.warn('Failed to save preference:', key, e);
-  }
-}
-
 // ── API helpers ───────────────────────────────────────────────────────────────
 // @deprecated — React components should import GET/POST/PATCH/PUT/DELETE from
 // src/react/utils/api.ts instead of using these window globals. These remain for
-// vanilla-JS pages during migration.
+// vanilla-JS pages (workflow-core.js, workflow.js, card-action-handlers.js)
+// during migration and will be removed when those files are ported to React.
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body !== undefined) opts.body = JSON.stringify(body);
@@ -274,110 +241,6 @@ function showToast(msg, isError) {
   setTimeout(() => el.remove(), 3500);
 }
 
-// ── Bootstrap (called by each page) ───────────────────────────────────────────
-// Common per-page bootstrap. Returns true if user is signed in & data loaded.
-// Workflow and QuickBooks data are loaded only when those modules are present
-// (real implementations live in workflow-core.js / invoices-core.js).
-async function bootstrap() {
-  const params = new URLSearchParams(window.location.search);
-
-  const user = await fetch('/api/auth/user')
-    .then(r => r.ok ? r.json() : null)
-    .catch(() => null);
-
-  if (!user) {
-    // Preserve any query-string flags so /login can still show them.
-    const qs = window.location.search ? window.location.search : '';
-    window.location.href = '/login' + qs;
-    return false;
-  }
-
-  // First-time users must finish their profile before they can use the app.
-  if (user.onboarding_status === 'more_info_required'
-      && window.location.pathname !== '/onboarding') {
-    window.location.href = '/onboarding';
-    return false;
-  }
-
-  state.user = user;
-  // Notify React islands (GlobalHeader, ProfilePage, …) that state.user is now populated.
-  // checkAuthStatus() already fires this on re-checks; bootstrap was the missing path.
-  renderAuthStatus();
-
-  const priv = getPrivilegeLevel();
-
-  if (priv === 'viewer') {
-    showViewerBanner();
-  }
-
-  try {
-    await checkAuthStatus();
-    await loadWorkflow();
-    await Promise.all([loadOpenLeads(), loadWorkflowStages(), ensurePrefs(),
-      typeof loadLeadStatuses === 'function' ? loadLeadStatuses() : Promise.resolve(),
-      typeof loadStageActionLabels === 'function' ? loadStageActionLabels() : Promise.resolve(),
-      typeof loadLeadSubstatuses === 'function' ? loadLeadSubstatuses() : Promise.resolve(),
-      GET('/api/whatsapp/config').then(cfg => { state.whatsappEnabled = !!cfg.enabled; }).catch(() => {}),
-    ]);
-    populateStageFilter();
-    if (document.getElementById('sales-view') || document.getElementById('survey-view')) document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
-    if (priv === 'manager' || priv === 'admin') loadQBInvoices();
-  } catch (e) {
-    console.error('Bootstrap failed', e);
-    const list        = document.getElementById('customers-view');
-    const salesView   = document.getElementById('sales-view');
-    const projectView = document.getElementById('projects-view');
-
-    // Sales page: dispatch an event so the React SalesBoardPage component can
-    // render a proper error state inside the board area. Writing innerHTML to
-    // #sales-view would destroy #sales-board-mount and orphan the React tree.
-    // Also persist the failure on window so a late-mounting component can detect
-    // it synchronously (the React chunk may not have loaded yet when this fires).
-    if (salesView && !list && !projectView) {
-      window.__salesBoardBootstrapFailed = { code: e.code, message: e.message };
-      document.dispatchEvent(new CustomEvent('sales-board-bootstrap-failed', {
-        detail: { code: e.code, message: e.message },
-      }));
-      return true;
-    }
-
-    const surveyView = document.getElementById('survey-view');
-    if (surveyView && !list && !projectView && !salesView) {
-      window.__surveyBoardBootstrapFailed = { code: e.code, message: e.message };
-      document.dispatchEvent(new CustomEvent('survey-board-bootstrap-failed', {
-        detail: { code: e.code, message: e.message },
-      }));
-      return true;
-    }
-
-    const target = list || projectView;
-    if (target) {
-      let msg, action;
-      if (e.code === 'HUBSPOT_AUTH') {
-        msg = 'Could not connect to HubSpot — the API token is invalid or expired. An admin needs to update the <strong>HUBSPOT_ACCESS_TOKEN</strong> in the environment settings and restart the app.';
-        action = `<a href="/settings" class="mt-2 inline-block mo-error-action underline text-xs">Go to Settings</a>`;
-      } else if (e.code === 'HUBSPOT_RATE_LIMIT') {
-        msg = 'HubSpot rate limit reached.';
-        action = `<button onclick="location.reload()" class="mt-2 mo-error-action underline text-xs">Try again</button>`;
-      } else if (e.code === 'DB_ERROR') {
-        msg = 'The list couldn\'t be loaded — there was a problem reaching the database.';
-        action = `<button onclick="location.reload()" class="mt-2 mo-error-action underline text-xs">Retry</button>`;
-      } else if (e.code === 'HUBSPOT_UNAVAILABLE') {
-        msg = 'HubSpot is currently unavailable. This is usually temporary.';
-        action = `<button onclick="location.reload()" class="mt-2 mo-error-action underline text-xs">Try again</button>`;
-      } else if (e.code === 'HUBSPOT_ERROR' || e.code) {
-        msg = 'Could not load data from HubSpot. This may be a temporary issue.';
-        action = `<button onclick="location.reload()" class="mt-2 mo-error-action underline text-xs">Retry</button>`;
-      } else {
-        msg = `Failed to load: ${escHtml(e.message)}`;
-        action = `<button onclick="location.reload()" class="mt-2 mo-error-action underline text-xs">Retry</button>`;
-      }
-      target.innerHTML = `<div class="p-4 text-sm mo-error-msg">${msg}${action ? `<br>${action}` : ''}</div>`;
-    }
-  }
-  return true;
-}
-
 function showAccessGate(params) {
   let view = 'form';
   if (params.get('email_conflict') === '1') {
@@ -390,24 +253,6 @@ function showAccessGate(params) {
     view = 'confirmed';
   }
   window.dispatchEvent(new CustomEvent('mo:show-access-gate', { detail: { view, urlParams: params } }));
-}
-
-async function checkAuthStatus() {
-  const isFirstCheck = state.authStatus === null;
-  const prevGoogle = !!(state.authStatus?.google);
-  const [status, user] = await Promise.all([
-    GET('/auth/status'),
-    fetch('/api/auth/user').then(r => r.ok ? r.json() : null).catch(() => null),
-  ]);
-  state.authStatus = status;
-  state.user = user;
-  renderAuthStatus();
-  if (!isFirstCheck && !prevGoogle && state.authStatus.google) {
-    window.dispatchEvent(new CustomEvent('mo:google-auth-connected'));
-  }
-  if (!isFirstCheck && prevGoogle && !state.authStatus.google) {
-    window.dispatchEvent(new CustomEvent('mo:google-auth-disconnected'));
-  }
 }
 
 // ── Header Search ─────────────────────────────────────────────────────────────

@@ -32,6 +32,7 @@ import { PageHeadingPanel } from './components/PageHeadingPanel';
 import { BottomNav } from './components/BottomNav';
 import { AdminTabsBar } from './components/AdminTabsBar';
 import { BottomActionBar } from './components/BottomActionBar';
+import { AppBootstrapProvider } from './contexts/AppBootstrapContext';
 const CommandPalette    = React.lazy(() => import('./components/CommandPalette').then(m => ({ default: m.CommandPalette })));
 const AccessRequestGate = React.lazy(() => import('./components/AccessRequestGate').then(m => ({ default: m.AccessRequestGate })));
 
@@ -101,9 +102,12 @@ function withTheme(
   islandId: string,
   fallback: React.ReactElement = <PageLoadingSkeleton />,
 ): React.ReactElement {
+  const withBootstrap = (
+    <AppBootstrapProvider islandId={islandId}>{node}</AppBootstrapProvider>
+  );
   const inner = CONN_TOAST_EXCLUDED.has(islandId)
-    ? node
-    : <ConnectionToastProvider>{node}</ConnectionToastProvider>;
+    ? withBootstrap
+    : <ConnectionToastProvider>{withBootstrap}</ConnectionToastProvider>;
   return (
     <AppThemeProvider>
       <IslandErrorBoundary islandId={islandId}>

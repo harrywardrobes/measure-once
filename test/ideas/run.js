@@ -489,7 +489,9 @@ async function main() {
         const cards = Array.from(mount.querySelectorAll('.MuiCard-root'));
         for (const card of cards) {
           if (card.textContent.includes(body2)) {
-            const chip = card.querySelector('.MuiChip-root');
+            // The comment chip has aria-expanded; the vote chip does not.
+            const chip = card.querySelector('.MuiChip-root[aria-expanded]') ||
+                         card.querySelector('.MuiChip-root');
             if (chip) { chip.click(); return true; }
           }
         }

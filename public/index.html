@@ -25,16 +25,5 @@
   <script src="/components.js"></script>
   <script type="module" src="/react/main.js"></script>
 
-  <script src="/core.js"></script>
-  <script>
-    // The Home tab is rendered by React (see src/react/pages/HomePage.tsx
-    // — mount id "home-view" in src/react/main.tsx). Bootstrap is still
-    // invoked so chrome/header, auth state, and shared globals used by
-    // legacy pages are initialised, but the React island fetches its own
-    // data and renders its own loading skeleton independently.
-    document.addEventListener('DOMContentLoaded', async () => {
-      try { await bootstrap(); } catch { /* HomePage shows its own errors */ }
-    });
-  </script>
 </body>
 </html>

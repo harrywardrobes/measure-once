@@ -3553,7 +3553,7 @@ app.get('/api/calendar/upcoming', async (req, res) => {
 });
 
 // ── Ideas & Feedback ──────────────────────────────────────────────────────────
-app.get('/ideas', isAuthenticated, (_req, res) => res.redirect('/'));
+app.get('/ideas', isAuthenticated, (_req, res) => res.sendFile(path.join(__dirname, 'public', 'ideas.html')));
 
 async function ensureIdeasTables() {
   await pool.query(`

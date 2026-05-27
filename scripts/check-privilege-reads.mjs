@@ -5,14 +5,14 @@
  * Enforces the privilege-check convention documented in replit.md:
  *
  *   All privilege checks MUST go through the canonical helper for that surface:
- *     - Client vanilla JS  → getPrivilegeLevel()   (defined in public/core.js)
+ *     - Client vanilla JS  → getPrivilegeLevel()   (defined in public/legacy-shim.js)
  *     - React / TypeScript → usePrivilege()         (defined in src/react/hooks/usePrivilege.ts)
  *     - Server route code  → getReqPrivilege(req)   (defined in auth.js)
  *
  * ── Surface 1 — public/*.js ──────────────────────────────────────────────────
  *
  *   Every .js file under public/ except:
- *     - public/core.js         — canonical implementation (defines the helper)
+ *     - public/legacy-shim.js  — canonical implementation (defines the helper)
  *     - public/react/**         — compiled React island (auto-generated, gitignored)
  *     - public/storybook/**     — compiled Storybook output (auto-generated, gitignored)
  *
@@ -86,7 +86,7 @@ const SRC_REACT_DIR  = resolve(ROOT, 'src', 'react');
 // ── Surface 1 exclusions — public/ ───────────────────────────────────────────
 
 const EXCLUDED_FILES = new Set([
-  resolve(PUBLIC_DIR, 'core.js'),
+  resolve(PUBLIC_DIR, 'legacy-shim.js'),
 ]);
 
 const EXCLUDED_DIRS = [
@@ -254,7 +254,7 @@ const violations       = [...jsViolations, ...tsViolations, ...serverViolations]
 
 console.log(
   `check-privilege-reads: scanned ${jsFiles.length} JS file(s) under public/ ` +
-  `(core.js, react/, storybook/ excluded)\n` +
+  `(legacy-shim.js, react/, storybook/ excluded)\n` +
   `                        and ${tsFiles.length} TS/TSX file(s) under src/react/ ` +
   `(usePrivilege.ts, usePrivilegeSync.ts, *.stories.* excluded)\n` +
   `                        and ${SERVER_FILES.length} server-side module(s) ` +

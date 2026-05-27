@@ -81,11 +81,11 @@
     })();
   </script>
 
-  <script src="/core.js"></script>
+  <script src="/legacy-shim.js"></script>
   <script src="/workflow-core.js"></script>
   <script>
     // Data-bridge event wiring for SalesBoardPage (inlined from sales.js).
-    // Overrides the open-leads loader so bootstrap fetches ALL contacts.
+    // Overrides the open-leads loader so the page init fetches ALL contacts.
     registerOpenLeadsLoader(loadAllContacts);
     // Notify the React SalesBoardPage whenever fresh data is available.
     document.addEventListener('mo:contacts-changed', function salesBoardNotifyReact() {
@@ -107,8 +107,27 @@
     });
   </script>
   <script>
+    // Load workflow data for the Sales board. Auth redirect and onboarding
+    // gating are handled by AppBootstrapProvider in the React tree.
     document.addEventListener('DOMContentLoaded', async () => {
-      await bootstrap();
+      try {
+        await loadWorkflow();
+        await Promise.all([
+          loadOpenLeads(),        // overridden above to loadAllContacts
+          loadWorkflowStages(),
+          loadLeadStatuses(),
+          loadStageActionLabels(),
+          loadLeadSubstatuses(),
+        ]);
+        populateStageFilter();
+        document.dispatchEvent(new CustomEvent('mo:contacts-changed'));
+      } catch (e) {
+        console.error('[sales] page init failed', e);
+        window.__salesBoardBootstrapFailed = { code: e.code, message: e.message };
+        document.dispatchEvent(new CustomEvent('sales-board-bootstrap-failed', {
+          detail: { code: e.code, message: e.message },
+        }));
+      }
     });
   </script>
 </body>

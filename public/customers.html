@@ -32,15 +32,17 @@
   <main id="tab-customers"></main>
 
   <!--
-    core.js / workflow-core.js / invoices-core.js are loaded (but their
-    bootstrap() is NOT called) so the React Customers island can reuse:
+    legacy-shim.js / workflow-core.js / invoices-core.js are loaded so the
+    React Customers island can reuse:
       - the legacy `state.qb.invoices` cache + `matchInvoicesForContact`
       - the legacy `state.contactUrgencyCache` + `getTaskUrgency`
     Their plain-script globals (`state`, `STAGE_COLOURS`, `stageColour`,
     `matchInvoicesForContact`, …) are read from `window.*` by `CustomersPage.tsx`.
     Invoice detail is handled by the React InvoiceDetailDrawer component.
+    bootstrap() is NOT called — the React island fetches its own data and
+    auth is handled by AppBootstrapProvider in the React tree.
   -->
-  <script src="/core.js"></script>
+  <script src="/legacy-shim.js"></script>
   <script src="/workflow-core.js"></script>
   <script src="/invoices-core.js"></script>
 
