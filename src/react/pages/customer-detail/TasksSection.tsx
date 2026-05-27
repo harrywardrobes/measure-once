@@ -1,4 +1,9 @@
 import React, { useState, useCallback } from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 import { HubSpotTask, stageColour, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 
@@ -132,7 +137,13 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
       {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
 
       {showAddTask && (
-        <div className="add-task-form">
+        <Box sx={{
+          background: 'var(--paper-deep)',
+          border: '1px solid var(--stone)',
+          borderRadius: 'var(--radius-lg)',
+          p: '12px',
+          mb: '12px',
+        }}>
           <input
             id="task-subject"
             type="text"
@@ -171,7 +182,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
           >
             {saving ? 'Saving…' : 'Save task'}
           </button>
-        </div>
+        </Box>
       )}
 
       {sorted.length > 0 ? (
@@ -191,39 +202,122 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
               : null;
 
             return (
-              <div key={task.id} className={`task-item${isDone ? ' task-done' : ''}`}>
-                <button
-                  className={`task-check${isDone ? ' task-check-done' : ''}`}
+              <Box
+                key={task.id}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                  background: 'var(--paper)',
+                  border: '1px solid var(--stone)',
+                  borderRadius: 'var(--radius-lg)',
+                  p: '10px 12px',
+                  transition: 'background 0.1s',
+                  boxShadow: 'var(--shadow-sm)',
+                  opacity: isDone ? 0.55 : 1,
+                  '&:active': { background: 'var(--paper-deep)' },
+                }}
+              >
+                <Box
+                  component="button"
                   onClick={() => toggleTaskDone(task.id, isDone)}
                   title={isDone ? 'Mark incomplete' : 'Mark complete'}
+                  sx={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: '50%',
+                    border: isDone ? 'none' : '2px solid var(--stone-deep)',
+                    background: isDone ? '#16a34a' : 'none',
+                    color: isDone ? '#fff' : 'inherit',
+                    flexShrink: 0,
+                    mt: '1px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'border-color 0.15s, background 0.15s',
+                    WebkitTapHighlightColor: 'transparent',
+                    fontFamily: 'inherit',
+                    p: 0,
+                    '&:hover': {
+                      borderColor: isDone ? undefined : 'var(--orchid)',
+                      background: isDone ? '#15803d' : undefined,
+                    },
+                  }}
                 >
-                  {isDone && (
-                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
+                  {isDone && <CheckIcon sx={{ fontSize: 12 }} />}
+                </Box>
+
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography sx={{
+                    fontSize: '0.875rem',
+                    color: isDone ? 'var(--ink-4)' : 'var(--ink-1)',
+                    lineHeight: 1.4,
+                    wordBreak: 'break-word',
+                    textDecoration: isDone ? 'line-through' : 'none',
+                  }}>
+                    {subj}
+                  </Typography>
+
+                  {(slabel || dueLabel) && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', mt: '5px' }}>
+                      {slabel && colour && (
+                        <Chip
+                          label={slabel}
+                          size="small"
+                          sx={{
+                            fontSize: '0.67rem',
+                            fontWeight: 700,
+                            height: 'auto',
+                            borderRadius: 'var(--radius-pill)',
+                            background: colour.light,
+                            color: colour.text,
+                            letterSpacing: '0.02em',
+                            '& .MuiChip-label': { px: '7px', py: '2px' },
+                          }}
+                        />
+                      )}
+                      {dueLabel && (
+                        <Typography
+                          component="span"
+                          sx={{
+                            fontSize: '0.72rem',
+                            color: overdue ? '#dc2626' : 'var(--ink-3)',
+                            fontWeight: overdue ? 700 : 500,
+                          }}
+                        >
+                          {overdue ? '⚠ ' : ''}{dueLabel}
+                        </Typography>
+                      )}
+                    </Box>
                   )}
-                </button>
-                <div className="task-content">
-                  <div className={`task-subject${isDone ? ' task-subject-done' : ''}`}>{subj}</div>
-                  <div className="task-meta">
-                    {slabel && colour && (
-                      <span className="task-stage-pill" style={{ background: colour.light, color: colour.text }}>
-                        {slabel}
-                      </span>
-                    )}
-                    {dueLabel && (
-                      <span className={`task-due${overdue ? ' task-due-overdue' : ''}`}>
-                        {overdue ? '⚠ ' : ''}{dueLabel}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button className="task-delete" onClick={() => deleteTask(task.id)} title="Delete task">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
+                </Box>
+
+                <Box
+                  component="button"
+                  onClick={() => deleteTask(task.id)}
+                  title="Delete task"
+                  sx={{
+                    flexShrink: 0,
+                    color: 'var(--stone-deep)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    p: '2px',
+                    borderRadius: 'var(--radius-sm)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    WebkitTapHighlightColor: 'transparent',
+                    fontFamily: 'inherit',
+                    transition: 'color 0.15s',
+                    mt: '2px',
+                    '&:hover': { color: '#dc2626' },
+                  }}
+                >
+                  <CloseIcon sx={{ fontSize: '0.875rem' }} />
+                </Box>
+              </Box>
             );
           })}
         </div>

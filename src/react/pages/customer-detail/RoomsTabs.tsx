@@ -1,4 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
 import { Room, RoomComment, stageColour, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 
@@ -113,60 +116,146 @@ export function RoomsTabs({
   const installFinish = room?.installFinish;
   const installLine   = [installStart, installFinish].filter(Boolean).join(' → ');
 
+  const tabBaseSx = {
+    fontSize: '.88rem',
+    fontWeight: 600,
+    px: 2,
+    py: 1,
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--stone)',
+    background: 'var(--paper)',
+    color: 'var(--ink-3)',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+    whiteSpace: 'nowrap',
+    WebkitTapHighlightColor: 'transparent',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    '@media (pointer: coarse)': { minHeight: 44 },
+    '&:hover': { background: 'var(--paper-deep)', color: 'var(--ink-2)' },
+  } as const;
+
   return (
     <div className="mb-5">
       <div id="room-tabs-section">
-        <div className="room-tabs-bar">
-          {rooms.map((r, i) => (
-            <button
-              key={i}
-              className={`room-tab${i === selectedRoomIdx ? ' room-tab-active' : ''}`}
-              onClick={() => onRoomSelect(i)}
-              title={r.room}
-            >
-              <span className="room-tab-name">{r.room}</span>
-              {rooms.length > 1 && !isViewer && (
-                <span
-                  className="room-tab-delete"
-                  role="button"
-                  tabIndex={0}
-                  title={`Delete ${r.room}`}
-                  onClick={e => { e.stopPropagation(); deleteRoom(i); }}
-                  onKeyDown={e => e.key === 'Enter' && deleteRoom(i)}
-                >
-                  ×
-                </span>
-              )}
-            </button>
-          ))}
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '8px', mb: '12px' }}>
+          {rooms.map((r, i) => {
+            const isActive = i === selectedRoomIdx;
+            return (
+              <Box
+                key={i}
+                component="button"
+                onClick={() => onRoomSelect(i)}
+                title={r.room}
+                sx={{
+                  ...tabBaseSx,
+                  ...(isActive ? {
+                    background: 'var(--plum)',
+                    color: '#fff',
+                    borderColor: 'var(--plum)',
+                    '&:hover': { background: 'var(--plum)', color: '#fff' },
+                  } : {}),
+                }}
+              >
+                <span>{r.room}</span>
+                {rooms.length > 1 && !isViewer && (
+                  <Box
+                    component="span"
+                    role="button"
+                    tabIndex={0}
+                    title={`Delete ${r.room}`}
+                    onClick={e => { e.stopPropagation(); deleteRoom(i); }}
+                    onKeyDown={e => e.key === 'Enter' && deleteRoom(i)}
+                    sx={{
+                      fontSize: '1.1rem',
+                      lineHeight: 1,
+                      opacity: 0.7,
+                      ml: '2px',
+                      '&:hover': { opacity: 1 },
+                    }}
+                  >
+                    ×
+                  </Box>
+                )}
+              </Box>
+            );
+          })}
+
           {!isViewer && !addingRoom && (
-            <button className="room-tab room-tab-add" onClick={() => setAddingRoom(true)} title="Add room">
+            <Box
+              component="button"
+              onClick={() => setAddingRoom(true)}
+              title="Add room"
+              sx={{
+                ...tabBaseSx,
+                border: '1px dashed var(--stone-deep)',
+                background: 'transparent',
+                color: 'var(--stone-deep)',
+                transition: 'color 0.15s, border-color 0.15s',
+                '&:hover': { color: 'var(--orchid)', borderColor: 'var(--orchid-soft)', background: 'transparent' },
+              }}
+            >
               + Add room
-            </button>
+            </Box>
           )}
+
           {addingRoom && (
-            <div className="room-add-form flex items-center gap-2">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <input
                 id="new-room-name"
                 type="text"
                 placeholder="Room name"
                 value={newRoomName}
                 onChange={e => setNewRoomName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') addRoom(); if (e.key === 'Escape') { setAddingRoom(false); setNewRoomName(''); } }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') addRoom();
+                  if (e.key === 'Escape') { setAddingRoom(false); setNewRoomName(''); }
+                }}
                 className="border border-slate-300 rounded px-2 py-1 text-sm"
                 style={{ fontSize: 16 }}
                 autoFocus
               />
-              <button className="btn-save-note text-sm" onClick={addRoom}>Add</button>
-              <button className="btn-cancel-note text-sm" onClick={() => { setAddingRoom(false); setNewRoomName(''); }}>Cancel</button>
-            </div>
+              <Button
+                size="small"
+                onClick={addRoom}
+                sx={{
+                  background: 'var(--orchid)',
+                  color: '#fff',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  textTransform: 'none',
+                  borderRadius: 'var(--radius-md)',
+                  px: 1.5,
+                  minWidth: 0,
+                  '&:hover': { background: 'var(--orchid)', opacity: 0.88 },
+                }}
+              >
+                Add
+              </Button>
+              <Button
+                size="small"
+                onClick={() => { setAddingRoom(false); setNewRoomName(''); }}
+                sx={{
+                  color: 'var(--ink-3)',
+                  fontWeight: 400,
+                  fontSize: '0.875rem',
+                  textTransform: 'none',
+                  minWidth: 0,
+                  '&:hover': { color: 'var(--ink-1)', background: 'transparent' },
+                }}
+              >
+                Cancel
+              </Button>
+            </Box>
           )}
-        </div>
+        </Box>
 
         {room && (
-          <div className="room-body">
-            <div className="room-stage-row flex items-center gap-3 mb-3">
-              <span className="text-xs text-slate-500 font-medium">Stage:</span>
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+              <Typography sx={{ fontSize: '0.75rem', color: 'var(--ink-3)', fontWeight: 500 }}>Stage:</Typography>
               {!isViewer ? (
                 <select
                   value={room.stageKey}
@@ -178,22 +267,33 @@ export function RoomsTabs({
                   ))}
                 </select>
               ) : (
-                <span
-                  className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                  style={{ background: colour.light, color: colour.text }}
+                <Typography
+                  component="span"
+                  sx={{
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    px: 1,
+                    py: '2px',
+                    borderRadius: '9999px',
+                    background: colour.light,
+                    color: colour.text,
+                  }}
                 >
                   {stageLabel}
-                </span>
+                </Typography>
               )}
               {installLine && (
-                <span className="text-xs text-slate-400 ml-2">Install: {installLine}</span>
+                <Typography sx={{ fontSize: '0.75rem', color: 'var(--ink-4)', ml: 0.5 }}>
+                  Install: {installLine}
+                </Typography>
               )}
-            </div>
+            </Box>
 
             <div id="comments-section" className="mb-4">
-              <div className="notes-header flex items-center justify-between mb-2">
-                <span className="notes-header-label text-sm font-semibold text-slate-700">Notes</span>
-              </div>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' }}>Notes</Typography>
+              </Box>
+
               <textarea
                 className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-blue-400 bg-white"
                 rows={4}
@@ -218,38 +318,66 @@ export function RoomsTabs({
                       style={{ fontSize: 16 }}
                     />
                     {draftComment.trim() && (
-                      <button
-                        className="mt-1 btn-save-note text-xs"
+                      <Button
+                        size="small"
                         onClick={addComment}
                         disabled={savingComment}
+                        sx={{
+                          mt: '4px',
+                          background: 'var(--orchid)',
+                          color: '#fff',
+                          fontWeight: 600,
+                          fontSize: '0.75rem',
+                          textTransform: 'none',
+                          borderRadius: 'var(--radius-md)',
+                          '&:hover': { background: 'var(--orchid)', opacity: 0.88 },
+                          '&.Mui-disabled': { background: 'var(--stone)', color: 'var(--ink-4)' },
+                        }}
                       >
                         {savingComment ? 'Saving…' : 'Add comment'}
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </>
               )}
 
               {(room.comments || []).length > 0 && (
-                <div className="mt-3 space-y-2">
+                <Box sx={{ mt: 1.5, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {[...(room.comments || [])].reverse().map((c, i) => (
-                    <div key={i} className="comment-item">
-                      <div className="comment-text">{c.text}</div>
-                      <div className="comment-meta">
-                        {c.author && <span>{c.author}</span>}
-                        {c.author && c.date && <span className="comment-meta-sep">·</span>}
-                        {c.date && (
-                          <span className="comment-date">
-                            {new Date(c.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                          </span>
+                    <Box
+                      key={i}
+                      sx={{
+                        background: 'var(--paper)',
+                        border: '1px solid var(--stone)',
+                        borderRadius: 'var(--radius-lg)',
+                        p: '11px 14px',
+                        boxShadow: 'var(--shadow-sm)',
+                      }}
+                    >
+                      <Typography sx={{ fontSize: '0.875rem', color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                        {c.text}
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: '5px', mt: '4px' }}>
+                        {c.author && (
+                          <Typography component="span" sx={{ fontSize: '0.75rem', color: 'var(--ink-3)' }}>
+                            {c.author}
+                          </Typography>
                         )}
-                      </div>
-                    </div>
+                        {c.author && c.date && (
+                          <Typography component="span" sx={{ fontSize: '0.65rem', color: 'var(--ink-4)' }}>·</Typography>
+                        )}
+                        {c.date && (
+                          <Typography component="span" sx={{ fontSize: '0.68rem', color: 'var(--ink-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            {new Date(c.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
                   ))}
-                </div>
+                </Box>
               )}
             </div>
-          </div>
+          </Box>
         )}
       </div>
     </div>
