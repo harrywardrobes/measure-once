@@ -81,6 +81,42 @@ function _dismiss(service: ConnectionService): void {
   }
 }
 
+// ── Dedup / cooldown helpers (exported for unit tests) ────────────────────────
+
+/** Duration (ms) of the mount-check cooldown. Re-exported for tests. */
+export const MOUNT_CHECK_COOLDOWN_MS = 30_000;
+
+/**
+ * Factory that wraps a raw check function with:
+ *  - promise deduplication: concurrent callers share the in-flight promise
+ *  - cooldown: skips re-polling within MOUNT_CHECK_COOLDOWN_MS of the last check
+ *
+ * Accepting `checkFn` and `getNow` as parameters keeps the logic pure and
+ * trivially testable without mocking module state.
+ */
+export function _createDedupedCheck(
+  checkFn: () => Promise<void>,
+  getNow: () => number = Date.now,
+): () => Promise<void> {
+  let inFlight: Promise<void> | null = null;
+  let lastCheckAt = -Infinity;
+
+  return function dedupedCheck(): Promise<void> {
+    // Share an existing in-flight promise so concurrent mount calls don't
+    // all fire their own parallel sets of HTTP requests.
+    if (inFlight) return inFlight;
+
+    // Skip if we polled recently enough.
+    if (getNow() - lastCheckAt < MOUNT_CHECK_COOLDOWN_MS) return Promise.resolve();
+
+    lastCheckAt = getNow();
+    inFlight = checkFn().finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  };
+}
+
 // ── Core logic ────────────────────────────────────────────────────────────────
 
 async function _checkService(service: ConnectionService, url: string): Promise<void> {
@@ -123,13 +159,13 @@ function _notifyReconnected(service: ConnectionService): void {
   _fire(service, 'reconnected');
 }
 
-async function _checkServicesOnMount(): Promise<void> {
-  await Promise.allSettled([
+const _checkServicesOnMount: () => Promise<void> = _createDedupedCheck(
+  () => Promise.allSettled([
     _checkService('hubspot',    '/api/hubspot/status'),
     _checkService('google',     '/api/google/status'),
     _checkService('quickbooks', '/api/quickbooks/status'),
-  ]);
-}
+  ]).then(() => undefined),
+);
 
 // ── Context value ─────────────────────────────────────────────────────────────
 

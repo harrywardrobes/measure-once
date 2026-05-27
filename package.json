@@ -154,6 +154,7 @@
     "test:stale-bundle": "node scripts/check-stale-bundle.mjs",
     "test:bundle-size-trend": "node scripts/test-bundle-size-trend.mjs",
     "test:bundle-spike-warning": "node scripts/test-bundle-spike-warning.mjs",
+    "test:connection-toast-dedup": "node scripts/test-connection-toast-dedup.mjs",
     "test:typo-vars": "node scripts/check-typo-vars.mjs",
     "test:color-radius-vars": "node scripts/check-color-radius-vars.mjs",
     "test:mount-ids": "node scripts/check-mount-id-conflicts.mjs",
