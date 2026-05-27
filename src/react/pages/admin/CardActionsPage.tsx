@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Box, Button, Card, CardContent, CircularProgress, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typography } from '@mui/material';
 import { useToast } from '../../contexts/ToastContext';
 import { GET, POST, PATCH, PUT } from '../../utils/api';
 
@@ -30,6 +30,7 @@ interface LeadStatus {
 interface Substatus {
   id: number; status_key: string; substatus_key: string;
   label: string; action_label: string; sort_order: number;
+  hubspotSyncWarning?: string;
 }
 interface CALabel  { stage_key: string; status_key: string; label: string; }
 interface Binding  { stage_key?: string; status_key?: string; substatus_id?: number | null; }
@@ -177,6 +178,7 @@ export function CardActionsPage() {
 
   const substatusesRef = useRef<Substatus[]>([]);
   const statusesRef    = useRef<LeadStatus[]>([]);
+  const [syncWarning, setSyncWarning] = useState<string | null>(null);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -224,6 +226,7 @@ export function CardActionsPage() {
   const saveAllCardActionLabels = useCallback(async () => {
     let saved = 0, failed = 0;
     const failures: string[] = [];
+    let hubSyncFailed = false;
 
     // Default-label inputs
     for (const input of Array.from(
@@ -278,6 +281,7 @@ export function CardActionsPage() {
         try {
           const created = await POST<Substatus>('/api/admin/lead-substatuses',
             { status_key: lsKey, substatus_key: subKey, label, action_label: action, sort_order: 0 });
+          if (created.hubspotSyncWarning) hubSyncFailed = true;
           row.removeAttribute('data-sub-new');
           row.dataset.subId      = String(created.id);
           row.dataset.origKey    = created.substatus_key;
@@ -301,6 +305,7 @@ export function CardActionsPage() {
         if (patch.label === '') { failed++; failures.push(`sub-status #${idStr}: label cannot be empty.`); continue; }
         try {
           const updated = await PATCH<Substatus>(`/api/admin/lead-substatuses/${idStr}`, patch);
+          if (updated.hubspotSyncWarning) hubSyncFailed = true;
           row.dataset.origKey    = updated.substatus_key;
           row.dataset.origLabel  = updated.label;
           row.dataset.origAction = updated.action_label || '';
@@ -329,7 +334,8 @@ export function CardActionsPage() {
         const sub = substatusesRef.current.find(s => Number(s.id) === ids[i]);
         if ((sub?.sort_order ?? -1) === i) continue;
         try {
-          await PATCH(`/api/admin/lead-substatuses/${ids[i]}`, { sort_order: i });
+          const reordered = await PATCH<Substatus>(`/api/admin/lead-substatuses/${ids[i]}`, { sort_order: i });
+          if (reordered.hubspotSyncWarning) hubSyncFailed = true;
           if (sub) sub.sort_order = i;
           saved++;
         } catch (e) {
@@ -341,6 +347,7 @@ export function CardActionsPage() {
     if (saved === 0 && failed === 0) { showToast('No changes to save.'); return; }
     if (failed) showToast(`Saved ${saved}, failed ${failed}.`, true);
     else        showToast(`${saved} change${saved !== 1 ? 's' : ''} saved.`);
+    if (hubSyncFailed) setSyncWarning('Sub-status saved locally, but the HubSpot property sync failed. Use the Re-sync button in the Settings tab to retry.');
 
     try { new BroadcastChannel('stage_action_labels_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
     try { new BroadcastChannel('lead_substatuses_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
@@ -369,10 +376,13 @@ export function CardActionsPage() {
     if ((a.sort_order || 0) === (b.sort_order || 0)) siblings.forEach((s, i) => { s.sort_order = i; });
     const aOrder = a.sort_order, bOrder = b.sort_order;
     try {
-      await Promise.all([
-        PATCH(`/api/admin/lead-substatuses/${a.id}`, { sort_order: bOrder }),
-        PATCH(`/api/admin/lead-substatuses/${b.id}`, { sort_order: aOrder }),
+      const [ra, rb] = await Promise.all([
+        PATCH<Substatus>(`/api/admin/lead-substatuses/${a.id}`, { sort_order: bOrder }),
+        PATCH<Substatus>(`/api/admin/lead-substatuses/${b.id}`, { sort_order: aOrder }),
       ]);
+      if (ra.hubspotSyncWarning || rb.hubspotSyncWarning) {
+        setSyncWarning('Sub-status saved locally, but the HubSpot property sync failed. Use the Re-sync button in the Settings tab to retry.');
+      }
       a.sort_order = bOrder; b.sort_order = aOrder;
       fetchAll();
     } catch (e) { showToast(`Failed to reorder: ${(e as Error).message}`, true); }
@@ -412,6 +422,15 @@ export function CardActionsPage() {
 
   return (
     <Stack spacing={2}>
+      {syncWarning && (
+        <Alert
+          severity="warning"
+          onClose={() => setSyncWarning(null)}
+          sx={{ mb: 0 }}
+        >
+          {syncWarning}
+        </Alert>
+      )}
       <Card variant="outlined">
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
