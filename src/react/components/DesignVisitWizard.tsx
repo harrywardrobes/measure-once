@@ -56,6 +56,7 @@ export interface DesignVisitWizardProps {
   ctx: DesignVisitWizardCtx;
   existingVisit?: ExistingVisit | null;
   onClose: () => void;
+  onCatalogueReady?: () => void;
 }
 
 function makeDefaultStep1(defaultDuration: number, existingVisit?: ExistingVisit | null): Step1Data {
@@ -152,7 +153,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
   );
 }
 
-export function DesignVisitWizard({ handler, ctx, existingVisit, onClose }: DesignVisitWizardProps) {
+export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCatalogueReady }: DesignVisitWizardProps) {
   const cfg = handler.config || {};
   const defaultDuration = cfg.defaultDurationMin || 90;
   const contactId    = ctx.contactId    || ctx.contact_id    || '';
@@ -226,7 +227,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose }: Desi
           setTermsVersionNumber(td.versionNumber ?? null);
         }
       } catch {}
-      if (!cancelled) setCatalogueLoading(false);
+      if (!cancelled) {
+        setCatalogueLoading(false);
+        onCatalogueReady?.();
+      }
     }
     load();
     return () => { cancelled = true; };

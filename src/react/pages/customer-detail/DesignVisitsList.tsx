@@ -37,6 +37,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [details, setDetails] = useState<Record<number, DetailState>>({});
   const [wizardState, setWizardState] = useState<WizardState | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const toggleExpanded = useCallback(async (id: number) => {
@@ -100,6 +101,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
       contactName:  detail.contact_name  || '',
       contactEmail: detail.contact_email || '',
     };
+    setEditingId(id);
     setWizardState({ handler: { config: {} }, ctx, existingVisit: detail as unknown as ExistingVisit });
   }, [visits, details, contactId]);
 
@@ -110,7 +112,8 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
         handler={wizardState.handler}
         ctx={wizardState.ctx}
         existingVisit={wizardState.existingVisit}
-        onClose={() => { setWizardState(null); onRefresh(); }}
+        onCatalogueReady={() => setEditingId(null)}
+        onClose={() => { setEditingId(null); setWizardState(null); onRefresh(); }}
       />
     )}
     <div id="design-visits-section" className="mb-5">
@@ -171,8 +174,12 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
                     {isExp ? 'Hide' : 'Review'}
                   </button>
                   {canEditV && (
-                    <button style={sxSecondaryBtn}
-                      onClick={() => handleEdit(v.id)}>
+                    <button
+                      style={sxSecondaryBtn}
+                      disabled={editingId === v.id}
+                      data-cah-loading={editingId === v.id ? '1' : undefined}
+                      onClick={() => handleEdit(v.id)}
+                    >
                       Edit
                     </button>
                   )}
