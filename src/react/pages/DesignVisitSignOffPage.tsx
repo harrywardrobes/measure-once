@@ -430,82 +430,91 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
 
             {/* Room Breakdown */}
             <SectionCard title="Room Breakdown">
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    {['Room', 'Style', 'Units', 'Total'].map((h, i) => (
+              {(data.rooms ?? []).length === 0 ? (
+                <Typography
+                  variant="body2"
+                  sx={{ color: 'text.secondary', py: 1.5, fontStyle: 'italic' }}
+                >
+                  No rooms have been added yet. Your designer will update this summary shortly.
+                </Typography>
+              ) : (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      {['Room', 'Style', 'Units', 'Total'].map((h, i) => (
+                        <TableCell
+                          key={h}
+                          align={i === 3 ? 'right' : 'left'}
+                          sx={{
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            color: 'text.disabled',
+                            borderBottomColor: 'divider',
+                            py: 1,
+                            px: '10px',
+                          }}
+                        >
+                          {h}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {data.rooms!.map((room, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: '#f3f4f6' }}>
+                          {room.roomName}
+                        </TableCell>
+                        <TableCell sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: '#f3f4f6' }}>
+                          {room.doorStyleName || '—'}
+                        </TableCell>
+                        <TableCell sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: '#f3f4f6' }}>
+                          {room.unitCount}
+                        </TableCell>
+                        <TableCell align="right" sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: '#f3f4f6' }}>
+                          {fmt(room.totalPence || 0)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
                       <TableCell
-                        key={h}
-                        align={i === 3 ? 'right' : 'left'}
+                        colSpan={3}
                         sx={{
-                          fontSize: '0.72rem',
                           fontWeight: 700,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          color: 'text.disabled',
-                          borderBottomColor: 'divider',
-                          py: 1,
+                          fontSize: '0.88rem',
+                          color: BRAND_COLORS.ink1,
+                          borderTop: '2px solid',
+                          borderTopColor: 'divider',
+                          borderBottom: 'none',
+                          py: '12px',
                           px: '10px',
                         }}
                       >
-                        {h}
+                        Estimate total
                       </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {(data.rooms ?? []).map((room, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: '#f3f4f6' }}>
-                        {room.roomName}
-                      </TableCell>
-                      <TableCell sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: '#f3f4f6' }}>
-                        {room.doorStyleName || '—'}
-                      </TableCell>
-                      <TableCell sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: '#f3f4f6' }}>
-                        {room.unitCount}
-                      </TableCell>
-                      <TableCell align="right" sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: '#f3f4f6' }}>
-                        {fmt(room.totalPence || 0)}
+                      <TableCell
+                        align="right"
+                        sx={{
+                          fontWeight: 700,
+                          fontSize: '0.88rem',
+                          color: BRAND_COLORS.ink1,
+                          borderTop: '2px solid',
+                          borderTopColor: 'divider',
+                          borderBottom: 'none',
+                          py: '12px',
+                          px: '10px',
+                        }}
+                      >
+                        {fmt(grandTotal)}
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-                <TableFooter>
-                  <TableRow>
-                    <TableCell
-                      colSpan={3}
-                      sx={{
-                        fontWeight: 700,
-                        fontSize: '0.88rem',
-                        color: BRAND_COLORS.ink1,
-                        borderTop: '2px solid',
-                        borderTopColor: 'divider',
-                        borderBottom: 'none',
-                        py: '12px',
-                        px: '10px',
-                      }}
-                    >
-                      Estimate total
-                    </TableCell>
-                    <TableCell
-                      align="right"
-                      sx={{
-                        fontWeight: 700,
-                        fontSize: '0.88rem',
-                        color: BRAND_COLORS.ink1,
-                        borderTop: '2px solid',
-                        borderTopColor: 'divider',
-                        borderBottom: 'none',
-                        py: '12px',
-                        px: '10px',
-                      }}
-                    >
-                      {fmt(grandTotal)}
-                    </TableCell>
-                  </TableRow>
-                </TableFooter>
-              </Table>
+                  </TableFooter>
+                </Table>
+              )}
             </SectionCard>
 
             {/* Room Photos */}
