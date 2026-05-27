@@ -393,6 +393,7 @@ export function StandaloneInvoicesPage() {
         onClose={closePanel}
         onNavigate={id => { setPanelInvId(id); window.location.hash = `inv-${id}`; }}
         isAdmin={isAdmin}
+        onSaved={loadInvoices}
       />
     </Box>
   );

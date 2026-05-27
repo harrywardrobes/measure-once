@@ -1560,6 +1560,7 @@ export function ProjectsPage() {
         onClose={() => setInvDrawerOpen(false)}
         onNavigate={id => setInvDrawerInvId(id)}
         isAdmin={isAdmin}
+        onSaved={qb.refresh}
       />
     </Box>
   );

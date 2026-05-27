@@ -604,7 +604,7 @@ export function CustomersPage(): React.ReactElement {
 
   const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
   const [roomsByContact, setRoomsByContact] = React.useState<Record<string, Room[]>>({});
-  const { invoices: qbInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
+  const { invoices: qbInvoices, triggerLoad: triggerQBLoad, refresh: refreshQBInvoices } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
   const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
 
@@ -1255,6 +1255,7 @@ export function CustomersPage(): React.ReactElement {
         onClose={() => setInvDrawerOpen(false)}
         onNavigate={id => setInvDrawerInvId(id)}
         isAdmin={isAdmin}
+        onSaved={refreshQBInvoices}
       />
     </Container>
   );
