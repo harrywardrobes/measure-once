@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -9,6 +9,72 @@ import Typography from '@mui/material/Typography';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import DoNotDisturbAltIcon from '@mui/icons-material/DoNotDisturbAlt';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+
+type TW = { render: (el: Element, opts: object) => string; getResponse: (id: string) => string; reset: (id: string) => void };
+
+const WIDGET_EL_ID = 'ts-access-gate';
+
+function useSingleTurnstile() {
+  const [siteKey, setSiteKey] = useState<string | null>(null);
+  const [token, setToken] = useState('');
+  const [hasError, setHasError] = useState(false);
+  const siteKeyRef = useRef<string | null>(null);
+  const widgetId = useRef<string | null>(null);
+  const attempted = useRef(false);
+
+  const renderWidget = useCallback(() => {
+    const tw = (window as unknown as { turnstile?: TW }).turnstile;
+    const key = siteKeyRef.current;
+    if (!key || !tw || attempted.current) return;
+    const el = document.getElementById(WIDGET_EL_ID);
+    if (!el) return;
+    attempted.current = true;
+    const id = tw.render(el, {
+      sitekey: key,
+      theme: 'light',
+      appearance: 'always',
+      size: 'flexible',
+      callback: () => {
+        setToken(tw.getResponse(id) || '');
+        setHasError(false);
+      },
+      'error-callback': () => setHasError(true),
+      'unsupported-callback': () => setHasError(true),
+    });
+    widgetId.current = id;
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/turnstile-config').then(r => r.json()).then(cfg => {
+      if (cfg?.enabled && cfg?.siteKey) {
+        siteKeyRef.current = cfg.siteKey;
+        setSiteKey(cfg.siteKey);
+        const w = window as unknown as { _turnstileApiReady?: boolean; onTurnstileReady?: () => void };
+        (window as unknown as { onTurnstileReady: () => void }).onTurnstileReady = () => {
+          renderWidget();
+        };
+        if (w._turnstileApiReady) {
+          renderWidget();
+        } else {
+          const script = document.createElement('script');
+          script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady';
+          script.async = true; script.defer = true;
+          document.head.appendChild(script);
+        }
+      }
+    }).catch(() => {});
+  }, [renderWidget]);
+
+  const resetWidget = useCallback(() => {
+    const tw = (window as unknown as { turnstile?: TW }).turnstile;
+    const id = widgetId.current;
+    setToken('');
+    setHasError(false);
+    if (id != null && tw) tw.reset(id);
+  }, []);
+
+  return { siteKey, token, hasError, resetWidget, renderWidget };
+}
 
 type ViewState = 'form' | 'confirmed' | 'email_conflict' | 'pending' | 'already_approved';
 
@@ -81,11 +147,24 @@ function GateStatusBadge({ state }: { state: ViewState }) {
   );
 }
 
-function FormView({ onConfirmed }: { onConfirmed: () => void }) {
+interface FormViewProps {
+  onConfirmed: () => void;
+  siteKey: string | null;
+  captchaToken: string;
+  captchaError: boolean;
+  onRenderWidget: () => void;
+  onResetWidget: () => void;
+}
+
+function FormView({ onConfirmed, siteKey, captchaToken, captchaError, onRenderWidget, onResetWidget }: FormViewProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    onRenderWidget();
+  }, [onRenderWidget]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,21 +174,30 @@ function FormView({ onConfirmed }: { onConfirmed: () => void }) {
       setError('Please enter your name and email address.');
       return;
     }
+    if (siteKey && !captchaToken && !captchaError) {
+      setError('Please complete the captcha challenge.');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
       const r = await fetch('/api/request-access', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ name: trimmedName, email: trimmedEmail }),
+        body: JSON.stringify({ name: trimmedName, email: trimmedEmail, captchaToken: captchaToken || undefined }),
       });
       const data = await r.json().catch(() => ({}));
       if (r.ok && data.ok) {
         onConfirmed();
       } else if (r.status === 429) {
         setError('Too many requests — please try again later.');
+        onResetWidget();
+      } else if (data.code === 'CAPTCHA_FAILED') {
+        setError('CAPTCHA verification failed — please complete the challenge again.');
+        onResetWidget();
       } else {
         setError(data.error || 'Could not submit request. Please try again.');
+        onResetWidget();
       }
     } catch {
       setError('Network error — please check your connection and try again.');
@@ -150,6 +238,9 @@ function FormView({ onConfirmed }: { onConfirmed: () => void }) {
           disabled={loading}
           slotProps={{ htmlInput: { 'aria-label': 'Email address' } }}
         />
+        {siteKey && (
+          <div id={WIDGET_EL_ID} style={{ margin: '4px 0 2px', minHeight: 65 }} />
+        )}
         {error && (
           <Typography variant="body2" color="error" role="alert">
             {error}
@@ -256,6 +347,7 @@ function AlreadyApprovedView() {
 export function AccessRequestGate() {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewState>('form');
+  const { siteKey, token: captchaToken, hasError: captchaError, resetWidget, renderWidget } = useSingleTurnstile();
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -275,7 +367,16 @@ export function AccessRequestGate() {
     >
       <DialogContent sx={{ pt: 3 }}>
         {BRAND_MARK}
-        {view === 'form' && <FormView onConfirmed={() => setView('confirmed')} />}
+        {view === 'form' && (
+          <FormView
+            onConfirmed={() => setView('confirmed')}
+            siteKey={siteKey}
+            captchaToken={captchaToken}
+            captchaError={captchaError}
+            onRenderWidget={renderWidget}
+            onResetWidget={resetWidget}
+          />
+        )}
         {view === 'confirmed' && <ConfirmedView />}
         {view === 'email_conflict' && <EmailConflictView />}
         {view === 'pending' && <PendingView />}
