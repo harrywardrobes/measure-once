@@ -50,8 +50,9 @@ window.getShortcut = function (key) {
   // #page-heading-action slot for pages that need a header button
   // (e.g. Customers' "+ New customer"). The placeholder is inserted
   // synchronously so layout reserves space immediately.
-  // Not inserted on /sales or /survey — those are full-bleed .app-body
-  // pages that never show a heading; skipping avoids a phantom in-flow div.
+  // Not inserted on pages where PageHeadingPanel suppresses itself
+  // (/sales, /survey, /admin*, /customers/:id) — those pages render their
+  // own heading or are full-bleed; skipping avoids a phantom in-flow div.
   const pageHeading = `<div id="page-heading-mount"></div>`;
 
   // The bottom navigation is a React island
@@ -87,7 +88,11 @@ window.getShortcut = function (key) {
   const commandPaletteMount = `<div id="command-palette-mount"></div>`;
 
   const isAdminPage = path === '/admin' || path.startsWith('/admin/');
-  const isAppBodyPage = path === '/sales' || path === '/survey';
+  // Mirrors the suppression list in PageHeadingPanel.tsx — all paths where
+  // PageHeadingPanel returns null must skip the placeholder div to avoid a
+  // phantom in-flow element occupying space before React mounts.
+  const isAppBodyPage = path === '/sales' || path === '/survey' ||
+    isAdminPage || /^\/customers\/[^/]+/.test(path);
   document.body.insertAdjacentHTML('afterbegin', skipLink + toastLive + header + viewerBanner + (isAppBodyPage ? '' : pageHeading) + accessGate);
   document.body.insertAdjacentHTML('beforeend', (isAdminPage ? '' : bottomNav) + bottomBar + commandPaletteMount);
 
