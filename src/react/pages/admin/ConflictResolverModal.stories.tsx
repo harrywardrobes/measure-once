@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
@@ -247,6 +247,81 @@ export const RemoveError: Story = {
           'Simulates a server error during removal: the mock `onRemove` always throws. ' +
           'Clicking "Remove" shows the inline error message and re-enables both buttons, ' +
           'allowing the admin to retry.',
+      },
+    },
+  },
+};
+
+function RemoveInteractionDemo() {
+  const [open, setOpen] = useState(true);
+
+  useEffect(() => {
+    const orig = window.fetch;
+    window.fetch = function storybookRemoveMock(
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+          ? input.href
+          : (input as Request).url;
+      const method = (
+        init?.method ||
+        (typeof input === 'object' && 'method' in input ? (input as Request).method : '') ||
+        'GET'
+      ).toUpperCase();
+      if (method === 'DELETE' && /\/api\/admin\/card-action-handlers\/\d+/.test(url)) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return orig(input, init);
+    };
+    return () => {
+      window.fetch = orig;
+    };
+  }, []);
+
+  return (
+    <Box>
+      {!open && (
+        <Button variant="outlined" onClick={() => setOpen(true)}>
+          Reopen dialog
+        </Button>
+      )}
+      {open && (
+        <ConflictResolverModal
+          stageKey="sales"
+          statusKey="quote_sent"
+          substatusId={null}
+          handlers={INITIAL_TWO_HANDLERS}
+          statuses={STATUSES}
+          substatuses={SUBSTATUSES}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </Box>
+  );
+}
+
+export const RemoveInteraction: Story = {
+  name: 'Remove interaction — network mock',
+  render: () => <RemoveInteractionDemo />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Exercises the **real** remove code path: no `onRemove` prop is passed, so ' +
+          'clicking "Remove" issues `DELETE /api/admin/card-action-handlers/:id` via the ' +
+          'normal `fetch`-based helper. A story-level `window.fetch` override intercepts ' +
+          'that request and returns a 200 OK with no real server involved. ' +
+          'After the mock DELETE resolves the dialog auto-closes — the same behaviour ' +
+          'the admin sees in production when only one handler remains.',
       },
     },
   },
