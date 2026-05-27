@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { loadSearchSettings } from '../lib/searchSettings';
 import type { SearchSettings } from '../lib/searchSettings';
 import { useQBInvoices } from '../hooks/useQBInvoices';
+import { useContactSearch } from '../hooks/useContactSearch';
 import type { InvoiceSummary } from './InvoiceDetailDrawer';
 import Dialog from '@mui/material/Dialog';
 import Box from '@mui/material/Box';
@@ -31,13 +32,11 @@ declare global {
     closeCommandPalette?: () => void;
     _cpRun?: Record<string, () => void>;
     state?: {
-      contacts?: Contact[];
       searchQuery?: string;
       leadStatusFilter?: string;
       sortBy?: string;
       currentPage?: number;
     };
-    allContacts?: Contact[];
   }
 }
 
@@ -48,18 +47,6 @@ interface Action {
   category: string;
   icon: React.ReactElement;
   href?: string;
-}
-
-interface Contact {
-  id?: string;
-  name?: string;
-  company?: string;
-  properties?: {
-    firstname?: string;
-    lastname?: string;
-    company?: string;
-    hs_object_id?: string;
-  };
 }
 
 const ALL_ACTIONS: Action[] = [
@@ -78,16 +65,10 @@ const ALL_ACTIONS: Action[] = [
   { id: 'sign-out',        label: 'Sign out',               hint: 'End your current session',               category: 'Account',  icon: <LogoutIcon fontSize="small" /> },
 ];
 
-function getContacts(): Contact[] {
-  if (window.state && Array.isArray(window.state.contacts)) return window.state.contacts;
-  if (window.allContacts && Array.isArray(window.allContacts)) return window.allContacts;
-  return [];
-}
-
-function contactName(c: Contact): string {
+function contactName(c: { properties?: { firstname?: string; lastname?: string } }): string {
   const first = c.properties?.firstname || '';
   const last  = c.properties?.lastname  || '';
-  return (first + ' ' + last).trim() || c.name || '';
+  return (first + ' ' + last).trim();
 }
 
 function contactInitials(name: string): string {
@@ -171,6 +152,7 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const { invoices: qbInvoices } = useQBInvoices();
+  const { contacts: searchedContacts } = useContactSearch(query, open);
 
   useEffect(() => {
     if (settings !== null) return;
@@ -272,16 +254,9 @@ export function CommandPalette() {
   const q = query.toLowerCase().trim();
   const encoded = encodeURIComponent(query.trim());
 
-  const contacts = getContacts();
   const invoices: InvoiceSummary[] = qbInvoices;
 
-  const matchedContacts: Contact[] = q
-    ? contacts.filter(c => {
-        const name = contactName(c).toLowerCase();
-        const company = (c.properties?.company || c.company || '').toLowerCase();
-        return name.includes(q) || company.includes(q);
-      }).slice(0, 5)
-    : [];
+  const matchedContacts = q ? searchedContacts : [];
 
   const matchedInvoices: InvoiceSummary[] = q
     ? invoices.filter(inv => {
@@ -400,8 +375,8 @@ export function CommandPalette() {
             {matchedContacts.map(c => {
               const name = contactName(c) || 'Unknown';
               const initials = contactInitials(name);
-              const company = c.properties?.company || c.company || undefined;
-              const id = c.id || c.properties?.hs_object_id || '';
+              const company = c.properties?.company || undefined;
+              const id = c.id || '';
               return (
                 <ResultItem
                   key={id || name}
