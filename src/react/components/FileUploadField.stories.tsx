@@ -9,13 +9,17 @@ const meta: Meta<typeof FileUploadField> = {
   component: FileUploadField,
   parameters: { layout: 'padded' },
   argTypes: {
-    label:     { control: 'text' },
-    accept:    { control: 'text' },
-    multiple:  { control: 'boolean' },
-    disabled:  { control: 'boolean' },
-    error:     { control: 'boolean' },
-    uploading: { control: 'boolean' },
-    progress:  { control: { type: 'range', min: 0, max: 100, step: 1 } },
+    label:        { control: 'text' },
+    accept:       { control: 'text' },
+    multiple:     { control: 'boolean' },
+    disabled:     { control: 'boolean' },
+    error:        { control: 'boolean' },
+    uploading:    { control: 'boolean' },
+    progress:     { control: { type: 'range', min: 0, max: 100, step: 1 } },
+    uploadStatus: {
+      control: 'select',
+      options: ['idle', 'uploading', 'success', 'error'],
+    },
   },
 };
 export default meta;
@@ -129,6 +133,98 @@ export const UploadInProgressIndeterminate: Story = {
       </Typography>
     </Box>
   ),
+};
+
+export const UploadSuccess: Story = {
+  name: 'Upload success',
+  render: () => (
+    <Box sx={{ maxWidth: 480 }}>
+      <FileUploadField
+        label="Design drawings"
+        accept=".pdf,.dwg"
+        value="floor-plan-v2.pdf"
+        uploadStatus="success"
+        helperText="File uploaded successfully."
+      />
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+        Green checkmark in adornment; progress bar fades out in green.
+      </Typography>
+    </Box>
+  ),
+};
+
+export const UploadError: Story = {
+  name: 'Upload error',
+  render: () => (
+    <Box sx={{ maxWidth: 480 }}>
+      <FileUploadField
+        label="Design drawings"
+        accept=".pdf,.dwg"
+        value="floor-plan-v2.pdf"
+        uploadStatus="error"
+        helperText="Upload failed — the server rejected the file. Please try again."
+      />
+      <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
+        Red error icon in adornment; progress bar fades out in red.
+      </Typography>
+    </Box>
+  ),
+};
+
+function UploadLifecycleDemo() {
+  type Phase = 'idle' | 'uploading' | 'success' | 'error';
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [progress, setProgress] = useState(0);
+
+  function simulate(outcome: 'success' | 'error') {
+    setPhase('uploading');
+    setProgress(0);
+    let p = 0;
+    const timer = setInterval(() => {
+      p = Math.min(p + 8, 100);
+      setProgress(p);
+      if (p >= 100) {
+        clearInterval(timer);
+        setTimeout(() => setPhase(outcome), 200);
+      }
+    }, 120);
+  }
+
+  const helperMap: Record<Phase, string> = {
+    idle: 'Choose a file then click Simulate below.',
+    uploading: `Uploading… ${progress}%`,
+    success: 'File uploaded successfully.',
+    error: 'Upload failed — please try again.',
+  };
+
+  return (
+    <Box sx={{ maxWidth: 480, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <FileUploadField
+        label="Design drawings"
+        accept=".pdf,.dwg"
+        value={phase !== 'idle' ? 'floor-plan-v2.pdf' : undefined}
+        uploadStatus={phase}
+        progress={phase === 'uploading' ? progress : undefined}
+        helperText={helperMap[phase]}
+      />
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <button onClick={() => simulate('success')} disabled={phase === 'uploading'}>
+          Simulate success
+        </button>
+        <button onClick={() => simulate('error')} disabled={phase === 'uploading'}>
+          Simulate error
+        </button>
+        <button onClick={() => { setPhase('idle'); setProgress(0); }} disabled={phase === 'uploading'}>
+          Reset
+        </button>
+      </Box>
+    </Box>
+  );
+}
+
+export const UploadLifecycle: Story = {
+  name: 'Upload lifecycle (interactive)',
+  render: () => <UploadLifecycleDemo />,
 };
 
 export const ErrorFallback: Story = {
