@@ -152,9 +152,10 @@ async function main() {
           timeout: 15000,
         });
         const status = resp ? resp.status() : 0;
-        if (!resp || !resp.ok()) {
-          record(`${route} — page loads (HTTP 200)`, 200, status, false,
-            'Page did not return 200; mount point check skipped.');
+        const statusOk = resp && (resp.ok() || status === 304);
+        if (!statusOk) {
+          record(`${route} — page loads (HTTP 200/304)`, '200 or 304', status, false,
+            'Page did not return 200 or 304; mount point check skipped.');
           continue;
         }
 
