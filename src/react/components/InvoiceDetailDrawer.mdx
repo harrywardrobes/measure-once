@@ -1,0 +1,51 @@
+{/* InvoiceDetailDrawer.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as InvoiceDetailDrawerStories from './InvoiceDetailDrawer.stories';
+
+<Meta title="Features/CustomerDetail/InvoiceDetailDrawer/Guide" />
+
+# InvoiceDetailDrawer
+
+A slide-in drawer that opens when the user clicks an invoice row in the
+customer-detail Invoices section. Displays line items, payment metadata,
+a PDF download link, and — for admins — editable fields (due date, customer
+email, memo) plus a **Send to customer** action.
+
+## When to use
+
+- As the sole detail view for a QuickBooks invoice within the customer-detail
+  page. It is not a general-purpose drawer; it is tightly coupled to the
+  `InvoicesSection` context.
+- When you need to allow admins to update invoice metadata (due date, email,
+  memo) or trigger a customer-facing send without leaving the customer record.
+
+## When not to use
+
+- Outside the customer-detail surface — it assumes a QuickBooks invoice ID
+  and fetches from `/api/quickbooks/invoice/:id`.
+- As a read-only document viewer for non-invoice content; use a standard MUI
+  `Drawer` with appropriate content instead.
+- When no QuickBooks integration is configured — the drawer will show a loading
+  state indefinitely if the API route is unavailable.
+
+## Do / Don't
+
+**Do:** pass the full `allIds` array so the navigation arrows let the user
+cycle through all invoices for a contact without closing the drawer.
+
+**Don't:** pass `isAdmin={true}` for member-role users — it exposes edit fields
+and the Send action that those users are not authorised to use. Always derive
+the flag server-side via the session privilege level.
+
+**Do:** supply an `onNavigate` handler that updates the `invId` prop so the
+drawer fetches the newly selected invoice.
+
+**Don't:** leave `onClose` as a no-op in production — the drawer has no other
+dismiss path for keyboard users (Escape key fires `onClose`).
+
+---
+
+<Canvas of={InvoiceDetailDrawerStories.AdminView} />
+<Canvas of={InvoiceDetailDrawerStories.MemberView} />
+<Canvas of={InvoiceDetailDrawerStories.PaidInvoice} />
+<Canvas of={InvoiceDetailDrawerStories.Interactive} />

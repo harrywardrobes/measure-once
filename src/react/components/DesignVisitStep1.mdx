@@ -1,0 +1,55 @@
+{/* DesignVisitStep1.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as DesignVisitStep1Stories from './DesignVisitStep1.stories';
+
+<Meta title="Features/DesignVisitStep1/Guide" />
+
+# DesignVisitStep1
+
+Step 1 of the Design Visit wizard. Captures all scheduling and product
+details needed before the visit can be submitted: visit date & time,
+duration, location, designer name, handle and furniture-range selections,
+and terms acceptance.
+
+The component is **controlled** — it calls `onDataChange` on every field
+update and the parent is responsible for persisting the draft (localStorage
+is recommended per the form-persistence convention).
+
+## When to use
+
+- As the first step of the multi-step Design Visit form embedded in the
+  customer-detail page.
+- Anywhere you need to collect the same structured set of design-visit
+  fields in a single scrollable form.
+
+## When not to use
+
+- As a standalone form outside the Design Visit wizard — it emits data via
+  `onDataChange` but has no internal submit action; a parent step-controller
+  is required.
+- For visit types that do not require handle or furniture-range selections —
+  hiding those fields requires changes to the component itself.
+
+## Do / Don't
+
+**Do:** pass the full `handles` and `furnitureRanges` lists even if the user
+hasn't selected one yet — the dropdowns need the options to render correctly.
+
+**Don't:** pass empty arrays for `handles` or `furnitureRanges` unless the
+catalogue genuinely has no items; the component will show an empty dropdown
+with no visual error, which may confuse users (see the *No catalogue items*
+story for the resulting UI).
+
+**Do:** supply `termsText` from the server so the copy is always up to date;
+passing an empty string hides the terms section entirely (the checkbox does
+not render — see *No terms text*).
+
+**Don't:** pre-set `termsAccepted: true` in `initialData` for a new visit;
+users must actively check the box to accept terms.
+
+---
+
+<Canvas of={DesignVisitStep1Stories.Default} />
+<Canvas of={DesignVisitStep1Stories.PreFilled} />
+<Canvas of={DesignVisitStep1Stories.NoHandlesOrRanges} />
+<Canvas of={DesignVisitStep1Stories.NoTerms} />

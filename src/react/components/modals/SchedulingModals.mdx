@@ -1,0 +1,59 @@
+{/* SchedulingModals.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as SchedulingModalsStories from './SchedulingModals.stories';
+
+<Meta title="Components/Modals/Scheduling/Guide" />
+
+# Scheduling Modals
+
+Two dialog modals used by card-action handlers to schedule customer
+appointments directly from a workflow card:
+
+| Modal | Handler type | Input |
+|-------|-------------|-------|
+| **DeliveryWindowModal** | `schedule_delivery_window` | Date/time range (start + end) via `DateTimeRangePicker` |
+| **InstallationSlotModal** | `schedule_installation_slot` | Single date/time + duration (minutes) via `DateTimePicker` |
+
+Both modals receive a `handler` (the card-action handler configuration) and
+a `ctx` (the contact context — id, name, email). On confirm they dispatch the
+handler's save action, optionally creating a Google Calendar event when
+`addToGoogleCalendar` is enabled in the handler config.
+
+## When to use
+
+- When a card-action handler of type `schedule_delivery_window` or
+  `schedule_installation_slot` is dispatched from a workflow card — the
+  card-action dispatch system opens the correct modal automatically.
+- When building or testing a new card-action handler that needs a scheduling
+  step; extend one of these modals or use them as a reference implementation.
+
+## When not to use
+
+- As a generic date-picker dialog — both modals are tightly coupled to the
+  card-action handler system and expect `handler` / `ctx` props.
+- When scheduling does not involve a contact record (e.g. internal team
+  meetings) — use a standard MUI `Dialog` with a `DatePicker` instead.
+
+## Do / Don't
+
+**Do:** pass a fully-populated `ctx` with `contactId`, `contactName`, and
+`contactEmail` — some save paths use the email to pre-fill calendar invites.
+
+**Don't:** open either modal without a valid `handler.id` — the save action
+uses it to record which handler triggered the appointment.
+
+**Do:** guard the Google Calendar option (`addToGoogleCalendar`) with a
+server-side check that the acting user has a connected Google account before
+enabling it in the handler config.
+
+**Don't:** use `DeliveryWindowModal` where only a single point-in-time is
+needed — its range picker always collects both start and end times. Use
+`InstallationSlotModal` (or a custom modal) for single-slot scheduling.
+
+---
+
+<Canvas of={SchedulingModalsStories.DeliveryWindow} />
+<Canvas of={SchedulingModalsStories.DeliveryWindowNoCustomer} />
+<Canvas of={SchedulingModalsStories.InstallationSlot} />
+<Canvas of={SchedulingModalsStories.InstallationSlotNoCustomer} />
+<Canvas of={SchedulingModalsStories.BothSideBySide} />

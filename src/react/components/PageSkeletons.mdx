@@ -1,0 +1,63 @@
+{/* PageSkeletons.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as PageSkeletonsStories from './PageSkeletons.stories';
+
+<Meta title="Components/Skeletons/PageSkeletons/Guide" />
+
+# Page Skeletons
+
+Shape-matched Suspense fallback skeletons for each page in the application.
+Each skeleton mirrors the layout of its corresponding page — header, sidebar,
+card grid, table columns — so there is minimal layout shift when the real
+content loads.
+
+All skeletons accept a `forceVisible` prop (used in Storybook and tests) that
+bypasses the built-in 200 ms delay before the skeleton appears, preventing a
+flash on fast connections.
+
+For individual field-level skeletons (a single line or block within a loaded
+component) see **Components/Skeleton**.
+
+## When to use
+
+- As the `fallback` prop of a `<React.Suspense>` boundary wrapping a
+  lazily-loaded page component.
+- In Suspense-skeleton integration tests where you need to assert the skeleton
+  is rendered while the lazy chunk is still loading.
+
+## When not to use
+
+- Inside an already-loaded page to indicate a sub-section is refreshing —
+  use MUI `<Skeleton>` (or `<CircularProgress>`) for that, not a full-page
+  skeleton.
+- As a placeholder for content that loads synchronously; showing a skeleton
+  when there is no async boundary will cause an unnecessary flash.
+
+## Do / Don't
+
+**Do:** keep each skeleton's layout in sync with the real page layout. When
+a page gains a new permanent section, add a matching skeleton block.
+
+**Don't:** use `forceVisible` outside of Storybook or test contexts — it
+disables the delay that prevents skeletons from flashing on fast connections.
+
+**Do:** use the most specific skeleton available (e.g. `CustomersPageSkeleton`
+rather than the generic `PageLoadingSkeleton`) so the shape closely matches
+what the user is about to see.
+
+---
+
+<Canvas of={PageSkeletonsStories.PageLoading} />
+<Canvas of={PageSkeletonsStories.Customers} />
+<Canvas of={PageSkeletonsStories.Home} />
+<Canvas of={PageSkeletonsStories.Calendar} />
+<Canvas of={PageSkeletonsStories.Profile} />
+<Canvas of={PageSkeletonsStories.Projects} />
+<Canvas of={PageSkeletonsStories.Login} />
+<Canvas of={PageSkeletonsStories.AdminTeam} />
+<Canvas of={PageSkeletonsStories.AdminPermissions} />
+<Canvas of={PageSkeletonsStories.AdminRequests} />
+<Canvas of={PageSkeletonsStories.AdminAuditLog} />
+<Canvas of={PageSkeletonsStories.AdminSettings} />
+<Canvas of={PageSkeletonsStories.CardActions} />
+<Canvas of={PageSkeletonsStories.ActionHandlers} />

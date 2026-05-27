@@ -1,0 +1,57 @@
+{/* Pickers.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as PickersStories from './Pickers.stories';
+
+<Meta title="Components/Pickers/Guide" />
+
+# Pickers
+
+Popover-based selection controls used on workflow cards and the
+customer-detail pipeline rail. Three picker variants are provided:
+
+| Picker | Purpose |
+|--------|---------|
+| **StagePicker** | Selects a pipeline stage (Sales → Aftercare) for a contact's card |
+| **LeadStatusPicker** | Selects a HubSpot lead status, optionally with a sub-status |
+| **SubstagePicker** | Selects a per-room substage within a given stage (e.g. Survey sub-statuses) |
+
+All three are anchored popovers — they open next to the element passed as
+`anchorEl` and close when the user picks an option or clicks away.
+
+## When to use
+
+- On workflow cards (`.eq-card`) where the user needs to advance a contact
+  through stages or update their lead status in-place without a full page
+  navigation.
+- In the customer-detail pipeline rail for stage and substage transitions.
+
+## When not to use
+
+- As a general-purpose dropdown for non-pipeline data — use MUI `Select`
+  or `Autocomplete` instead.
+- When the list of options needs search/filter capability for large sets —
+  the pickers render flat lists and are not optimised for hundreds of items.
+- When a selection must trigger a confirmation step before saving — the
+  pickers fire callbacks immediately on selection.
+
+## Do / Don't
+
+**Do:** null-check `anchorEl` before passing it; pass `open={Boolean(anchorEl)}`
+to control visibility rather than a separate boolean flag.
+
+**Don't:** render a picker outside a component that has access to the correct
+`contactId` — all three pickers require it to dispatch the correct mutation.
+
+**Do:** ensure `window.LEAD_STATUS_OPTIONS` and `window.LEAD_SUBSTATUSES` are
+populated before rendering `LeadStatusPicker` — the component reads from those
+globals (populated at page load from `/api/admin/lead-statuses`).
+
+**Don't:** use `SubstagePicker` without a valid `stageKey` — it uses the key
+to scope which sub-statuses are shown and to persist the correct field.
+
+---
+
+<Canvas of={PickersStories.StagePickerStory} />
+<Canvas of={PickersStories.LeadStatusPickerStory} />
+<Canvas of={PickersStories.LeadStatusPickerWithSubstatuses} />
+<Canvas of={PickersStories.SubstagePickerStory} />

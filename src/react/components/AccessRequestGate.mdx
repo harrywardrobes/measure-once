@@ -1,0 +1,53 @@
+{/* AccessRequestGate.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as AccessRequestGateStories from './AccessRequestGate.stories';
+
+<Meta title="Features/AccessRequestGate/Guide" />
+
+# AccessRequestGate
+
+A modal dialog that handles the full access-request flow for visitors who
+are not yet approved users. It progresses through several views — request
+form, submission confirmed, email conflict, already pending, and already
+approved — based on the server response.
+
+Cloudflare Turnstile bot-protection is embedded in the form view. The
+`forceNoTurnstile` prop disables it for Storybook and test environments
+where the Turnstile script is not loaded.
+
+## When to use
+
+- On the login page or any public-facing surface where an unauthenticated
+  visitor needs to request access to the application.
+- When you need to surface the full request-access lifecycle (submit →
+  confirm / conflict / already-pending / already-approved) in a single
+  controlled component.
+
+## When not to use
+
+- For authenticated users — they already have access and should see the
+  main application, not a request gate.
+- As a generic contact or enquiry form — the component is tightly coupled
+  to `POST /api/request-access` and its specific response codes.
+
+## Do / Don't
+
+**Do:** pass `open` from parent state so the dialog can be dismissed
+programmatically (e.g. after the user cancels).
+
+**Don't:** set `forceNoTurnstile` in production — Turnstile must be active
+to protect the endpoint from automated submissions.
+
+**Do:** handle `onClose` to reset any parent state (e.g. clear a
+"Request access" link highlight) when the dialog is dismissed.
+
+**Don't:** show this dialog to users who are already logged in; always gate
+it behind an `isAuthenticated` check in the parent.
+
+---
+
+<Canvas of={AccessRequestGateStories.FormView} />
+<Canvas of={AccessRequestGateStories.ConfirmedView} />
+<Canvas of={AccessRequestGateStories.EmailConflictView} />
+<Canvas of={AccessRequestGateStories.PendingView} />
+<Canvas of={AccessRequestGateStories.AlreadyApprovedView} />
