@@ -713,7 +713,10 @@ const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
 // ── Google OAuth ──────────────────────────────────────────────────────────────
-const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || `http://localhost:${PORT}/auth/google/callback`;
+const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI ||
+  (process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}/auth/google/callback`
+    : `http://localhost:${PORT}/auth/google/callback`);
 
 
 const oauth2Client = new google.auth.OAuth2(
