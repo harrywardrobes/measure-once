@@ -20,6 +20,7 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Snackbar,
   Stack,
   Switch,
   TextField,
@@ -160,6 +161,7 @@ export function CalendarPage(): React.ReactElement {
   const [platformUsers, setPlatformUsers] = React.useState<PlatformUser[]>([]);
   const [contacts, setContacts] = React.useState<Contact[]>([]);
   const [googleConnected, setGoogleConnected] = React.useState<boolean>(false);
+  const [googleConnectedToast, setGoogleConnectedToast] = React.useState<boolean>(false);
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<{ msg: string; db: boolean } | null>(null);
 
@@ -180,6 +182,17 @@ export function CalendarPage(): React.ReactElement {
     workshopPrefAppliedRef.current = true;
     if ('calShowWorkshop' in prefs) setShowWorkshop(!!prefs.calShowWorkshop);
   }, [prefsLoading, prefs]);
+
+  // Detect ?connected=true from Google OAuth redirect and show a success toast.
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('connected') === 'true') {
+      setGoogleConnectedToast(true);
+      params.delete('connected');
+      const newSearch = params.toString();
+      history.replaceState(null, '', newSearch ? `?${newSearch}` : window.location.pathname);
+    }
+  }, []);
 
   // Check Google auth status once on mount.
   React.useEffect(() => {
@@ -315,6 +328,23 @@ export function CalendarPage(): React.ReactElement {
           onSaved={() => { closeVisitModal(); reload(); }}
         />
       )}
+
+      {/* Google Calendar reconnect success toast */}
+      <Snackbar
+        open={googleConnectedToast}
+        autoHideDuration={6000}
+        onClose={() => setGoogleConnectedToast(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity="success"
+          onClose={() => setGoogleConnectedToast(false)}
+          variant="filled"
+          sx={{ minWidth: 280 }}
+        >
+          Google Calendar connected successfully
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
