@@ -1,5 +1,6 @@
 import React from 'react';
 import Box from '@mui/material/Box';
+import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -33,18 +34,31 @@ export function LeadStatusRail({
     : [];
 
   if (!loaded) {
+    const labelWidths = [120, 90, 140];
     return (
-      <div id="workflow-stages" className="space-y-2">
+      <Box id="workflow-stages" sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {[0, 1, 2].map(i => (
-          <div key={i} className="skeleton-stage-row">
-            <div className="flex items-center gap-3 flex-1">
-              <div className="skeleton-line skeleton-stage-dot" />
-              <div className={`skeleton-line skeleton-stage-label${i === 1 ? ' skeleton-stage-label-md' : i === 2 ? ' skeleton-stage-label-sm' : ''}`} />
-            </div>
-            <div className="skeleton-line skeleton-stage-count" />
-          </div>
+          <Box
+            key={i}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              p: '14px 16px',
+              bgcolor: 'var(--bg)',
+              border: '1px solid var(--stone)',
+              borderRadius: 'var(--radius-md)',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+              <Skeleton variant="circular" width={12} height={12} sx={{ flexShrink: 0 }} />
+              <Skeleton variant="rounded" width={labelWidths[i]} height={13} />
+            </Box>
+            <Skeleton variant="rounded" width={36} height={13} sx={{ flexShrink: 0 }} />
+          </Box>
         ))}
-      </div>
+      </Box>
     );
   }
 
