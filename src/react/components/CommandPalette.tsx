@@ -11,6 +11,7 @@ import InputBase from '@mui/material/InputBase';
 import Typography from '@mui/material/Typography';
 import ButtonBase from '@mui/material/ButtonBase';
 import Avatar from '@mui/material/Avatar';
+import Skeleton from '@mui/material/Skeleton';
 
 import SearchIcon from '@mui/icons-material/Search';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
@@ -153,7 +154,7 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const { invoices: qbInvoices } = useQBInvoices();
-  const { contacts: searchedContacts } = useContactSearch(query, open);
+  const { contacts: searchedContacts, loading: contactsLoading } = useContactSearch(query, open);
 
   useEffect(() => {
     if (settings !== null) return;
@@ -371,7 +372,22 @@ export function CommandPalette() {
           </>
         )}
 
-        {matchedContacts.length > 0 && (
+        {q && contactsLoading && (
+          <>
+            <Typography sx={SECTION_LABEL_SX}>Customers</Typography>
+            {[0, 1, 2].map(i => (
+              <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2, py: 1 }}>
+                <Skeleton variant="circular" width={26} height={26} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Skeleton variant="text" width="55%" height={18} />
+                  <Skeleton variant="text" width="35%" height={14} />
+                </Box>
+              </Box>
+            ))}
+          </>
+        )}
+
+        {!contactsLoading && matchedContacts.length > 0 && (
           <>
             <Typography sx={SECTION_LABEL_SX}>Customers</Typography>
             {matchedContacts.map(c => {
