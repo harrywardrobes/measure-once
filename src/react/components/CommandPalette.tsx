@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { loadSearchSettings, getCachedSearchSettings } from '../lib/searchSettings';
+import type { SearchSettings } from '../lib/searchSettings';
 import Dialog from '@mui/material/Dialog';
 import Box from '@mui/material/Box';
 import InputBase from '@mui/material/InputBase';
@@ -67,28 +69,6 @@ interface Invoice {
   balance?: number;
 }
 
-interface SearchSettings {
-  disabled_actions: string[];
-  hint_placeholder: string;
-  action_order: string[];
-}
-
-let _cachedSettings: SearchSettings | null = null;
-let _settingsFetch: Promise<SearchSettings> | null = null;
-
-function loadSearchSettings(): Promise<SearchSettings> {
-  if (_cachedSettings !== null) return Promise.resolve(_cachedSettings);
-  if (_settingsFetch !== null) return _settingsFetch;
-  _settingsFetch = fetch('/api/search-settings')
-    .then(r => r.ok ? r.json() : { disabled_actions: [], hint_placeholder: '', action_order: [] })
-    .catch(() => ({ disabled_actions: [], hint_placeholder: '', action_order: [] }))
-    .then((data: SearchSettings) => {
-      _cachedSettings = data;
-      _settingsFetch = null;
-      return data;
-    });
-  return _settingsFetch;
-}
 
 const ALL_ACTIONS: Action[] = [
   { id: 'new-customer',    label: 'New customer',           hint: 'Create a new customer record',           category: 'Action',   icon: <PersonAddIcon fontSize="small" /> },
@@ -200,13 +180,21 @@ function ResultItem({ icon, avatar, label, sub, category, onClick, itemRef }: Re
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [settings, setSettings] = useState<SearchSettings | null>(_cachedSettings);
+  const [settings, setSettings] = useState<SearchSettings | null>(getCachedSearchSettings);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (getCachedSearchSettings() === null) {
+      loadSearchSettings().then(data => {
+        setSettings(data);
+      });
+    }
+  }, []);
+
   const doOpen = useCallback(() => {
-    if (_cachedSettings === null && !settingsLoading) {
+    if (getCachedSearchSettings() === null && !settingsLoading) {
       setSettingsLoading(true);
       loadSearchSettings().then(data => {
         setSettings(data);

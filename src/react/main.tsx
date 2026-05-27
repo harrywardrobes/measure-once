@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppThemeProvider } from './AppThemeProvider';
+import { loadSearchSettings } from './lib/searchSettings';
 import { IslandErrorBoundary } from './components/IslandErrorBoundary';
 import { ConnectionToastProvider } from './context/ConnectionToastContext';
 import {
@@ -228,6 +229,8 @@ if (document.readyState === 'loading') {
 } else {
   mount();
 }
+
+loadSearchSettings();
 
 /**
  * Imperative mounting function exposed for the vanilla-JS design-visit wizard.
