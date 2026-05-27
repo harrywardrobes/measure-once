@@ -9,7 +9,7 @@ import React, {
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type ConnectionService = 'hubspot' | 'google' | 'quickbooks' | 'database';
-export type ServiceStatus = 'ok' | 'error' | 'warning';
+export type ServiceStatus = 'ok' | 'error' | 'warning' | 'checking';
 type ToastKind = 'disconnected' | 'reconnected';
 
 // ── Module-level singleton state ──────────────────────────────────────────────
@@ -17,7 +17,12 @@ type ToastKind = 'disconnected' | 'reconnected';
 // This lets ConnectionToastProvider and GlobalHeader stay in sync without
 // needing a shared React tree.
 
-const _lastKnown = new Map<ConnectionService, ServiceStatus>();
+const _lastKnown = new Map<ConnectionService, ServiceStatus>([
+  ['hubspot',    'checking'],
+  ['google',     'checking'],
+  ['quickbooks', 'checking'],
+  ['database',   'checking'],
+]);
 const _updateCallbacks = new Set<() => void>();
 let _rendererClaimed = false;
 
@@ -89,7 +94,12 @@ export function _createDedupedCheck(
 async function _checkService(service: ConnectionService, url: string): Promise<void> {
   try {
     const r = await fetch(url, { credentials: 'include', headers: { Accept: 'application/json' } });
-    if (r.status === 401 || r.status === 403) return; // not authenticated — skip
+    if (r.status === 401 || r.status === 403) {
+      // Not authenticated — resolve checking to ok so the icon doesn't stay grey
+      const prev = _lastKnown.get(service);
+      if (prev === 'checking') { _lastKnown.set(service, 'ok'); _notifyAll(); }
+      return;
+    }
     const data: unknown = await r.json().catch(() => ({}));
     const connected =
       (data as { connected?: boolean }).connected === true ||
@@ -100,7 +110,10 @@ async function _checkService(service: ConnectionService, url: string): Promise<v
     } else if (connected && prev === 'error') {
       _fire(service, 'reconnected');
     }
-    if (connected) _lastKnown.set(service, 'ok');
+    if (connected) {
+      _lastKnown.set(service, 'ok');
+      _notifyAll();
+    }
   } catch {
     // Network-level failure
     const prev = _lastKnown.get(service);

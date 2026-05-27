@@ -19,7 +19,7 @@ import type { CurrentUser } from '../hooks/useCurrentUser';
 import { useAuth } from '../contexts/AuthContext';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrivilegeSync } from '../hooks/usePrivilegeSync';
-import { useServiceStatuses, type ConnectionService, type ServiceStatus } from '../context/ConnectionToastContext';
+import { useServiceStatuses, useConnectionToast, type ConnectionService, type ServiceStatus } from '../context/ConnectionToastContext';
 import { BRAND_COLORS } from '../theme';
 import { getShortcut } from '../lib/getShortcut';
 
@@ -83,15 +83,17 @@ const SERVICE_KEYS: ConnectionService[] = ['hubspot', 'google', 'quickbooks', 'd
 
 function statusLabel(service: ConnectionService, status: ServiceStatus): string {
   const name = SERVICE_CONFIG[service].label;
+  if (status === 'checking') return `Checking ${name} connection…`;
   if (status === 'error') return `${name} — disconnected`;
   if (status === 'warning') return `${name} — degraded`;
-  return name;
+  return `${name} — connected`;
 }
 
 function statusBadgeColor(status: ServiceStatus): string {
-  if (status === 'error') return '#ef4444';   // red-500
-  if (status === 'warning') return '#f59e0b'; // amber-500
-  return 'transparent';
+  if (status === 'error') return '#ef4444';              // red-500
+  if (status === 'warning') return '#f59e0b';            // amber-500
+  if (status === 'ok') return '#22c55e';                 // green-500
+  return 'rgba(255,255,255,0.35)';                       // checking — neutral grey
 }
 
 interface ServiceStatusBadgeProps {
@@ -99,11 +101,32 @@ interface ServiceStatusBadgeProps {
   status: ServiceStatus;
 }
 
+const CHECKING_PULSE_KEYFRAMES = {
+  '@keyframes mo-status-pulse': {
+    '0%, 100%': { opacity: 1 },
+    '50%':      { opacity: 0.3 },
+  },
+};
+
 function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps) {
   const { label, Icon } = SERVICE_CONFIG[service];
   const badgeColor = statusBadgeColor(status);
   const tip = statusLabel(service, status);
-  const ariaLabel = `${label} status: ${status === 'error' ? 'disconnected' : status === 'warning' ? 'degraded' : 'ok'}`;
+  const isChecking = status === 'checking';
+  const statusWord = status === 'error' ? 'disconnected' : status === 'warning' ? 'degraded' : status === 'checking' ? 'checking' : 'connected';
+  const ariaLabel = `${label} status: ${statusWord}`;
+
+  const iconColor =
+    status === 'error'    ? '#fca5a5' :
+    status === 'warning'  ? '#fcd34d' :
+    status === 'ok'       ? '#86efac' :
+    'rgba(255,255,255,0.5)';
+
+  const borderColor =
+    status === 'error'   ? 'rgba(252,165,165,0.4)' :
+    status === 'warning' ? 'rgba(252,211,77,0.4)'  :
+    status === 'ok'      ? 'rgba(134,239,172,0.35)' :
+    'rgba(255,255,255,0.12)';
 
   return (
     <Tooltip title={tip}>
@@ -117,6 +140,7 @@ function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps) {
           overlap="circular"
           anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
           sx={{
+            ...CHECKING_PULSE_KEYFRAMES,
             '& .MuiBadge-dot': {
               backgroundColor: badgeColor,
               border: `1.5px solid ${BRAND_COLORS.plum}`,
@@ -124,6 +148,9 @@ function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps) {
               height: 8,
               minWidth: 8,
               borderRadius: '50%',
+              ...(isChecking && {
+                animation: 'mo-status-pulse 1.4s ease-in-out infinite',
+              }),
             },
           }}
         >
@@ -135,9 +162,9 @@ function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps) {
               width: 28,
               height: 28,
               borderRadius: '8px',
-              color: status === 'error' ? '#fca5a5' : status === 'warning' ? '#fcd34d' : 'rgba(255,255,255,0.7)',
+              color: iconColor,
               bgcolor: 'rgba(255,255,255,0.08)',
-              border: `1px solid ${status === 'error' ? 'rgba(252,165,165,0.4)' : status === 'warning' ? 'rgba(252,211,77,0.4)' : 'rgba(255,255,255,0.12)'}`,
+              border: `1px solid ${borderColor}`,
             }}
           >
             <Icon fontSize="small" />
@@ -155,8 +182,16 @@ export function GlobalHeader() {
   const { user } = useAuth();
   const [pendingCount, setPendingCount] = useState<number>(0);
   const serviceStatuses = useServiceStatuses();
+  const { checkServicesOnMount } = useConnectionToast();
 
   usePrivilegeSync();
+
+  // Fire connection checks on every page, even when no page component calls useConnectionCheck.
+  // The dedup/cooldown logic in ConnectionToastContext prevents double-firing.
+  useEffect(() => {
+    checkServicesOnMount().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const onNav = () => setPath(window.location.pathname);
@@ -203,11 +238,8 @@ export function GlobalHeader() {
   const photoSrc = user ? resolvePhotoSrc(user) : null;
   const initials = user ? resolveInitials(user) : '';
 
-  // Collect services with a non-ok status for display
-  const unhealthyServices = SERVICE_KEYS.filter((svc) => {
-    const s = serviceStatuses.get(svc);
-    return s === 'error' || s === 'warning';
-  });
+  // All services are always shown; filter out 'database' which has no dedicated check endpoint
+  const visibleServices = SERVICE_KEYS.filter((svc) => svc !== 'database');
 
   const onBack = () => {
     if (window.history.length > 1) window.history.back();
@@ -266,27 +298,25 @@ export function GlobalHeader() {
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-          {/* Service status icons — only shown when at least one service has a problem */}
-          {unhealthyServices.length > 0 && (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 0.5,
-                mr: 0.25,
-              }}
-              role="group"
-              aria-label="Service status"
-            >
-              {unhealthyServices.map((svc) => (
-                <ServiceStatusBadge
-                  key={svc}
-                  service={svc}
-                  status={serviceStatuses.get(svc) as ServiceStatus}
-                />
-              ))}
-            </Box>
-          )}
+          {/* Service status icons — always visible with checking/ok/error/warning states */}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              mr: 0.25,
+            }}
+            role="group"
+            aria-label="Service status"
+          >
+            {visibleServices.map((svc) => (
+              <ServiceStatusBadge
+                key={svc}
+                service={svc}
+                status={serviceStatuses.get(svc) ?? 'checking'}
+              />
+            ))}
+          </Box>
 
           <Tooltip title={`Search (${kbdHint})`}>
             <IconButton
