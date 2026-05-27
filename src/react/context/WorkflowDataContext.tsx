@@ -115,7 +115,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
       }
       setContactStageCache(cache);
 
-      // Keep window.state.contactStageCache in sync for card-action-handlers.js
+      // Keep window.state.contactStageCache in sync for vanilla-JS interop
       try {
         const st = (window as unknown as Record<string, Record<string, unknown>>).state;
         if (st) st.contactStageCache = cache;
@@ -152,7 +152,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
       setLeadStatuses(opts);
       setNullLsLabel(label);
 
-      // Keep window globals in sync for card-action-handlers.js
+      // Keep window globals in sync for vanilla-JS interop
       const g = window as unknown as Record<string, unknown>;
       g.LEAD_STATUS_OPTIONS    = opts;
       g.NULL_LEAD_STATUS_LABEL = label;
@@ -169,7 +169,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
       const rows = await r.json() as LeadSubstatus[];
       if (!Array.isArray(rows)) return;
       setLeadSubstatuses(rows);
-      // Keep window.LEAD_SUBSTATUSES in sync for card-action-handlers.js
+      // Keep window.LEAD_SUBSTATUSES in sync for vanilla-JS interop
       (window as unknown as Record<string, unknown>).LEAD_SUBSTATUSES = rows;
       // Notify CustomerDetailPage (and any other local listener) synchronously
       // so it can update its own leadSubs state without relying on React context
@@ -199,7 +199,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
         }
       }
       setWorkflow(wf);
-      // Keep window.state.workflow in sync for card-action-handlers.js
+      // Keep window.state.workflow in sync for vanilla-JS interop
       try {
         const st = (window as unknown as Record<string, Record<string, unknown>>).state;
         if (st) st.workflow = wf;
@@ -360,8 +360,8 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
   }, []);
 
   // ── Expose fetch functions as window globals ──────────────────────────────
-  // window.loadLeadStatuses / loadLeadSubstatuses are used by the vanilla-JS
-  // pickers (card-action-handlers.js) and by test harness bootstrapFilter().
+  // window.loadLeadStatuses / loadLeadSubstatuses are used by test harness
+  // bootstrapFilter() and any remaining vanilla-JS pickers.
   // Must run BEFORE the lazy page chunk loads so the functions are available
   // immediately after the React island mounts (preSuspenseWrap pattern).
   useEffect(() => {

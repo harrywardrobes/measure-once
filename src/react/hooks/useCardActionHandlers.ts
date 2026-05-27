@@ -265,14 +265,10 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
     [substatusActionLabelMapRef, stageActionLabelMapRef],
   );
 
-  // Backwards-compat shims for pages that no longer load card-action-handlers.js
-  // (sales.html no longer loads card-action-modals.js either — it relies entirely
-  // on the React bundle for dispatch and click delegation).
+  // Window shims: expose React-managed handler data and dispatch as window globals
+  // so test probes and any remaining vanilla-JS call-sites can reach them.
   //
-  // window.cardActionHandlerFor — label/substatus lookup used by test probes and
-  // vanilla-JS call-sites.  Only set when card-action-handlers.js hasn't already
-  // set it (that file is still present on survey/customer-detail and its re-fetch
-  // logic is tested directly by the test suite).
+  // window.cardActionHandlerFor — label/substatus lookup used by test probes.
   //
   // window.cardActionHandlerById — id-keyed lookup used by the click-delegation
   // handler (registered below) so it can retrieve the full config (e.g.
@@ -280,7 +276,6 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
   //
   // window.loadCardActionHandlers — async re-fetch trigger.  The test suite calls
   // this to force the in-page index to update after creating new handlers mid-test.
-  // Only set when card-action-handlers.js hasn't already claimed the name.
   //
   // window.dispatchCardActionHandler — modal dispatch shim.  The TypeScript
   // implementation lives in src/react/utils/dispatchCardActionHandler.ts; we
@@ -289,16 +284,10 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
   //
   // window.cardActionHandlerAttrs — attr-string helper (test probe E.2).
   // Generates data-card-action-handler-* attribute strings for eq-card-action
-  // elements.  card-action-handlers.js no longer exports this; React is the
-  // sole provider.
+  // elements.
   //
   // window.enquiryRowHtml — card-strip HTML helper (test probe E.3).
   // Builds the outer .eq-card HTML including the action-strip div.
-  // card-action-handlers.js no longer exports this; React is the sole provider.
-  //
-  // Click delegation — handles clicks on [data-card-action-handler-id] elements
-  // (test-injected strips).  Registered here so card-action-modals.js is no
-  // longer needed on sales.html.
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>;
     const cleanups: (() => void)[] = [];
@@ -334,9 +323,6 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
     }
 
     // cardActionHandlerAttrs — test probe E.2.
-    // card-action-handlers.js no longer registers this on window (removed in
-    // task #1428), so this guard is always true.  Kept defensively in case
-    // another provider registers it before React mounts.
     if (typeof w.cardActionHandlerAttrs !== 'function') {
       const safe = (s: unknown) =>
         String(s == null ? '' : s)

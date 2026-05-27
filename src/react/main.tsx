@@ -255,11 +255,10 @@ if (document.readyState === 'loading') {
 loadSearchSettings();
 
 /**
- * Vanilla-JS bridge so card-action-handlers.js can open the React
- * CardActionModalsHost for start_design_visit without importing the
- * TypeScript registry directly.  The host registers itself on mount via
- * registerCardActionModalOpener; calls before mount are silently ignored
- * (same behaviour as openCardActionModal itself).
+ * Global bridge so vanilla-JS call-sites and test probes can open the React
+ * CardActionModalsHost without importing the TypeScript registry directly.
+ * The host registers itself on mount via registerCardActionModalOpener; calls
+ * before mount are silently ignored (same behaviour as openCardActionModal itself).
  */
 (window as unknown as {
   openCardActionModal: typeof openCardActionModal;

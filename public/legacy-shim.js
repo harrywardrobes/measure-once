@@ -107,8 +107,8 @@ function canEditPrivilege()   { const p = getPrivilegeLevel(); return p === 'man
 // ── API helpers ───────────────────────────────────────────────────────────────
 // @deprecated — React components should import GET/POST/PATCH/PUT/DELETE from
 // src/react/utils/api.ts instead of using these window globals. These remain for
-// vanilla-JS pages (card-action-handlers.js) during migration and
-// will be removed when those files are ported to React.
+// vanilla-JS pages during migration and will be removed as those files are ported
+// to React.
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body !== undefined) opts.body = JSON.stringify(body);
