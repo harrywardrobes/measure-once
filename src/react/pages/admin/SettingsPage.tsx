@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import HubIcon from '@mui/icons-material/Hub';
 import SyncIcon from '@mui/icons-material/Sync';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
@@ -534,10 +535,7 @@ export function SettingsPage() {
 
           <Box id="hubspot-status-row" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, p: 1.25, borderRadius: 1, border: 1, borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box component="svg" width={18} height={18} viewBox="0 0 18 18" fill="none" sx={{ flexShrink: 0 }}>
-                <rect width="18" height="18" rx="4" fill="#FF7A59" />
-                <text x="9" y="13" textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff" fontFamily="sans-serif">HS</text>
-              </Box>
+              <HubIcon fontSize="small" sx={{ flexShrink: 0, color: 'text.secondary' }} />
               <Typography variant="body2" sx={{ fontWeight: 600 }}>HubSpot CRM</Typography>
             </Box>
             <span id="hubspot-status-badge" style={{ padding: '2px 10px', borderRadius: 999, fontSize: '.75rem', fontWeight: 600, background: badge.bg, color: badge.color, transition: 'background .2s,color .2s' }}>

@@ -11,7 +11,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ShieldIcon from '@mui/icons-material/Shield';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
-import SyncIcon from '@mui/icons-material/Sync';
+import HubIcon from '@mui/icons-material/Hub';
 import EventIcon from '@mui/icons-material/Event';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import StorageIcon from '@mui/icons-material/Storage';
@@ -73,7 +73,7 @@ const SERVICE_CONFIG: Record<ConnectionService, {
   label: string;
   Icon: React.ComponentType<{ fontSize?: 'small' | 'medium' }>;
 }> = {
-  hubspot:    { label: 'HubSpot',    Icon: SyncIcon },
+  hubspot:    { label: 'HubSpot',    Icon: HubIcon },
   google:     { label: 'Google',     Icon: EventIcon },
   quickbooks: { label: 'QuickBooks', Icon: ReceiptIcon },
   database:   { label: 'Database',   Icon: StorageIcon },
