@@ -68,12 +68,12 @@ args = "PRIVTEST_ALLOW_SHARED_DB=1 npm run test:calendar-empty-state"
 name = "ci"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm run test:ci"
-
-[workflows.workflow.metadata]
-isValidation = true
 
 [[ports]]
 localPort = 5000

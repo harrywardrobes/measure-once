@@ -28,11 +28,22 @@ import '../public/app-styles.css';
  * Returns minimal stub payloads so components skip loading states and render
  * immediately.  Only affects the Storybook iframe — production code is
  * unchanged.
+ *
+ * STUB_RESPONSES: exact-path matches (no dynamic segments).
+ * STUB_PATTERNS:  array of [regex, payload] for routes with dynamic segments.
  * ─────────────────────────────────────────────────────────────────────── */
 const STUB_RESPONSES: Record<string, unknown> = {
-  '/api/users/me/prefs':  {},
-  '/api/nav-role-config': {},
+  '/api/users/me/prefs':      {},
+  '/api/nav-role-config':     {},
+  '/api/admin/pending-count': { count: 0 },
 };
+
+const STUB_PATTERNS: Array<[RegExp, unknown]> = [
+  // /api/contacts/:id/localdata  — must come before the contacts/:id rule
+  [/^\/api\/contacts\/[^/]+\/localdata$/, {}],
+  // /api/contacts/:id
+  [/^\/api\/contacts\/[^/]+$/, { id: 'demo', firstname: 'Demo', lastname: 'Contact' }],
+];
 
 const _nativeFetch = window.fetch.bind(window);
 window.fetch = function storybookFetch(
@@ -41,8 +52,21 @@ window.fetch = function storybookFetch(
 ): Promise<Response> {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.pathname : (input as Request).url;
   const pathname = url.startsWith('http') ? new URL(url).pathname : url.split('?')[0];
+
+  let stubBody: unknown | undefined;
   if (Object.prototype.hasOwnProperty.call(STUB_RESPONSES, pathname)) {
-    const body = JSON.stringify(STUB_RESPONSES[pathname]);
+    stubBody = STUB_RESPONSES[pathname];
+  } else {
+    for (const [pattern, payload] of STUB_PATTERNS) {
+      if (pattern.test(pathname)) {
+        stubBody = payload;
+        break;
+      }
+    }
+  }
+
+  if (stubBody !== undefined) {
+    const body = JSON.stringify(stubBody);
     return Promise.resolve(
       new Response(body, {
         status: 200,
