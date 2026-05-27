@@ -9,6 +9,10 @@ export interface ProjectContact {
     email?: string;
     closedate?: string;
     lastmodifieddate?: string;
+    hs_lead_status?: string;
+    hw_lead_substatus?: string;
+    customer_number?: string;
+    zip?: string;
   };
 }
 
@@ -47,6 +51,7 @@ export interface ProjectsData {
   platformUsers: ProjectPlatformUser[];
   currentUserId: string | undefined;
   roomAssignmentsStale: boolean;
+  draftVisitIds: Record<string, number | string>;
   refresh: () => void;
   updateRoomAssignment: (contactId: string, roomIdx: number, fitterId: string | null) => void;
 }
@@ -67,9 +72,14 @@ export function useProjectsData(): ProjectsData {
   const [platformUsers, setPlatformUsers] = useState<ProjectPlatformUser[]>([]);
   const [roomAssignmentsStale, setRoomAssignmentsStale] = useState(false);
   const [fetchNonce, setFetchNonce] = useState(0);
+  const [draftVisitIds, setDraftVisitIds] = useState<Record<string, number | string>>({});
+  const [draftRefreshTick, setDraftRefreshTick] = useState(0);
 
   // Pending stale value while the tab is hidden — applied on visibilitychange.
   const pendingRoomStaleRef = useRef<boolean | null>(null);
+
+  // Keep a ref to latest contacts for draft-visit refetch.
+  const contactsRef = useRef<ProjectContact[]>([]);
 
   const refresh = useCallback(() => setFetchNonce((n) => n + 1), []);
 
@@ -138,8 +148,10 @@ export function useProjectsData(): ProjectsData {
           pendingRoomStaleRef.current = null;
         }
 
-        const rawContacts: ProjectContact[] = leadsData.contacts || [];
-        const rawCache: Record<string, ProjectRoom[]> = leadsData.contactStageCache || {};
+        // /api/open-leads returns { results, total } where results is the HubSpot
+        // contacts array.
+        const rawContacts: ProjectContact[] = leadsData.results || [];
+        const rawCache: Record<string, ProjectRoom[]> = {};
 
         const mergedCache: Record<string, ProjectRoom[]> = { ...rawCache };
         if (localdataData && typeof localdataData === 'object') {
@@ -150,6 +162,7 @@ export function useProjectsData(): ProjectsData {
           }
         }
 
+        contactsRef.current = rawContacts;
         setContacts(rawContacts);
         setStageCache(mergedCache);
         setWorkflow(workflowData);
@@ -172,6 +185,33 @@ export function useProjectsData(): ProjectsData {
     const onLocalData = () => setFetchNonce((n) => n + 1);
     document.addEventListener('localdata-updated', onLocalData);
     return () => document.removeEventListener('localdata-updated', onLocalData);
+  }, []);
+
+  // ── Draft visit detection ──────────────────────────────────────────────────
+  // Batch-fetch in-progress (draft) design visit IDs for all visible contacts
+  // so the "Continue designing" action can be shown on relevant cards.
+  useEffect(() => {
+    if (contactsRef.current.length === 0) return;
+    let cancelled = false;
+    const ids = contactsRef.current.map((c) => c.id).join(',');
+    fetch(`/api/design-visits/in-progress?contactIds=${encodeURIComponent(ids)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Array<{ id: number | string; contactId: string }>) => {
+        if (cancelled) return;
+        const map: Record<string, number | string> = {};
+        for (const row of rows) map[row.contactId] = row.id;
+        setDraftVisitIds(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [contacts, draftRefreshTick]); // re-run when contacts load or draft changes
+
+  // Listen for design_visit_draft_changed broadcast to refresh draft IDs.
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const bc = new BroadcastChannel('design_visit_draft_changed');
+    bc.addEventListener('message', () => setDraftRefreshTick((t) => t + 1));
+    return () => bc.close();
   }, []);
 
   // ── Optimistic room-assignment update ──────────────────────────────────────
@@ -197,6 +237,7 @@ export function useProjectsData(): ProjectsData {
     platformUsers,
     currentUserId: user?.id,
     roomAssignmentsStale,
+    draftVisitIds,
     refresh,
     updateRoomAssignment,
   };

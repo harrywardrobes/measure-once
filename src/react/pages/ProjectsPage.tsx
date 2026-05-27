@@ -24,8 +24,13 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckIcon from '@mui/icons-material/Check';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import { useCardActionHandlers, CardActionHandlerData } from '../hooks/useCardActionHandlers';
+import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
+import { openCardActionModal } from '../utils/cardActionModalRegistry';
+import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { BRAND_COLORS, RADIUS, STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrefs } from '../hooks/usePrefs';
@@ -443,6 +448,9 @@ function ProjectCard({
   canAssign,
   workflow,
   qb,
+  cardActionHandlerFor,
+  resolveActionLabel,
+  draftVisitId,
   onOpenFitterPicker,
   onNavigate,
   onOpenInvoice,
@@ -453,6 +461,18 @@ function ProjectCard({
   canAssign: boolean;
   workflow: ProjectWorkflowDef | undefined;
   qb?: QBState;
+  cardActionHandlerFor: (
+    stageKey: string,
+    leadStatusKey: string | undefined,
+    hwSubstatusValue: string | undefined,
+  ) => CardActionHandlerData | null;
+  resolveActionLabel: (
+    stageKey: string,
+    leadStatusKey: string | undefined,
+    substageId: string | undefined,
+    hwSubstatusValue: string | undefined,
+  ) => string;
+  draftVisitId?: number | string | null;
   onOpenFitterPicker: (contactId: string, roomIdx: number) => void;
   onNavigate: (contactId: string, roomIdx: number) => void;
   onOpenInvoice: (firstId: string, allIds: string[]) => void;
@@ -461,6 +481,68 @@ function ProjectCard({
   const earliestInstall =
     rooms.map((r) => r.installStart).filter(Boolean).sort()[0] ?? null;
   const installLabel = fmtInstallDate(earliestInstall);
+
+  // ── Action strip state ─────────────────────────────────────────────────────
+  const [dispatchingAction, setDispatchingAction] = useState(false);
+
+  // Pick the primary stage from the first room (rooms sorted by stage desc).
+  const primaryStageKey = rooms[0]?.stageKey || '';
+  const leadStatusKey = contact.properties?.hs_lead_status;
+  const hwSubstatusValue = contact.properties?.hw_lead_substatus;
+
+  // Only show a strip when a matching handler is actually configured.
+  const handler = cardActionHandlerFor(primaryStageKey, leadStatusKey, hwSubstatusValue);
+
+  const cahName = handler?.config?.action_name
+    ? handler.config.action_name
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c: string) => c.toUpperCase())
+    : '';
+  // When there's a draft visit and the handler is start_design_visit, prefer
+  // "Continue designing" as the label (unless the admin configured a custom name).
+  const isDesignHandler = handler?.type === 'start_design_visit';
+  const hasDraft = !!draftVisitId && isDesignHandler;
+  const actionLabel = cahName
+    || (hasDraft ? 'Continue designing' : '')
+    || resolveActionLabel(primaryStageKey, leadStatusKey, undefined, hwSubstatusValue);
+
+  const stageColors = STAGE_COLORS[primaryStageKey];
+  const actionTint = hasDraft ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
+  const actionTextColor = hasDraft ? '#15803d' : (stageColors?.text || '#374151');
+
+  // Unified dispatch: preloads the draft visit when handler is start_design_visit
+  // and a draft exists; otherwise dispatches normally.
+  const handleActionClick = useCallback(
+    async (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!handler || dispatchingAction) return;
+      if (hasDraft && draftVisitId) {
+        setDispatchingAction(true);
+        try {
+          const resp = await fetch(`/api/design-visits/${encodeURIComponent(String(draftVisitId))}`);
+          if (!resp.ok) throw new Error('Could not load visit');
+          const visit: ExistingVisit = await resp.json();
+          openCardActionModal(handler, {
+            contactId:    contact.id,
+            contactName:  name,
+            contactEmail: contact.properties?.email || '',
+          }, visit);
+        } catch {
+          // Silent failure — user can navigate to customer detail instead
+        } finally {
+          setDispatchingAction(false);
+        }
+      } else {
+        dispatchCardActionHandler(handler, {
+          contactId:    contact.id,
+          contactName:  name,
+          contactEmail: contact.properties?.email || '',
+        });
+      }
+    },
+    [handler, hasDraft, draftVisitId, dispatchingAction, contact, name],
+  );
 
   return (
     <Box
@@ -576,6 +658,41 @@ function ProjectCard({
           );
         })}
       </Box>
+
+      {/* Action strip — only rendered when a configured handler matches this card's
+          stage/lead-status/substatus. When the handler is start_design_visit and a
+          draft visit exists, the strip doubles as "Continue designing" and preloads
+          the draft on click. */}
+      {!!handler && (
+        <Box
+          role="button"
+          tabIndex={-1}
+          title={actionLabel || 'Run action'}
+          onClick={handleActionClick}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            px: '14px',
+            py: '9px',
+            bgcolor: actionTint,
+            borderTop: `1px solid ${BRAND_COLORS.stone}`,
+            cursor: dispatchingAction ? 'wait' : 'pointer',
+            opacity: dispatchingAction ? 0.7 : 1,
+            transition: 'opacity 0.15s, filter 0.12s',
+            '&:hover': dispatchingAction ? undefined : { filter: 'brightness(0.96)' },
+          }}
+        >
+          <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
+            {dispatchingAction ? 'Opening…' : actionLabel}
+          </Typography>
+          {dispatchingAction ? (
+            <CircularProgress size={12} sx={{ color: actionTextColor }} />
+          ) : (
+            <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
+          )}
+        </Box>
+      )}
 
       {/* Invoice badge */}
       <InvoiceBadge contact={contact} qb={qb} onOpen={onOpenInvoice} />
@@ -728,8 +845,11 @@ export function ProjectsPage() {
     platformUsers,
     currentUserId,
     roomAssignmentsStale,
+    draftVisitIds,
     updateRoomAssignment,
   } = useProjectsData();
+
+  const { cardActionHandlerFor, resolveActionLabel } = useCardActionHandlers();
 
   const [filter, setFilter] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortKey>('stage');
@@ -1035,6 +1155,9 @@ export function ProjectsPage() {
                     canAssign={canAssign}
                     workflow={workflow}
                     qb={qb}
+                    cardActionHandlerFor={cardActionHandlerFor}
+                    resolveActionLabel={resolveActionLabel}
+                    draftVisitId={draftVisitIds[contact.id] ?? null}
                     onOpenFitterPicker={handleOpenPicker}
                     onNavigate={handleNavigate}
                     onOpenInvoice={handleOpenInvoice}
@@ -1058,6 +1181,9 @@ export function ProjectsPage() {
             canAssign={canAssign}
             workflow={workflow}
             qb={qb}
+            cardActionHandlerFor={cardActionHandlerFor}
+            resolveActionLabel={resolveActionLabel}
+            draftVisitId={draftVisitIds[contact.id] ?? null}
             onOpenFitterPicker={handleOpenPicker}
             onNavigate={handleNavigate}
             onOpenInvoice={handleOpenInvoice}
