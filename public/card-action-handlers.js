@@ -751,6 +751,7 @@
           doorStyles: doorStyles,
           onRoomsChange: function(updatedRooms) { rooms = updatedRooms; },
           onUploadingChange: function(uploading) { _step2Uploading = uploading; },
+          draftKey: editMode ? undefined : (contactId ? 'dv-s2-' + contactId : undefined),
         });
       } else {
         console.error('[design-visit] mountDesignVisitRoomsStep not available — React bundle not loaded?');
@@ -868,9 +869,10 @@
             if (!resp.ok) throw new Error(data.error || (editMode ? 'Save failed' : 'Submission failed'));
             _cleanupChans();
             backdrop.remove();
-            // Clear the Step 1 draft now that the visit has been successfully submitted
+            // Clear Step 1 and Step 2 drafts now that the visit has been successfully submitted
             if (!editMode && contactId) {
               try { localStorage.removeItem('dv-s1-' + contactId); } catch {}
+              try { localStorage.removeItem('dv-s2-' + contactId); } catch {}
             }
             const successMsg = editMode
               ? 'Design visit updated. A fresh sign-off email has been sent.'
