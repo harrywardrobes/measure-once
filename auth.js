@@ -92,16 +92,6 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-// Bootstrap admin password — hashed lazily from BOOTSTRAP_ADMIN_PASSWORD env var
-// so the hash is computed at most once per server process.
-let _bootstrapAdminHash = undefined; // undefined = not yet computed
-async function getBootstrapAdminHash() {
-  if (_bootstrapAdminHash !== undefined) return _bootstrapAdminHash;
-  const pw = process.env.BOOTSTRAP_ADMIN_PASSWORD;
-  if (!pw) { _bootstrapAdminHash = null; return null; }
-  _bootstrapAdminHash = await bcrypt.hash(pw, 12);
-  return _bootstrapAdminHash;
-}
 
 function createMailTransport() {
   if (process.env.MAIL_TRANSPORT_THROW_OVERRIDE) {
@@ -611,10 +601,7 @@ async function cleanupExpiredSessions() {
 async function cleanupExpiredPasswordTokens() {
   try {
     // Only delete tokens that were never consumed. Consumed tokens (used_at IS NOT NULL)
-    // are kept permanently as proof that an admin account has completed a real
-    // set-password flow, which permanently blocks the bootstrap admin password path.
-    // Deleting consumed tokens would erase that proof and re-open the bootstrap
-    // backdoor after each cleanup cycle.
+    // are kept for audit history.
     const r = await pool.query(
       `DELETE FROM password_set_tokens WHERE expires_at < NOW() - INTERVAL '7 days' AND used_at IS NULL`
     );
@@ -963,51 +950,11 @@ async function setupAuth(app) {
       }
       const normalOk = dbUser.password_hash && await bcrypt.compare(password, dbUser.password_hash);
       if (!normalOk) {
-        // Bootstrap admin path: emergency-only, strictly scoped to the very
-        // first login of an admin account that has never had a password set.
-        // Accepted only when ALL of the following hold:
-        //   1. The account currently has no password hash (password_hash IS NULL).
-        //   2. The account has NEVER previously completed a set-password flow —
-        //      the absence of any consumed token proves the account is genuinely
-        //      first-time. Once a password has ever been set (and later cleared
-        //      by force-reset) the bootstrap path is permanently blocked for that
-        //      account; the admin must use the emailed set-password link.
-        //   3. No unconsumed reset token (used or not, expired or not) exists —
-        //      a pending reset means an admin explicitly revoked access and the
-        //      bootstrap secret must not substitute for that reset flow.
-        //   4. The submitted email is in ADMIN_EMAILS.
-        //   5. BOOTSTRAP_ADMIN_PASSWORD is configured and matches.
-        let bootstrapOk = false;
-        if (!dbUser.password_hash && isAdminEmail(email)) {
-          const tokenCheckRow = await pool.query(
-            `SELECT
-               MAX(CASE WHEN used_at IS NOT NULL THEN 1 ELSE 0 END) AS ever_consumed,
-               MAX(CASE WHEN used_at IS NULL     THEN 1 ELSE 0 END) AS has_unused
-             FROM password_set_tokens
-             WHERE LOWER(email) = LOWER($1)`,
-            [email]
-          );
-          const everConsumed = tokenCheckRow.rows[0]?.ever_consumed === 1;
-          const hasUnused    = tokenCheckRow.rows[0]?.has_unused    === 1;
-          // Permanently blocked once any token has been consumed (account has
-          // had a real password before). Also blocked while any unused token
-          // exists (covers unexpired set-password invites and all reset tokens,
-          // regardless of expiry — the reset intent must be honoured first).
-          if (!everConsumed && !hasUnused) {
-            const bootstrapHash = await getBootstrapAdminHash();
-            if (bootstrapHash && await bcrypt.compare(password, bootstrapHash)) {
-              bootstrapOk = true;
-              console.warn(`  [SECURITY] Bootstrap admin login used for ${email}`);
-            }
-          }
-        }
-        if (!bootstrapOk) {
-          // Return a uniform response for all auth failures — no distinction
-          // between unknown email, unapproved email, no-password-set, or wrong
-          // password — so the public login endpoint cannot be used to enumerate
-          // account existence or approval state.
-          return res.status(401).json({ error: 'Invalid email or password.' });
-        }
+        // Return a uniform response for all auth failures — no distinction
+        // between unknown email, unapproved email, no-password-set, or wrong
+        // password — so the public login endpoint cannot be used to enumerate
+        // account existence or approval state.
+        return res.status(401).json({ error: 'Invalid email or password.' });
       }
 
       const sessionUser = buildSessionUser(dbUser);
