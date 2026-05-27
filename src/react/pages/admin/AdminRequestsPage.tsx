@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert, AlertTitle, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
-  DialogContent, DialogTitle, FormControl, Grid, InputLabel, Link, MenuItem, Select,
-  Skeleton, Stack, Table, TableBody, TableCell, TableContainer, TableHead,
-  TableRow, TextField, Typography,
+  DialogContent, DialogTitle, FormControl, Grid, InputLabel, LinearProgress, Link,
+  MenuItem, Select, Skeleton, Stack, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
 import LanguageIcon from '@mui/icons-material/Language';
 import PhoneIcon from '@mui/icons-material/Phone';
@@ -59,6 +59,8 @@ export function AdminRequestsPage() {
   const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [allowed, setAllowed] = useState<Allowed[]>([]);
+
+  const [photoProgress, setPhotoProgress] = useState<Record<string, number | undefined>>({});
 
   // Approve modal
   const [approving, setApproving] = useState<Req | null>(null);
@@ -201,12 +203,35 @@ export function AdminRequestsPage() {
     } catch (e: unknown) { toast(e instanceof Error ? e.message : String(e), true); }
   }
 
-  async function approvePhoto(id: string) {
-    try {
-      await api('POST', `/api/admin/photo-requests/${id}/approve`);
-      toast('Photo approved — now live');
-      emitAdminChange('photos'); emitAdminChange('team');
-    } catch (e: unknown) { toast(e instanceof Error ? e.message : String(e), true); }
+  function approvePhoto(id: string) {
+    setPhotoProgress(p => ({ ...p, [id]: 0 }));
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/admin/photo-requests/${id}/approve`);
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.upload.onprogress = (evt) => {
+      if (evt.lengthComputable) {
+        setPhotoProgress(p => ({ ...p, [id]: Math.round((evt.loaded / evt.total) * 100) }));
+      }
+    };
+    xhr.onload = () => {
+      setPhotoProgress(p => { const n = { ...p }; delete n[id]; return n; });
+      if (xhr.status >= 400) {
+        let msg = `HTTP ${xhr.status}`;
+        try { msg = (JSON.parse(xhr.responseText) as { error?: string }).error || msg; } catch { /* ignore */ }
+        toast(msg, true);
+      } else {
+        toast('Photo approved — now live');
+        emitAdminChange('photos'); emitAdminChange('team');
+      }
+    };
+    xhr.onerror = () => {
+      setPhotoProgress(p => { const n = { ...p }; delete n[id]; return n; });
+      toast('Network error — please try again', true);
+    };
+    xhr.onabort = () => {
+      setPhotoProgress(p => { const n = { ...p }; delete n[id]; return n; });
+    };
+    xhr.send();
   }
   async function rejectPhoto(id: string) {
     if (!confirm('Reject this photo? The user will need to submit a new one.')) return;
@@ -335,12 +360,23 @@ export function AdminRequestsPage() {
                     <Card key={u.id} variant="outlined">
                       <Box component="img" src={u.pending_photo} alt=""
                         sx={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', display: 'block' }} />
+                      {photoProgress[u.id] !== undefined && (
+                        <LinearProgress
+                          variant="determinate"
+                          value={photoProgress[u.id]}
+                          sx={{ height: 3 }}
+                        />
+                      )}
                       <CardContent>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>{name}</Typography>
                         <Typography variant="caption" color="text.secondary">{u.email || ''}</Typography>
                         <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                          <Button size="small" variant="contained" onClick={() => approvePhoto(u.id)}>Approve</Button>
-                          <Button size="small" variant="outlined" onClick={() => rejectPhoto(u.id)}>Reject</Button>
+                          <Button size="small" variant="contained"
+                            disabled={photoProgress[u.id] !== undefined}
+                            onClick={() => approvePhoto(u.id)}>Approve</Button>
+                          <Button size="small" variant="outlined"
+                            disabled={photoProgress[u.id] !== undefined}
+                            onClick={() => rejectPhoto(u.id)}>Reject</Button>
                         </Stack>
                       </CardContent>
                     </Card>
