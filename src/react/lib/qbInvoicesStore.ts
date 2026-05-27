@@ -127,3 +127,12 @@ export function triggerLoad(): void {
 export function refresh(): void {
   void _doFetch();
 }
+
+/**
+ * Reset the store to its initial state without triggering a new fetch.
+ * Call this after QuickBooks is disconnected so cached invoice data is
+ * cleared immediately — before any subsequent `triggerLoad()` or `refresh()`.
+ */
+export function reset(): void {
+  _setState({ ...INITIAL_STATE });
+}

@@ -25,6 +25,7 @@ import {
   invoiceStatus,
 } from '../components/InvoiceDetailDrawer';
 import { useQBInvoices } from '../hooks/useQBInvoices';
+import { reset as resetQBStore } from '../lib/qbInvoicesStore';
 
 type _Icons = typeof RefreshIcon | typeof SearchIcon | typeof WarningAmberIcon;
 
@@ -112,6 +113,7 @@ export function StandaloneInvoicesPage() {
   const handleDisconnect = useCallback(() => {
     window.showBottomConfirm('Disconnect QuickBooks? Invoice data will no longer be visible.', async () => {
       await fetch('/auth/quickbooks/disconnect', { method: 'POST' }).catch(() => {});
+      resetQBStore();
       loadInvoices();
     });
   }, [loadInvoices]);
