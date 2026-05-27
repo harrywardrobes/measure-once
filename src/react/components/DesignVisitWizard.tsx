@@ -134,6 +134,25 @@ function clearDraft(key: string) {
   try { sessionStorage.removeItem(key); } catch {}
 }
 
+/**
+ * Reads the current sessionStorage draft and extracts every image storageKey
+ * found in the rooms list.  Used on wizard open to find uploads from a
+ * previous session that ended abruptly (crash, hard-close, forced reload) so
+ * they can be deleted before the wizard starts fresh.
+ */
+function extractOrphanedDraftKeys(key: string): string[] {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return [];
+    const draft = JSON.parse(raw) as { rooms?: RoomData[] };
+    return (draft.rooms || [])
+      .flatMap(r => (r.images || []).map(img => img.storageKey))
+      .filter((k): k is string => typeof k === 'string' && k.length > 0);
+  } catch {
+    return [];
+  }
+}
+
 function StepIndicator({ current, total }: { current: number; total: number }) {
   return (
     <Box sx={{ display: 'flex', gap: '6px', mb: '20px' }}>
@@ -166,8 +185,22 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const [open, setOpen] = useState(true);
   const [step, setStep] = useState(1);
 
+  /**
+   * Image storageKeys found in the sessionStorage draft when this wizard
+   * instance first mounted.  They belong to a previous session that was
+   * interrupted (crash / hard-close / forced reload) before the cleanup
+   * useEffect could fire, so they are orphaned.  Captured once at mount time
+   * so the recovery useEffect below can delete them.
+   */
+  const [orphanedDraftKeys] = useState<string[]>(() =>
+    editMode ? [] : extractOrphanedDraftKeys(storageKey)
+  );
+
   const [step1, setStep1] = useState<Step1Data>(() => {
-    if (!editMode) {
+    // When the prior session was interrupted (orphaned uploads detected) we
+    // intentionally skip draft restoration so the wizard starts completely
+    // fresh.  Only restore the draft when there are no orphaned image uploads.
+    if (!editMode && orphanedDraftKeys.length === 0) {
       const draft = loadDraft(storageKey);
       if (draft) return draft.step1;
     }
@@ -175,7 +208,8 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   });
 
   const [rooms, setRooms] = useState<RoomData[]>(() => {
-    if (!editMode) {
+    // Same guard as step1: skip draft restoration when orphaned uploads exist.
+    if (!editMode && orphanedDraftKeys.length === 0) {
       const draft = loadDraft(storageKey);
       if (draft) return draft.rooms;
     }
@@ -267,6 +301,26 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     }
     return () => { channels.forEach(ch => { try { ch.close(); } catch {} }); };
   }, []);
+
+  /**
+   * Orphan-recovery effect — runs once on mount.
+   *
+   * If the previous wizard session ended abruptly (browser crash, forced
+   * reload, tab hard-close before the SPA navigation unmount could fire) the
+   * abandon-cleanup useEffect below never ran for that session and the images
+   * it had uploaded are stranded in object storage.  `orphanedDraftKeys` was
+   * computed from the sessionStorage draft before this session's state was
+   * saved, so it contains exactly those unreachable keys.  We delete them now
+   * and clear the draft so the wizard opens cleanly.
+   */
+  useEffect(() => {
+    if (!orphanedDraftKeys.length) return;
+    for (const key of orphanedDraftKeys) {
+      fetch(`/api/design-visits/uploads/${encodeURIComponent(key)}`, { method: 'DELETE' })
+        .catch(err => console.warn('[design-visit] orphan-recovery delete failed:', err));
+    }
+    clearDraft(storageKey);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!editMode) saveDraft(storageKey, step1, rooms);
