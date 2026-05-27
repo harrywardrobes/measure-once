@@ -1000,6 +1000,7 @@ export function SalesBoardPage() {
   // Batch-fetch in-progress (draft) design visit IDs for all currently visible
   // contacts so the "Continue designing" action can be shown on relevant cards.
   const [draftVisitIds, setDraftVisitIds] = useState<Record<string, number | string>>({});
+  const [draftRefreshTick, setDraftRefreshTick] = useState(0);
 
   const allContacts = useMemo(
     () => [...salesHook.contacts, ...dvHook.contacts],
@@ -1020,7 +1021,14 @@ export function SalesBoardPage() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [allContacts]);
+  }, [allContacts, draftRefreshTick]);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const bc = new BroadcastChannel('design_visit_draft_changed');
+    bc.addEventListener('message', () => setDraftRefreshTick((t) => t + 1));
+    return () => bc.close();
+  }, []);
 
   const hookByStage = { sales: salesHook, designvisit: dvHook } as const;
   const entriesByStage = { sales: salesEntries, designvisit: dvEntries } as const;

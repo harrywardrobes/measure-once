@@ -49,7 +49,13 @@ export function CardActionModalsHost() {
   }, [openModal]);
 
   function close() {
+    const closing = modal;
     setModal({ type: 'none' });
+    if (closing.type === 'start_design_visit' && typeof BroadcastChannel !== 'undefined') {
+      const bc = new BroadcastChannel('design_visit_draft_changed');
+      bc.postMessage({ ts: Date.now() });
+      bc.close();
+    }
   }
 
   return (
