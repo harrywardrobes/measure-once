@@ -134,6 +134,8 @@ export function DesignVisitRoomsStep({
 
   // Keyed by stable clientId — safe across reorder/remove operations.
   const [uploadStatusById, setUploadStatusById] = useState<Record<string, UploadStatus>>({});
+  // Upload progress percentage (0-100) per room, shown during 'uploading' status.
+  const [uploadProgressById, setUploadProgressById] = useState<Record<string, number>>({});
   // Bump to reset FileUploadField after each upload batch completes.
   const [fileKeyById, setFileKeyById] = useState<Record<string, number>>({});
 
@@ -172,6 +174,7 @@ export function DesignVisitRoomsStep({
   function removeRoom(clientId: string) {
     setRooms(prev => prev.filter(r => r.clientId !== clientId));
     setUploadStatusById(prev => { const n = { ...prev }; delete n[clientId]; return n; });
+    setUploadProgressById(prev => { const n = { ...prev }; delete n[clientId]; return n; });
     setFileKeyById(prev => { const n = { ...prev }; delete n[clientId]; return n; });
   }
 
@@ -216,10 +219,16 @@ export function DesignVisitRoomsStep({
   async function handleFilesSelected(clientId: string, files: FileList | null) {
     if (!files || !files.length) return;
     setUploadStatusById(prev => ({ ...prev, [clientId]: 'uploading' }));
+    setUploadProgressById(prev => ({ ...prev, [clientId]: 0 }));
+
+    const fileArray = Array.from(files);
+    const totalFiles = fileArray.length;
 
     const uploaded: RoomImage[] = [];
     let hadError = false;
-    for (const file of Array.from(files)) {
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
+      const basePct = (i / totalFiles) * 100;
       try {
         const dataUrl = await new Promise<string>((resolve, reject) => {
           const fr = new FileReader();
@@ -227,13 +236,38 @@ export function DesignVisitRoomsStep({
           fr.onerror = () => reject(new Error('FileReader error'));
           fr.readAsDataURL(file);
         });
-        const resp = await fetch('/api/design-visits/uploads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dataUrl }),
+        const body = JSON.stringify({ dataUrl });
+        const data = await new Promise<{ storageKey?: string; mimeType?: string; viewUrl?: string; error?: string; status?: number }>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/api/design-visits/uploads');
+          xhr.setRequestHeader('Content-Type', 'application/json');
+          xhr.upload.onprogress = (evt) => {
+            if (evt.lengthComputable) {
+              const filePct = (evt.loaded / evt.total) * (100 / totalFiles);
+              setUploadProgressById(prev => ({
+                ...prev,
+                [clientId]: Math.round(basePct + filePct),
+              }));
+            }
+          };
+          xhr.onload = () => {
+            setUploadProgressById(prev => ({
+              ...prev,
+              [clientId]: Math.round(((i + 1) / totalFiles) * 100),
+            }));
+            try {
+              resolve({ ...JSON.parse(xhr.responseText), status: xhr.status });
+            } catch {
+              reject(new Error('Invalid JSON response'));
+            }
+          };
+          xhr.onerror = () => reject(new Error('Network error'));
+          xhr.onabort = () => reject(new Error('Upload aborted'));
+          xhr.send(body);
         });
-        const data = await resp.json();
-        if (!resp.ok || !data.storageKey) throw new Error(data.error || 'Upload failed');
+        if ((data.status !== undefined && data.status >= 400) || !data.storageKey) {
+          throw new Error(data.error || 'Upload failed');
+        }
         const newImg: RoomImage = {
           storageKey: data.storageKey,
           mimeType: data.mimeType || file.type,
@@ -269,6 +303,7 @@ export function DesignVisitRoomsStep({
     // then show success/error adornment briefly before returning to idle.
     setFileKeyById(prev => ({ ...prev, [clientId]: (prev[clientId] ?? 0) + 1 }));
     setUploadStatusById(prev => ({ ...prev, [clientId]: finalStatus }));
+    setUploadProgressById(prev => { const n = { ...prev }; delete n[clientId]; return n; });
     setTimeout(() => {
       setUploadStatusById(prev => ({ ...prev, [clientId]: 'idle' }));
     }, 1500);
@@ -279,6 +314,7 @@ export function DesignVisitRoomsStep({
       {rooms.map((room, idx) => {
         const { clientId, data } = room;
         const uploadStatus = uploadStatusById[clientId] ?? 'idle';
+        const uploadProgress = uploadProgressById[clientId];
 
         return (
           <Box
@@ -492,13 +528,14 @@ export function DesignVisitRoomsStep({
               sx={{ mb: 1.5 }}
             />
 
-            {/* Photo upload — uploadStatus drives spinner/result adornment inside the field */}
+            {/* Photo upload — uploadStatus + progress drive the progress bar inside the field */}
             <FileUploadField
               key={fileKeyById[clientId] ?? 0}
               label="Photos (optional)"
               accept="image/*"
               multiple
               uploadStatus={uploadStatus}
+              progress={uploadProgress}
               onChange={files => handleFilesSelected(clientId, files)}
             />
 
