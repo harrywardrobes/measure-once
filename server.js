@@ -4664,6 +4664,11 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
     if (existing[0].is_null_row) {
       return res.status(400).json({ error: 'The null-status sentinel row cannot be deleted.' });
     }
+    await pool.query(
+      `DELETE FROM card_action_handler_bindings
+        WHERE status_key = LOWER($1) AND status_key <> '' AND substatus_id IS NULL`,
+      [key]
+    );
     await pool.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
@@ -5543,6 +5548,23 @@ async function ensureCardActionHandlersTables() {
     CREATE UNIQUE INDEX IF NOT EXISTS cahb_substatus_uniq
       ON card_action_handler_bindings (substatus_id)
       WHERE substatus_id IS NOT NULL
+  `);
+  // Remove the cahb_status_key_fk constraint if it was ever added (it was
+  // introduced in an earlier version but is incompatible with the existing
+  // key-case contract: lead_status_config.key is uppercase while
+  // card_action_handler_bindings.status_key is lowercase).
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_type = 'FOREIGN KEY'
+          AND table_name = 'card_action_handler_bindings'
+          AND constraint_name = 'cahb_status_key_fk'
+      ) THEN
+        ALTER TABLE card_action_handler_bindings DROP CONSTRAINT cahb_status_key_fk;
+      END IF;
+    END $$
   `);
 }
 

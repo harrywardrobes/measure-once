@@ -125,10 +125,10 @@ async function purgeFixtures(pool) {
   // cascades to any binding pointing at it.
   await pool.query(
     `DELETE FROM card_action_handlers
-       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [HANDLER_NAME_DV, HANDLER_NAME_PC, HANDLER_NAME_LBL, HANDLER_NAME_SUB,
      HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B, HANDLER_NAME_ANAME,
-     HANDLER_NAME_NAMING, HANDLER_NAME_ILS]
+     HANDLER_NAME_NAMING, HANDLER_NAME_ILS, 'PrivTest orphan cleanup handler']
   );
   // Prefix sweep: a previously crashed or partly-validated probe run can
   // leave behind handlers whose names don't match the constants above
@@ -186,8 +186,9 @@ async function purgeFixtures(pool) {
   // delete above so the FK doesn't block this DELETE.
   try {
     await pool.query(
-      `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3, $4)`,
-      [LBL_KEY_CONFLICT_LS, SUB_STATUS_K, LBL_KEY_ANAME, LBL_KEY_FALLBACK_STATUS]
+      `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3, $4, $5, $6, $7)`,
+      [LBL_KEY_CONFLICT_LS, SUB_STATUS_K, LBL_KEY_ANAME, LBL_KEY_FALLBACK_STATUS,
+       'PRIVTEST_CAH_ORPHAN_LS', 'privtest_cah_orphan_ls', 'PRIVTEST_CAH_THROWAWAY']
     );
   } catch (_) {}
   // Recreate the unique label-binding index if it was temporarily dropped
@@ -2617,6 +2618,133 @@ async function main() {
     await browser.close().catch(() => {});
   }
 
+  // ── (K) Orphan-binding cleanup on lead-status delete ──────────────────────
+  //
+  // Verifies that deleting a lead status via
+  // DELETE /api/admin/lead-statuses/:key removes any card_action_handler_bindings
+  // rows that pointed at that status_key, leaving no orphaned rows.
+  //
+  // This is a pure-API probe — no browser required.
+  {
+    console.log('\n  [K] Orphan-binding cleanup on lead-status delete');
+
+    // lead_status_config.key is always stored uppercase (POST route forces .toUpperCase()).
+    // card_action_handler_bindings.status_key is always stored lowercase
+    // (_validateHandlerBinding forces .toLowerCase()).
+    // The DELETE route uses LOWER($1) to bridge this gap.
+    const LS_KEY_UPPER  = 'PRIVTEST_CAH_ORPHAN_LS'; // as stored in lead_status_config
+    const LS_KEY_LOWER  = 'privtest_cah_orphan_ls'; // as stored in bindings
+
+    // Seed the lead status using the POST admin route so it gets the canonical
+    // uppercase key (the route enforces .toUpperCase() itself).
+    const seedLsRes = await adminClient.post('/api/admin/lead-statuses', {
+      key: LS_KEY_UPPER, label: 'PrivTest orphan LS', stage: 'SALES',
+    });
+    // Use ON CONFLICT fallback in case a prior crashed run left the row.
+    if (seedLsRes.status !== 201 && seedLsRes.status !== 409) {
+      await pool.query(
+        `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+         VALUES ($1, 'PrivTest orphan LS', 9995, false, 'SALES')
+         ON CONFLICT (key) DO NOTHING`,
+        [LS_KEY_UPPER]
+      );
+    }
+
+    // Create a handler bound to the orphan status (binding API lowercases the key).
+    const createOrphanRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'PrivTest orphan cleanup handler',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [{ stage_key: 'sales', status_key: LS_KEY_LOWER }],
+    });
+    const orphanHandlerId = createOrphanRes.json?.id;
+    record(
+      '(K.setup) POST handler bound to orphan-test lead status',
+      'status=201 with numeric id',
+      `status=${createOrphanRes.status} id=${orphanHandlerId}`,
+      createOrphanRes.status === 201 && Number.isInteger(orphanHandlerId),
+    );
+
+    if (orphanHandlerId) {
+      // Confirm the binding row exists (stored as lowercase) before the delete.
+      const beforeRows = await pool.query(
+        `SELECT COUNT(*)::int AS cnt FROM card_action_handler_bindings
+          WHERE handler_id = $1 AND status_key = $2`,
+        [orphanHandlerId, LS_KEY_LOWER]
+      );
+      record(
+        '(K.1) Binding row (lowercase key) exists before lead-status delete',
+        '1 binding row',
+        `${beforeRows.rows[0].cnt} row(s)`,
+        beforeRows.rows[0].cnt === 1,
+      );
+
+      // Delete the lead status via the admin API (key is uppercase in the URL).
+      // The route uses LOWER($1) so the lowercase binding is matched correctly.
+      const delLsRes = await adminClient.delete(`/api/admin/lead-statuses/${LS_KEY_UPPER}`);
+      record(
+        '(K.2) DELETE /api/admin/lead-statuses/:key (uppercase) succeeds',
+        'status=200, ok=true',
+        `status=${delLsRes.status} ok=${delLsRes.json?.ok}`,
+        delLsRes.status === 200 && delLsRes.json?.ok === true,
+      );
+
+      // Confirm the binding row is gone — LOWER($1) matched the lowercase stored key.
+      const afterRows = await pool.query(
+        `SELECT COUNT(*)::int AS cnt FROM card_action_handler_bindings
+          WHERE handler_id = $1 AND status_key = $2`,
+        [orphanHandlerId, LS_KEY_LOWER]
+      );
+      record(
+        '(K.3) Binding row removed after lead-status delete (no orphan, case-insensitive match)',
+        '0 binding rows',
+        `${afterRows.rows[0].cnt} row(s)`,
+        afterRows.rows[0].cnt === 0,
+      );
+
+      // (K.4) Stage-default binding (status_key='') survives an unrelated lead-status delete.
+      // Seed a stage-default binding for the same handler temporarily.
+      try {
+        await pool.query(
+          `INSERT INTO card_action_handler_bindings (handler_id, stage_key, status_key)
+             VALUES ($1, 'sales', '')
+           ON CONFLICT DO NOTHING`,
+          [orphanHandlerId]
+        );
+        // Seed a second throwaway lead status and delete it.
+        const LS_KEY_THROWAWAY = 'PRIVTEST_CAH_THROWAWAY';
+        await pool.query(
+          `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+           VALUES ($1, 'PrivTest throwaway LS', 9994, false, 'SALES')
+           ON CONFLICT (key) DO NOTHING`,
+          [LS_KEY_THROWAWAY]
+        );
+        await adminClient.delete(`/api/admin/lead-statuses/${LS_KEY_THROWAWAY}`);
+        const defaultAfter = await pool.query(
+          `SELECT COUNT(*)::int AS cnt FROM card_action_handler_bindings
+            WHERE handler_id = $1 AND status_key = '' AND stage_key = 'sales'`,
+          [orphanHandlerId]
+        );
+        record(
+          '(K.4) Stage-default binding (status_key=\'\') survives unrelated lead-status delete',
+          '1 stage-default binding row',
+          `${defaultAfter.rows[0].cnt} row(s)`,
+          defaultAfter.rows[0].cnt === 1,
+        );
+      } catch (e) {
+        record('(K.4) Stage-default binding survival check', 'no error', e.message, false);
+      }
+
+      // Clean up the handler (and any remaining bindings via ON DELETE CASCADE).
+      await adminClient.delete(`/api/admin/card-action-handlers/${orphanHandlerId}`);
+    } else {
+      // Handler creation failed — clean up the lead status we seeded.
+      await pool.query(`DELETE FROM lead_status_config WHERE key = $1`, [LS_KEY_UPPER]);
+    }
+    // Also clean up the throwaway status in case it survived.
+    await pool.query(`DELETE FROM lead_status_config WHERE key = 'PRIVTEST_CAH_THROWAWAY'`).catch(() => {});
+  }
+
   // ── summary & report ──────────────────────────────────────────────────────
   const pass = findings.filter(f => f.ok).length;
   const fail = findings.filter(f => !f.ok).length;
@@ -2773,6 +2901,25 @@ async function writeReport(runId, findings) {
     '  that status.  Confirms the warning path in `ActionHandlersPage.tsx` fires',
     '  when `slot.hasLabel === false && handler !== null`.  The handler is',
     '  deleted as part of cleanup.',
+    '- **(K) Orphan-binding cleanup on lead-status delete** (task #1736):',
+    '  pure-API probes that verify the route-level DELETE cleanup added to',
+    '  `DELETE /api/admin/lead-statuses/:key`. `lead_status_config.key` is',
+    '  stored uppercase (POST route forces `.toUpperCase()`); bindings store',
+    '  `status_key` lowercase (`_validateHandlerBinding` forces `.toLowerCase()`).',
+    '  The route uses `LOWER($1)` to bridge the gap. A lead status',
+    '  (`PRIVTEST_CAH_ORPHAN_LS`) is seeded, a `summarise_phone_call` handler',
+    '  is bound to it with `status_key = "privtest_cah_orphan_ls"` (lowercase),',
+    '  and then the status is deleted via the admin API.',
+    '  - **K.setup** POST creates the handler (201 with numeric id).',
+    '  - **K.1** Binding row (lowercase key) exists before the delete.',
+    '  - **K.2** `DELETE /api/admin/lead-statuses/PRIVTEST_CAH_ORPHAN_LS`',
+    '    returns 200 `{ ok: true }` — the uppercase URL key is accepted.',
+    '  - **K.3** Binding row is gone — `LOWER($1)` matched the lowercase',
+    '    stored `status_key` despite the uppercase URL argument.',
+    '  - **K.4** A stage-default binding (`status_key=\'\'`) for the same',
+    '    handler survives an unrelated lead-status delete, confirming the',
+    '    `status_key <> \'\'` guard in the cleanup query prevents accidental',
+    '    removal of stage-wide default bindings.',
     '',
     '## Notes',
     '',
