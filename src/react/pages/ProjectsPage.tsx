@@ -358,8 +358,8 @@ function InvoiceBadge({
           fontSize: '0.68rem', fontWeight: 700,
           fontFamily: 'inherit',
           padding: '2px 7px', borderRadius: '999px',
-          background: '#fef3c7', color: '#92400e',
-          border: '1px solid #fde68a',
+          background: '#fef3c7', color: '#92400e', /* amber-100 / amber-800 — warning semantic, matches Tailwind */
+          border: '1px solid #fde68a', /* amber-200 — warning semantic border */
           whiteSpace: 'nowrap',
           cursor: 'pointer',
           lineHeight: 1.4,
@@ -1141,7 +1141,7 @@ export function ProjectsPage() {
         message={toast?.msg}
         slotProps={
           toast?.error
-            ? { content: { sx: { background: '#b91c1c' } } }
+            ? { content: { sx: { bgcolor: 'error.dark' } } }
             : undefined
         }
       />
