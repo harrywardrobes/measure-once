@@ -1,21 +1,16 @@
 'use strict';
 // test/window-ui-smoke/run.js
 //
-// Smoke test: shared chrome includes must be present on every dashboard page.
+// Smoke test: static chrome mount points must be present on every dashboard page.
 //
-// public/chrome.js attaches `window.getShortcut` and
-// `window.handleAccessRequestSubmit`, and synchronously injects the top-nav
-// header mount (`#app-header-mount`, populated by the React GlobalHeader
-// island in /react/main.js) plus — on non-admin pages — the bottom-nav
-// mount (`nav.bottom-nav#main-content`). If a new page is added in the
-// future and the maintainer forgets `<script src="/chrome.js">`, anything
-// that touches the chrome DOM will silently throw `ReferenceError` or render
-// without the shared chrome. This test visits each dashboard route with an
-// admin session and asserts that:
-//   - `typeof window.getShortcut === 'function'`
-//   - `typeof window.handleAccessRequestSubmit === 'function'`
-//   - `#app-header-mount` exists in the DOM
+// Mount-point divs (#app-header-mount, #app-bottom-nav-mount, etc.) are now
+// declared statically in each HTML shell rather than injected by chrome.js.
+// If a new page is added and the maintainer forgets the static divs, anything
+// that depends on those mounts will silently fail. This test visits each
+// dashboard route with an admin session and asserts that:
+//   - `#app-header-mount` exists in the DOM and has React content (GlobalHeader mounted)
 //   - `nav.bottom-nav#main-content` exists on every non-admin route
+//     (populated by the React BottomNav island in /react/main.js)
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:window-ui-smoke
@@ -44,7 +39,7 @@ require('dotenv').config();
 
 // Dashboard routes. /customers/:id is also a real page but the task spec only
 // lists the top-level routes; covering the listed 11 is sufficient to catch a
-// missing script tag on any of the shared chrome includes.
+// missing static mount on any of the shared chrome includes.
 const ROUTES = [
   '/',
   '/customers',
@@ -60,7 +55,6 @@ const ROUTES = [
 ];
 
 function parseCookieKV(jar) {
-  if (!jar) return null;
   const idx = jar.indexOf('=');
   if (idx < 0) return null;
   return { name: jar.slice(0, idx), value: jar.slice(idx + 1) };
@@ -86,7 +80,7 @@ function isAdminRoute(route) {
 }
 
 async function main() {
-  console.log('\n  shared chrome includes — smoke test\n');
+  console.log('\n  shared chrome mount points — smoke test\n');
 
   const findings = [];
   function record(name, expected, observed, ok, detail) {
@@ -148,7 +142,7 @@ async function main() {
       const page = await browser.newPage();
       // Swallow runtime errors from per-page bootstrap (HubSpot is stripped in
       // the test server so many fetches 503) — we only care about whether the
-      // shared chrome.js script tag executed.
+      // static mount divs are present and the React chrome globals are set.
       page.on('pageerror', () => {});
       page.on('console', () => {});
       try {
@@ -160,17 +154,19 @@ async function main() {
         const status = resp ? resp.status() : 0;
         if (!resp || !resp.ok()) {
           record(`${route} — page loads (HTTP 200)`, 200, status, false,
-            'Page did not return 200; chrome globals check skipped.');
+            'Page did not return 200; mount point check skipped.');
           continue;
         }
 
-        // Wait briefly for the synchronous chrome.js <script> to evaluate.
+        // Wait briefly for the React bundle to mount.
+        // Readiness: #app-header-mount has React content (GlobalHeader rendered),
+        // and nav.bottom-nav#main-content exists on non-admin pages (BottomNav rendered).
         const adminPage = isAdminRoute(route);
         const ready = await page.waitForFunction(
           (adminPage) => {
-            if (typeof window.getShortcut !== 'function') return false;
-            if (typeof window.handleAccessRequestSubmit !== 'function') return false;
-            if (!document.querySelector('#app-header-mount')) return false;
+            // GlobalHeader must have mounted at least one child element
+            const hdr = document.querySelector('#app-header-mount');
+            if (!hdr || !hdr.firstElementChild) return false;
             if (!adminPage && !document.querySelector('nav.bottom-nav#main-content')) return false;
             return true;
           },
@@ -180,39 +176,30 @@ async function main() {
 
         // Always re-evaluate to record per-symbol pass/fail for the report.
         const observed = await page.evaluate(() => {
+          const hdr = document.querySelector('#app-header-mount');
           return {
-            getShortcut: typeof window.getShortcut,
-            handleAccessRequestSubmit: typeof window.handleAccessRequestSubmit,
-            hasHeader: !!document.querySelector('#app-header-mount'),
+            headerMountExists: !!hdr,
+            headerReactMounted: !!(hdr && hdr.firstElementChild),
             hasBottomNav: !!document.querySelector('nav.bottom-nav#main-content'),
           };
         }).catch(e => ({ error: String(e) }));
 
-        const getShortcutOk = observed && observed.getShortcut === 'function';
+        const headerOk = observed && observed.headerMountExists;
         record(
-          `${route} — window.getShortcut defined`,
-          'function',
-          observed?.getShortcut || 'missing',
-          !!getShortcutOk,
-          getShortcutOk ? '' : 'Likely missing <script src="/chrome.js"> in the page HTML.',
-        );
-
-        const handlerOk = observed && observed.handleAccessRequestSubmit === 'function';
-        record(
-          `${route} — window.handleAccessRequestSubmit defined`,
-          'function',
-          observed?.handleAccessRequestSubmit || 'missing',
-          !!handlerOk,
-          handlerOk ? '' : 'Likely missing <script src="/chrome.js"> in the page HTML.',
-        );
-
-        const headerOk = observed && observed.hasHeader;
-        record(
-          `${route} — #app-header-mount mounted`,
+          `${route} — #app-header-mount present`,
           'present',
           headerOk ? 'present' : 'missing',
           !!headerOk,
-          headerOk ? '' : 'chrome.js did not inject the #app-header-mount placeholder — likely missing <script src="/chrome.js">.',
+          headerOk ? '' : '#app-header-mount static div is missing from the HTML shell.',
+        );
+
+        const reactOk = observed && observed.headerReactMounted;
+        record(
+          `${route} — GlobalHeader React island mounted`,
+          'mounted',
+          reactOk ? 'mounted' : 'not mounted',
+          !!reactOk,
+          reactOk ? '' : 'React bundle did not render GlobalHeader into #app-header-mount.',
         );
 
         if (!adminPage) {
@@ -222,7 +209,7 @@ async function main() {
             'present',
             navOk ? 'present' : 'missing',
             !!navOk,
-            navOk ? '' : 'chrome.js did not inject the bottom-nav — likely missing <script src="/chrome.js">.',
+            navOk ? '' : '#app-bottom-nav-mount static div is missing or React BottomNav did not mount.',
           );
         }
 
@@ -231,8 +218,8 @@ async function main() {
           // the specific failure(s); nothing else to do here.
         }
       } catch (e) {
-        record(`${route} — shared chrome includes present`,
-          'page loads and chrome globals are set',
+        record(`${route} — shared chrome mounts present`,
+          'page loads and static mounts exist',
           `error: ${e.message}`, false);
       } finally {
         await page.close().catch(() => {});
@@ -261,7 +248,7 @@ async function writeReport(findings) {
   fs.mkdirSync(dir, { recursive: true });
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const lines = [
-    '# Shared chrome includes — Smoke Test',
+    '# Shared chrome mount points — Smoke Test',
     '',
     `- Date: ${new Date().toISOString()}`,
     `- Command: \`npm run test:window-ui-smoke\``,
@@ -283,12 +270,10 @@ async function writeReport(findings) {
     '',
     'Visits each dashboard route below with an admin session and asserts:',
     '',
-    '- `window.getShortcut` is a function (from `public/chrome.js`)',
-    '- `window.handleAccessRequestSubmit` is a function (from `public/chrome.js`)',
-    '- `#app-header-mount` is mounted (injected by `public/chrome.js`,',
-    '  populated by the React GlobalHeader island in `/react/main.js`)',
+    '- `#app-header-mount` is present in the DOM (static div in HTML shell)',
+    '- GlobalHeader React island has rendered content into `#app-header-mount`',
     '- `nav.bottom-nav#main-content` is mounted on every non-admin route',
-    '  (also injected by `public/chrome.js`)',
+    '  (React BottomNav island renders into `#app-bottom-nav-mount`)',
     '',
     'Routes covered:',
     '',
@@ -296,10 +281,10 @@ async function writeReport(findings) {
     '',
     '## Relevant files',
     '',
-    '- `public/chrome.js` — top-nav header, bottom-nav, `window.getShortcut`,',
-    '  `window.handleAccessRequestSubmit`',
-    '- Each dashboard HTML page in `public/` includes it via an explicit',
-    '  `<script>` tag; this smoke catches a missing tag on any of them.',
+    '- Each dashboard HTML page in `public/` declares static mount divs',
+    '  (`#app-header-mount`, `#app-bottom-nav-mount`, etc.) directly in the HTML',
+    '  shell. This smoke catches a missing div on any page.',
+    '- `src/react/main.tsx` — mounts React islands into those divs',
   ];
   const outPath = path.join(dir, 'window-ui-smoke.md');
   fs.writeFileSync(outPath, lines.join('\n'));

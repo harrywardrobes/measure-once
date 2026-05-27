@@ -44,11 +44,26 @@ const mainTsxPath = join(ROOT, 'src', 'react', 'main.tsx');
 const mainTsxSrc = readFileSync(mainTsxPath, 'utf8');
 
 // Match every  { id: 'some-id', …  entry in the MOUNTS array.
+// Lines annotated with  // chrome-global  are intentionally present in every
+// HTML shell (they replaced the synchronous chrome.js injection); they are
+// excluded from the duplicate-detection check (Pass 1) but still counted
+// toward Pass 2 so pages that load main.js are confirmed to have at least
+// one mount element.
 const mountIdPattern = /\{\s*id:\s*['"]([^'"]+)['"]/g;
 const mountIds = new Set();
+const chromeGlobalIds = new Set();
 let m;
 while ((m = mountIdPattern.exec(mainTsxSrc)) !== null) {
-  mountIds.add(m[1]);
+  const id = m[1];
+  mountIds.add(id);
+  // Check if this line ends with a // chrome-global comment (allowing
+  // trailing whitespace between the end of the object literal and the comment).
+  const lineStart = mainTsxSrc.lastIndexOf('\n', m.index) + 1;
+  const lineEnd   = mainTsxSrc.indexOf('\n', m.index);
+  const fullLine  = mainTsxSrc.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+  if (/\/\/\s*chrome-global\b/.test(fullLine)) {
+    chromeGlobalIds.add(id);
+  }
 }
 
 if (mountIds.size === 0) {
@@ -103,7 +118,7 @@ console.log(
 /** @type {Array<{id: string, files: string[]}>} */
 const conflicts = [];
 for (const [id, files] of idToFiles) {
-  if (files.length > 1) {
+  if (files.length > 1 && !chromeGlobalIds.has(id)) {
     conflicts.push({ id, files });
   }
 }

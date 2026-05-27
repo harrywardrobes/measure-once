@@ -1,7 +1,7 @@
 'use strict';
 // test/keyboard-shortcuts/run.js
 //
-// Automated smoke test for window.getShortcut() in public/chrome.js.
+// Automated smoke test for getShortcut() in src/react/lib/getShortcut.ts.
 //
 // Exercises four scenarios in a headless Chromium context:
 //   (1) userAgentData path  — platform = "macOS"   → ⌘K
@@ -10,8 +10,8 @@
 //   (4) legacy fallback     — platform = "Win32"    → Ctrl K (userAgentData absent)
 //
 // No server or database required — the function source is read directly from
-// public/chrome.js and evaluated inside a data-URL page so the test exercises
-// the real production code rather than a copy.
+// src/react/lib/getShortcut.ts and evaluated inside a data-URL page so the
+// test exercises the real production code rather than a copy.
 //
 // Usage:
 //   npm run test:keyboard-shortcuts
@@ -23,25 +23,44 @@ let puppeteer = null;
 try { puppeteer = require('puppeteer'); } catch {}
 
 // ── load the real function source ──────────────────────────────────────────
-// Extract only the window.getShortcut definition from chrome.js so we can
-// inject it into a sandboxed page without running the rest of the file (which
-// would fail in a data-URL context without the full app DOM).
-const chromeSrc = fs.readFileSync(
-  path.resolve(__dirname, '..', '..', 'public', 'chrome.js'),
+// Read the TypeScript source and do a targeted transform to extract valid JS
+// for evaluation in a headless browser.  Transforms applied:
+//   1. Strip JSDoc block comments.
+//   2. Strip single-line comments (// …).
+//   3. Convert `export function getShortcut(key: string): string {`
+//        to `window.getShortcut = function(key) {`.
+//   4. Strip TypeScript parenthesised casts `(expr as SomeType)` → `expr`.
+//   5. Strip remaining TS type annotations (`: TYPE` on const declarations).
+//   6. Close with `};` instead of `}`.
+const tsSrc = fs.readFileSync(
+  path.resolve(__dirname, '..', '..', 'src', 'react', 'lib', 'getShortcut.ts'),
   'utf8',
 );
 
-// Pull out lines 1–11 (the JSDoc + function definition).  We match greedily
-// up to the closing `};` so that even if the implementation grows, we get
-// the whole block.
-const fnMatch = chromeSrc.match(
-  /(\/\*\*[\s\S]*?window\.getShortcut\s*=\s*function[\s\S]*?\};)/,
-);
-if (!fnMatch) {
-  console.error('Could not locate window.getShortcut in public/chrome.js');
+const GET_SHORTCUT_SRC = tsSrc
+  // 1. Strip JSDoc block comments
+  .replace(/\/\*\*[\s\S]*?\*\/\s*/g, '')
+  // 2. Strip single-line comments
+  .replace(/\/\/[^\n]*/g, '')
+  // 3. Convert function signature
+  .replace(
+    /export\s+function\s+getShortcut\s*\(\s*key\s*:\s*string\s*\)\s*:\s*string\s*\{/,
+    'window.getShortcut = function(key) {',
+  )
+  // 4. Strip TS parenthesised casts: (expr as SomeType) → expr
+  //    Handles cases like (navigator as Navigator & { ... }).property
+  .replace(/\(([^()]+)\s+as\s+[^)]+\)/g, '$1')
+  // 5. Strip const/let/var type annotations: `const x: TYPE =` → `const x =`
+  //    Matches a colon followed by a simple or compound type up to `=`
+  .replace(/:\s*string(?=\s*[=\n])/g, '')
+  // 6. Collapse blank lines and close with };
+  .replace(/^\s*\n/gm, '')
+  .replace(/\}\s*$/, '};');
+
+if (!GET_SHORTCUT_SRC.includes('window.getShortcut')) {
+  console.error('Could not locate getShortcut in src/react/lib/getShortcut.ts');
   process.exit(2);
 }
-const GET_SHORTCUT_SRC = fnMatch[1];
 
 // ── test cases ─────────────────────────────────────────────────────────────
 const CASES = [
@@ -247,7 +266,7 @@ async function writeReport(findings) {
     '',
     '## Relevant file',
     '',
-    '- `public/chrome.js` — `window.getShortcut` (lines 8–11)',
+    '- `src/react/lib/getShortcut.ts` — `getShortcut` function',
   ];
   const outPath = path.join(dir, 'keyboard-shortcuts.md');
   fs.writeFileSync(outPath, lines.join('\n'));

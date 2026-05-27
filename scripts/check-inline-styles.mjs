@@ -78,6 +78,12 @@ for (const htmlFile of htmlFiles) {
 
     if (!/style\s*=\s*["']/i.test(raw)) continue;
 
+    // A trailing <!-- inline-style-ok: reason --> comment on the same line
+    // suppresses this violation — used for sr-only patterns, banner defaults,
+    // and other cases where the style must live on the element rather than in
+    // a stylesheet.
+    if (/<!--\s*inline-style-ok\s*:/i.test(raw)) continue;
+
     violations.push({ file: relPath, line: lineNum, text: raw.trimStart() });
   }
 }

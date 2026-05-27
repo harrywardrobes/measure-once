@@ -21,14 +21,13 @@ import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrivilegeSync } from '../hooks/usePrivilegeSync';
 import { useServiceStatuses, type ConnectionService, type ServiceStatus } from '../context/ConnectionToastContext';
 import { BRAND_COLORS } from '../theme';
+import { getShortcut } from '../lib/getShortcut';
 
 export type { CurrentUser as HeaderUser } from '../hooks/useCurrentUser';
 
 declare global {
   interface Window {
     openCommandPalette?: () => void;
-    getShortcut?: (key: string) => string;
-    PAGE_TITLES?: Record<string, string>;
   }
 }
 
@@ -196,7 +195,7 @@ export function GlobalHeader() {
   }, [isAdmin]);
 
   const showBack = path !== '/';
-  const kbdHint = window.getShortcut ? window.getShortcut('K') : 'Ctrl K';
+  const kbdHint = getShortcut('K');
   const customersActive = path === '/customers' || path.startsWith('/customers/');
   const adminActive = path === '/admin' || path.startsWith('/admin/');
   const storybookActive = path.startsWith('/storybook');

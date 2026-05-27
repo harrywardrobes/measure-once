@@ -1,20 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-
-declare global {
-  interface Window {
-    PAGE_TITLES?: Record<string, string>;
-  }
-}
+import { PAGE_TITLES } from '../lib/pageTitles';
 
 /**
  * Per-page heading panel rendered into the `#page-heading-mount`
- * placeholder injected by `public/chrome.js` immediately below the
- * AppBar.
+ * placeholder declared statically in each HTML shell.
  *
- * Behaviour mirrors the previous vanilla template:
- *   - Title resolved from `window.PAGE_TITLES[location.pathname]`.
+ * Behaviour:
+ *   - Title resolved from `PAGE_TITLES[location.pathname]`.
  *   - Suppressed on `/admin*` and on `/customers/:id` (those pages
  *     render their own heading / use a fixed-layout shell).
  *   - Action slot exposed as `#page-heading-action` for legacy consumers
@@ -42,7 +36,7 @@ export function PageHeadingPanel() {
     /^\/customers\/[^/]+/.test(path) ||
     path === '/sales' ||
     path === '/survey';
-  const title = (window.PAGE_TITLES || {})[path] || '';
+  const title = PAGE_TITLES[path] || '';
 
   if (!title || suppressed) return null;
 

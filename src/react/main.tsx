@@ -156,12 +156,15 @@ const MOUNTS: Array<{
   { id: 'login-root',           render: () => <LoginPage /> },
   { id: 'set-password-root',    render: () => <SetPasswordPage /> },
   { id: 'onboarding-root',      render: () => <OnboardingPage /> },
-  { id: 'access-gate-mount',     render: () => <AccessRequestGate />, fallback: <></> },
-  { id: 'app-header-mount',      render: () => <GlobalHeader /> },
-  { id: 'page-heading-mount',    render: () => <PageHeadingPanel /> },
-  { id: 'app-bottom-nav-mount',  render: () => <BottomNav /> },
-  { id: 'app-bottom-bar-mount',  render: () => <BottomActionBar /> },
-  { id: 'command-palette-mount', render: () => <CommandPalette />, fallback: <></> },
+  // chrome-global: these six mounts are declared statically in every HTML shell
+  // so they appear on all pages simultaneously.  The duplicate-mount check in
+  // scripts/check-mount-id-conflicts.mjs skips ids annotated with this comment.
+  { id: 'access-gate-mount',     render: () => <AccessRequestGate />, fallback: <></> }, // chrome-global
+  { id: 'app-header-mount',      render: () => <GlobalHeader /> },                       // chrome-global
+  { id: 'page-heading-mount',    render: () => <PageHeadingPanel /> },                   // chrome-global
+  { id: 'app-bottom-nav-mount',  render: () => <BottomNav /> },                          // chrome-global
+  { id: 'app-bottom-bar-mount',  render: () => <BottomActionBar /> },                    // chrome-global
+  { id: 'command-palette-mount', render: () => <CommandPalette />, fallback: <></> },    // chrome-global
   { id: 'trades-view',          render: () => <TradesPage /> },
   { id: 'home-view',            render: () => <HomePage />,     fallback: <HomePageSkeleton /> },
   { id: 'tab-calendar',         render: () => <CalendarPage />, fallback: <CalendarPageSkeleton /> },
