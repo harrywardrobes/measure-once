@@ -1,9 +1,9 @@
 // Shared chrome: skip link, toast-live, access gate, header, bottom nav, invoice panel.
 // Runs synchronously so chrome is in the DOM before bootstrap() looks for it.
 
-// dismissViewerBanner lives here (not legacy-shim.js) because the viewer banner
-// HTML is built in this file and onclick="dismissViewerBanner()" must resolve on
-// every page that loads chrome.js, regardless of whether legacy-shim.js is loaded.
+// dismissViewerBanner is defined here because the viewer banner HTML is built
+// in this file and onclick="dismissViewerBanner()" must resolve on every page
+// that loads chrome.js.
 window.dismissViewerBanner = function dismissViewerBanner() {
   const banner = document.getElementById('viewer-banner');
   if (banner) banner.style.display = 'none';
@@ -39,7 +39,8 @@ window.getShortcut = function (key) {
 
   // The access-request gate is a React island (AccessRequestGate.tsx)
   // mounted into #access-gate-mount by /react/main.js. It is triggered via
-  // window.showAccessGate() which dispatches a CustomEvent the component listens for.
+  // window.showAccessGate() (defined in AccessRequestGate.tsx) which dispatches
+  // a CustomEvent the component listens for.
   const accessGate = `<div id="access-gate-mount"></div>`;
 
   // The top app bar is a React island (src/react/components/GlobalHeader.tsx)

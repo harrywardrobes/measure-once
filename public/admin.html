@@ -30,7 +30,6 @@
 
 <script src="/chrome.js"></script>
 
-<script src="/legacy-shim.js"></script>
 <!--
   Search settings tab and other admin tabs are React islands built by
   `npm run build:react` into /react/main.js. The script self-mounts into
@@ -127,11 +126,12 @@
       window.location.href = '/';
       return;
     }
-    // Populate shared chrome (auth avatar).
-    if (typeof state !== 'undefined') {
-      state.user = me;
-      renderAuthStatus();
-    }
+    // Publish the authenticated user so the React GlobalHeader island
+    // (src/react/components/GlobalHeader.tsx) can update its avatar.
+    window.__moHeaderUser = me;
+    try {
+      window.dispatchEvent(new CustomEvent('mo:user', { detail: me }));
+    } catch (_) {}
 
     // Team / Permissions / Requests / Audit log / Settings / Card actions /
     // Action handlers / Design visit / Dev environment are all React + MUI

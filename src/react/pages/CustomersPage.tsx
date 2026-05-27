@@ -283,18 +283,6 @@ async function loadLeadSubstatuses(): Promise<void> {
  * test asserts directly on this element's options.
  */
 function populateLeadStatusFilter(): void {
-  // Lazy-seed: if the legacy-shim stub in legacy-shim.js fetched lead-status
-  // data before this chunk's own loadLeadStatuses ran (test bootstrap race),
-  // absorb that data so we render options immediately.
-  if (!store.loaded) {
-    const shim = (window as unknown as { __shimLeadStatuses?: typeof store & { loaded: boolean } }).__shimLeadStatuses;
-    if (shim?.loaded && shim.statuses.length > 0) {
-      store.statuses  = shim.statuses;
-      store.nullLabel = shim.nullLabel;
-      store.loaded    = true;
-    }
-  }
-
   const sel = document.getElementById('lead-status-filter') as HTMLSelectElement | null;
   if (!sel) {
     notify();
@@ -334,21 +322,8 @@ declare global {
     loadLeadStatuses?: () => Promise<void>;
     populateLeadStatusFilter?: () => void;
     loadLeadStatusCounts?: () => Promise<void>;
-    __shimLeadStatuses?: { statuses: LeadStatus[]; nullLabel: string; loaded: boolean };
   }
 }
-
-// If the legacy-shim.js stub ran before this chunk loaded (test path), seed
-// store from the shim data it fetched so populateLeadStatusFilter works
-// immediately without waiting for a second fetch.
-(function seedFromShim() {
-  const shim = window.__shimLeadStatuses;
-  if (shim && shim.loaded && shim.statuses.length > 0) {
-    store.statuses = shim.statuses;
-    store.nullLabel = shim.nullLabel;
-    store.loaded = true;
-  }
-})();
 
 window.loadLeadStatuses = loadLeadStatuses;
 window.populateLeadStatusFilter = populateLeadStatusFilter;
