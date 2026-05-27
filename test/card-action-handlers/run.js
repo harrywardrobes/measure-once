@@ -44,6 +44,14 @@
 //       action_label value; L.2 checks .adm-handlers-slot-sub text matches
 //       the "Sub-status · <label>" pattern.  Guards ActionHandlersPage.tsx
 //       lines 232-239 against regressions that hide or skip sub-status rows.
+//   (M) Blank-action_label sub-status produces no slot row: a slot-level
+//       negative guard complementing probe (I).  Uses the same
+//       LBL_KEY_FALLBACK_STATUS fixture (no stage-action label, one sub-status
+//       with empty action_label, no bound handler).  Asserts that no
+//       .adm-handlers-slot-label element appears for that sub-status inside
+//       #card-action-handlers-wrap — either the group is absent entirely or,
+//       if present, it contains zero slot-label rows.  Guards the
+//       `if (!action) continue` guard in ActionHandlersPage.tsx line 243.
 //
 // API pre-checks run before any browser tab opens so failures in the API
 // surface clearly.
@@ -2566,6 +2574,37 @@ async function main() {
       noLabelNoHandlerGroupAbsent === 'absent',
     );
 
+    // ── (M) Blank-action_label sub-status produces no slot row ────────────────
+    //
+    // Slot-level negative guard complementing probe (I).  The same
+    // LBL_KEY_FALLBACK_STATUS fixture is used (no stage-action label, one
+    // sub-status with empty action_label, no bound handler).  Where probe (I)
+    // checks that the group header is absent, this probe checks directly at
+    // the slot DOM level: no .adm-handlers-slot-label element should exist for
+    // that sub-status inside #card-action-handlers-wrap.
+    // Guards the `if (!action) continue` guard in ActionHandlersPage.tsx line 243.
+    console.log('\n  [M] Blank-action_label sub-status produces no slot row');
+
+    const blankSubstatusSlotAbsent = await fallbackTab.evaluate((statusLabel) => {
+      const wrap = document.getElementById('card-action-handlers-wrap');
+      if (!wrap) return 'wrap-missing';
+      const groups = wrap.querySelectorAll('.adm-handlers-group');
+      for (const grp of groups) {
+        const head = grp.querySelector('.adm-handlers-group-head');
+        if (head && head.textContent.includes(statusLabel)) {
+          const slots = grp.querySelectorAll('.adm-handlers-slot-label');
+          return slots.length > 0 ? `found:${slots.length}` : 'no-slots';
+        }
+      }
+      return 'group-absent';
+    }, FALLBACK_STATUS_LABEL);
+    record(
+      '(M) Blank-action_label sub-status produces no .adm-handlers-slot-label row',
+      '"group-absent" or "no-slots" — no slot-label row must exist for a blank-label sub-status',
+      `result=${blankSubstatusSlotAbsent}`,
+      blankSubstatusSlotAbsent === 'group-absent' || blankSubstatusSlotAbsent === 'no-slots',
+    );
+
     // ── (J) Bound-but-unlabelled slot shows warning chip ─────────────────────
     //
     // When a handler is bound to a slot that has no stage-action label the row
@@ -3058,6 +3097,18 @@ async function writeReport(runId, findings) {
     '    sub-status label, confirming the "Sub-status · <label>" rowLabel pattern.',
     '  Guards `ActionHandlersPage.tsx` lines 232-239 against a regression that',
     '  hides or skips sub-status slot rows.',
+    '- **(M) Blank-action_label sub-status produces no slot row** (task #1742):',
+    '  slot-level negative guard complementing probe (I).  Uses the same',
+    '  `LBL_KEY_FALLBACK_STATUS` fixture (no stage-action label, one',
+    '  `lead_substatuses` row with `action_label = \'\'`, no bound handler).',
+    '  The probe runs on the same `fallbackTab` immediately after the probe (I)',
+    '  group-absent check, querying `#card-action-handlers-wrap` directly for',
+    '  any `.adm-handlers-slot-label` elements inside the group for that status.',
+    '  Passes when the result is `"group-absent"` (the group does not appear at',
+    '  all) or `"no-slots"` (the group exists but contains zero slot-label rows).',
+    '  Guards the `if (!action) continue` guard in `ActionHandlersPage.tsx`',
+    '  line 243 against a regression that would accidentally render a slot row',
+    '  for a sub-status whose `action_label` is blank.',
     '',
     '## Notes',
     '',
