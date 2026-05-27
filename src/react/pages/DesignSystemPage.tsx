@@ -573,6 +573,28 @@ function DialogDemo() {
   );
 }
 
+function AccessRequestGateDemo() {
+  const views: Array<{ label: string; view: string }> = [
+    { label: 'Form (default)', view: 'form' },
+    { label: 'Confirmed', view: 'confirmed' },
+    { label: 'Email conflict', view: 'email_conflict' },
+    { label: 'Pending', view: 'pending' },
+    { label: 'Already approved', view: 'already_approved' },
+  ];
+  const dispatch = (view: string) => {
+    window.dispatchEvent(new CustomEvent('mo:show-access-gate', { detail: { view } }));
+  };
+  return (
+    <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+      {views.map(({ label, view }) => (
+        <Button key={view} variant="outlined" size="small" onClick={() => dispatch(view)}>
+          {label}
+        </Button>
+      ))}
+    </Stack>
+  );
+}
+
 function SnackbarDemo() {
   const [open, setOpen] = useState(false);
   return (
@@ -1376,6 +1398,23 @@ export function DesignSystemPage() {
     <Button color="error" variant="contained">Delete</Button>
   </DialogActions>
 </Dialog>`}
+          />
+          <ComponentShowcase
+            name="AccessRequestGate"
+            description="Full-screen dialog that collects an access request or displays a status view (confirmed, email conflict, pending, already approved). Triggered by dispatching a `mo:show-access-gate` CustomEvent. The gate is mounted globally as a React island — use the buttons below to preview each view state."
+            demo={<AccessRequestGateDemo />}
+            code={`// Open the form (default)
+window.dispatchEvent(new CustomEvent('mo:show-access-gate', { detail: {} }));
+
+// Open a specific view state
+window.dispatchEvent(new CustomEvent('mo:show-access-gate', {
+  detail: { view: 'confirmed' },          // 'form' | 'confirmed' | 'email_conflict' | 'pending' | 'already_approved'
+}));
+
+// Resolve from URL params (used on the login/request-access page)
+window.dispatchEvent(new CustomEvent('mo:show-access-gate', {
+  detail: { urlParams: new URLSearchParams(location.search) },
+}));`}
           />
           <ComponentShowcase
             name="Snackbar"
