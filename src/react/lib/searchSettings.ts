@@ -20,7 +20,3 @@ export function loadSearchSettings(): Promise<SearchSettings> {
     });
   return _settingsFetch;
 }
-
-export function getCachedSearchSettings(): SearchSettings | null {
-  return _cachedSettings;
-}
