@@ -23,6 +23,9 @@
 //       lists the conflicting slot; D.banner-2: its Fix button opens the
 //       resolver modal for the right slot; D.banner-3: disappears once the
 //       duplicate is removed.
+//       D.modal-1: the resolver is a MuiDialog-root element whose visible
+//       DialogTitle reads "Fix conflicting handlers" (guards the React Dialog
+//       migration from task #1673).
 //   (E) action_name field: a handler seeded with config.action_name =
 //       'send_quote' shows the badge in the admin table (E.1), causes
 //       cardActionHandlerAttrs() to emit data-card-action-name="send_quote"
@@ -1520,6 +1523,37 @@ async function main() {
       const btn   = block && block.querySelector('.ca-fix-conflict-btn');
       if (btn) btn.click();
     }, LBL_KEY_CONFLICT_LS);
+
+    // (D.modal-1) The conflict resolver must be a MUI React Dialog
+    // (.MuiDialog-root) whose visible DialogTitle reads exactly
+    // "Fix conflicting handlers".  This guards the migration from the
+    // old DOM-appended modal to a React Dialog (task #1673): if anyone
+    // accidentally reverts to a plain DOM modal, or changes the title
+    // text, this probe will fail.
+    const muiDialogState = await pollPage(
+      conflictAdminTab,
+      () => {
+        const root = document.querySelector('.MuiDialog-root');
+        if (!root) return null;
+        // DialogTitle renders as an element with role="heading" or an <h2>
+        // inside the dialog; either way its text must include the expected string.
+        const titleEl = root.querySelector('.MuiDialogTitle-root');
+        const titleText = titleEl ? (titleEl.textContent || '').trim() : '';
+        return {
+          hasMuiRoot: true,
+          titleText,
+          titleOk: titleText === 'Fix conflicting handlers',
+        };
+      },
+      null,
+      5000,
+    );
+    record(
+      '(D.modal-1) conflict resolver is a MuiDialog-root with title "Fix conflicting handlers"',
+      '.MuiDialog-root present; .MuiDialogTitle-root text = "Fix conflicting handlers"',
+      `state=${JSON.stringify(muiDialogState)}`,
+      !!muiDialogState && muiDialogState.hasMuiRoot && muiDialogState.titleOk,
+    );
 
     // Assert the conflict-resolver modal opens with 2 handler rows.
     const conflictModalRows = await pollPage(
