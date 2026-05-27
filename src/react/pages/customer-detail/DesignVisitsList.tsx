@@ -3,6 +3,15 @@ import { DesignVisit, DesignVisitRoom, DESIGN_VISIT_STATUS_LABELS, fmtDesignVisi
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { DesignVisitWizard, type DesignVisitWizardHandler, type DesignVisitWizardCtx, type ExistingVisit } from '../../components/DesignVisitWizard';
 
+const sxHeader: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 };
+const sxHeaderLabel: React.CSSProperties = { fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' };
+const sxItem: React.CSSProperties = { background: 'var(--paper)', border: '1px solid var(--stone)', borderRadius: 'var(--radius-lg)', padding: '11px 14px', boxShadow: 'var(--shadow-sm)' };
+const sxMeta: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 };
+const sxMetaSep: React.CSSProperties = { fontSize: '0.65rem', color: 'var(--ink-4)' };
+const sxDate: React.CSSProperties = { fontSize: '0.68rem', color: 'var(--ink-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' };
+const sxText: React.CSSProperties = { fontSize: '0.875rem', color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' };
+const sxSecondaryBtn: React.CSSProperties = { background: 'none', color: 'var(--ink-3)', fontSize: '0.75rem', border: '1px solid var(--stone)', borderRadius: 'var(--radius-md)', cursor: 'pointer', padding: '4px 10px' };
+
 interface Props {
   contactId: string;
   visits: DesignVisit[];
@@ -105,8 +114,8 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
       />
     )}
     <div id="design-visits-section" className="mb-5">
-      <div className="notes-header">
-        <span className="notes-header-label">Design visits</span>
+      <div style={sxHeader}>
+        <span style={sxHeaderLabel}>Design visits</span>
       </div>
       {actionError && (
         <p style={{ fontSize: '0.85rem', color: '#b91c1c', padding: '4px 0' }}>{actionError}</p>
@@ -133,49 +142,48 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
           return (
             <div
               key={v.id}
-              className="comment-item"
               data-dv-id={v.id}
-              style={{ marginBottom: 6, flexDirection: 'column', alignItems: 'stretch', gap: 6 }}
+              style={{ ...sxItem, marginBottom: 6, flexDirection: 'column', alignItems: 'stretch', gap: 6 }}
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="comment-text" style={{ fontWeight: 500 }}>{when}</div>
-                  <div className="comment-meta" style={{ marginTop: 2 }}>
-                    <span style={{
+                  <div data-testid="dv-when" style={{ ...sxText, fontWeight: 500 }}>{when}</div>
+                  <div style={{ ...sxMeta, marginTop: 2 }}>
+                    <span data-testid="dv-status-pill" style={{
                       fontSize: '0.7rem', background: st.bg, color: st.fg,
                       borderRadius: 4, padding: '1px 6px', fontWeight: 600,
                     }}>
                       {st.label}
                     </span>
-                    <span className="comment-meta-sep">·</span>
-                    <span className="comment-date">Estimate: £{totalGbp}</span>
+                    <span style={sxMetaSep}>·</span>
+                    <span data-testid="dv-date" style={sxDate}>Estimate: £{totalGbp}</span>
                     {v.qb_estimate_doc_num && (
                       <>
-                        <span className="comment-meta-sep">·</span>
-                        <span className="comment-date">QB #{v.qb_estimate_doc_num}</span>
+                        <span style={sxMetaSep}>·</span>
+                        <span data-testid="dv-date" style={sxDate}>QB #{v.qb_estimate_doc_num}</span>
                       </>
                     )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <button className="btn-cancel-note" style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                  <button style={sxSecondaryBtn}
                     onClick={() => toggleExpanded(v.id)}>
                     {isExp ? 'Hide' : 'Review'}
                   </button>
                   {canEditV && (
-                    <button className="btn-cancel-note" style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                    <button style={sxSecondaryBtn}
                       onClick={() => handleEdit(v.id)}>
                       Edit
                     </button>
                   )}
                   {isAdmin && canRevise && (
-                    <button className="btn-cancel-note" style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                    <button style={sxSecondaryBtn}
                       onClick={() => handleRevision(v.id)}>
                       Request revision
                     </button>
                   )}
                   {isAdmin && (
-                    <button className="btn-cancel-note" style={{ padding: '4px 10px', fontSize: '0.75rem', color: '#b91c1c' }}
+                    <button style={{ ...sxSecondaryBtn, color: '#b91c1c' }}
                       onClick={() => handleDelete(v.id)}>
                       Delete
                     </button>

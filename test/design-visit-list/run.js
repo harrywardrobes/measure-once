@@ -189,7 +189,7 @@ async function openCustomerDetail(browser, jar, contactId) {
     const list = document.getElementById('design-visits-list');
     if (!list) return null;
     if (/Loading…/.test(list.textContent)) return null;
-    if (list.querySelectorAll('.comment-item').length === 0) return null;
+    if (list.querySelectorAll('[data-dv-id]').length === 0) return null;
     return 'ok';
   }, null, 8000);
   page.__logs = pageLogs;
@@ -203,17 +203,17 @@ async function snapshotList(page) {
     if (!list) return { present: false };
     const empty = /No design visits yet/.test(list.textContent);
     const error = /Could not load design visits/.test(list.textContent);
-    const items = Array.from(list.querySelectorAll('.comment-item')).map(el => {
+    const items = Array.from(list.querySelectorAll('[data-dv-id]')).map(el => {
       const buttons = Array.from(el.querySelectorAll('button')).map(b => ({
         text:    (b.textContent || '').trim(),
         onclick: b.getAttribute('onclick') || '',
       }));
       return {
-        when:    (el.querySelector('.comment-text')?.textContent || '').trim(),
-        // First inline span in .comment-meta is the status pill.
-        pill:    (el.querySelector('.comment-meta span')?.textContent || '').trim(),
-        // Every span with class .comment-date — we want the "Estimate: £..." one.
-        meta:    Array.from(el.querySelectorAll('.comment-date'))
+        when:    (el.querySelector('[data-testid="dv-when"]')?.textContent || '').trim(),
+        // Status pill carries data-testid="dv-status-pill".
+        pill:    (el.querySelector('[data-testid="dv-status-pill"]')?.textContent || '').trim(),
+        // Every element with data-testid="dv-date" — we want the "Estimate: £..." one.
+        meta:    Array.from(el.querySelectorAll('[data-testid="dv-date"]'))
                    .map(s => (s.textContent || '').trim()),
         buttons,
       };
@@ -526,7 +526,7 @@ async function main() {
         const deletedOk = await pollPage(adminPage, (id) => {
           const list = document.getElementById('design-visits-list');
           if (!list) return null;
-          const items = list.querySelectorAll('.comment-item');
+          const items = list.querySelectorAll('[data-dv-id]');
           if (items.length !== 1) return null;
           // Confirm the deleted item's [data-dv-id] row is gone.
           if (list.querySelector(`[data-dv-id="${id}"]`)) return null;
@@ -554,13 +554,13 @@ async function main() {
         const revisionOk = await pollPage(adminPage, (id) => {
           const list = document.getElementById('design-visits-list');
           if (!list) return null;
-          const items = Array.from(list.querySelectorAll('.comment-item'));
+          const items = Array.from(list.querySelectorAll('[data-dv-id]'));
           if (items.length !== 1) return null;
           // After revision_requested, canRevise becomes false → no
           // Request-revision button, but Delete remains.
           const btnTexts = Array.from(items[0].querySelectorAll('button'))
             .map(b => (b.textContent || '').trim());
-          const pill = (items[0].querySelector('.comment-meta span')?.textContent || '').trim();
+          const pill = (items[0].querySelector('[data-testid="dv-status-pill"]')?.textContent || '').trim();
           if (pill !== 'Revision requested') return null;
           if (btnTexts.includes('Request revision')) return null;
           return 'ok';

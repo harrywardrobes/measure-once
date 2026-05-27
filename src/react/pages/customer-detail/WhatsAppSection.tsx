@@ -2,6 +2,15 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { WhatsAppMessage } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 
+const sxHeader: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 };
+const sxHeaderLabel: React.CSSProperties = { fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' };
+const sxItem: React.CSSProperties = { background: 'var(--paper)', border: '1px solid var(--stone)', borderRadius: 'var(--radius-lg)', padding: '11px 14px', boxShadow: 'var(--shadow-sm)' };
+const sxMeta: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 };
+const sxMetaSep: React.CSSProperties = { fontSize: '0.65rem', color: 'var(--ink-4)' };
+const sxDate: React.CSSProperties = { fontSize: '0.68rem', color: 'var(--ink-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' };
+const sxText: React.CSSProperties = { fontSize: '0.875rem', color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' };
+const sxCancelBtn: React.CSSProperties = { background: 'none', color: 'var(--ink-3)', fontSize: '.88rem', border: 'none', cursor: 'pointer', padding: '8px 16px' };
+
 interface Template {
   name: string;
   components?: Array<{ type: string; text?: string }>;
@@ -22,8 +31,8 @@ export function WhatsAppHistory({ contactId, phone, messages, loading, error, en
   if (!enabled) return null;
   return (
     <div id="whatsapp-history-section" className="mb-5">
-      <div className="notes-header">
-        <span className="notes-header-label">WhatsApp history</span>
+      <div style={sxHeader}>
+        <span style={sxHeaderLabel}>WhatsApp history</span>
       </div>
       {loading && <p className="text-sm text-slate-400 italic px-1">Loading…</p>}
       {!loading && error && <p className="text-sm text-red-500 px-1">Could not load WhatsApp history.</p>}
@@ -33,14 +42,14 @@ export function WhatsAppHistory({ contactId, phone, messages, loading, error, en
       {!loading && !error && messages.length > 0 && (
         <div className="space-y-1.5">
           {messages.map((m, i) => (
-            <div key={m.id || i} className={`comment-item wa-msg wa-msg-${m.direction}`}>
-              <div className="comment-text">{m.body || ''}</div>
-              <div className="comment-meta">
-                <span className="comment-date">{m.direction === 'in' ? 'Received' : 'Sent'}</span>
+            <div key={m.id || i} className={`wa-msg wa-msg-${m.direction}`} style={sxItem}>
+              <div style={sxText}>{m.body || ''}</div>
+              <div style={sxMeta}>
+                <span style={sxDate}>{m.direction === 'in' ? 'Received' : 'Sent'}</span>
                 {m.timestamp && (
                   <>
-                    <span className="comment-meta-sep">·</span>
-                    <span className="comment-date">
+                    <span style={sxMetaSep}>·</span>
+                    <span style={sxDate}>
                       {new Date(m.timestamp).toLocaleDateString('en-GB', {
                         day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
                       })}
@@ -168,7 +177,7 @@ export function WhatsAppModal({ contactId, phone, open, onClose }: Pick<Props, '
           {sendSuccess && <div id="wa-send-success" style={{ fontSize: '0.82rem', color: '#15803d', marginTop: 8, padding: '6px 10px', background: '#f0fdf4', borderRadius: 6 }}>Message sent successfully!</div>}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
-            <button onClick={onClose} className="btn-cancel-note">Cancel</button>
+            <button onClick={onClose} style={sxCancelBtn}>Cancel</button>
             <button id="wa-send-btn" onClick={send} disabled={sending}
               style={{ background: '#25D366', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 22px', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s' }}>
               {sending ? 'Sending…' : 'Send'}

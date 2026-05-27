@@ -106,8 +106,8 @@ export function InvoicesSection({ contact, qb }: Props) {
   return (
     <>
       <div id="invoices-section" className="mb-5">
-        <div className="notes-header">
-          <span className="notes-header-label">Invoices</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' }}>Invoices</span>
           {qb.company && <span className="text-xs text-slate-400 ml-2">· {qb.company}</span>}
         </div>
 
