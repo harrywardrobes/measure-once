@@ -662,9 +662,11 @@ interface ConflictResolverModalProps {
   statuses:    LeadStatus[];
   substatuses: Substatus[];
   onClose:     () => void;
+  /** Optional override for the remove action (used by Storybook to avoid real API calls). */
+  onRemove?:   (id: number) => Promise<void>;
 }
 
-function ConflictResolverModal({
+export function ConflictResolverModal({
   stageKey,
   statusKey,
   substatusId,
@@ -672,6 +674,7 @@ function ConflictResolverModal({
   statuses,
   substatuses,
   onClose,
+  onRemove,
 }: ConflictResolverModalProps) {
   const slot: Partial<ActionSlot> = substatusId != null
     ? { substatus_id: Number(substatusId) }
@@ -704,13 +707,17 @@ function ConflictResolverModal({
     setRemovingId(id);
     setErrorMsg('');
     try {
-      await DELETE(`/api/admin/card-action-handlers/${id}`);
-      await _reloadAndBroadcast();
-      showToast('Handler removed.');
-      const remaining = _handlersForSlot(slot);
-      if (remaining.length <= 1) {
-        onClose();
-        _flashResolvedBadge(slot);
+      if (onRemove) {
+        await onRemove(id);
+      } else {
+        await DELETE(`/api/admin/card-action-handlers/${id}`);
+        await _reloadAndBroadcast();
+        showToast('Handler removed.');
+        const remaining = _handlersForSlot(slot);
+        if (remaining.length <= 1) {
+          onClose();
+          _flashResolvedBadge(slot);
+        }
       }
     } catch (err) {
       setErrorMsg('Remove failed: ' + ((err as Error).message || 'unknown error'));
