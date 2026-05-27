@@ -244,3 +244,74 @@ export const ErrorFallback: Story = {
     </Box>
   ),
 };
+
+function AutoResetDemo() {
+  type Phase = 'idle' | 'uploading' | 'success' | 'error';
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [progress, setProgress] = useState(0);
+  const [resetCount, setResetCount] = useState(0);
+
+  const RESET_DELAY_MS = 2500;
+
+  function simulate(outcome: 'success' | 'error') {
+    setPhase('uploading');
+    setProgress(0);
+    let p = 0;
+    const timer = setInterval(() => {
+      p = Math.min(p + 10, 100);
+      setProgress(p);
+      if (p >= 100) {
+        clearInterval(timer);
+        setTimeout(() => setPhase(outcome), 200);
+      }
+    }, 100);
+  }
+
+  const helperMap: Record<Phase, string> = {
+    idle: `Choose a file, then click Simulate below. After success or error the field auto-resets in ${RESET_DELAY_MS / 1000}s.`,
+    uploading: `Uploading… ${progress}%`,
+    success: `Upload complete — field resets automatically in ${RESET_DELAY_MS / 1000}s.`,
+    error: `Upload failed — field resets automatically in ${RESET_DELAY_MS / 1000}s.`,
+  };
+
+  return (
+    <Box sx={{ maxWidth: 480, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <FileUploadField
+        label="Design drawings"
+        accept=".pdf,.dwg"
+        value={phase !== 'idle' ? 'floor-plan-v2.pdf' : undefined}
+        uploadStatus={phase}
+        progress={phase === 'uploading' ? progress : undefined}
+        helperText={helperMap[phase]}
+        resetDelay={RESET_DELAY_MS}
+        onStatusReset={() => {
+          setPhase('idle');
+          setProgress(0);
+          setResetCount((c) => c + 1);
+        }}
+      />
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <button onClick={() => simulate('success')} disabled={phase === 'uploading'}>
+          Simulate success
+        </button>
+        <button onClick={() => simulate('error')} disabled={phase === 'uploading'}>
+          Simulate error
+        </button>
+      </Box>
+      {resetCount > 0 && (
+        <Typography variant="caption" color="text.secondary">
+          Auto-reset fired {resetCount} time{resetCount !== 1 ? 's' : ''}.
+        </Typography>
+      )}
+      <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+        After a success or error the green/red adornment fades and the Browse
+        button reappears automatically — no manual Reset needed.
+      </Typography>
+    </Box>
+  );
+}
+
+export const AutoReset: Story = {
+  name: 'Auto-reset after success / error',
+  render: () => <AutoResetDemo />,
+};

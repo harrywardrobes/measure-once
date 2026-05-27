@@ -37,6 +37,20 @@ export interface FileUploadFieldProps {
    * When provided, `uploadStatus` takes precedence over the legacy `uploading` prop.
    */
   uploadStatus?: UploadStatus;
+  /**
+   * When set (milliseconds), the field automatically returns to the 'idle'
+   * appearance after a 'success' or 'error' outcome and fires `onStatusReset`
+   * so the caller can sync its own state.  The reset timer starts as soon as
+   * the terminal status is first observed.
+   */
+  resetDelay?: number;
+  /**
+   * Called once, after `resetDelay` ms, whenever `uploadStatus` settles on
+   * 'success' or 'error'.  Use this to set your own `uploadStatus` state back
+   * to `'idle'` so the Browse button reappears and the user can pick another
+   * file without any extra UI.
+   */
+  onStatusReset?: () => void;
 }
 
 const PROGRESS_FADE_MS = 1200;
@@ -53,15 +67,20 @@ export function FileUploadField({
   uploading = false,
   progress,
   uploadStatus,
+  resetDelay,
+  onStatusReset,
 }: FileUploadFieldProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [displayValue, setDisplayValue] = useState<string>(value ?? '');
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [progressVisible, setProgressVisible] = useState(false);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [localStatus, setLocalStatus] = useState<UploadStatus | null>(null);
 
-  const effectiveStatus: UploadStatus =
+  const resolvedStatus: UploadStatus =
     uploadStatus ?? (uploading ? 'uploading' : 'idle');
+  const effectiveStatus: UploadStatus = localStatus ?? resolvedStatus;
 
   const isUploading = effectiveStatus === 'uploading';
   const isSuccess = effectiveStatus === 'success';
@@ -99,6 +118,25 @@ export function FileUploadField({
       if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
     };
   }, [isUploading, isDone]);
+
+  const isResolvedDone = resolvedStatus === 'success' || resolvedStatus === 'error';
+
+  useEffect(() => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+
+    if (isResolvedDone && resetDelay !== undefined) {
+      resetTimerRef.current = setTimeout(() => {
+        setLocalStatus('idle');
+        onStatusReset?.();
+      }, resetDelay);
+    } else {
+      setLocalStatus(null);
+    }
+
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  }, [isResolvedDone, resetDelay, onStatusReset]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
