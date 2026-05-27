@@ -355,8 +355,14 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     };
   }, []);
 
-  function hasMeaningfulRoomData(): boolean {
-    return rooms.some(
+  function hasUnsavedDraftData(): boolean {
+    const step1Touched =
+      step1.visitDate.trim() !== '' ||
+      step1.designerName.trim() !== '' ||
+      step1.location.trim() !== '' ||
+      step1.handleId !== '' ||
+      step1.furnitureRangeId !== '';
+    const roomsTouched = rooms.some(
       r =>
         r.roomName.trim() !== '' ||
         r.doorStyleId !== '' ||
@@ -366,6 +372,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         r.unitPricePence > 0 ||
         r.notes.trim() !== ''
     );
+    return step1Touched || roomsTouched;
   }
 
   const doClose = useCallback(() => {
@@ -374,12 +381,12 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   }, [onClose]);
 
   const handleClose = useCallback(() => {
-    if (!editMode && !committedRef.current && (step >= 2 || hasMeaningfulRoomData())) {
+    if (!editMode && !committedRef.current && hasUnsavedDraftData()) {
       setShowDiscardDialog(true);
       return;
     }
     doClose();
-  }, [editMode, step, rooms, doClose]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [editMode, step1, rooms, doClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function advanceToStep2() {
     if (!step1.termsAccepted) {
