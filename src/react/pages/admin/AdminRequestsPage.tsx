@@ -61,6 +61,7 @@ export function AdminRequestsPage() {
   const [allowed, setAllowed] = useState<Allowed[]>([]);
 
   const [photoProgress, setPhotoProgress] = useState<Record<string, number | undefined>>({});
+  const [photoRejecting, setPhotoRejecting] = useState<Record<string, boolean>>({});
 
   // Approve modal
   const [approving, setApproving] = useState<Req | null>(null);
@@ -233,13 +234,31 @@ export function AdminRequestsPage() {
     };
     xhr.send();
   }
-  async function rejectPhoto(id: string) {
+  function rejectPhoto(id: string) {
     if (!confirm('Reject this photo? The user will need to submit a new one.')) return;
-    try {
-      await api('POST', `/api/admin/photo-requests/${id}/reject`);
-      toast('Photo rejected');
-      emitAdminChange('photos');
-    } catch (e: unknown) { toast(e instanceof Error ? e.message : String(e), true); }
+    setPhotoRejecting(r => ({ ...r, [id]: true }));
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/admin/photo-requests/${id}/reject`);
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.onload = () => {
+      setPhotoRejecting(r => { const n = { ...r }; delete n[id]; return n; });
+      if (xhr.status >= 400) {
+        let msg = `HTTP ${xhr.status}`;
+        try { msg = (JSON.parse(xhr.responseText) as { error?: string }).error || msg; } catch { /* ignore */ }
+        toast(msg, true);
+      } else {
+        toast('Photo rejected');
+        emitAdminChange('photos');
+      }
+    };
+    xhr.onerror = () => {
+      setPhotoRejecting(r => { const n = { ...r }; delete n[id]; return n; });
+      toast('Network error — please try again', true);
+    };
+    xhr.onabort = () => {
+      setPhotoRejecting(r => { const n = { ...r }; delete n[id]; return n; });
+    };
+    xhr.send();
   }
 
   async function approveTrade(id: number) {
@@ -360,22 +379,24 @@ export function AdminRequestsPage() {
                     <Card key={u.id} variant="outlined">
                       <Box component="img" src={u.pending_photo} alt=""
                         sx={{ width: '100%', aspectRatio: '1/1', objectFit: 'cover', display: 'block' }} />
-                      {photoProgress[u.id] !== undefined && (
+                      {photoRejecting[u.id] ? (
+                        <LinearProgress variant="indeterminate" sx={{ height: 3 }} />
+                      ) : photoProgress[u.id] !== undefined ? (
                         <LinearProgress
                           variant="determinate"
                           value={photoProgress[u.id]}
                           sx={{ height: 3 }}
                         />
-                      )}
+                      ) : null}
                       <CardContent>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>{name}</Typography>
                         <Typography variant="caption" color="text.secondary">{u.email || ''}</Typography>
                         <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                           <Button size="small" variant="contained"
-                            disabled={photoProgress[u.id] !== undefined}
+                            disabled={photoProgress[u.id] !== undefined || !!photoRejecting[u.id]}
                             onClick={() => approvePhoto(u.id)}>Approve</Button>
                           <Button size="small" variant="outlined"
-                            disabled={photoProgress[u.id] !== undefined}
+                            disabled={photoProgress[u.id] !== undefined || !!photoRejecting[u.id]}
                             onClick={() => rejectPhoto(u.id)}>Reject</Button>
                         </Stack>
                       </CardContent>
