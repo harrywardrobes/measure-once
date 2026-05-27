@@ -72,6 +72,13 @@ create a Google Calendar event automatically.
 <Canvas of={ScheduleVisitStories.Blank} />
 <Canvas of={ScheduleVisitStories.Prefilled} />
 
+### Validation & edge cases
+
+`defaultDurationMin` is validated on save — it must be a whole number between 5 and 1440.
+The story below shows the inline error state that appears when the field holds an out-of-range value.
+
+<Canvas of={ScheduleVisitStories.DurationValidationError} />
+
 ---
 
 ## ShowMessage
@@ -83,6 +90,13 @@ else happens.
 
 <Canvas of={ShowMessageStories.Blank} />
 <Canvas of={ShowMessageStories.Prefilled} />
+
+### Validation & edge cases
+
+`message` is the only required field and has a 2000-character limit. The story below shows
+the error state when the field is submitted empty.
+
+<Canvas of={ShowMessageStories.MessageValidationError} />
 
 ---
 
@@ -96,6 +110,13 @@ toggle Google Calendar creation.
 <Canvas of={StartDesignVisitStories.Blank} />
 <Canvas of={StartDesignVisitStories.WithTermsAndConditions} />
 
+### Validation & edge cases
+
+`defaultDurationMin` is validated on save — it must be a whole number between 5 and 1440.
+The story below shows the inline error state that appears when the field holds an out-of-range value.
+
+<Canvas of={StartDesignVisitStories.DurationValidationError} />
+
 ---
 
 ## DeliveryWindow
@@ -106,6 +127,13 @@ toggle.
 
 <Canvas of={DeliveryWindowStories.Blank} />
 <Canvas of={DeliveryWindowStories.Prefilled} />
+
+### Validation & edge cases
+
+The story below shows the block with the Google Calendar toggle switched off — useful for
+teams that do not use the Google Calendar integration.
+
+<Canvas of={DeliveryWindowStories.CalendarOff} />
 
 ---
 
@@ -118,3 +146,12 @@ Calendar toggle.
 
 <Canvas of={InstallationSlotStories.Blank} />
 <Canvas of={InstallationSlotStories.Prefilled} />
+
+### Validation & edge cases
+
+`defaultDurationMin` is validated on save — it must be a whole number between 5 and 1440.
+The first story below shows the inline error state for an out-of-range value; the second
+shows the block with the Google Calendar toggle switched off.
+
+<Canvas of={InstallationSlotStories.DurationValidationError} />
+<Canvas of={InstallationSlotStories.CalendarOff} />
