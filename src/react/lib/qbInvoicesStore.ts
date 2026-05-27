@@ -21,6 +21,13 @@
  *  - A 5-minute TTL also acts as a safety net: `triggerLoad()` treats data
  *    older than CACHE_TTL_MS as expired and issues a background re-fetch even
  *    without an explicit cross-tab signal.
+ *
+ * Tab-visibility refresh:
+ *  - A `visibilitychange` listener is registered on first `triggerLoad()` call.
+ *  - When the tab regains visibility and the cache is stale (> CACHE_TTL_MS),
+ *    a silent background re-fetch fires: no loading spinner is shown and the
+ *    existing data stays visible while the update runs in the background.
+ *    Errors during silent re-fetches are swallowed so cached data is preserved.
  */
 
 import type { InvoiceSummary } from '../components/InvoiceDetailDrawer';
@@ -87,9 +94,36 @@ function _getChannel(): BroadcastChannel | null {
   return _bc;
 }
 
-/** Returns `true` when the fetch completed successfully (invoices loaded or 403 no-access). */
-async function _doFetch(): Promise<boolean> {
-  _setState({ loading: true, loadError: false, error: null, errorCode: null });
+let _visibilityListenerAttached = false;
+
+function _initVisibilityListener(): void {
+  if (_visibilityListenerAttached || typeof document === 'undefined') return;
+  _visibilityListenerAttached = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (_state.loading) return;
+    if (_state.loaded && !_isCacheExpired()) return;
+    void _doFetch(true);
+  });
+}
+
+/**
+ * Execute a fetch.
+ *
+ * @param silent - When `true` and data is already loaded, the fetch runs
+ *   without setting `loading: true`, so the UI retains its current view.
+ *   Errors during a silent fetch are swallowed to preserve cached data.
+ *   Use this for background tab-restore refreshes.
+ *   When `false` (default), the normal loading-state transitions apply.
+ *
+ * Returns `true` when the fetch completed successfully (invoices loaded or
+ * 403 no-access).
+ */
+async function _doFetch(silent = false): Promise<boolean> {
+  const alreadyLoaded = _state.loaded;
+  if (!silent || !alreadyLoaded) {
+    _setState({ loading: true, loadError: false, error: null, errorCode: null });
+  }
 
   try {
     const statusRes = await fetch('/api/quickbooks/status').catch(() => null);
@@ -119,6 +153,9 @@ async function _doFetch(): Promise<boolean> {
     };
 
     if (!invRes.ok || data.error) {
+      if (silent && alreadyLoaded) {
+        return false;
+      }
       _setState({
         loading: false,
         loadError: true,
@@ -132,6 +169,9 @@ async function _doFetch(): Promise<boolean> {
     _lastFetchedAt = Date.now();
     return true;
   } catch (e: unknown) {
+    if (silent && alreadyLoaded) {
+      return false;
+    }
     _setState({
       loading: false,
       loadError: true,
@@ -155,11 +195,13 @@ function _isCacheExpired(): boolean {
  * Only an in-progress fetch (`loading: true`) or a fresh successful one
  * (`loaded: true` and cache not expired) prevents a new request.
  *
- * Initialises the BroadcastChannel listener on first call so that
- * cross-tab invalidation is active whenever any component uses the store.
+ * Initialises the BroadcastChannel listener and `visibilitychange` listener
+ * on first call so that cross-tab invalidation and tab-restore freshness
+ * checks are active whenever any component uses the store.
  */
 export function triggerLoad(): void {
   _getChannel();
+  _initVisibilityListener();
   if (_state.loading) return;
   if (_state.loaded && !_isCacheExpired()) return;
   void _doFetch();
