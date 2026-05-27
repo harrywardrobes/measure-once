@@ -4386,6 +4386,54 @@ app.patch('/api/admin/page-filter-config', isAuthenticated, requireAdmin, async 
 });
 
 // Admin: delete a status row (null sentinel is protected)
+// After a lead status is deleted, find all HubSpot contacts that still carry
+// it as hs_lead_status AND have a hw_lead_substatus set, and clear the stale
+// substatus value.  Runs fire-and-forget so it never blocks the DELETE response.
+async function clearOrphanedSubstatusesForDeletedStatus(deletedKey) {
+  if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
+  const label = `[clear-orphaned-substatuses key=${deletedKey}]`;
+  try {
+    let cleared = 0;
+    let failed = 0;
+    let after;
+    do {
+      const body = {
+        filterGroups: [{
+          filters: [
+            { propertyName: 'hs_lead_status',    operator: 'EQ',           value: deletedKey },
+            { propertyName: 'hw_lead_substatus',  operator: 'HAS_PROPERTY'                   },
+          ],
+        }],
+        properties: ['hs_lead_status', 'hw_lead_substatus'],
+        limit: 100,
+      };
+      if (after) body.after = after;
+      const r = await hubspotSearchWithRetry(body);
+      const contacts = r.data.results || [];
+      after = r.data.paging?.next?.after;
+      for (const contact of contacts) {
+        const cid = contact.id;
+        try {
+          await hubspotRequestWithRetry(
+            'patch',
+            `${HS}/crm/v3/objects/contacts/${encodeURIComponent(cid)}`,
+            { properties: { hw_lead_substatus: '' } }
+          );
+          cleared++;
+        } catch (patchErr) {
+          failed++;
+          console.warn(`${label} PATCH contact ${cid} failed:`, patchErr.response?.data?.message || patchErr.message);
+        }
+      }
+    } while (after);
+    if (cleared > 0 || failed > 0) {
+      console.log(`${label} cleared=${cleared} failed=${failed}`);
+    }
+  } catch (e) {
+    console.warn(`${label} search failed:`, e.response?.data?.message || e.message);
+  }
+}
+
 app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
@@ -4410,6 +4458,7 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
       try { client.write(_lsscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
     }
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
+    clearOrphanedSubstatusesForDeletedStatus(key).catch(e => console.warn('Orphaned substatus clear failed:', e.message));
   } catch (e) {
     console.error('DELETE /api/admin/lead-statuses/:key error:', e.message);
     res.status(500).json({ error: 'Could not delete lead status.' });
