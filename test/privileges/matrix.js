@@ -125,8 +125,9 @@ const ROUTES = [
   { method: 'PATCH',  path: '/api/visits/0',                  level: 'member',  body: {} },
   { method: 'DELETE', path: '/api/visits/0',                  level: 'member' },
   // Design-visit member-level surface (design-visits.js).
-  { method: 'GET',    path: '/api/design-visits',             level: 'member' },
-  { method: 'GET',    path: '/api/design-visits/0',           level: 'member' },
+  { method: 'GET',    path: '/api/design-visits',              level: 'member' },
+  { method: 'GET',    path: '/api/design-visits/in-progress',  level: 'member' },
+  { method: 'GET',    path: '/api/design-visits/0',            level: 'member' },
   { method: 'POST',   path: '/api/design-visits',             level: 'member',  body: {} },
   { method: 'PATCH',  path: '/api/design-visits/0',           level: 'member',  body: {} },
   { method: 'PUT',    path: '/api/design-visits/0',           level: 'member',  body: {} },

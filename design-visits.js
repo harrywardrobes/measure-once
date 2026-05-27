@@ -1260,6 +1260,39 @@ router.get('/api/design-visits', isAuthenticated, requirePrivilege('member'), as
   }
 });
 
+router.get('/api/design-visits/in-progress', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  try {
+    let contactIds = req.query.contactIds;
+    if (!contactIds) return res.json([]);
+    if (typeof contactIds === 'string') contactIds = contactIds.split(',');
+    contactIds = Array.from(
+      new Set(
+        (Array.isArray(contactIds) ? contactIds : [contactIds])
+          .map(id => String(id).trim())
+          .filter(Boolean),
+      ),
+    ).slice(0, 100);
+    if (!contactIds.length) return res.json([]);
+    const r = await pool.query(
+      `SELECT id, contact_id FROM design_visits
+       WHERE contact_id = ANY($1) AND status = 'draft'
+       ORDER BY created_at DESC`,
+      [contactIds],
+    );
+    const seen = new Set();
+    const result = [];
+    for (const row of r.rows) {
+      if (!seen.has(row.contact_id)) {
+        seen.add(row.contact_id);
+        result.push({ id: row.id, contactId: row.contact_id });
+      }
+    }
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/api/design-visits/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
