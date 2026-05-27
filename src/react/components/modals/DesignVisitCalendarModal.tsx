@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
@@ -25,6 +25,44 @@ interface Props {
   onClose: () => void;
 }
 
+interface DraftState {
+  title: string;
+  duration: string;
+  location: string;
+  notes: string;
+  addGcal: boolean;
+}
+
+function draftKey(handlerId: string | number, contactId: string | number | null | undefined): string {
+  return `mo-dv-cal-draft-${handlerId}-${contactId ?? 'unknown'}`;
+}
+
+function loadDraft(key: string): Partial<DraftState> {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return {};
+    return JSON.parse(raw) as Partial<DraftState>;
+  } catch {
+    return {};
+  }
+}
+
+function saveDraft(key: string, draft: DraftState): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(draft));
+  } catch {
+    // quota exceeded or private browsing — silently ignore
+  }
+}
+
+function clearDraft(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
 export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props) {
   const cfg = handler.config || {};
   const defaultDuration = (cfg.defaultDurationMin as number) || 60;
@@ -33,18 +71,31 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
     (ctx.contactName ? `Design visit — ${ctx.contactName}` : 'Design visit');
   const addToGoogleDefault = (cfg.addToGoogleCalendar as boolean) !== false;
 
+  const key = draftKey(handler.id, ctx.contactId);
+  const draft = loadDraft(key);
+
   const initialStart = dayjs().add(24, 'hour').startOf('hour');
 
-  const [title, setTitle] = useState(defaultTitle);
+  const [title, setTitle] = useState(draft.title ?? defaultTitle);
   const [startDt, setStartDt] = useState<Dayjs | null>(initialStart);
-  const [duration, setDuration] = useState(String(defaultDuration));
-  const [location, setLocation] = useState('');
-  const [notes, setNotes] = useState('');
-  const [addGcal, setAddGcal] = useState(addToGoogleDefault);
+  const [duration, setDuration] = useState(draft.duration ?? String(defaultDuration));
+  const [location, setLocation] = useState(draft.location ?? '');
+  const [notes, setNotes] = useState(draft.notes ?? '');
+  const [addGcal, setAddGcal] = useState(draft.addGcal ?? addToGoogleDefault);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  function handleClose() {
+  useEffect(() => {
+    saveDraft(key, { title, duration, location, notes, addGcal });
+  }, [key, title, duration, location, notes, addGcal]);
+
+  function handleDismiss() {
+    setError('');
+    onClose();
+  }
+
+  function handleCancel() {
+    clearDraft(key);
     setError('');
     onClose();
   }
@@ -88,7 +139,8 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
           const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
           const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
           w.showToast?.(`Visit saved; Google Calendar add failed: ${msg}`, true);
-          handleClose();
+          clearDraft(key);
+          handleDismiss();
           (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
           return;
         }
@@ -96,7 +148,8 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
 
       const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
       w.showToast?.('Visit scheduled', false);
-      handleClose();
+      clearDraft(key);
+      handleDismiss();
       (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
     } catch (e) {
       setError('Could not save: ' + (e instanceof Error ? e.message : 'error'));
@@ -107,7 +160,7 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+      <Dialog open={open} onClose={handleDismiss} maxWidth="xs" fullWidth>
         <DialogTitle>
           {ctx.contactName ? `Schedule design visit for ${ctx.contactName}` : 'Schedule design visit'}
         </DialogTitle>
@@ -184,7 +237,7 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose} disabled={submitting}>Cancel</Button>
+          <Button onClick={handleCancel} disabled={submitting}>Cancel</Button>
           <Button
             variant="contained"
             onClick={handleSubmit}
