@@ -80,16 +80,16 @@ export const ManagerHomeSelected: Story = {
     docs: {
       description: {
         story:
-          'Manager view: bar shows Home, Sales, Projects + More. Home is active.',
+          'Manager view: bar shows Home, Customers, Projects + More. Home is active.',
       },
     },
   },
 };
 
-export const ManagerSalesSelected: Story = {
-  name: 'Manager — Sales selected (bar tab, accent colour)',
+export const ManagerProjectsSelected: Story = {
+  name: 'Manager — Projects selected (bar tab, accent colour)',
   render: () => {
-    history.replaceState(null, '', '/sales');
+    history.replaceState(null, '', '/projects');
     (window as { __moHeaderUser?: { privilege_level: string } }).__moHeaderUser = { privilege_level: 'manager' };
     return <BottomNav />;
   },
@@ -97,7 +97,7 @@ export const ManagerSalesSelected: Story = {
     docs: {
       description: {
         story:
-          'Manager view with Sales active — uses the Sales stage accent colour for the icon and border.',
+          'Manager view with Projects active — uses the Projects stage accent colour for the icon and border.',
       },
     },
   },
