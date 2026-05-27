@@ -238,8 +238,7 @@ export function GlobalHeader() {
   const photoSrc = user ? resolvePhotoSrc(user) : null;
   const initials = user ? resolveInitials(user) : '';
 
-  // All services are always shown; filter out 'database' which has no dedicated check endpoint
-  const visibleServices = SERVICE_KEYS.filter((svc) => svc !== 'database');
+  const visibleServices = SERVICE_KEYS;
 
   const onBack = () => {
     if (window.history.length > 1) window.history.back();

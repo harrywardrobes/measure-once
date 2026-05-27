@@ -875,6 +875,16 @@ app.get('/auth/status', (req, res) => {
   });
 });
 
+// ── Database: Connection status (lightweight SELECT 1 ping) ───────────────────
+app.get('/api/database/status', isAuthenticated, async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ connected: true });
+  } catch (e) {
+    res.json({ connected: false, error: e.message });
+  }
+});
+
 // ── HubSpot: Connection status (lightweight ping, no requireHubspotToken guard) ─
 app.get('/api/hubspot/status', async (req, res) => {
   if (!process.env.HUBSPOT_ACCESS_TOKEN) {

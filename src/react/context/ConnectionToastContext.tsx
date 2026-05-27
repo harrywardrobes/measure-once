@@ -153,6 +153,7 @@ const _checkServicesOnMount: () => Promise<void> = _createDedupedCheck(
     _checkService('hubspot',    '/api/hubspot/status'),
     _checkService('google',     '/api/google/status'),
     _checkService('quickbooks', '/api/quickbooks/status'),
+    _checkService('database',   '/api/database/status'),
   ]).then(() => undefined),
 );
 

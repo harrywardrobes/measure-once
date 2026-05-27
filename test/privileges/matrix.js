@@ -52,6 +52,7 @@ const ROUTES = [
   { method: 'POST',   path: '/auth/logout-google',            level: 'auth',    body: {} },
   { method: 'GET',    path: '/api/quickbooks/status',         level: 'auth' },
   { method: 'GET',    path: '/api/hubspot/status',            level: 'auth' },
+  { method: 'GET',    path: '/api/database/status',           level: 'auth' },
   { method: 'GET',    path: '/api/account',                   level: 'auth',    needsHubspot: true },
   { method: 'GET',    path: '/api/pipeline',                  level: 'auth',    needsHubspot: true },
   { method: 'GET',    path: '/api/deals',                     level: 'auth',    needsHubspot: true },
