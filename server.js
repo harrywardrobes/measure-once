@@ -4372,8 +4372,12 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
     _invalidateOpenLeadsCache();
     res.json({ ok: true });
     const _lscSseMsg = `data: ${JSON.stringify({ type: 'lead_statuses_changed' })}\n\n`;
+    const _lsscSseMsg = `data: ${JSON.stringify({ type: 'lead_substatuses_changed' })}\n\n`;
     for (const client of _hsWebhookSseClients) {
       try { client.write(_lscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
+    }
+    for (const client of _hsWebhookSseClients) {
+      try { client.write(_lsscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
     }
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
