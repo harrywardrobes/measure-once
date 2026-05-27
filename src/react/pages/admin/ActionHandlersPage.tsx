@@ -11,6 +11,8 @@ const HANDLER_TYPE_LABELS: Record<string, string> = {
   summarise_phone_call:         'Summarise phone call',
   show_message:                 'Show informational message',
   start_design_visit:           'Start design visit wizard',
+  schedule_delivery_window:     'Schedule delivery window',
+  schedule_installation_slot:   'Schedule installation slot',
 };
 
 const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
@@ -57,6 +59,20 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     '• Step 2 — Rooms: add/remove rooms with name, door style, dimensions (mm), unit count, unit price, notes, and optional photo upload.\n' +
     '• Step 3 — Review: read-only summary before submission.\n' +
     '• On submit: creates a design_visits DB record, updates HubSpot lead status to the configured submitted status, creates a HubSpot note, attempts a QuickBooks Estimate (non-fatal), generates a single-use sign-off token, emails the customer a "See Your Design & Sign Off" link, and notifies the admin team.',
+  schedule_delivery_window:
+    'Clicking the action on a card opens a modal for scheduling a delivery window with a start and end date/time.\n' +
+    '• The operator picks a window start and window end (e.g. "8 AM – 1 PM on 12 June").\n' +
+    '• On submit, a visit of type "delivery" is created in this CRM (POST /api/visits) and appears in the "Upcoming visits" section of the customer page.\n' +
+    '• If the operator ticks "Also add to my Google Calendar", a matching event is also created in their personal Google Calendar.\n' +
+    '• No HubSpot record is changed by this action.\n' +
+    'Config keys: defaultTitle (≤120 chars), addToGoogleCalendar (bool).',
+  schedule_installation_slot:
+    'Clicking the action on a card opens a modal for scheduling a single installation slot with a start time and duration.\n' +
+    '• The operator picks a start date/time and a duration in minutes (default 240 min / 4 hours).\n' +
+    '• On submit, a visit of type "installation" is created in this CRM (POST /api/visits) and appears in the "Upcoming visits" section of the customer page.\n' +
+    '• If the operator ticks "Also add to my Google Calendar", a matching event is also created in their personal Google Calendar.\n' +
+    '• No HubSpot record is changed by this action.\n' +
+    'Config keys: defaultDurationMin (5–1440), defaultTitle (≤120 chars), addToGoogleCalendar (bool).',
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────

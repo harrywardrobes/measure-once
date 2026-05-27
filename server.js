@@ -5017,6 +5017,37 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
     }
     return { value: out };
   },
+  schedule_delivery_window(cfg) {
+    const out = {};
+    if (cfg.defaultTitle !== undefined) {
+      const v = String(cfg.defaultTitle || '');
+      if (v.length > 120) return { error: 'defaultTitle must be 120 characters or fewer.' };
+      out.defaultTitle = v;
+    }
+    if (cfg.addToGoogleCalendar !== undefined) {
+      out.addToGoogleCalendar = !!cfg.addToGoogleCalendar;
+    }
+    return { value: out };
+  },
+  schedule_installation_slot(cfg) {
+    const out = {};
+    if (cfg.defaultDurationMin !== undefined) {
+      const n = parseInt(cfg.defaultDurationMin, 10);
+      if (!Number.isInteger(n) || n < 5 || n > 1440) {
+        return { error: 'defaultDurationMin must be 5–1440.' };
+      }
+      out.defaultDurationMin = n;
+    }
+    if (cfg.defaultTitle !== undefined) {
+      const v = String(cfg.defaultTitle || '');
+      if (v.length > 120) return { error: 'defaultTitle must be 120 characters or fewer.' };
+      out.defaultTitle = v;
+    }
+    if (cfg.addToGoogleCalendar !== undefined) {
+      out.addToGoogleCalendar = !!cfg.addToGoogleCalendar;
+    }
+    return { value: out };
+  },
 };
 
 const CARD_ACTION_HANDLER_TYPES = new Set(

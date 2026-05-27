@@ -10,7 +10,7 @@ const router = express.Router();
 // sharing a NAT/proxy do not share a single budget).
 const visitsRateLimiter = visitsReadLimiter;
 
-const VALID_TYPES = ['design', 'survey', 'installation', 'remedial', 'workshop', 'other'];
+const VALID_TYPES = ['design', 'survey', 'installation', 'delivery', 'remedial', 'workshop', 'other'];
 const VALID_ROLES = ['designer', 'surveyor', 'fitter', 'manager'];
 
 async function ensureVisitsTable() {

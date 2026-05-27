@@ -1,0 +1,203 @@
+import React, { useState } from 'react';
+import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import dayjs from 'dayjs';
+import type { Dayjs } from 'dayjs';
+import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
+import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
+import { POST } from '../../utils/api';
+
+interface Props {
+  handler: CardActionHandlerData;
+  ctx: CardActionContext;
+  open: boolean;
+  onClose: () => void;
+}
+
+export function InstallationSlotModal({ handler, ctx, open, onClose }: Props) {
+  const cfg = handler.config || {};
+  const defaultDuration = (cfg.defaultDurationMin as number) || 240;
+  const defaultTitle =
+    (cfg.defaultTitle as string) ||
+    (ctx.contactName ? `Installation — ${ctx.contactName}` : 'Installation');
+  const addToGoogleDefault = (cfg.addToGoogleCalendar as boolean) !== false;
+
+  const initialStart = dayjs().add(48, 'hour').startOf('hour');
+
+  const [title, setTitle] = useState(defaultTitle);
+  const [startDt, setStartDt] = useState<Dayjs | null>(initialStart);
+  const [duration, setDuration] = useState(String(defaultDuration));
+  const [location, setLocation] = useState('');
+  const [notes, setNotes] = useState('');
+  const [addGcal, setAddGcal] = useState(addToGoogleDefault);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  function handleClose() {
+    setError('');
+    onClose();
+  }
+
+  async function handleSubmit() {
+    setError('');
+    if (!title.trim()) { setError('Title is required.'); return; }
+    if (!startDt || !startDt.isValid()) { setError('Start time is required.'); return; }
+    const durationInt = parseInt(duration, 10);
+    if (!Number.isInteger(durationInt) || durationInt < 5) {
+      setError('Duration must be ≥ 5 minutes.');
+      return;
+    }
+
+    const start = startDt.toDate();
+    const end = new Date(start.getTime() + durationInt * 60000);
+
+    setSubmitting(true);
+    try {
+      await POST('/api/visits', {
+        type: 'installation',
+        title: title.trim(),
+        customerId: ctx.contactId || null,
+        customerName: ctx.contactName || null,
+        startAt: start.toISOString(),
+        endAt: end.toISOString(),
+        location: location.trim() || null,
+        notes: notes.trim() || null,
+      });
+
+      if (addGcal) {
+        try {
+          await POST('/api/events', {
+            summary: title.trim(),
+            description: notes.trim() || '',
+            location: location.trim() || '',
+            start: { dateTime: start.toISOString() },
+            end: { dateTime: end.toISOString() },
+          });
+        } catch (gcalErr) {
+          const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
+          const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
+          w.showToast?.(`Installation slot saved; Google Calendar add failed: ${msg}`, true);
+          handleClose();
+          (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
+          return;
+        }
+      }
+
+      const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
+      w.showToast?.('Installation slot scheduled', false);
+      handleClose();
+      (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
+    } catch (e) {
+      setError('Could not save: ' + (e instanceof Error ? e.message : 'error'));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          {ctx.contactName
+            ? `Schedule installation for ${ctx.contactName}`
+            : 'Schedule installation slot'}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <TextField
+              id="cah-is-title"
+              label="Title"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              slotProps={{ htmlInput: { maxLength: 120 } }}
+              fullWidth
+              size="small"
+            />
+            <Stack direction="row" spacing={1.5}>
+              <DateTimePicker
+                label="Start"
+                value={startDt}
+                onChange={(v: Dayjs | null) => setStartDt(v)}
+                slotProps={{
+                  textField: {
+                    id: 'cah-is-start',
+                    fullWidth: true,
+                    size: 'small',
+                  },
+                }}
+              />
+              <TextField
+                id="cah-is-duration"
+                label="Duration (min)"
+                type="number"
+                value={duration}
+                onChange={e => setDuration(e.target.value)}
+                slotProps={{ htmlInput: { min: 5, max: 1440, step: 30 } }}
+                sx={{ minWidth: 130 }}
+                size="small"
+              />
+            </Stack>
+            <TextField
+              id="cah-is-location"
+              label="Location (optional)"
+              value={location}
+              onChange={e => setLocation(e.target.value)}
+              slotProps={{ htmlInput: { maxLength: 300 } }}
+              placeholder="Installation address"
+              fullWidth
+              size="small"
+            />
+            <TextField
+              id="cah-is-notes"
+              label="Notes (optional)"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              slotProps={{ htmlInput: { maxLength: 4000 } }}
+              placeholder="Fitter details, parking, special instructions, etc."
+              multiline
+              minRows={3}
+              fullWidth
+              size="small"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  id="cah-is-google"
+                  checked={addGcal}
+                  onChange={e => setAddGcal(e.target.checked)}
+                  size="small"
+                />
+              }
+              label="Also add to my Google Calendar"
+            />
+            {error && (
+              <Typography variant="caption" color="error">{error}</Typography>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose} disabled={submitting}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleSubmit}
+            disabled={submitting}
+            data-testid="cah-primary"
+          >
+            {submitting ? 'Scheduling…' : 'Schedule'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </LocalizationProvider>
+  );
+}
