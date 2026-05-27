@@ -540,7 +540,8 @@ export function HomePage(): React.ReactElement {
   const [calConnected, setCalConnected] = React.useState(false);
   const [calEvents, setCalEvents] = React.useState<CalendarEvent[]>([]);
 
-  const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, refresh: loadInvoices } = useQBInvoices();
+  const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, refresh: loadInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
+  React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
 
   const [projectsLoading, setProjectsLoading] = React.useState(true);
   const [contacts, setContacts] = React.useState<Contact[]>([]);

@@ -603,7 +603,8 @@ export function CustomersPage(): React.ReactElement {
 
   const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
   const [roomsByContact, setRoomsByContact] = React.useState<Record<string, Room[]>>({});
-  const { invoices: qbInvoices } = useQBInvoices();
+  const { invoices: qbInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
+  React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
   const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
 
   // Invoice drawer state

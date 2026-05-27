@@ -89,7 +89,9 @@ export function StandaloneInvoicesPage() {
   const { isAdmin } = usePrivilege();
 
   const qb = useQBInvoices();
-  const { connected, company, invoices, loading, loadError, error, errorCode, refresh: loadInvoices } = qb;
+  const { connected, company, invoices, loading, loadError, error, errorCode, refresh: loadInvoices, triggerLoad } = qb;
+
+  useEffect(() => { triggerLoad(); }, [triggerLoad]);
 
   const [filter, setFilter] = useState<'all' | 'overdue' | 'outstanding'>('all');
   const [search, setSearch] = useState('');

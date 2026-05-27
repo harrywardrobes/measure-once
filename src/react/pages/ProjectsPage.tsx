@@ -718,6 +718,7 @@ export function ProjectsPage() {
   }, []);
 
   const qb = useQBInvoices();
+  useEffect(() => { qb.triggerLoad(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { prefs, loading: prefsLoading, patchPref } = usePrefs();
 

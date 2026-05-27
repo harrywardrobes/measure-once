@@ -3,6 +3,7 @@ import { loadSearchSettings } from '../lib/searchSettings';
 import type { SearchSettings } from '../lib/searchSettings';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { useContactSearch } from '../hooks/useContactSearch';
+import { triggerLoad as triggerQBLoad } from '../lib/qbInvoicesStore';
 import type { InvoiceSummary } from './InvoiceDetailDrawer';
 import Dialog from '@mui/material/Dialog';
 import Box from '@mui/material/Box';
@@ -162,6 +163,7 @@ export function CommandPalette() {
   }, [settings]);
 
   const doOpen = useCallback(() => {
+    triggerQBLoad();
     const seed = location.pathname === '/customers' && window.state?.searchQuery
       ? window.state.searchQuery : '';
     setQuery(seed);

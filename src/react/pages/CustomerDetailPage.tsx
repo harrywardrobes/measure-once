@@ -73,6 +73,7 @@ export function CustomerDetailPage() {
   const [selectedRoom, setSelectedRoom] = useState(0);
   const [workflow,     setWorkflow]     = useState<{ stages?: Record<string, { label: string }> } | null>(null);
   const qb = useQBInvoices();
+  useEffect(() => { qb.triggerLoad(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState<string | null>(null);
