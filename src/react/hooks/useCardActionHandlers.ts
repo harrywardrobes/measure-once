@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
+import { resolveActionLabel as resolveActionLabelPure } from '../utils/resolveActionLabel.mjs';
 
 export interface CardActionHandlerBinding {
   substatus_id?: number;
@@ -237,45 +238,24 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
   //   2. Per-LS stage action label (if contact has a lead status)
   //   3. Per-substageId stage action label (legacy fallback, no LS)
   //   4. Per-stage "no lead status" row (stage|'')
+  //
+  // The pure resolver logic lives in src/react/utils/resolveActionLabel.mjs and
+  // is shared with the unit-test suite so tests exercise the same code path.
   const resolveActionLabel = useCallback(
     (
       stageKey: string,
       leadStatusKey: string | undefined,
       substageId: string | undefined,
       hwSubstatusValue: string | undefined,
-    ): string => {
-      // 1. Substatus action label
-      if (leadStatusKey && hwSubstatusValue) {
-        const sk = String(leadStatusKey).toUpperCase();
-        const v = String(hwSubstatusValue).toUpperCase();
-        const prefix = `${sk}__`;
-        if (v.startsWith(prefix)) {
-          const subKey = v.slice(prefix.length);
-          const fromSub = substatusActionLabelMapRef.current[`${sk}|${subKey}`];
-          if (fromSub) return fromSub;
-        }
-      }
-      const sKey = String(stageKey || '').toLowerCase();
-      const lsKey = String(leadStatusKey || '').toLowerCase();
-      const map = stageActionLabelMapRef.current;
-      // 2. Per-LS stage action label
-      if (lsKey) {
-        const perLsKey = `${sKey}|${lsKey}`;
-        if (perLsKey in map) {
-          // Row exists: return label (non-empty) or '' (admin explicitly cleared it).
-          return map[perLsKey] ?? '';
-        }
-        // No row for this LS → fall back to the per-stage default (stage_key, '').
-        return map[`${sKey}|`] ?? '';
-      }
-      // 3. Per-substageId legacy fallback (lowercase to match map key format)
-      if (substageId) {
-        const fromSub = map[`${sKey}|${String(substageId).toLowerCase()}`];
-        if (fromSub) return fromSub;
-      }
-      // 4. Per-stage "no lead status" row
-      return map[`${sKey}|`] ?? '';
-    },
+    ): string =>
+      resolveActionLabelPure(
+        stageActionLabelMapRef.current,
+        substatusActionLabelMapRef.current,
+        stageKey,
+        leadStatusKey,
+        substageId,
+        hwSubstatusValue,
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [substatusActionLabelMapRef, stageActionLabelMapRef],
   );

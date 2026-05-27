@@ -29,6 +29,7 @@ const STEPS = [
   'test:stale-bundle',
   'test:bundle-size-trend',
   'test:bundle-spike-warning',
+  'test:resolve-action-label',
   'test:typo-vars',
   'test:color-radius-vars',
   'test:privilege-reads',
