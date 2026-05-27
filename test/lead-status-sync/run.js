@@ -61,6 +61,10 @@ const SS_LABEL_VIS = 'PrivTest Sub Renamed Vis';
 // SSE broadcast label used by section (H).
 const LABEL_SSE = 'PrivTest Renamed SSE';
 
+// New lead-status fixture created in probe [I] and deleted in probe [J].
+const LS_KEY_NEW  = 'PRIVTEST_LS_SYNC_NEW';
+const LABEL_NEW   = 'PrivTest Created New';
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 function parseCookieKV(jar) {
   if (!jar) return null;
@@ -103,6 +107,22 @@ async function waitForFilterLabel(page, label, timeoutMs = 6000) {
       return Array.from(sel.options).some(o => o.textContent.startsWith(lbl));
     }, label);
     if (found) return true;
+    await new Promise(r => setTimeout(r, 150));
+  }
+  return false;
+}
+
+// Poll the #lead-status-filter <select> until no <option> whose text starts
+// with `label` remains, or until `timeoutMs` elapses.
+async function waitForFilterLabelGone(page, label, timeoutMs = 6000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const found = await page.evaluate((lbl) => {
+      const sel = document.getElementById('lead-status-filter');
+      if (!sel) return false;
+      return Array.from(sel.options).some(o => o.textContent.startsWith(lbl));
+    }, label);
+    if (!found) return true;
     await new Promise(r => setTimeout(r, 150));
   }
   return false;
@@ -178,6 +198,8 @@ async function main() {
   // Delete sub-statuses before lead_status_config (FK ON DELETE NO ACTION).
   await pool.query(`DELETE FROM lead_substatuses WHERE status_key = $1`, [LS_KEY]);
   await pool.query(`DELETE FROM lead_status_config WHERE key = $1`, [LS_KEY]);
+  await pool.query(`DELETE FROM lead_substatuses WHERE status_key = $1`, [LS_KEY_NEW]);
+  await pool.query(`DELETE FROM lead_status_config WHERE key = $1`, [LS_KEY_NEW]);
 
   const users = await seedUsers(pool, runId);
   console.log(`  Seeded users  admin=${users.admin.email}`);
@@ -226,6 +248,8 @@ async function main() {
       // Delete sub-statuses first (FK ON DELETE NO ACTION blocks lead_status_config delete).
       await pool.query(`DELETE FROM lead_substatuses WHERE status_key = $1`, [LS_KEY]);
       await pool.query(`DELETE FROM lead_status_config WHERE key = $1`, [LS_KEY]);
+      await pool.query(`DELETE FROM lead_substatuses WHERE status_key = $1`, [LS_KEY_NEW]);
+      await pool.query(`DELETE FROM lead_status_config WHERE key = $1`, [LS_KEY_NEW]);
       await cleanupTestData(pool);
     } catch {}
     await pool.end().catch(() => {});
@@ -1124,6 +1148,170 @@ async function main() {
     await sseListenerTab.close();
     await sseRelayTab.close();
 
+    // ── (I) SSE broadcast — POST (create) path ────────────────────────────────
+    // Sends POST /api/admin/lead-statuses from a browser tab that has
+    // WorkflowDataContext's SSE EventSource open.  Asserts that a separate
+    // customers tab picks up the new label via SSE → BroadcastChannel → re-render,
+    // without any manual BC post or visibilitychange from the test harness.
+    console.log('\n  [I] SSE broadcast — POST (create) path');
+
+    const iListenerTab = await browser.newPage();
+    await iListenerTab.setCacheEnabled(false);
+    await injectSession(iListenerTab, adminClient.cookie);
+
+    await iListenerTab.goto(`${BASE}/customers`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+    await new Promise(r => setTimeout(r, 500));
+    await bootstrapFilter(iListenerTab);
+
+    // Confirm LABEL_SSE (from [H]) is the current state before the POST.
+    const optsBeforeI = await getFilterOptions(iListenerTab);
+    const hasSseLabelI = optsBeforeI.some(t => t.startsWith(LABEL_SSE));
+    record(
+      '[I] iListenerTab filter shows LABEL_SSE before POST-create',
+      `option starting with "${LABEL_SSE}"`,
+      `found=${hasSseLabelI} options: ${JSON.stringify(optsBeforeI.filter(t => t !== 'All statuses').slice(0, 6))}`,
+      hasSseLabelI,
+    );
+
+    // Attach a passive BC spy on the listener tab.
+    await iListenerTab.evaluate(() => {
+      window.__i_bc_received = false;
+      const spy = new BroadcastChannel('lead_statuses_changed');
+      spy.addEventListener('message', () => { window.__i_bc_received = true; });
+      window.__i_bc_spy = spy;
+    });
+
+    // Open the SSE relay tab (WorkflowDataContext mounts here and opens the
+    // EventSource).  Use a dummy contact ID so the page loads quickly.
+    const iRelayTab = await browser.newPage();
+    await iRelayTab.setCacheEnabled(false);
+    await injectSession(iRelayTab, adminClient.cookie);
+
+    await iRelayTab.goto(`${BASE}/customers/sse-probe-dummy`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+
+    // Wait for WorkflowDataContext's 500 ms initialTimer + SSE handshake.
+    await new Promise(r => setTimeout(r, 2500));
+
+    // POST the new lead-status from within the browser context (same-origin
+    // session cookie, mirrors the real admin-panel flow).
+    const postResult = await iRelayTab.evaluate(async (url, key, label) => {
+      try {
+        const res = await fetch(`${url}/api/admin/lead-statuses`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, label }),
+        });
+        const body = await res.json();
+        return { status: res.status, key: body.key, label: body.label };
+      } catch (e) {
+        return { status: 0, error: String(e) };
+      }
+    }, BASE, LS_KEY_NEW, LABEL_NEW);
+
+    record(
+      '[I] in-page POST creates new lead-status LABEL_NEW',
+      `status=201 key="${LS_KEY_NEW}" label="${LABEL_NEW}"`,
+      `status=${postResult.status} key="${postResult.key}" label="${postResult.label}"`,
+      postResult.status === 201 && postResult.key === LS_KEY_NEW && postResult.label === LABEL_NEW,
+    );
+
+    // Wait for the BC spy flag on the listener tab.
+    const iBcDeadline = Date.now() + 8000;
+    while (Date.now() < iBcDeadline) {
+      const received = await iListenerTab.evaluate(() => window.__i_bc_received);
+      if (received) break;
+      await new Promise(r => setTimeout(r, 150));
+    }
+    const iBcFlagSet = await iListenerTab.evaluate(() => !!window.__i_bc_received);
+    record(
+      '[I] BroadcastChannel message received on iListenerTab after POST (SSE relay verified)',
+      'window.__i_bc_received = true within 8 s',
+      `received=${iBcFlagSet}`,
+      iBcFlagSet,
+    );
+
+    // Assert the new label appears in the filter dropdown on the listener tab.
+    const iLabelAppeared = await waitForFilterLabel(iListenerTab, LABEL_NEW, 8000);
+    const optsAfterI = await getFilterOptions(iListenerTab);
+    record(
+      '[I] SSE broadcast (POST) causes iListenerTab filter dropdown to show LABEL_NEW',
+      `option starting with "${LABEL_NEW}" within 8 s`,
+      `found=${iLabelAppeared} options: ${JSON.stringify(optsAfterI.filter(t => t !== 'All statuses').slice(0, 6))}`,
+      iLabelAppeared,
+    );
+
+    await iListenerTab.evaluate(() => { try { window.__i_bc_spy?.close(); } catch { /**/ } });
+
+    // ── (J) SSE broadcast — DELETE path ──────────────────────────────────────
+    // Deletes the status created in [I] from the same relay tab (SSE EventSource
+    // is still open).  Asserts the deleted label disappears from the listener
+    // tab's filter dropdown via the same SSE → BroadcastChannel → re-render path.
+    console.log('\n  [J] SSE broadcast — DELETE path');
+
+    // Attach a fresh BC spy on the same listener tab.
+    await iListenerTab.evaluate(() => {
+      window.__j_bc_received = false;
+      const spy = new BroadcastChannel('lead_statuses_changed');
+      spy.addEventListener('message', () => { window.__j_bc_received = true; });
+      window.__j_bc_spy = spy;
+    });
+
+    // Send DELETE from the relay tab's browser context.
+    const deleteResult = await iRelayTab.evaluate(async (url, key) => {
+      try {
+        const res = await fetch(
+          `${url}/api/admin/lead-statuses/${encodeURIComponent(key)}`,
+          { method: 'DELETE' },
+        );
+        const body = await res.json();
+        return { status: res.status, ok: body.ok };
+      } catch (e) {
+        return { status: 0, error: String(e) };
+      }
+    }, BASE, LS_KEY_NEW);
+
+    record(
+      '[J] in-page DELETE removes LABEL_NEW lead-status',
+      `status=200 ok=true`,
+      `status=${deleteResult.status} ok=${deleteResult.ok}`,
+      deleteResult.status === 200 && deleteResult.ok === true,
+    );
+
+    // Wait for the BC spy flag on the listener tab.
+    const jBcDeadline = Date.now() + 8000;
+    while (Date.now() < jBcDeadline) {
+      const received = await iListenerTab.evaluate(() => window.__j_bc_received);
+      if (received) break;
+      await new Promise(r => setTimeout(r, 150));
+    }
+    const jBcFlagSet = await iListenerTab.evaluate(() => !!window.__j_bc_received);
+    record(
+      '[J] BroadcastChannel message received on iListenerTab after DELETE (SSE relay verified)',
+      'window.__j_bc_received = true within 8 s',
+      `received=${jBcFlagSet}`,
+      jBcFlagSet,
+    );
+
+    // Assert the deleted label is gone from the filter dropdown.
+    const jLabelGone = await waitForFilterLabelGone(iListenerTab, LABEL_NEW, 8000);
+    const optsAfterJ = await getFilterOptions(iListenerTab);
+    record(
+      '[J] SSE broadcast (DELETE) causes iListenerTab filter dropdown to remove LABEL_NEW',
+      `no option starting with "${LABEL_NEW}" within 8 s`,
+      `gone=${jLabelGone} options: ${JSON.stringify(optsAfterJ.filter(t => t !== 'All statuses').slice(0, 6))}`,
+      jLabelGone,
+    );
+
+    await iListenerTab.evaluate(() => { try { window.__j_bc_spy?.close(); } catch { /**/ } });
+    await iListenerTab.close();
+    await iRelayTab.close();
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -1237,6 +1425,27 @@ async function writeReport(runId, findings) {
     '  Exercises: server-side SSE broadcast (lines ~4221–4224 of `server.js`),',
     '  the SSE → BC bridge in `WorkflowDataContext.tsx` lines ~319–324, and the',
     '  BC → `refresh()` path in `CustomersPage.tsx` `useLeadStatusSync`.',
+    '- **(I) SSE broadcast — POST (create) path** (two-page setup): follows the',
+    '  same two-tab pattern as [H]. `iListenerTab` navigates to `/customers` with',
+    '  a passive `window.__i_bc_received` spy. `iRelayTab` opens `/customers/:id`',
+    '  so `WorkflowDataContext` mounts its SSE `EventSource`. After 2.5 s,',
+    '  `iRelayTab` calls `POST /api/admin/lead-statuses` with a fresh key',
+    '  (`PRIVTEST_LS_SYNC_NEW`) and label (`PrivTest Created New`) via in-page',
+    '  `fetch()`. The server broadcasts `lead_statuses_changed` SSE; the BC bridge',
+    '  fires on `iListenerTab`; `useLeadStatusSync` calls `refresh()` →',
+    '  `loadLeadStatuses()` → `populateLeadStatusFilter()`. Asserts (i)',
+    '  `window.__i_bc_received` is true within 8 s, (ii) the new label appears',
+    '  in the filter dropdown within 8 s. Exercises the POST SSE broadcast path',
+    '  in `server.js` (lines ~4266–4269).',
+    '- **(J) SSE broadcast — DELETE path** (continues on the same two tabs): reuses',
+    '  `iListenerTab` and `iRelayTab` from [I]. Attaches a fresh',
+    '  `window.__j_bc_received` spy on `iListenerTab`, then calls',
+    '  `DELETE /api/admin/lead-statuses/PRIVTEST_LS_SYNC_NEW` from `iRelayTab`\'s',
+    '  browser context. The server broadcasts `lead_statuses_changed` SSE; the BC',
+    '  bridge fires; `useLeadStatusSync` refreshes the dropdown. Asserts (i)',
+    '  `window.__j_bc_received` is true within 8 s, (ii) the deleted label is',
+    '  absent from the filter dropdown within 8 s. Exercises the DELETE SSE',
+    '  broadcast path in `server.js` (lines ~4555–4562).',
     '',
     '## Notes',
     '',
