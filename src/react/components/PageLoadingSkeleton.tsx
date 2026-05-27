@@ -594,7 +594,7 @@ export function AdminSettingsPageSkeleton({ forceVisible }: { forceVisible?: boo
           <MuiSkeleton variant="rounded" width={72} height={36} sx={{ flexShrink: 0 }} />
         </Stack>
 
-        {/* Sales board section */}
+        {/* Sales board */}
         <MuiSkeleton variant="text" width={100} height={18} sx={{ mb: 1.5 }} />
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
           <MuiSkeleton variant="rounded" width={220} height={56} />
@@ -603,7 +603,7 @@ export function AdminSettingsPageSkeleton({ forceVisible }: { forceVisible?: boo
 
         <Box sx={{ my: 2, borderTop: '1px solid', borderColor: 'divider' }} />
 
-        {/* Surveys board section */}
+        {/* Surveys board */}
         <MuiSkeleton variant="text" width={110} height={18} sx={{ mb: 1.5 }} />
         <MuiSkeleton variant="rounded" width={200} height={56} sx={{ mb: 2 }} />
 
