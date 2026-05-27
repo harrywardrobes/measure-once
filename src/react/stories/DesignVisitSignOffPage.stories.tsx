@@ -78,6 +78,62 @@ export const MainView: Story = {
   ),
 };
 
+export const MainWithPhotos: Story = {
+  name: 'Main — with room photos',
+  render: () => (
+    <DesignVisitSignOffPage
+      embedded={{
+        state: 'main',
+        data: {
+          ...SAMPLE_DATA,
+          rooms: [
+            {
+              roomName: 'Kitchen',
+              doorStyleName: 'Shaker Ivory',
+              unitCount: 14,
+              totalPence: 620000,
+              images: [
+                { storageKey: 'https://picsum.photos/seed/kitchen1/800/600' },
+                { storageKey: 'https://picsum.photos/seed/kitchen2/800/600' },
+                { storageKey: 'https://picsum.photos/seed/kitchen3/800/600' },
+              ],
+            },
+            {
+              roomName: 'Utility Room',
+              doorStyleName: 'Shaker Ivory',
+              unitCount: 6,
+              totalPence: 185000,
+              images: [
+                { storageKey: 'https://picsum.photos/seed/utility1/800/600' },
+              ],
+            },
+            {
+              roomName: 'Master Bedroom',
+              doorStyleName: 'Handleless Dust Grey',
+              unitCount: 8,
+              totalPence: 310000,
+              images: [
+                { storageKey: 'https://picsum.photos/seed/bedroom1/800/600' },
+                { storageKey: 'https://picsum.photos/seed/bedroom2/800/600' },
+              ],
+            },
+          ],
+        },
+      }}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Shows the "Room Photos" section rendered with placeholder images. ' +
+          'In production the storageKey values are opaque object-store keys; ' +
+          'here we use public picsum.photos URLs which safeImageSrc passes through directly.',
+      },
+    },
+  },
+};
+
 export const MainSuperseded: Story = {
   name: 'Main — superseded (changes in progress)',
   render: () => (
