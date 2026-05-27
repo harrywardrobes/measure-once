@@ -1,5 +1,6 @@
 import React from 'react';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { usePrefs } from '../hooks/usePrefs';
 import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 import {
   Alert,
@@ -152,6 +153,7 @@ export function CalendarPage(): React.ReactElement {
   useConnectionCheck();
   const { notifyApiError } = useConnectionToast();
   const { isViewer } = usePrivilege();
+  const { prefs, loading: prefsLoading, patchPref } = usePrefs();
   const [cursor, setCursor] = React.useState<Date>(() => startOfDay(new Date()));
   const [showWorkshop, setShowWorkshop] = React.useState<boolean>(true);
   const [visits, setVisits] = React.useState<Visit[]>([]);
@@ -172,17 +174,17 @@ export function CalendarPage(): React.ReactElement {
   const weekStart = React.useMemo(() => startOfWeek(cursor), [cursor]);
   const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
 
-  // Load workshop pref once.
+  // Apply workshop pref once prefs have loaded.
+  const workshopPrefAppliedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (prefsLoading || workshopPrefAppliedRef.current) return;
+    workshopPrefAppliedRef.current = true;
+    if ('calShowWorkshop' in prefs) setShowWorkshop(!!prefs.calShowWorkshop);
+  }, [prefsLoading, prefs]);
+
+  // Check Google auth status once on mount.
   React.useEffect(() => {
     let cancelled = false;
-    fetch('/api/users/me/prefs', { headers: { Accept: 'application/json' } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((prefs) => {
-        if (cancelled || !prefs) return;
-        if ('calShowWorkshop' in prefs) setShowWorkshop(!!prefs.calShowWorkshop);
-      })
-      .catch(() => {});
-    // Check Google auth status.
     fetch('/api/auth/status', { headers: { Accept: 'application/json' } })
       .then((r) => (r.ok ? r.json() : null))
       .then((s) => { if (!cancelled && s) setGoogleConnected(!!s.google); })
@@ -230,11 +232,7 @@ export function CalendarPage(): React.ReactElement {
 
   const onToggleWorkshop = (checked: boolean) => {
     setShowWorkshop(checked);
-    fetch('/api/users/me/prefs', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ calShowWorkshop: checked }),
-    }).catch(() => {});
+    void patchPref('calShowWorkshop', checked);
   };
 
   const openVisitModal = (visit: Visit | null, prefillDate?: string | null) => {
@@ -921,22 +919,20 @@ function VisitModal(props: {
     [contacts],
   );
 
-  // Load the gcal-sync preference once on mount (matches legacy behaviour).
+  const { prefs: visitPrefs, loading: visitPrefsLoading, patchPref: patchVisitPref } = usePrefs();
+
+  // Apply gcal-sync pref once prefs have loaded (only for new visits when Google is connected).
+  const gcalPrefAppliedRef = React.useRef(false);
   React.useEffect(() => {
     if (existing || !googleConnected) return;
-    fetch('/api/users/me/prefs', { headers: { Accept: 'application/json' } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((prefs) => { if (prefs?.gcal_sync_pref === true) setAddToGcal(true); })
-      .catch(() => {});
-  }, [existing, googleConnected]);
+    if (visitPrefsLoading || gcalPrefAppliedRef.current) return;
+    gcalPrefAppliedRef.current = true;
+    if (visitPrefs.gcal_sync_pref === true) setAddToGcal(true);
+  }, [existing, googleConnected, visitPrefsLoading, visitPrefs]);
 
   const onGcalToggle = (checked: boolean) => {
     setAddToGcal(checked);
-    fetch('/api/users/me/prefs', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gcal_sync_pref: checked }),
-    }).catch(() => {});
+    void patchVisitPref('gcal_sync_pref', checked);
   };
 
   const save = async () => {

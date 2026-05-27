@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { usePrefs } from '../hooks/usePrefs';
 import Box from '@mui/material/Box';
 import BottomNavigation from '@mui/material/BottomNavigation';
 import BottomNavigationAction from '@mui/material/BottomNavigationAction';
@@ -123,41 +124,22 @@ async function loadRoleNavConfig(): Promise<string[] | null> {
   }
 }
 
-async function loadUserNavPrefs(): Promise<string[] | null> {
-  try {
-    const r = await fetch('/api/users/me/prefs', { headers: { Accept: 'application/json' } });
-    if (!r.ok) return null;
-    const data = await r.json() as { nav_primary_keys?: unknown };
-    const keys = data.nav_primary_keys;
-    if (
-      Array.isArray(keys) &&
-      keys.length === BAR_SIZE &&
-      keys.every((k) => typeof k === 'string' && VALID_NAV_KEYS.has(k)) &&
-      new Set(keys).size === BAR_SIZE
-    ) {
-      return keys as string[];
-    }
-    return null;
-  } catch {
-    return null;
+function parseNavKeys(raw: unknown): string[] | null {
+  if (
+    Array.isArray(raw) &&
+    raw.length === BAR_SIZE &&
+    raw.every((k) => typeof k === 'string' && VALID_NAV_KEYS.has(k)) &&
+    new Set(raw).size === BAR_SIZE
+  ) {
+    return raw as string[];
   }
-}
-
-async function saveUserNavPrefs(keys: string[]): Promise<void> {
-  try {
-    await fetch('/api/users/me/prefs', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ nav_primary_keys: keys }),
-    });
-  } catch {
-    // best-effort
-  }
+  return null;
 }
 
 export function BottomNav() {
   const theme = useTheme();
   const { isManager } = usePrivilege();
+  const { prefs, loading: prefsLoading, patchPref } = usePrefs();
   const [value, setValue] = useState<string | false>(() =>
     typeof window === 'undefined' ? false : matchPath(window.location.pathname),
   );
@@ -209,10 +191,12 @@ export function BottomNav() {
   }, []);
 
   useEffect(() => {
+    if (prefsLoading) return; // Wait for prefs to be available before reading nav_primary_keys
     let cancelled = false;
-    Promise.all([loadUserNavPrefs(), loadRoleNavConfig()]).then(([userPrefs, roleKeys]) => {
+    loadRoleNavConfig().then((roleKeys) => {
       if (cancelled) return;
       // User personal prefs take priority over role config.
+      const userPrefs = parseNavKeys(prefs.nav_primary_keys);
       const keys = userPrefs ?? roleKeys;
       if (keys) {
         setPrimaryKeys(keys);
@@ -229,7 +213,8 @@ export function BottomNav() {
       setConfigLoaded(true);
     });
     return () => { cancelled = true; };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefsLoading]);
 
   // Re-apply role-aware defaults when the privilege level resolves after the
   // initial config load.  This handles the common race: the config fetch
@@ -259,8 +244,8 @@ export function BottomNav() {
   const handleCustomiseSave = useCallback((keys: string[]) => {
     setPrimaryKeys(keys);
     apiConfigFoundRef.current = true;
-    void saveUserNavPrefs(keys);
-  }, []);
+    void patchPref('nav_primary_keys', keys);
+  }, [patchPref]);
 
   const actionSx = {
     color: 'text.secondary',

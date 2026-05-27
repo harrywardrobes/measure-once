@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Avatar,
@@ -24,6 +24,7 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { BRAND_COLORS, RADIUS, STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { usePrefs } from '../hooks/usePrefs';
 import { InvoiceDetailDrawer, fmtGBP as fmtGBPShared } from '../components/InvoiceDetailDrawer';
 import { PageFilterBar } from '../components/PageFilterBar';
 import { StageTabGroup } from '../components/StageTabGroup';
@@ -694,21 +695,16 @@ export function ProjectsPage() {
   // QB state — read from window globals (populated by invoices-core.js when loaded)
   const qb = (window as unknown as WindowGlobals).state?.qb;
 
-  // ── Load prefs ─────────────────────────────────────────────────────────────
+  const { prefs, loading: prefsLoading, patchPref } = usePrefs();
+
+  // ── Apply prefs once they have loaded ──────────────────────────────────────
+  const prefAppliedRef = useRef(false);
   useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch('/api/users/me/prefs', { headers: { Accept: 'application/json' } });
-        if (r.ok) {
-          const prefs = (await r.json()) as Record<string, unknown>;
-          if (prefs?.projectSort) setSortBy(prefs.projectSort as SortKey);
-          if (prefs?.projectGroupByStage != null) setGroupBy(!!prefs.projectGroupByStage);
-        }
-      } catch {
-        // ignore — default prefs are fine
-      }
-    })();
-  }, []);
+    if (prefsLoading || prefAppliedRef.current) return;
+    prefAppliedRef.current = true;
+    if (prefs.projectSort) setSortBy(prefs.projectSort as SortKey);
+    if (prefs.projectGroupByStage != null) setGroupBy(!!prefs.projectGroupByStage);
+  }, [prefsLoading, prefs]);
 
   const isStale = roomAssignmentsStale && !staleDismissed;
 
@@ -731,32 +727,19 @@ export function ProjectsPage() {
     return tabs;
   }, [workflow]);
 
-  // ── Pref persistence helpers ───────────────────────────────────────────────
-  const persistPref = useCallback(async (key: string, value: unknown) => {
-    try {
-      await fetch('/api/users/me/prefs', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ [key]: value }),
-      });
-    } catch {
-      // ignore
-    }
-  }, []);
-
   const handleSortChange = useCallback(
     (val: SortKey) => {
       setSortBy(val);
-      persistPref('projectSort', val);
+      void patchPref('projectSort', val);
     },
-    [persistPref],
+    [patchPref],
   );
 
   const handleGroupToggle = useCallback(() => {
     const next = !groupBy;
     setGroupBy(next);
-    persistPref('projectGroupByStage', next);
-  }, [groupBy, persistPref]);
+    void patchPref('projectGroupByStage', next);
+  }, [groupBy, patchPref]);
 
   // ── Fitter picker ──────────────────────────────────────────────────────────
   const handleOpenPicker = useCallback((contactId: string, roomIdx: number) => {
