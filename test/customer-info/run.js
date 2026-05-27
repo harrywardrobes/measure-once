@@ -145,6 +145,19 @@ async function cleanup(pool, contactId) {
   } catch {}
 }
 
+// ── Validation probe helper ───────────────────────────────────────────────────
+// Used by CI-V probes: POST the submit endpoint with a partial / invalid body
+// and assert the server returns 400 with an `error` field.
+async function postSubmit(base, token, body) {
+  const res = await fetch(`${base}/api/customer-info/${token}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => null);
+  return { status: res.status, json };
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   const hasTestDb   = !!process.env.DATABASE_URL_TEST;
@@ -312,6 +325,80 @@ async function main() {
       if (uploadOk) uploadedKeys = uploadBody.keys;
     } else {
       record('CI-3.photo-upload', false, 'skipped — no rawToken');
+    }
+
+    // ── CI-V: Input validation probes ────────────────────────────────────────
+    // CI-V1 – no contactId on the upload-photos-and-info action
+    const noContactIdRes = await client.post('/api/card-actions/upload-photos-and-info', {});
+    const noContactId400 = noContactIdRes.status === 400 && noContactIdRes.json?.error;
+    record('CI-V1.no-contactId',
+      noContactId400,
+      noContactId400
+        ? `400 error="${noContactIdRes.json.error}"`
+        : `status=${noContactIdRes.status} body=${noContactIdRes.text.slice(0, 200)}`);
+
+    if (rawToken) {
+      // Base for valid fields (roomCount and photoKeys are fine; we vary address fields)
+      const validBase = {
+        correctedEmail: '', correctedMobile: '',
+        addressLine1: '42 Test Road', city: 'Manchester', postcode: 'M1 1AA',
+        roomCount: '2', roomNotes: '', photoKeys: uploadedKeys,
+      };
+
+      // CI-V2 – missing addressLine1 → 400
+      const v2 = await postSubmit(BASE, rawToken, { ...validBase, addressLine1: '' });
+      const v2Ok = v2.status === 400 && v2.json?.error;
+      record('CI-V2.missing-addressLine1',
+        v2Ok,
+        v2Ok
+          ? `400 error="${v2.json.error}"`
+          : `status=${v2.status} body=${JSON.stringify(v2.json).slice(0, 200)}`);
+
+      // CI-V3 – invalid roomCount ('5') → 400
+      const v3 = await postSubmit(BASE, rawToken, { ...validBase, roomCount: '5' });
+      const v3Ok = v3.status === 400 && v3.json?.error;
+      record('CI-V3.invalid-roomCount',
+        v3Ok,
+        v3Ok
+          ? `400 error="${v3.json.error}"`
+          : `status=${v3.status} body=${JSON.stringify(v3.json).slice(0, 200)}`);
+
+      // CI-V4 – missing city → 400
+      const v4 = await postSubmit(BASE, rawToken, { ...validBase, city: '' });
+      const v4Ok = v4.status === 400 && v4.json?.error;
+      record('CI-V4.missing-city',
+        v4Ok,
+        v4Ok
+          ? `400 error="${v4.json.error}"`
+          : `status=${v4.status} body=${JSON.stringify(v4.json).slice(0, 200)}`);
+
+      // CI-V5 – missing postcode → 400
+      const v5 = await postSubmit(BASE, rawToken, { ...validBase, postcode: '' });
+      const v5Ok = v5.status === 400 && v5.json?.error;
+      record('CI-V5.missing-postcode',
+        v5Ok,
+        v5Ok
+          ? `400 error="${v5.json.error}"`
+          : `status=${v5.status} body=${JSON.stringify(v5.json).slice(0, 200)}`);
+
+      // CI-V6 – photo upload with no files → 400
+      const emptyFd = new FormData();
+      const noFileRes = await fetch(`${BASE}/api/customer-info/${rawToken}/photos`, {
+        method: 'POST',
+        body: emptyFd,
+      });
+      const noFileBody = await noFileRes.json().catch(() => null);
+      const v6Ok = noFileRes.status === 400 && noFileBody?.error;
+      record('CI-V6.no-photos',
+        v6Ok,
+        v6Ok
+          ? `400 error="${noFileBody.error}"`
+          : `status=${noFileRes.status} body=${JSON.stringify(noFileBody).slice(0, 200)}`);
+    } else {
+      for (const id of ['CI-V2.missing-addressLine1', 'CI-V3.invalid-roomCount',
+                         'CI-V4.missing-city', 'CI-V5.missing-postcode', 'CI-V6.no-photos']) {
+        record(id, false, 'skipped — no rawToken');
+      }
     }
 
     // ── CI-4: POST /api/customer-info/:token (submit) ────────────────────────
