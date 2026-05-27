@@ -490,6 +490,13 @@ function ProjectCard({
   const leadStatusKey = contact.properties?.hs_lead_status;
   const hwSubstatusValue = contact.properties?.hw_lead_substatus;
 
+  // Show "Photos received" badge when the customer has submitted their upload form.
+  // Clears automatically when lead status advances away from AWAITING_PHOTOS.
+  const photosReceived =
+    leadStatusKey === 'AWAITING_PHOTOS' &&
+    typeof hwSubstatusValue === 'string' &&
+    hwSubstatusValue.includes('AWPH_RECEIVED');
+
   // Only show a strip when a matching handler is actually configured.
   const handler = cardActionHandlerFor(primaryStageKey, leadStatusKey, hwSubstatusValue);
 
@@ -587,7 +594,7 @@ function ProjectCard({
             </Typography>
           )}
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: '2px' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: '2px', flexWrap: 'wrap' }}>
           <Typography sx={{ fontSize: '0.72rem', fontWeight: 500, color: BRAND_COLORS.ink4, letterSpacing: '0.02em' }}>
             #{contact.id}
           </Typography>
@@ -610,6 +617,27 @@ function ProjectCard({
               }}
             >
               Unknown status
+            </Box>
+          )}
+          {photosReceived && (
+            <Box
+              component="span"
+              title="Customer has submitted their photos and info — ready to review."
+              sx={{
+                fontSize: '0.62rem',
+                fontWeight: 700,
+                px: '6px',
+                py: '1px',
+                borderRadius: '999px',
+                background: '#dcfce7',
+                color: '#166534',
+                border: '1px solid #bbf7d0',
+                letterSpacing: '0.02em',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              Photos received
             </Box>
           )}
         </Box>

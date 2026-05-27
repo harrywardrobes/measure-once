@@ -38,6 +38,7 @@ interface DemoCardProps {
   actionStageKey?: string;
   showContinueDesigning?: boolean;
   continuingDesign?: boolean;
+  photosReceived?: boolean;
 }
 
 function DemoProjectCard({
@@ -49,6 +50,7 @@ function DemoProjectCard({
   actionStageKey,
   showContinueDesigning = false,
   continuingDesign = false,
+  photosReceived = false,
 }: DemoCardProps) {
   const stageColors = STAGE_COLORS[actionStageKey || rooms[0]?.stageKey || ''];
   const actionTint = stageColors?.light || '#f3f4f6';
@@ -96,9 +98,32 @@ function DemoProjectCard({
             </Typography>
           )}
         </Box>
-        <Typography sx={{ fontSize: '0.72rem', fontWeight: 500, color: BRAND_COLORS.ink4, mt: '2px' }}>
-          #{contactId}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: '2px', flexWrap: 'wrap' }}>
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 500, color: BRAND_COLORS.ink4, letterSpacing: '0.02em' }}>
+            #{contactId}
+          </Typography>
+          {photosReceived && (
+            <Box
+              component="span"
+              title="Customer has submitted their photos and info — ready to review."
+              sx={{
+                fontSize: '0.62rem',
+                fontWeight: 700,
+                px: '6px',
+                py: '1px',
+                borderRadius: '999px',
+                background: '#dcfce7',
+                color: '#166534',
+                border: '1px solid #bbf7d0',
+                letterSpacing: '0.02em',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+              }}
+            >
+              Photos received
+            </Box>
+          )}
+        </Box>
       </Box>
 
       {/* Room rows */}
@@ -333,5 +358,35 @@ export const SalesStageAction: Story = {
       actionLabel="Follow Up Call"
       actionStageKey="sales"
     />
+  ),
+};
+
+export const PhotosReceived: Story = {
+  name: 'Photos received badge (AWAITING_PHOTOS + AWPH_RECEIVED)',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Shown when `hs_lead_status === "AWAITING_PHOTOS"` **and** `hw_lead_substatus` contains `"AWPH_RECEIVED"` — set automatically after the customer submits the upload form. The badge disappears as soon as the lead status advances past AWAITING_PHOTOS.',
+      },
+    },
+  },
+  render: () => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <DemoProjectCard
+        name="Emily Carter"
+        contactId="77777"
+        rooms={[{ roomLabel: 'Kitchen', stageKey: 'sales' }]}
+        photosReceived
+      />
+      <DemoProjectCard
+        name="Marcus Webb"
+        contactId="88888"
+        rooms={[{ roomLabel: 'Main', stageKey: 'sales' }, { roomLabel: 'Utility', stageKey: 'sales' }]}
+        photosReceived
+        actionLabel="Book Survey"
+        actionStageKey="sales"
+      />
+    </Box>
   ),
 };
