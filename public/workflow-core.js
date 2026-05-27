@@ -271,6 +271,9 @@ async function loadContactsPage({ page = 1, leadStatus = '', sort = 'newest' } =
 // the pending ref directly without a network round-trip.
 let _pendingRoomAssignmentsStale = null;
 window.__setTestPendingRoomStale = (v) => { _pendingRoomAssignmentsStale = v; };
+// Tracks whether the user dismissed the banner this session.  Reset when fresh
+// data arrives so the banner can reappear if the data becomes stale again.
+let _roomStaleBannerDismissed = false;
 
 async function _loadWorkflowStagesImpl() {
   const r = await fetch('/api/localdata/all', { method: 'GET', headers: { 'Content-Type': 'application/json' } });
@@ -289,6 +292,7 @@ async function _loadWorkflowStagesImpl() {
     } else {
       state.roomAssignmentsStale = nextStale;
       _pendingRoomAssignmentsStale = null;
+      _renderRoomAssignmentsStaleBanner();
     }
   }
   for (const [contactId, rooms] of Object.entries(data || {})) {
@@ -521,11 +525,11 @@ async function loadLeadStatuses() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   // Apply any deferred room-stale-banner update from a fetch that arrived
-  // while the tab was hidden, then re-render the projects view.
+  // while the tab was hidden, then render the banner.
   if (_pendingRoomAssignmentsStale !== null) {
     state.roomAssignmentsStale = _pendingRoomAssignmentsStale;
     _pendingRoomAssignmentsStale = null;
-    renderProjectsView();
+    _renderRoomAssignmentsStaleBanner();
   }
   // Apply any deferred open-leads stale-badge update and re-render.
   if (_pendingOpenLeadsStale !== null) {
@@ -753,6 +757,42 @@ if (!window._leadDriftListenersAttached) {
     if (document.visibilityState === 'visible') _checkLeadStatusDrift();
   });
   window.addEventListener('focus', _checkLeadStatusDrift);
+}
+
+// ── Room-assignments stale banner ──────────────────────────────────────────────
+// Lightweight DOM renderer for the room-assignments stale indicator, shown as a
+// fixed bottom banner on all pages that load workflow-core.js.  Created and
+// removed dynamically so no per-page HTML markup is required (mirrors the
+// open-leads badge pattern).
+function _renderRoomAssignmentsStaleBanner() {
+  const BANNER_ID = 'room-stale-banner';
+  const existing = document.getElementById(BANNER_ID);
+  if (state.roomAssignmentsStale && !_roomStaleBannerDismissed) {
+    if (!existing) {
+      const el = document.createElement('div');
+      el.id = BANNER_ID;
+      el.className = 'room-stale-banner';
+      el.setAttribute('role', 'alert');
+      const span = document.createElement('span');
+      span.textContent = 'Room data may be out of date \u2014 showing last cached assignments';
+      const btn = document.createElement('button');
+      btn.className = 'room-stale-banner-dismiss';
+      btn.setAttribute('aria-label', 'dismiss stale banner');
+      btn.textContent = '\u00d7';
+      btn.addEventListener('click', () => {
+        _roomStaleBannerDismissed = true;
+        el.remove();
+      });
+      el.appendChild(span);
+      el.appendChild(btn);
+      document.body.appendChild(el);
+    }
+  } else {
+    // Reset the dismissed flag when data is fresh so the banner can reappear
+    // if the data becomes stale again in a future fetch.
+    if (!state.roomAssignmentsStale) _roomStaleBannerDismissed = false;
+    if (existing) existing.remove();
+  }
 }
 
 // ── Open-leads stale badge ─────────────────────────────────────────────────────

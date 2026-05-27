@@ -21,7 +21,6 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import CheckIcon from '@mui/icons-material/Check';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { BRAND_COLORS, RADIUS, STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrefs } from '../hooks/usePrefs';
@@ -675,6 +674,36 @@ export function ProjectsPage() {
   const [staleDismissed, setStaleDismissed] = useState(false);
   const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null);
 
+  // ── Room-assignments stale banner (DOM-managed, mirrors open-leads approach) ─
+  // Creates / removes #room-stale-banner imperatively so no per-page HTML markup
+  // is required and any page that runs this effect gets the banner automatically.
+  useEffect(() => {
+    const BANNER_ID = 'room-stale-banner';
+    if (roomAssignmentsStale && !staleDismissed) {
+      if (!document.getElementById(BANNER_ID)) {
+        const el = document.createElement('div');
+        el.id = BANNER_ID;
+        el.className = 'room-stale-banner';
+        el.setAttribute('role', 'alert');
+        const span = document.createElement('span');
+        span.textContent = 'Room data may be out of date \u2014 showing last cached assignments';
+        const btn = document.createElement('button');
+        btn.className = 'room-stale-banner-dismiss';
+        btn.setAttribute('aria-label', 'dismiss stale banner');
+        btn.textContent = '\u00d7';
+        btn.addEventListener('click', () => setStaleDismissed(true));
+        el.appendChild(span);
+        el.appendChild(btn);
+        document.body.appendChild(el);
+      }
+    } else {
+      document.getElementById(BANNER_ID)?.remove();
+    }
+    return () => {
+      document.getElementById(BANNER_ID)?.remove();
+    };
+  }, [roomAssignmentsStale, staleDismissed]);
+
   // Fitter picker state
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerContactId, setPickerContactId] = useState('');
@@ -706,7 +735,6 @@ export function ProjectsPage() {
     if (prefs.projectGroupByStage != null) setGroupBy(!!prefs.projectGroupByStage);
   }, [prefsLoading, prefs]);
 
-  const isStale = roomAssignmentsStale && !staleDismissed;
 
   const myRooms = filter === '__mine__';
   const stageKeyFilter = myRooms ? '' : filter;
@@ -948,35 +976,6 @@ export function ProjectsPage() {
         background: BRAND_COLORS.paper,
       }}
     >
-      {/* Stale data banner */}
-      {isStale && (
-        <Alert
-          severity="warning"
-          icon={<WarningAmberIcon fontSize="small" />}
-          action={
-            <IconButton
-              className="room-stale-banner-dismiss"
-              aria-label="dismiss stale banner"
-              size="small"
-              onClick={() => setStaleDismissed(true)}
-              sx={{ color: 'inherit' }}
-            >
-              <CloseIcon fontSize="small" />
-            </IconButton>
-          }
-          id="room-stale-banner"
-          role="alert"
-          sx={{
-            borderRadius: 0,
-            flexShrink: 0,
-            py: 0.5,
-            fontSize: '0.82rem',
-          }}
-        >
-          Room data may be out of date — showing last cached assignments
-        </Alert>
-      )}
-
       {/* Stage filter tabs */}
       <PageFilterBar
         sx={{

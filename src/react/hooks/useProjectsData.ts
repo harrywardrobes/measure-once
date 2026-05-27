@@ -70,7 +70,10 @@ export function useProjectsData(): ProjectsData {
 
   const refresh = useCallback(() => setFetchNonce((n) => n + 1), []);
 
-  // ── Expose test hook ───────────────────────────────────────────────────────
+  // ── Expose test hook for visibility integration tests ──────────────────────
+  // Lets the room-stale-banner-visibility test drive pendingRoomStaleRef
+  // directly without a network round-trip. workflow-core.js exposes its own
+  // hook for non-React pages; this one covers the projects page (React-only).
   useEffect(() => {
     window.__setTestPendingRoomStale = (v: boolean) => {
       pendingRoomStaleRef.current = v;

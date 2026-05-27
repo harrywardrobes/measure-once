@@ -123,8 +123,10 @@ async function openProjectsPage(browser, cookie, cacheStatus) {
   }, null, 15000);
   // Step 2: wait for the loading skeleton to disappear and real content to render.
   // The sort-bar Select (.MuiSelect-root) is always present once loading=false.
+  // #room-stale-banner is now appended to document.body by workflow-core.js,
+  // so we no longer look for it inside #projects-view.
   await page.waitForSelector(
-    '#projects-view .MuiSelect-root, #projects-view #room-stale-banner',
+    '#projects-view .MuiSelect-root, #room-stale-banner',
     { timeout: 12000 },
   ).catch(() => {});
 

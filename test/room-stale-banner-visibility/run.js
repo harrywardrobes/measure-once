@@ -373,7 +373,7 @@ async function writeReport(runId) {
     '- `public/workflow-core.js` — `_loadWorkflowStagesImpl` reads the',
     '  `X-Cache-Status` header; defers `state.roomAssignmentsStale` update',
     '  when `document.hidden` is true.  The `visibilitychange` listener applies',
-    '  any pending update and calls `renderProjectsView()`.',
+    '  any pending update and calls `_renderRoomAssignmentsStaleBanner()`.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
