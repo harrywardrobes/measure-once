@@ -220,12 +220,13 @@ function _buildActionSlotGroups(): ActionStage[] {
         (b.status_key || '').toLowerCase() === lsKeyLower,
       ),
     );
-    if (dflt || hasHandler) {
-      slots.push({ kind: 'ls', stage_key: stageKey, status_key: lsKeyLower, label: dflt || ls.label, rowLabel: 'Default action' });
-    }
 
     const lsSubs = subs.filter(s => String(s.status_key).toUpperCase() === String(ls.key).toUpperCase())
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    if (dflt || hasHandler || lsSubs.length > 0) {
+      slots.push({ kind: 'ls', stage_key: stageKey, status_key: lsKeyLower, label: dflt || ls.label, rowLabel: 'Default action' });
+    }
     for (const sub of lsSubs) {
       const action = (sub.action_label || '').trim();
       if (!action) continue;
