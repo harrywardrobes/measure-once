@@ -34,6 +34,8 @@ There are five handler types. Each maps to its own config block component in
 
 \* Optional field — the block still saves and works if this value is left blank.
 
+> **Validation & edge cases:** `defaultDurationMin` must be between **5 and 1440** minutes (24 hours) when provided — values outside that range are rejected on save. `message` (in **Show message**) is a required field; the block cannot be saved without it.
+
 ---
 
 ## Two-phase status flow (StartDesignVisit only)
