@@ -428,7 +428,7 @@ router.post('/api/card-actions/upload-photos-and-info',
     const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
     await sendCustomerInviteEmail(email, maskEmail(email), formLink);
 
-    res.json({ ok: true });
+    res.status(201).json({ ok: true });
   }
 );
 
