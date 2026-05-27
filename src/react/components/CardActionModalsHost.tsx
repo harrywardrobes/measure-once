@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { DesignVisitWizard } from './DesignVisitWizard';
 import { MessagePopupModal } from './modals/MessagePopupModal';
 import { DesignVisitCalendarModal } from './modals/DesignVisitCalendarModal';
+import { VisitCalendarModal } from './modals/VisitCalendarModal';
 import { PhoneSummaryModal } from './modals/PhoneSummaryModal';
 import { registerCardActionModalOpener } from '../utils/cardActionModalRegistry';
 import type { CardActionHandlerData } from '../hooks/useCardActionHandlers';
@@ -12,6 +13,7 @@ type ModalState =
   | { type: 'none' }
   | { type: 'show_message';                handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'add_design_visit_to_calendar'; handler: CardActionHandlerData; ctx: CardActionContext }
+  | { type: 'schedule_visit';              handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'summarise_phone_call';         handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'start_design_visit';           handler: CardActionHandlerData; ctx: CardActionContext; existingVisit?: ExistingVisit | null };
 
@@ -30,6 +32,9 @@ export function CardActionModalsHost() {
           break;
         case 'add_design_visit_to_calendar':
           setModal({ type: 'add_design_visit_to_calendar', handler, ctx });
+          break;
+        case 'schedule_visit':
+          setModal({ type: 'schedule_visit', handler, ctx });
           break;
         case 'summarise_phone_call':
           setModal({ type: 'summarise_phone_call', handler, ctx });
@@ -65,6 +70,9 @@ export function CardActionModalsHost() {
       )}
       {modal.type === 'add_design_visit_to_calendar' && (
         <DesignVisitCalendarModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+      )}
+      {modal.type === 'schedule_visit' && (
+        <VisitCalendarModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
       )}
       {modal.type === 'summarise_phone_call' && (
         <PhoneSummaryModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />

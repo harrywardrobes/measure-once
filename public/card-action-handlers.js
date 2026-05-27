@@ -145,14 +145,15 @@
   }
 
   function dispatchCardActionHandler(handler, ctx, triggerEl) {
-    if (handler.type === 'add_design_visit_to_calendar') return openDesignVisitModal(handler, ctx);
-    if (handler.type === 'summarise_phone_call')        return openPhoneSummaryModal(handler, ctx);
-    if (handler.type === 'show_message')                return openMessagePopup(handler, ctx);
-    if (handler.type === 'start_design_visit') {
+    if (handler.type === 'add_design_visit_to_calendar' ||
+        handler.type === 'schedule_visit' ||
+        handler.type === 'start_design_visit') {
       if (typeof window.openCardActionModal === 'function') return window.openCardActionModal(handler, ctx);
       console.error('[card-action-handlers] window.openCardActionModal not available — React bundle not loaded?');
       return;
     }
+    if (handler.type === 'summarise_phone_call') return openPhoneSummaryModal(handler, ctx);
+    if (handler.type === 'show_message')         return openMessagePopup(handler, ctx);
     console.warn('Unknown card action handler type:', handler.type);
   }
 
@@ -237,113 +238,6 @@
 
   function _toast(msg, isErr) {
     return showToast(msg, !!isErr);
-  }
-
-  // ── Handler: add_design_visit_to_calendar ──────────────────────────────────
-  function openDesignVisitModal(handler, ctx) {
-    const cfg = handler.config || {};
-    const duration = cfg.defaultDurationMin || 60;
-    const title    = cfg.defaultTitle       || (ctx.contactName ? `Design visit — ${ctx.contactName}` : 'Design visit');
-    const addToGoogle = cfg.addToGoogleCalendar !== false;
-
-    const now = new Date();
-    now.setMinutes(0, 0, 0);
-    now.setHours(now.getHours() + 24);
-    const startDefault = _toLocalInputValue(now);
-
-    const wrap = _openModal(`
-      <h3>Schedule design visit${ctx.contactName ? ` for ${_esc(ctx.contactName)}` : ''}</h3>
-      <label>Title</label>
-      <input type="text" id="cah-dv-title" value="${_esc(title)}" maxlength="120">
-      <div class="cah-row">
-        <div>
-          <label>Start</label>
-          <input type="datetime-local" id="cah-dv-start" value="${_esc(startDefault)}">
-        </div>
-        <div>
-          <label>Duration (min)</label>
-          <input type="number" id="cah-dv-duration" value="${duration}" min="5" max="1440" step="5">
-        </div>
-      </div>
-      <label>Location (optional)</label>
-      <input type="text" id="cah-dv-location" maxlength="300" placeholder="Customer address">
-      <label>Notes (optional)</label>
-      <textarea id="cah-dv-notes" maxlength="4000" placeholder="Anything the designer should know"></textarea>
-      <div class="cah-checkbox-row">
-        <input type="checkbox" id="cah-dv-google" ${addToGoogle ? 'checked' : ''}>
-        <label for="cah-dv-google">Also add to my Google Calendar</label>
-      </div>
-      <div class="cah-error" id="cah-dv-error"></div>
-      <div class="cah-actions">
-        <button class="cah-cancel"  type="button">Cancel</button>
-        <button class="cah-primary" type="button">Schedule</button>
-      </div>
-    `);
-
-    wrap.querySelector('.cah-cancel').addEventListener('click', () => wrap.remove());
-    const submitBtn = wrap.querySelector('.cah-primary');
-    submitBtn.addEventListener('click', async () => {
-      const errEl = wrap.querySelector('#cah-dv-error');
-      errEl.textContent = '';
-      const titleV    = wrap.querySelector('#cah-dv-title').value.trim();
-      const startV    = wrap.querySelector('#cah-dv-start').value;
-      const durationV = parseInt(wrap.querySelector('#cah-dv-duration').value, 10);
-      const locationV = wrap.querySelector('#cah-dv-location').value.trim();
-      const notesV    = wrap.querySelector('#cah-dv-notes').value.trim();
-      const addGcal   = wrap.querySelector('#cah-dv-google').checked;
-
-      if (!titleV) { errEl.textContent = 'Title is required.'; return; }
-      if (!startV) { errEl.textContent = 'Start time is required.'; return; }
-      if (!Number.isInteger(durationV) || durationV < 5) { errEl.textContent = 'Duration must be ≥ 5 minutes.'; return; }
-
-      const start = new Date(startV);
-      const end   = new Date(start.getTime() + durationV * 60000);
-
-      submitBtn.disabled = true; submitBtn.textContent = 'Scheduling…';
-      try {
-        await POST('/api/visits', {
-          type:         'design',
-          title:        titleV,
-          customerId:   ctx.contactId || null,
-          customerName: ctx.contactName || null,
-          startAt:      start.toISOString(),
-          endAt:        end.toISOString(),
-          location:     locationV || null,
-          notes:        notesV    || null,
-        });
-        if (addGcal) {
-          try {
-            await POST('/api/events', {
-              summary:     titleV,
-              description: notesV || '',
-              location:    locationV || '',
-              start:       { dateTime: start.toISOString() },
-              end:         { dateTime: end.toISOString() },
-            });
-          } catch (e) {
-            _toast('Visit saved; Google Calendar add failed: ' + (e.message || 'error'), true);
-            wrap.remove();
-            if (typeof window.renderUpcomingVisits === 'function') {
-              try { window.renderUpcomingVisits(); } catch (_) {}
-            }
-            return;
-          }
-        }
-        _toast('Visit scheduled');
-        wrap.remove();
-        if (typeof window.renderUpcomingVisits === 'function') {
-          try { window.renderUpcomingVisits(); } catch (_) {}
-        }
-      } catch (e) {
-        submitBtn.disabled = false; submitBtn.textContent = 'Schedule';
-        errEl.textContent = 'Could not save: ' + (e.message || 'error');
-      }
-    });
-  }
-
-  function _toLocalInputValue(d) {
-    const pad = n => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   // ── Handler: summarise_phone_call ──────────────────────────────────────────

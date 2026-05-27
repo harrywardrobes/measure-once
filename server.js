@@ -4902,11 +4902,13 @@ app.post('/api/admin/lead-substatuses/sync-hubspot', isAuthenticated, requireAdm
 });
 
 // ── Card action handlers ─────────────────────────────────────────────────────
-// Admins can attach an interactive "handler" to a card action label. Two
-// built-in handler types:
+// Admins can attach an interactive "handler" to a card action label. Built-in
+// handler types:
 //   • add_design_visit_to_calendar — click opens a date/time picker; on submit
-//     a `visits` row + (optionally) a Google Calendar event are created via
-//     existing endpoints (POST /api/visits, POST /api/events).
+//     a `visits` row (type=design) + (optionally) a Google Calendar event are
+//     created via existing endpoints (POST /api/visits, POST /api/events).
+//   • schedule_visit — generic version of the above; visit type (survey,
+//     installation, remedial, workshop, etc.) is set via config.visitType.
 //   • summarise_phone_call — click opens a textarea modal; on submit a HubSpot
 //     note is created against the active contact, then the UI offers to draft
 //     a follow-up email.
@@ -4920,6 +4922,33 @@ app.post('/api/admin/lead-substatuses/sync-hubspot', isAuthenticated, requireAdm
 const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
   add_design_visit_to_calendar(cfg) {
     const out = {};
+    if (cfg.defaultDurationMin !== undefined) {
+      const n = parseInt(cfg.defaultDurationMin, 10);
+      if (!Number.isInteger(n) || n < 5 || n > 24 * 60) {
+        return { error: 'defaultDurationMin must be 5–1440.' };
+      }
+      out.defaultDurationMin = n;
+    }
+    if (cfg.defaultTitle !== undefined) {
+      const v = String(cfg.defaultTitle || '');
+      if (v.length > 120) return { error: 'defaultTitle must be 120 characters or fewer.' };
+      out.defaultTitle = v;
+    }
+    if (cfg.addToGoogleCalendar !== undefined) {
+      out.addToGoogleCalendar = !!cfg.addToGoogleCalendar;
+    }
+    return { value: out };
+  },
+  schedule_visit(cfg) {
+    const VALID_VISIT_TYPES = ['design', 'survey', 'installation', 'remedial', 'workshop', 'other'];
+    const out = {};
+    if (cfg.visitType !== undefined) {
+      const v = String(cfg.visitType || '').toLowerCase();
+      if (!VALID_VISIT_TYPES.includes(v)) {
+        return { error: `visitType must be one of: ${VALID_VISIT_TYPES.join(', ')}.` };
+      }
+      out.visitType = v;
+    }
     if (cfg.defaultDurationMin !== undefined) {
       const n = parseInt(cfg.defaultDurationMin, 10);
       if (!Number.isInteger(n) || n < 5 || n > 24 * 60) {

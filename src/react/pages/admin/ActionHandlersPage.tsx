@@ -7,6 +7,7 @@ import { GET, POST, PATCH, DELETE } from '../../utils/api';
 
 const HANDLER_TYPE_LABELS: Record<string, string> = {
   add_design_visit_to_calendar: 'Add design visit to calendar',
+  schedule_visit:               'Schedule visit (any type)',
   summarise_phone_call:         'Summarise phone call',
   show_message:                 'Show informational message',
   start_design_visit:           'Start design visit wizard',
@@ -23,6 +24,15 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     '/api/events) using their stored Google OAuth credentials. No email is ' +
     'sent by this app — Google Calendar may email invitees if attendees ' +
     'are added.\n' +
+    '• No HubSpot record is changed by this action.',
+  schedule_visit:
+    'Generic version of "Add design visit to calendar" — works for any visit ' +
+    'type (survey, installation, remedial, workshop, etc.).\n' +
+    '• Clicking the action on a card opens a MUI DateTimePicker modal asking ' +
+    'for date, time, duration, title, location, and notes.\n' +
+    '• On submit, a visit row is created in this CRM (POST /api/visits) with ' +
+    'the visit type you select below.\n' +
+    '• Optionally adds a Google Calendar event (POST /api/events).\n' +
     '• No HubSpot record is changed by this action.',
   summarise_phone_call:
     'Clicking the action on a Sales/Survey card opens a modal with a ' +
@@ -282,6 +292,27 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
           `<option value="${k}" ${k === type ? 'selected' : ''}>${esc(v)}</option>`).join('')}
       </select>
       <div id="cah-type-desc" class="adm-type-desc"></div>
+      <div id="cah-sv-block" class="hidden adm-block-mt12">
+        <label class="adm-modal-label adm-modal-label--first">Visit type</label>
+        <select id="cah-sv-type" class="field adm-field-sm">
+          <option value="survey"       ${String(config.visitType || 'survey') === 'survey'       ? 'selected' : ''}>Survey</option>
+          <option value="installation" ${String(config.visitType || '') === 'installation' ? 'selected' : ''}>Installation</option>
+          <option value="remedial"     ${String(config.visitType || '') === 'remedial'     ? 'selected' : ''}>Remedial</option>
+          <option value="workshop"     ${String(config.visitType || '') === 'workshop'     ? 'selected' : ''}>Workshop</option>
+          <option value="design"       ${String(config.visitType || '') === 'design'       ? 'selected' : ''}>Design visit</option>
+          <option value="other"        ${String(config.visitType || '') === 'other'        ? 'selected' : ''}>Other</option>
+        </select>
+        <div class="adm-mt-10">
+          <label class="adm-modal-label adm-modal-label--first">Default duration (min) <span class="adm-optional">(optional)</span></label>
+          <input id="cah-sv-duration" type="number" class="field adm-field-sm" min="5" max="1440" step="5" value="${esc(String(config.defaultDurationMin || 60))}">
+        </div>
+        <div class="adm-mt-8">
+          <label class="adm-checkbox-row">
+            <input type="checkbox" id="cah-sv-google" ${config.addToGoogleCalendar !== false ? 'checked' : ''}>
+            Also add to Google Calendar
+          </label>
+        </div>
+      </div>
       <div id="cah-msg-block" class="hidden adm-block-mt12">
         <label class="adm-modal-label adm-modal-label--first">Popup title (optional)</label>
         <input id="cah-msg-title" type="text" class="field adm-field-sm" maxlength="120">
@@ -337,6 +368,7 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
 
   const descEl       = wrap.querySelector('#cah-type-desc')       as HTMLElement;
   const typeSel      = wrap.querySelector('#cah-type')            as HTMLSelectElement;
+  const svBlock      = wrap.querySelector('#cah-sv-block')        as HTMLElement;
   const msgBlock     = wrap.querySelector('#cah-msg-block')       as HTMLElement;
   const sdvBlock     = wrap.querySelector('#cah-sdv-block')       as HTMLElement;
   const cfgBlock     = wrap.querySelector('#cah-cfg-block')       as HTMLElement;
@@ -356,9 +388,11 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
     const t = typeSel.value;
     descEl.textContent = HANDLER_TYPE_DESCRIPTIONS[t] || '';
     const isMsg = t === 'show_message', isSdv = t === 'start_design_visit';
-    msgBlock.style.display = isMsg ? '' : 'none';
-    sdvBlock.style.display = isSdv ? '' : 'none';
-    cfgBlock.style.display = (isMsg || isSdv) ? 'none' : '';
+    const isSv  = t === 'schedule_visit';
+    svBlock.style.display  = isSv            ? '' : 'none';
+    msgBlock.style.display = isMsg           ? '' : 'none';
+    sdvBlock.style.display = isSdv           ? '' : 'none';
+    cfgBlock.style.display = (isMsg || isSdv || isSv) ? 'none' : '';
   };
   renderForType();
   typeSel.addEventListener('change', () => { conflictBox.style.display = 'none'; renderForType(); });
@@ -384,7 +418,17 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
       return null;
     }
     let cfg: Record<string, unknown>;
-    if (tp === 'show_message') {
+    if (tp === 'schedule_visit') {
+      const visitType = (wrap.querySelector('#cah-sv-type') as HTMLSelectElement).value;
+      const durVal    = parseInt((wrap.querySelector('#cah-sv-duration') as HTMLInputElement).value, 10);
+      const gcal      = (wrap.querySelector('#cah-sv-google') as HTMLInputElement).checked;
+      if (durVal && (isNaN(durVal) || durVal < 5 || durVal > 1440)) {
+        errEl.textContent = 'Default duration must be between 5 and 1440 minutes.'; return null;
+      }
+      cfg = { visitType };
+      if (durVal) cfg.defaultDurationMin = durVal;
+      cfg.addToGoogleCalendar = gcal;
+    } else if (tp === 'show_message') {
       const message = msgBody.value.trim();
       if (!message) { errEl.textContent = 'Message is required for "Show informational message".'; return null; }
       cfg = { message };

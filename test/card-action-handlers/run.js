@@ -11,7 +11,7 @@
 //       `card_action_handlers_changed` BroadcastChannel fires → another open
 //       Sales tab refreshes its in-page handler lookup.
 //   (B) Clicking a bound `.eq-card-action` strip opens the correct modal
-//       (datetime-local picker for add_design_visit_to_calendar, textarea
+//       (MUI DateTimePicker for add_design_visit_to_calendar, textarea
 //       for summarise_phone_call) and submitting the form posts to the
 //       expected backend route.
 //   (C) Substatus binding wins over a label binding when both exist for the
@@ -69,6 +69,7 @@ require('dotenv').config();
 // Use lowercase letters/digits/underscores only — these are what the server-side
 // label-binding validator (_validateHandlerBinding) accepts for status_key.
 const LBL_KEY_DV       = 'privtest_cah_dv';       // bound to add_design_visit_to_calendar
+const LBL_KEY_SV       = 'privtest_cah_sv';        // bound to schedule_visit (survey type)
 const LBL_KEY_PC       = 'privtest_cah_pc';        // bound to summarise_phone_call
 const LBL_KEY_OVR      = 'privtest_cah_ovr';       // (sales, this) -> handler A (label binding)
 const SUB_STATUS_K     = 'PRIVTEST_CAH_OVR';       // matching status_key (uppercase in lead_substatuses)
@@ -85,6 +86,7 @@ const LBL_KEY_ILS         = 'privtest_cah_ils';      // status_key for the inter
 const INTERMEDIATE_LS     = 'PRIVTEST_INPROGRESS';   // value sent on PATCH /api/contacts/:id when wizard opens
 
 const HANDLER_NAME_DV         = 'PrivTest design visit handler';
+const HANDLER_NAME_SV         = 'PrivTest schedule-visit handler';
 const HANDLER_NAME_PC         = 'PrivTest phone summary handler';
 const HANDLER_NAME_LBL        = 'PrivTest label-binding handler';
 const HANDLER_NAME_SUB        = 'PrivTest substatus-binding handler';
@@ -883,7 +885,7 @@ async function main() {
     // based on data-card-action-handler-type.
     console.log('\n  [B] Click-to-open modal + submit to backend');
 
-    // (B.1) design visit handler → datetime-local picker → POST /api/visits
+    // (B.1) design visit handler → MUI DateTimePicker modal → POST /api/visits
     const FAKE_CONTACT_ID_DV = 'privtest-cah-dv-001';
     await salesTab.evaluate(({ id, name, email, handlerId }) => {
       const div = document.createElement('div');
@@ -978,6 +980,98 @@ async function main() {
       `rows=${persisted.rows.length} types=${persisted.rows.map(r => r.type).join(',')}`,
       persisted.rows.length === 1 && persisted.rows[0].type === 'design',
     );
+
+    // (B.1b) schedule_visit handler (visitType=survey) → MUI DateTimePicker → POST /api/visits type=survey
+    const FAKE_CONTACT_ID_SV = 'privtest-cah-sv-001';
+    const createSvRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name: HANDLER_NAME_SV,
+      type: 'schedule_visit',
+      config: {
+        visitType:          'survey',
+        defaultDurationMin: 60,
+        addToGoogleCalendar: false,
+      },
+      bindings: [{ stage_key: 'sales', status_key: LBL_KEY_SV }],
+    });
+    record(
+      'POST /api/admin/card-action-handlers creates schedule_visit handler (survey)',
+      'status=201',
+      `status=${createSvRes.status} id=${createSvRes.json?.id}`,
+      createSvRes.status === 201 && !!createSvRes.json?.id,
+    );
+    const svHandlerId = createSvRes.json?.id;
+
+    if (svHandlerId) {
+      await salesTab.evaluate(({ id, name, email, handlerId }) => {
+        const div = document.createElement('div');
+        div.className = 'eq-card-action';
+        div.id = '__cah-test-card-sv';
+        div.setAttribute('data-card-action-handler-id',    handlerId);
+        div.setAttribute('data-card-action-handler-type',  'schedule_visit');
+        div.setAttribute('data-card-action-contact-id',    id);
+        div.setAttribute('data-card-action-contact-name',  name);
+        div.setAttribute('data-card-action-contact-email', email);
+        div.textContent = 'Schedule survey';
+        document.body.appendChild(div);
+      }, { id: FAKE_CONTACT_ID_SV, name: 'PrivTest Contact SV', email: 'sv@privtest.local', handlerId: svHandlerId });
+
+      await salesTab.evaluate(() => document.getElementById('__cah-test-card-sv').click());
+      const svModalOpened = await pollPage(
+        salesTab,
+        () => {
+          const m = document.querySelector('[role=dialog]');
+          if (!m) return null;
+          return {
+            hasStart:    !!m.querySelector('input#cah-dv-start'),
+            hasTitle:    !!m.querySelector('input#cah-dv-title'),
+            hasDuration: !!m.querySelector('input#cah-dv-duration'),
+          };
+        },
+        null,
+        4000,
+      );
+      record(
+        'click on schedule_visit-bound card opens the visit modal (DateTimePicker)',
+        'modal with #cah-dv-start, #cah-dv-title, #cah-dv-duration',
+        `got=${JSON.stringify(svModalOpened)}`,
+        !!svModalOpened && svModalOpened.hasStart && svModalOpened.hasTitle && svModalOpened.hasDuration,
+      );
+
+      const svRequests = [];
+      const svReqListener = (req) => {
+        const u = req.url();
+        if (u.includes('/api/visits')) svRequests.push({ url: u, method: req.method() });
+      };
+      salesTab.on('request', svReqListener);
+
+      await salesTab.click('[data-testid=cah-primary]');
+      await pollPage(
+        salesTab,
+        () => !document.querySelector('[data-testid=cah-primary]'),
+        null,
+        6000,
+      );
+      salesTab.off('request', svReqListener);
+
+      const svVisitReq = svRequests.find(r => /\/api\/visits(?:$|\?)/.test(r.url) && r.method === 'POST');
+      record(
+        'schedule_visit modal submit POSTs /api/visits',
+        'one POST to /api/visits',
+        `requests=${JSON.stringify(svRequests)}`,
+        !!svVisitReq,
+      );
+
+      const svPersisted = await pool.query(
+        `SELECT id, type, customer_id FROM visits WHERE customer_id = $1`,
+        [FAKE_CONTACT_ID_SV],
+      );
+      record(
+        'schedule_visit submit persisted a survey row in the visits table',
+        `1 row with type=survey and customer_id=${FAKE_CONTACT_ID_SV}`,
+        `rows=${svPersisted.rows.length} types=${svPersisted.rows.map(r => r.type).join(',')}`,
+        svPersisted.rows.length === 1 && svPersisted.rows[0].type === 'survey',
+      );
+    }
 
     // (B.2) phone-summary handler → textarea modal → POST
     //        /api/card-actions/phone-call-summary
