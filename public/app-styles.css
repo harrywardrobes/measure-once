@@ -918,6 +918,26 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   flex: 1;
 }
 
+/* Fixed banner shown on workflow-core pages when open-leads data is stale */
+.ls-stale-hint {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  background: #fffbeb;
+  border-top: 2px solid #f59e0b;
+  font-size: 0.8rem;
+  color: #78350f;
+}
+.ls-stale-hint span {
+  flex: 1;
+}
+
 
 /* Inline notice shown when counts fail to load (hard error / 5xx / network) */
 .ls-counts-error-notice {

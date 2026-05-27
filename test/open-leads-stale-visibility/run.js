@@ -81,14 +81,12 @@ async function makeTabVisible(page, waitMs = 600) {
   await new Promise(r => setTimeout(r, waitMs));
 }
 
-// Returns true when state.openLeadsStale is set to true.
-// Previously checked for a `.ls-stale-hint` DOM badge, but task #1359 migrated
-// the projects page to a self-contained React island that no longer calls
-// registerWorkflowStagesRenderer(), making _workflowStagesRenderer a no-op on
-// all pages.  The ground-truth for the visibility-pause behaviour is the
-// state.openLeadsStale flag in workflow-core.js, so we check that directly.
+// Returns true when the `.ls-stale-hint` DOM element is present in the document.
+// workflow-core.js registers _renderOpenLeadsStaleBadge() as the
+// renderWorkflowStages implementation; it appends/removes a #open-leads-stale-hint
+// div with class ls-stale-hint whenever state.openLeadsStale changes.
 async function isBadgeVisible(page) {
-  return page.evaluate(() => !!(window.state && window.state.openLeadsStale === true));
+  return page.evaluate(() => !!document.querySelector('.ls-stale-hint'));
 }
 
 // Poll page.evaluate(fn) until it returns truthy or timeout elapses.
@@ -265,10 +263,10 @@ async function main() {
     record('F1 test hook sets pendingOpenLeadsStale=true while hidden', f1HookSet,
       `hookSet=${f1HookSet}`);
 
-    // The pending value must NOT yet have been applied to state.openLeadsStale.
+    // The pending value must NOT yet have been applied — badge must be absent.
     const f1BadgeBeforeVisible = await isBadgeVisible(page);
-    record('F1 stale flag absent while tab is hidden', !f1BadgeBeforeVisible,
-      `openLeadsStale=${f1BadgeBeforeVisible}`);
+    record('F1 badge absent while tab is hidden', !f1BadgeBeforeVisible,
+      `badgePresent=${f1BadgeBeforeVisible}`);
 
     // Simulate the tab becoming visible — pending true is applied.
     await makeTabVisible(page, 700);
@@ -365,32 +363,29 @@ async function writeReport(runId) {
     '  `true` via `evaluateOnNewDocument`, then uses the',
     '  `__setTestPendingOpenLeadsStale(true)` hook to set `_pendingOpenLeadsStale`',
     '  (simulating what `_loadOpenLeadsImpl` would do with a stale response).',
-    '  Confirms `state.openLeadsStale` is false (not yet applied), then',
-    '  synthesises a `visibilitychange` event (→ visible) and confirms',
-    '  `state.openLeadsStale` becomes true.  Note: the survey page overrides',
-    '  the open-leads loader with `loadAllContacts`, so the request intercept',
-    '  is bypassed — the hook directly exercises the deferred-apply path.',
-    '- **(F2) Fresh response while hidden — pending clear deferred**: with',
-    '  `state.openLeadsStale` true from (F1), overrides `document.hidden` to',
+    '  Confirms the `.ls-stale-hint` DOM badge is absent (pending not yet applied),',
+    '  then synthesises a `visibilitychange` event (→ visible) and confirms the',
+    '  badge appears.  Note: the survey page overrides the open-leads loader with',
+    '  `loadAllContacts`, so the request intercept is bypassed — the hook directly',
+    '  exercises the deferred-apply path.',
+    '- **(F2) Fresh response while hidden — pending clear deferred**: with the',
+    '  `.ls-stale-hint` badge showing from (F1), overrides `document.hidden` to',
     '  `true`.  Uses the `__setTestPendingOpenLeadsStale(false)` hook (exposed',
     '  by `workflow-core.js`) to set `_pendingOpenLeadsStale = false` directly,',
     '  simulating a fresh response arriving while the tab is hidden.  Confirms',
-    '  `state.openLeadsStale` still true (the deferred false has not been',
-    '  applied yet), then synthesises a `visibilitychange` event (→ visible)',
-    '  and confirms `state.openLeadsStale` becomes false.',
+    '  the badge is still present (the deferred false has not been applied yet),',
+    '  then synthesises a `visibilitychange` event (→ visible) and confirms the',
+    '  badge is removed.',
     '',
     '## Relevant files',
     '',
     '- `public/workflow-core.js` — `_loadOpenLeadsImpl` reads the',
     '  `X-Cache-Status` header; defers `state.openLeadsStale` update',
     '  when `document.hidden` is true.  The `visibilitychange` listener applies',
-    '  any pending update.',
-    '- `public/survey.html` — test target page (loads `workflow-core.js`);',
-    '  previously tested against `/projects` but task #1359 migrated the',
-    '  projects page to a self-contained React island that no longer loads',
-    '  `workflow-core.js`.  The badge check now reads `window.state.openLeadsStale`',
-    '  directly instead of a DOM element, since `registerWorkflowStagesRenderer`',
-    '  is a no-op after the migration.',
+    '  any pending update and calls `_renderOpenLeadsStaleBadge()` which',
+    '  creates/removes the `.ls-stale-hint` DOM element.',
+    '- `public/app-styles.css` — `.ls-stale-hint` styles the fixed bottom banner.',
+    '- `public/survey.html` — test target page (loads `workflow-core.js`).',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);

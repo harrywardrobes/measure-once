@@ -210,6 +210,7 @@ async function _loadOpenLeadsImpl() {
     } else {
       state.openLeadsStale = nextStale;
       _pendingOpenLeadsStale = null;
+      _renderOpenLeadsStaleBadge();
     }
   }
   state.contacts = data.results || [];
@@ -530,7 +531,7 @@ document.addEventListener('visibilitychange', () => {
   if (_pendingOpenLeadsStale !== null) {
     state.openLeadsStale = _pendingOpenLeadsStale;
     _pendingOpenLeadsStale = null;
-    if (typeof renderWorkflowStages === 'function') renderWorkflowStages();
+    _renderOpenLeadsStaleBadge();
   }
   Promise.all([loadLeadStatuses(), loadLeadStatusCounts(), loadLeadSubstatuses()]).then(() => {
     renderCustomerList();
@@ -754,10 +755,32 @@ if (!window._leadDriftListenersAttached) {
   window.addEventListener('focus', _checkLeadStatusDrift);
 }
 
+// ── Open-leads stale badge ─────────────────────────────────────────────────────
+// Lightweight DOM renderer for the open-leads stale indicator, shown as a
+// fixed bottom banner on all pages that load workflow-core.js (customers,
+// sales, survey, customer-detail, etc.).  Registered as the
+// renderWorkflowStages implementation so existing call sites continue to work.
+function _renderOpenLeadsStaleBadge() {
+  const BADGE_ID = 'open-leads-stale-hint';
+  const existing = document.getElementById(BADGE_ID);
+  if (state.openLeadsStale) {
+    if (!existing) {
+      const el = document.createElement('div');
+      el.id = BADGE_ID;
+      el.className = 'ls-stale-hint';
+      el.innerHTML = '<span>\u26a0\ufe0f Lead data may be slightly out of date \u2014 refresh to update.</span>';
+      document.body.appendChild(el);
+    }
+  } else {
+    if (existing) existing.remove();
+  }
+}
+
 // ── Register implementations with core.js dispatchers ─────────────────────────
 registerWorkflowLoader(_loadWorkflowImpl);
 registerOpenLeadsLoader(_loadOpenLeadsImpl);
 registerWorkflowStagesLoader(_loadWorkflowStagesImpl);
+registerWorkflowStagesRenderer(_renderOpenLeadsStaleBadge);
 registerDealsFilter(_filterDealsImpl);
 
 // ── Card picker cluster ────────────────────────────────────────────────────────
