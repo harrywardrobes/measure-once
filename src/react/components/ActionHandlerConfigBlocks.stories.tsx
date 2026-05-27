@@ -16,6 +16,7 @@ import {
   FIXTURE_LEAD_STATUSES,
   FIXTURE_SUBSTATUSES,
   HANDLER_TYPES,
+  NO_CONFIG_HANDLER_TYPES,
 } from '../pages/admin/_HandlerConfigBlockStoryHelpers';
 
 function configBlockForType(type: string): React.ReactNode {
@@ -38,11 +39,14 @@ function configBlockForType(type: string): React.ReactNode {
     case 'schedule_installation_slot':
       return <InstallationSlotConfig defaultTitle="Installation" defaultDurationMin={240} />;
     default:
-      return (
-        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-          No additional configuration required for this action type.
-        </Typography>
-      );
+      if (NO_CONFIG_HANDLER_TYPES.has(type)) {
+        return (
+          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+            No additional configuration required for this action type.
+          </Typography>
+        );
+      }
+      return null;
   }
 }
 

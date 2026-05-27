@@ -8,6 +8,9 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
 import type { LeadStatusOption, SubstatusOption } from './HandlerConfigBlocks';
+import { NO_CONFIG_HANDLER_TYPES } from './ActionHandlersPage';
+
+export { NO_CONFIG_HANDLER_TYPES };
 
 export const HANDLER_TYPES = [
   { value: 'add_design_visit_to_calendar', label: 'Add design visit to calendar' },

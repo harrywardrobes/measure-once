@@ -49,6 +49,11 @@ const HANDLER_TYPE_LABELS: Record<string, string> = {
   schedule_installation_slot:   'Schedule installation slot',
 };
 
+export const NO_CONFIG_HANDLER_TYPES: ReadonlySet<string> = new Set([
+  'add_design_visit_to_calendar',
+  'summarise_phone_call',
+]);
+
 const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
   add_design_visit_to_calendar:
     'Clicking the action on a Sales/Survey card opens a modal asking for ' +
@@ -365,7 +370,7 @@ function HandlerEditorModal({
   const showSdv = handlerType === 'start_design_visit';
   const showDw  = handlerType === 'schedule_delivery_window';
   const showIs  = handlerType === 'schedule_installation_slot';
-  const showNoConfig = handlerType === 'add_design_visit_to_calendar' || handlerType === 'summarise_phone_call';
+  const showNoConfig = NO_CONFIG_HANDLER_TYPES.has(handlerType);
   const showJson = !(showSv || showMsg || showSdv || showDw || showIs || showNoConfig);
 
   const buildPayload = (): Record<string, unknown> | null => {
