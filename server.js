@@ -4132,6 +4132,10 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
     res.status(201).json(rows[0]);
+    const _lscSseMsg = `data: ${JSON.stringify({ type: 'lead_statuses_changed' })}\n\n`;
+    for (const client of _hsWebhookSseClients) {
+      try { client.write(_lscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
+    }
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
     if (e.code === '23505') {
@@ -4194,6 +4198,10 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
         'UPDATE lead_status_config SET label = $1, shorthand = $2 WHERE key = $3 RETURNING *',
         [newLabel, newShorthand, key]
       );
+      const _lscSseMsg = `data: ${JSON.stringify({ type: 'lead_statuses_changed' })}\n\n`;
+      for (const client of _hsWebhookSseClients) {
+        try { client.write(_lscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
+      }
       return res.json(rows[0]);
     }
 
@@ -4210,6 +4218,10 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
     res.json(rows[0]);
+    const _lscSseMsg = `data: ${JSON.stringify({ type: 'lead_statuses_changed' })}\n\n`;
+    for (const client of _hsWebhookSseClients) {
+      try { client.write(_lscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
+    }
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
     if (e.code === '23505') {
@@ -4359,6 +4371,10 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
     res.json({ ok: true });
+    const _lscSseMsg = `data: ${JSON.stringify({ type: 'lead_statuses_changed' })}\n\n`;
+    for (const client of _hsWebhookSseClients) {
+      try { client.write(_lscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
+    }
     syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
   } catch (e) {
     console.error('DELETE /api/admin/lead-statuses/:key error:', e.message);

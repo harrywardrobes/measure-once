@@ -316,10 +316,10 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
         sseSource.addEventListener('message', (e) => {
           let payload: { type?: string };
           try { payload = JSON.parse(e.data as string); } catch { return; }
-          if (payload.type === 'hs_lead_status_changed') {
+          if (payload.type === 'hs_lead_status_changed' || payload.type === 'lead_statuses_changed') {
             try {
               const bc = new BroadcastChannel('lead_statuses_changed');
-              bc.postMessage({ ts: Date.now(), src: 'hs_webhook' });
+              bc.postMessage({ ts: Date.now(), src: payload.type === 'lead_statuses_changed' ? 'admin_mutation' : 'hs_webhook' });
               bc.close();
             } catch { /* ignore */ }
           }
