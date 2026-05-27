@@ -33,12 +33,6 @@ declare global {
     openCommandPalette?: () => void;
     closeCommandPalette?: () => void;
     _cpRun?: Record<string, () => void>;
-    state?: {
-      searchQuery?: string;
-      leadStatusFilter?: string;
-      sortBy?: string;
-      currentPage?: number;
-    };
   }
 }
 
@@ -165,8 +159,8 @@ export function CommandPalette() {
 
   const doOpen = useCallback(() => {
     triggerQBLoad();
-    const seed = location.pathname === '/customers' && window.state?.searchQuery
-      ? window.state.searchQuery : '';
+    const seed = location.pathname === '/customers'
+      ? new URLSearchParams(location.search).get('q') || '' : '';
     setQuery(seed);
     setOpen(true);
     setTimeout(() => inputRef.current?.focus(), 30);
@@ -281,9 +275,9 @@ export function CommandPalette() {
   }
 
   const urlParams = location.pathname === '/customers' ? new URLSearchParams(location.search) : null;
-  const _ls   = (window.state?.leadStatusFilter) || urlParams?.get('leadStatus') || '';
-  const _sort = (window.state?.sortBy)           || urlParams?.get('sort')        || '';
-  const _page = (window.state?.currentPage)      || parseInt(urlParams?.get('page') || '1', 10) || 1;
+  const _ls   = urlParams?.get('leadStatus') || '';
+  const _sort = urlParams?.get('sort')        || '';
+  const _page = parseInt(urlParams?.get('page') || '1', 10) || 1;
   let customersSearchUrl = '/customers?q=' + encoded;
   if (_ls)                        customersSearchUrl += '&leadStatus=' + encodeURIComponent(_ls);
   if (_sort && _sort !== 'newest') customersSearchUrl += '&sort='       + encodeURIComponent(_sort);

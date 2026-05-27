@@ -114,12 +114,6 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
         cache[contactId] = rooms;
       }
       setContactStageCache(cache);
-
-      // Keep window.state.contactStageCache in sync for vanilla-JS interop
-      try {
-        const st = (window as unknown as Record<string, Record<string, unknown>>).state;
-        if (st) st.contactStageCache = cache;
-      } catch { /* ignore */ }
     } catch (e) {
       console.warn('[WorkflowDataContext] contactStageCache fetch error:', (e as Error).message);
     }
@@ -199,11 +193,6 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
         }
       }
       setWorkflow(wf);
-      // Keep window.state.workflow in sync for vanilla-JS interop
-      try {
-        const st = (window as unknown as Record<string, Record<string, unknown>>).state;
-        if (st) st.workflow = wf;
-      } catch { /* ignore */ }
     } catch (e) {
       console.warn('[WorkflowDataContext] workflow fetch error:', (e as Error).message);
     }
