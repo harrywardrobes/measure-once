@@ -482,7 +482,6 @@ function SalesCard({
     (workflow?.stages?.[stageKey]?.statuses as Array<{ id: string; label?: string }>) || [];
 
   // Resolve action handler and label
-  const w = window as unknown as WindowGlobals;
   const handler = cardActionHandlerFor(stageKey, leadStatusKey, hwSubstatusValue);
   const cahName = handler?.config?.action_name
     ? handler.config.action_name
