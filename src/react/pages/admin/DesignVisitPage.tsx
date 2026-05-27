@@ -71,7 +71,8 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
   const [loading, setLoading] = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [errMsg,  setErrMsg]  = useState('');
-  const [imageUploadStatus, setImageUploadStatus] = useState<UploadStatus>('idle');
+  const [imageUploadStatus,   setImageUploadStatus]   = useState<UploadStatus>('idle');
+  const [imageUploadProgress, setImageUploadProgress] = useState<number | undefined>(undefined);
 
   const [name,        setName]        = useState('');
   const [style,       setStyle]       = useState('');
@@ -91,7 +92,8 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
   useEffect(() => {
     if (!open) {
       setName(''); setStyle(''); setDescription(''); setImageUrl('');
-      setImageFile(null); setPreviewSrc(''); setErrMsg(''); setImageUploadStatus('idle');
+      setImageFile(null); setPreviewSrc(''); setErrMsg('');
+      setImageUploadStatus('idle'); setImageUploadProgress(undefined);
       return;
     }
     if (!existingId) return;
@@ -134,14 +136,38 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
       formData.append('image', imageFile);
       setSaving(true);
       setImageUploadStatus('uploading');
+      setImageUploadProgress(0);
       try {
-        const res = await fetch(uploadUrlMap[type], { method: 'POST', body: formData });
-        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as {error?: string}).error || res.statusText); }
-        const j = await res.json() as { url: string };
+        const j = await new Promise<{ url: string }>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', uploadUrlMap[type]);
+          xhr.upload.onprogress = (evt) => {
+            if (evt.lengthComputable) {
+              setImageUploadProgress(Math.round((evt.loaded / evt.total) * 100));
+            }
+          };
+          xhr.onload = () => {
+            setImageUploadProgress(100);
+            try {
+              const data = JSON.parse(xhr.responseText) as { url?: string; error?: string };
+              if (xhr.status >= 400 || !data.url) {
+                reject(new Error(data.error || xhr.statusText));
+              } else {
+                resolve(data as { url: string });
+              }
+            } catch {
+              reject(new Error('Invalid server response'));
+            }
+          };
+          xhr.onerror = () => reject(new Error('Network error'));
+          xhr.onabort = () => reject(new Error('Upload aborted'));
+          xhr.send(formData);
+        });
         finalImageUrl = j.url;
         setImageUploadStatus('success');
       } catch (e) {
         setImageUploadStatus('error');
+        setImageUploadProgress(undefined);
         setErrMsg('Image upload failed: ' + (e as Error).message);
         setSaving(false);
         return;
@@ -247,12 +273,14 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
                   accept="image/*"
                   disabled={saving}
                   uploadStatus={imageUploadStatus}
+                  progress={imageUploadProgress}
                   resetDelay={2500}
                   onStatusReset={() => setImageUploadStatus('idle')}
                   onChange={(files) => {
                     const file = files?.[0] ?? null;
                     setImageFile(file);
                     setImageUploadStatus('idle');
+                    setImageUploadProgress(undefined);
                   }}
                   helperText="Replace the current image by selecting a new file"
                 />

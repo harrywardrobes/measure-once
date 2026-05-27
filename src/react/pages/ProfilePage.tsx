@@ -9,6 +9,7 @@ import {
   Chip,
   CircularProgress,
   IconButton,
+  LinearProgress,
   Stack,
   Typography,
 } from '@mui/material';
@@ -197,6 +198,7 @@ function IdentityCard({
   const [pendingData, setPendingData] = React.useState<string | null>(null);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  const [uploadProgress, setUploadProgress] = React.useState<number | undefined>(undefined);
 
   const onFile = (file: File) => {
     setErrorMsg(null);
@@ -224,20 +226,46 @@ function IdentityCard({
     reader.readAsDataURL(file);
   };
 
-  const onSubmitPhoto = async () => {
+  const onSubmitPhoto = () => {
     if (!pendingData) return;
     setSubmitting(true);
     setErrorMsg(null);
-    try {
-      await jpost('/api/users/me/photo', { data: pendingData });
-      setPendingData(null);
-      showToast('Photo submitted for approval');
-      onReload();
-    } catch (e) {
-      setErrorMsg((e as Error).message || 'Upload failed');
-    } finally {
+    setUploadProgress(0);
+    const body = JSON.stringify({ data: pendingData });
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/users/me/photo');
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.upload.onprogress = (evt) => {
+      if (evt.lengthComputable) {
+        setUploadProgress(Math.round((evt.loaded / evt.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      setUploadProgress(100);
       setSubmitting(false);
-    }
+      setUploadProgress(undefined);
+      if (xhr.status >= 400) {
+        let msg = `HTTP ${xhr.status}`;
+        try { msg = (JSON.parse(xhr.responseText) as { error?: string }).error || msg; } catch { /* ignore */ }
+        setErrorMsg(msg);
+      } else {
+        setPendingData(null);
+        showToast('Photo submitted for approval');
+        onReload();
+      }
+    };
+    xhr.onerror = () => {
+      setSubmitting(false);
+      setUploadProgress(undefined);
+      setErrorMsg('Network error — please try again');
+    };
+    xhr.onabort = () => {
+      setSubmitting(false);
+      setUploadProgress(undefined);
+      setErrorMsg('Upload cancelled');
+    };
+    xhr.send(body);
   };
 
   const onCancel = () => {
@@ -317,6 +345,13 @@ function IdentityCard({
                 Cancel
               </Button>
             </Stack>
+            {submitting && uploadProgress !== undefined && (
+              <LinearProgress
+                variant="determinate"
+                value={uploadProgress}
+                sx={{ mt: 1, borderRadius: 1 }}
+              />
+            )}
           </Box>
         )}
 
