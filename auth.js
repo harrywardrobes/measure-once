@@ -104,6 +104,13 @@ async function getBootstrapAdminHash() {
 }
 
 function createMailTransport() {
+  if (process.env.MAIL_TRANSPORT_THROW_OVERRIDE) {
+    return {
+      sendMail() {
+        return Promise.reject(new Error('MAIL_TRANSPORT_THROW_OVERRIDE: simulated send failure'));
+      },
+    };
+  }
   if (process.env.MAIL_TRANSPORT_FILE_OVERRIDE) {
     const fpath = process.env.MAIL_TRANSPORT_FILE_OVERRIDE;
     return {

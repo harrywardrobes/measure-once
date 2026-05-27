@@ -27,6 +27,12 @@
 //   (REJECT-SKIP-AUDIT)   audit log details contains
 //                         "email notification skipped (SMTP not configured)"
 //
+// Probes (Pass 3 — broken SMTP transport, always throws):
+//   (APPROVE-FAIL-AUDIT)  audit log details contains
+//                         "email notification failed to send"
+//   (REJECT-FAIL-AUDIT)   audit log details contains
+//                         "email notification failed to send"
+//
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:photo-approval-notification
 //   PRIVTEST_ALLOW_SHARED_DB=1     npm run test:photo-approval-notification
@@ -137,7 +143,15 @@ async function runPass(label, pool, harness, extraEnv) {
       passOk = false;
     } else {
       const details = await getLatestAuditLog(pool, 'approve_profile_photo', approveEmail);
-      if (extraEnv.MAIL_TRANSPORT_FILE_OVERRIDE) {
+      if (extraEnv.MAIL_TRANSPORT_THROW_OVERRIDE) {
+        const wantDetail = 'email notification failed to send';
+        const ok = typeof details === 'string' && details.includes(wantDetail);
+        record(`${label}.APPROVE-FAIL-AUDIT`, ok,
+          ok
+            ? `audit details contained "${wantDetail}"`
+            : `audit details did not contain "${wantDetail}"; got: ${JSON.stringify(details)}`);
+        passOk = passOk && ok;
+      } else if (extraEnv.MAIL_TRANSPORT_FILE_OVERRIDE) {
         const wantDetail = `email notification sent to ${approveEmail}`;
         const ok = typeof details === 'string' && details.includes(wantDetail);
         record(`${label}.APPROVE-SENT-AUDIT`, ok,
@@ -176,7 +190,15 @@ async function runPass(label, pool, harness, extraEnv) {
       passOk = false;
     } else {
       const details = await getLatestAuditLog(pool, 'reject_profile_photo', rejectEmail);
-      if (extraEnv.MAIL_TRANSPORT_FILE_OVERRIDE) {
+      if (extraEnv.MAIL_TRANSPORT_THROW_OVERRIDE) {
+        const wantDetail = 'email notification failed to send';
+        const ok = typeof details === 'string' && details.includes(wantDetail);
+        record(`${label}.REJECT-FAIL-AUDIT`, ok,
+          ok
+            ? `audit details contained "${wantDetail}"`
+            : `audit details did not contain "${wantDetail}"; got: ${JSON.stringify(details)}`);
+        passOk = passOk && ok;
+      } else if (extraEnv.MAIL_TRANSPORT_FILE_OVERRIDE) {
         const wantDetail = `email notification sent to ${rejectEmail}`;
         const ok = typeof details === 'string' && details.includes(wantDetail);
         record(`${label}.REJECT-SENT-AUDIT`, ok,
@@ -256,6 +278,11 @@ async function main() {
 
     // Pass 2: No SMTP, no file override → notifications are "skipped"
     await runPass('NO-SMTP', pool, harness, {});
+
+    // Pass 3: Transport configured but sendMail always throws → notifications are "failed"
+    await runPass('SMTP-FAIL', pool, harness, {
+      MAIL_TRANSPORT_THROW_OVERRIDE: '1',
+    });
   } finally {
     await pool.end().catch(() => {});
   }
