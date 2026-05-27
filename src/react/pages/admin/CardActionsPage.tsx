@@ -83,12 +83,16 @@ function buildModel(
     });
   }
 
-  // Null-status row goes first in the Sales stage
-  const salesStage = stageMap.get('sales');
-  if (salesStage && nullRow) {
-    salesStage.statuses.unshift({
-      key: '__NULL__', label: nullRow.label, shorthand: nullRow.shorthand || '',
-      defaultLabel: labelByKey['sales|'] || '',
+  // Null-status / stage-default row goes first in every stage
+  for (const cs of CARD_ACTION_STAGES) {
+    const stage = stageMap.get(cs.key);
+    if (!stage) continue;
+    const rowLabel = cs.key === 'sales'
+      ? (nullRow?.label ?? 'No lead status')
+      : 'No lead status / stage default';
+    stage.statuses.unshift({
+      key: '__NULL__', label: rowLabel, shorthand: '',
+      defaultLabel: labelByKey[`${cs.key}|`] || '',
       defaultStatusKey: '', isNullRow: true,
       substatuses: [],
     });
@@ -476,7 +480,11 @@ export function CardActionsPage() {
                           <div className="adm-ca-block-head">
                             <strong className={`adm-ca-block-title${ls.isNullRow ? ' is-null' : ''}`}>{ls.label}</strong>
                             {ls.isNullRow
-                              ? <span className="adm-text-muted-xs">contact has no <code>hs_lead_status</code> — also used as the <strong>stage default</strong> for any lead status without a per-LS row below</span>
+                              ? <span className="adm-text-muted-xs">
+                                  {stage.key === 'sales'
+                                    ? <>contact has no <code>hs_lead_status</code> — also used as the <strong>stage default</strong> for any lead status without a per-LS row below</>
+                                    : <>used as the <strong>stage default</strong> for any lead status without a per-LS row below</>}
+                                </span>
                               : <span className="adm-text-faint-mono">{ls.key}</span>}
                           </div>
 
