@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { DesignVisit, DesignVisitRoom, DESIGN_VISIT_STATUS_LABELS, fmtDesignVisitWhen, fmtGbp } from './types';
+import { DesignVisit, DesignVisitRoom, fmtDesignVisitWhen, fmtGbp } from './types';
+import { DesignVisitStatusPill } from './DesignVisitStatusPill';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { DesignVisitWizard, type DesignVisitWizardHandler, type DesignVisitWizardCtx, type ExistingVisit } from '../../components/DesignVisitWizard';
 
@@ -134,7 +135,6 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
           <p style={{ fontSize: '0.85rem', padding: '4px 0', fontStyle: 'italic' }}>No design visits yet.</p>
         )}
         {!loading && !error && visits.map(v => {
-          const st = DESIGN_VISIT_STATUS_LABELS[v.status] || { label: v.status || 'Unknown', bg: 'var(--stone-light)', fg: 'var(--ink-2)' };
           const when     = fmtDesignVisitWhen(v.visit_date || v.created_at);
           const totalGbp = fmtGbp(Number(v.estimate_total_pence) || 0);
           const canRevise = v.status === 'submitted' || v.status === 'signed_off';
@@ -152,11 +152,8 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div data-testid="dv-when" style={{ ...sxText, fontWeight: 500 }}>{when}</div>
                   <div style={{ ...sxMeta, marginTop: 2 }}>
-                    <span data-testid="dv-status-pill" style={{
-                      fontSize: '0.7rem', background: st.bg, color: st.fg,
-                      borderRadius: 4, padding: '1px 6px', fontWeight: 600,
-                    }}>
-                      {st.label}
+                    <span data-testid="dv-status-pill">
+                      <DesignVisitStatusPill status={v.status} />
                     </span>
                     <span style={sxMetaSep}>·</span>
                     <span data-testid="dv-date" style={sxDate}>Estimate: £{totalGbp}</span>
