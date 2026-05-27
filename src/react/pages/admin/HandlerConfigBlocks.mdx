@@ -26,15 +26,14 @@ There are five handler types. Each maps to its own config block component in
 
 | Handler type | Component | Config keys | Side effects when clicked |
 |---|---|---|---|
-| **Schedule visit** | `ScheduleVisitConfig` | `visitType`, `defaultDurationMin`\*, `addToGoogleCalendar` | Opens the scheduling modal pre-set to the chosen visit type and duration |
-| **Show message** | `ShowMessageConfig` | `title`\*, `message` | Displays a read-only popup — no API call, no status change |
-| **Start design visit wizard** | `StartDesignVisitConfig` | `defaultDurationMin`, `intermediateLeadStatus`\*, `submittedLeadStatus`\*, `termsAndConditions`\*, `addToGoogleCalendar` | Opens the multi-step design visit wizard; sets lead status on open and again on submit (see two-phase flow below) |
+| **Schedule visit** | `ScheduleVisitConfig` | `visitType`, `defaultDurationMin`\*†, `addToGoogleCalendar` | Opens the scheduling modal pre-set to the chosen visit type and duration |
+| **Show message** | `ShowMessageConfig` | `title`\*, `message`† | Displays a read-only popup — no API call, no status change |
+| **Start design visit wizard** | `StartDesignVisitConfig` | `defaultDurationMin`†, `intermediateLeadStatus`\*, `submittedLeadStatus`\*, `termsAndConditions`\*, `addToGoogleCalendar` | Opens the multi-step design visit wizard; sets lead status on open and again on submit (see two-phase flow below) |
 | **Schedule delivery window** | `DeliveryWindowConfig` | `defaultTitle`\*, `addToGoogleCalendar` | Opens the delivery-window picker modal |
-| **Schedule installation slot** | `InstallationSlotConfig` | `defaultDurationMin`\*, `defaultTitle`\*, `addToGoogleCalendar` | Opens the installation-slot picker modal pre-filled with the saved duration |
+| **Schedule installation slot** | `InstallationSlotConfig` | `defaultDurationMin`\*†, `defaultTitle`\*, `addToGoogleCalendar` | Opens the installation-slot picker modal pre-filled with the saved duration |
 
-\* Optional field — the block still saves and works if this value is left blank.
-
-> **Validation & edge cases:** `defaultDurationMin` must be between **5 and 1440** minutes (24 hours) when provided — values outside that range are rejected on save. `message` (in **Show message**) is a required field; the block cannot be saved without it.
+\* Optional field — the block still saves and works if this value is left blank.  
+† Validated field — `defaultDurationMin` must be a whole number between 5 and 1440 (minutes) when provided; `message` is required and cannot be left blank.
 
 ---
 
