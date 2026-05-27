@@ -62,6 +62,7 @@ export function AdminRequestsPage() {
 
   const [photoProgress, setPhotoProgress] = useState<Record<string, number | undefined>>({});
   const [photoRejecting, setPhotoRejecting] = useState<Record<string, boolean>>({});
+  const [tradeActing, setTradeActing] = useState<Record<number, 'approving' | 'rejecting'>>({});
 
   // Approve modal
   const [approving, setApproving] = useState<Req | null>(null);
@@ -262,20 +263,32 @@ export function AdminRequestsPage() {
   }
 
   async function approveTrade(id: number) {
+    if (tradeActing[id]) return;
+    setTradeActing(s => ({ ...s, [id]: 'approving' }));
     try {
       await api('POST', `/api/admin/trades/submissions/${id}/approve`);
       toast('Approved — company is now live in the Trades directory');
       emitAdminChange('trades');
-    } catch (e: unknown) { toast(e instanceof Error ? e.message : String(e), true); }
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setTradeActing(s => { const n = { ...s }; delete n[id]; return n; });
+    }
   }
   async function rejectTrade(id: number) {
+    if (tradeActing[id]) return;
     const reason = prompt('Optional: enter a reason for rejection (leave blank to skip)');
     if (reason === null) return;
+    setTradeActing(s => ({ ...s, [id]: 'rejecting' }));
     try {
       await api('POST', `/api/admin/trades/submissions/${id}/reject`, { reason: reason || '' });
       toast('Submission rejected');
       emitAdminChange('trades');
-    } catch (e: unknown) { toast(e instanceof Error ? e.message : String(e), true); }
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setTradeActing(s => { const n = { ...s }; delete n[id]; return n; });
+    }
   }
 
   if (loading) {
@@ -434,8 +447,10 @@ export function AdminRequestsPage() {
           s.payment_terms && `Payment: ${s.payment_terms}`,
         ].filter(Boolean).join(' · ');
         const webUrl = safeUrl(s.website);
+        const acting = !!tradeActing[s.id];
         return (
           <Card key={s.id} variant="outlined" id={`tsub-${s.id}`}>
+            {acting && <LinearProgress variant="indeterminate" sx={{ height: 3 }} />}
             <CardContent>
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ justifyContent: 'space-between' }}>
                 <Box sx={{ flex: 1 }}>
@@ -477,8 +492,8 @@ export function AdminRequestsPage() {
                   </Typography>
                 </Box>
                 <Stack direction="row" spacing={1} sx={{  flexShrink: 0, alignItems: 'flex-start' }}>
-                  <Button variant="contained" color="success" onClick={() => approveTrade(s.id)}>Approve</Button>
-                  <Button variant="outlined" color="error" onClick={() => rejectTrade(s.id)}>Reject</Button>
+                  <Button variant="contained" color="success" disabled={acting} onClick={() => approveTrade(s.id)}>Approve</Button>
+                  <Button variant="outlined" color="error" disabled={acting} onClick={() => rejectTrade(s.id)}>Reject</Button>
                 </Stack>
               </Stack>
             </CardContent>
