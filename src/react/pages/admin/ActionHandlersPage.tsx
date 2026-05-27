@@ -1,10 +1,26 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import { ThemeProvider } from '@mui/material/styles';
+
 import { useToast } from '../../contexts/ToastContext';
-import { Box, Card, CardContent, Stack, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
-import { theme } from '../../theme';
+
 import {
   DeliveryWindowConfig,
   InstallationSlotConfig,
@@ -128,9 +144,10 @@ const _substatusesRef:  { current: Substatus[]  }                      = { curre
 const _statusesRef:     { current: LeadStatus[] }                      = { current: [] };
 const _toastRef:        { fn: ((m: string, err?: boolean) => void) | null } = { fn: null };
 
+// Ref to open the handler editor from outside the React tree (e.g. window exposure)
+const _openEditorRef: { fn: ((slot: ActionSlot, existing?: Handler | null) => void) | null } = { fn: null };
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-
 
 function showToast(msg: string, err?: boolean) {
   if (_toastRef.fn) _toastRef.fn(msg, err);
@@ -162,41 +179,6 @@ function _resolveLeadStatusLabel(key: string): string {
     return `${sub.label || sub.substatus_key} (${parent ? (parent.label || parent.key) : sub.status_key})`;
   }
   return key;
-}
-
-function _buildLeadStatusOnlyOptions(selectedKey: string): string {
-  const real = _statusesRef.current.filter(s => !s.is_null_row);
-  let html = `<option value="">— none —</option>`;
-  for (const ls of real) {
-    const sel = ls.key === selectedKey ? ' selected' : '';
-    html += `<option value="${esc(ls.key)}"${sel}>${esc(ls.label || ls.key)}</option>`;
-  }
-  return html;
-}
-
-function _buildLeadStatusWithSubsOptions(selectedKey: string): string {
-  const real = _statusesRef.current.filter(s => !s.is_null_row);
-  const subs = _substatusesRef.current;
-  let html = `<option value="">— none —</option>`;
-  if (real.length) {
-    html += `<optgroup label="Lead statuses">`;
-    for (const ls of real) {
-      const sel = ls.key === selectedKey ? ' selected' : '';
-      html += `<option value="${esc(ls.key)}"${sel}>${esc(ls.label || ls.key)}</option>`;
-    }
-    html += `</optgroup>`;
-  }
-  if (subs.length) {
-    html += `<optgroup label="Lead sub-statuses">`;
-    for (const s of subs) {
-      const val = s.substatus_key;
-      const sel = val === selectedKey ? ' selected' : '';
-      const lbl = s.label ? `${esc(s.label)} (${esc(s.status_key)})` : `${esc(val)} (${esc(s.status_key)})`;
-      html += `<option value="${esc(val)}"${sel}>${lbl}</option>`;
-    }
-    html += `</optgroup>`;
-  }
-  return html;
 }
 
 function _buildActionSlotGroups(): ActionStage[] {
@@ -303,298 +285,376 @@ function _flashResolvedBadge(slot: Partial<ActionSlot>): void {
   }
 }
 
-function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
-  const type   = existing?.type   || 'add_design_visit_to_calendar';
-  const config = existing?.config || {} as Record<string, unknown>;
+// ── HandlerEditorModal ────────────────────────────────────────────────────────
+
+const SNAKE_RE = /^[a-z0-9_]*$/;
+
+interface HandlerEditorModalProps {
+  slot:        ActionSlot;
+  existing:    Handler | null;
+  handlers:    Handler[];
+  statuses:    LeadStatus[];
+  substatuses: Substatus[];
+  onClose:     () => void;
+  onSaved:     (isEdit: boolean) => void;
+}
+
+function HandlerEditorModal({
+  slot,
+  existing,
+  handlers,
+  statuses,
+  substatuses,
+  onClose,
+  onSaved,
+}: HandlerEditorModalProps) {
+  const initConfig = existing?.config ?? {};
+  const initType   = existing?.type   ?? 'add_design_visit_to_calendar';
+
+  const [handlerType,   setHandlerType]   = useState(initType);
+  const [actionName,    setActionName]    = useState(String(initConfig.action_name ?? ''));
+  const [actionNameErr, setActionNameErr] = useState('');
+
+  const [svVal,  setSvVal]  = useState<ScheduleVisitConfigValue>({
+    visitType:           (initConfig.visitType as VisitType) ?? 'survey',
+    defaultDurationMin:  initConfig.defaultDurationMin != null ? Number(initConfig.defaultDurationMin) : 60,
+    addToGoogleCalendar: initConfig.addToGoogleCalendar !== false,
+  });
+  const [msgVal,  setMsgVal]  = useState<ShowMessageConfigValue>({
+    title:   String(initConfig.title   ?? ''),
+    message: String(initConfig.message ?? ''),
+  });
+  const [sdvVal,  setSdvVal]  = useState<StartDesignVisitConfigValue>({
+    defaultDurationMin:     initConfig.defaultDurationMin != null ? Number(initConfig.defaultDurationMin) : 90,
+    intermediateLeadStatus: String(initConfig.intermediateLeadStatus ?? ''),
+    submittedLeadStatus:    String(initConfig.submittedLeadStatus    ?? ''),
+    termsAndConditions:     String(initConfig.termsAndConditions     ?? ''),
+    addToGoogleCalendar:    initConfig.addToGoogleCalendar !== false,
+  });
+  const [dwVal,   setDwVal]   = useState<DeliveryWindowConfigValue>({
+    defaultTitle:        String(initConfig.defaultTitle ?? ''),
+    addToGoogleCalendar: initConfig.addToGoogleCalendar !== false,
+  });
+  const [isVal,   setIsVal]   = useState<InstallationSlotConfigValue>({
+    defaultDurationMin:  initConfig.defaultDurationMin != null ? Number(initConfig.defaultDurationMin) : 240,
+    defaultTitle:        String(initConfig.defaultTitle ?? ''),
+    addToGoogleCalendar: initConfig.addToGoogleCalendar !== false,
+  });
+  const [jsonCfg,      setJsonCfg]      = useState(JSON.stringify(initConfig, null, 2));
+  const [editError,    setEditError]    = useState('');
+  const [conflictList, setConflictList] = useState<Handler[]>([]);
+  const [saving,       setSaving]       = useState(false);
+
   const binding: Binding = slot.kind === 'sub'
     ? { substatus_id: slot.substatus_id }
     : { stage_key: slot.stage_key, status_key: slot.status_key };
 
-  // ── Mutable config state — each React config block updates its slot via onChange ──
-  // These are read synchronously by buildPayload; no DOM queries needed.
-
-  const svState: ScheduleVisitConfigValue = {
-    visitType:          (config.visitType as VisitType) || 'survey',
-    defaultDurationMin: config.defaultDurationMin != null ? Number(config.defaultDurationMin) : 60,
-    addToGoogleCalendar: config.addToGoogleCalendar !== false,
-  };
-  const msgState: ShowMessageConfigValue = {
-    title:   String(config.title   || ''),
-    message: String(config.message || ''),
-  };
-  const sdvLeadStatuses = _statusesRef.current
+  const sdvLeadStatuses = statuses
     .filter(s => !s.is_null_row)
     .map(s => ({ key: s.key, label: s.label || s.key }));
-  const sdvSubstatuses = _substatusesRef.current.map(s => ({
+  const sdvSubstatuses = substatuses.map(s => ({
     key: s.substatus_key, label: s.label, statusKey: s.status_key,
   }));
-  const sdvState: StartDesignVisitConfigValue = {
-    defaultDurationMin:     config.defaultDurationMin != null ? Number(config.defaultDurationMin) : 90,
-    intermediateLeadStatus: String(config.intermediateLeadStatus || ''),
-    submittedLeadStatus:    String(config.submittedLeadStatus    || ''),
-    termsAndConditions:     String(config.termsAndConditions     || ''),
-    addToGoogleCalendar:    config.addToGoogleCalendar !== false,
-  };
-  const dwState: DeliveryWindowConfigValue = {
-    defaultTitle:        String(config.defaultTitle || ''),
-    addToGoogleCalendar: config.addToGoogleCalendar !== false,
-  };
-  const isState: InstallationSlotConfigValue = {
-    defaultDurationMin:  config.defaultDurationMin != null ? Number(config.defaultDurationMin) : 240,
-    defaultTitle:        String(config.defaultTitle || ''),
-    addToGoogleCalendar: config.addToGoogleCalendar !== false,
+
+  const validateName = (v: string): boolean => {
+    if (v.length > 0 && !SNAKE_RE.test(v)) {
+      setActionNameErr('Only lowercase letters, digits, and underscores are allowed (e.g. send_quote).');
+      return false;
+    }
+    setActionNameErr('');
+    return true;
   };
 
-  // ── Modal HTML shell ─────────────────────────────────────────────────────────
-  // The five config block divs are now empty React mount points.
+  const showSv  = handlerType === 'schedule_visit';
+  const showMsg = handlerType === 'show_message';
+  const showSdv = handlerType === 'start_design_visit';
+  const showDw  = handlerType === 'schedule_delivery_window';
+  const showIs  = handlerType === 'schedule_installation_slot';
+  const showJson = !(showSv || showMsg || showSdv || showDw || showIs);
 
-  const wrap = document.createElement('div');
-  wrap.className = 'js-modal-scrim';
-  wrap.innerHTML = `
-    <div class="adm-modal-card adm-modal-card--wide">
-      <h3 class="adm-modal-title">${existing ? 'Change action' : 'Add action'}</h3>
-      <p class="adm-modal-sub">for <strong>${esc(slot.label)}</strong> <span class="adm-optional">(${esc(slot.rowLabel || '')})</span></p>
-      <label class="adm-modal-label">Action name <span class="adm-optional">(optional)</span></label>
-      <input id="cah-action-name" type="text" class="field adm-field-sm" maxlength="80" placeholder="e.g. send_quote" value="${esc(String(config.action_name || ''))}">
-      <div id="cah-action-name-err" class="adm-err-line--sm hidden">Only lowercase letters, digits, and underscores are allowed (e.g. <code>send_quote</code>).</div>
-      <div class="adm-info-amber">⚙️ Backend automation coming soon — this name will be used to trigger workflows automatically once wired up.</div>
-      <label class="adm-modal-label">Action type</label>
-      <select id="cah-type" class="field">
-        ${Object.entries(HANDLER_TYPE_LABELS).map(([k, v]) =>
-          `<option value="${k}" ${k === type ? 'selected' : ''}>${esc(v)}</option>`).join('')}
-      </select>
-      <div id="cah-type-desc" class="adm-type-desc"></div>
-      <div id="cah-sv-block"  class="hidden adm-block-mt12"></div>
-      <div id="cah-msg-block" class="hidden adm-block-mt12"></div>
-      <div id="cah-sdv-block" class="hidden adm-block-mt12"></div>
-      <div id="cah-dw-block"  class="hidden adm-block-mt12"></div>
-      <div id="cah-is-block"  class="hidden adm-block-mt12"></div>
-      <div id="cah-cfg-block" class="adm-block-mt12">
-        <label class="adm-modal-label adm-modal-label--first">Advanced configuration (JSON, optional)</label>
-        <textarea id="cah-config" class="field adm-field-mono-xs" rows="4">${esc(JSON.stringify(config, null, 2))}</textarea>
-      </div>
-      <div id="cah-conflict" class="hidden adm-conflict-box">
-        <div class="adm-conflict-box-head">⚠️ Slot already has a handler</div>
-        <div id="cah-conflict-list" class="adm-conflict-box-list"></div>
-        <div class="adm-conflict-box-actions">
-          <button class="btn btn-ghost adm-btn-conflict" id="cah-conflict-cancel">Keep editing</button>
-          <button class="btn adm-btn-conflict adm-btn-conflict--primary" id="cah-conflict-confirm">Bind anyway</button>
-        </div>
-      </div>
-      <div id="cah-edit-err" class="adm-err-line"></div>
-      <div class="adm-modal-actions">
-        <button class="btn btn-ghost" id="cah-cancel">Cancel</button>
-        <button class="btn btn-primary" id="cah-save">${existing ? 'Save' : 'Add'}</button>
-      </div>
-    </div>`;
-
-  document.body.appendChild(wrap);
-
-  // ── Mount React config blocks into their placeholder divs ─────────────────
-  // We wrap with ThemeProvider only (no Auth/Toast) — these are isolated form islands.
-
-  function mountConfigBlock(el: Element, node: React.ReactElement) {
-    const root = createRoot(el);
-    root.render(<ThemeProvider theme={theme}>{node}</ThemeProvider>);
-    return root;
-  }
-
-  const svRoot  = mountConfigBlock(
-    wrap.querySelector('#cah-sv-block')!,
-    <ScheduleVisitConfig
-      defaultVisitType={svState.visitType}
-      defaultDurationMin={svState.defaultDurationMin}
-      addToGoogleCalendar={svState.addToGoogleCalendar}
-      onChange={v => Object.assign(svState, v)}
-    />,
-  );
-  const msgRoot = mountConfigBlock(
-    wrap.querySelector('#cah-msg-block')!,
-    <ShowMessageConfig
-      defaultTitle={msgState.title}
-      defaultMessage={msgState.message}
-      onChange={v => Object.assign(msgState, v)}
-    />,
-  );
-  const sdvRoot = mountConfigBlock(
-    wrap.querySelector('#cah-sdv-block')!,
-    <StartDesignVisitConfig
-      defaultDurationMin={sdvState.defaultDurationMin}
-      intermediateLeadStatus={sdvState.intermediateLeadStatus}
-      submittedLeadStatus={sdvState.submittedLeadStatus}
-      termsAndConditions={sdvState.termsAndConditions}
-      addToGoogleCalendar={sdvState.addToGoogleCalendar}
-      leadStatuses={sdvLeadStatuses}
-      substatuses={sdvSubstatuses}
-      onChange={v => Object.assign(sdvState, v)}
-    />,
-  );
-  const dwRoot  = mountConfigBlock(
-    wrap.querySelector('#cah-dw-block')!,
-    <DeliveryWindowConfig
-      defaultTitle={dwState.defaultTitle}
-      addToGoogleCalendar={dwState.addToGoogleCalendar}
-      onChange={v => Object.assign(dwState, v)}
-    />,
-  );
-  const isRoot  = mountConfigBlock(
-    wrap.querySelector('#cah-is-block')!,
-    <InstallationSlotConfig
-      defaultDurationMin={isState.defaultDurationMin}
-      defaultTitle={isState.defaultTitle}
-      addToGoogleCalendar={isState.addToGoogleCalendar}
-      onChange={v => Object.assign(isState, v)}
-    />,
-  );
-
-  const unmountAll = () => {
-    [svRoot, msgRoot, sdvRoot, dwRoot, isRoot].forEach(r => {
-      try { r.unmount(); } catch { /* already unmounted */ }
-    });
-  };
-
-  const close = () => { unmountAll(); wrap.remove(); };
-
-  // ── Show/hide logic ───────────────────────────────────────────────────────
-
-  const descEl      = wrap.querySelector('#cah-type-desc')     as HTMLElement;
-  const typeSel     = wrap.querySelector('#cah-type')          as HTMLSelectElement;
-  const svBlock     = wrap.querySelector('#cah-sv-block')      as HTMLElement;
-  const msgBlock    = wrap.querySelector('#cah-msg-block')     as HTMLElement;
-  const sdvBlock    = wrap.querySelector('#cah-sdv-block')     as HTMLElement;
-  const dwBlock     = wrap.querySelector('#cah-dw-block')      as HTMLElement;
-  const isBlock     = wrap.querySelector('#cah-is-block')      as HTMLElement;
-  const cfgBlock    = wrap.querySelector('#cah-cfg-block')     as HTMLElement;
-  const conflictBox  = wrap.querySelector('#cah-conflict')     as HTMLElement;
-  const conflictList = wrap.querySelector('#cah-conflict-list') as HTMLElement;
-  const actionNameIn = wrap.querySelector('#cah-action-name')  as HTMLInputElement;
-  const actionNameEr = wrap.querySelector('#cah-action-name-err') as HTMLElement;
-
-  const renderForType = () => {
-    const t = typeSel.value;
-    descEl.textContent = HANDLER_TYPE_DESCRIPTIONS[t] || '';
-    const isMsg = t === 'show_message', isSdv = t === 'start_design_visit';
-    const isSv  = t === 'schedule_visit';
-    const isDw  = t === 'schedule_delivery_window';
-    const isIs  = t === 'schedule_installation_slot';
-    svBlock.style.display  = isSv            ? '' : 'none';
-    msgBlock.style.display = isMsg           ? '' : 'none';
-    sdvBlock.style.display = isSdv           ? '' : 'none';
-    dwBlock.style.display  = isDw            ? '' : 'none';
-    isBlock.style.display  = isIs            ? '' : 'none';
-    cfgBlock.style.display = (isMsg || isSdv || isSv || isDw || isIs) ? 'none' : '';
-  };
-  renderForType();
-  typeSel.addEventListener('change', () => { conflictBox.style.display = 'none'; renderForType(); });
-  wrap.addEventListener('click', e => { if (e.target === wrap) close(); });
-  wrap.querySelector('#cah-cancel')!.addEventListener('click', () => close());
-  wrap.querySelector('#cah-conflict-cancel')!.addEventListener('click', () => { conflictBox.style.display = 'none'; });
-
-  // ── Payload builder — reads from React component state objects ────────────
-
-  const SNAKE_RE = /^[a-z0-9_]*$/;
-  const validateActionName = () => {
-    const v = actionNameIn.value.trim();
-    const invalid = v.length > 0 && !SNAKE_RE.test(v);
-    actionNameEr.classList.toggle('hidden', !invalid);
-    return !invalid;
-  };
-  actionNameIn.addEventListener('blur', validateActionName);
-
-  const buildPayload = () => {
-    const tp    = typeSel.value;
-    const errEl = wrap.querySelector('#cah-edit-err') as HTMLElement;
-    errEl.textContent = '';
-    if (!validateActionName()) {
-      errEl.textContent = 'Action name may only contain lowercase letters, digits, and underscores.';
+  const buildPayload = (): Record<string, unknown> | null => {
+    setEditError('');
+    if (!validateName(actionName.trim())) {
+      setEditError('Action name may only contain lowercase letters, digits, and underscores.');
       return null;
     }
+
     let cfg: Record<string, unknown>;
-    if (tp === 'schedule_visit') {
-      const dur = svState.defaultDurationMin;
-      const durNum = dur === '' ? NaN : Number(dur);
-      if (dur !== '' && (isNaN(durNum) || durNum < 5 || durNum > 1440)) {
-        errEl.textContent = 'Default duration must be between 5 and 1440 minutes.'; return null;
+
+    if (handlerType === 'schedule_visit') {
+      const dur = svVal.defaultDurationMin;
+      const n   = dur === '' ? NaN : Number(dur);
+      if (dur !== '' && (isNaN(n) || n < 5 || n > 1440)) {
+        setEditError('Default duration must be between 5 and 1440 minutes.'); return null;
       }
-      cfg = { visitType: svState.visitType };
-      if (dur !== '' && !isNaN(durNum) && durNum > 0) cfg.defaultDurationMin = durNum;
-      cfg.addToGoogleCalendar = svState.addToGoogleCalendar;
-    } else if (tp === 'show_message') {
-      const message = msgState.message.trim();
-      if (!message) { errEl.textContent = 'Message is required for "Show informational message".'; return null; }
-      cfg = { message };
-      if (msgState.title.trim()) cfg.title = msgState.title.trim();
-    } else if (tp === 'start_design_visit') {
-      const dur = sdvState.defaultDurationMin;
-      const durNum = dur === '' ? NaN : Number(dur);
-      if (dur !== '' && (isNaN(durNum) || durNum < 5 || durNum > 1440)) {
-        errEl.textContent = 'Default duration must be between 5 and 1440 minutes.'; return null;
-      }
-      cfg = {};
-      if (dur !== '' && !isNaN(durNum) && durNum > 0) cfg.defaultDurationMin = durNum;
-      if (sdvState.intermediateLeadStatus) cfg.intermediateLeadStatus = sdvState.intermediateLeadStatus;
-      if (sdvState.submittedLeadStatus)    cfg.submittedLeadStatus    = sdvState.submittedLeadStatus;
-      if (sdvState.termsAndConditions)     cfg.termsAndConditions     = sdvState.termsAndConditions;
-      cfg.addToGoogleCalendar = sdvState.addToGoogleCalendar;
-    } else if (tp === 'schedule_delivery_window') {
-      cfg = {};
-      if (dwState.defaultTitle.trim()) cfg.defaultTitle = dwState.defaultTitle.trim();
-      cfg.addToGoogleCalendar = dwState.addToGoogleCalendar;
-    } else if (tp === 'schedule_installation_slot') {
-      const dur = isState.defaultDurationMin;
-      const durNum = dur === '' ? NaN : Number(dur);
-      if (dur !== '' && (isNaN(durNum) || durNum < 5 || durNum > 1440)) {
-        errEl.textContent = 'Default duration must be between 5 and 1440 minutes.'; return null;
+      cfg = { visitType: svVal.visitType };
+      if (dur !== '' && !isNaN(n) && n > 0) cfg.defaultDurationMin = n;
+      cfg.addToGoogleCalendar = svVal.addToGoogleCalendar;
+
+    } else if (handlerType === 'show_message') {
+      const msg = msgVal.message.trim();
+      if (!msg) { setEditError('Message is required for "Show informational message".'); return null; }
+      cfg = { message: msg };
+      if (msgVal.title.trim()) cfg.title = msgVal.title.trim();
+
+    } else if (handlerType === 'start_design_visit') {
+      const dur = sdvVal.defaultDurationMin;
+      const n   = dur === '' ? NaN : Number(dur);
+      if (dur !== '' && (isNaN(n) || n < 5 || n > 1440)) {
+        setEditError('Default duration must be between 5 and 1440 minutes.'); return null;
       }
       cfg = {};
-      if (dur !== '' && !isNaN(durNum)) cfg.defaultDurationMin = durNum;
-      if (isState.defaultTitle.trim()) cfg.defaultTitle = isState.defaultTitle.trim();
-      cfg.addToGoogleCalendar = isState.addToGoogleCalendar;
+      if (dur !== '' && !isNaN(n) && n > 0) cfg.defaultDurationMin = n;
+      if (sdvVal.intermediateLeadStatus) cfg.intermediateLeadStatus = sdvVal.intermediateLeadStatus;
+      if (sdvVal.submittedLeadStatus)    cfg.submittedLeadStatus    = sdvVal.submittedLeadStatus;
+      if (sdvVal.termsAndConditions)     cfg.termsAndConditions     = sdvVal.termsAndConditions;
+      cfg.addToGoogleCalendar = sdvVal.addToGoogleCalendar;
+
+    } else if (handlerType === 'schedule_delivery_window') {
+      cfg = {};
+      if (dwVal.defaultTitle.trim()) cfg.defaultTitle = dwVal.defaultTitle.trim();
+      cfg.addToGoogleCalendar = dwVal.addToGoogleCalendar;
+
+    } else if (handlerType === 'schedule_installation_slot') {
+      const dur = isVal.defaultDurationMin;
+      const n   = dur === '' ? NaN : Number(dur);
+      if (dur !== '' && (isNaN(n) || n < 5 || n > 1440)) {
+        setEditError('Default duration must be between 5 and 1440 minutes.'); return null;
+      }
+      cfg = {};
+      if (dur !== '' && !isNaN(n)) cfg.defaultDurationMin = n;
+      if (isVal.defaultTitle.trim()) cfg.defaultTitle = isVal.defaultTitle.trim();
+      cfg.addToGoogleCalendar = isVal.addToGoogleCalendar;
+
     } else {
-      const cfgTxt = (wrap.querySelector('#cah-config') as HTMLTextAreaElement).value.trim() || '{}';
-      try { cfg = JSON.parse(cfgTxt); }
-      catch { errEl.textContent = 'Configuration is not valid JSON.'; return null; }
+      const txt = jsonCfg.trim() || '{}';
+      try { cfg = JSON.parse(txt); }
+      catch { setEditError('Configuration is not valid JSON.'); return null; }
     }
-    const av = actionNameIn.value.trim();
+
+    const av = actionName.trim();
     if (av) cfg.action_name = av; else delete cfg.action_name;
-    return { name: '', type: tp, config: cfg, bindings: [binding] };
+    return { name: '', type: handlerType, config: cfg, bindings: [binding] };
   };
 
   const doSave = async (payload: Record<string, unknown>) => {
-    const errEl = wrap.querySelector('#cah-edit-err') as HTMLElement;
+    setSaving(true);
     try {
       if (existing) await PATCH(`/api/admin/card-action-handlers/${existing.id}`, payload);
       else          await POST('/api/admin/card-action-handlers', payload);
-      close();
-      await _reloadAndBroadcast();
-      showToast(existing ? 'Action updated.' : 'Action added.');
+      onSaved(!!existing);
     } catch (e) {
-      errEl.textContent = (e as Error).message || 'Save failed.';
+      setEditError((e as Error).message || 'Save failed.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  wrap.querySelector('#cah-conflict-confirm')!.addEventListener('click', async () => {
-    conflictBox.style.display = 'none';
-    const payload = buildPayload();
-    if (payload) await doSave(payload);
-  });
-
-  wrap.querySelector('#cah-save')!.addEventListener('click', async () => {
+  const handleSave = async () => {
     const payload = buildPayload();
     if (!payload) return;
-    const conflicts = _handlersForSlot(slot).filter(h => !existing || h.id !== existing.id);
+
+    const conflicts = handlers.filter(h =>
+      (h.bindings ?? []).some((b: Binding) => {
+        if (slot.substatus_id != null) return Number(b.substatus_id) === slot.substatus_id;
+        if (b.substatus_id != null) return false;
+        return (b.stage_key  || '').toLowerCase() === (slot.stage_key  || '').toLowerCase()
+            && (b.status_key || '').toLowerCase() === (slot.status_key || '').toLowerCase();
+      }) && (!existing || h.id !== existing.id),
+    );
+
     if (conflicts.length > 0) {
-      const slotLabel = slot.label || (slot.substatus_id != null
-        ? `sub-status #${slot.substatus_id}` : `${slot.stage_key} / ${slot.status_key}`);
-      conflictList.innerHTML = conflicts.map(h =>
-        `<div>• <strong>${esc(slotLabel)}</strong> is already wired to <strong>${esc(h.name || HANDLER_TYPE_LABELS[h.type] || h.type)}</strong> — bind anyway?</div>`
-      ).join('');
-      conflictBox.style.display = '';
-      conflictBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      setConflictList(conflicts);
       return;
     }
     await doSave(payload);
-  });
+  };
+
+  const handleConfirmBind = async () => {
+    const payload = buildPayload();
+    if (!payload) return;
+    setConflictList([]);
+    await doSave(payload);
+  };
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth sx={{ '& .MuiDialog-paper': { maxHeight: '90vh' } }}>
+        <DialogTitle sx={{ pb: 0.5 }}>
+          {existing ? 'Change action' : 'Add action'}
+          <Typography
+            component="span"
+            variant="body2"
+            color="text.secondary"
+            sx={{ display: 'block', fontWeight: 400 }}
+          >
+            for <strong>{slot.label}</strong>{' '}
+            {slot.rowLabel && (
+              <span style={{ opacity: 0.65 }}>({slot.rowLabel})</span>
+            )}
+          </Typography>
+        </DialogTitle>
+
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+
+            {/* Action name */}
+            <Box>
+              <TextField
+                label="Action name (optional)"
+                size="small"
+                fullWidth
+                value={actionName}
+                slotProps={{ htmlInput: { maxLength: 80 } }}
+                placeholder="e.g. send_quote"
+                error={!!actionNameErr}
+                helperText={actionNameErr || undefined}
+                onChange={e => { setActionName(e.target.value); validateName(e.target.value); }}
+                onBlur={e => validateName(e.target.value)}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                ⚙️ Backend automation coming soon — this name will be used to trigger workflows automatically once wired up.
+              </Typography>
+            </Box>
+
+            {/* Handler type */}
+            <FormControl size="small" fullWidth>
+              <InputLabel>Action type</InputLabel>
+              <Select
+                label="Action type"
+                value={handlerType}
+                onChange={e => { setHandlerType(e.target.value); setConflictList([]); }}
+              >
+                {Object.entries(HANDLER_TYPE_LABELS).map(([k, v]) => (
+                  <MenuItem key={k} value={k}>{v}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {/* Type description */}
+            {HANDLER_TYPE_DESCRIPTIONS[handlerType] && (
+              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+                {HANDLER_TYPE_DESCRIPTIONS[handlerType]}
+              </Typography>
+            )}
+
+            {/* Config blocks — only one is shown at a time */}
+            {showSv && (
+              <ScheduleVisitConfig
+                defaultVisitType={svVal.visitType}
+                defaultDurationMin={svVal.defaultDurationMin}
+                addToGoogleCalendar={svVal.addToGoogleCalendar}
+                onChange={setSvVal}
+              />
+            )}
+            {showMsg && (
+              <ShowMessageConfig
+                defaultTitle={msgVal.title}
+                defaultMessage={msgVal.message}
+                onChange={setMsgVal}
+              />
+            )}
+            {showSdv && (
+              <StartDesignVisitConfig
+                defaultDurationMin={sdvVal.defaultDurationMin}
+                intermediateLeadStatus={sdvVal.intermediateLeadStatus}
+                submittedLeadStatus={sdvVal.submittedLeadStatus}
+                termsAndConditions={sdvVal.termsAndConditions}
+                addToGoogleCalendar={sdvVal.addToGoogleCalendar}
+                leadStatuses={sdvLeadStatuses}
+                substatuses={sdvSubstatuses}
+                onChange={setSdvVal}
+              />
+            )}
+            {showDw && (
+              <DeliveryWindowConfig
+                defaultTitle={dwVal.defaultTitle}
+                addToGoogleCalendar={dwVal.addToGoogleCalendar}
+                onChange={setDwVal}
+              />
+            )}
+            {showIs && (
+              <InstallationSlotConfig
+                defaultDurationMin={isVal.defaultDurationMin}
+                defaultTitle={isVal.defaultTitle}
+                addToGoogleCalendar={isVal.addToGoogleCalendar}
+                onChange={setIsVal}
+              />
+            )}
+
+            {/* JSON fallback for types without a dedicated config block */}
+            {showJson && (
+              <Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: 'block', mb: 0.5, fontWeight: 500 }}
+                >
+                  Advanced configuration (JSON, optional)
+                </Typography>
+                <TextField
+                  size="small"
+                  fullWidth
+                  multiline
+                  rows={4}
+                  value={jsonCfg}
+                  onChange={e => setJsonCfg(e.target.value)}
+                  slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontSize: '0.75rem' } } }}
+                />
+              </Box>
+            )}
+
+            {/* Conflict warning */}
+            {conflictList.length > 0 && (
+              <Alert
+                severity="warning"
+                action={
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <Button size="small" onClick={() => setConflictList([])}>
+                      Keep editing
+                    </Button>
+                    <Button size="small" variant="contained" color="warning" onClick={handleConfirmBind} disabled={saving}>
+                      Bind anyway
+                    </Button>
+                  </Stack>
+                }
+              >
+                <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                  Slot already has a handler
+                </Typography>
+                {conflictList.map(h => {
+                  const slotLabel = slot.label || (
+                    slot.substatus_id != null
+                      ? `sub-status #${slot.substatus_id}`
+                      : `${slot.stage_key} / ${slot.status_key}`
+                  );
+                  return (
+                    <Typography key={h.id} variant="body2">
+                      • <strong>{slotLabel}</strong> is already wired to{' '}
+                      <strong>{h.name || HANDLER_TYPE_LABELS[h.type] || h.type}</strong> — bind anyway?
+                    </Typography>
+                  );
+                })}
+              </Alert>
+            )}
+
+            {/* Error */}
+            {editError && (
+              <Typography variant="body2" color="error">
+                {editError}
+              </Typography>
+            )}
+
+          </Stack>
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="contained" onClick={handleSave} disabled={saving}>
+            {existing ? 'Save' : 'Add'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+  );
 }
 
 function openConflictResolver(
@@ -730,6 +790,8 @@ function HandlerSummary({ h }: { h: Handler }) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+interface EditorOpenState { slot: ActionSlot; existing: Handler | null; }
+
 export function ActionHandlersPage() {
   const toast = useToast();
   const [handlers,    setHandlers]    = useState<Handler[]>([]);
@@ -739,6 +801,7 @@ export function ActionHandlersPage() {
   const [conflicts,   setConflicts]   = useState<ConflictData>({ total: 0, conflicts: [] });
   const [dismissed,   setDismissed]   = useState('');
   const [loading,     setLoading]     = useState(true);
+  const [editorOpen,  setEditorOpen]  = useState<EditorOpenState | null>(null);
   const everLoaded = useRef(false);
 
   useEffect(() => { _toastRef.fn = toast; return () => { _toastRef.fn = null; }; }, [toast]);
@@ -804,11 +867,14 @@ export function ActionHandlersPage() {
   // ── Window exposures ───────────────────────────────────────────────────────
 
   useEffect(() => {
-    W.loadCardActionHandlersAdmin     = fetchAll;
-    W.openHandlerEditor               = openHandlerEditor;
-    W.openConflictResolver            = openConflictResolver;
-    W.refreshHandlerConflictsBanner   = fetchAll;
+    _openEditorRef.fn = (slot, existing) => setEditorOpen({ slot, existing: existing ?? null });
+    W.loadCardActionHandlersAdmin   = fetchAll;
+    W.openHandlerEditor             = (slot: ActionSlot, existing?: Handler | null) =>
+      _openEditorRef.fn?.(slot, existing);
+    W.openConflictResolver          = openConflictResolver;
+    W.refreshHandlerConflictsBanner = fetchAll;
     return () => {
+      _openEditorRef.fn = null;
       delete W.loadCardActionHandlersAdmin;
       delete W.openHandlerEditor;
       delete W.openConflictResolver;
@@ -825,6 +891,12 @@ export function ActionHandlersPage() {
   ).sort().join('|');
 
   const bannerVisible = conflicts.total > 0 && dismissed !== conflictKey;
+
+  const handleEditorSaved = async (isEdit: boolean) => {
+    setEditorOpen(null);
+    await _reloadAndBroadcast();
+    showToast(isEdit ? 'Action updated.' : 'Action added.');
+  };
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -942,7 +1014,7 @@ export function ActionHandlersPage() {
                                   {handler ? (
                                     <>
                                       <button className="btn btn-ghost"
-                                        onClick={() => openHandlerEditor(slot, handler)}>
+                                        onClick={() => setEditorOpen({ slot, existing: handler })}>
                                         Change
                                       </button>
                                       <button className="btn btn-ghost adm-btn-remove"
@@ -952,7 +1024,7 @@ export function ActionHandlersPage() {
                                     </>
                                   ) : (
                                     <button className="btn btn-primary adm-btn-add-action"
-                                      onClick={() => openHandlerEditor(slot, null)}>
+                                      onClick={() => setEditorOpen({ slot, existing: null })}>
                                       + Add action
                                     </button>
                                   )}
@@ -970,6 +1042,20 @@ export function ActionHandlersPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Handler editor modal — rendered in React, outside the card */}
+      {editorOpen && (
+        <HandlerEditorModal
+          key={`${editorOpen.existing?.id ?? 'new'}-${editorOpen.slot.kind}-${editorOpen.slot.substatus_id ?? editorOpen.slot.status_key}`}
+          slot={editorOpen.slot}
+          existing={editorOpen.existing}
+          handlers={handlers}
+          statuses={statuses}
+          substatuses={substatuses}
+          onClose={() => setEditorOpen(null)}
+          onSaved={handleEditorSaved}
+        />
+      )}
     </Stack>
   );
 }
