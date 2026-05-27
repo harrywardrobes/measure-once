@@ -87,6 +87,9 @@ const LBL_KEY_NAMING      = 'privtest_cah_naming';   // status_key for the edito
 // (H) intermediateLeadStatus on wizard open
 const LBL_KEY_ILS         = 'privtest_cah_ils';      // status_key for the intermediateLeadStatus probe
 const INTERMEDIATE_LS     = 'PRIVTEST_INPROGRESS';   // value sent on PATCH /api/contacts/:id when wizard opens
+// (I) fallback slot visibility — regression guard for task #1722
+// Uppercase because it must match lead_status_config.key exactly for the FK on lead_substatuses.
+const LBL_KEY_FALLBACK_STATUS = 'PRIVTEST_CAH_FALLBACK'; // lead_status_config.key + substatus status_key
 
 const HANDLER_NAME_DV         = 'PrivTest design visit handler';
 const HANDLER_NAME_SV         = 'PrivTest schedule-visit handler';
@@ -167,6 +170,13 @@ async function purgeFixtures(pool) {
        WHERE status_key = $1 AND substatus_key = $2`,
     [SUB_STATUS_K, SUB_SUB_K]
   );
+  // (I) probe fallback-slot substatus
+  try {
+    await pool.query(
+      `DELETE FROM lead_substatuses WHERE status_key = $1`,
+      [LBL_KEY_FALLBACK_STATUS]
+    );
+  } catch (_) {}
   await pool.query(
     `DELETE FROM visits WHERE customer_id LIKE 'privtest-cah-%'`
   );
@@ -176,8 +186,8 @@ async function purgeFixtures(pool) {
   // delete above so the FK doesn't block this DELETE.
   try {
     await pool.query(
-      `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3)`,
-      [LBL_KEY_CONFLICT_LS, SUB_STATUS_K, LBL_KEY_ANAME]
+      `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3, $4)`,
+      [LBL_KEY_CONFLICT_LS, SUB_STATUS_K, LBL_KEY_ANAME, LBL_KEY_FALLBACK_STATUS]
     );
   } catch (_) {}
   // Recreate the unique label-binding index if it was temporarily dropped
@@ -2464,6 +2474,100 @@ async function main() {
       await reorderTab.evaluate(() => { try { window.__reorderBc && window.__reorderBc.close(); } catch (_) {} });
       await reorderTab.close();
     }
+
+    // ── (I) Fallback slot visibility ──────────────────────────────────────────
+    //
+    // Regression guard for task #1722: a lead status that has sub-statuses but
+    // no default action label and no bound handler must still render a
+    // "Default action" slot row in the Action Handlers tab.
+    //
+    // Before the fix, the condition in processLs() was `dflt || hasHandler`
+    // only — omitting `lsSubs.length > 0` — so the slot was invisible whenever
+    // both dflt and hasHandler were falsy, even if sub-statuses existed.  The
+    // fix added the third clause; this probe guards against a regression.
+    console.log('\n  [I] Fallback slot visibility (task #1722 regression guard)');
+
+    // Seed the lead_status_config row.
+    const FALLBACK_STATUS_LABEL = 'PrivTest Fallback Slot';
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+       VALUES ($1, $2, 9996, false, 'SALES')
+       ON CONFLICT (key) DO UPDATE
+         SET label               = EXCLUDED.label,
+             sort_order          = EXCLUDED.sort_order,
+             excluded_from_sales = EXCLUDED.excluded_from_sales,
+             stage               = EXCLUDED.stage`,
+      [LBL_KEY_FALLBACK_STATUS, FALLBACK_STATUS_LABEL],
+    );
+    // Insert a sub-status with an empty action_label — the condition that was
+    // previously hiding the Default action slot.
+    await pool.query(
+      `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order)
+       VALUES ($1, $2, 'PrivTest fallback sub', '', 9996)
+       ON CONFLICT DO NOTHING`,
+      [LBL_KEY_FALLBACK_STATUS, 'PRIVTEST_FALLBACK_SUB'],
+    );
+    console.log(`  Seeded lead_status_config key=${LBL_KEY_FALLBACK_STATUS} with one empty-action_label sub-status`);
+
+    // Open a fresh admin tab and switch to the Action Handlers panel.
+    const fallbackTab = await browser.newPage();
+    await fallbackTab.setCacheEnabled(false);
+    await injectSession(fallbackTab, adminClient.cookie);
+    await fallbackTab.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await fallbackTab.evaluate(() => {
+      if (typeof switchTab === 'function') switchTab('cardactions');
+    });
+    await new Promise(r => setTimeout(r, 400));
+    await fallbackTab.evaluate(() => {
+      if (typeof switchTab === 'function') switchTab('actionhandlers');
+    });
+    await pollPage(
+      fallbackTab,
+      () => typeof window.loadCardActionHandlersAdmin === 'function',
+      null,
+      10000,
+    );
+    await fallbackTab.evaluate(() => {
+      const p1 = typeof loadCardActionsAdmin === 'function'
+        ? loadCardActionsAdmin() : Promise.resolve();
+      const p2 = typeof loadCardActionHandlersAdmin === 'function'
+        ? loadCardActionHandlersAdmin() : Promise.resolve();
+      return Promise.all([p1, p2]);
+    });
+
+    // Poll for a "Default action" slot sub-label inside the group whose heading
+    // matches our seeded status label.  The slot is rendered as:
+    //   <div class="adm-handlers-slot-sub">Default action</div>
+    // inside a <div class="adm-handlers-group"> whose
+    //   <div class="adm-handlers-group-head"> contains FALLBACK_STATUS_LABEL.
+    const fallbackSlotVisible = await pollPage(
+      fallbackTab,
+      (statusLabel) => {
+        const wrap = document.getElementById('card-action-handlers-wrap');
+        if (!wrap) return null;
+        const groups = wrap.querySelectorAll('.adm-handlers-group');
+        for (const grp of groups) {
+          const head = grp.querySelector('.adm-handlers-group-head');
+          if (!head || !head.textContent.includes(statusLabel)) continue;
+          const subs = grp.querySelectorAll('.adm-handlers-slot-sub');
+          for (const sub of subs) {
+            if (sub.textContent.trim() === 'Default action') return 'found';
+          }
+        }
+        return null;
+      },
+      FALLBACK_STATUS_LABEL,
+      10000,
+    );
+    record(
+      '(I) "Default action" slot visible for a lead status with subs but no label or handler',
+      '"Default action" slot row rendered in #card-action-handlers-wrap group for the status',
+      `result=${fallbackSlotVisible}`,
+      fallbackSlotVisible === 'found',
+    );
+
+    await fallbackTab.close();
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -2608,6 +2712,15 @@ async function writeReport(runId, findings) {
     '  still opens even though the PATCH naturally returns 503 in this harness',
     '  (HUBSPOT_TOKEN stripped → `requireHubspotToken` rejects).  This exercises',
     '  the `.catch` / non-ok branch in `public/card-action-handlers.js` 388–395.',
+    '- **(I) Fallback slot visibility** (task #1722 regression guard): a lead',
+    '  status row (stage=SALES) is seeded in `lead_status_config` together with',
+    '  one `lead_substatuses` row whose `action_label` is empty — no stage-action',
+    '  label entry and no bound handler.  A fresh admin tab switches to the',
+    '  Action Handlers panel; the probe polls `#card-action-handlers-wrap` and',
+    '  asserts that a `.adm-handlers-slot-sub` element with text',
+    '  `"Default action"` is present inside the group headed by the seeded',
+    '  status label.  Guards the `lsSubs.length > 0` clause in `processLs()`',
+    '  (`ActionHandlersPage.tsx` line 227) against a silent regression.',
     '',
     '## Notes',
     '',
