@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typography } from '@mui/material';
+import {
+  Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typography,
+  Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, ListItemText,
+} from '@mui/material';
 import { useToast } from '../../contexts/ToastContext';
 import { GET, POST, PATCH, PUT } from '../../utils/api';
 
@@ -184,6 +187,16 @@ export function CardActionsPage() {
   const statusesRef    = useRef<LeadStatus[]>([]);
   const [syncWarning, setSyncWarning] = useState<string | null>(null);
 
+  type ClearSlot = { stageKey: string; statusKey: string; label: string; boundHandlers: Handler[] };
+  const [clearConfirm, setClearConfirm] = useState<{
+    slots: ClearSlot[];
+    resolve: (confirmed: boolean) => void;
+  } | null>(null);
+
+  const confirmClear = useCallback((slots: ClearSlot[]): Promise<boolean> => {
+    return new Promise(resolve => setClearConfirm({ slots, resolve }));
+  }, []);
+
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchAll = useCallback(async () => {
@@ -231,6 +244,29 @@ export function CardActionsPage() {
     let saved = 0, failed = 0;
     const failures: string[] = [];
     let hubSyncFailed = false;
+
+    // Before saving, check if any default-label inputs are being cleared while
+    // they still have a handler bound. Warn the admin and let them cancel.
+    const clearingWithHandlers: ClearSlot[] = [];
+    for (const input of Array.from(
+      document.querySelectorAll<HTMLInputElement>('#card-actions-table-wrap .ca-default-input')
+    )) {
+      const value    = input.value.trim();
+      const original = input.dataset.original || '';
+      if (!value && original) {
+        const stageKey  = input.dataset.stage  || '';
+        const statusKey = input.dataset.status || '';
+        const bound = handlersForSlot(handlers, stageKey, statusKey);
+        if (bound.length) {
+          clearingWithHandlers.push({ stageKey, statusKey, label: original, boundHandlers: bound });
+        }
+      }
+    }
+    if (clearingWithHandlers.length) {
+      const confirmed = await confirmClear(clearingWithHandlers);
+      setClearConfirm(null);
+      if (!confirmed) return;
+    }
 
     // Default-label inputs
     for (const input of Array.from(
@@ -356,7 +392,7 @@ export function CardActionsPage() {
     try { new BroadcastChannel('stage_action_labels_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
     try { new BroadcastChannel('lead_substatuses_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
     fetchAll();
-  }, [fetchAll, showToast]);
+  }, [fetchAll, showToast, handlers, confirmClear]);
 
   const addCardActionSubstatus = useCallback((lsKey: string) => {
     const ls = statusesRef.current.find(s => s.key === lsKey);
@@ -596,6 +632,50 @@ export function CardActionsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {clearConfirm && (
+        <Dialog
+          open
+          onClose={() => { clearConfirm.resolve(false); setClearConfirm(null); }}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Handler still bound to this label</DialogTitle>
+          <DialogContent>
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {clearConfirm.slots.length === 1
+                ? 'The label you\'re clearing has a handler bound to it.'
+                : `${clearConfirm.slots.length} labels you're clearing have handlers bound to them.`}
+              {' '}If you proceed, the handler will still exist but won't appear on any card — it will show as an unlabelled binding in the Action handlers tab.
+            </Alert>
+            <List dense disablePadding>
+              {clearConfirm.slots.map(s => (
+                <ListItem key={`${s.stageKey}:${s.statusKey}`} disableGutters>
+                  <ListItemText
+                    primary={`"${s.label}" — ${s.stageKey} / ${s.statusKey || 'stage default'}`}
+                    secondary={`Bound handler${s.boundHandlers.length > 1 ? 's' : ''}: ${s.boundHandlers.map(h => h.name || h.type).join(', ')}`}
+                  />
+                </ListItem>
+              ))}
+            </List>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+              To avoid orphaning the handler, cancel and remove its binding first in the <strong>Action handlers</strong> tab.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => { clearConfirm.resolve(false); setClearConfirm(null); }}>
+              Cancel
+            </Button>
+            <Button
+              color="warning"
+              variant="contained"
+              onClick={() => { clearConfirm.resolve(true); setClearConfirm(null); }}
+            >
+              Clear label anyway
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Stack>
   );
 }
