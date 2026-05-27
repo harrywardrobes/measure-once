@@ -2,7 +2,8 @@
 // test/scheduling-past-time-guard/run.js
 //
 // Covers the past-time confirmation dialog and 15-minute start-time warning
-// introduced in task #1615 for InstallationSlotModal and DeliveryWindowModal.
+// introduced in task #1615 for InstallationSlotModal and DeliveryWindowModal,
+// and extended in task #1677 to cover VisitCalendarModal.
 //
 // Probes:
 //   [IS-PAST]    InstallationSlotModal: submitting with a past startDt opens
@@ -15,30 +16,47 @@
 //                the same confirmation dialog.
 //   [DW-BACK]    "Go back" works for the delivery window modal.
 //   [DW-PROCEED] "Schedule anyway" fires POST /api/visits for delivery windows.
+//   [VCM-PAST]   VisitCalendarModal: submitting with a past startDt opens the
+//                "Schedule in the past?" confirmation dialog.
+//   [VCM-BACK]   Clicking "Go back" dismisses the dialog; the scheduling form
+//                stays open.
+//   [VCM-PROCEED] Clicking "Schedule anyway" fires POST /api/visits and the
+//                modal closes.
 //   [WARN-IS]    The 15-minute warning Alert appears in InstallationSlotModal
 //                edit mode when startAt is within 15 minutes.
 //   [WARN-DW]    The 15-minute warning Alert appears in DeliveryWindowModal
 //                edit mode when start is within 15 minutes.
+//   [WARN-VCM]   The 15-minute warning Alert appears in VisitCalendarModal
+//                when the DateTimePicker is updated to a near-future time.
 //
-// Strategy for IS/DW past-time probes:
+// Strategy for IS/DW/VCM past-time probes:
 //   Navigate to /customers (a real, authenticated page that loads main.js).
 //   main.js mounts CardActionModalsHost on every page via
 //   initCardActionModalsHost(); that component registers _opener via a
 //   useEffect so window.openCardActionModal becomes functional within ~300 ms.
 //   We retry calling window.openCardActionModal(handler, ctx) in a pollPage
-//   loop until the InstallationSlotModal / DeliveryWindowModal dialog appears.
+//   loop until the modal dialog appears.
 //   After the modal appears we mock Date/Date.now in the browser context to
 //   return a time 100 h in the future; clicking Submit triggers handleSubmit
 //   which calls dayjs() and finds startDt < dayjs() — the past-confirm dialog
 //   appears.
 //
-// Strategy for WARN probes:
+// Strategy for WARN-IS/WARN-DW probes:
 //   Navigate to /customers/:contactId with request interception active.
 //   Mock /api/contacts/:id and /api/visits to inject a visit whose startAt is
 //   10 minutes in the future. The CustomerDetailPage renders
 //   UpcomingVisitsSection; clicking the edit button opens the modal in edit
 //   mode, which sets startDt = visit.startAt. The useEffect fires immediately
 //   and sets startTimeWarning = true (minutesUntilStart = 10 < 15).
+//
+// Strategy for WARN-VCM probe:
+//   VisitCalendarModal has no edit mode via the customer-detail flow, so the
+//   warning cannot be triggered via a pre-populated startAt. Instead, we open
+//   the modal via openCardActionModal (initialStart = now + 24 h), then use
+//   Puppeteer keyboard interaction to overwrite the DateTimePicker (#cah-dv-start)
+//   with a near-future time (now + 10 min). The onChange fires, React updates
+//   startDt, the useEffect re-runs checkApproaching(), and the warning Alert
+//   appears because minutesUntilStart ≈ 10 < 15.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:scheduling-past-time-guard
@@ -66,14 +84,16 @@ try { puppeteer = require('puppeteer'); } catch {}
 require('dotenv').config();
 
 // ── Fixture constants ──────────────────────────────────────────────────────────
-const HANDLER_NAME_IS = 'PrivTest scheduling-past-time installation handler';
-const HANDLER_NAME_DW = 'PrivTest scheduling-past-time delivery handler';
+const HANDLER_NAME_IS  = 'PrivTest scheduling-past-time installation handler';
+const HANDLER_NAME_DW  = 'PrivTest scheduling-past-time delivery handler';
+const HANDLER_NAME_VCM = 'PrivTest scheduling-past-time visit calendar handler';
 
 // Numeric ID required by customer-detail bootstrap (validates /^\d+$/)
 const FAKE_CONTACT_ID = '989800001641';
 
-const FAKE_CONTACT_ID_IS = 'privtest-sptg-is-001';
-const FAKE_CONTACT_ID_DW = 'privtest-sptg-dw-001';
+const FAKE_CONTACT_ID_IS  = 'privtest-sptg-is-001';
+const FAKE_CONTACT_ID_DW  = 'privtest-sptg-dw-001';
+const FAKE_CONTACT_ID_VCM = 'privtest-sptg-vcm-001';
 
 const REPORT_PATH = path.join(
   __dirname, '..', '..', 'test-results', 'scheduling-past-time-guard.md',
@@ -119,12 +139,14 @@ function writeReport(runId) {
     `## Coverage`,
     ``,
     `Tests the past-time confirmation dialog and 15-minute warning in`,
-    `InstallationSlotModal and DeliveryWindowModal (task #1615).`,
+    `InstallationSlotModal and DeliveryWindowModal (task #1615), and`,
+    `VisitCalendarModal (task #1677).`,
     ``,
     `## Relevant files`,
     ``,
     `- \`src/react/components/modals/InstallationSlotModal.tsx\``,
     `- \`src/react/components/modals/DeliveryWindowModal.tsx\``,
+    `- \`src/react/components/modals/VisitCalendarModal.tsx\``,
   ].join('\n');
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   fs.writeFileSync(REPORT_PATH, md, 'utf8');
@@ -199,14 +221,14 @@ async function restoreDateMock(page) {
 async function purgeFixtures(pool) {
   try {
     await pool.query(
-      `DELETE FROM card_action_handlers WHERE name IN ($1, $2)`,
-      [HANDLER_NAME_IS, HANDLER_NAME_DW],
+      `DELETE FROM card_action_handlers WHERE name IN ($1, $2, $3)`,
+      [HANDLER_NAME_IS, HANDLER_NAME_DW, HANDLER_NAME_VCM],
     );
   } catch (_) {}
   try {
     await pool.query(
-      `DELETE FROM visits WHERE customer_id IN ($1, $2)`,
-      [FAKE_CONTACT_ID_IS, FAKE_CONTACT_ID_DW],
+      `DELETE FROM visits WHERE customer_id IN ($1, $2, $3)`,
+      [FAKE_CONTACT_ID_IS, FAKE_CONTACT_ID_DW, FAKE_CONTACT_ID_VCM],
     );
   } catch (_) {}
 }
@@ -331,7 +353,21 @@ async function main() {
     dwHandlerRes.status === 201 && Number.isInteger(dwHandlerId),
   );
 
-  if (!isHandlerId || !dwHandlerId) {
+  const vcmHandlerRes = await adminClient.post('/api/admin/card-action-handlers', {
+    name: HANDLER_NAME_VCM,
+    type: 'schedule_visit',
+    config: { visitType: 'survey', defaultDurationMin: 60, addToGoogleCalendar: false },
+    bindings: [],
+  });
+  const vcmHandlerId = vcmHandlerRes.json?.id;
+  record(
+    'seed schedule_visit handler',
+    'status=201 with numeric id',
+    `status=${vcmHandlerRes.status} id=${vcmHandlerId}`,
+    vcmHandlerRes.status === 201 && Number.isInteger(vcmHandlerId),
+  );
+
+  if (!isHandlerId || !dwHandlerId || !vcmHandlerId) {
     console.error('  Handler seeding failed — skipping Puppeteer probes.');
     await cleanupAndExit(1);
     return;
@@ -625,6 +661,139 @@ async function main() {
 
     await dwPage.close();
 
+    // ── [VCM-PAST / VCM-BACK / VCM-PROCEED] VisitCalendarModal past-time guard
+
+    console.log('\n  [VCM] VisitCalendarModal past-time guard');
+    const vcmPage = await browser.newPage();
+    vcmPage.on('pageerror', () => {});
+    vcmPage.on('console',   () => {});
+    await vcmPage.setCacheEnabled(false);
+    await injectSession(vcmPage, adminClient.cookie);
+    await vcmPage.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+
+    const vcmHandlerObj = {
+      id:       vcmHandlerId,
+      type:     'schedule_visit',
+      config:   { visitType: 'survey', defaultDurationMin: 60, addToGoogleCalendar: false },
+      bindings: [],
+    };
+    const vcmCtxObj = {
+      contactId:    FAKE_CONTACT_ID_VCM,
+      contactName:  'PrivTest VCM Contact',
+      contactEmail: 'vcm@privtest.local',
+    };
+    const vcmModalOpened = await pollPage(vcmPage, (arg) => {
+      if (typeof window.openCardActionModal === 'function') {
+        window.openCardActionModal(arg.handler, arg.ctx);
+      }
+      const m = document.querySelector('[role=dialog]');
+      if (!m) return null;
+      return {
+        hasPrimary: !!m.querySelector('[data-testid=cah-primary]'),
+        hasTitle:   !!m.querySelector('input#cah-dv-title'),
+      };
+    }, { handler: vcmHandlerObj, ctx: vcmCtxObj }, 10000, 300);
+
+    record(
+      '[VCM] modal opens with DateTimePicker and Schedule button',
+      'dialog with #cah-dv-title and [data-testid=cah-primary]',
+      `got=${JSON.stringify(vcmModalOpened)}`,
+      !!vcmModalOpened && vcmModalOpened.hasPrimary && vcmModalOpened.hasTitle,
+    );
+
+    if (vcmModalOpened) {
+      const farFutureVcm = Date.now() + 100 * 3600 * 1000;
+      await applyDateMock(vcmPage, farFutureVcm);
+
+      // [VCM-PAST] Submit → past-confirm dialog.
+      await vcmPage.evaluate(() => document.querySelector('[data-testid=cah-primary]').click());
+      const vcmPastDialog = await pollPage(vcmPage, () => {
+        const dialogs = [...document.querySelectorAll('[role=dialog]')];
+        const past = dialogs.find(d => d.textContent.includes('Schedule in the past?'));
+        if (!past) return null;
+        return {
+          hasTitle:    past.textContent.includes('Schedule in the past?'),
+          hasBody:     past.textContent.includes('already passed'),
+          hasGoBack:   !!([...past.querySelectorAll('button')].find(b => b.textContent.trim() === 'Go back')),
+          hasSchedule: !!past.querySelector('[data-testid=cah-past-confirm]'),
+        };
+      }, null, 6000);
+
+      record(
+        '[VCM-PAST] past-confirm dialog appears when submitting with past startDt',
+        'dialog with "Schedule in the past?" + "Go back" + "Schedule anyway"',
+        `got=${JSON.stringify(vcmPastDialog)}`,
+        !!vcmPastDialog && vcmPastDialog.hasTitle && vcmPastDialog.hasGoBack && vcmPastDialog.hasSchedule,
+      );
+
+      // [VCM-BACK] "Go back" dismisses dialog, form stays open.
+      await vcmPage.evaluate(() => {
+        const dialogs = [...document.querySelectorAll('[role=dialog]')];
+        const past = dialogs.find(d => d.textContent.includes('Schedule in the past?'));
+        const btn = past && [...past.querySelectorAll('button')].find(b => b.textContent.trim() === 'Go back');
+        if (btn) btn.click();
+      });
+      await new Promise(r => setTimeout(r, 300));
+      const vcmAfterGoBack = await vcmPage.evaluate(() => {
+        const dialogs = [...document.querySelectorAll('[role=dialog]')];
+        const pastGone      = !dialogs.some(d => d.textContent.includes('Schedule in the past?'));
+        const formStillOpen = dialogs.some(d => !!d.querySelector('[data-testid=cah-primary]'));
+        return { pastGone, formStillOpen };
+      });
+      record(
+        '[VCM-BACK] "Go back" dismisses dialog; scheduling form stays open',
+        'past-confirm gone, primary button still present',
+        `got=${JSON.stringify(vcmAfterGoBack)}`,
+        !!vcmAfterGoBack && vcmAfterGoBack.pastGone && vcmAfterGoBack.formStillOpen,
+      );
+
+      // [VCM-PROCEED] "Schedule anyway" → POST /api/visits.
+      const vcmRequests = [];
+      const vcmReqListener = (req) => {
+        const u = req.url();
+        if (u.includes('/api/visits') || u.includes('/api/events')) {
+          vcmRequests.push({ url: u, method: req.method() });
+        }
+      };
+      vcmPage.on('request', vcmReqListener);
+
+      await vcmPage.evaluate(() => document.querySelector('[data-testid=cah-primary]')?.click());
+      const vcmPastDialog2 = await pollPage(vcmPage, () => {
+        const dialogs = [...document.querySelectorAll('[role=dialog]')];
+        return dialogs.some(d => d.textContent.includes('Schedule in the past?')) || null;
+      }, null, 5000);
+
+      if (vcmPastDialog2) {
+        await vcmPage.evaluate(() => {
+          const btn = document.querySelector('[data-testid=cah-past-confirm]');
+          if (btn) btn.click();
+        });
+        await pollPage(
+          vcmPage,
+          () => !document.querySelector('[data-testid=cah-primary]') || null,
+          null,
+          6000,
+        );
+      }
+      vcmPage.off('request', vcmReqListener);
+
+      const vcmVisitReq = vcmRequests.find(r => /\/api\/visits(?:$|\?)/.test(r.url) && r.method === 'POST');
+      record(
+        '[VCM-PROCEED] "Schedule anyway" fires POST /api/visits',
+        'one POST to /api/visits',
+        `requests=${JSON.stringify(vcmRequests)}`,
+        !!vcmVisitReq,
+      );
+
+      await restoreDateMock(vcmPage);
+    } else {
+      record('[VCM-PAST]    past-confirm dialog appears', 'dialog present', 'modal did not open — skipped', false);
+      record('[VCM-BACK]    "Go back" dismisses dialog',  'dialog gone',    'skipped',                       false);
+      record('[VCM-PROCEED] "Schedule anyway" fires POST', 'POST /api/visits', 'skipped',                   false);
+    }
+
+    await vcmPage.close();
+
     // ── [WARN-IS / WARN-DW] 15-minute warning via edit mode ───────────────────
     //
     // Navigate to /customers/:FAKE_CONTACT_ID with request interception.
@@ -747,6 +916,104 @@ async function main() {
 
       await warnPage.close();
     }
+
+    // ── [WARN-VCM] 15-minute warning in VisitCalendarModal via DateTimePicker ──
+    //
+    // VisitCalendarModal has no edit mode from the customer-detail flow; it
+    // always opens with initialStart = now + 24 h. To trigger the warning we:
+    //   1. Open the modal via openCardActionModal.
+    //   2. Interact with the #cah-dv-start DateTimePicker to type a near-future
+    //      time (now + 10 min). MUI DateTimePicker segments accept digit input.
+    //   3. React fires onChange → startDt state updates → useEffect re-runs
+    //      checkApproaching() → startTimeWarning = true → Alert appears.
+
+    console.log('\n  [WARN-VCM] VisitCalendarModal 15-minute warning');
+
+    const vcmWarnPage = await browser.newPage();
+    vcmWarnPage.on('pageerror', () => {});
+    vcmWarnPage.on('console',   () => {});
+    await vcmWarnPage.setCacheEnabled(false);
+    await injectSession(vcmWarnPage, adminClient.cookie);
+    await vcmWarnPage.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 25000 });
+
+    const vcmWarnHandlerObj = {
+      id:       vcmHandlerId,
+      type:     'schedule_visit',
+      config:   { visitType: 'survey', defaultDurationMin: 60, addToGoogleCalendar: false },
+      bindings: [],
+    };
+    const vcmWarnCtxObj = {
+      contactId:    FAKE_CONTACT_ID_VCM,
+      contactName:  'PrivTest VCM Warn Contact',
+      contactEmail: 'vcmwarn@privtest.local',
+    };
+
+    // Wait for the modal to open with the DateTimePicker.
+    const vcmWarnModalOpened = await pollPage(vcmWarnPage, (arg) => {
+      if (typeof window.openCardActionModal === 'function') {
+        window.openCardActionModal(arg.handler, arg.ctx);
+      }
+      const m = document.querySelector('[role=dialog]');
+      if (!m) return null;
+      return !!m.querySelector('input#cah-dv-start') || null;
+    }, { handler: vcmWarnHandlerObj, ctx: vcmWarnCtxObj }, 10000, 300);
+
+    if (!vcmWarnModalOpened) {
+      record(
+        '[WARN-VCM] modal opens with DateTimePicker',
+        'dialog with input#cah-dv-start present',
+        'modal did not open — skipped',
+        false,
+      );
+    } else {
+      // Compute near-future time: real now + 10 min.
+      const nearFutureMs = Date.now() + 10 * 60 * 1000;
+      const nf = new Date(nearFutureMs);
+      const pad = n => String(n).padStart(2, '0');
+      // Segments for MUI DateTimePicker (en-US locale): MM DD YYYY hh mm AM/PM
+      const monthStr   = pad(nf.getMonth() + 1);
+      const dayStr     = pad(nf.getDate());
+      const yearStr    = String(nf.getFullYear());
+      const hourRaw    = nf.getHours() % 12 || 12; // 1–12
+      const hourStr    = pad(hourRaw);
+      const minuteStr  = pad(nf.getMinutes());
+      const ampmKey    = nf.getHours() < 12 ? 'a' : 'p'; // a/p triggers AM/PM in MUI
+
+      // Click the start input to focus the first segment (month).
+      await vcmWarnPage.click('input#cah-dv-start');
+      await new Promise(r => setTimeout(r, 200));
+
+      // MUI DateTimePicker segments auto-advance when the segment is filled.
+      // Typing the digits for each segment in sequence fills the full date/time.
+      await vcmWarnPage.keyboard.type(monthStr);  // month (MM)
+      await vcmWarnPage.keyboard.type(dayStr);    // day   (DD)
+      await vcmWarnPage.keyboard.type(yearStr);   // year  (YYYY)
+      await vcmWarnPage.keyboard.type(hourStr);   // hour  (hh)
+      await vcmWarnPage.keyboard.type(minuteStr); // min   (mm)
+      // Toggle AM/PM by pressing 'a' or 'p'.
+      await vcmWarnPage.keyboard.press(ampmKey === 'a' ? 'KeyA' : 'KeyP');
+      await new Promise(r => setTimeout(r, 500));
+
+      // Assert the warning Alert appeared.
+      const vcmWarnAlert = await pollPage(vcmWarnPage, () => {
+        const alerts = [...document.querySelectorAll('[role=alert]')];
+        const warn = alerts.find(a =>
+          a.textContent.includes('less than 15 minutes') ||
+          a.textContent.includes('already passed')
+        );
+        if (!warn) return null;
+        return { text: warn.textContent.trim().slice(0, 120) };
+      }, null, 8000);
+
+      record(
+        '[WARN-VCM] 15-minute warning Alert appears in VisitCalendarModal after DateTimePicker update',
+        'Alert with "less than 15 minutes" or "already passed" text',
+        vcmWarnAlert ? `text="${vcmWarnAlert.text}"` : 'not found',
+        !!vcmWarnAlert,
+      );
+    }
+
+    await vcmWarnPage.close();
   } catch (e) {
     console.error('Unexpected error in test body:', e);
     record('test-body', 'no uncaught error', String(e), false);
