@@ -1,0 +1,42 @@
+{/* Swatch.mdx — component documentation */}
+import { Meta, Canvas } from '@storybook/blocks';
+import * as SwatchStories from './Swatch.stories';
+
+<Meta title="Components/Swatch/Guide" />
+
+# Swatch
+
+A colour-token preview tile used by the Design System token gallery. Displays a
+coloured chip alongside the CSS custom-property name and its resolved value, and
+handles loading and empty states automatically.
+
+## When to use
+
+- On design-token reference pages where you need to visually preview a palette
+  or a set of CSS custom properties (e.g. `--paper`, `--primary`, stage colours).
+- When building a token catalogue — pass the resolved hex/rgba value via `value`
+  and let the chip reflect the token through `chipStyle` or the default
+  `var(name)` background.
+
+## When not to use
+
+- **General UI** — Swatch is a documentation-only component. Do not use it
+  inside product pages, customer-facing views, or any surface that is not a
+  design-system reference page.
+- As a colour picker or interactive element — it carries no click handler and
+  is not keyboard-operable by design.
+
+## Do / Don't
+
+**Do:** supply the exact CSS custom-property name (including the leading `--`)
+so the chip background resolves correctly from `:root`.
+
+**Don't:** pass a bare colour string as `name` — the component wraps it in
+`var(…)` internally, so a raw hex value will produce an invalid `var(#F6F1E7)`
+reference. Put the hex in `value` and the token name in `name`.
+
+---
+
+<Canvas of={SwatchStories.Default} />
+<Canvas of={SwatchStories.Loading} />
+<Canvas of={SwatchStories.Empty} />
