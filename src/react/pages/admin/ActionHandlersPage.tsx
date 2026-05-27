@@ -1,7 +1,25 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { ThemeProvider } from '@mui/material/styles';
 import { useToast } from '../../contexts/ToastContext';
 import { Box, Card, CardContent, Stack, Typography } from '@mui/material';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
+import { theme } from '../../theme';
+import {
+  DeliveryWindowConfig,
+  InstallationSlotConfig,
+  ScheduleVisitConfig,
+  ShowMessageConfig,
+  StartDesignVisitConfig,
+} from './HandlerConfigBlocks';
+import type {
+  DeliveryWindowConfigValue,
+  InstallationSlotConfigValue,
+  ScheduleVisitConfigValue,
+  ShowMessageConfigValue,
+  StartDesignVisitConfigValue,
+  VisitType,
+} from './HandlerConfigBlocks';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -292,6 +310,44 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
     ? { substatus_id: slot.substatus_id }
     : { stage_key: slot.stage_key, status_key: slot.status_key };
 
+  // ── Mutable config state — each React config block updates its slot via onChange ──
+  // These are read synchronously by buildPayload; no DOM queries needed.
+
+  const svState: ScheduleVisitConfigValue = {
+    visitType:          (config.visitType as VisitType) || 'survey',
+    defaultDurationMin: config.defaultDurationMin != null ? Number(config.defaultDurationMin) : 60,
+    addToGoogleCalendar: config.addToGoogleCalendar !== false,
+  };
+  const msgState: ShowMessageConfigValue = {
+    title:   String(config.title   || ''),
+    message: String(config.message || ''),
+  };
+  const sdvLeadStatuses = _statusesRef.current
+    .filter(s => !s.is_null_row)
+    .map(s => ({ key: s.key, label: s.label || s.key }));
+  const sdvSubstatuses = _substatusesRef.current.map(s => ({
+    key: s.substatus_key, label: s.label, statusKey: s.status_key,
+  }));
+  const sdvState: StartDesignVisitConfigValue = {
+    defaultDurationMin:     config.defaultDurationMin != null ? Number(config.defaultDurationMin) : 90,
+    intermediateLeadStatus: String(config.intermediateLeadStatus || ''),
+    submittedLeadStatus:    String(config.submittedLeadStatus    || ''),
+    termsAndConditions:     String(config.termsAndConditions     || ''),
+    addToGoogleCalendar:    config.addToGoogleCalendar !== false,
+  };
+  const dwState: DeliveryWindowConfigValue = {
+    defaultTitle:        String(config.defaultTitle || ''),
+    addToGoogleCalendar: config.addToGoogleCalendar !== false,
+  };
+  const isState: InstallationSlotConfigValue = {
+    defaultDurationMin:  config.defaultDurationMin != null ? Number(config.defaultDurationMin) : 240,
+    defaultTitle:        String(config.defaultTitle || ''),
+    addToGoogleCalendar: config.addToGoogleCalendar !== false,
+  };
+
+  // ── Modal HTML shell ─────────────────────────────────────────────────────────
+  // The five config block divs are now empty React mount points.
+
   const wrap = document.createElement('div');
   wrap.className = 'js-modal-scrim';
   wrap.innerHTML = `
@@ -308,87 +364,11 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
           `<option value="${k}" ${k === type ? 'selected' : ''}>${esc(v)}</option>`).join('')}
       </select>
       <div id="cah-type-desc" class="adm-type-desc"></div>
-      <div id="cah-sv-block" class="hidden adm-block-mt12">
-        <label class="adm-modal-label adm-modal-label--first">Visit type</label>
-        <select id="cah-sv-type" class="field adm-field-sm">
-          <option value="survey"       ${String(config.visitType || 'survey') === 'survey'       ? 'selected' : ''}>Survey</option>
-          <option value="installation" ${String(config.visitType || '') === 'installation' ? 'selected' : ''}>Installation</option>
-          <option value="remedial"     ${String(config.visitType || '') === 'remedial'     ? 'selected' : ''}>Remedial</option>
-          <option value="workshop"     ${String(config.visitType || '') === 'workshop'     ? 'selected' : ''}>Workshop</option>
-          <option value="design"       ${String(config.visitType || '') === 'design'       ? 'selected' : ''}>Design visit</option>
-          <option value="other"        ${String(config.visitType || '') === 'other'        ? 'selected' : ''}>Other</option>
-        </select>
-        <div class="adm-mt-10">
-          <label class="adm-modal-label adm-modal-label--first">Default duration (min) <span class="adm-optional">(optional)</span></label>
-          <input id="cah-sv-duration" type="number" class="field adm-field-sm" min="5" max="1440" step="5" value="${esc(String(config.defaultDurationMin || 60))}">
-        </div>
-        <div class="adm-mt-8">
-          <label class="adm-checkbox-row">
-            <input type="checkbox" id="cah-sv-google" ${config.addToGoogleCalendar !== false ? 'checked' : ''}>
-            Also add to Google Calendar
-          </label>
-        </div>
-      </div>
-      <div id="cah-msg-block" class="hidden adm-block-mt12">
-        <label class="adm-modal-label adm-modal-label--first">Popup title (optional)</label>
-        <input id="cah-msg-title" type="text" class="field adm-field-sm" maxlength="120">
-        <label class="adm-modal-label adm-modal-label--sm">Message to display <span class="adm-req">*</span></label>
-        <textarea id="cah-msg-body" class="field adm-field-sm" rows="4" maxlength="2000" placeholder="What should the operator do when they click this label?"></textarea>
-        <div class="adm-hint">Shown verbatim in a popup. Plain text only; line breaks are preserved.</div>
-      </div>
-      <div id="cah-sdv-block" class="hidden adm-block-mt12">
-        <div>
-          <label class="adm-modal-label adm-modal-label--first">Default duration (min)</label>
-          <input id="cah-sdv-duration" type="number" class="field adm-field-sm" min="5" max="1440" step="5" value="${esc(String(config.defaultDurationMin || 90))}">
-        </div>
-        <div class="adm-mt-10">
-          <label class="adm-modal-label adm-modal-label--first">In-progress lead status <span class="adm-optional">(optional — set when wizard opens)</span></label>
-          <select id="cah-sdv-lead-status-intermediate" class="field adm-field-sm">${_buildLeadStatusOnlyOptions(String(config.intermediateLeadStatus || ''))}</select>
-        </div>
-        <div class="adm-info-blue"><strong>Two-phase status flow:</strong> Opening the wizard sets the in-progress status. Submitting the form sets the submitted status.</div>
-        <div class="adm-mt-8">
-          <label class="adm-modal-label adm-modal-label--first">Submitted lead status <span class="adm-optional">(optional — set on submit)</span></label>
-          <select id="cah-sdv-lead-status-submitted" class="field adm-field-sm">${_buildLeadStatusWithSubsOptions(String(config.submittedLeadStatus || ''))}</select>
-        </div>
-        <div class="adm-mt-10">
-          <label class="adm-modal-label adm-modal-label--first">Terms &amp; Conditions <span class="adm-optional">(optional, ≤4000 chars)</span></label>
-          <textarea id="cah-sdv-terms" class="field adm-field-xs" rows="4" maxlength="4000" placeholder="Your terms and conditions text…">${esc(String(config.termsAndConditions || ''))}</textarea>
-        </div>
-        <div class="adm-mt-8">
-          <label class="adm-checkbox-row">
-            <input type="checkbox" id="cah-sdv-google" ${config.addToGoogleCalendar !== false ? 'checked' : ''}>
-            Also add to Google Calendar
-          </label>
-        </div>
-      </div>
-      <div id="cah-dw-block" class="hidden adm-block-mt12">
-        <div>
-          <label class="adm-modal-label adm-modal-label--first">Default title <span class="adm-optional">(optional, ≤120 chars)</span></label>
-          <input id="cah-dw-title" type="text" class="field adm-field-sm" maxlength="120" placeholder="e.g. Delivery window" value="${esc(String(config.defaultTitle || ''))}">
-        </div>
-        <div class="adm-mt-8">
-          <label class="adm-checkbox-row">
-            <input type="checkbox" id="cah-dw-google" ${config.addToGoogleCalendar !== false ? 'checked' : ''}>
-            Also add to Google Calendar
-          </label>
-        </div>
-      </div>
-      <div id="cah-is-block" class="hidden adm-block-mt12">
-        <div>
-          <label class="adm-modal-label adm-modal-label--first">Default duration (min) <span class="adm-optional">(optional, 5–1440)</span></label>
-          <input id="cah-is-duration" type="number" class="field adm-field-sm" min="5" max="1440" step="5" value="${esc(String(config.defaultDurationMin || 240))}">
-        </div>
-        <div class="adm-mt-10">
-          <label class="adm-modal-label adm-modal-label--first">Default title <span class="adm-optional">(optional, ≤120 chars)</span></label>
-          <input id="cah-is-title" type="text" class="field adm-field-sm" maxlength="120" placeholder="e.g. Installation" value="${esc(String(config.defaultTitle || ''))}">
-        </div>
-        <div class="adm-mt-8">
-          <label class="adm-checkbox-row">
-            <input type="checkbox" id="cah-is-google" ${config.addToGoogleCalendar !== false ? 'checked' : ''}>
-            Also add to Google Calendar
-          </label>
-        </div>
-      </div>
+      <div id="cah-sv-block"  class="hidden adm-block-mt12"></div>
+      <div id="cah-msg-block" class="hidden adm-block-mt12"></div>
+      <div id="cah-sdv-block" class="hidden adm-block-mt12"></div>
+      <div id="cah-dw-block"  class="hidden adm-block-mt12"></div>
+      <div id="cah-is-block"  class="hidden adm-block-mt12"></div>
       <div id="cah-cfg-block" class="adm-block-mt12">
         <label class="adm-modal-label adm-modal-label--first">Advanced configuration (JSON, optional)</label>
         <textarea id="cah-config" class="field adm-field-mono-xs" rows="4">${esc(JSON.stringify(config, null, 2))}</textarea>
@@ -410,25 +390,85 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
 
   document.body.appendChild(wrap);
 
-  const descEl       = wrap.querySelector('#cah-type-desc')       as HTMLElement;
-  const typeSel      = wrap.querySelector('#cah-type')            as HTMLSelectElement;
-  const svBlock      = wrap.querySelector('#cah-sv-block')        as HTMLElement;
-  const msgBlock     = wrap.querySelector('#cah-msg-block')       as HTMLElement;
-  const sdvBlock     = wrap.querySelector('#cah-sdv-block')       as HTMLElement;
-  const dwBlock      = wrap.querySelector('#cah-dw-block')        as HTMLElement;
-  const isBlock      = wrap.querySelector('#cah-is-block')        as HTMLElement;
-  const cfgBlock     = wrap.querySelector('#cah-cfg-block')       as HTMLElement;
-  const msgTitle     = wrap.querySelector('#cah-msg-title')       as HTMLInputElement;
-  const msgBody      = wrap.querySelector('#cah-msg-body')        as HTMLTextAreaElement;
-  const conflictBox  = wrap.querySelector('#cah-conflict')        as HTMLElement;
-  const conflictList = wrap.querySelector('#cah-conflict-list')   as HTMLElement;
-  const actionNameIn = wrap.querySelector('#cah-action-name')     as HTMLInputElement;
-  const actionNameEr = wrap.querySelector('#cah-action-name-err') as HTMLElement;
+  // ── Mount React config blocks into their placeholder divs ─────────────────
+  // We wrap with ThemeProvider only (no Auth/Toast) — these are isolated form islands.
 
-  if (type === 'show_message') {
-    msgTitle.value = String(config.title   || '');
-    msgBody.value  = String(config.message || '');
+  function mountConfigBlock(el: Element, node: React.ReactElement) {
+    const root = createRoot(el);
+    root.render(<ThemeProvider theme={theme}>{node}</ThemeProvider>);
+    return root;
   }
+
+  const svRoot  = mountConfigBlock(
+    wrap.querySelector('#cah-sv-block')!,
+    <ScheduleVisitConfig
+      defaultVisitType={svState.visitType}
+      defaultDurationMin={svState.defaultDurationMin}
+      addToGoogleCalendar={svState.addToGoogleCalendar}
+      onChange={v => Object.assign(svState, v)}
+    />,
+  );
+  const msgRoot = mountConfigBlock(
+    wrap.querySelector('#cah-msg-block')!,
+    <ShowMessageConfig
+      defaultTitle={msgState.title}
+      defaultMessage={msgState.message}
+      onChange={v => Object.assign(msgState, v)}
+    />,
+  );
+  const sdvRoot = mountConfigBlock(
+    wrap.querySelector('#cah-sdv-block')!,
+    <StartDesignVisitConfig
+      defaultDurationMin={sdvState.defaultDurationMin}
+      intermediateLeadStatus={sdvState.intermediateLeadStatus}
+      submittedLeadStatus={sdvState.submittedLeadStatus}
+      termsAndConditions={sdvState.termsAndConditions}
+      addToGoogleCalendar={sdvState.addToGoogleCalendar}
+      leadStatuses={sdvLeadStatuses}
+      substatuses={sdvSubstatuses}
+      onChange={v => Object.assign(sdvState, v)}
+    />,
+  );
+  const dwRoot  = mountConfigBlock(
+    wrap.querySelector('#cah-dw-block')!,
+    <DeliveryWindowConfig
+      defaultTitle={dwState.defaultTitle}
+      addToGoogleCalendar={dwState.addToGoogleCalendar}
+      onChange={v => Object.assign(dwState, v)}
+    />,
+  );
+  const isRoot  = mountConfigBlock(
+    wrap.querySelector('#cah-is-block')!,
+    <InstallationSlotConfig
+      defaultDurationMin={isState.defaultDurationMin}
+      defaultTitle={isState.defaultTitle}
+      addToGoogleCalendar={isState.addToGoogleCalendar}
+      onChange={v => Object.assign(isState, v)}
+    />,
+  );
+
+  const unmountAll = () => {
+    [svRoot, msgRoot, sdvRoot, dwRoot, isRoot].forEach(r => {
+      try { r.unmount(); } catch { /* already unmounted */ }
+    });
+  };
+
+  const close = () => { unmountAll(); wrap.remove(); };
+
+  // ── Show/hide logic ───────────────────────────────────────────────────────
+
+  const descEl      = wrap.querySelector('#cah-type-desc')     as HTMLElement;
+  const typeSel     = wrap.querySelector('#cah-type')          as HTMLSelectElement;
+  const svBlock     = wrap.querySelector('#cah-sv-block')      as HTMLElement;
+  const msgBlock    = wrap.querySelector('#cah-msg-block')     as HTMLElement;
+  const sdvBlock    = wrap.querySelector('#cah-sdv-block')     as HTMLElement;
+  const dwBlock     = wrap.querySelector('#cah-dw-block')      as HTMLElement;
+  const isBlock     = wrap.querySelector('#cah-is-block')      as HTMLElement;
+  const cfgBlock    = wrap.querySelector('#cah-cfg-block')     as HTMLElement;
+  const conflictBox  = wrap.querySelector('#cah-conflict')     as HTMLElement;
+  const conflictList = wrap.querySelector('#cah-conflict-list') as HTMLElement;
+  const actionNameIn = wrap.querySelector('#cah-action-name')  as HTMLInputElement;
+  const actionNameEr = wrap.querySelector('#cah-action-name-err') as HTMLElement;
 
   const renderForType = () => {
     const t = typeSel.value;
@@ -446,9 +486,11 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
   };
   renderForType();
   typeSel.addEventListener('change', () => { conflictBox.style.display = 'none'; renderForType(); });
-  wrap.addEventListener('click', e => { if (e.target === wrap) wrap.remove(); });
-  wrap.querySelector('#cah-cancel')!.addEventListener('click', () => wrap.remove());
+  wrap.addEventListener('click', e => { if (e.target === wrap) close(); });
+  wrap.querySelector('#cah-cancel')!.addEventListener('click', () => close());
   wrap.querySelector('#cah-conflict-cancel')!.addEventListener('click', () => { conflictBox.style.display = 'none'; });
+
+  // ── Payload builder — reads from React component state objects ────────────
 
   const SNAKE_RE = /^[a-z0-9_]*$/;
   const validateActionName = () => {
@@ -469,54 +511,45 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
     }
     let cfg: Record<string, unknown>;
     if (tp === 'schedule_visit') {
-      const visitType = (wrap.querySelector('#cah-sv-type') as HTMLSelectElement).value;
-      const durVal    = parseInt((wrap.querySelector('#cah-sv-duration') as HTMLInputElement).value, 10);
-      const gcal      = (wrap.querySelector('#cah-sv-google') as HTMLInputElement).checked;
-      if (durVal && (isNaN(durVal) || durVal < 5 || durVal > 1440)) {
+      const dur = svState.defaultDurationMin;
+      const durNum = dur === '' ? NaN : Number(dur);
+      if (dur !== '' && (isNaN(durNum) || durNum < 5 || durNum > 1440)) {
         errEl.textContent = 'Default duration must be between 5 and 1440 minutes.'; return null;
       }
-      cfg = { visitType };
-      if (durVal) cfg.defaultDurationMin = durVal;
-      cfg.addToGoogleCalendar = gcal;
+      cfg = { visitType: svState.visitType };
+      if (dur !== '' && !isNaN(durNum) && durNum > 0) cfg.defaultDurationMin = durNum;
+      cfg.addToGoogleCalendar = svState.addToGoogleCalendar;
     } else if (tp === 'show_message') {
-      const message = msgBody.value.trim();
+      const message = msgState.message.trim();
       if (!message) { errEl.textContent = 'Message is required for "Show informational message".'; return null; }
       cfg = { message };
-      const titleV = msgTitle.value.trim();
-      if (titleV) cfg.title = titleV;
+      if (msgState.title.trim()) cfg.title = msgState.title.trim();
     } else if (tp === 'start_design_visit') {
-      const durVal  = parseInt((wrap.querySelector('#cah-sdv-duration') as HTMLInputElement).value, 10);
-      const lsInter = (wrap.querySelector('#cah-sdv-lead-status-intermediate') as HTMLSelectElement).value;
-      const lsSub   = (wrap.querySelector('#cah-sdv-lead-status-submitted')    as HTMLSelectElement).value;
-      const terms   = (wrap.querySelector('#cah-sdv-terms') as HTMLTextAreaElement).value;
-      const gcal    = (wrap.querySelector('#cah-sdv-google') as HTMLInputElement).checked;
-      if (durVal && (isNaN(durVal) || durVal < 5 || durVal > 1440)) {
+      const dur = sdvState.defaultDurationMin;
+      const durNum = dur === '' ? NaN : Number(dur);
+      if (dur !== '' && (isNaN(durNum) || durNum < 5 || durNum > 1440)) {
         errEl.textContent = 'Default duration must be between 5 and 1440 minutes.'; return null;
       }
       cfg = {};
-      if (durVal) cfg.defaultDurationMin = durVal;
-      if (lsInter) cfg.intermediateLeadStatus = lsInter;
-      if (lsSub)   cfg.submittedLeadStatus    = lsSub;
-      if (terms)   cfg.termsAndConditions     = terms;
-      cfg.addToGoogleCalendar = gcal;
+      if (dur !== '' && !isNaN(durNum) && durNum > 0) cfg.defaultDurationMin = durNum;
+      if (sdvState.intermediateLeadStatus) cfg.intermediateLeadStatus = sdvState.intermediateLeadStatus;
+      if (sdvState.submittedLeadStatus)    cfg.submittedLeadStatus    = sdvState.submittedLeadStatus;
+      if (sdvState.termsAndConditions)     cfg.termsAndConditions     = sdvState.termsAndConditions;
+      cfg.addToGoogleCalendar = sdvState.addToGoogleCalendar;
     } else if (tp === 'schedule_delivery_window') {
-      const titleV = (wrap.querySelector('#cah-dw-title') as HTMLInputElement).value.trim();
-      const gcal   = (wrap.querySelector('#cah-dw-google') as HTMLInputElement).checked;
       cfg = {};
-      if (titleV) cfg.defaultTitle = titleV;
-      cfg.addToGoogleCalendar = gcal;
+      if (dwState.defaultTitle.trim()) cfg.defaultTitle = dwState.defaultTitle.trim();
+      cfg.addToGoogleCalendar = dwState.addToGoogleCalendar;
     } else if (tp === 'schedule_installation_slot') {
-      const durRaw = (wrap.querySelector('#cah-is-duration') as HTMLInputElement).value.trim();
-      const durVal = durRaw ? parseInt(durRaw, 10) : NaN;
-      const titleV = (wrap.querySelector('#cah-is-title') as HTMLInputElement).value.trim();
-      const gcal   = (wrap.querySelector('#cah-is-google') as HTMLInputElement).checked;
-      if (durRaw && (isNaN(durVal) || durVal < 5 || durVal > 1440)) {
+      const dur = isState.defaultDurationMin;
+      const durNum = dur === '' ? NaN : Number(dur);
+      if (dur !== '' && (isNaN(durNum) || durNum < 5 || durNum > 1440)) {
         errEl.textContent = 'Default duration must be between 5 and 1440 minutes.'; return null;
       }
       cfg = {};
-      if (durRaw && !isNaN(durVal)) cfg.defaultDurationMin = durVal;
-      if (titleV) cfg.defaultTitle = titleV;
-      cfg.addToGoogleCalendar = gcal;
+      if (dur !== '' && !isNaN(durNum)) cfg.defaultDurationMin = durNum;
+      if (isState.defaultTitle.trim()) cfg.defaultTitle = isState.defaultTitle.trim();
+      cfg.addToGoogleCalendar = isState.addToGoogleCalendar;
     } else {
       const cfgTxt = (wrap.querySelector('#cah-config') as HTMLTextAreaElement).value.trim() || '{}';
       try { cfg = JSON.parse(cfgTxt); }
@@ -532,7 +565,7 @@ function openHandlerEditor(slot: ActionSlot, existing?: Handler | null): void {
     try {
       if (existing) await PATCH(`/api/admin/card-action-handlers/${existing.id}`, payload);
       else          await POST('/api/admin/card-action-handlers', payload);
-      wrap.remove();
+      close();
       await _reloadAndBroadcast();
       showToast(existing ? 'Action updated.' : 'Action added.');
     } catch (e) {
