@@ -10,6 +10,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ShieldIcon from '@mui/icons-material/Shield';
+import AutoStoriesIcon from '@mui/icons-material/AutoStories';
 import SyncIcon from '@mui/icons-material/Sync';
 import EventIcon from '@mui/icons-material/Event';
 import ReceiptIcon from '@mui/icons-material/Receipt';
@@ -198,6 +199,7 @@ export function GlobalHeader() {
   const kbdHint = window.getShortcut ? window.getShortcut('K') : 'Ctrl K';
   const customersActive = path === '/customers' || path.startsWith('/customers/');
   const adminActive = path === '/admin' || path.startsWith('/admin/');
+  const storybookActive = path.startsWith('/storybook');
   const profileActive = path === '/profile' || path.startsWith('/profile/');
   const photoSrc = user ? resolvePhotoSrc(user) : null;
   const initials = user ? resolveInitials(user) : '';
@@ -339,6 +341,20 @@ export function GlobalHeader() {
                 sx={{ ...ICON_BTN_SX, ...(adminActive ? ICON_BTN_ACTIVE_SX : {}) }}
               >
                 <ShieldIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+
+          {isAdmin && (
+            <Tooltip title="Design system">
+              <IconButton
+                component="a"
+                href="/storybook/"
+                aria-label="Design system"
+                size="small"
+                sx={{ ...ICON_BTN_SX, ...(storybookActive ? ICON_BTN_ACTIVE_SX : {}) }}
+              >
+                <AutoStoriesIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           )}
