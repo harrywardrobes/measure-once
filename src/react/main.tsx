@@ -5,6 +5,7 @@ import { loadSearchSettings } from './lib/searchSettings';
 import { IslandErrorBoundary } from './components/IslandErrorBoundary';
 import { CardActionModalsHost } from './components/CardActionModalsHost';
 import { ConnectionToastProvider } from './context/ConnectionToastContext';
+import { openCardActionModal } from './utils/cardActionModalRegistry';
 import {
   PageLoadingSkeleton,
   CustomersPageSkeleton,
@@ -247,50 +248,12 @@ if (document.readyState === 'loading') {
 loadSearchSettings();
 
 /**
- * Imperative mounting function exposed for the vanilla-JS design-visit wizard.
- * Called from card-action-handlers.js when the wizard reaches Step 2 (Rooms).
- *
- * Async: dynamically imports DesignVisitRoomsStep so it lands in its own
- * lazy chunk and does not inflate the always-loaded main.js bundle.
- *
- * Returns a Promise that resolves to a handle with:
- *   update(newProps)  — re-render with updated props (e.g. fresh doorStyles
- *                       after a BroadcastChannel catalogue change)
- *   unmount()         — tear down the React tree when leaving Step 2
+ * Vanilla-JS bridge so card-action-handlers.js can open the React
+ * CardActionModalsHost for start_design_visit without importing the
+ * TypeScript registry directly.  The host registers itself on mount via
+ * registerCardActionModalOpener; calls before mount are silently ignored
+ * (same behaviour as openCardActionModal itself).
  */
 (window as unknown as {
-  mountDesignVisitRoomsStep: (
-    container: HTMLElement,
-    props: import('./components/DesignVisitRoomsStep').DesignVisitRoomsStepProps,
-  ) => Promise<{
-    update: (p: Partial<import('./components/DesignVisitRoomsStep').DesignVisitRoomsStepProps>) => void;
-    unmount: () => void;
-  }>;
-}).mountDesignVisitRoomsStep = async (container, props) => {
-  const { DesignVisitRoomsStep } = await import('./components/DesignVisitRoomsStep');
-  const root = createRoot(container);
-  let current = { ...props };
-
-  function doRender() {
-    root.render(
-      <AppThemeProvider>
-        <IslandErrorBoundary islandId="dv-rooms-step">
-          <DesignVisitRoomsStep {...current} />
-        </IslandErrorBoundary>
-      </AppThemeProvider>,
-    );
-  }
-
-  doRender();
-
-  return {
-    update(newProps: Partial<typeof current>) {
-      current = { ...current, ...newProps };
-      doRender();
-    },
-    unmount() {
-      root.unmount();
-    },
-  };
-};
-
+  openCardActionModal: typeof openCardActionModal;
+}).openCardActionModal = openCardActionModal;
