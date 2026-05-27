@@ -58,6 +58,9 @@ const SS_LABEL     = 'PrivTest Sub Sync';
 const SS_LABEL_BC  = 'PrivTest Sub Renamed BC';
 const SS_LABEL_VIS = 'PrivTest Sub Renamed Vis';
 
+// SSE broadcast label used by section (H).
+const LABEL_SSE = 'PrivTest Renamed SSE';
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 function parseCookieKV(jar) {
   if (!jar) return null;
@@ -980,6 +983,147 @@ async function main() {
       await chipVisTab.close();
     }
 
+    // ── (H) SSE broadcast path ────────────────────────────────────────────────
+    // Verify the full server-side SSE broadcast path end-to-end:
+    //   admin PATCH → server broadcasts `lead_statuses_changed` SSE → a page
+    //   whose WorkflowDataContext has an active EventSource receives the event
+    //   and re-posts it as a BroadcastChannel('lead_statuses_changed') message →
+    //   a second tab (the customers page) has its useLeadStatusSync BC listener
+    //   call refresh() and update the filter dropdown.
+    //
+    // Two-page setup:
+    //   sseListenerTab  — /customers (filter dropdown, BC listener in useLeadStatusSync)
+    //   sseRelayTab     — /customers/:id (WorkflowDataProvider wraps CustomerDetailPage,
+    //                     so WorkflowDataContext's EventSource connects here; this page
+    //                     also performs the PATCH via in-page fetch())
+    //
+    // The mutation is performed from within the browser context (fetch() call inside
+    // sseRelayTab) rather than from Node, mirroring the real admin-panel flow.
+    // The filter update on sseListenerTab must happen via the production
+    // WorkflowDataContext → BroadcastChannel bridge without any manual BC post or
+    // visibilitychange from the test harness.
+    console.log('\n  [H] SSE broadcast path');
+
+    // ── open Page 1: /customers (filter listener) ─────────────────────────────
+    const sseListenerTab = await browser.newPage();
+    await sseListenerTab.setCacheEnabled(false);
+    await injectSession(sseListenerTab, adminClient.cookie);
+
+    await sseListenerTab.goto(`${BASE}/customers`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+    await new Promise(r => setTimeout(r, 500));
+
+    // Seed the filter so the dropdown is populated with the current LABEL_VIS.
+    await bootstrapFilter(sseListenerTab);
+
+    const optsBeforeSse = await getFilterOptions(sseListenerTab);
+    const hasVisLabel = optsBeforeSse.some(t => t.startsWith(LABEL_VIS));
+    record(
+      '[H] sseListenerTab filter shows LABEL_VIS before SSE-triggered rename',
+      `option starting with "${LABEL_VIS}"`,
+      `found=${hasVisLabel} options: ${JSON.stringify(optsBeforeSse.filter(t => t !== 'All statuses').slice(0, 6))}`,
+      hasVisLabel,
+    );
+
+    // Attach a passive BC spy: sets a window flag when any BC message arrives.
+    // This is purely diagnostic — it does NOT post any new BC messages itself.
+    await sseListenerTab.evaluate(() => {
+      window.__h_bc_received = false;
+      const spy = new BroadcastChannel('lead_statuses_changed');
+      spy.addEventListener('message', () => { window.__h_bc_received = true; });
+      // Keep spy open throughout the probe.
+      window.__h_bc_spy = spy;
+    });
+
+    // ── open Page 2: /customers/:id (WorkflowDataContext SSE relay + mutator) ─
+    // CustomerDetailPage is wrapped in WorkflowDataProvider in main.tsx, so
+    // WorkflowDataContext mounts here and its SSE EventSource will connect after
+    // its built-in 500 ms delay.  We use a dummy contact ID — the detail page
+    // will show an empty/error state but WorkflowDataContext still mounts.
+    const sseRelayTab = await browser.newPage();
+    await sseRelayTab.setCacheEnabled(false);
+    await injectSession(sseRelayTab, adminClient.cookie);
+
+    await sseRelayTab.goto(`${BASE}/customers/sse-probe-dummy`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+
+    // Wait for WorkflowDataContext's 500 ms initialTimer + SSE handshake.
+    // 2.5 s is conservative; the connection typically opens in < 300 ms.
+    await new Promise(r => setTimeout(r, 2500));
+
+    // Perform the PATCH from within the browser context of sseRelayTab.
+    // The page already has the admin session cookie, so credentials are included
+    // automatically for this same-origin fetch.
+    const patchResult = await sseRelayTab.evaluate(async (url, key, label) => {
+      try {
+        const res = await fetch(
+          `${url}/api/admin/lead-statuses/${encodeURIComponent(key)}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label }),
+          },
+        );
+        const body = await res.json();
+        return { status: res.status, label: body.label };
+      } catch (e) {
+        return { status: 0, error: String(e) };
+      }
+    }, BASE, LS_KEY, LABEL_SSE);
+
+    record(
+      '[H] in-page PATCH renames lead-status to LABEL_SSE',
+      `status=200 label="${LABEL_SSE}"`,
+      `status=${patchResult.status} label="${patchResult.label}"`,
+      patchResult.status === 200 && patchResult.label === LABEL_SSE,
+    );
+
+    // ── wait for the BC spy flag on Page 1 ────────────────────────────────────
+    // The server broadcasts SSE → sseRelayTab's WorkflowDataContext receives it
+    // → posts BroadcastChannel('lead_statuses_changed') → sseListenerTab's spy
+    // and useLeadStatusSync listener both fire.
+    const bcFlagDeadline = Date.now() + 8000;
+    while (Date.now() < bcFlagDeadline) {
+      const bcReceived = await sseListenerTab.evaluate(() => window.__h_bc_received);
+      if (bcReceived) break;
+      await new Promise(r => setTimeout(r, 150));
+    }
+    const bcFlagSet = await sseListenerTab.evaluate(() => !!window.__h_bc_received);
+    record(
+      '[H] BroadcastChannel message received on sseListenerTab (SSE relay verified)',
+      'window.__h_bc_received = true within 8 s',
+      `received=${bcFlagSet}`,
+      bcFlagSet,
+    );
+
+    // ── assert filter dropdown updated on Page 1 ──────────────────────────────
+    // useLeadStatusSync's BC listener calls refresh() → loadLeadStatuses() →
+    // populateLeadStatusFilter() → the select options reflect LABEL_SSE.
+    const sseUpdated = await waitForFilterLabel(sseListenerTab, LABEL_SSE, 8000);
+    const optsAfterSse = await getFilterOptions(sseListenerTab);
+    record(
+      '[H] SSE broadcast causes sseListenerTab filter dropdown to show LABEL_SSE',
+      `option starting with "${LABEL_SSE}" within 8 s`,
+      `found=${sseUpdated} options: ${JSON.stringify(optsAfterSse.filter(t => t !== 'All statuses').slice(0, 6))}`,
+      sseUpdated,
+    );
+
+    const staleAfterSse = optsAfterSse.some(t => t.startsWith(LABEL_VIS));
+    record(
+      '[H] LABEL_VIS absent from sseListenerTab filter after SSE-triggered rename',
+      `no option starting with "${LABEL_VIS}"`,
+      `stalePresent=${staleAfterSse}`,
+      !staleAfterSse,
+    );
+
+    await sseListenerTab.evaluate(() => { try { window.__h_bc_spy?.close(); } catch { /**/ } });
+    await sseListenerTab.close();
+    await sseRelayTab.close();
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -1071,6 +1215,28 @@ async function writeReport(runId, findings) {
     '  updates to the new label and the prior label is absent. Exercises the',
     '  `document.addEventListener("visibilitychange", onVisibility)` → `refresh()`',
     '  → `loadLeadSubstatuses()` → `notify()` path for sub-status chip re-renders.',
+    '- **(H) SSE broadcast path** (two-page setup): opens two browser tabs.',
+    '  `sseListenerTab` navigates to `/customers` (has `useLeadStatusSync`\'s',
+    '  `BroadcastChannel(\'lead_statuses_changed\')` listener; carries the',
+    '  filter dropdown). A passive BC spy sets `window.__h_bc_received` on any',
+    '  incoming BC message — no BC re-post, so success depends entirely on the',
+    '  production `WorkflowDataContext` → `BroadcastChannel` bridge.',
+    '  `sseRelayTab` navigates to `/customers/:id` (CustomerDetailPage is wrapped',
+    '  in `WorkflowDataProvider` in `main.tsx`), which causes `WorkflowDataContext`',
+    '  to mount and open an `EventSource` to `GET /api/hubspot/webhook-events` after',
+    '  its built-in 500 ms delay. After 2.5 s the relay tab PATCHes',
+    '  `PATCH /api/admin/lead-statuses/:key` via an in-page `fetch()` call',
+    '  (browser context, same-origin session cookie — mirrors the real admin flow).',
+    '  The server broadcasts `lead_statuses_changed` SSE; `sseRelayTab`\'s',
+    '  `WorkflowDataContext` EventSource fires and posts a',
+    '  `BroadcastChannel(\'lead_statuses_changed\')` message; `sseListenerTab`\'s',
+    '  `useLeadStatusSync` BC listener calls `refresh()` → `loadLeadStatuses()`',
+    '  → `populateLeadStatusFilter()` → filter shows the new label. Asserts',
+    '  (i) `window.__h_bc_received` is true within 8 s, (ii) the new label',
+    '  appears in the filter dropdown within 8 s, (iii) the old label is absent.',
+    '  Exercises: server-side SSE broadcast (lines ~4221–4224 of `server.js`),',
+    '  the SSE → BC bridge in `WorkflowDataContext.tsx` lines ~319–324, and the',
+    '  BC → `refresh()` path in `CustomersPage.tsx` `useLeadStatusSync`.',
     '',
     '## Notes',
     '',
