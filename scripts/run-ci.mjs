@@ -61,6 +61,7 @@ const STEPS = [
   'test:duplicate-phone-warnings:ci',
   'test:calendar-page:ci',
   'test:bottom-nav-lint',
+  'test:nav-key-sync',
   'test:hubspot-429-retry:ci',
   'test:hubspot-429-retry-contacts:ci',
   'test:icon-lint',

@@ -72,6 +72,7 @@
     "test:calendar-page": "node test/calendar-page/run.js",
     "test:calendar-page:ci": "node scripts/with-test-db.js test/calendar-page/run.js",
     "test:bottom-nav-lint": "node test/bottom-nav-lint/run.js",
+    "test:nav-key-sync": "node test/nav-key-sync/run.js",
     "test:hubspot-429-retry": "node test/hubspot-429-retry/run.js",
     "test:hubspot-429-retry:ci": "node scripts/with-test-db.js test/hubspot-429-retry/run.js",
     "test:hubspot-429-retry-contacts": "node test/hubspot-429-retry-contacts/run.js",
