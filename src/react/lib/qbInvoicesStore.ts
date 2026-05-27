@@ -228,9 +228,11 @@ export function reset(): void {
   _setState({ ...INITIAL_STATE });
 }
 
-// ── Cross-tab disconnect listener ─────────────────────────────────────────────
-// When any tab broadcasts { type: 'qb-disconnected' }, all other tabs that
-// share this module instance reset their invoice cache immediately.
+// ── Cross-tab connect / disconnect listeners ───────────────────────────────────
+// When any tab broadcasts { type: 'qb-disconnected' }, all other tabs reset
+// their invoice cache immediately.
+// When any tab broadcasts { type: 'qb-connected' }, all other tabs refresh so
+// they show data from the newly connected account instead of stale data.
 
 const QB_CHANNEL = 'qb-invoices';
 
@@ -242,12 +244,22 @@ export function broadcastDisconnect(): void {
   } catch { /* BroadcastChannel not supported — no-op */ }
 }
 
+export function broadcastConnect(): void {
+  try {
+    const ch = new BroadcastChannel(QB_CHANNEL);
+    ch.postMessage({ type: 'qb-connected' });
+    ch.close();
+  } catch { /* BroadcastChannel not supported — no-op */ }
+}
+
 (function _initCrossTabListener() {
   try {
     const ch = new BroadcastChannel(QB_CHANNEL);
     ch.addEventListener('message', (ev: MessageEvent) => {
       if (ev.data?.type === 'qb-disconnected') {
         reset();
+      } else if (ev.data?.type === 'qb-connected') {
+        refresh();
       }
     });
     // Intentionally never closed — lives for the lifetime of the page.

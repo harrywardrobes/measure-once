@@ -14,6 +14,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { EmptyState } from '../components/EmptyState';
 import { useQBInvoices } from '../hooks/useQBInvoices';
+import { broadcastConnect } from '../lib/qbInvoicesStore';
 import type { InvoiceSummary } from '../components/InvoiceDetailDrawer';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
@@ -542,6 +543,16 @@ export function HomePage(): React.ReactElement {
 
   const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, refresh: loadInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('qb') === 'connected') {
+      broadcastConnect();
+      params.delete('qb');
+      const newSearch = params.toString();
+      history.replaceState(null, '', newSearch ? `?${newSearch}` : window.location.pathname);
+    }
+  }, []);
 
   const [projectsLoading, setProjectsLoading] = React.useState(true);
   const [contacts, setContacts] = React.useState<Contact[]>([]);
