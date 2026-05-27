@@ -1973,6 +1973,36 @@ app.post('/api/events', isAuthenticated, requirePrivilege('member'), calendarEve
   }
 });
 
+app.patch('/api/events/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+  const eventId = String(req.params.id || '').trim();
+  if (!eventId) return res.status(400).json({ error: 'Invalid event id' });
+  try {
+    const auth = getGoogleClient(req.session.googleTokens);
+    const calendar = google.calendar({ version: 'v3', auth });
+    const event = await calendar.events.patch({ calendarId: 'primary', eventId, requestBody: req.body });
+    res.json(event.data);
+  } catch (e) {
+    const code = classifyGoogleError(e);
+    res.status(code === 'GOOGLE_AUTH' ? 401 : 500).json({ error: e.message, code });
+  }
+});
+
+app.delete('/api/events/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+  const eventId = String(req.params.id || '').trim();
+  if (!eventId) return res.status(400).json({ error: 'Invalid event id' });
+  try {
+    const auth = getGoogleClient(req.session.googleTokens);
+    const calendar = google.calendar({ version: 'v3', auth });
+    await calendar.events.delete({ calendarId: 'primary', eventId });
+    res.json({ success: true });
+  } catch (e) {
+    const code = classifyGoogleError(e);
+    res.status(code === 'GOOGLE_AUTH' ? 401 : 500).json({ error: e.message, code });
+  }
+});
+
 // ── HubSpot: Contact Notes + Workflow Data ────────────────────────────────────
 app.get('/api/contacts/:id/notes', requireHubspotToken, async (req, res) => {
   const contactId = String(req.params.id || '');

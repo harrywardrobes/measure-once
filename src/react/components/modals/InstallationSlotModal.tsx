@@ -16,37 +16,65 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
-import { POST } from '../../utils/api';
+import type { Visit } from '../../pages/customer-detail/types';
+import { POST, PATCH } from '../../utils/api';
 
-interface Props {
+interface CreateProps {
+  mode?: 'create';
   handler: CardActionHandlerData;
   ctx: CardActionContext;
   open: boolean;
   onClose: () => void;
+  onSaved?: () => void;
 }
 
-export function InstallationSlotModal({ handler, ctx, open, onClose }: Props) {
-  const cfg = handler.config || {};
-  const defaultDuration = (cfg.defaultDurationMin as number) || 240;
-  const defaultTitle =
-    (cfg.defaultTitle as string) ||
-    (ctx.contactName ? `Installation — ${ctx.contactName}` : 'Installation');
-  const addToGoogleDefault = (cfg.addToGoogleCalendar as boolean) !== false;
+interface EditProps {
+  mode: 'edit';
+  visit: Visit;
+  open: boolean;
+  onClose: () => void;
+  onSaved?: () => void;
+}
 
-  const initialStart = dayjs().add(48, 'hour').startOf('hour');
+type Props = CreateProps | EditProps;
+
+export function InstallationSlotModal(props: Props) {
+  const isEdit = props.mode === 'edit';
+  const visit = isEdit ? props.visit : undefined;
+
+  const cfg = !isEdit ? (props.handler.config || {}) : {};
+  const contactName = !isEdit ? props.ctx.contactName : visit?.customerName;
+  const contactId   = !isEdit ? props.ctx.contactId   : visit?.customerId;
+
+  const defaultDuration = !isEdit ? ((cfg.defaultDurationMin as number) || 240) : (() => {
+    if (!visit) return 240;
+    const diffMs = new Date(visit.endAt).getTime() - new Date(visit.startAt).getTime();
+    return Math.round(diffMs / 60000);
+  })();
+
+  const defaultTitle = isEdit
+    ? (visit?.title || 'Installation')
+    : ((cfg.defaultTitle as string) || (contactName ? `Installation — ${contactName}` : 'Installation'));
+
+  const addToGoogleDefault = !isEdit ? (cfg.addToGoogleCalendar as boolean) !== false : false;
+
+  const initialStart = isEdit && visit
+    ? dayjs(visit.startAt)
+    : dayjs().add(48, 'hour').startOf('hour');
 
   const [title, setTitle] = useState(defaultTitle);
   const [startDt, setStartDt] = useState<Dayjs | null>(initialStart);
   const [duration, setDuration] = useState(String(defaultDuration));
-  const [location, setLocation] = useState('');
-  const [notes, setNotes] = useState('');
+  const [location, setLocation] = useState(isEdit ? (visit?.location || '') : '');
+  const [notes, setNotes] = useState(isEdit ? (visit?.notes || '') : '');
   const [addGcal, setAddGcal] = useState(addToGoogleDefault);
+  const [updateGcal, setUpdateGcal] = useState(isEdit && !!visit?.googleEventId);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   function handleClose() {
     setError('');
-    onClose();
+    props.onClose();
   }
 
   async function handleSubmit() {
@@ -63,41 +91,77 @@ export function InstallationSlotModal({ handler, ctx, open, onClose }: Props) {
     const end = new Date(start.getTime() + durationInt * 60000);
 
     setSubmitting(true);
+    const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
     try {
-      await POST('/api/visits', {
-        type: 'installation',
-        title: title.trim(),
-        customerId: ctx.contactId || null,
-        customerName: ctx.contactName || null,
-        startAt: start.toISOString(),
-        endAt: end.toISOString(),
-        location: location.trim() || null,
-        notes: notes.trim() || null,
-      });
+      if (isEdit && visit) {
+        await PATCH(`/api/visits/${visit.id}`, {
+          type: 'installation',
+          title: title.trim(),
+          customerId: visit.customerId || null,
+          customerName: visit.customerName || null,
+          startAt: start.toISOString(),
+          endAt: end.toISOString(),
+          location: location.trim() || null,
+          notes: notes.trim() || null,
+        });
 
-      if (addGcal) {
-        try {
-          await POST('/api/events', {
-            summary: title.trim(),
-            description: notes.trim() || '',
-            location: location.trim() || '',
-            start: { dateTime: start.toISOString() },
-            end: { dateTime: end.toISOString() },
-          });
-        } catch (gcalErr) {
-          const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
-          const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-          w.showToast?.(`Installation slot saved; Google Calendar add failed: ${msg}`, true);
-          handleClose();
-          (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
-          return;
+        if (updateGcal && visit.googleEventId) {
+          try {
+            await PATCH(`/api/events/${visit.googleEventId}`, {
+              summary: title.trim(),
+              description: notes.trim() || '',
+              location: location.trim() || '',
+              start: { dateTime: start.toISOString() },
+              end: { dateTime: end.toISOString() },
+            });
+          } catch (gcalErr) {
+            const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
+            w.showToast?.(`Installation slot updated; Google Calendar update failed: ${msg}`, true);
+            handleClose();
+            props.onSaved?.();
+            return;
+          }
         }
-      }
 
-      const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-      w.showToast?.('Installation slot scheduled', false);
-      handleClose();
-      (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
+        w.showToast?.('Installation slot updated', false);
+        handleClose();
+        props.onSaved?.();
+      } else {
+        await POST('/api/visits', {
+          type: 'installation',
+          title: title.trim(),
+          customerId: contactId || null,
+          customerName: contactName || null,
+          startAt: start.toISOString(),
+          endAt: end.toISOString(),
+          location: location.trim() || null,
+          notes: notes.trim() || null,
+        });
+
+        if (addGcal) {
+          try {
+            await POST('/api/events', {
+              summary: title.trim(),
+              description: notes.trim() || '',
+              location: location.trim() || '',
+              start: { dateTime: start.toISOString() },
+              end: { dateTime: end.toISOString() },
+            });
+          } catch (gcalErr) {
+            const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
+            w.showToast?.(`Installation slot saved; Google Calendar add failed: ${msg}`, true);
+            handleClose();
+            (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
+            props.onSaved?.();
+            return;
+          }
+        }
+
+        w.showToast?.('Installation slot scheduled', false);
+        handleClose();
+        (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
+        props.onSaved?.();
+      }
     } catch (e) {
       setError('Could not save: ' + (e instanceof Error ? e.message : 'error'));
     } finally {
@@ -105,14 +169,14 @@ export function InstallationSlotModal({ handler, ctx, open, onClose }: Props) {
     }
   }
 
+  const dialogTitle = isEdit
+    ? (contactName ? `Edit installation slot for ${contactName}` : 'Edit installation slot')
+    : (contactName ? `Schedule installation for ${contactName}` : 'Schedule installation slot');
+
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
-        <DialogTitle>
-          {ctx.contactName
-            ? `Schedule installation for ${ctx.contactName}`
-            : 'Schedule installation slot'}
-        </DialogTitle>
+      <Dialog open={props.open} onClose={handleClose} maxWidth="xs" fullWidth>
+        <DialogTitle>{dialogTitle}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             <TextField
@@ -170,17 +234,32 @@ export function InstallationSlotModal({ handler, ctx, open, onClose }: Props) {
               fullWidth
               size="small"
             />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  id="cah-is-google"
-                  checked={addGcal}
-                  onChange={e => setAddGcal(e.target.checked)}
-                  size="small"
-                />
-              }
-              label="Also add to my Google Calendar"
-            />
+            {isEdit && visit?.googleEventId && (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    id="cah-is-update-google"
+                    checked={updateGcal}
+                    onChange={e => setUpdateGcal(e.target.checked)}
+                    size="small"
+                  />
+                }
+                label="Also update my Google Calendar event"
+              />
+            )}
+            {!isEdit && (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    id="cah-is-google"
+                    checked={addGcal}
+                    onChange={e => setAddGcal(e.target.checked)}
+                    size="small"
+                  />
+                }
+                label="Also add to my Google Calendar"
+              />
+            )}
             {error && (
               <Typography variant="caption" color="error">{error}</Typography>
             )}
@@ -194,7 +273,7 @@ export function InstallationSlotModal({ handler, ctx, open, onClose }: Props) {
             disabled={submitting}
             data-testid="cah-primary"
           >
-            {submitting ? 'Scheduling…' : 'Schedule'}
+            {submitting ? (isEdit ? 'Saving…' : 'Scheduling…') : (isEdit ? 'Save changes' : 'Schedule')}
           </Button>
         </DialogActions>
       </Dialog>

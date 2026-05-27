@@ -635,6 +635,7 @@ export function CustomerDetailPage() {
               contact={contact}
               upcomingVisits={upcomingVisits}
               loadingVisits={visitsLoading}
+              onRefresh={fetchVisits}
             />
 
             <PastVisitsSection

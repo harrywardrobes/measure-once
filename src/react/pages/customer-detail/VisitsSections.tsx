@@ -1,6 +1,22 @@
 import React, { useState, useCallback } from 'react';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Checkbox from '@mui/material/Checkbox';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { Visit, STAGE_COLOURS, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
+import { DELETE as apiDELETE } from '../../utils/api';
+import { DeliveryWindowModal } from '../../components/modals/DeliveryWindowModal';
+import { InstallationSlotModal } from '../../components/modals/InstallationSlotModal';
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
   design:       'Design visit',
@@ -57,6 +73,7 @@ interface Props {
   upcomingVisits: Visit[];
   pastVisits: Visit[];
   loadingVisits: boolean;
+  onRefresh?: () => void;
 }
 
 function fmtVisitRange(start: string, end: string): string {
@@ -68,8 +85,107 @@ function fmtVisitRange(start: string, end: string): string {
   return `${dateStr} · ${startTime}–${endTime}`;
 }
 
-export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, loadingVisits }: Omit<Props, 'pastVisits'>) {
-  const { isViewer } = usePrivilege();
+function isEditable(type?: string): boolean {
+  return type === 'delivery' || type === 'installation';
+}
+
+interface CancelDialogProps {
+  visit: Visit;
+  onClose: () => void;
+  onConfirm: (deleteGcal: boolean) => void;
+  deleting: boolean;
+}
+
+function CancelVisitDialog({ visit, onClose, onConfirm, deleting }: CancelDialogProps) {
+  const hasGcal = !!visit.googleEventId;
+  const [deleteGcal, setDeleteGcal] = useState(hasGcal);
+
+  return (
+    <Dialog open onClose={deleting ? undefined : onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Cancel {visitTypeLabel(visit.type)}?</DialogTitle>
+      <DialogContent>
+        <DialogContentText sx={{ mb: hasGcal ? 1 : 0 }}>
+          This will permanently remove this {visitTypeLabel(visit.type).toLowerCase()} from the system. This cannot be undone.
+        </DialogContentText>
+        {hasGcal && (
+          <FormControlLabel
+            sx={{ mt: 1 }}
+            control={
+              <Checkbox
+                checked={deleteGcal}
+                onChange={e => setDeleteGcal(e.target.checked)}
+                size="small"
+                disabled={deleting}
+              />
+            }
+            label="Also delete from my Google Calendar"
+          />
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={deleting}>Keep it</Button>
+        <Button
+          variant="contained"
+          color="error"
+          onClick={() => onConfirm(deleteGcal)}
+          disabled={deleting}
+          startIcon={deleting ? <CircularProgress size={14} color="inherit" /> : undefined}
+          data-testid="confirm-cancel-visit"
+        >
+          {deleting ? 'Cancelling…' : 'Cancel visit'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, loadingVisits, onRefresh }: Omit<Props, 'pastVisits'>) {
+  const { isAdmin, isManager } = usePrivilege();
+  const canEdit = isAdmin || isManager;
+
+  const [editVisit, setEditVisit] = useState<Visit | null>(null);
+  const [cancelVisit, setCancelVisit] = useState<Visit | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleEditClose = useCallback(() => setEditVisit(null), []);
+  const handleEditSaved = useCallback(() => {
+    setEditVisit(null);
+    onRefresh?.();
+  }, [onRefresh]);
+
+  const handleCancelClose = useCallback(() => {
+    if (!deleting) setCancelVisit(null);
+  }, [deleting]);
+
+  const handleCancelConfirm = useCallback(async (deleteGcal: boolean) => {
+    if (!cancelVisit) return;
+    setDeleting(true);
+    const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
+    try {
+      await apiDELETE(`/api/visits/${cancelVisit.id}`);
+
+      if (deleteGcal && cancelVisit.googleEventId) {
+        try {
+          await apiDELETE(`/api/events/${cancelVisit.googleEventId}`);
+        } catch (gcalErr) {
+          const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
+          w.showToast?.(`Visit cancelled; Google Calendar delete failed: ${msg}`, true);
+          setCancelVisit(null);
+          onRefresh?.();
+          return;
+        }
+      }
+
+      w.showToast?.(`${visitTypeLabel(cancelVisit.type)} cancelled`, false);
+      setCancelVisit(null);
+      onRefresh?.();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'error';
+      w.showToast?.(`Could not cancel visit: ${msg}`, true);
+    } finally {
+      setDeleting(false);
+    }
+  }, [cancelVisit, onRefresh]);
 
   return (
     <div id="upcoming-visits-section" style={{ marginBottom: 20 }}>
@@ -84,17 +200,75 @@ export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, load
         <div style={sxStack}>
           {upcomingVisits.map(v => (
             <div key={v.id} style={sxItem}>
-              <VisitTypeBadge type={v.type} />
-              <div style={{ ...sxText, fontWeight: 500 }}>
-                {v.title || visitTypeLabel(v.type)}
-              </div>
-              <div style={sxMeta}>
-                <span style={sxDate}>{fmtVisitRange(v.startAt, v.endAt)}</span>
-                {v.location && <><span style={sxMetaSep}>·</span><span>{v.location}</span></>}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 4 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <VisitTypeBadge type={v.type} />
+                  <div style={{ ...sxText, fontWeight: 500 }}>
+                    {v.title || visitTypeLabel(v.type)}
+                  </div>
+                  <div style={sxMeta}>
+                    <span style={sxDate}>{fmtVisitRange(v.startAt, v.endAt)}</span>
+                    {v.location && <><span style={sxMetaSep}>·</span><span>{v.location}</span></>}
+                  </div>
+                </div>
+                {canEdit && isEditable(v.type) && (
+                  <div style={{ display: 'flex', gap: 2, flexShrink: 0, marginTop: -2 }}>
+                    <Tooltip title={`Edit ${visitTypeLabel(v.type).toLowerCase()}`}>
+                      <IconButton
+                        size="small"
+                        onClick={() => setEditVisit(v)}
+                        aria-label={`Edit ${visitTypeLabel(v.type).toLowerCase()}`}
+                        data-testid={`edit-visit-${v.id}`}
+                      >
+                        <EditIcon fontSize="inherit" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={`Cancel ${visitTypeLabel(v.type).toLowerCase()}`}>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => setCancelVisit(v)}
+                        aria-label={`Cancel ${visitTypeLabel(v.type).toLowerCase()}`}
+                        data-testid={`cancel-visit-${v.id}`}
+                      >
+                        <DeleteIcon fontSize="inherit" />
+                      </IconButton>
+                    </Tooltip>
+                  </div>
+                )}
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {editVisit && editVisit.type === 'delivery' && (
+        <DeliveryWindowModal
+          mode="edit"
+          visit={editVisit}
+          open
+          onClose={handleEditClose}
+          onSaved={handleEditSaved}
+        />
+      )}
+
+      {editVisit && editVisit.type === 'installation' && (
+        <InstallationSlotModal
+          mode="edit"
+          visit={editVisit}
+          open
+          onClose={handleEditClose}
+          onSaved={handleEditSaved}
+        />
+      )}
+
+      {cancelVisit && (
+        <CancelVisitDialog
+          visit={cancelVisit}
+          onClose={handleCancelClose}
+          onConfirm={handleCancelConfirm}
+          deleting={deleting}
+        />
       )}
     </div>
   );
