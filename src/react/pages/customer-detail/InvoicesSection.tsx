@@ -72,6 +72,23 @@ export function InvoicesSection({ contact, qb }: Props) {
     }
   }, [qb.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    function handlePopState() {
+      const hash = window.location.hash;
+      if (hash.startsWith('#inv-')) {
+        const id = hash.slice(5);
+        if (id) {
+          setDrawerInvId(id);
+          setDrawerOpen(true);
+        }
+      } else {
+        setDrawerOpen(false);
+      }
+    }
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   if (!qb.statusKnown) return null;
   if (!qb.connected) return null;
 
