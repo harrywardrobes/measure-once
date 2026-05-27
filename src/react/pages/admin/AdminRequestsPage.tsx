@@ -64,6 +64,10 @@ export function AdminRequestsPage() {
   const [photoRejecting, setPhotoRejecting] = useState<Record<string, boolean>>({});
   const [tradeActing, setTradeActing] = useState<Record<number, 'approving' | 'rejecting'>>({});
 
+  // Reject access-request dialog
+  const [rejectReqTarget, setRejectReqTarget] = useState<number | null>(null);
+  const [reqRejecting, setReqRejecting] = useState<Record<number, boolean>>({});
+
   // Reject trade dialog
   const [rejectTradeTarget, setRejectTradeTarget] = useState<number | null>(null);
   const [rejectTradeReason, setRejectTradeReason] = useState('');
@@ -200,13 +204,23 @@ export function AdminRequestsPage() {
     void match;
   }
 
-  async function rejectReq(id: number) {
-    if (!confirm('Reject this request?')) return;
+  function rejectReq(id: number) {
+    setRejectReqTarget(id);
+  }
+  async function confirmRejectReq() {
+    if (rejectReqTarget === null) return;
+    const id = rejectReqTarget;
+    setRejectReqTarget(null);
+    setReqRejecting(r => ({ ...r, [id]: true }));
     try {
       await api('POST', `/api/admin/requests/${id}/reject`);
       toast('Rejected');
       emitAdminChange('requests');
-    } catch (e: unknown) { toast(e instanceof Error ? e.message : String(e), true); }
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setReqRejecting(r => { const n = { ...r }; delete n[id]; return n; });
+    }
   }
 
   function approvePhoto(id: string) {
@@ -330,19 +344,23 @@ export function AdminRequestsPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {pending.map(r => (
-                    <TableRow key={r.id}>
-                      <TableCell>{r.name}</TableCell>
-                      <TableCell><Typography variant="body2" color="text.secondary">{r.email}</Typography></TableCell>
-                      <TableCell><Typography variant="body2">{fmtDate(r.created_at)}</Typography></TableCell>
-                      <TableCell align="right">
-                        <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
-                          <Button size="small" variant="contained" color="success" onClick={() => openApprove(r)}>Approve</Button>
-                          <Button size="small" variant="outlined" color="error" onClick={() => rejectReq(r.id)}>Reject</Button>
-                        </Stack>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {pending.map(r => {
+                    const rejecting = !!reqRejecting[r.id];
+                    return (
+                      <TableRow key={r.id}>
+                        <TableCell>{r.name}</TableCell>
+                        <TableCell><Typography variant="body2" color="text.secondary">{r.email}</Typography></TableCell>
+                        <TableCell><Typography variant="body2">{fmtDate(r.created_at)}</Typography></TableCell>
+                        <TableCell align="right">
+                          {rejecting && <LinearProgress variant="indeterminate" sx={{ height: 3, mb: 0.5 }} />}
+                          <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+                            <Button size="small" variant="contained" color="success" disabled={rejecting} onClick={() => openApprove(r)}>Approve</Button>
+                            <Button size="small" variant="outlined" color="error" disabled={rejecting} onClick={() => rejectReq(r.id)}>Reject</Button>
+                          </Stack>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -509,6 +527,18 @@ export function AdminRequestsPage() {
           </Card>
         );
       })}
+
+      {/* Reject access-request dialog */}
+      <Dialog open={rejectReqTarget !== null} onClose={() => setRejectReqTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Reject access request</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">Are you sure you want to reject this request? This cannot be undone.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRejectReqTarget(null)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={confirmRejectReq}>Reject</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Reject trade dialog */}
       <Dialog open={rejectTradeTarget !== null} onClose={() => setRejectTradeTarget(null)} maxWidth="xs" fullWidth>
