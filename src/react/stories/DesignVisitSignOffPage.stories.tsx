@@ -1,0 +1,157 @@
+import React from 'react';
+import type { Meta, StoryObj } from '@storybook/react';
+import { DesignVisitSignOffPage } from '../pages/DesignVisitSignOffPage';
+
+const meta: Meta<typeof DesignVisitSignOffPage> = {
+  title: 'Pages/DesignVisit Sign-Off',
+  component: DesignVisitSignOffPage,
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'Public-facing design-visit sign-off page sent to customers via email. ' +
+          'Pass an `EmbeddedPreview` object to `embedded` to pin the page into a ' +
+          'specific UI state without a real token or network call.',
+      },
+    },
+  },
+};
+export default meta;
+
+type Story = StoryObj<typeof DesignVisitSignOffPage>;
+
+const SAMPLE_DATA = {
+  contactName: 'Sarah Thompson',
+  visitDate: '2026-04-15T10:00:00Z',
+  location: '14 Maple Avenue, Oxford, OX1 2AB',
+  handleName: 'Brushed Nickel Bar',
+  furnitureRange: 'Shaker Classic',
+  status: 'pending',
+  termsVersionNumber: 3,
+  terms:
+    'These terms and conditions govern the supply of fitted furniture by Measure Once Ltd.\n\n' +
+    '1. The estimate provided is valid for 30 days from the date of issue.\n' +
+    '2. A 50% deposit is required to proceed with manufacture.\n' +
+    '3. The remaining balance is due upon delivery and installation.\n' +
+    '4. Cancellations made within 14 days of the survey date are subject to a £250 administration fee.\n' +
+    '5. All goods remain the property of Measure Once Ltd until paid in full.',
+  rooms: [
+    {
+      roomName: 'Kitchen',
+      doorStyleName: 'Shaker Ivory',
+      unitCount: 14,
+      totalPence: 620000,
+      images: [],
+    },
+    {
+      roomName: 'Utility Room',
+      doorStyleName: 'Shaker Ivory',
+      unitCount: 6,
+      totalPence: 185000,
+      images: [],
+    },
+    {
+      roomName: 'Master Bedroom',
+      doorStyleName: 'Handleless Dust Grey',
+      unitCount: 8,
+      totalPence: 310000,
+      images: [],
+    },
+  ],
+};
+
+export const Loading: Story = {
+  name: 'Loading',
+  render: () => <DesignVisitSignOffPage embedded={{ state: 'loading' }} />,
+};
+
+export const MainView: Story = {
+  name: 'Main — awaiting sign-off',
+  render: () => (
+    <DesignVisitSignOffPage
+      embedded={{
+        state: 'main',
+        data: SAMPLE_DATA,
+      }}
+    />
+  ),
+};
+
+export const MainSuperseded: Story = {
+  name: 'Main — superseded (changes in progress)',
+  render: () => (
+    <DesignVisitSignOffPage
+      embedded={{
+        state: 'main',
+        data: { ...SAMPLE_DATA, status: 'superseded' },
+      }}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'When the designer reopens a visit that the customer has already received, ' +
+          'the sign-off banner is replaced by a "Changes in progress" warning and the ' +
+          'action buttons are hidden.',
+      },
+    },
+  },
+};
+
+export const SuccessApproved: Story = {
+  name: 'Success — approved',
+  render: () => (
+    <DesignVisitSignOffPage
+      embedded={{
+        state: 'success',
+        successKind: 'approved',
+      }}
+    />
+  ),
+};
+
+export const SuccessRevision: Story = {
+  name: 'Success — revision requested',
+  render: () => (
+    <DesignVisitSignOffPage
+      embedded={{
+        state: 'success',
+        successKind: 'revision',
+      }}
+    />
+  ),
+};
+
+export const Expired: Story = {
+  name: 'Expired link',
+  render: () => <DesignVisitSignOffPage embedded={{ state: 'expired' }} />,
+};
+
+export const ErrorDefault: Story = {
+  name: 'Error — default',
+  render: () => <DesignVisitSignOffPage embedded={{ state: 'error' }} />,
+  parameters: {
+    docs: {
+      description: {
+        story: 'Default error state shown when no custom title or subtitle is supplied.',
+      },
+    },
+  },
+};
+
+export const ErrorAlreadySigned: Story = {
+  name: 'Error — already signed off',
+  render: () => (
+    <DesignVisitSignOffPage
+      embedded={{
+        state: 'error',
+        errorTitle: 'Already signed off',
+        errorSub:
+          'This design visit has already been signed off. ' +
+          'Please contact your designer if you believe this is a mistake.',
+      }}
+    />
+  ),
+};
