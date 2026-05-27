@@ -11,6 +11,8 @@ import {
   Snackbar,
   Typography,
 } from '@mui/material';
+import type { ExistingVisit } from '../components/DesignVisitWizard';
+import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -357,6 +359,7 @@ function SurveyCard({
   workflow,
   cardActionHandlerFor,
   resolveActionLabel,
+  draftVisitId,
 }: {
   entry: BoardEntry;
   isManager: boolean;
@@ -372,6 +375,7 @@ function SurveyCard({
     substageId: string | undefined,
     hwSubstatusValue: string | undefined,
   ) => string;
+  draftVisitId?: number | string | null;
 }) {
   const { contact, substageId, sourceId, stageTime, priority, roomIdx } = entry;
   const isTerminal = priority === 3;
@@ -394,12 +398,41 @@ function SurveyCard({
 
   const [lsAnchor, setLsAnchor] = useState<HTMLElement | null>(null);
   const [subAnchor, setSubAnchor] = useState<HTMLElement | null>(null);
+  const [continuingDesign, setContinuingDesign] = useState(false);
 
   const surveyStatuses: Array<{ id: string; label?: string }> =
     (workflow?.stages?.[SURVEY_STAGE_KEY]?.statuses as Array<{ id: string; label?: string }>) || [];
 
   const w = window as unknown as WindowGlobals;
   const handler = cardActionHandlerFor(SURVEY_STAGE_KEY, leadStatusKey, hwSubstatusValue);
+
+  const openContinueDesigning = useCallback(
+    async (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!draftVisitId || continuingDesign) return;
+      setContinuingDesign(true);
+      try {
+        const resp = await fetch(`/api/design-visits/${encodeURIComponent(String(draftVisitId))}`);
+        if (!resp.ok) throw new Error('Could not load visit');
+        const visit: ExistingVisit = await resp.json();
+        const dvHandler: CardActionHandlerData = handler && handler.type === 'start_design_visit'
+          ? handler
+          : { id: 0, type: 'start_design_visit', config: {} };
+        openCardActionModal(dvHandler, {
+          contactId:    contact.id,
+          contactName:  name,
+          contactEmail: contact.properties?.email || '',
+        }, visit);
+      } catch {
+        // Silent failure — user can navigate to customer detail instead
+      } finally {
+        setContinuingDesign(false);
+      }
+    },
+    [draftVisitId, continuingDesign, handler, contact, name],
+  );
+
   const cahName = handler?.config?.action_name
     ? handler.config.action_name
         .replace(/_/g, ' ')
@@ -636,6 +669,40 @@ function SurveyCard({
           <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
         </Box>
       )}
+      {/* Continue designing strip — shown when the card has a saved draft visit */}
+      {!!draftVisitId && !isTerminal && (
+        <Box
+          role="button"
+          tabIndex={-1}
+          title="Continue designing"
+          onClick={openContinueDesigning}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            px: 1.5,
+            py: 0.75,
+            bgcolor: '#F0FDF4',
+            borderTop: '1px solid',
+            borderTopColor: 'divider',
+            cursor: continuingDesign ? 'wait' : 'pointer',
+            opacity: continuingDesign ? 0.7 : 1,
+            transition: 'opacity 0.15s',
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{ color: '#15803d', fontWeight: 600, fontSize: '0.78rem' }}
+          >
+            {continuingDesign ? 'Opening…' : 'Continue designing'}
+          </Typography>
+          {continuingDesign ? (
+            <CircularProgress size={12} sx={{ color: '#15803d' }} />
+          ) : (
+            <ChevronRightIcon sx={{ fontSize: 15, color: '#15803d', flexShrink: 0 }} />
+          )}
+        </Box>
+      )}
       <LeadStatusPicker
         anchorEl={lsAnchor}
         open={Boolean(lsAnchor)}
@@ -819,6 +886,27 @@ export function SurveyBoardPage() {
     () => allEntries.filter((e) => !hiddenSubstages.has(e.substageId)),
     [allEntries, hiddenSubstages],
   );
+
+  // ── Draft visit detection ─────────────────────────────────────────────────
+  // Batch-fetch in-progress (draft) design visit IDs for all currently visible
+  // contacts so the "Continue designing" action can be shown on relevant cards.
+  const [draftVisitIds, setDraftVisitIds] = useState<Record<string, number | string>>({});
+
+  useEffect(() => {
+    if (surveyHook.contacts.length === 0) return;
+    let cancelled = false;
+    const ids = surveyHook.contacts.map((c) => c.id).join(',');
+    fetch(`/api/design-visits/in-progress?contactIds=${encodeURIComponent(ids)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Array<{ id: number | string; contactId: string }>) => {
+        if (cancelled) return;
+        const map: Record<string, number | string> = {};
+        for (const row of rows) map[row.contactId] = row.id;
+        setDraftVisitIds(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [surveyHook.contacts]);
 
   // Reset to page 1 when the substage filter changes — done in an effect
   // (not inside useMemo) so it is never a render-phase side effect.
@@ -1082,6 +1170,7 @@ export function SurveyBoardPage() {
               workflow={workflow}
               cardActionHandlerFor={cardActionHandlerFor}
               resolveActionLabel={resolveActionLabel}
+              draftVisitId={draftVisitIds[e.contact.id] ?? null}
             />
           ))
         )}
