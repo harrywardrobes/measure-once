@@ -163,6 +163,7 @@
     "test:privilege-reads": "node scripts/check-privilege-reads.mjs",
     "test:workflow-js-no-dups": "node scripts/check-workflow-js-duplicates.mjs",
     "test:storybook-output-clean": "node scripts/check-storybook-output-clean.mjs",
+    "test:storybook-smoke": "node scripts/storybook-smoke.mjs",
     "test:ci": "node scripts/run-ci.mjs",
     "test:ci:parallel": "node scripts/run-ci-parallel.mjs"
   },
