@@ -184,11 +184,9 @@ export function CommandPalette() {
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (getCachedSearchSettings() === null) {
-      loadSearchSettings().then(data => {
-        setSettings(data);
-      });
-    }
+    loadSearchSettings().then(data => {
+      setSettings(data);
+    });
   }, []);
 
   const doOpen = useCallback(() => {
