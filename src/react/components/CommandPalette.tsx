@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { loadSearchSettings } from '../lib/searchSettings';
 import type { SearchSettings } from '../lib/searchSettings';
+import { useQBInvoices } from '../hooks/useQBInvoices';
+import type { InvoiceSummary } from './InvoiceDetailDrawer';
 import Dialog from '@mui/material/Dialog';
 import Box from '@mui/material/Box';
 import InputBase from '@mui/material/InputBase';
@@ -60,14 +62,6 @@ interface Contact {
   };
 }
 
-interface Invoice {
-  id?: string;
-  customerName?: string;
-  docNumber?: string;
-  balance?: number;
-}
-
-
 const ALL_ACTIONS: Action[] = [
   { id: 'new-customer',    label: 'New customer',           hint: 'Create a new customer record',           category: 'Action',   icon: <PersonAddIcon fontSize="small" /> },
   { id: 'go-customers',    label: 'All customers',          hint: 'Browse your customer list',              category: 'Navigate', icon: <GroupIcon fontSize="small" />,           href: '/customers' },
@@ -87,10 +81,6 @@ const ALL_ACTIONS: Action[] = [
 function getContacts(): Contact[] {
   if (window.state && Array.isArray(window.state.contacts)) return window.state.contacts;
   if (window.allContacts && Array.isArray(window.allContacts)) return window.allContacts;
-  return [];
-}
-
-function getInvoices(): Invoice[] {
   return [];
 }
 
@@ -180,6 +170,7 @@ export function CommandPalette() {
   const [settings, setSettings] = useState<SearchSettings | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const { invoices: qbInvoices } = useQBInvoices();
 
   useEffect(() => {
     if (settings !== null) return;
@@ -282,7 +273,7 @@ export function CommandPalette() {
   const encoded = encodeURIComponent(query.trim());
 
   const contacts = getContacts();
-  const invoices = getInvoices();
+  const invoices: InvoiceSummary[] = qbInvoices;
 
   const matchedContacts: Contact[] = q
     ? contacts.filter(c => {
@@ -292,7 +283,7 @@ export function CommandPalette() {
       }).slice(0, 5)
     : [];
 
-  const matchedInvoices: Invoice[] = q
+  const matchedInvoices: InvoiceSummary[] = q
     ? invoices.filter(inv => {
         const custName  = (inv.customerName || '').toLowerCase();
         const docNumber = (inv.docNumber    || '').toLowerCase();
