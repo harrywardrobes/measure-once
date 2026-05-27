@@ -5118,8 +5118,15 @@ async function ensureHwLeadSubstatusProperty() {
 }
 
 // Push the full lead_substatuses table to HubSpot as hw_lead_substatus options.
-// Option label is `{Lead Status label} → {Sub-status label}` so the dropdown
-// reads naturally in HubSpot. Called after every create / update / delete.
+// Option value: "{STATUS_KEY}__{SUBSTATUS_KEY}" for normal rows (uniquely
+//   scoped to the lead status); just "{SUBSTATUS_KEY}" for __NULL__ sentinel
+//   rows (avoids ugly "__NULL____{SUBSTATUS_KEY}" values).
+// Option label: "{Lead Status label} → {Sub-status label}" for normal rows so
+//   the dropdown reads naturally in HubSpot and labels stay globally unique
+//   even when the same sub-status name appears under multiple lead statuses.
+//   For __NULL__ sentinel rows the label is just the sub-status label (no
+//   "null →" prefix).
+// Called after every create / update / delete, and at server startup.
 async function syncLeadSubstatusesToHubSpot() {
   if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
   const { rows } = await pool.query(`
@@ -5138,9 +5145,13 @@ async function syncLeadSubstatusesToHubSpot() {
     value:        r.status_key === '__NULL__'
                     ? r.substatus_key
                     : `${r.status_key}__${r.substatus_key}`,
-    // Label: only the sub-status label (no "{LS Label} → " prefix); the
-    // shorthand prefix inside substatus_key already disambiguates in HubSpot.
-    label:        r.sub_label,
+    // Label: prefix with "{Lead Status label} → " for normal rows so labels
+    // are globally unique in HubSpot even when the same sub-status name
+    // appears under multiple lead statuses. Use just the sub-status label for
+    // __NULL__ sentinel rows (no lead status to prefix with).
+    label:        r.status_key === '__NULL__' || !r.ls_label
+                    ? r.sub_label
+                    : `${r.ls_label} \u2192 ${r.sub_label}`,
     displayOrder: i,
     hidden:       false,
   }));
