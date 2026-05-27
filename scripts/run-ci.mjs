@@ -101,6 +101,7 @@ const STEPS = [
   'test:conflict-digest-settings:ci',
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',
+  'test:scheduling-past-time-guard:ci',
   'build:storybook',
   { script: 'test:storybook-output-clean', env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
   { script: 'test:storybook-smoke',        env: { STORYBOOK_OUT_DIR: 'public/storybook' } },

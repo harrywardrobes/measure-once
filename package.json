@@ -152,6 +152,8 @@
     "test:settings-tab-load:ci": "node scripts/with-test-db.js test/settings-tab-load/run.js",
     "test:profile-google-calendar": "node test/profile-google-calendar/run.js",
     "test:profile-google-calendar:ci": "node scripts/with-test-db.js test/profile-google-calendar/run.js",
+    "test:scheduling-past-time-guard": "node test/scheduling-past-time-guard/run.js",
+    "test:scheduling-past-time-guard:ci": "node scripts/with-test-db.js test/scheduling-past-time-guard/run.js",
     "test:bundle-sizes": "node scripts/check-bundle-sizes.mjs",
     "test:stale-bundle": "node scripts/check-stale-bundle.mjs",
     "test:bundle-size-trend": "node scripts/test-bundle-size-trend.mjs",

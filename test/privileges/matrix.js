@@ -253,6 +253,9 @@ const ROUTES = [
   { method: 'PATCH',  path: '/api/admin/lead-substatuses/0',                   level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/lead-substatuses/0',                   level: 'admin' },
   { method: 'POST',   path: '/api/admin/lead-substatuses/sync-hubspot',        level: 'admin' },
+  { method: 'GET',    path: '/api/admin/substatus-clear-failures',             level: 'admin' },
+  { method: 'POST',   path: '/api/admin/substatus-clear-failures/retry',       level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/substatus-clear-failures/0',           level: 'admin' },
   { method: 'GET',    path: '/api/admin/pending-count',                        level: 'admin' },
 
   // WhatsApp routes — admin-only but live outside the /api/admin/* prefix,
