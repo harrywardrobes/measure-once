@@ -411,6 +411,12 @@ async function main() {
   // action_name format probes (POST):
   //   NEG-19  config.action_name with spaces + punctuation (not snake_case) → 400
   //   NEG-20  config.action_name with valid snake_case → 201 (happy path)
+  //
+  // status_key existence probes:
+  //   NEG-21  POST with a well-formed but unknown status_key → 400
+  //   NEG-22  PATCH with a well-formed but unknown status_key → 400
+  //   NEG-23  POST with a known existing status_key → 201 (happy-path guard)
+  //   NEG-24  PATCH with a known existing status_key → 200 (happy-path guard)
 
   console.log('\n  [NEG] Negative-path validation probes');
 
@@ -691,6 +697,118 @@ async function main() {
       ok,
     );
     if (r.json?.id) await adminClient.delete(`/api/admin/card-action-handlers/${r.json.id}`);
+  }
+
+  // NEG-21: POST with a well-formed but unknown status_key (does not exist in
+  // lead_status_config) — must be rejected with 400 before hitting the FK.
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [{ stage_key: 'sales', status_key: 'nonexistent_status_key_xyz' }],
+    });
+    assertBadRequest('NEG-21: POST with unknown status_key rejected', r, 'status_key');
+  }
+
+  // NEG-22: PATCH with a well-formed but unknown status_key — must also be
+  // rejected with 400 before hitting the FK.
+  {
+    const scaffoldRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'privtest-neg22-scaffold',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [],
+    });
+    const scaffoldId = scaffoldRes.json?.id;
+    if (scaffoldId) {
+      const r = await adminClient.patch(`/api/admin/card-action-handlers/${scaffoldId}`, {
+        bindings: [{ stage_key: 'sales', status_key: 'nonexistent_status_key_xyz' }],
+      });
+      assertBadRequest('NEG-22: PATCH with unknown status_key rejected', r, 'status_key');
+      await adminClient.delete(`/api/admin/card-action-handlers/${scaffoldId}`);
+    } else {
+      record(
+        'NEG-22: PATCH with unknown status_key rejected',
+        'status=400 with error containing "status_key"',
+        `skipped — scaffold POST failed (status=${scaffoldRes.status})`,
+        false,
+      );
+    }
+  }
+
+  // NEG-23: POST with a known existing status_key — must be accepted (201).
+  // Guards against over-rejection: the validator must not block valid bindings.
+  // Fetches the first available key from lead_status_config dynamically so the
+  // probe is correct regardless of whether the DB was seeded from HubSpot or
+  // from the hardcoded defaults.
+  {
+    const statusListRes = await adminClient.get('/api/admin/lead-statuses');
+    const firstStatus = Array.isArray(statusListRes.json)
+      ? statusListRes.json.find(s => !s.is_null_row)
+      : null;
+    if (firstStatus?.key) {
+      const knownKey = String(firstStatus.key).toLowerCase();
+      const r = await adminClient.post('/api/admin/card-action-handlers', {
+        name: 'privtest-neg23',
+        type: 'summarise_phone_call',
+        config: {},
+        bindings: [{ stage_key: 'sales', status_key: knownKey }],
+      });
+      const ok = r.status === 201 && Number.isInteger(r.json?.id);
+      record(
+        'NEG-23: POST with known existing status_key accepted',
+        'status=201 with integer id',
+        `status=${r.status} id=${JSON.stringify(r.json?.id)} key="${knownKey}"`,
+        ok,
+      );
+      if (r.json?.id) await adminClient.delete(`/api/admin/card-action-handlers/${r.json.id}`);
+    } else {
+      record(
+        'NEG-23: POST with known existing status_key accepted',
+        'status=201 with integer id',
+        `skipped — no real lead statuses found in DB (statusList status=${statusListRes.status})`,
+        false,
+      );
+    }
+  }
+
+  // NEG-24: PATCH with a known existing status_key — must be accepted (200).
+  // Companion happy-path probe for PATCH, mirroring NEG-23.
+  {
+    const statusListRes = await adminClient.get('/api/admin/lead-statuses');
+    const firstStatus = Array.isArray(statusListRes.json)
+      ? statusListRes.json.find(s => !s.is_null_row)
+      : null;
+    const scaffoldRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'privtest-neg24-scaffold',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [],
+    });
+    const scaffoldId = scaffoldRes.json?.id;
+    if (scaffoldId && firstStatus?.key) {
+      const knownKey = String(firstStatus.key).toLowerCase();
+      const r = await adminClient.patch(`/api/admin/card-action-handlers/${scaffoldId}`, {
+        bindings: [{ stage_key: 'sales', status_key: knownKey }],
+      });
+      const ok = r.status === 200 && Number.isInteger(r.json?.id);
+      record(
+        'NEG-24: PATCH with known existing status_key accepted',
+        'status=200 with integer id',
+        `status=${r.status} id=${JSON.stringify(r.json?.id)} key="${knownKey}"`,
+        ok,
+      );
+      await adminClient.delete(`/api/admin/card-action-handlers/${scaffoldId}`);
+    } else {
+      if (scaffoldId) await adminClient.delete(`/api/admin/card-action-handlers/${scaffoldId}`);
+      record(
+        'NEG-24: PATCH with known existing status_key accepted',
+        'status=200 with integer id',
+        `skipped — scaffold POST failed (status=${scaffoldRes.status}) or no real statuses in DB`,
+        false,
+      );
+    }
   }
 
   // ── (PRIV) Member-privilege probes ────────────────────────────────────────
@@ -2954,7 +3072,7 @@ async function writeReport(runId, findings) {
     '  - PRIV-01: member POST `/api/admin/card-action-handlers` → 403.',
     '  - PRIV-02: member PATCH `/api/admin/card-action-handlers/:id` → 403.',
     '  - PRIV-03: member DELETE `/api/admin/card-action-handlers/:id` → 403.',
-    '- **(NEG) Negative-path validation probes** — 18 pure-REST probes that',
+    '- **(NEG) Negative-path validation probes** — 22 pure-REST probes that',
     '  POST or PATCH `/api/admin/card-action-handlers` with each known-bad',
     '  payload and assert the server returns 400 with a descriptive error:',
     '  - NEG-01/02/03: `defaultDurationMin` below 5, above 1440, non-numeric.',
@@ -2973,6 +3091,10 @@ async function writeReport(runId, findings) {
     '  - NEG-18: PATCH with an invalid binding `stage_key`.',
     '  - NEG-19: POST with non-snake_case `config.action_name` (spaces + punctuation).',
     '  - NEG-20: happy-path companion — valid snake_case `config.action_name` accepted (201).',
+    '  - NEG-21: POST with a well-formed but unknown `status_key` → 400.',
+    '  - NEG-22: PATCH with a well-formed but unknown `status_key` → 400.',
+    '  - NEG-23: POST with a known existing `status_key` → 201 (over-rejection guard).',
+    '  - NEG-24: PATCH with a known existing `status_key` → 200 (over-rejection guard).',
     '  Both handler types (`add_design_visit_to_calendar`, `summarise_phone_call`)',
     '  and both binding shapes (label and substatus) are exercised.',
     '- **(A) BroadcastChannel cross-tab refresh**: a second same-browser tab',

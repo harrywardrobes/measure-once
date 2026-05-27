@@ -5639,9 +5639,36 @@ async function _loadHandlerWithBindings(id) {
 async function _replaceHandlerBindings(client, handlerId, bindings) {
   await client.query(`DELETE FROM card_action_handler_bindings WHERE handler_id = $1`, [handlerId]);
   if (!Array.isArray(bindings) || !bindings.length) return;
+
+  const validated = [];
   for (const raw of bindings) {
     const { error, value } = _validateHandlerBinding(raw);
     if (error) throw Object.assign(new Error(error), { _userError: true });
+    validated.push(value);
+  }
+
+  const statusKeys = [...new Set(validated.map(v => v.status_key).filter(Boolean))];
+  if (statusKeys.length) {
+    // Binding status_key values are stored lowercase (normalised by
+    // _validateHandlerBinding) while lead_status_config.key is stored in the
+    // original HubSpot casing (typically uppercase).  Compare on LOWER(key) so
+    // the check is case-consistent.
+    const { rows } = await client.query(
+      `SELECT LOWER(key) AS key FROM lead_status_config WHERE LOWER(key) = ANY($1::text[])`,
+      [statusKeys]
+    );
+    const knownKeys = new Set(rows.map(r => r.key));
+    for (const key of statusKeys) {
+      if (!knownKeys.has(key)) {
+        throw Object.assign(
+          new Error(`status_key "${key}" does not exist in lead_status_config.`),
+          { _userError: true }
+        );
+      }
+    }
+  }
+
+  for (const value of validated) {
     await client.query(
       `INSERT INTO card_action_handler_bindings (handler_id, stage_key, status_key, substatus_id)
        VALUES ($1, $2, $3, $4)`,
