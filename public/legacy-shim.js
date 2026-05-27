@@ -81,18 +81,6 @@ const state = {
   calendarError: false,
   calendarLoading: false,
   showAddPersonalTask: false,
-  qb: {
-    statusKnown: false, // true once the first /api/quickbooks/status fetch resolves
-    connected: false,
-    company: null,
-    invoices: [],
-    loaded: false,
-    loading: false,
-    showMatchedOnly: true,
-    panel: null,        // full invoice detail currently open
-    panelSaving: false,
-    panelSending: false,
-  },
   whatsappEnabled: false,
 };
 window.state = state;

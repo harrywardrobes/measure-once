@@ -30,7 +30,6 @@ declare global {
     _cpRun?: Record<string, () => void>;
     state?: {
       contacts?: Contact[];
-      qb?: { invoices?: Invoice[] };
       searchQuery?: string;
       leadStatusFilter?: string;
       sortBy?: string;
@@ -92,7 +91,6 @@ function getContacts(): Contact[] {
 }
 
 function getInvoices(): Invoice[] {
-  if (window.state?.qb && Array.isArray(window.state.qb.invoices)) return window.state.qb.invoices;
   return [];
 }
 
