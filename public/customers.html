@@ -45,14 +45,10 @@
   <div id="command-palette-mount"></div>
 
   <!--
-    invoices-core.js is loaded so the React Customers island can use the
-    QB invoice helpers. CustomersPage.tsx defines its own stageColour /
-    matchInvoicesForContact / getTaskUrgency fallbacks.
     bootstrap() is NOT called — the React island fetches its own data and
-    auth is handled by AppBootstrapProvider in the React tree.
+    auth is handled by AppBootstrapProvider in the React tree. QB invoice
+    data is managed by useQBInvoices / qbInvoicesStore inside the React island.
   -->
-  <script src="/invoices-core.js"></script>
-
   <script type="module" src="/react/main.js"></script>
 </body>
 </html>
