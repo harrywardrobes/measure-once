@@ -547,6 +547,7 @@ export function HomePage(): React.ReactElement {
 
   const [qbConnectedToast, setQbConnectedToast] = React.useState(false);
   const [googleConnectedToast, setGoogleConnectedToast] = React.useState(false);
+  const [googleAuthErrorToast, setGoogleAuthErrorToast] = React.useState(false);
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -560,6 +561,11 @@ export function HomePage(): React.ReactElement {
     if (params.get('connected') === 'true') {
       setGoogleConnectedToast(true);
       params.delete('connected');
+      changed = true;
+    }
+    if (params.get('error') === 'google_auth_failed') {
+      setGoogleAuthErrorToast(true);
+      params.delete('error');
       changed = true;
     }
     if (changed) {
@@ -700,6 +706,23 @@ export function HomePage(): React.ReactElement {
           sx={{ minWidth: 280 }}
         >
           Google Calendar connected successfully
+        </Alert>
+      </Snackbar>
+
+      {/* Google Calendar auth error toast */}
+      <Snackbar
+        open={googleAuthErrorToast}
+        autoHideDuration={8000}
+        onClose={() => setGoogleAuthErrorToast(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity="error"
+          onClose={() => setGoogleAuthErrorToast(false)}
+          variant="filled"
+          sx={{ minWidth: 280 }}
+        >
+          Google Calendar could not be connected. Please try again.
         </Alert>
       </Snackbar>
     </Box>
