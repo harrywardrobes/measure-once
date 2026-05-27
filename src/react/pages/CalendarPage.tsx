@@ -25,6 +25,11 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import dayjs from 'dayjs';
+import type { Dayjs } from 'dayjs';
 import AddIcon from '@mui/icons-material/Add';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -94,12 +99,6 @@ function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 
 
 function fmtTime(d: Date) {
   return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-}
-function fmtDateInput(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-function fmtTimeInput(d: Date) {
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 // ── API helper ───────────────────────────────────────────────────────────────
@@ -903,9 +902,8 @@ function VisitModal(props: {
   const [type, setType] = React.useState<string>(existing?.type || 'design');
   const [customerId, setCustomerId] = React.useState<string>(existing?.customerId || '');
   const [title, setTitle] = React.useState<string>(existing?.title || '');
-  const [date, setDate] = React.useState<string>(fmtDateInput(initialStart));
-  const [start, setStart] = React.useState<string>(fmtTimeInput(initialStart));
-  const [end, setEnd] = React.useState<string>(fmtTimeInput(initialEnd));
+  const [startDt, setStartDt] = React.useState<Dayjs | null>(dayjs(initialStart));
+  const [endDt, setEndDt] = React.useState<Dayjs | null>(dayjs(initialEnd));
   const [location, setLocation] = React.useState<string>(existing?.location || '');
   const [notes, setNotes] = React.useState<string>(existing?.notes || '');
   const [assigneeRole, setAssigneeRole] = React.useState<string>(existing?.assigneeRole || '');
@@ -936,9 +934,10 @@ function VisitModal(props: {
   };
 
   const save = async () => {
-    if (!date || !start || !end) { showToast('Date and times are required', true); return; }
-    const startAt = new Date(`${date}T${start}`);
-    const endAt = new Date(`${date}T${end}`);
+    if (!startDt || !startDt.isValid()) { showToast('Start date & time is required', true); return; }
+    if (!endDt || !endDt.isValid()) { showToast('End date & time is required', true); return; }
+    const startAt = startDt.toDate();
+    const endAt = endDt.toDate();
     if (endAt <= startAt) { showToast('End must be after start', true); return; }
     const customerName = customerId
       ? contactDisplayName(sortedContacts.find((c) => c.id === customerId) || { id: customerId, properties: {} })
@@ -1027,23 +1026,22 @@ function VisitModal(props: {
             fullWidth
           />
 
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <TextField
-              type="date" size="small" label="Date" value={date}
-              onChange={(e) => setDate(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true }}} sx={{ flex: 1 }}
-            />
-            <TextField
-              type="time" size="small" label="Start" value={start}
-              onChange={(e) => setStart(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true }}} sx={{ flex: 1 }}
-            />
-            <TextField
-              type="time" size="small" label="End" value={end}
-              onChange={(e) => setEnd(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true }}} sx={{ flex: 1 }}
-            />
-          </Stack>
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+              <DateTimePicker
+                label="Start"
+                value={startDt}
+                onChange={(v: Dayjs | null) => setStartDt(v)}
+                slotProps={{ textField: { size: 'small', fullWidth: true } }}
+              />
+              <DateTimePicker
+                label="End"
+                value={endDt}
+                onChange={(v: Dayjs | null) => setEndDt(v)}
+                slotProps={{ textField: { size: 'small', fullWidth: true } }}
+              />
+            </Stack>
+          </LocalizationProvider>
 
           <TextField
             size="small" label="Location (optional)" value={location}

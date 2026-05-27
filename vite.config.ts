@@ -21,11 +21,12 @@ import { resolve } from 'path';
  * AppThemeProvider, IslandErrorBoundary).
  *
  * Always-loaded chunks (every page):
- *   main.js            mount detection + shell UI
- *   vendor-react-*     react + react-dom + scheduler
- *   vendor-emotion-*   @emotion/*
- *   vendor-mui-*       @mui/material + @mui/system + … (excluding icons)
- *   vendor-mui-icons-* icons used by GlobalHeader and BottomNav
+ *   main.js                 mount detection + shell UI
+ *   vendor-react-*          react + react-dom + scheduler
+ *   vendor-emotion-*        @emotion/*
+ *   vendor-mui-*            @mui/material + @mui/system + … (excluding icons + pickers)
+ *   vendor-mui-icons-*      icons used by GlobalHeader and BottomNav
+ *   vendor-mui-datepickers-* @mui/x-date-pickers + pro (scheduling forms)
  *
  * Real gzip sizes are measured automatically after every build by
  * scripts/check-bundle-sizes.mjs, which also enforces per-chunk thresholds
@@ -95,6 +96,18 @@ export default defineConfig({
           // bundle.
           if (id.includes('/@mui/icons-material/')) {
             return 'vendor-mui-icons';
+          }
+
+          // MUI X date/time picker packages are only used in scheduling forms
+          // (design visit wizard + calendar modal). Kept in a separate chunk so
+          // a pickers version bump doesn't bust the core MUI vendor cache and
+          // so bundle-size thresholds stay tight for the base MUI bundle.
+          // Must come before the /@mui/ catch-all below.
+          if (
+            id.includes('/@mui/x-date-pickers/') ||
+            id.includes('/@mui/x-date-pickers-pro/')
+          ) {
+            return 'vendor-mui-datepickers';
           }
 
           // React runtime — no upstream deps within node_modules.

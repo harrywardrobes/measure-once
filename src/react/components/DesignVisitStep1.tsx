@@ -8,6 +8,11 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import dayjs from 'dayjs';
+import type { Dayjs } from 'dayjs';
 
 export interface Step1Data {
   visitDate: string;
@@ -57,6 +62,20 @@ function saveDraft(key: string, data: Step1Data): void {
   }
 }
 
+/** Parse a stored visitDate string to a Dayjs value, or null if empty/invalid. */
+function parseVisitDate(s: string): Dayjs | null {
+  if (!s) return null;
+  const d = dayjs(s);
+  return d.isValid() ? d : null;
+}
+
+/** Serialise a Dayjs value back to the YYYY-MM-DDTHH:mm string used for
+ *  storage and API submission.  Returns '' when value is null or invalid
+ *  (e.g. mid-way through manual keyboard entry). */
+function formatVisitDate(v: Dayjs | null): string {
+  return v && v.isValid() ? v.format('YYYY-MM-DDTHH:mm') : '';
+}
+
 export function DesignVisitStep1({
   initialData,
   handles,
@@ -98,126 +117,130 @@ export function DesignVisitStep1({
   }, [draftKey]);
 
   return (
-    <Box>
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', mb: 1.5 }}>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', mb: 1.5 }}>
+          <DateTimePicker
+            label="Visit date & time"
+            value={parseVisitDate(data.visitDate)}
+            onChange={(v: Dayjs | null) => update({ visitDate: formatVisitDate(v) })}
+            slotProps={{
+              textField: {
+                size: 'small',
+                fullWidth: true,
+              },
+            }}
+          />
+          <TextField
+            label="Duration (minutes)"
+            type="number"
+            size="small"
+            fullWidth
+            slotProps={{ htmlInput: { min: 15, max: 1440, step: 15 } }}
+            value={data.duration}
+            onChange={e => update({ duration: e.target.value })}
+          />
+        </Box>
+
         <TextField
-          label="Visit date & time"
-          type="datetime-local"
+          label="Location"
           size="small"
           fullWidth
-          value={data.visitDate}
-          onChange={e => update({ visitDate: e.target.value })}
-          slotProps={{ inputLabel: { shrink: true } }}
+          placeholder="e.g. 12 Baker Street, London"
+          value={data.location}
+          onChange={e => update({ location: e.target.value })}
+          sx={{ mb: 1.5 }}
         />
+
         <TextField
-          label="Duration (minutes)"
-          type="number"
+          label="Designer name"
           size="small"
           fullWidth
-          slotProps={{ htmlInput: { min: 15, max: 1440, step: 15 } }}
-          value={data.duration}
-          onChange={e => update({ duration: e.target.value })}
+          placeholder="e.g. Sarah Jones"
+          slotProps={{ htmlInput: { maxLength: 200 } }}
+          value={data.designerName}
+          onChange={e => update({ designerName: e.target.value })}
+          sx={{ mb: 1.5 }}
+        />
+
+        {handles.length > 0 && (
+          <FormControl fullWidth size="small" sx={{ mb: 1.5 }}>
+            <InputLabel>Handle selection</InputLabel>
+            <Select
+              label="Handle selection"
+              value={data.handleId ? String(data.handleId) : ''}
+              onChange={e => update({ handleId: e.target.value })}
+            >
+              <MenuItem value="">— select handle —</MenuItem>
+              {handles.map(h => (
+                <MenuItem key={h.id} value={String(h.id)}>{h.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+
+        {furnitureRanges.length > 0 && (
+          <FormControl fullWidth size="small" sx={{ mb: 1.5 }}>
+            <InputLabel>Furniture range</InputLabel>
+            <Select
+              label="Furniture range"
+              value={data.furnitureRangeId ? String(data.furnitureRangeId) : ''}
+              onChange={e => update({ furnitureRangeId: e.target.value })}
+            >
+              <MenuItem value="">— select range —</MenuItem>
+              {furnitureRanges.map(fr => (
+                <MenuItem key={fr.id} value={String(fr.id)}>{fr.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+
+        {termsText && (
+          <>
+            <Typography
+              variant="caption"
+              sx={{ fontWeight: 600, color: '#4b5563', display: 'block', mb: '4px', mt: '12px' }}
+            >
+              Terms &amp; Conditions
+            </Typography>
+            <Box
+              sx={{
+                background: '#f9fafb',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                p: '10px 12px',
+                fontSize: '.78rem',
+                color: '#4b5563',
+                maxHeight: 120,
+                overflowY: 'auto',
+                whiteSpace: 'pre-wrap',
+                mb: '6px',
+                lineHeight: 1.5,
+              }}
+            >
+              {termsText}
+            </Box>
+          </>
+        )}
+
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={data.termsAccepted}
+              onChange={e => update({ termsAccepted: e.target.checked })}
+              size="small"
+              sx={{ mt: '-2px' }}
+            />
+          }
+          label={
+            <Typography sx={{ fontSize: '.82rem', color: '#374151' }}>
+              Customer has read and accepted the terms &amp; conditions
+            </Typography>
+          }
+          sx={{ mt: '10px', alignItems: 'flex-start' }}
         />
       </Box>
-
-      <TextField
-        label="Location"
-        size="small"
-        fullWidth
-        placeholder="e.g. 12 Baker Street, London"
-        value={data.location}
-        onChange={e => update({ location: e.target.value })}
-        sx={{ mb: 1.5 }}
-      />
-
-      <TextField
-        label="Designer name"
-        size="small"
-        fullWidth
-        placeholder="e.g. Sarah Jones"
-        slotProps={{ htmlInput: { maxLength: 200 } }}
-        value={data.designerName}
-        onChange={e => update({ designerName: e.target.value })}
-        sx={{ mb: 1.5 }}
-      />
-
-      {handles.length > 0 && (
-        <FormControl fullWidth size="small" sx={{ mb: 1.5 }}>
-          <InputLabel>Handle selection</InputLabel>
-          <Select
-            label="Handle selection"
-            value={data.handleId ? String(data.handleId) : ''}
-            onChange={e => update({ handleId: e.target.value })}
-          >
-            <MenuItem value="">— select handle —</MenuItem>
-            {handles.map(h => (
-              <MenuItem key={h.id} value={String(h.id)}>{h.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      )}
-
-      {furnitureRanges.length > 0 && (
-        <FormControl fullWidth size="small" sx={{ mb: 1.5 }}>
-          <InputLabel>Furniture range</InputLabel>
-          <Select
-            label="Furniture range"
-            value={data.furnitureRangeId ? String(data.furnitureRangeId) : ''}
-            onChange={e => update({ furnitureRangeId: e.target.value })}
-          >
-            <MenuItem value="">— select range —</MenuItem>
-            {furnitureRanges.map(fr => (
-              <MenuItem key={fr.id} value={String(fr.id)}>{fr.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      )}
-
-      {termsText && (
-        <>
-          <Typography
-            variant="caption"
-            sx={{ fontWeight: 600, color: '#4b5563', display: 'block', mb: '4px', mt: '12px' }}
-          >
-            Terms &amp; Conditions
-          </Typography>
-          <Box
-            sx={{
-              background: '#f9fafb',
-              border: '1px solid #e5e7eb',
-              borderRadius: '8px',
-              p: '10px 12px',
-              fontSize: '.78rem',
-              color: '#4b5563',
-              maxHeight: 120,
-              overflowY: 'auto',
-              whiteSpace: 'pre-wrap',
-              mb: '6px',
-              lineHeight: 1.5,
-            }}
-          >
-            {termsText}
-          </Box>
-        </>
-      )}
-
-      <FormControlLabel
-        control={
-          <Checkbox
-            checked={data.termsAccepted}
-            onChange={e => update({ termsAccepted: e.target.checked })}
-            size="small"
-            sx={{ mt: '-2px' }}
-          />
-        }
-        label={
-          <Typography sx={{ fontSize: '.82rem', color: '#374151' }}>
-            Customer has read and accepted the terms &amp; conditions
-          </Typography>
-        }
-        sx={{ mt: '10px', alignItems: 'flex-start' }}
-      />
-    </Box>
+    </LocalizationProvider>
   );
 }
 

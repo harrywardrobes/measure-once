@@ -909,7 +909,7 @@ async function main() {
         const m = document.querySelector('[role=dialog]');
         if (!m) return null;
         return {
-          hasDatetime: !!m.querySelector('input#cah-dv-start[type="datetime-local"]'),
+          hasDatetime: !!m.querySelector('input#cah-dv-start'),
           hasTitle:    !!m.querySelector('input#cah-dv-title'),
           hasDuration: !!m.querySelector('input#cah-dv-duration'),
           hasTextarea: !!m.querySelector('textarea#cah-dv-notes'),
@@ -919,8 +919,8 @@ async function main() {
       4000,
     );
     record(
-      'click on DV-bound card opens the design-visit modal (datetime-local)',
-      'modal with #cah-dv-start[type=datetime-local], #cah-dv-title, #cah-dv-duration',
+      'click on DV-bound card opens the design-visit modal (DateTimePicker)',
+      'modal with #cah-dv-start, #cah-dv-title, #cah-dv-duration',
       `got=${JSON.stringify(dvModalOpened)}`,
       !!dvModalOpened && dvModalOpened.hasDatetime && dvModalOpened.hasTitle && dvModalOpened.hasDuration,
     );
@@ -2410,7 +2410,7 @@ async function writeReport(runId, findings) {
     '  handler.  Also confirms the lookup starts empty (no stale state).',
     '- **(B) Click → modal → backend route**: an injected `.eq-card-action`',
     '  element bound to each handler type is clicked.  The design-visit',
-    '  handler must open a datetime-local picker and submit to `/api/visits`',
+    '  handler must open a DateTimePicker and submit to `/api/visits`',
     '  (verified both via Puppeteer network interception and a follow-up DB',
     '  query confirming the row landed).  The phone-summary handler must open',
     '  a textarea modal and submit to `/api/card-actions/phone-call-summary`',
