@@ -229,6 +229,42 @@ async function sendSetPasswordEmail(email, token, { resend = false, reset = fals
   }
 }
 
+async function notifyUserOfPhotoRejection(email) {
+  const transport = createMailTransport();
+  if (!transport) {
+    console.warn(`  SMTP not configured — skipping photo-rejection email for ${email}.`);
+    return;
+  }
+  const profileUrl = `${appBaseUrl()}/profile`;
+  const from = buildFromHeader();
+  const replyTo = buildReplyTo();
+  try {
+    await transport.sendMail({
+      from,
+      replyTo,
+      to: email,
+      subject: 'Your profile photo was not approved — Measure Once',
+      text: [
+        'Your profile photo submission was reviewed and was not approved.',
+        '',
+        'Please upload a new photo by visiting your profile page:',
+        `  ${profileUrl}`,
+        '',
+        'If you have any questions, please contact your administrator.',
+      ].join('\n'),
+      html: `
+        <p>Your profile photo submission was reviewed and was <strong>not approved</strong>.</p>
+        <p>Please upload a new photo by visiting your profile page:</p>
+        <p><a href="${profileUrl}">${profileUrl}</a></p>
+        <p>If you have any questions, please contact your administrator.</p>
+      `,
+    });
+    console.log(`  Photo-rejection email sent to ${email}`);
+  } catch (err) {
+    console.error('  Failed to send photo-rejection email:', err.message);
+  }
+}
+
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // ── Rate limiters ────────────────────────────────────────────────────────────
@@ -2468,11 +2504,14 @@ async function setupAuth(app) {
     try {
       const r = await pool.query(
         `UPDATE users SET pending_photo = NULL, photo_version = NOW(), updated_at = NOW()
-         WHERE id = $1 RETURNING email`,
+         WHERE id = $1 AND pending_photo IS NOT NULL RETURNING email`,
         [req.params.id]
       );
-      if (r.rowCount === 0) return res.status(404).json({ error: 'User not found.' });
+      if (r.rowCount === 0) return res.status(404).json({ error: 'No pending photo found.' });
       await logAdminAction(req.user?.claims?.email || req.user?.email || null, 'reject_profile_photo', r.rows[0].email, 'Profile photo rejected');
+      notifyUserOfPhotoRejection(r.rows[0].email).catch(err =>
+        console.error('  Photo-rejection notification error:', err.message)
+      );
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
