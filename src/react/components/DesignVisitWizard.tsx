@@ -375,6 +375,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
 
   function hasUnsavedDraftData(): boolean {
     const step1Touched =
+      step1.termsAccepted ||
       step1.visitDate.trim() !== '' ||
       step1.designerName.trim() !== '' ||
       step1.location.trim() !== '' ||
