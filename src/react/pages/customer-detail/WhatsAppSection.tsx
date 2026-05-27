@@ -10,6 +10,9 @@ const sxMetaSep: React.CSSProperties = { fontSize: '0.65rem', color: 'var(--ink-
 const sxDate: React.CSSProperties = { fontSize: '0.68rem', color: 'var(--ink-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' };
 const sxText: React.CSSProperties = { fontSize: '0.875rem', color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' };
 const sxCancelBtn: React.CSSProperties = { background: 'none', color: 'var(--ink-3)', fontSize: '.88rem', border: 'none', cursor: 'pointer', padding: '8px 16px' };
+const sxMuted: React.CSSProperties = { fontSize: '0.875rem', fontStyle: 'italic', padding: '0 4px', color: 'var(--stone-deep)' };
+const sxError: React.CSSProperties = { fontSize: '0.875rem', padding: '0 4px', color: '#ef4444' };
+const sxStack: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6 };
 
 interface Template {
   name: string;
@@ -30,17 +33,17 @@ interface Props {
 export function WhatsAppHistory({ contactId, phone, messages, loading, error, enabled }: Omit<Props, 'open' | 'onClose'>) {
   if (!enabled) return null;
   return (
-    <div id="whatsapp-history-section" className="mb-5">
+    <div id="whatsapp-history-section" style={{ marginBottom: 20 }}>
       <div style={sxHeader}>
         <span style={sxHeaderLabel}>WhatsApp history</span>
       </div>
-      {loading && <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>Loading…</p>}
-      {!loading && error && <p className="text-sm text-red-500 px-1">Could not load WhatsApp history.</p>}
+      {loading && <p style={sxMuted}>Loading…</p>}
+      {!loading && error && <p style={sxError}>Could not load WhatsApp history.</p>}
       {!loading && !error && messages.length === 0 && (
-        <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>No messages yet.</p>
+        <p style={sxMuted}>No messages yet.</p>
       )}
       {!loading && !error && messages.length > 0 && (
-        <div className="space-y-1.5">
+        <div style={sxStack}>
           {messages.map((m, i) => (
             <div key={m.id || i} className={`wa-msg wa-msg-${m.direction}`} style={sxItem}>
               <div style={sxText}>{m.body || ''}</div>

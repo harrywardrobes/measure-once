@@ -9,6 +9,8 @@ const sxMeta: React.CSSProperties = { display: 'flex', alignItems: 'center', gap
 const sxMetaSep: React.CSSProperties = { fontSize: '0.65rem', color: 'var(--ink-4)' };
 const sxDate: React.CSSProperties = { fontSize: '0.68rem', color: 'var(--ink-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' };
 const sxText: React.CSSProperties = { fontSize: '0.875rem', color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' };
+const sxMuted: React.CSSProperties = { fontSize: '0.875rem', fontStyle: 'italic', padding: '0 4px', color: 'var(--stone-deep)' };
+const sxStack: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 8 };
 
 interface Props {
   contactId: string;
@@ -31,16 +33,16 @@ export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, load
   const { isViewer } = usePrivilege();
 
   return (
-    <div id="upcoming-visits-section" className="mb-5">
+    <div id="upcoming-visits-section" style={{ marginBottom: 20 }}>
       <div style={sxHeader}>
         <span style={sxHeaderLabel}>Upcoming visits</span>
       </div>
-      {loadingVisits && <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>Loading…</p>}
+      {loadingVisits && <p style={sxMuted}>Loading…</p>}
       {!loadingVisits && upcomingVisits.length === 0 && (
-        <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>No upcoming visits.</p>
+        <p style={sxMuted}>No upcoming visits.</p>
       )}
       {!loadingVisits && upcomingVisits.length > 0 && (
-        <div className="space-y-2">
+        <div style={sxStack}>
           {upcomingVisits.map(v => (
             <div key={v.id} style={sxItem}>
               <div style={{ ...sxText, fontWeight: 500 }}>
@@ -60,21 +62,22 @@ export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, load
 
 export function PastVisitsSection({ pastVisits, loadingVisits }: Pick<Props, 'pastVisits' | 'loadingVisits'>) {
   const [expanded, setExpanded] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const recent = pastVisits.slice(0, 3);
   const rest   = pastVisits.slice(3);
 
   return (
-    <div id="past-visits-section" className="mb-5">
+    <div id="past-visits-section" style={{ marginBottom: 20 }}>
       <div style={sxHeader}>
         <span style={sxHeaderLabel}>Past visits</span>
       </div>
-      {loadingVisits && <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>Loading…</p>}
+      {loadingVisits && <p style={sxMuted}>Loading…</p>}
       {!loadingVisits && pastVisits.length === 0 && (
-        <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>No past visits.</p>
+        <p style={sxMuted}>No past visits.</p>
       )}
       {!loadingVisits && pastVisits.length > 0 && (
         <>
-          <div className="space-y-2">
+          <div style={sxStack}>
             {recent.map(v => (
               <div key={v.id} style={sxItem}>
                 <div style={sxText}>{v.title || v.type || 'Visit'}</div>
@@ -94,8 +97,9 @@ export function PastVisitsSection({ pastVisits, loadingVisits }: Pick<Props, 'pa
           </div>
           {rest.length > 0 && (
             <button
-              className="text-xs mt-2 hover:underline"
-              style={{ color: 'var(--orchid)' }}
+              style={{ fontSize: '0.75rem', marginTop: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--orchid)', textDecoration: hovered ? 'underline' : 'none' }}
+              onMouseEnter={() => setHovered(true)}
+              onMouseLeave={() => setHovered(false)}
               onClick={() => setExpanded(v => !v)}
             >
               {expanded ? 'Show fewer' : `Show ${rest.length} more`}

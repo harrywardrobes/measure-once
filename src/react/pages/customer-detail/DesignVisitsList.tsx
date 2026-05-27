@@ -116,14 +116,14 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
         onClose={() => { setEditingId(null); setWizardState(null); onRefresh(); }}
       />
     )}
-    <div id="design-visits-section" className="mb-5">
+    <div id="design-visits-section" style={{ marginBottom: 20 }}>
       <div style={sxHeader}>
         <span style={sxHeaderLabel}>Design visits</span>
       </div>
       {actionError && (
         <p style={{ fontSize: '0.85rem', color: '#b91c1c', padding: '4px 0' }}>{actionError}</p>
       )}
-      <div id="design-visits-list" className="text-sm" style={{ color: 'var(--stone-deep)' }}>
+      <div id="design-visits-list" style={{ fontSize: '0.875rem', color: 'var(--stone-deep)' }}>
         {loading && (
           <p style={{ fontSize: '0.85rem', padding: '4px 0', fontStyle: 'italic' }}>Loading…</p>
         )}

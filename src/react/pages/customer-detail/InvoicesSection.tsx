@@ -105,40 +105,42 @@ export function InvoicesSection({ contact, qb }: Props) {
 
   return (
     <>
-      <div id="invoices-section" className="mb-5">
+      <div id="invoices-section" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' }}>Invoices</span>
-          {qb.company && <span className="text-xs ml-2" style={{ color: 'var(--stone-deep)' }}>· {qb.company}</span>}
+          {qb.company && (
+            <span style={{ fontSize: '0.75rem', marginLeft: 8, color: 'var(--stone-deep)' }}>· {qb.company}</span>
+          )}
         </div>
 
         {qb.loading && (
-          <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>Loading invoices…</p>
+          <p style={{ fontSize: '0.875rem', fontStyle: 'italic', padding: '0 4px', color: 'var(--stone-deep)' }}>Loading invoices…</p>
         )}
         {qb.loadError && (
-          <p className="text-sm text-red-500 px-1">{qb.error || 'Failed to load invoices.'}</p>
+          <p style={{ fontSize: '0.875rem', padding: '0 4px', color: '#ef4444' }}>{qb.error || 'Failed to load invoices.'}</p>
         )}
         {qb.loaded && matched.length === 0 && (
-          <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>No invoices found for this customer.</p>
+          <p style={{ fontSize: '0.875rem', fontStyle: 'italic', padding: '0 4px', color: 'var(--stone-deep)' }}>No invoices found for this customer.</p>
         )}
         {qb.loaded && matched.length > 0 && (
-          <div className="space-y-2">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {matched.map(inv => (
               <div
                 key={inv.Id}
-                className="inv-row flex items-center justify-between gap-3 px-1 py-1.5 cursor-pointer rounded"
-                style={{ borderBottom: '1px solid var(--stone)' }}
+                className="inv-row"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '4px 4px 6px', cursor: 'pointer', borderRadius: 4, borderBottom: '1px solid var(--stone)' }}
                 onClick={() => openDrawer(inv.Id)}
                 role="button"
                 tabIndex={0}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openDrawer(inv.Id); }}
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs" style={{ color: 'var(--ink-4)' }}>#{inv.DocNumber}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--ink-4)' }}>#{inv.DocNumber}</span>
                   {statusPill(inv)}
                 </div>
-                <div className="flex items-center gap-3 shrink-0 text-xs" style={{ color: 'var(--ink-4)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, fontSize: '0.75rem', color: 'var(--ink-4)' }}>
                   <span>{fmtQBDate(inv.TxnDate)}</span>
-                  <span className="font-semibold" style={{ color: 'var(--ink-2)' }}>{fmtGBP(inv.TotalAmt)}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{fmtGBP(inv.TotalAmt)}</span>
                   {inv.Balance != null && Number(inv.Balance) > 0 && (
                     <span style={{ color: 'var(--stone-deep)' }}>due {fmtGBP(inv.Balance)}</span>
                   )}
