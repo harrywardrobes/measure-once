@@ -51,6 +51,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseCookieKV(jar) {
@@ -75,13 +77,7 @@ async function injectSession(page, jar) {
  * Returns the truthy result or null on timeout.
  */
 async function pollPage(page, fn, arg, timeoutMs = 6000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const result = await page.evaluate(fn, arg);
-    if (result) return result;
-    await new Promise(r => setTimeout(r, 120));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, 120, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 /**

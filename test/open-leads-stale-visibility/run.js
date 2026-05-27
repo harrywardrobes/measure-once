@@ -30,6 +30,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 const REPORT_PATH = path.join(
   __dirname, '..', '..', 'test-results', 'open-leads-stale-visibility.md',
 );
@@ -91,14 +93,7 @@ async function isBadgeVisible(page) {
 
 // Poll page.evaluate(fn) until it returns truthy or timeout elapses.
 async function pollPage(page, fn, timeoutMs = 12000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────

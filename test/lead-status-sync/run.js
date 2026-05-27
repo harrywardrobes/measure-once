@@ -45,6 +45,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 // ── test fixtures ─────────────────────────────────────────────────────────────
 // A fixed key with the privtest- naming convention so cleanup is easy.
 const LS_KEY      = 'PRIVTEST_LS_SYNC';
@@ -88,15 +90,12 @@ async function injectSession(page, jar) {
 // on evaluation; the React bundle exposes populateLeadStatusFilter after mount.
 // Replaces post-goto fixed delays throughout the test.
 async function waitForBootstrapFns(page, timeoutMs = 10000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const ready = await page.evaluate(() =>
-      typeof loadLeadStatuses === 'function'
-      && typeof populateLeadStatusFilter === 'function',
-    ).catch(() => false);
-    if (ready) return;
-    await new Promise(r => setTimeout(r, 150));
-  }
+  await pollUntil(
+    page,
+    () => (typeof loadLeadStatuses === 'function' && typeof populateLeadStatusFilter === 'function') ? 'ok' : null,
+    timeoutMs,
+    150,
+  );
 }
 
 // Call loadLeadStatuses() then populateLeadStatusFilter() inside the page's JS

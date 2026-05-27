@@ -44,6 +44,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function findChromium() {
@@ -69,14 +71,7 @@ async function injectSession(page, jar) {
 }
 
 async function poll(page, fn, arg, timeoutMs = 8000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn, arg); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 /**

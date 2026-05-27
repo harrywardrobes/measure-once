@@ -39,6 +39,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 const REPORT_PATH = path.join(
   __dirname, '..', '..', 'test-results', 'invoice-hash-restore.md',
 );
@@ -73,14 +75,7 @@ async function injectSession(page, jar) {
 }
 
 async function pollPage(page, fn, arg, timeoutMs = 12000, intervalMs = 200) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn, arg); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 const FAKE_CONTACT_ID = '99999';

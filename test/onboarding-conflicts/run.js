@@ -39,6 +39,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil, stabilityPoll } = require('../helpers/poll');
+
 const REPORT_PATH = path.join(__dirname, '..', '..', 'test-results', 'onboarding-conflicts.md');
 
 // ── Pre-filled admin metadata ────────────────────────────────────────────────
@@ -93,14 +95,7 @@ async function injectSession(page, jar) {
 
 async function pollPage(page, fn, arg, timeoutMs = 12000, intervalMs = 200) {
   if (typeof arg === 'number') { timeoutMs = arg; arg = undefined; }
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn, arg); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 // Open /admin and wait for the AdminTeamPage React island to mount.
@@ -129,19 +124,7 @@ async function openAdminTeamPage(browser, jar) {
   await pollPage(page, () => window.__moHeaderUser ? 'ok' : null, 10000);
   // Poll until the team panel's HTML length stabilises — confirms React has
   // flushed the privilege update and the tab is fully rendered.
-  let _prevTeamLen = -1;
-  {
-    const deadline = Date.now() + 5000;
-    while (Date.now() < deadline) {
-      const len = await page.evaluate(() => {
-        const p = document.getElementById('tab-team');
-        return p ? p.innerHTML.length : 0;
-      }).catch(() => 0);
-      if (len > 0 && len === _prevTeamLen) break;
-      _prevTeamLen = len;
-      await new Promise(r => setTimeout(r, 100));
-    }
-  }
+  await stabilityPoll(page, '#tab-team', 5000);
 
   page.__logs = pageLogs;
   return page;

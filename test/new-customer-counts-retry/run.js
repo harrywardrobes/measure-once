@@ -34,6 +34,8 @@ const { Pool } = require('pg');
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 const {
   spawnServer,
   waitForServer,
@@ -137,14 +139,7 @@ async function injectSession(page, jar) {
 }
 
 async function pollPage(page, fn, arg, timeoutMs = 10000, intervalMs = 100) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn, arg); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 async function newPageWithSession(browser, jar) {

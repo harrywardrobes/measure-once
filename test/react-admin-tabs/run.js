@@ -35,6 +35,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { waitForSwitchTab } = require('../helpers/poll');
+
 function parseCookieKV(jar) {
   if (!jar) return null;
   const idx = jar.indexOf('=');
@@ -258,14 +260,7 @@ async function main() {
     // Wait for window.switchTab to be defined — the admin.html script must
     // have evaluated before we can call it. Polling is more reliable than a
     // fixed delay because bundle evaluation time varies with load.
-    await (async () => {
-      const deadline = Date.now() + 10000;
-      while (Date.now() < deadline) {
-        const ready = await page.evaluate(() => typeof window.switchTab === 'function').catch(() => false);
-        if (ready) break;
-        await new Promise(r => setTimeout(r, 150));
-      }
-    })();
+    await waitForSwitchTab(page, 10000);
 
     // ── Search tab ───────────────────────────────────────────────────────
     await page.evaluate(() => {

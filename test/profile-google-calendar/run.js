@@ -43,6 +43,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 const REPORT_PATH = path.join(
   __dirname, '..', '..', 'test-results', 'profile-google-calendar.md',
 );
@@ -78,14 +80,7 @@ async function injectSession(page, jar) {
 }
 
 async function pollPage(page, fn, timeoutMs = 15000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs);
 }
 
 // Open /profile with fetch interception for /api/google/status.

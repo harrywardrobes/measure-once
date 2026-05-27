@@ -44,14 +44,19 @@ function parseCookieKV(jar) {
   return { name: jar.slice(0, idx), value: jar.slice(idx + 1) };
 }
 
+// This file uses `!== null && !== undefined` completion semantics (accepts
+// falsy values such as `false` or `0`) and retries once after timeout.
+// These differ from the standard pollUntil (truthy-only, returns null on
+// timeout), so the loop is kept inline rather than delegating to that helper.
 async function pollPage(page, fn, arg, timeoutMs = 8000, intervalMs = 150) {
+  const evalArgs = arg !== undefined && arg !== null ? [arg] : [];
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const got = await page.evaluate(fn, arg);
+    const got = await page.evaluate(fn, ...evalArgs);
     if (got !== null && got !== undefined) return got;
     await new Promise(r => setTimeout(r, intervalMs));
   }
-  return page.evaluate(fn, arg);
+  return page.evaluate(fn, ...evalArgs);
 }
 
 // Wait until the React bundle has mounted (checks for known React mount markers).

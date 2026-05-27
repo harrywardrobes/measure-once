@@ -55,6 +55,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 // ── fixtures ──────────────────────────────────────────────────────────────────
 // Must be all-digits — customer-detail.html bootstrap refuses non-numeric
 // contact ids with "Invalid customer ID.".
@@ -80,14 +82,7 @@ async function injectSession(page, jar) {
 }
 
 async function pollPage(page, fn, arg, timeoutMs = 6000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn, arg); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 function fmtGbpDate(iso) {

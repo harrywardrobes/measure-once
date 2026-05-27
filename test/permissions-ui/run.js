@@ -47,6 +47,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil, waitForSwitchTab } = require('../helpers/poll');
+
 // ── SVG path constants (MUI v5) ───────────────────────────────────────────────
 //
 // These are the literal `d` attribute values extracted from the MUI icon
@@ -79,14 +81,7 @@ async function injectSession(page, jar) {
 }
 
 async function pollPage(page, fn, arg, timeoutMs = 8000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let result = null;
-    try { result = await page.evaluate(fn, arg); } catch {}
-    if (result) return result;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 function writeReport(runId, findings) {
@@ -284,7 +279,7 @@ async function main() {
 
     // Wait for window.switchTab to be defined — the React bundle must have
     // evaluated before we can activate the Permissions tab.
-    await pollPage(page, () => typeof window.switchTab === 'function' ? 'ok' : null, null, 10000);
+    await waitForSwitchTab(page, 10000);
 
     // ── Activate the Permissions tab ──────────────────────────────────────
     console.log('\n  [PERMISSIONS-TAB] Activating tab-permissions');

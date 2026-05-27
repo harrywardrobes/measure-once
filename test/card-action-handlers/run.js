@@ -68,6 +68,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 // ── fixtures ──────────────────────────────────────────────────────────────────
 // Use lowercase letters/digits/underscores only — these are what the server-side
 // label-binding validator (_validateHandlerBinding) accepts for status_key.
@@ -206,13 +208,7 @@ async function purgeFixtures(pool) {
 
 // Poll an in-page predicate until it returns truthy or the deadline expires.
 async function pollPage(page, fn, arg, timeoutMs = 6000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const got = await page.evaluate(fn, arg);
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────

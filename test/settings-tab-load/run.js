@@ -52,6 +52,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil, waitForSwitchTab } = require('../helpers/poll');
+
 const REPORT_PATH = path.join(
   __dirname, '..', '..', 'test-results', 'settings-tab-load.md',
 );
@@ -98,14 +100,7 @@ async function injectSession(page, jar) {
 }
 
 async function pollPage(page, fn, arg, timeoutMs = 10000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn, arg); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 // ── Report ────────────────────────────────────────────────────────────────────
@@ -344,7 +339,7 @@ async function main() {
 
     // Wait for window.switchTab to be defined — the React bundle must have
     // evaluated and registered admin tab handlers before we can call it.
-    await pollPage(page, () => typeof window.switchTab === 'function' ? 'ok' : null, null, 10000);
+    await waitForSwitchTab(page, 10000);
 
     // ── Activate the Settings tab ────────────────────────────────────────────
     //

@@ -51,6 +51,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 // ── fixture names (prefixed so shared-DB cleanup catches them) ─────────────
 
 const CO_ALPHA   = 'PrivTest Trades Alpha';   // primary company
@@ -103,14 +105,10 @@ async function closePage(page) {
 }
 
 async function pollPage(page, fn, arg, timeoutMs = 10000, intervalMs = 200) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn, arg); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  try { return await page.evaluate(fn, arg); } catch { return null; }
+  const evalArgs = arg !== undefined && arg !== null ? [arg] : [];
+  const result = await pollUntil(page, fn, timeoutMs, intervalMs, evalArgs);
+  if (result !== null) return result;
+  try { return await page.evaluate(fn, ...evalArgs); } catch { return null; }
 }
 
 // Wait for the TradesPage React island to mount — the "Vendors & Trades"

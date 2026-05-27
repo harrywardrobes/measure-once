@@ -53,6 +53,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 // Strong password that passes server-side zxcvbn policy (score ≥ 2,
 // mixed letters + numbers, not a known-weak phrase).
 const STRONG_PASSWORD = 'Zqr9!mBlue#Anchor27';
@@ -84,14 +86,7 @@ async function insertValidToken(pool, email) {
 }
 
 async function pollPage(page, fn, arg, timeoutMs = 10000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn, arg); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────

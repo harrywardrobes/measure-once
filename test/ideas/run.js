@@ -40,6 +40,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil, stabilityPoll } = require('../helpers/poll');
+
 const REPORT_PATH = path.join(__dirname, '..', '..', 'test-results', 'ideas.md');
 
 const findings = [];
@@ -75,14 +77,7 @@ async function injectSession(page, jar) {
 async function pollPage(page, fn, arg, timeoutMs = 12000, intervalMs = 200) {
   // arg is optional: if timeoutMs-ish number passed as arg, treat as timeout
   if (typeof arg === 'number') { timeoutMs = arg; arg = undefined; }
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn, arg); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 async function openIdeasPage(browser, jar) {
@@ -114,19 +109,7 @@ async function openIdeasPage(browser, jar) {
 
   // Wait for React to flush the privilege-level update — poll until the mount's
   // rendered HTML length stops changing, which confirms the re-render is done.
-  let _prevMountLen = -1;
-  {
-    const deadline = Date.now() + 5000;
-    while (Date.now() < deadline) {
-      const len = await page.evaluate(() => {
-        const el = document.getElementById('ideas-page-mount');
-        return el ? el.innerHTML.length : 0;
-      }).catch(() => 0);
-      if (len > 0 && len === _prevMountLen) break;
-      _prevMountLen = len;
-      await new Promise(r => setTimeout(r, 100));
-    }
-  }
+  await stabilityPoll(page, '#ideas-page-mount', 5000);
 
   page.__logs = pageLogs;
   return page;
@@ -678,19 +661,7 @@ async function main() {
     // Poll until the mount's HTML length stabilises — confirms React has flushed
     // the privilege-level update and the delete buttons (absent for members)
     // won't appear after sampling.
-    let _prevMemberLen = -1;
-    {
-      const deadline = Date.now() + 5000;
-      while (Date.now() < deadline) {
-        const len = await memberPage.evaluate(() => {
-          const el = document.getElementById('ideas-page-mount');
-          return el ? el.innerHTML.length : 0;
-        }).catch(() => 0);
-        if (len > 0 && len === _prevMemberLen) break;
-        _prevMemberLen = len;
-        await new Promise(r => setTimeout(r, 100));
-      }
-    }
+    await stabilityPoll(memberPage, '#ideas-page-mount', 5000);
 
     const memberDeleteCount = await memberPage.evaluate(() => {
       const mount = document.getElementById('ideas-page-mount');

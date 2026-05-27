@@ -36,6 +36,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function parseCookieKV(jar) {
@@ -62,14 +64,7 @@ function findChromium() {
 
 // Poll page.evaluate(fn) until it returns truthy or timeout elapses.
 async function pollPage(page, fn, arg, timeoutMs = 8000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn, arg); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 // Open a fresh page with request interception. The cacheStatus argument

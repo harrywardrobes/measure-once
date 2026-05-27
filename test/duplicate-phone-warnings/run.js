@@ -47,6 +47,8 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
+const { pollUntil } = require('../helpers/poll');
+
 // ── fixtures ──────────────────────────────────────────────────────────────────
 // The phone duplicate check matches the last 9 digits, so we derive
 // per-run-unique numbers from the runId to avoid colliding with real
@@ -147,13 +149,10 @@ async function purgeFixtures(pool) {
 }
 
 async function pollPage(page, fn, arg, timeoutMs = 6000, intervalMs = 100) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const got = await page.evaluate(fn, arg);
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return await page.evaluate(fn, arg);
+  const evalArgs = arg !== undefined && arg !== null ? [arg] : [];
+  const result = await pollUntil(page, fn, timeoutMs, intervalMs, evalArgs);
+  if (result !== null) return result;
+  return page.evaluate(fn, ...evalArgs);
 }
 
 // MUI <TextField> wraps a native <input>, but typing into it via
