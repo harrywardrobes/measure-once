@@ -17,6 +17,7 @@ import { usePrivilege } from '../../hooks/usePrivilege';
 import { DELETE as apiDELETE } from '../../utils/api';
 import { DeliveryWindowModal } from '../../components/modals/DeliveryWindowModal';
 import { InstallationSlotModal } from '../../components/modals/InstallationSlotModal';
+import { GenericVisitEditModal } from '../../components/modals/GenericVisitEditModal';
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
   design:       'Design visit',
@@ -86,7 +87,7 @@ function fmtVisitRange(start: string, end: string): string {
 }
 
 function isEditable(type?: string): boolean {
-  return type === 'delivery' || type === 'installation';
+  return type !== 'design';
 }
 
 interface CancelDialogProps {
@@ -255,6 +256,15 @@ export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, load
       {editVisit && editVisit.type === 'installation' && (
         <InstallationSlotModal
           mode="edit"
+          visit={editVisit}
+          open
+          onClose={handleEditClose}
+          onSaved={handleEditSaved}
+        />
+      )}
+
+      {editVisit && editVisit.type !== 'delivery' && editVisit.type !== 'installation' && (
+        <GenericVisitEditModal
           visit={editVisit}
           open
           onClose={handleEditClose}
