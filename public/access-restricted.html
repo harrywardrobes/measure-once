@@ -13,14 +13,18 @@
 </head>
 <body>
 
+  <div id="app-header-mount"></div>
+
   <div id="tab-restricted" class="app-body">
+    <div id="page-heading-mount"></div>
     <div id="main-content">
       <div id="access-restricted-root"></div>
     </div>
   </div>
 
-  <!-- main-js-no-mount-ok: chrome.js dynamically injects #app-header-mount, #page-heading-mount, #app-bottom-nav-mount, and #app-bottom-bar-mount at runtime -->
-  <script src="/chrome.js"></script>
+  <div id="app-bottom-nav-mount"></div>
+  <div id="app-bottom-bar-mount"></div>
+
   <script type="module" src="/react/main.js"></script>
 
 </body>
