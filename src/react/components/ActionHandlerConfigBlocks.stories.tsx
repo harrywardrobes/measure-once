@@ -17,6 +17,47 @@ import {
   FIXTURE_SUBSTATUSES,
 } from '../pages/admin/_HandlerConfigBlockStoryHelpers';
 
+function configBlockForType(type: string): React.ReactNode {
+  switch (type) {
+    case 'schedule_visit':
+      return <ScheduleVisitConfig defaultDurationMin={60} />;
+    case 'show_message':
+      return <ShowMessageConfig />;
+    case 'start_design_visit':
+      return (
+        <StartDesignVisitConfig
+          intermediateLeadStatus="design_in_prog"
+          submittedLeadStatus="design_in_prog__submitted"
+          leadStatuses={FIXTURE_LEAD_STATUSES}
+          substatuses={FIXTURE_SUBSTATUSES}
+        />
+      );
+    case 'schedule_delivery_window':
+      return <DeliveryWindowConfig defaultTitle="Delivery window" />;
+    case 'schedule_installation_slot':
+      return <InstallationSlotConfig defaultTitle="Installation" defaultDurationMin={240} />;
+    default:
+      return (
+        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+          No additional configuration required for this action type.
+        </Typography>
+      );
+  }
+}
+
+function LiveAddActionFlowDemo() {
+  const [type, setType] = useState('schedule_visit');
+  return (
+    <ModalChrome
+      selectedType={type}
+      onTypeChange={setType}
+      slotLabel="Survey booked · Default action"
+    >
+      {configBlockForType(type)}
+    </ModalChrome>
+  );
+}
+
 const meta: Meta = {
   title: 'Features/ActionHandlerConfigBlocks',
   parameters: {
@@ -35,6 +76,23 @@ const meta: Meta = {
 export default meta;
 
 type Story = StoryObj;
+
+export const LiveAddActionFlow: Story = {
+  name: 'Live — full Add action modal flow',
+  render: () => <LiveAddActionFlowDemo />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The full "Add action" modal with a live type selector. ' +
+          'Changing the **Action type** dropdown swaps the config block in real time. ' +
+          'Try the key transitions: Schedule visit → Start design visit → Show message. ' +
+          'Types with no configurable fields (e.g. Add design visit to calendar, ' +
+          'Summarise phone call) show a "no additional configuration" placeholder.',
+      },
+    },
+  },
+};
 
 function ScheduleVisitWrapper() {
   const [type, setType] = useState('schedule_visit');
