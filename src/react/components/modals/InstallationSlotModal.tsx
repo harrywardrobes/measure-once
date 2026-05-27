@@ -29,6 +29,15 @@ interface CreateProps {
   onSaved?: () => void;
 }
 
+interface CreateDirectProps {
+  mode: 'create-direct';
+  contactId?: string;
+  contactName?: string;
+  open: boolean;
+  onClose: () => void;
+  onSaved?: () => void;
+}
+
 interface EditProps {
   mode: 'edit';
   visit: Visit;
@@ -37,17 +46,26 @@ interface EditProps {
   onSaved?: () => void;
 }
 
-type Props = CreateProps | EditProps;
+type Props = CreateProps | CreateDirectProps | EditProps;
 
 export function InstallationSlotModal(props: Props) {
   const isEdit = props.mode === 'edit';
+  const isCreateDirect = props.mode === 'create-direct';
   const visit = isEdit ? props.visit : undefined;
 
-  const cfg = !isEdit ? (props.handler.config || {}) : {};
-  const contactName = !isEdit ? props.ctx.contactName : visit?.customerName;
-  const contactId   = !isEdit ? props.ctx.contactId   : visit?.customerId;
+  const cfg = (!isEdit && !isCreateDirect) ? ((props as CreateProps).handler.config || {}) : {};
+  const contactName = isEdit
+    ? visit?.customerName
+    : isCreateDirect
+      ? (props as CreateDirectProps).contactName
+      : (props as CreateProps).ctx.contactName;
+  const contactId = isEdit
+    ? visit?.customerId
+    : isCreateDirect
+      ? (props as CreateDirectProps).contactId
+      : (props as CreateProps).ctx.contactId;
 
-  const defaultDuration = !isEdit ? ((cfg.defaultDurationMin as number) || 240) : (() => {
+  const defaultDuration = (!isEdit && !isCreateDirect) ? ((cfg.defaultDurationMin as number) || 240) : isCreateDirect ? 240 : (() => {
     if (!visit) return 240;
     const diffMs = new Date(visit.endAt).getTime() - new Date(visit.startAt).getTime();
     return Math.round(diffMs / 60000);
@@ -57,7 +75,7 @@ export function InstallationSlotModal(props: Props) {
     ? (visit?.title || 'Installation')
     : ((cfg.defaultTitle as string) || (contactName ? `Installation — ${contactName}` : 'Installation'));
 
-  const addToGoogleDefault = !isEdit ? (cfg.addToGoogleCalendar as boolean) !== false : false;
+  const addToGoogleDefault = isEdit ? false : isCreateDirect ? false : (cfg.addToGoogleCalendar as boolean) !== false;
 
   const initialStart = isEdit && visit
     ? dayjs(visit.startAt)

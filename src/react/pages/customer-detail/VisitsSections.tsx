@@ -34,10 +34,12 @@ const VISIT_TYPE_LABELS: Record<string, string> = {
 };
 
 const CREATABLE_VISIT_TYPES = [
-  { type: 'survey',   label: 'Survey' },
-  { type: 'remedial', label: 'Remedial' },
-  { type: 'workshop', label: 'Workshop' },
-  { type: 'other',    label: 'Other visit' },
+  { type: 'delivery',     label: 'Delivery window' },
+  { type: 'installation', label: 'Installation slot' },
+  { type: 'survey',       label: 'Survey' },
+  { type: 'remedial',     label: 'Remedial' },
+  { type: 'workshop',     label: 'Workshop' },
+  { type: 'other',        label: 'Other visit' },
 ];
 
 function visitTypeLabel(type?: string): string {
@@ -367,7 +369,35 @@ export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, load
         />
       )}
 
-      {createType && (
+      {createType === 'delivery' && (
+        <DeliveryWindowModal
+          mode="create-direct"
+          contactId={contactId}
+          contactName={contactName || undefined}
+          open
+          onClose={() => setCreateType(null)}
+          onSaved={() => {
+            setCreateType(null);
+            onRefresh?.();
+          }}
+        />
+      )}
+
+      {createType === 'installation' && (
+        <InstallationSlotModal
+          mode="create-direct"
+          contactId={contactId}
+          contactName={contactName || undefined}
+          open
+          onClose={() => setCreateType(null)}
+          onSaved={() => {
+            setCreateType(null);
+            onRefresh?.();
+          }}
+        />
+      )}
+
+      {createType && createType !== 'delivery' && createType !== 'installation' && (
         <GenericVisitEditModal
           mode="create"
           visitType={createType}
