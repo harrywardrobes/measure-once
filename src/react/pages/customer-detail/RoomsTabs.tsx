@@ -213,7 +213,7 @@ export function RoomsTabs({
                   if (e.key === 'Enter') addRoom();
                   if (e.key === 'Escape') { setAddingRoom(false); setNewRoomName(''); }
                 }}
-                className="border border-slate-300 rounded px-2 py-1 text-sm"
+                className="border rounded px-2 py-1 text-sm"
                 style={{ fontSize: 16 }}
                 autoFocus
               />
@@ -260,7 +260,7 @@ export function RoomsTabs({
                 <select
                   value={room.stageKey}
                   onChange={e => changeStage(e.target.value)}
-                  className="border border-slate-200 rounded px-2 py-1 text-xs bg-white"
+                  className="border rounded px-2 py-1 text-xs"
                 >
                   {stageEntries.map(({ key, label }) => (
                     <option key={key} value={key}>{label}</option>
@@ -295,7 +295,7 @@ export function RoomsTabs({
               </Box>
 
               <textarea
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-blue-400 bg-white"
+                className="w-full border rounded-xl px-4 py-3 text-sm resize-none focus:outline-none"
                 rows={4}
                 placeholder="Room notes…"
                 value={notes}
@@ -310,7 +310,7 @@ export function RoomsTabs({
                   <div id="comment-input-area" className="mt-2">
                     <textarea
                       id="comment-input"
-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:border-blue-400 bg-white"
+                      className="w-full border rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none"
                       rows={2}
                       placeholder="Add a comment…"
                       value={draftComment}

@@ -60,12 +60,12 @@ export function GoogleEmailSection({ contactEmail, emails, loading, error, conne
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
         <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' }}>Emails</Typography>
       </Box>
-      {loading && <p className="text-sm text-slate-400 italic px-1">Loading emails…</p>}
+      {loading && <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>Loading emails…</p>}
       {!loading && error && (
-        <p className="text-sm text-red-500 px-1">Could not load emails.</p>
+        <p className="text-sm px-1" style={{ color: 'var(--status-danger)' }}>Could not load emails.</p>
       )}
       {!loading && !error && emails.length === 0 && (
-        <p className="text-sm text-slate-400 italic px-1">No emails found.</p>
+        <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>No emails found.</p>
       )}
       {!loading && !error && emails.length > 0 && (
         <>
@@ -79,7 +79,8 @@ export function GoogleEmailSection({ contactEmail, emails, loading, error, conne
           </Box>
           {rest.length > 0 && (
             <button
-              className="text-xs text-blue-600 mt-2 hover:underline"
+              className="text-xs mt-2 hover:underline"
+              style={{ color: 'var(--orchid)' }}
               onClick={() => setExpanded(v => !v)}
             >
               {expanded ? 'Show fewer' : `Show ${rest.length} more`}

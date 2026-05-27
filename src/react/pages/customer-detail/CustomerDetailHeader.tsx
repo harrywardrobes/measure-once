@@ -89,13 +89,14 @@ export function CustomerDetailHeader({
   return (
     <div
       id="workflow-header"
-      className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 sticky top-0 z-10 shadow-sm"
+      className="border-b px-4 sm:px-6 py-4 sticky top-0 z-10 shadow-sm"
+      style={{ backgroundColor: 'var(--paper)', borderBottomColor: 'var(--stone)' }}
     >
       <div className="customer-header-wrap" style={{ maxWidth: 1100, margin: '0 auto' }}>
         <div className="flex items-start justify-between gap-6 flex-wrap">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5 min-w-0">
-              <h1 className="text-xl font-bold text-slate-900 truncate">{name}</h1>
+              <h1 className="text-xl font-bold truncate" style={{ color: 'var(--ink-1)' }}>{name}</h1>
               {customerNum && (
                 <span className="customer-num-badge">{customerNum}</span>
               )}
@@ -117,8 +118,8 @@ export function CustomerDetailHeader({
 
             {(address || cityLine) && (
               <div className="mt-3 space-y-0.5">
-                {address  && <div className="text-sm text-slate-500">{address}</div>}
-                {cityLine && <div className="text-sm text-slate-500">{cityLine}</div>}
+                {address  && <div className="text-sm" style={{ color: 'var(--ink-4)' }}>{address}</div>}
+                {cityLine && <div className="text-sm" style={{ color: 'var(--ink-4)' }}>{cityLine}</div>}
               </div>
             )}
 
@@ -126,13 +127,13 @@ export function CustomerDetailHeader({
               <div className="mt-3 space-y-1">
                 {email && (
                   <div>
-                    <a href={`mailto:${email}`} className="text-sm text-blue-600 hover:underline">
+                    <a href={`mailto:${email}`} className="text-sm hover:underline" style={{ color: 'var(--orchid)' }}>
                       {email}
                     </a>
                   </div>
                 )}
                 {phone && (
-                  <div className="text-sm text-slate-500 flex items-center gap-1.5">
+                  <div className="text-sm flex items-center gap-1.5" style={{ color: 'var(--ink-4)' }}>
                     <span>{phone}</span>
                     {whatsappEnabled && !isViewer && onOpenWhatsApp && (
                       <button
