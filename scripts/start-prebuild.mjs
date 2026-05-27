@@ -8,6 +8,9 @@
  *  - Subsequent runs (bundle already exists): skip the build entirely so
  *    Replit workflow restarts after server-side-only changes are instant.
  *
+ * Storybook: built automatically whenever public/storybook/ is absent, so the
+ * Design System card works on a fresh checkout without a manual step.
+ *
  * For a full, CI-quality build regardless of existing bundle use:
  *   npm run build:react
  *
@@ -19,6 +22,7 @@ import { existsSync } from 'fs';
 import { execSync } from 'child_process';
 
 const BUNDLE = 'public/react/main.js';
+const STORYBOOK = 'public/storybook/index.html';
 
 if (existsSync(BUNDLE)) {
   console.log('[start-prebuild] Bundle already exists — skipping React build.');
@@ -29,4 +33,11 @@ if (existsSync(BUNDLE)) {
   execSync('npm run typecheck', { stdio: 'inherit' });
   execSync('npx vite build', { stdio: 'inherit' });
   execSync('node scripts/check-bundle-sizes.mjs', { stdio: 'inherit' });
+}
+
+if (existsSync(STORYBOOK)) {
+  console.log('[start-prebuild] Storybook already built — skipping.');
+} else {
+  console.log('[start-prebuild] Storybook not found — building now (run `npm run build:storybook` to rebuild manually).');
+  execSync('npm run build:storybook', { stdio: 'inherit' });
 }
