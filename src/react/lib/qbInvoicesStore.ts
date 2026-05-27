@@ -185,3 +185,29 @@ export function refresh(): void {
 export function reset(): void {
   _setState({ ...INITIAL_STATE });
 }
+
+// ── Cross-tab disconnect listener ─────────────────────────────────────────────
+// When any tab broadcasts { type: 'qb-disconnected' }, all other tabs that
+// share this module instance reset their invoice cache immediately.
+
+const QB_CHANNEL = 'qb-invoices';
+
+export function broadcastDisconnect(): void {
+  try {
+    const ch = new BroadcastChannel(QB_CHANNEL);
+    ch.postMessage({ type: 'qb-disconnected' });
+    ch.close();
+  } catch { /* BroadcastChannel not supported — no-op */ }
+}
+
+(function _initCrossTabListener() {
+  try {
+    const ch = new BroadcastChannel(QB_CHANNEL);
+    ch.addEventListener('message', (ev: MessageEvent) => {
+      if (ev.data?.type === 'qb-disconnected') {
+        reset();
+      }
+    });
+    // Intentionally never closed — lives for the lifetime of the page.
+  } catch { /* BroadcastChannel not supported — no-op */ }
+})();
