@@ -3,11 +3,11 @@ import { Contact } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { InvoiceDetailDrawer, type InvoiceSummary } from '../../components/InvoiceDetailDrawer';
 import { fmtQBDate, fmtGBP } from '../../utils/formatters';
-import type { QBInvoicesState } from '../../hooks/useQBInvoices';
+import type { QBInvoicesResult } from '../../hooks/useQBInvoices';
 
 interface Props {
   contact: Contact;
-  qb: QBInvoicesState;
+  qb: QBInvoicesResult;
 }
 
 function statusPill(inv: InvoiceSummary): React.ReactNode {

@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import Box from '@mui/material/Box';
 import { InvoicesSection } from './InvoicesSection';
 import type { Contact } from './types';
-import type { QBInvoicesState } from '../../hooks/useQBInvoices';
+import type { QBInvoicesResult } from '../../hooks/useQBInvoices';
 
 const meta: Meta = {
   title: 'Features/CustomerDetail/InvoicesSection',
@@ -31,7 +31,9 @@ const mockContact: Contact = {
   },
 };
 
-const loadingQB: QBInvoicesState = {
+const noop = () => {};
+
+const loadingQB: QBInvoicesResult = {
   connected: false,
   statusKnown: false,
   loading: true,
@@ -41,9 +43,11 @@ const loadingQB: QBInvoicesState = {
   errorCode: null,
   company: null,
   invoices: [],
+  refresh: noop,
+  triggerLoad: noop,
 };
 
-const loadedQB: QBInvoicesState = {
+const loadedQB: QBInvoicesResult = {
   connected: true,
   statusKnown: true,
   loading: false,
@@ -84,9 +88,11 @@ const loadedQB: QBInvoicesState = {
       customerName: 'Mitchell Interiors',
     },
   ],
+  refresh: noop,
+  triggerLoad: noop,
 };
 
-const noInvoicesQB: QBInvoicesState = {
+const noInvoicesQB: QBInvoicesResult = {
   connected: true,
   statusKnown: true,
   loading: false,
@@ -96,9 +102,11 @@ const noInvoicesQB: QBInvoicesState = {
   errorCode: null,
   company: 'Measure Once Ltd',
   invoices: [],
+  refresh: noop,
+  triggerLoad: noop,
 };
 
-const errorQB: QBInvoicesState = {
+const errorQB: QBInvoicesResult = {
   connected: true,
   statusKnown: true,
   loading: false,
@@ -108,6 +116,8 @@ const errorQB: QBInvoicesState = {
   errorCode: 'TOKEN_EXPIRED',
   company: null,
   invoices: [],
+  refresh: noop,
+  triggerLoad: noop,
 };
 
 export const Loading: Story = {
