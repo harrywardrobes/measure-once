@@ -145,15 +145,15 @@ export interface StageColour {
 }
 
 export const STAGE_COLOURS: StageColour[] = [
-  { key: 'sales',        bg: '#8B2BFF', light: '#F3EAFF', text: '#6A12D9' },
-  { key: 'designvisit',  bg: '#0d9488', light: '#ccfbf1', text: '#0f766e' },
-  { key: 'survey',       bg: '#d97706', light: '#fef3c7', text: '#b45309' },
-  { key: 'order',        bg: '#2563eb', light: '#dbeafe', text: '#1d4ed8' },
-  { key: 'workshop',     bg: '#dc2626', light: '#fee2e2', text: '#b91c1c' },
-  { key: 'packing',      bg: '#059669', light: '#d1fae5', text: '#047857' },
-  { key: 'delivery',     bg: '#0891b2', light: '#cffafe', text: '#0e7490' },
-  { key: 'installation', bg: '#8A5A3B', light: '#fdf6ee', text: '#5c3820' },
-  { key: 'aftercare',    bg: '#200842', light: '#ede0ff', text: '#3d0f7a' },
+  { key: 'sales',        bg: 'var(--stage-sales-bg)',          light: 'var(--stage-sales-light)',          text: 'var(--stage-sales-text)'          },
+  { key: 'designvisit',  bg: 'var(--stage-designvisit-bg)',    light: 'var(--stage-designvisit-light)',    text: 'var(--stage-designvisit-text)'    },
+  { key: 'survey',       bg: 'var(--stage-survey-bg)',         light: 'var(--stage-survey-light)',         text: 'var(--stage-survey-text)'         },
+  { key: 'order',        bg: 'var(--stage-order-bg)',          light: 'var(--stage-order-light)',          text: 'var(--stage-order-text)'          },
+  { key: 'workshop',     bg: 'var(--stage-workshop-bg)',       light: 'var(--stage-workshop-light)',       text: 'var(--stage-workshop-text)'       },
+  { key: 'packing',      bg: 'var(--stage-packing-bg)',        light: 'var(--stage-packing-light)',        text: 'var(--stage-packing-text)'        },
+  { key: 'delivery',     bg: 'var(--stage-delivery-bg)',       light: 'var(--stage-delivery-light)',       text: 'var(--stage-delivery-text)'       },
+  { key: 'installation', bg: 'var(--stage-installation-bg)',   light: 'var(--stage-installation-light)',   text: 'var(--stage-installation-text)'   },
+  { key: 'aftercare',    bg: 'var(--stage-aftercare-bg)',      light: 'var(--stage-aftercare-light)',      text: 'var(--stage-aftercare-text)'      },
 ];
 
 export const STAGE_KEYS = ['sales','designvisit','survey','order','workshop','packing','delivery','installation','aftercare'];
@@ -164,10 +164,10 @@ export function stageColour(stageKey: string): StageColour {
 }
 
 export const DESIGN_VISIT_STATUS_LABELS: Record<string, { label: string; bg: string; fg: string }> = {
-  draft:              { label: 'Draft',               bg: '#f3f4f6', fg: '#374151' },
-  submitted:          { label: 'Submitted',           bg: '#dbeafe', fg: '#1d4ed8' },
-  signed_off:         { label: 'Signed off',          bg: '#d1fae5', fg: '#047857' },
-  revision_requested: { label: 'Revision requested',  bg: '#fee2e2', fg: '#b91c1c' },
+  draft:              { label: 'Draft',               bg: '#f3f4f6',                    fg: '#374151'                   },
+  submitted:          { label: 'Submitted',           bg: 'var(--stage-order-light)',   fg: 'var(--stage-order-text)'   },
+  signed_off:         { label: 'Signed off',          bg: 'var(--stage-packing-light)', fg: 'var(--stage-packing-text)' },
+  revision_requested: { label: 'Revision requested',  bg: 'var(--stage-workshop-light)',fg: 'var(--stage-workshop-text)'},
 };
 
 export function contactName(contact: Contact | null | undefined): string {
