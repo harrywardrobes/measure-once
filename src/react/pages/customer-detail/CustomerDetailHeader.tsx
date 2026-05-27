@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Contact, LeadStatus, LeadSubstatus, contactName } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
+import { LeadStatusPicker } from '../../components/pickers/LeadStatusPicker';
 
 interface Props {
   contact: Contact;
@@ -43,6 +44,9 @@ export function CustomerDetailHeader({
   const { isManager, isViewer } = usePrivilege();
   const canEdit = isManager;
 
+  const [pickerAnchorEl, setPickerAnchorEl] = useState<HTMLElement | null>(null);
+  const pickerOpen = Boolean(pickerAnchorEl);
+
   const props      = contact.properties;
   const name       = contactName(contact);
   const email      = props.email || '';
@@ -76,14 +80,9 @@ export function CustomerDetailHeader({
     return { label: parentLabel, subLabel: null, title: 'Change lead status', empty: false };
   })();
 
-  function handlePillClick(e: React.MouseEvent) {
+  function handlePillClick(e: React.MouseEvent<HTMLElement>) {
     if (!canEdit) return;
-    const g = window as unknown as Record<string, unknown>;
-    if (typeof g.openLeadStatusPicker === 'function') {
-      (g.openLeadStatusPicker as (ev: MouseEvent, id: string, opts: object) => void)(
-        e.nativeEvent, contact.id, { showSubstatuses: true },
-      );
-    }
+    setPickerAnchorEl(e.currentTarget);
   }
 
   return (
@@ -172,6 +171,16 @@ export function CustomerDetailHeader({
           </div>
         </div>
       </div>
+
+      <LeadStatusPicker
+        anchorEl={pickerAnchorEl}
+        open={pickerOpen}
+        onClose={() => setPickerAnchorEl(null)}
+        contactId={contact.id}
+        currentStatus={props.hs_lead_status || ''}
+        currentHwSubstatus={props.hw_lead_substatus || ''}
+        showSubstatuses
+      />
     </div>
   );
 }

@@ -75,66 +75,18 @@ async function quickLoadAndUpdate(contactId, roomIdx, updater) {
 // NOTE: CustomerDetailPage.tsx (React) now owns contact editing. The vanilla-JS
 // inline-edit form functions that previously lived here have been removed.
 
-// HTML fragment shown next to the lead-status pill: chip (current sub) or +.
-// Returns '' when there's nothing to show.
-function renderSubstatusAffordance(contact) {
-  const statusKey = contact?.properties?.hs_lead_status || '';
-  if (!statusKey) return '';
-  const subs = _substatusesForStatus(statusKey);
-  if (!subs.length) return '';
-  const cid = contact?.id || '';
-  const editable = canEditPrivilege();
-  const current = _currentSubstatusFor(contact);
-  if (current) {
-    const label = escHtml(current.label);
-    if (!editable) return `<span class="lead-substatus-chip" title="Sub-status">${label}</span>`;
-    return `<span class="lead-substatus-chip lsb-clickable" title="Change sub-status" role="button" tabindex="-1" onclick="openLeadSubstatusPicker(event,'${cid}')">${label}</span>`;
-  }
-  if (!editable) return '';
-  return `<button type="button" class="lead-substatus-add" title="Set sub-status" onclick="openLeadSubstatusPicker(event,'${cid}')">+</button>`;
+// renderSubstatusAffordance — replaced by the React LeadStatusPicker component in
+// CustomerDetailHeader.tsx (task #1382). Kept as a no-op shim so any remaining
+// stale call sites degrade gracefully.
+function renderSubstatusAffordance(_contact) {
+  return '';
 }
 
-async function openLeadSubstatusPicker(event, contactId) {
-  event.stopPropagation();
-  { if (!canEditPrivilege()) return; }
-  closeCardPicker();
-
-  let contact = state.contacts.find(c => c.id === contactId);
-  if (!contact && state.selectedContact?.id === contactId) contact = state.selectedContact;
-  const statusKey = contact?.properties?.hs_lead_status || '';
-  const subs = _substatusesForStatus(statusKey);
-  if (!statusKey || !subs.length) return;
-
-  const current = _currentSubstatusFor(contact);
-
-  const rect = event.currentTarget.getBoundingClientRect();
-  const popup = document.createElement('div');
-  popup.id = 'card-picker-popup';
-  popup.className = 'card-picker-popup';
-  const top = Math.min(rect.bottom + 4, window.innerHeight - 300);
-  popup.style.cssText = `top:${top}px;left:${Math.max(4, rect.left)}px;`;
-
-  const clearBtn = document.createElement('button');
-  clearBtn.className = 'card-picker-opt card-picker-opt--clear' + (current ? '' : ' card-picker-opt--disabled');
-  clearBtn.textContent = '✕ Clear sub-status';
-  if (current) {
-    clearBtn.addEventListener('click', () => quickSetLeadSubstatus(contactId, ''));
-  } else {
-    clearBtn.disabled = true;
-  }
-  popup.appendChild(clearBtn);
-
-  subs.forEach(sub => {
-    const btn = document.createElement('button');
-    const isActive = current && current.key === sub.substatus_key;
-    btn.className = 'card-picker-opt' + (isActive ? ' card-picker-opt--active' : '');
-    btn.textContent = sub.label || sub.substatus_key;
-    btn.addEventListener('click', () => quickSetLeadSubstatus(contactId, sub.substatus_key));
-    popup.appendChild(btn);
-  });
-
-  document.body.appendChild(popup);
-  setTimeout(() => document.addEventListener('click', closeCardPicker, { once: true }), 0);
+// openLeadSubstatusPicker — replaced by the React LeadStatusPicker component in
+// CustomerDetailHeader.tsx (task #1382). Kept as a no-op shim so any remaining
+// stale call sites degrade gracefully.
+function openLeadSubstatusPicker(_event, _contactId) {
+  // No-op: picker is now rendered by React.
 }
 
 async function quickSetLeadSubstatus(contactId, newSubKey) {

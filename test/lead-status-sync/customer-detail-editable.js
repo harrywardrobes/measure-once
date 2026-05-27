@@ -115,45 +115,37 @@ async function probeEditableRole(page, role, lsKey, record) {
     pillInfo.clickable,
   );
 
-  // Call openLeadStatusPicker directly and confirm the unified picker opens.
-  // Direct invocation via page.evaluate avoids document-level dismiss handlers
-  // that page.click() can trigger through event bubbling; the function itself
-  // (and its canEditPrivilege() guard) is what we want to regression-test.
-  if (pillInfo.present) {
-    const pickerResult = await page.evaluate(async (contactId) => {
-      // Remove any stale popup first.
-      document.getElementById('card-picker-popup')?.remove();
+  // Click the pill and confirm the React LeadStatusPicker (MUI Popover) opens.
+  // The picker is now a React component rendered as a MUI Popover portal — it
+  // no longer uses the vanilla-JS #card-picker-popup DOM element (task #1382).
+  if (pillInfo.present && pillInfo.clickable) {
+    const pill = await page.$('#workflow-header .lead-status-badge');
+    if (pill) {
+      await pill.click();
+      // Wait for the MUI Popover to render (it mounts into a portal at body level).
+      await new Promise(r => setTimeout(r, 600));
+    }
 
-      const pill = document.querySelector('#workflow-header .lead-status-badge');
-      if (!pill || typeof openLeadStatusPicker !== 'function') {
-        return { popupCreated: false, error: 'pill or function missing' };
-      }
-      // Build a minimal event with currentTarget pointing to the pill so
-      // getBoundingClientRect() has a real element to work with.
-      const evt = new MouseEvent('click', { bubbles: false, cancelable: true });
-      Object.defineProperty(evt, 'currentTarget', { get: () => pill });
-      openLeadStatusPicker(evt, contactId, { showSubstatuses: true });
-      // The popup is appended synchronously before the first await inside the
-      // function — check immediately.
-      const immediate = !!document.getElementById('card-picker-popup');
-      // Also wait for the async path (HubSpot fetch will 503 in test; the
-      // function shows a toast and continues building the full picker list).
-      await new Promise(r => setTimeout(r, 1500));
-      const after = !!document.getElementById('card-picker-popup');
-      return { popupCreated: immediate || after };
-    }, '999999998');
+    const pickerResult = await page.evaluate(() => {
+      // The React LeadStatusPicker renders as a MUI Popover portal.
+      // Check for a Popover root or the "Clear status" button inside it.
+      const popover = document.querySelector('[class*="MuiPopover-root"]');
+      const clearBtn = Array.from(document.querySelectorAll('button')).find(
+        b => b.textContent.includes('Clear status'),
+      );
+      return { popupCreated: !!(popover || clearBtn) };
+    });
 
     record(
-      `[${role}] invoking openLeadStatusPicker creates the unified picker popup`,
-      '#card-picker-popup is present in DOM',
+      `[${role}] clicking the pill opens the React LeadStatusPicker popover`,
+      'MUI Popover is present in DOM',
       `pickerOpened=${pickerResult.popupCreated}`,
       pickerResult.popupCreated,
     );
 
-    // Clean up the picker for the next probe.
-    await page.evaluate(() => {
-      document.getElementById('card-picker-popup')?.remove();
-    });
+    // Close the picker by pressing Escape for a clean state.
+    await page.keyboard.press('Escape');
+    await new Promise(r => setTimeout(r, 200));
   }
 }
 
@@ -379,11 +371,10 @@ async function writeReport(runId, findings) {
     '  `.lead-status-badge` is rendered inside `#workflow-header`.',
     '- **lsb-clickable class present**: asserts the pill carries the `lsb-clickable`',
     '  CSS class that enables click-to-open.',
-    '- **onclick handler present**: asserts `getAttribute("onclick")` returns a',
-    '  non-empty string, confirming the click handler was attached.',
-    '- **Picker popup opens**: calls `openLeadStatusPicker()` directly via `page.evaluate`',
-    '  with a minimal mock event; asserts `#card-picker-popup` appears in the DOM immediately',
-    '  (the popup is appended synchronously before the first async HubSpot fetch).',
+    '- **Picker popover opens**: clicks the pill element and asserts a MUI Popover',
+    '  (or the "Clear status" button inside it) appears in the DOM. The picker is',
+    '  now a React LeadStatusPicker component (task #1382) — `#card-picker-popup`',
+    '  is no longer used.',
     '- **Admin role**: repeats all four assertions with `privilege_level: "admin"` in',
     '  a fresh incognito context.',
     '',
