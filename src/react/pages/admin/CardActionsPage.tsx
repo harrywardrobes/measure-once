@@ -489,27 +489,34 @@ export function CardActionsPage() {
                           </div>
 
                           <div className="adm-ca-default-row">
-                            <div className="adm-ca-default-label">Default action label</div>
-                            <input type="text" className="field ca-default-input adm-ca-default-input"
-                              maxLength={128}
-                              data-kind="ls-default"
-                              data-stage={stage.key}
-                              data-status={ls.defaultStatusKey}
-                              data-original={ls.defaultLabel}
-                              defaultValue={ls.defaultLabel}
-                              placeholder="(used when no sub-status set)"
-                              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                            />
-                            <HandlerBadges stageKey={stage.key} statusKey={ls.defaultStatusKey} handlers={handlers} />
-                            {resolvedSlots.has(`ls:${stage.key}:${ls.defaultStatusKey}`) && (
-                              <span className="ca-resolved-pill" style={{
-                                display: 'inline-flex', alignItems: 'center',
-                                padding: '1px 8px', marginLeft: 6,
-                                background: '#d1fae5', color: '#065f46',
-                                borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
-                                lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
-                              }}>✓ Resolved</span>
-                            )}
+                            {(() => {
+                              const hasSubstatuses = ls.substatuses.length > 0 || stageNewRows.length > 0;
+                              return (
+                                <>
+                                  <div className="adm-ca-default-label">{hasSubstatuses ? 'Default action label' : 'Action label'}</div>
+                                  <input type="text" className="field ca-default-input adm-ca-default-input"
+                                    maxLength={128}
+                                    data-kind="ls-default"
+                                    data-stage={stage.key}
+                                    data-status={ls.defaultStatusKey}
+                                    data-original={ls.defaultLabel}
+                                    defaultValue={ls.defaultLabel}
+                                    placeholder={hasSubstatuses ? '(fallback when no sub-status active)' : '(Action label)'}
+                                    onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                                  />
+                                  <HandlerBadges stageKey={stage.key} statusKey={ls.defaultStatusKey} handlers={handlers} />
+                                  {resolvedSlots.has(`ls:${stage.key}:${ls.defaultStatusKey}`) && (
+                                    <span className="ca-resolved-pill" style={{
+                                      display: 'inline-flex', alignItems: 'center',
+                                      padding: '1px 8px', marginLeft: 6,
+                                      background: '#d1fae5', color: '#065f46',
+                                      borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
+                                      lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
+                                    }}>✓ Resolved</span>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
 
                           <div className="adm-ca-sub-list" data-sub-list={ls.key}>
