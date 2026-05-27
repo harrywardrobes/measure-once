@@ -606,6 +606,58 @@ router.get('/api/customer-info-photos/:key', isAuthenticated, async (req, res) =
   }
 });
 
+// Authenticated: resend a fresh invite link for a contact
+// POST /api/customer-info/by-contact/:contactId/resend
+router.post('/api/customer-info/by-contact/:contactId/resend',
+  isAuthenticated,
+  requirePrivilege('member'),
+  async (req, res) => {
+    const cid = String(req.params.contactId || '').trim();
+    if (!cid || !/^\d+$/.test(cid)) {
+      return res.status(400).json({ error: 'Invalid contactId.' });
+    }
+
+    // Fetch contact from HubSpot
+    let contact;
+    try {
+      contact = await fetchContactFromHubSpot(cid);
+    } catch (err) {
+      console.error('[customer-info] Failed to fetch contact from HubSpot:', err.message);
+      return res.status(502).json({ error: 'Could not fetch contact from HubSpot.' });
+    }
+
+    const props = contact.properties || {};
+    const email = (props.email || '').trim();
+    if (!email) {
+      return res.status(400).json({ error: 'Contact has no email address in HubSpot.' });
+    }
+    const phone     = (props.mobilephone || props.phone || '').trim();
+    const firstName = (props.firstname || '').trim();
+    const lastName  = (props.lastname  || '').trim();
+    const name = [firstName, lastName].filter(Boolean).join(' ') || email;
+
+    // Generate a fresh token
+    const rawToken  = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+    await pool.query(
+      `INSERT INTO customer_info_submissions
+         (contact_id, contact_name, contact_email, token_hash, expires_at,
+          masked_email, masked_phone)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [cid, name, email, tokenHash, expiresAt.toISOString(),
+       maskEmail(email), maskPhone(phone)]
+    );
+
+    const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
+    await sendCustomerInviteEmail(email, maskEmail(email), formLink);
+
+    console.log(`[customer-info] Resent invite link for contact ${cid}`);
+    res.json({ ok: true });
+  }
+);
+
 // Authenticated: list all submissions for a contact (dashboard viewer)
 // GET /api/customer-info/by-contact/:contactId
 router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, async (req, res) => {

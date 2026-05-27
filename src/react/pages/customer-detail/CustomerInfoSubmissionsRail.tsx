@@ -1,16 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Collapse from '@mui/material/Collapse';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
+import Tooltip from '@mui/material/Tooltip';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HomeIcon from '@mui/icons-material/Home';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
+import SendIcon from '@mui/icons-material/Send';
+import { usePrivilege } from '../../hooks/usePrivilege';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,9 +52,86 @@ function roomLabel(count: string | null): string {
   return '3+ rooms';
 }
 
+// ── Resend button ─────────────────────────────────────────────────────────────
+
+type ResendState = 'idle' | 'loading' | 'sent' | 'error';
+
+function ResendButton({
+  contactId,
+  onSuccess,
+}: {
+  contactId: string;
+  onSuccess: () => void;
+}) {
+  const [state, setState] = useState<ResendState>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  async function handleResend() {
+    setState('loading');
+    setErrorMsg('');
+    try {
+      const r = await fetch(
+        `/api/customer-info/by-contact/${encodeURIComponent(contactId)}/resend`,
+        { method: 'POST' }
+      );
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || `HTTP ${r.status}`);
+      }
+      setState('sent');
+      onSuccess();
+    } catch (e) {
+      setErrorMsg((e as Error).message);
+      setState('error');
+    }
+  }
+
+  if (state === 'sent') {
+    return (
+      <Chip
+        icon={<CheckCircleIcon />}
+        label="Link sent"
+        size="small"
+        color="success"
+        variant="outlined"
+      />
+    );
+  }
+
+  return (
+    <Tooltip
+      title={state === 'error' ? errorMsg : ''}
+      placement="top"
+      arrow
+    >
+      <span>
+        <Button
+          size="small"
+          variant="outlined"
+          color={state === 'error' ? 'error' : 'primary'}
+          startIcon={state === 'loading'
+            ? <CircularProgress size={13} color="inherit" />
+            : <SendIcon fontSize="small" />
+          }
+          disabled={state === 'loading'}
+          onClick={handleResend}
+          sx={{ fontSize: '0.75rem', py: 0.4 }}
+        >
+          {state === 'error' ? 'Retry' : 'Resend link'}
+        </Button>
+      </span>
+    </Tooltip>
+  );
+}
+
 // ── Submission card ───────────────────────────────────────────────────────────
 
-function SubmissionCard({ sub }: { sub: Submission }) {
+function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
+  sub: Submission;
+  contactId: string;
+  canResend: boolean;
+  onResendSuccess: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const isPending = !sub.submitted_at;
   const isExpired = isPending && new Date(sub.expires_at) < new Date();
@@ -77,25 +158,45 @@ function SubmissionCard({ sub }: { sub: Submission }) {
     >
       {/* Header row */}
       <Box
-        onClick={() => setOpen(v => !v)}
         sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           px: 2,
           py: 1.5,
-          cursor: 'pointer',
           gap: 1,
-          '&:hover': { bgcolor: 'grey.50' },
         }}
       >
-        <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            Sent {fmtDate(sub.created_at)}
-          </Typography>
-          {statusChip}
-        </Stack>
-        {open ? <ExpandLessIcon fontSize="small" sx={{ color: 'text.disabled' }} /> : <ExpandMoreIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
+        <Box
+          onClick={() => setOpen(v => !v)}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            flex: 1,
+            cursor: 'pointer',
+            gap: 1,
+            minWidth: 0,
+            '&:hover .expand-icon': { color: 'text.secondary' },
+          }}
+        >
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              Sent {fmtDate(sub.created_at)}
+            </Typography>
+            {statusChip}
+          </Stack>
+          {open
+            ? <ExpandLessIcon className="expand-icon" fontSize="small" sx={{ color: 'text.disabled', ml: 'auto', flexShrink: 0 }} />
+            : <ExpandMoreIcon className="expand-icon" fontSize="small" sx={{ color: 'text.disabled', ml: 'auto', flexShrink: 0 }} />
+          }
+        </Box>
+
+        {/* Resend button — only for non-viewer roles */}
+        {canResend && (
+          <Box sx={{ flexShrink: 0 }}>
+            <ResendButton contactId={contactId} onSuccess={onResendSuccess} />
+          </Box>
+        )}
       </Box>
 
       {/* Expanded detail */}
@@ -226,8 +327,9 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
   const [open, setOpen]               = useState(true);
+  const { isViewer }                  = usePrivilege();
 
-  useEffect(() => {
+  const loadSubmissions = useCallback(() => {
     if (!contactId) return;
     setLoading(true);
     setError('');
@@ -240,6 +342,10 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
       .catch(e => setError((e as Error).message))
       .finally(() => setLoading(false));
   }, [contactId]);
+
+  useEffect(() => {
+    loadSubmissions();
+  }, [loadSubmissions]);
 
   if (!loading && !error && submissions.length === 0) return null;
 
@@ -289,7 +395,13 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
         {!loading && !error && (
           <Stack spacing={1.5}>
             {submissions.map(sub => (
-              <SubmissionCard key={sub.id} sub={sub} />
+              <SubmissionCard
+                key={sub.id}
+                sub={sub}
+                contactId={contactId}
+                canResend={!isViewer}
+                onResendSuccess={loadSubmissions}
+              />
             ))}
           </Stack>
         )}
