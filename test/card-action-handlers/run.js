@@ -38,6 +38,12 @@
 //       (F.2) Entering a valid snake_case value clears the inline error and
 //             clicking Save closes the modal and creates the handler via
 //             POST /api/admin/card-action-handlers.
+//   (L) Sub-status slot rows render for labelled sub-statuses: a
+//       lead_substatuses row with a non-empty action_label produces a visible
+//       slot row — L.1 checks .adm-handlers-slot-label text equals the
+//       action_label value; L.2 checks .adm-handlers-slot-sub text matches
+//       the "Sub-status · <label>" pattern.  Guards ActionHandlersPage.tsx
+//       lines 232-239 against regressions that hide or skip sub-status rows.
 //
 // API pre-checks run before any browser tab opens so failures in the API
 // surface clearly.
@@ -92,6 +98,8 @@ const INTERMEDIATE_LS     = 'PRIVTEST_INPROGRESS';   // value sent on PATCH /api
 // (I) fallback slot visibility — regression guard for task #1722
 // Uppercase because it must match lead_status_config.key exactly for the FK on lead_substatuses.
 const LBL_KEY_FALLBACK_STATUS = 'PRIVTEST_CAH_FALLBACK'; // lead_status_config.key + substatus status_key
+// (L) sub-status slot row rendering — regression guard for task #1731
+const LBL_KEY_SUB_ROW         = 'PRIVTEST_CAH_SUB_ROW';  // lead_status_config.key for sub-status slot row probe
 
 const HANDLER_NAME_DV         = 'PrivTest design visit handler';
 const HANDLER_NAME_SV         = 'PrivTest schedule-visit handler';
@@ -179,6 +187,13 @@ async function purgeFixtures(pool) {
       [LBL_KEY_FALLBACK_STATUS]
     );
   } catch (_) {}
+  // (L) probe sub-status slot row substatus
+  try {
+    await pool.query(
+      `DELETE FROM lead_substatuses WHERE status_key = $1`,
+      [LBL_KEY_SUB_ROW]
+    );
+  } catch (_) {}
   await pool.query(
     `DELETE FROM visits WHERE customer_id LIKE 'privtest-cah-%'`
   );
@@ -188,9 +203,9 @@ async function purgeFixtures(pool) {
   // delete above so the FK doesn't block this DELETE.
   try {
     await pool.query(
-      `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3, $4, $5, $6, $7)`,
+      `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [LBL_KEY_CONFLICT_LS, SUB_STATUS_K, LBL_KEY_ANAME, LBL_KEY_FALLBACK_STATUS,
-       'PRIVTEST_CAH_ORPHAN_LS', 'privtest_cah_orphan_ls', 'PRIVTEST_CAH_THROWAWAY']
+       LBL_KEY_SUB_ROW, 'PRIVTEST_CAH_ORPHAN_LS', 'privtest_cah_orphan_ls', 'PRIVTEST_CAH_THROWAWAY']
     );
   } catch (_) {}
   // Recreate the unique label-binding index if it was temporarily dropped
@@ -2610,6 +2625,122 @@ async function main() {
 
     await fallbackTab.close();
 
+    // ── (L) Sub-status slot rows render for labelled sub-statuses ─────────────
+    //
+    // Guard for ActionHandlersPage.tsx lines 232-239: a `lead_substatuses` row
+    // whose `action_label` is non-empty must produce a visible slot row with:
+    //   (L.1) `.adm-handlers-slot-label` text equal to the action_label value.
+    //   (L.2) `.adm-handlers-slot-sub` text matching the "Sub-status · <label>"
+    //         pattern.
+    // A regression that skips or hides sub-status rows would fail both checks.
+    console.log('\n  [L] Sub-status slot rows render for labelled sub-statuses');
+
+    const SUB_ROW_STATUS_LABEL = 'PrivTest SubRow Status';
+    const SUB_ROW_ACTION_LABEL = 'Book measurement';
+    const SUB_ROW_SUB_LABEL    = 'Confirmed';
+    const SUB_ROW_SUB_KEY      = 'PRIVTEST_SUB_ROW_LABELLED';
+
+    // Seed a lead_status_config row with a sub-status that has a non-empty action_label.
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+       VALUES ($1, $2, 9994, false, 'SALES')
+       ON CONFLICT (key) DO UPDATE
+         SET label               = EXCLUDED.label,
+             sort_order          = EXCLUDED.sort_order,
+             excluded_from_sales = EXCLUDED.excluded_from_sales,
+             stage               = EXCLUDED.stage`,
+      [LBL_KEY_SUB_ROW, SUB_ROW_STATUS_LABEL],
+    );
+    await pool.query(
+      `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order)
+       VALUES ($1, $2, $3, $4, 9994)
+       ON CONFLICT DO NOTHING`,
+      [LBL_KEY_SUB_ROW, SUB_ROW_SUB_KEY, SUB_ROW_SUB_LABEL, SUB_ROW_ACTION_LABEL],
+    );
+    console.log(`  Seeded lead_status_config key=${LBL_KEY_SUB_ROW} with sub-status action_label="${SUB_ROW_ACTION_LABEL}"`);
+
+    const subRowTab = await browser.newPage();
+    await subRowTab.setCacheEnabled(false);
+    await injectSession(subRowTab, adminClient.cookie);
+    await subRowTab.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await subRowTab.evaluate(() => {
+      if (typeof switchTab === 'function') switchTab('cardactions');
+    });
+    await new Promise(r => setTimeout(r, 400));
+    await subRowTab.evaluate(() => {
+      if (typeof switchTab === 'function') switchTab('actionhandlers');
+    });
+    await pollPage(
+      subRowTab,
+      () => typeof window.loadCardActionHandlersAdmin === 'function',
+      null,
+      10000,
+    );
+    await subRowTab.evaluate(() => {
+      const p1 = typeof loadCardActionsAdmin === 'function'
+        ? loadCardActionsAdmin() : Promise.resolve();
+      const p2 = typeof loadCardActionHandlersAdmin === 'function'
+        ? loadCardActionHandlersAdmin() : Promise.resolve();
+      return Promise.all([p1, p2]);
+    });
+    await new Promise(r => setTimeout(r, 800));
+
+    // K.1 — The slot label text matches the action_label value.
+    const subRowSlotLabelFound = await pollPage(
+      subRowTab,
+      ([statusLabel, actionLabel]) => {
+        const wrap = document.getElementById('card-action-handlers-wrap');
+        if (!wrap) return null;
+        const groups = wrap.querySelectorAll('.adm-handlers-group');
+        for (const grp of groups) {
+          const head = grp.querySelector('.adm-handlers-group-head');
+          if (!head || !head.textContent.includes(statusLabel)) continue;
+          const labels = grp.querySelectorAll('.adm-handlers-slot-label');
+          for (const el of labels) {
+            if (el.textContent.trim() === actionLabel) return 'found';
+          }
+        }
+        return null;
+      },
+      [SUB_ROW_STATUS_LABEL, SUB_ROW_ACTION_LABEL],
+      8000,
+    );
+    record(
+      '(L.1) Sub-status slot row label text matches action_label',
+      `"found" — .adm-handlers-slot-label text equals "${SUB_ROW_ACTION_LABEL}" inside group "${SUB_ROW_STATUS_LABEL}"`,
+      `result=${subRowSlotLabelFound}`,
+      subRowSlotLabelFound === 'found',
+    );
+
+    // L.2 — The rowLabel follows the "Sub-status · <sub.label>" pattern.
+    const subRowRowLabelFound = await subRowTab.evaluate(([statusLabel, actionLabel, subLabel]) => {
+      const wrap = document.getElementById('card-action-handlers-wrap');
+      if (!wrap) return 'wrap-missing';
+      const groups = wrap.querySelectorAll('.adm-handlers-group');
+      for (const grp of groups) {
+        const head = grp.querySelector('.adm-handlers-group-head');
+        if (!head || !head.textContent.includes(statusLabel)) continue;
+        const rows = grp.querySelectorAll('tr.adm-handlers-row');
+        for (const row of rows) {
+          const slotLabel = row.querySelector('.adm-handlers-slot-label');
+          if (!slotLabel || slotLabel.textContent.trim() !== actionLabel) continue;
+          const slotSub = row.querySelector('.adm-handlers-slot-sub');
+          if (slotSub && slotSub.textContent.includes('Sub-status') && slotSub.textContent.includes(subLabel)) {
+            return 'found';
+          }
+        }
+      }
+      return 'absent';
+    }, [SUB_ROW_STATUS_LABEL, SUB_ROW_ACTION_LABEL, SUB_ROW_SUB_LABEL]);
+    record(
+      '(L.2) Sub-status slot rowLabel follows "Sub-status · <label>" pattern',
+      `"found" — .adm-handlers-slot-sub contains "Sub-status" and "${SUB_ROW_SUB_LABEL}"`,
+      `result=${subRowRowLabelFound}`,
+      subRowRowLabelFound === 'found',
+    );
+
+    await subRowTab.close();
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -2916,6 +3047,17 @@ async function writeReport(runId, findings) {
     '    handler survives an unrelated lead-status delete, confirming the',
     '    `status_key <> \'\'` guard in the cleanup query prevents accidental',
     '    removal of stage-wide default bindings.',
+    '- **(L) Sub-status slot rows render for labelled sub-statuses** (task #1731):',
+    '  a fresh `lead_status_config` row (stage=SALES) is seeded together with a',
+    '  `lead_substatuses` row whose `action_label` is non-empty ("Book measurement")',
+    '  and whose `label` is "Confirmed".  A fresh admin tab switches to the Action',
+    '  Handlers panel and two assertions run:',
+    '  - **L.1** `.adm-handlers-slot-label` text equals the `action_label` value',
+    '    inside the group for that status.',
+    '  - **L.2** `.adm-handlers-slot-sub` text contains "Sub-status" and the',
+    '    sub-status label, confirming the "Sub-status · <label>" rowLabel pattern.',
+    '  Guards `ActionHandlersPage.tsx` lines 232-239 against a regression that',
+    '  hides or skips sub-status slot rows.',
     '',
     '## Notes',
     '',
