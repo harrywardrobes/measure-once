@@ -31,6 +31,30 @@ export interface DesignVisitStep1Props {
   termsText: string;
   termsVersionNumber?: number | null;
   onDataChange: (data: Step1Data) => void;
+  /** When set, draft values are saved to localStorage under this key and
+   *  restored on mount. Pass only for new-visit mode — edit mode always
+   *  pre-populates from the server record and must not restore old drafts. */
+  draftKey?: string;
+}
+
+function readDraft(key: string): Partial<Step1Data> | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    return parsed as Partial<Step1Data>;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(key: string, data: Step1Data): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch {
+    // localStorage unavailable or quota exceeded — silently ignore
+  }
 }
 
 export function DesignVisitStep1({
@@ -39,19 +63,39 @@ export function DesignVisitStep1({
   furnitureRanges,
   termsText,
   onDataChange,
+  draftKey,
 }: DesignVisitStep1Props) {
-  const [data, setData] = useState<Step1Data>({ ...initialData });
+  const [data, setData] = useState<Step1Data>(() => {
+    if (draftKey) {
+      const draft = readDraft(draftKey);
+      if (draft) {
+        return { ...initialData, ...draft };
+      }
+    }
+    return { ...initialData };
+  });
 
   const onDataChangeRef = useRef(onDataChange);
   useEffect(() => { onDataChangeRef.current = onDataChange; }, [onDataChange]);
+
+  // Sync parent with the initialized state (which may include restored draft
+  // values) so the wizard's source-of-truth is correct even if the user
+  // clicks Next without touching any field.
+  useEffect(() => {
+    onDataChangeRef.current(data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const update = useCallback((patch: Partial<Step1Data>) => {
     setData(prev => {
       const next = { ...prev, ...patch };
       onDataChangeRef.current(next);
+      if (draftKey) {
+        saveDraft(draftKey, next);
+      }
       return next;
     });
-  }, []);
+  }, [draftKey]);
 
   return (
     <Box>

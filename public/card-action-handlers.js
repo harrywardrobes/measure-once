@@ -678,6 +678,7 @@
           termsText: termsText,
           termsVersionNumber: termsVersionNumber,
           onDataChange: function(data) { Object.assign(s1, data); },
+          draftKey: editMode ? undefined : (contactId ? 'dv-s1-' + contactId : undefined),
         });
       } else {
         console.error('[design-visit] mountDesignVisitStep1 not available — React bundle not loaded?');
@@ -866,6 +867,10 @@
             if (!resp.ok) throw new Error(data.error || (editMode ? 'Save failed' : 'Submission failed'));
             _cleanupChans();
             backdrop.remove();
+            // Clear the Step 1 draft now that the visit has been successfully submitted
+            if (!editMode && contactId) {
+              try { localStorage.removeItem('dv-s1-' + contactId); } catch {}
+            }
             const successMsg = editMode
               ? 'Design visit updated. A fresh sign-off email has been sent.'
               : 'Design visit submitted. Customer sign-off email sent.';
