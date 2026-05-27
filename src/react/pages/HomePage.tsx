@@ -7,6 +7,7 @@ import {
   CardActionArea,
   Chip,
   Skeleton,
+  Snackbar,
   Stack,
   Typography,
 } from '@mui/material';
@@ -541,13 +542,16 @@ export function HomePage(): React.ReactElement {
   const [calConnected, setCalConnected] = React.useState(false);
   const [calEvents, setCalEvents] = React.useState<CalendarEvent[]>([]);
 
-  const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, refresh: loadInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
+  const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, company: qbCompany, refresh: loadInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
+
+  const [qbConnectedToast, setQbConnectedToast] = React.useState(false);
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('qb') === 'connected') {
       broadcastConnect();
+      setQbConnectedToast(true);
       params.delete('qb');
       const newSearch = params.toString();
       history.replaceState(null, '', newSearch ? `?${newSearch}` : window.location.pathname);
@@ -652,6 +656,25 @@ export function HomePage(): React.ReactElement {
         roomsByContact={roomsByContact}
         workflow={workflow}
       />
+
+      {/* QuickBooks reconnect success toast */}
+      <Snackbar
+        open={qbConnectedToast}
+        autoHideDuration={6000}
+        onClose={() => setQbConnectedToast(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          severity="success"
+          onClose={() => setQbConnectedToast(false)}
+          variant="filled"
+          sx={{ minWidth: 280 }}
+        >
+          {qbCompany
+            ? `QuickBooks connected — ${qbCompany}`
+            : 'QuickBooks connected successfully'}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
