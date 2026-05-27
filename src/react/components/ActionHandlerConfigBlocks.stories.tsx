@@ -15,6 +15,7 @@ import {
   ModalChrome,
   FIXTURE_LEAD_STATUSES,
   FIXTURE_SUBSTATUSES,
+  HANDLER_TYPES,
 } from '../pages/admin/_HandlerConfigBlockStoryHelpers';
 
 function configBlockForType(type: string): React.ReactNode {
@@ -45,8 +46,9 @@ function configBlockForType(type: string): React.ReactNode {
   }
 }
 
-function LiveAddActionFlowDemo() {
-  const [type, setType] = useState('schedule_visit');
+function LiveAddActionFlowDemo({ initialType }: { initialType: string }) {
+  const [type, setType] = useState(initialType);
+  React.useEffect(() => { setType(initialType); }, [initialType]);
   return (
     <ModalChrome
       selectedType={type}
@@ -79,14 +81,31 @@ type Story = StoryObj;
 
 export const LiveAddActionFlow: Story = {
   name: 'Live — full Add action modal flow',
-  render: () => <LiveAddActionFlowDemo />,
+  args: {
+    initialType: 'schedule_visit',
+  },
+  argTypes: {
+    initialType: {
+      name: 'Initial handler type',
+      description: 'Which handler type the modal opens on. Changing this control resets the dropdown to that type.',
+      options: HANDLER_TYPES.map(t => t.value),
+      control: {
+        type: 'select',
+        labels: Object.fromEntries(HANDLER_TYPES.map(t => [t.value, t.label])),
+      },
+    },
+  },
+  render: (args: { initialType?: string }) => (
+    <LiveAddActionFlowDemo initialType={args.initialType ?? 'schedule_visit'} />
+  ),
   parameters: {
     docs: {
       description: {
         story:
           'The full "Add action" modal with a live type selector. ' +
-          'Changing the **Action type** dropdown swaps the config block in real time. ' +
-          'Try the key transitions: Schedule visit → Start design visit → Show message. ' +
+          'Use the **Initial handler type** control in the Controls panel to open the ' +
+          'story on any of the seven handler types without touching the in-canvas dropdown. ' +
+          'Changing the **Action type** dropdown inside the modal still works as normal. ' +
           'Types with no configurable fields (e.g. Add design visit to calendar, ' +
           'Summarise phone call) show a "no additional configuration" placeholder.',
       },
