@@ -107,7 +107,7 @@ function canEditPrivilege()   { const p = getPrivilegeLevel(); return p === 'man
 // ── API helpers ───────────────────────────────────────────────────────────────
 // @deprecated — React components should import GET/POST/PATCH/PUT/DELETE from
 // src/react/utils/api.ts instead of using these window globals. These remain for
-// vanilla-JS pages (workflow.js, card-action-handlers.js) during migration and
+// vanilla-JS pages (card-action-handlers.js) during migration and
 // will be removed when those files are ported to React.
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
@@ -340,10 +340,10 @@ function renderAuthStatus() {
   };
 })();
 
-// ── Room-cache helper (used by workflow.js) ───────────────────────────────────
+// ── Room-cache helper ─────────────────────────────────────────────────────────
 // Derives a lightweight cache entry for the currently-selected contact from
 // state.allRooms (the full room objects) and stores it in state.contactStageCache.
-// Moved here from workflow-core.js; workflow.js is the only caller.
+// Moved here from workflow-core.js. No longer called by workflow.js (deleted).
 function updateRoomCache() {
   if (!state.selectedContactId) return;
   state.contactStageCache[state.selectedContactId] = state.allRooms.map(r => {

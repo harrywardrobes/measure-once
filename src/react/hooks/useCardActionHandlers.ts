@@ -289,14 +289,16 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
   //
   // window.cardActionHandlerAttrs — attr-string helper (test probe E.2).
   // Generates data-card-action-handler-* attribute strings for eq-card-action
-  // elements injected by vanilla-JS rendering helpers.
+  // elements.  card-action-handlers.js no longer exports this; React is the
+  // sole provider.
   //
   // window.enquiryRowHtml — card-strip HTML helper (test probe E.3).
   // Builds the outer .eq-card HTML including the action-strip div.
+  // card-action-handlers.js no longer exports this; React is the sole provider.
   //
   // Click delegation — handles clicks on [data-card-action-handler-id] elements
-  // (test-injected or vanilla-JS-rendered strips on the sales page).  Registered
-  // here so card-action-modals.js is no longer needed on sales.html.
+  // (test-injected strips).  Registered here so card-action-modals.js is no
+  // longer needed on sales.html.
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>;
     const cleanups: (() => void)[] = [];
@@ -332,7 +334,9 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
     }
 
     // cardActionHandlerAttrs — test probe E.2.
-    // Only register when card-action-handlers.js hasn't already claimed the name.
+    // card-action-handlers.js no longer registers this on window (removed in
+    // task #1428), so this guard is always true.  Kept defensively in case
+    // another provider registers it before React mounts.
     if (typeof w.cardActionHandlerAttrs !== 'function') {
       const safe = (s: unknown) =>
         String(s == null ? '' : s)

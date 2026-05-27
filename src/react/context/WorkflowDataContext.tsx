@@ -115,7 +115,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
       }
       setContactStageCache(cache);
 
-      // Keep window.state.contactStageCache in sync for workflow.js
+      // Keep window.state.contactStageCache in sync for card-action-handlers.js
       try {
         const st = (window as unknown as Record<string, Record<string, unknown>>).state;
         if (st) st.contactStageCache = cache;
@@ -199,7 +199,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
         }
       }
       setWorkflow(wf);
-      // Keep window.state.workflow in sync for workflow.js
+      // Keep window.state.workflow in sync for card-action-handlers.js
       try {
         const st = (window as unknown as Record<string, Record<string, unknown>>).state;
         if (st) st.workflow = wf;
