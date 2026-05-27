@@ -1978,6 +1978,29 @@ router.post('/api/design-visits/uploads', isAuthenticated, requirePrivilege('mem
   }
 });
 
+// DELETE /api/design-visits/uploads/:storageKey — authenticated (member+).
+// Removes an opaque cloud-storage key that was minted by the POST endpoint
+// above. Called fire-and-forget from the wizard when a user removes a photo
+// thumbnail before the visit is saved. Only opaque `obj:…` keys are accepted;
+// legacy data URIs, /uploads/ paths, and external URLs are ignored (204) since
+// they are not stored in the bucket.
+router.delete('/api/design-visits/uploads/:storageKey', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const key = String(req.params.storageKey || '');
+  if (!dvUploads.isOpaqueKey(key)) {
+    // Not a bucket key — nothing to do. Return 204 so the client doesn't retry.
+    return res.status(204).send();
+  }
+  try {
+    await dvUploads.deleteOpaqueKey(key);
+    const kp = key.slice(0, 40);
+    console.log(`[design-visits] upload delete ok key=${kp} user=${req.user?.email || '?'}`);
+    return res.status(204).send();
+  } catch (e) {
+    console.warn('[design-visits] upload delete failed:', e.message);
+    return res.status(500).json({ error: 'Delete failed' });
+  }
+});
+
 // GET /api/design-visit-images/:key?exp=&sig= — public, gated by HMAC.
 // Streams bytes for opaque cloud-storage keys. The signature is minted by
 // `signImageUrl` for both authenticated admin previews and the public

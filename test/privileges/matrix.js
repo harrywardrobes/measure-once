@@ -133,6 +133,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/design-visits/0/submit',    level: 'member',  body: {} },
   { method: 'POST',   path: '/api/design-visits/0/revision',  level: 'admin',   body: {} },
   { method: 'POST',   path: '/api/design-visits/uploads',     level: 'member',  body: {} },
+  { method: 'DELETE', path: '/api/design-visits/uploads/obj%3Afake.jpg', level: 'member' },
   // /api/design-visit-images/:key is registered on the design-visits router
   // BEFORE the global /api isAuthenticated gate (server.js mounts the router
   // at line 121, the gate at line 136), so it's intentionally public and

@@ -130,13 +130,19 @@ export function DesignVisitRoomsStep({
   }
 
   function removeImage(clientId: string, imgIdx: number) {
+    let removedKey: string | null = null;
     setRooms(prev =>
-      prev.map(r =>
-        r.clientId === clientId
-          ? { ...r, data: { ...r.data, images: r.data.images.filter((_, i) => i !== imgIdx) } }
-          : r
-      )
+      prev.map(r => {
+        if (r.clientId !== clientId) return r;
+        const img = r.data.images[imgIdx];
+        if (img) removedKey = img.storageKey;
+        return { ...r, data: { ...r.data, images: r.data.images.filter((_, i) => i !== imgIdx) } };
+      })
     );
+    if (removedKey) {
+      fetch(`/api/design-visits/uploads/${encodeURIComponent(removedKey)}`, { method: 'DELETE' })
+        .catch(err => console.warn('[design-visit] photo delete failed:', err));
+    }
   }
 
   function moveRoom(clientId: string, dir: -1 | 1) {
