@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
@@ -77,6 +78,8 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
 
   const freshStart = dayjs().add(24, 'hour').startOf('hour');
   const restoredStart = draft.startDt ? dayjs(draft.startDt) : null;
+  const restoredStartIsStale =
+    restoredStart !== null && restoredStart.isValid() && !restoredStart.isAfter(dayjs());
   const initialStart =
     restoredStart && restoredStart.isValid() && restoredStart.isAfter(dayjs())
       ? restoredStart
@@ -90,6 +93,7 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
   const [addGcal, setAddGcal] = useState(draft.addGcal ?? addToGoogleDefault);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [startDtWasReset, setStartDtWasReset] = useState(restoredStartIsStale);
 
   useEffect(() => {
     saveDraft(key, { title, duration, location, notes, addGcal, startDt: startDt?.toISOString() });
@@ -185,7 +189,10 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
               <DateTimePicker
                 label="Start"
                 value={startDt}
-                onChange={(v: Dayjs | null) => setStartDt(v)}
+                onChange={(v: Dayjs | null) => {
+                  setStartDt(v);
+                  setStartDtWasReset(false);
+                }}
                 slotProps={{
                   textField: {
                     id: 'cah-dv-start',
@@ -205,6 +212,11 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
                 size="small"
               />
             </Stack>
+            {startDtWasReset && (
+              <Alert severity="info" sx={{ py: 0.5 }}>
+                Your saved date/time was in the past and has been reset.
+              </Alert>
+            )}
             <TextField
               label="Location (optional)"
               value={location}
