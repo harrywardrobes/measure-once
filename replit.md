@@ -118,7 +118,10 @@ no effect on `public/storybook/` (the static build served by Express at
   in `AppThemeProvider`. See `src/react/README.md` and `src/react/ICONS.md`.
 - Mounts are declared in `src/react/main.tsx`. Brand tokens (palette, stage
   colours, radii, typography) live in `src/react/theme.ts` — the canonical
-  source of design tokens; `public/style.css` will eventually be retired.
+  source of design tokens. CSS custom-property tokens are generated into
+  `public/tokens.css` by `scripts/generate-tokens-css.mjs` and loaded by every
+  HTML page. All shared app styles live in `public/app-styles.css`.
+  (`public/style.css` has been retired and deleted.)
 - Icons: named imports from `@mui/icons-material`, no inline `<svg>` in React.
 
 ## Privilege checks
