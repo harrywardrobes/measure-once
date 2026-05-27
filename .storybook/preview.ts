@@ -6,7 +6,6 @@ import { StorybookThemeProvider } from '../src/react/StorybookThemeProvider';
  * Storybook loads the same stylesheets the production app uses, so every
  * component renders against the real tokens defined in `public/tokens.css`
  * and `public/app-styles.css`.
- * Tailwind utilities resolve through the JIT build in `public/tailwind.css`.
  *
  * Every story is wrapped in StorybookThemeProvider — a slim variant of
  * AppThemeProvider that provides the MUI theme and design tokens but omits
@@ -23,7 +22,6 @@ import { StorybookThemeProvider } from '../src/react/StorybookThemeProvider';
  */
 import '../public/tokens.css';
 import '../public/app-styles.css';
-import '../public/tailwind.css';
 
 /* ── Storybook fetch stub ─────────────────────────────────────────────────
  * Intercepts unauthenticated API calls that components fire on mount.
