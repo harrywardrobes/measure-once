@@ -79,15 +79,6 @@ interface WindowGlobals {
   LEAD_STATUS_OPTIONS?: LeadStatusOption[];
   loadWorkflow?: () => Promise<void>;
   loadLeadStatuses?: () => Promise<void>;
-  stageOrLeadStatusActionLabel?: (
-    stageKey: string,
-    leadStatusKey: string | undefined,
-    substageId: string | undefined,
-  ) => string;
-  substatusActionLabelLookup?: (
-    leadStatusKey: string | undefined,
-    hwSubstatusValue: string | undefined,
-  ) => string;
   __salesBoardBootstrapFailed?: { code: string | undefined; message: string } | undefined;
 }
 
