@@ -104,7 +104,7 @@ export function AdminRequestsPage() {
   useEffect(() => {
     load();
     const off = onAdminChange((k) => {
-      if (k === 'requests' || k === 'photos' || k === 'trades' || k === 'roles' || k === 'team') load();
+      if (k === 'requests' || k === 'photos' || k === 'photos_rejected' || k === 'trades' || k === 'roles' || k === 'team') load();
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -249,7 +249,7 @@ export function AdminRequestsPage() {
         toast(msg, true);
       } else {
         toast('Photo rejected');
-        emitAdminChange('photos');
+        emitAdminChange('photos_rejected');
       }
     };
     xhr.onerror = () => {

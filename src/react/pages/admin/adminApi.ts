@@ -58,13 +58,14 @@ export function fmtRelativeAge(iso?: string | null): string {
 const CHANNEL_NAME = 'admin_data_changed';
 
 export type AdminChangeKind =
-  | 'team'      // users + allowed
-  | 'requests'  // access requests
-  | 'photos'    // photo approvals
-  | 'trades'    // trade submissions
-  | 'roles'     // job roles
-  | 'capabilities' // perm matrix
-  | 'audit';    // anything that should invalidate the audit feed
+  | 'team'           // users + allowed
+  | 'requests'       // access requests
+  | 'photos'         // photo approved
+  | 'photos_rejected' // photo rejected
+  | 'trades'         // trade submissions
+  | 'roles'          // job roles
+  | 'capabilities'   // perm matrix
+  | 'audit';         // anything that should invalidate the audit feed
 
 let _bc: BroadcastChannel | null = null;
 function getChannel(): BroadcastChannel | null {

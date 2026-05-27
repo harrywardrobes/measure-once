@@ -16,6 +16,7 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
@@ -82,14 +83,19 @@ export function ProfilePage(): React.ReactElement {
   const [error, setError] = React.useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = React.useState(0);
   const [approvalSuccess, setApprovalSuccess] = React.useState(false);
+  const [rejectionFeedback, setRejectionFeedback] = React.useState(false);
   const approvalTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rejectionTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
-    return () => { if (approvalTimerRef.current) clearTimeout(approvalTimerRef.current); };
+    return () => {
+      if (approvalTimerRef.current) clearTimeout(approvalTimerRef.current);
+      if (rejectionTimerRef.current) clearTimeout(rejectionTimerRef.current);
+    };
   }, []);
 
-  // Listen for admin photo-approval events so the profile page can show a
-  // brief success indicator when an admin approves the pending photo.
+  // Listen for admin photo-approval/rejection events so the profile page can
+  // show brief feedback when an admin acts on the pending photo.
   React.useEffect(() => {
     if (!appUser) return;
     const handleApproval = () => {
@@ -105,10 +111,22 @@ export function ProfilePage(): React.ReactElement {
         return prev;
       });
     };
+    const handleRejection = () => {
+      setProfile((prev) => {
+        if (prev?.has_pending_photo) {
+          setRejectionFeedback(true);
+          if (rejectionTimerRef.current) clearTimeout(rejectionTimerRef.current);
+          rejectionTimerRef.current = setTimeout(() => setRejectionFeedback(false), 3500);
+          setReloadNonce((n) => n + 1);
+        }
+        return prev;
+      });
+    };
 
     const winHandler = (ev: Event) => {
       const kind = (ev as CustomEvent<{ kind: string }>).detail?.kind;
       if (kind === 'photos') handleApproval();
+      if (kind === 'photos_rejected') handleRejection();
     };
     window.addEventListener('admin:change', winHandler);
 
@@ -117,6 +135,7 @@ export function ProfilePage(): React.ReactElement {
       bc = new BroadcastChannel('admin_data_changed');
       bc.onmessage = (ev: MessageEvent) => {
         if (ev?.data?.kind === 'photos') handleApproval();
+        if (ev?.data?.kind === 'photos_rejected') handleRejection();
       };
     } catch { /* BroadcastChannel not available */ }
 
@@ -202,7 +221,7 @@ export function ProfilePage(): React.ReactElement {
         Back
       </Button>
 
-      <IdentityCard profile={profile} appUser={appUser} onReload={reload} approvalSuccess={approvalSuccess} />
+      <IdentityCard profile={profile} appUser={appUser} onReload={reload} approvalSuccess={approvalSuccess} rejectionFeedback={rejectionFeedback} />
       <RoleCard profile={profile} />
       <GoogleCalendarCard />
       <ChangePasswordCard profile={profile} />
@@ -228,11 +247,13 @@ function IdentityCard({
   appUser,
   onReload,
   approvalSuccess = false,
+  rejectionFeedback = false,
 }: {
   profile: Profile;
   appUser: AppUser;
   onReload: () => void;
   approvalSuccess?: boolean;
+  rejectionFeedback?: boolean;
 }) {
   const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ')
     || profile.email || 'User';
@@ -340,7 +361,7 @@ function IdentityCard({
               sx={{
                 width: 64, height: 64, bgcolor: 'primary.light', fontWeight: 700,
                 outline: '3px solid',
-                outlineColor: approvalSuccess ? 'success.main' : 'transparent',
+                outlineColor: approvalSuccess ? 'success.main' : rejectionFeedback ? 'warning.main' : 'transparent',
                 transition: 'outline-color 0.4s ease',
               }}
             >
@@ -382,6 +403,13 @@ function IdentityCard({
               <Box sx={{ mt: 0.5 }}>
                 <Pill variant="warn" label="Photo awaiting approval" />
               </Box>
+            ) : rejectionFeedback ? (
+              <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, alignItems: 'center' }}>
+                <HighlightOffIcon sx={{ fontSize: 15, color: 'warning.main', flexShrink: 0 }} />
+                <Typography variant="caption" sx={{ color: 'warning.dark', fontWeight: 600 }}>
+                  Photo not approved — please submit a new one
+                </Typography>
+              </Stack>
             ) : !photoSrc ? (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                 Upload a professional photo with a plain background
