@@ -10,8 +10,12 @@
  *   Phase 1 — static lints  (all in parallel; no server or DB required)
  *   Phase 2 — DB-isolated suites  (bounded parallel pool; each suite gets
  *              its own temp DB via scripts/with-test-db.js)
+ *   Phase 3 — build:storybook (sequential), then test:storybook-output-clean
+ *              and test:storybook-smoke in parallel
  *
  * Phases 1 and 2 run concurrently with each other once the build finishes.
+ * Phase 3 runs concurrently with Phases 1 and 2 (the Storybook build starts
+ * immediately after Phase 0 completes).
  * Within Phase 2 the pool size is controlled by the CI_PARALLEL env-var
  * (default: 5).  Raising it speeds things up; lowering it reduces peak load.
  *
@@ -129,7 +133,6 @@ const DB_SUITES = [
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',
   'test:scheduling-past-time-guard:ci',
-  'test:storybook-output-clean',
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -146,15 +149,18 @@ function log(msg) {
  * Run a single npm script; returns a Promise that resolves to a result object.
  * Output is only buffered (and later printed) when the suite fails; passing
  * suites discard their output to keep peak memory low during large parallel runs.
+ *
+ * @param {string} scriptName - npm script to run
+ * @param {Record<string,string>} [extraEnv] - extra env vars merged into process.env
  */
-function runScript(scriptName) {
+function runScript(scriptName, extraEnv = {}) {
   return new Promise((resolve) => {
     const started = Date.now();
     const chunks  = [];
 
     const child = spawn(NPM, ['run', scriptName], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env:   process.env,
+      env:   { ...process.env, ...extraEnv },
     });
 
     child.stdout.on('data', (d) => chunks.push({ stream: 'out', data: d }));
@@ -254,6 +260,29 @@ async function runPool(suites, label) {
   });
 }
 
+/**
+ * Phase 3: build Storybook sequentially, then run the two Storybook test
+ * suites in parallel, passing STORYBOOK_OUT_DIR so they reuse the artifact
+ * produced by the build step rather than triggering a second build.
+ * Returns all results (build failure included as a synthetic failed result
+ * so it surfaces in the summary).
+ */
+async function runStorybookPhase() {
+  log('\nPhase 3: build:storybook');
+  const buildResult = await runScript('build:storybook');
+  if (!buildResult.ok) {
+    log(`Phase 3: build:storybook FAILED  (${fmtMs(buildResult.durationMs)})`);
+    return [buildResult];
+  }
+  log(`Phase 3: build:storybook passed  (${fmtMs(buildResult.durationMs)})`);
+
+  const sbEnv = { STORYBOOK_OUT_DIR: 'public/storybook' };
+  const STORYBOOK_SUITES = ['test:storybook-output-clean', 'test:storybook-smoke'];
+  log(`Phase 3 (storybook): starting ${STORYBOOK_SUITES.length} suite(s) in parallel`);
+  for (const s of STORYBOOK_SUITES) log(`  → ${s}`);
+  return Promise.all(STORYBOOK_SUITES.map((s) => runScript(s, sbEnv)));
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -271,15 +300,16 @@ async function main() {
   }
   log(`Phase 0: build:react passed  (${fmtMs(buildResult.durationMs)})`);
 
-  // ── Phases 1 & 2: run concurrently ─────────────────────────────────────────
-  log('\nPhase 1 + 2: static lints and DB suites (running concurrently)');
-  const [staticResults, dbResults] = await Promise.all([
-    runAll(STATIC_SUITES, 'Phase 1 (static)'),
-    runPool(DB_SUITES,    'Phase 2 (DB-isolated)'),
+  // ── Phases 1, 2 & 3: run concurrently ──────────────────────────────────────
+  log('\nPhase 1 + 2 + 3: static lints, DB suites, and Storybook (running concurrently)');
+  const [staticResults, dbResults, storybookResults] = await Promise.all([
+    runAll(STATIC_SUITES,  'Phase 1 (static)'),
+    runPool(DB_SUITES,     'Phase 2 (DB-isolated)'),
+    runStorybookPhase(),
   ]);
 
   // ── Summary ─────────────────────────────────────────────────────────────────
-  const allResults  = [...staticResults, ...dbResults];
+  const allResults  = [...staticResults, ...dbResults, ...storybookResults];
   const failed      = allResults.filter((r) => !r.ok);
   const passed      = allResults.filter((r) => r.ok);
   const wallElapsed = Date.now() - wallStart;
