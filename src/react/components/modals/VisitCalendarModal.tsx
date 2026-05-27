@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
@@ -63,22 +64,37 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
   const [addGcal, setAddGcal]   = useState(addToGoogleDefault);
   const [error, setError]       = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [startTimeWarning, setStartTimeWarning] = useState(false);
+  const [pastConfirmOpen, setPastConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setStartTimeWarning(false);
+      return;
+    }
+
+    function checkApproaching() {
+      if (!startDt || !startDt.isValid()) {
+        setStartTimeWarning(false);
+        return;
+      }
+      const minutesUntilStart = startDt.diff(dayjs(), 'minute');
+      setStartTimeWarning(minutesUntilStart < 15);
+    }
+
+    checkApproaching();
+    const interval = setInterval(checkApproaching, 60_000);
+    return () => clearInterval(interval);
+  }, [open, startDt]);
 
   function handleClose() {
     setError('');
     onClose();
   }
 
-  async function handleSubmit() {
-    setError('');
-    if (!title.trim()) { setError('Title is required.'); return; }
-    if (!startDt || !startDt.isValid()) { setError('Start time is required.'); return; }
+  async function doSubmit() {
+    if (!startDt || !startDt.isValid()) return;
     const durationInt = parseInt(duration, 10);
-    if (!Number.isInteger(durationInt) || durationInt < 5) {
-      setError('Duration must be ≥ 5 minutes.');
-      return;
-    }
-
     const start = startDt.toDate();
     const end   = new Date(start.getTime() + durationInt * 60000);
 
@@ -125,12 +141,58 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
     }
   }
 
+  function handleSubmit() {
+    setError('');
+    if (!title.trim()) { setError('Title is required.'); return; }
+    if (!startDt || !startDt.isValid()) { setError('Start time is required.'); return; }
+    const durationInt = parseInt(duration, 10);
+    if (!Number.isInteger(durationInt) || durationInt < 5) {
+      setError('Duration must be ≥ 5 minutes.');
+      return;
+    }
+
+    if (startDt.isBefore(dayjs())) {
+      setPastConfirmOpen(true);
+      return;
+    }
+
+    void doSubmit();
+  }
+
   const dialogTitle = ctx.contactName
     ? `Schedule ${typeLabel.toLowerCase()} for ${ctx.contactName}`
     : `Schedule ${typeLabel.toLowerCase()}`;
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <Dialog
+        open={pastConfirmOpen}
+        onClose={() => setPastConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Schedule in the past?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            This time has already passed — schedule anyway?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPastConfirmOpen(false)}>Go back</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            data-testid="cah-past-confirm"
+            onClick={() => {
+              setPastConfirmOpen(false);
+              void doSubmit();
+            }}
+          >
+            Schedule anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
         <DialogTitle>{dialogTitle}</DialogTitle>
         <DialogContent>
@@ -168,6 +230,13 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
                 size="small"
               />
             </Stack>
+            {startTimeWarning && (
+              <Alert severity="warning" sx={{ py: 0.5 }}>
+                {startDt && startDt.isBefore(dayjs())
+                  ? 'The selected start time has already passed. Please choose a future time.'
+                  : 'The selected start time is less than 15 minutes away. You may want to update it.'}
+              </Alert>
+            )}
             <TextField
               label="Location (optional)"
               value={location}

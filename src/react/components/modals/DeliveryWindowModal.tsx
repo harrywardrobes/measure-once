@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
@@ -67,19 +68,38 @@ export function DeliveryWindowModal(props: Props) {
   const [updateGcal, setUpdateGcal] = useState(isEdit && !!visit?.googleEventId);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [startTimeWarning, setStartTimeWarning] = useState(false);
+  const [pastConfirmOpen, setPastConfirmOpen] = useState(false);
+
+  useEffect(() => {
+    if (!props.open) {
+      setStartTimeWarning(false);
+      return;
+    }
+
+    function checkApproaching() {
+      const start = range[0];
+      if (!start || !start.isValid()) {
+        setStartTimeWarning(false);
+        return;
+      }
+      const minutesUntilStart = start.diff(dayjs(), 'minute');
+      setStartTimeWarning(minutesUntilStart < 15);
+    }
+
+    checkApproaching();
+    const interval = setInterval(checkApproaching, 60_000);
+    return () => clearInterval(interval);
+  }, [props.open, range]);
 
   function handleClose() {
     setError('');
     props.onClose();
   }
 
-  async function handleSubmit() {
-    setError('');
-    if (!title.trim()) { setError('Title is required.'); return; }
+  async function doSubmit() {
     const [start, end] = range;
-    if (!start || !start.isValid()) { setError('Delivery window start is required.'); return; }
-    if (!end || !end.isValid()) { setError('Delivery window end is required.'); return; }
-    if (!end.isAfter(start)) { setError('End must be after start.'); return; }
+    if (!start || !start.isValid() || !end || !end.isValid()) return;
 
     setSubmitting(true);
     const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
@@ -160,12 +180,56 @@ export function DeliveryWindowModal(props: Props) {
     }
   }
 
+  function handleSubmit() {
+    setError('');
+    if (!title.trim()) { setError('Title is required.'); return; }
+    const [start, end] = range;
+    if (!start || !start.isValid()) { setError('Delivery window start is required.'); return; }
+    if (!end || !end.isValid()) { setError('Delivery window end is required.'); return; }
+    if (!end.isAfter(start)) { setError('End must be after start.'); return; }
+
+    if (start.isBefore(dayjs())) {
+      setPastConfirmOpen(true);
+      return;
+    }
+
+    void doSubmit();
+  }
+
   const dialogTitle = isEdit
     ? (contactName ? `Edit delivery window for ${contactName}` : 'Edit delivery window')
     : (contactName ? `Schedule delivery window for ${contactName}` : 'Schedule delivery window');
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <Dialog
+        open={pastConfirmOpen}
+        onClose={() => setPastConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Schedule in the past?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            This time has already passed — schedule anyway?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPastConfirmOpen(false)}>Go back</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            data-testid="cah-past-confirm"
+            onClick={() => {
+              setPastConfirmOpen(false);
+              void doSubmit();
+            }}
+          >
+            Schedule anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog open={props.open} onClose={handleClose} maxWidth="sm" fullWidth>
         <DialogTitle>{dialogTitle}</DialogTitle>
         <DialogContent>
@@ -185,6 +249,13 @@ export function DeliveryWindowModal(props: Props) {
               localeText={{ start: 'Window start', end: 'Window end' }}
               slotProps={{ textField: { size: 'small', fullWidth: true } }}
             />
+            {startTimeWarning && (
+              <Alert severity="warning" sx={{ py: 0.5 }}>
+                {range[0] && range[0].isBefore(dayjs())
+                  ? 'The selected start time has already passed. Please choose a future time.'
+                  : 'The selected start time is less than 15 minutes away. You may want to update it.'}
+              </Alert>
+            )}
             <TextField
               id="cah-dw-location"
               label="Location (optional)"
