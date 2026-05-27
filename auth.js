@@ -233,7 +233,7 @@ async function notifyUserOfPhotoApproval(email) {
   const transport = createMailTransport();
   if (!transport) {
     console.warn(`  SMTP not configured — skipping photo-approval email for ${email}.`);
-    return;
+    return 'skipped';
   }
   const profileUrl = `${appBaseUrl()}/profile`;
   const from = buildFromHeader();
@@ -257,8 +257,10 @@ async function notifyUserOfPhotoApproval(email) {
       `,
     });
     console.log(`  Photo-approval email sent to ${email}`);
+    return 'sent';
   } catch (err) {
     console.error('  Failed to send photo-approval email:', err.message);
+    return 'failed';
   }
 }
 
@@ -266,7 +268,7 @@ async function notifyUserOfPhotoRejection(email) {
   const transport = createMailTransport();
   if (!transport) {
     console.warn(`  SMTP not configured — skipping photo-rejection email for ${email}.`);
-    return;
+    return 'skipped';
   }
   const profileUrl = `${appBaseUrl()}/profile`;
   const from = buildFromHeader();
@@ -293,8 +295,10 @@ async function notifyUserOfPhotoRejection(email) {
       `,
     });
     console.log(`  Photo-rejection email sent to ${email}`);
+    return 'sent';
   } catch (err) {
     console.error('  Failed to send photo-rejection email:', err.message);
+    return 'failed';
   }
 }
 
@@ -2526,10 +2530,13 @@ async function setupAuth(app) {
         [req.params.id]
       );
       if (r.rowCount === 0) return res.status(404).json({ error: 'No pending photo found.' });
-      await logAdminAction(req.user?.claims?.email || req.user?.email || null, 'approve_profile_photo', r.rows[0].email, 'Profile photo approved');
-      notifyUserOfPhotoApproval(r.rows[0].email).catch(err =>
-        console.error('  Photo-approval notification error:', err.message)
-      );
+      const approvalNotifyStatus = await notifyUserOfPhotoApproval(r.rows[0].email);
+      const approvalDetails = approvalNotifyStatus === 'sent'
+        ? `Profile photo approved; email notification sent to ${r.rows[0].email}`
+        : approvalNotifyStatus === 'skipped'
+          ? 'Profile photo approved; email notification skipped (SMTP not configured)'
+          : 'Profile photo approved; email notification failed to send';
+      await logAdminAction(req.user?.claims?.email || req.user?.email || null, 'approve_profile_photo', r.rows[0].email, approvalDetails);
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -2544,10 +2551,13 @@ async function setupAuth(app) {
         [req.params.id]
       );
       if (r.rowCount === 0) return res.status(404).json({ error: 'No pending photo found.' });
-      await logAdminAction(req.user?.claims?.email || req.user?.email || null, 'reject_profile_photo', r.rows[0].email, 'Profile photo rejected');
-      notifyUserOfPhotoRejection(r.rows[0].email).catch(err =>
-        console.error('  Photo-rejection notification error:', err.message)
-      );
+      const rejectNotifyStatus = await notifyUserOfPhotoRejection(r.rows[0].email);
+      const rejectDetails = rejectNotifyStatus === 'sent'
+        ? `Profile photo rejected; email notification sent to ${r.rows[0].email}`
+        : rejectNotifyStatus === 'skipped'
+          ? 'Profile photo rejected; email notification skipped (SMTP not configured)'
+          : 'Profile photo rejected; email notification failed to send';
+      await logAdminAction(req.user?.claims?.email || req.user?.email || null, 'reject_profile_photo', r.rows[0].email, rejectDetails);
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
