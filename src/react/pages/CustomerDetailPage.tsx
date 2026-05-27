@@ -533,7 +533,7 @@ export function CustomerDetailPage() {
 
       {/* ── Header: skeleton / error / real ────────────────────────────────── */}
       {loading && (
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 shadow-sm">
+        <div className="px-4 sm:px-6 py-4 shadow-sm" style={{ background: 'var(--paper)', borderBottom: '1px solid var(--stone)' }}>
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <div className="skeleton-line skeleton-wf-name" />
@@ -549,7 +549,7 @@ export function CustomerDetailPage() {
       )}
 
       {!loading && error && !contact && (
-        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 shadow-sm">
+        <div className="px-4 sm:px-6 py-4 shadow-sm" style={{ background: 'var(--paper)', borderBottom: '1px solid var(--stone)' }}>
           <p className="text-sm text-red-500">{error}</p>
           <button
             onClick={() => void bootstrap()}

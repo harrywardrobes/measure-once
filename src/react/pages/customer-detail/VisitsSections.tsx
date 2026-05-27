@@ -35,9 +35,9 @@ export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, load
       <div style={sxHeader}>
         <span style={sxHeaderLabel}>Upcoming visits</span>
       </div>
-      {loadingVisits && <p className="text-sm text-slate-400 italic px-1">Loading…</p>}
+      {loadingVisits && <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>Loading…</p>}
       {!loadingVisits && upcomingVisits.length === 0 && (
-        <p className="text-sm text-slate-400 italic px-1">No upcoming visits.</p>
+        <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>No upcoming visits.</p>
       )}
       {!loadingVisits && upcomingVisits.length > 0 && (
         <div className="space-y-2">
@@ -68,9 +68,9 @@ export function PastVisitsSection({ pastVisits, loadingVisits }: Pick<Props, 'pa
       <div style={sxHeader}>
         <span style={sxHeaderLabel}>Past visits</span>
       </div>
-      {loadingVisits && <p className="text-sm text-slate-400 italic px-1">Loading…</p>}
+      {loadingVisits && <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>Loading…</p>}
       {!loadingVisits && pastVisits.length === 0 && (
-        <p className="text-sm text-slate-400 italic px-1">No past visits.</p>
+        <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>No past visits.</p>
       )}
       {!loadingVisits && pastVisits.length > 0 && (
         <>
@@ -94,7 +94,8 @@ export function PastVisitsSection({ pastVisits, loadingVisits }: Pick<Props, 'pa
           </div>
           {rest.length > 0 && (
             <button
-              className="text-xs text-blue-600 mt-2 hover:underline"
+              className="text-xs mt-2 hover:underline"
+              style={{ color: 'var(--orchid)' }}
               onClick={() => setExpanded(v => !v)}
             >
               {expanded ? 'Show fewer' : `Show ${rest.length} more`}

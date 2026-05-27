@@ -108,38 +108,39 @@ export function InvoicesSection({ contact, qb }: Props) {
       <div id="invoices-section" className="mb-5">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' }}>Invoices</span>
-          {qb.company && <span className="text-xs text-slate-400 ml-2">· {qb.company}</span>}
+          {qb.company && <span className="text-xs ml-2" style={{ color: 'var(--stone-deep)' }}>· {qb.company}</span>}
         </div>
 
         {qb.loading && (
-          <p className="text-sm text-slate-400 italic px-1">Loading invoices…</p>
+          <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>Loading invoices…</p>
         )}
         {qb.loadError && (
           <p className="text-sm text-red-500 px-1">{qb.error || 'Failed to load invoices.'}</p>
         )}
         {qb.loaded && matched.length === 0 && (
-          <p className="text-sm text-slate-400 italic px-1">No invoices found for this customer.</p>
+          <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>No invoices found for this customer.</p>
         )}
         {qb.loaded && matched.length > 0 && (
           <div className="space-y-2">
             {matched.map(inv => (
               <div
                 key={inv.Id}
-                className="inv-row flex items-center justify-between gap-3 px-1 py-1.5 border-b border-slate-100 cursor-pointer hover:bg-slate-50 rounded"
+                className="inv-row flex items-center justify-between gap-3 px-1 py-1.5 cursor-pointer rounded"
+                style={{ borderBottom: '1px solid var(--stone)' }}
                 onClick={() => openDrawer(inv.Id)}
                 role="button"
                 tabIndex={0}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') openDrawer(inv.Id); }}
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-xs text-slate-500">#{inv.DocNumber}</span>
+                  <span className="text-xs" style={{ color: 'var(--ink-4)' }}>#{inv.DocNumber}</span>
                   {statusPill(inv)}
                 </div>
-                <div className="flex items-center gap-3 shrink-0 text-xs text-slate-500">
+                <div className="flex items-center gap-3 shrink-0 text-xs" style={{ color: 'var(--ink-4)' }}>
                   <span>{fmtQBDate(inv.TxnDate)}</span>
-                  <span className="font-semibold text-slate-700">{fmtGBP(inv.TotalAmt)}</span>
+                  <span className="font-semibold" style={{ color: 'var(--ink-2)' }}>{fmtGBP(inv.TotalAmt)}</span>
                   {inv.Balance != null && Number(inv.Balance) > 0 && (
-                    <span className="text-slate-400">due {fmtGBP(inv.Balance)}</span>
+                    <span style={{ color: 'var(--stone-deep)' }}>due {fmtGBP(inv.Balance)}</span>
                   )}
                   <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/>

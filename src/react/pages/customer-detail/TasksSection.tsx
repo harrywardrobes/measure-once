@@ -127,12 +127,13 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
   return (
     <div id="tasks-section" className="mb-6">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-700">Tasks</h3>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>Tasks</h3>
         {!isViewer && (
           <button
             id="add-task-btn"
             onClick={() => setShowAddTask(v => !v)}
-            className="text-xs font-semibold text-blue-600 hover:text-blue-700 px-2.5 py-1 rounded-lg hover:bg-blue-50 transition"
+            className="text-xs font-semibold px-2.5 py-1 rounded-lg transition"
+            style={{ color: 'var(--orchid)' }}
           >
             {showAddTask ? 'Cancel' : '+ Add task'}
           </button>
@@ -156,7 +157,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
             value={subject}
             onChange={e => setSubject(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && saveNewTask()}
-            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm mb-2 focus:outline-none focus:border-blue-400 bg-white"
+            className="w-full border rounded-xl px-4 py-2.5 text-sm mb-2 focus:outline-none"
             style={{ fontSize: 16 }}
           />
           <div className="flex gap-2 mb-2">
@@ -165,14 +166,14 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
               type="date"
               value={dueDate}
               onChange={e => setDueDate(e.target.value)}
-              className="flex-1 min-w-0 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 bg-white"
+              className="flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none"
               style={{ fontSize: 16 }}
             />
             <select
               id="task-stage"
               value={stageKey}
               onChange={e => setStageKey(e.target.value)}
-              className="flex-1 min-w-0 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-400 bg-white"
+              className="flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none"
               style={{ fontSize: 16 }}
             >
               <option value="">No stage</option>
@@ -182,8 +183,8 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
           <button
             onClick={saveNewTask}
             disabled={saving}
-            className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium py-2.5 rounded-xl transition"
-            style={{ minHeight: 44 }}
+            className="w-full text-white text-sm font-medium py-2.5 rounded-xl transition task-save-btn"
+            style={{ minHeight: 44, background: 'var(--orchid)' }}
           >
             {saving ? 'Saving…' : 'Save task'}
           </button>
@@ -327,7 +328,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
           })}
         </div>
       ) : (
-        <p className="text-sm text-slate-400 italic">No tasks yet.</p>
+        <p className="text-sm italic" style={{ color: 'var(--stone-deep)' }}>No tasks yet.</p>
       )}
     </div>
   );

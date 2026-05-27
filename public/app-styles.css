@@ -462,24 +462,13 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 }
 .lead-substatus-add:hover { background: var(--paper-deep); color: var(--ink-2); }
 
-/* ── Tailwind colour overrides ───────────────────────────────────────────────── */
-/* Override Tailwind blue utilities used throughout app.js HTML strings */
-.text-blue-600, .text-blue-500 { color: var(--orchid) !important; }
-.bg-blue-600  { background-color: var(--orchid) !important; }
-.bg-blue-50   { background-color: var(--orchid-tint) !important; }
-.border-blue-400, .border-blue-600 { border-color: var(--orchid-soft) !important; }
-.focus\:border-blue-400:focus { border-color: var(--orchid-soft) !important; }
-.focus\:bg-white:focus { background-color: var(--paper) !important; }
+/* ── Customer-detail invoice row hover ─────────────────────────────────────── */
+.inv-row:hover { background: var(--paper-deep); }
 
-
-/* Tailwind bg/text overrides for slate tones → brand */
-
-
-.text-slate-500 { color: var(--ink-4) !important; }
-.text-slate-400 { color: var(--stone-deep) !important; }
-.border-slate-200 { border-color: var(--stone) !important; }
-.border-slate-100 { border-color: var(--stone) !important; }
-.bg-white       { background-color: var(--paper) !important; }
+/* ── Task section button hover/active states ───────────────────────────────── */
+#add-task-btn:hover { background: var(--orchid-tint); }
+.task-save-btn:hover:not(:disabled) { filter: brightness(0.92); }
+.task-save-btn:active:not(:disabled) { filter: brightness(0.85); }
 
 /* Inputs */
 input[type="text"], input[type="date"], select, textarea {

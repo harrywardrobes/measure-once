@@ -34,10 +34,10 @@ export function WhatsAppHistory({ contactId, phone, messages, loading, error, en
       <div style={sxHeader}>
         <span style={sxHeaderLabel}>WhatsApp history</span>
       </div>
-      {loading && <p className="text-sm text-slate-400 italic px-1">Loading…</p>}
+      {loading && <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>Loading…</p>}
       {!loading && error && <p className="text-sm text-red-500 px-1">Could not load WhatsApp history.</p>}
       {!loading && !error && messages.length === 0 && (
-        <p className="text-sm text-slate-400 italic px-1">No messages yet.</p>
+        <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>No messages yet.</p>
       )}
       {!loading && !error && messages.length > 0 && (
         <div className="space-y-1.5">
