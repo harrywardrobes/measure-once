@@ -10,9 +10,14 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ShieldIcon from '@mui/icons-material/Shield';
+import SyncIcon from '@mui/icons-material/Sync';
+import EventIcon from '@mui/icons-material/Event';
+import ReceiptIcon from '@mui/icons-material/Receipt';
+import StorageIcon from '@mui/icons-material/Storage';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrivilegeSync } from '../hooks/usePrivilegeSync';
+import { useServiceStatuses, type ConnectionService, type ServiceStatus } from '../context/ConnectionToastContext';
 import { BRAND_COLORS } from '../theme';
 
 export type { CurrentUser as HeaderUser } from '../hooks/useCurrentUser';
@@ -61,10 +66,94 @@ const ICON_BTN_ACTIVE_SX = {
   color: '#fff',
 } as const;
 
+// ── Service status icon config ─────────────────────────────────────────────────
+
+const SERVICE_CONFIG: Record<ConnectionService, {
+  label: string;
+  Icon: React.ComponentType<{ fontSize?: 'small' | 'medium' }>;
+}> = {
+  hubspot:    { label: 'HubSpot',    Icon: SyncIcon },
+  google:     { label: 'Google',     Icon: EventIcon },
+  quickbooks: { label: 'QuickBooks', Icon: ReceiptIcon },
+  database:   { label: 'Database',   Icon: StorageIcon },
+};
+
+const SERVICE_KEYS: ConnectionService[] = ['hubspot', 'google', 'quickbooks', 'database'];
+
+function statusLabel(service: ConnectionService, status: ServiceStatus): string {
+  const name = SERVICE_CONFIG[service].label;
+  if (status === 'error') return `${name} — disconnected`;
+  if (status === 'warning') return `${name} — degraded`;
+  return name;
+}
+
+function statusBadgeColor(status: ServiceStatus): string {
+  if (status === 'error') return '#ef4444';   // red-500
+  if (status === 'warning') return '#f59e0b'; // amber-500
+  return 'transparent';
+}
+
+interface ServiceStatusBadgeProps {
+  service: ConnectionService;
+  status: ServiceStatus;
+}
+
+function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps) {
+  const { label, Icon } = SERVICE_CONFIG[service];
+  const badgeColor = statusBadgeColor(status);
+  const tip = statusLabel(service, status);
+  const ariaLabel = `${label} status: ${status === 'error' ? 'disconnected' : status === 'warning' ? 'degraded' : 'ok'}`;
+
+  return (
+    <Tooltip title={tip}>
+      <Box
+        component="span"
+        aria-label={ariaLabel}
+        sx={{ display: 'inline-flex', position: 'relative' }}
+      >
+        <Badge
+          variant="dot"
+          overlap="circular"
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+          sx={{
+            '& .MuiBadge-dot': {
+              backgroundColor: badgeColor,
+              border: `1.5px solid ${BRAND_COLORS.plum}`,
+              width: 8,
+              height: 8,
+              minWidth: 8,
+              borderRadius: '50%',
+            },
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 28,
+              height: 28,
+              borderRadius: '8px',
+              color: status === 'error' ? '#fca5a5' : status === 'warning' ? '#fcd34d' : 'rgba(255,255,255,0.7)',
+              bgcolor: 'rgba(255,255,255,0.08)',
+              border: `1px solid ${status === 'error' ? 'rgba(252,165,165,0.4)' : status === 'warning' ? 'rgba(252,211,77,0.4)' : 'rgba(255,255,255,0.12)'}`,
+            }}
+          >
+            <Icon fontSize="small" />
+          </Box>
+        </Badge>
+      </Box>
+    </Tooltip>
+  );
+}
+
+// ── GlobalHeader ───────────────────────────────────────────────────────────────
+
 export function GlobalHeader() {
   const [path, setPath] = useState<string>(() => window.location.pathname);
   const { user } = useCurrentUser();
   const [pendingCount, setPendingCount] = useState<number>(0);
+  const serviceStatuses = useServiceStatuses();
 
   usePrivilegeSync();
 
@@ -111,6 +200,12 @@ export function GlobalHeader() {
   const profileActive = path === '/profile' || path.startsWith('/profile/');
   const photoSrc = user ? resolvePhotoSrc(user) : null;
   const initials = user ? resolveInitials(user) : '';
+
+  // Collect services with a non-ok status for display
+  const unhealthyServices = SERVICE_KEYS.filter((svc) => {
+    const s = serviceStatuses.get(svc);
+    return s === 'error' || s === 'warning';
+  });
 
   const onBack = () => {
     if (window.history.length > 1) window.history.back();
@@ -169,6 +264,28 @@ export function GlobalHeader() {
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+          {/* Service status icons — only shown when at least one service has a problem */}
+          {unhealthyServices.length > 0 && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                mr: 0.25,
+              }}
+              role="group"
+              aria-label="Service status"
+            >
+              {unhealthyServices.map((svc) => (
+                <ServiceStatusBadge
+                  key={svc}
+                  service={svc}
+                  status={serviceStatuses.get(svc) as ServiceStatus}
+                />
+              ))}
+            </Box>
+          )}
+
           <Tooltip title={`Search (${kbdHint})`}>
             <IconButton
               aria-label={`Search (${kbdHint})`}

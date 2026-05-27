@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { useConnectionToast } from '../context/ConnectionToastContext';
+import { useConnectionToast, useServiceStatuses, type ConnectionService, type ServiceStatus } from '../context/ConnectionToastContext';
+import SyncIcon from '@mui/icons-material/Sync';
+import ReceiptIcon from '@mui/icons-material/Receipt';
+import StorageIcon from '@mui/icons-material/Storage';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
@@ -1954,63 +1957,175 @@ if (!sessionChecked) return <LoginPageSkeleton />;`}
   );
 }
 
-// ── Connection Toasts Demo ─────────────────────────────────────────────────────
+// ── Service Status Icons Demo ──────────────────────────────────────────────────
+
+const DS_SERVICE_CONFIG: Record<ConnectionService, {
+  label: string;
+  Icon: React.ComponentType<{ fontSize?: 'small' | 'medium' | 'large' }>;
+}> = {
+  hubspot:    { label: 'HubSpot',    Icon: SyncIcon },
+  google:     { label: 'Google',     Icon: EventIcon },
+  quickbooks: { label: 'QuickBooks', Icon: ReceiptIcon },
+  database:   { label: 'Database',   Icon: StorageIcon },
+};
+
+const DS_SERVICE_KEYS: ConnectionService[] = ['hubspot', 'google', 'quickbooks', 'database'];
+
+function dsStatusBadgeColor(status: ServiceStatus): string {
+  if (status === 'error') return '#ef4444';
+  if (status === 'warning') return '#f59e0b';
+  return 'transparent';
+}
+
+function ServiceStatusIconPreview({ status }: { status: ServiceStatus }) {
+  return (
+    <Box sx={{ display: 'flex', gap: 0.75 }}>
+      {DS_SERVICE_KEYS.map((svc) => {
+        const { Icon } = DS_SERVICE_CONFIG[svc];
+        const badgeColor = dsStatusBadgeColor(status);
+        return (
+          <Box
+            key={svc}
+            sx={{ position: 'relative', display: 'inline-flex' }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 28,
+                height: 28,
+                borderRadius: '8px',
+                color: status === 'error' ? '#fca5a5' : status === 'warning' ? '#fcd34d' : 'rgba(255,255,255,0.7)',
+                bgcolor: BRAND_COLORS.plum,
+                border: `1px solid ${status === 'error' ? 'rgba(252,165,165,0.4)' : status === 'warning' ? 'rgba(252,211,77,0.4)' : 'rgba(255,255,255,0.12)'}`,
+              }}
+            >
+              <Icon fontSize="small" />
+            </Box>
+            {status !== 'ok' && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: -2,
+                  right: -2,
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  bgcolor: badgeColor,
+                  border: `1.5px solid ${BRAND_COLORS.plum}`,
+                }}
+              />
+            )}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
 
 function ConnectionToastsDemo() {
-  const { notifyApiError, notifyReconnected } = useConnectionToast();
-  const SERVICES = ['hubspot', 'google', 'quickbooks', 'database'] as const;
+  const { notifyApiError, notifyApiWarning, notifyReconnected } = useConnectionToast();
+  const serviceStatuses = useServiceStatuses();
+
   return (
     <ComponentShowcase
-      name="Connection Toasts"
-      description="Global bottom-right Snackbar toasts that fire when a service goes offline or recovers. Disconnected toasts are persistent (warning); reconnected toasts auto-dismiss after 5 s (success). Powered by ConnectionToastContext."
+      name="Service Status Icons"
+      description="Persistent status icons that appear in the GlobalHeader right-hand area when an external service has a problem. Hidden when all services are healthy. Red badge = fully disconnected (error); amber badge = degraded / rate-limited (warning). Icons disappear when the service recovers. Powered by ConnectionToastContext — no Snackbar toasts for connection events."
       demo={
-        <Stack spacing={1}>
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
-            Trigger a disconnected or reconnected toast for each service:
-          </Typography>
-          {SERVICES.map((svc) => (
-            <Stack key={svc} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <Typography variant="body2" sx={{ width: 100, textTransform: 'capitalize' }}>
-                {svc === 'quickbooks' ? 'QuickBooks' : svc.charAt(0).toUpperCase() + svc.slice(1)}
-              </Typography>
-              <Button
-                size="small"
-                variant="outlined"
-                color="warning"
-                onClick={() => notifyApiError(svc, { code: svc === 'database' ? 'DB_ERROR' : 'HUBSPOT_UNAVAILABLE' })}
-              >
-                Disconnected
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                color="success"
-                onClick={() => notifyReconnected(svc)}
-              >
-                Reconnected
-              </Button>
+        <Stack spacing={2}>
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Badge states (as shown in the header on a dark background):
+            </Typography>
+            <Stack spacing={1.5}>
+              <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ width: 100, color: 'text.secondary' }}>All healthy</Typography>
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', px: 1, py: 0.5, bgcolor: BRAND_COLORS.plum, borderRadius: 1 }}>
+                  <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
+                    (no icons shown)
+                  </Typography>
+                </Box>
+              </Stack>
+              <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ width: 100, color: 'text.secondary' }}>Error (red)</Typography>
+                <Box sx={{ display: 'inline-flex', px: 1, py: 0.5, bgcolor: BRAND_COLORS.plum, borderRadius: 1 }}>
+                  <ServiceStatusIconPreview status="error" />
+                </Box>
+              </Stack>
+              <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ width: 100, color: 'text.secondary' }}>Warning (amber)</Typography>
+                <Box sx={{ display: 'inline-flex', px: 1, py: 0.5, bgcolor: BRAND_COLORS.plum, borderRadius: 1 }}>
+                  <ServiceStatusIconPreview status="warning" />
+                </Box>
+              </Stack>
             </Stack>
-          ))}
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-            Toasts stack bottom-right. Disconnected stays until dismissed; reconnected auto-hides after 5 s.
-          </Typography>
+          </Box>
+
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Trigger live header icon changes (watch the GlobalHeader above):
+            </Typography>
+            {DS_SERVICE_KEYS.map((svc) => {
+              const currentStatus = serviceStatuses.get(svc) ?? 'ok';
+              return (
+                <Stack key={svc} direction="row" spacing={1} sx={{ alignItems: 'center', mb: 0.75 }}>
+                  <Typography variant="body2" sx={{ width: 100 }}>
+                    {DS_SERVICE_CONFIG[svc].label}
+                  </Typography>
+                  <Chip
+                    size="small"
+                    label={currentStatus}
+                    color={currentStatus === 'error' ? 'error' : currentStatus === 'warning' ? 'warning' : 'success'}
+                    variant="outlined"
+                    sx={{ minWidth: 72, fontFamily: 'ui-monospace, monospace', fontSize: 11 }}
+                  />
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    onClick={() => notifyApiError(svc, { code: svc === 'database' ? 'DB_ERROR' : 'HUBSPOT_UNAVAILABLE' })}
+                  >
+                    Error
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="warning"
+                    onClick={() => notifyApiWarning(svc)}
+                  >
+                    Warning
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="success"
+                    onClick={() => notifyReconnected(svc)}
+                  >
+                    Clear
+                  </Button>
+                </Stack>
+              );
+            })}
+          </Box>
         </Stack>
       }
       code={`import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 
 // In your page component:
-const { notifyApiError, notifyReconnected } = useConnectionToast();
+const { notifyApiError, notifyApiWarning, notifyReconnected } = useConnectionToast();
 useConnectionCheck(); // probes /api/hubspot|google|quickbooks/status on mount
 
 // On a failed API call:
 try {
   await saveData();
 } catch (e) {
-  notifyApiError('hubspot', e); // fires toast if error is connection-related
+  notifyApiError('hubspot', e); // sets red badge if connection-related
+  // 429 rate-limit errors automatically map to amber (warning) badge
 }
 
 // On a successful retry after failure:
-notifyReconnected('hubspot');`}
+notifyReconnected('hubspot'); // clears the badge`}
     />
   );
 }
