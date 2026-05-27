@@ -5,14 +5,16 @@
  * Enforces the privilege-check convention documented in replit.md:
  *
  *   All privilege checks MUST go through the canonical helper for that surface:
- *     - Client vanilla JS  → getPrivilegeLevel()   (defined in public/legacy-shim.js)
  *     - React / TypeScript → usePrivilege()         (defined in src/react/hooks/usePrivilege.ts)
  *     - Server route code  → getReqPrivilege(req)   (defined in auth.js)
+ *
+ *   Note: the former vanilla-JS helper getPrivilegeLevel() (previously in
+ *   public/legacy-shim.js) was removed when legacy-shim.js was deleted. All
+ *   client-side privilege checks now go through the React usePrivilege() hook.
  *
  * ── Surface 1 — public/*.js ──────────────────────────────────────────────────
  *
  *   Every .js file under public/ except:
- *     - public/legacy-shim.js  — canonical implementation (defines the helper)
  *     - public/react/**         — compiled React island (auto-generated, gitignored)
  *     - public/storybook/**     — compiled Storybook output (auto-generated, gitignored)
  *
@@ -86,7 +88,7 @@ const SRC_REACT_DIR  = resolve(ROOT, 'src', 'react');
 // ── Surface 1 exclusions — public/ ───────────────────────────────────────────
 
 const EXCLUDED_FILES = new Set([
-  resolve(PUBLIC_DIR, 'legacy-shim.js'),
+  // legacy-shim.js was deleted (task #1593); no vanilla-JS canonical file remains
 ]);
 
 const EXCLUDED_DIRS = [
@@ -254,7 +256,7 @@ const violations       = [...jsViolations, ...tsViolations, ...serverViolations]
 
 console.log(
   `check-privilege-reads: scanned ${jsFiles.length} JS file(s) under public/ ` +
-  `(legacy-shim.js, react/, storybook/ excluded)\n` +
+  `(react/, storybook/ excluded)\n` +
   `                        and ${tsFiles.length} TS/TSX file(s) under src/react/ ` +
   `(usePrivilege.ts, usePrivilegeSync.ts, *.stories.* excluded)\n` +
   `                        and ${SERVER_FILES.length} server-side module(s) ` +
@@ -264,7 +266,7 @@ console.log(
 if (violations.length === 0) {
   console.log(
     '✓ No direct privilege_level reads found.\n' +
-    '  Client checks use getPrivilegeLevel() (vanilla JS) or usePrivilege() (React).\n' +
+    '  Client checks use usePrivilege() (React hook).\n' +
     '  Server checks use getReqPrivilege(req) (Express route code).'
   );
   process.exit(0);
