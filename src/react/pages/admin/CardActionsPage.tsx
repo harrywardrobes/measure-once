@@ -476,7 +476,7 @@ export function CardActionsPage() {
                           <div className="adm-ca-block-head">
                             <strong className={`adm-ca-block-title${ls.isNullRow ? ' is-null' : ''}`}>{ls.label}</strong>
                             {ls.isNullRow
-                              ? <span className="adm-text-muted-xs">contact has no <code>hs_lead_status</code></span>
+                              ? <span className="adm-text-muted-xs">contact has no <code>hs_lead_status</code> — also used as the <strong>stage default</strong> for any lead status without a per-LS row below</span>
                               : <span className="adm-text-faint-mono">{ls.key}</span>}
                           </div>
 

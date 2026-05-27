@@ -82,8 +82,11 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
   const substatusesRef = useRef<LeadSubstatus[]>([]);
   // `${STATUS_KEY}|${SUBSTATUS_KEY}` → action_label (uppercase keys)
   const substatusActionLabelMapRef = useRef<Record<string, string>>({});
-  // `${stage_key}|${status_key}` → label (lowercase keys)
-  const stageActionLabelMapRef = useRef<Record<string, string>>({});
+  // `${stage_key}|${status_key}` → label (lowercase keys).
+  // null means the row EXISTS in the DB with an empty label (admin explicitly
+  // cleared it). undefined (key absent) means no row exists → fall back to the
+  // per-stage default `(stage_key, '')` row.
+  const stageActionLabelMapRef = useRef<Record<string, string | null>>({});
 
   const [, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
@@ -117,12 +120,17 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
         return;
       }
       const rows: StageActionLabel[] = await res.json();
-      const m: Record<string, string> = {};
+      const m: Record<string, string | null> = {};
       for (const r of rows || []) {
         const s = String(r.stage_key || '').toLowerCase();
         const k = String(r.status_key || '').toLowerCase();
+        if (!s) continue;
         const label = String(r.label || '').trim();
-        if (s && label) m[`${s}|${k}`] = label;
+        // Store every row so the resolver can distinguish:
+        //   non-empty string → use this label
+        //   null             → row exists, admin explicitly cleared it (suppress strip)
+        //   key absent       → no row → fall back to per-stage default
+        m[`${s}|${k}`] = label || null;
       }
       stageActionLabelMapRef.current = m;
     } catch (e) {
@@ -249,17 +257,24 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       }
       const sKey = String(stageKey || '').toLowerCase();
       const lsKey = String(leadStatusKey || '').toLowerCase();
+      const map = stageActionLabelMapRef.current;
       // 2. Per-LS stage action label
       if (lsKey) {
-        return stageActionLabelMapRef.current[`${sKey}|${lsKey}`] || '';
+        const perLsKey = `${sKey}|${lsKey}`;
+        if (perLsKey in map) {
+          // Row exists: return label (non-empty) or '' (admin explicitly cleared it).
+          return map[perLsKey] ?? '';
+        }
+        // No row for this LS → fall back to the per-stage default (stage_key, '').
+        return map[`${sKey}|`] ?? '';
       }
       // 3. Per-substageId legacy fallback (lowercase to match map key format)
       if (substageId) {
-        const fromSub = stageActionLabelMapRef.current[`${sKey}|${String(substageId).toLowerCase()}`];
+        const fromSub = map[`${sKey}|${String(substageId).toLowerCase()}`];
         if (fromSub) return fromSub;
       }
       // 4. Per-stage "no lead status" row
-      return stageActionLabelMapRef.current[`${sKey}|`] || '';
+      return map[`${sKey}|`] ?? '';
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [substatusActionLabelMapRef, stageActionLabelMapRef],
