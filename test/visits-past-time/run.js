@@ -82,19 +82,26 @@ function pastIso(offsetMinutes) {
   return new Date(Date.now() - offsetMinutes * 60 * 1000).toISOString();
 }
 
+// Privtest-prefixed so purgeTestVisits can scope deletes by customer_id,
+// preventing stale rows from accumulating on a shared database across runs.
+const FAKE_CONTACT_ID = 'privtest-visits-past-time-001';
+
 function visitBody(startIso, type = 'design') {
   return {
     type,
     startAt:      startIso,
     endAt:        new Date(new Date(startIso).getTime() + 60 * 60 * 1000).toISOString(),
-    customerId:   null,
+    customerId:   FAKE_CONTACT_ID,
     customerName: 'Past-time test customer',
   };
 }
 
 async function purgeTestVisits(pool) {
   try {
-    await pool.query(`DELETE FROM visits WHERE customer_name = 'Past-time test customer'`);
+    await pool.query(
+      `DELETE FROM visits WHERE customer_id = $1`,
+      [FAKE_CONTACT_ID],
+    );
   } catch (_) {}
 }
 
