@@ -1085,7 +1085,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   white-space: nowrap;
 }
 .admin-page .toast.show { opacity: 1; }
-.admin-page .toast.err  { background: var(--status-danger-text); }
+.admin-page .toast.err  { background: var(--error); }
 
 
 /* Loading / forbidden */
@@ -1155,7 +1155,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   margin: 0;
 }
 .admin-page .admin-msg--muted { color: var(--ink-4); }
-.admin-page .admin-msg--error { color: var(--status-danger-text); }
+.admin-page .admin-msg--error { color: var(--error); }
 
 /* ── Admin helper classes (`adm-` prefix) ────────────────────────────────────
    Used by React admin islands (CardActionsPage, ActionHandlersPage,

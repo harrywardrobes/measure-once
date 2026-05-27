@@ -176,7 +176,7 @@ export function WhatsAppModal({ contactId, phone, open, onClose }: Pick<Props, '
             </div>
           )}
 
-          {sendError && <div id="wa-send-error" style={{ fontSize: '0.82rem', color: 'var(--status-danger-text)', marginTop: 8, padding: '6px 10px', background: 'var(--status-danger-bg)', borderRadius: 6 }}>{sendError}</div>}
+          {sendError && <div id="wa-send-error" style={{ fontSize: '0.82rem', color: 'var(--error)', marginTop: 8, padding: '6px 10px', background: 'var(--status-danger-bg)', borderRadius: 6 }}>{sendError}</div>}
           {sendSuccess && <div id="wa-send-success" style={{ fontSize: '0.82rem', color: 'var(--status-success)', marginTop: 8, padding: '6px 10px', background: 'var(--status-success-bg)', borderRadius: 6 }}>Message sent successfully!</div>}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>

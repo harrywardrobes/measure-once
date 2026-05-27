@@ -121,14 +121,14 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
         <span style={sxHeaderLabel}>Design visits</span>
       </div>
       {actionError && (
-        <p style={{ fontSize: '0.85rem', color: 'var(--status-danger-text)', padding: '4px 0' }}>{actionError}</p>
+        <p style={{ fontSize: '0.85rem', color: 'var(--error)', padding: '4px 0' }}>{actionError}</p>
       )}
       <div id="design-visits-list" style={{ fontSize: '0.875rem', color: 'var(--stone-deep)' }}>
         {loading && (
           <p style={{ fontSize: '0.85rem', padding: '4px 0', fontStyle: 'italic' }}>Loading…</p>
         )}
         {!loading && error && (
-          <p style={{ fontSize: '0.85rem', color: 'var(--status-danger-text)', padding: '4px 0' }}>Could not load design visits.</p>
+          <p style={{ fontSize: '0.85rem', color: 'var(--error)', padding: '4px 0' }}>Could not load design visits.</p>
         )}
         {!loading && !error && visits.length === 0 && (
           <p style={{ fontSize: '0.85rem', padding: '4px 0', fontStyle: 'italic' }}>No design visits yet.</p>
@@ -190,7 +190,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
                     </button>
                   )}
                   {isAdmin && (
-                    <button style={{ ...sxSecondaryBtn, color: 'var(--status-danger-text)' }}
+                    <button style={{ ...sxSecondaryBtn, color: 'var(--error)' }}
                       onClick={() => handleDelete(v.id)}>
                       Delete
                     </button>
@@ -204,7 +204,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
                   borderRadius: 8, padding: '10px 12px',
                 }}>
                   {!det || det.loading ? 'Loading…' : det.error ? (
-                    <span style={{ color: 'var(--status-danger-text)' }}>{det.error}</span>
+                    <span style={{ color: 'var(--error)' }}>{det.error}</span>
                   ) : det.data ? (
                     <DesignVisitDetail visit={det.data} />
                   ) : null}
@@ -267,7 +267,7 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
         <p style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>No rooms recorded.</p>
       )}
       {visit.notes         && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}><strong>Notes:</strong> {visit.notes}</div>}
-      {visit.revision_note && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap', color: 'var(--status-danger-text)' }}><strong>Revision note:</strong> {visit.revision_note}</div>}
+      {visit.revision_note && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap', color: 'var(--error)' }}><strong>Revision note:</strong> {visit.revision_note}</div>}
     </>
   );
 }
