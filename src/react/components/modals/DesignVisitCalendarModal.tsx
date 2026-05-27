@@ -94,10 +94,31 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [startDtWasReset, setStartDtWasReset] = useState(restoredStartIsStale);
+  const [startTimeWarning, setStartTimeWarning] = useState(false);
 
   useEffect(() => {
     saveDraft(key, { title, duration, location, notes, addGcal, startDt: startDt?.toISOString() });
   }, [key, title, duration, location, notes, addGcal, startDt]);
+
+  useEffect(() => {
+    if (!open) {
+      setStartTimeWarning(false);
+      return;
+    }
+
+    function checkApproaching() {
+      if (!startDt || !startDt.isValid()) {
+        setStartTimeWarning(false);
+        return;
+      }
+      const minutesUntilStart = startDt.diff(dayjs(), 'minute');
+      setStartTimeWarning(minutesUntilStart < 15);
+    }
+
+    checkApproaching();
+    const interval = setInterval(checkApproaching, 60_000);
+    return () => clearInterval(interval);
+  }, [open, startDt]);
 
   function handleDismiss() {
     setError('');
@@ -215,6 +236,13 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
             {startDtWasReset && (
               <Alert severity="info" sx={{ py: 0.5 }}>
                 Your saved date/time was in the past and has been reset.
+              </Alert>
+            )}
+            {startTimeWarning && !startDtWasReset && (
+              <Alert severity="warning" sx={{ py: 0.5 }}>
+                {startDt && startDt.isBefore(dayjs())
+                  ? 'The selected start time has already passed. Please choose a future time.'
+                  : 'The selected start time is less than 15 minutes away. You may want to update it.'}
               </Alert>
             )}
             <TextField
