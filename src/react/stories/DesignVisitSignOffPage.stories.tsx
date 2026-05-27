@@ -100,6 +100,34 @@ export const MainNoRooms: Story = {
   },
 };
 
+export const MainNoDetails: Story = {
+  name: 'Main — no visit details',
+  render: () => (
+    <DesignVisitSignOffPage
+      embedded={{
+        state: 'main',
+        data: {
+          ...SAMPLE_DATA,
+          visitDate: undefined,
+          location: undefined,
+          handleName: undefined,
+          furnitureRange: undefined,
+        },
+      }}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Edge case where the designer has not yet filled in any visit metadata ' +
+          '(date, location, handle, or furniture range). The Visit Details card ' +
+          'remains visible but shows a short placeholder note rather than an empty card.',
+      },
+    },
+  },
+};
+
 export const MainWithPhotos: Story = {
   name: 'Main — with room photos',
   render: () => (

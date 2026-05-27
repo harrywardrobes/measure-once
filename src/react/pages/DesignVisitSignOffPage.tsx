@@ -400,8 +400,15 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
             )}
 
             {/* Visit Details */}
-            {metaPairs.length > 0 && (
-              <SectionCard title="Visit Details">
+            <SectionCard title="Visit Details">
+              {metaPairs.length === 0 ? (
+                <Typography
+                  variant="body2"
+                  sx={{ color: 'text.secondary', py: 1.5, fontStyle: 'italic' }}
+                >
+                  No visit details have been recorded yet. Your designer will update this shortly.
+                </Typography>
+              ) : (
                 <Box
                   sx={{
                     display: 'grid',
@@ -425,8 +432,8 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
                     </React.Fragment>
                   ))}
                 </Box>
-              </SectionCard>
-            )}
+              )}
+            </SectionCard>
 
             {/* Room Breakdown */}
             <SectionCard title="Room Breakdown">
