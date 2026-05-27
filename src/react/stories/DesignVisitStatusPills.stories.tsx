@@ -7,6 +7,7 @@ import { DesignVisitStatusPill } from '../pages/customer-detail/DesignVisitStatu
 
 const meta: Meta = {
   title: 'Components/DesignVisit Status Pills',
+  tags: ['autodocs'],
   parameters: {
     layout: 'padded',
     docs: {
