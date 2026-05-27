@@ -1,6 +1,16 @@
 // Shared chrome: skip link, toast-live, access gate, header, bottom nav, invoice panel.
 // Runs synchronously so chrome is in the DOM before bootstrap() looks for it.
 
+// dismissViewerBanner lives here (not legacy-shim.js) because the viewer banner
+// HTML is built in this file and onclick="dismissViewerBanner()" must resolve on
+// every page that loads chrome.js, regardless of whether legacy-shim.js is loaded.
+window.dismissViewerBanner = function dismissViewerBanner() {
+  const banner = document.getElementById('viewer-banner');
+  if (banner) banner.style.display = 'none';
+  document.body.classList.remove('has-viewer-banner');
+  sessionStorage.setItem('viewerBannerDismissed', '1');
+};
+
 /**
  * Returns a platform-aware keyboard shortcut string.
  * getShortcut('K') → '⌘K' on Mac / iOS, 'Ctrl K' everywhere else.
