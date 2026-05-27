@@ -81,6 +81,50 @@ export function ProfilePage(): React.ReactElement {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = React.useState(0);
+  const [approvalSuccess, setApprovalSuccess] = React.useState(false);
+  const approvalTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => { if (approvalTimerRef.current) clearTimeout(approvalTimerRef.current); };
+  }, []);
+
+  // Listen for admin photo-approval events so the profile page can show a
+  // brief success indicator when an admin approves the pending photo.
+  React.useEffect(() => {
+    if (!appUser) return;
+    const handleApproval = () => {
+      // Only trigger if the profile is currently showing a pending-photo state;
+      // otherwise the event is for another user's photo and we can ignore it.
+      setProfile((prev) => {
+        if (prev?.has_pending_photo) {
+          setApprovalSuccess(true);
+          if (approvalTimerRef.current) clearTimeout(approvalTimerRef.current);
+          approvalTimerRef.current = setTimeout(() => setApprovalSuccess(false), 2500);
+          setReloadNonce((n) => n + 1);
+        }
+        return prev;
+      });
+    };
+
+    const winHandler = (ev: Event) => {
+      const kind = (ev as CustomEvent<{ kind: string }>).detail?.kind;
+      if (kind === 'photos') handleApproval();
+    };
+    window.addEventListener('admin:change', winHandler);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('admin_data_changed');
+      bc.onmessage = (ev: MessageEvent) => {
+        if (ev?.data?.kind === 'photos') handleApproval();
+      };
+    } catch { /* BroadcastChannel not available */ }
+
+    return () => {
+      window.removeEventListener('admin:change', winHandler);
+      bc?.close();
+    };
+  }, [appUser]);
 
   React.useEffect(() => {
     if (appUser) return;
@@ -158,7 +202,7 @@ export function ProfilePage(): React.ReactElement {
         Back
       </Button>
 
-      <IdentityCard profile={profile} appUser={appUser} onReload={reload} />
+      <IdentityCard profile={profile} appUser={appUser} onReload={reload} approvalSuccess={approvalSuccess} />
       <RoleCard profile={profile} />
       <GoogleCalendarCard />
       <ChangePasswordCard profile={profile} />
@@ -183,10 +227,12 @@ function IdentityCard({
   profile,
   appUser,
   onReload,
+  approvalSuccess = false,
 }: {
   profile: Profile;
   appUser: AppUser;
   onReload: () => void;
+  approvalSuccess?: boolean;
 }) {
   const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ')
     || profile.email || 'User';
@@ -291,7 +337,12 @@ function IdentityCard({
           <Box sx={{ position: 'relative' }}>
             <Avatar
               src={photoSrc || undefined}
-              sx={{ width: 64, height: 64, bgcolor: 'primary.light', fontWeight: 700 }}
+              sx={{
+                width: 64, height: 64, bgcolor: 'primary.light', fontWeight: 700,
+                outline: '3px solid',
+                outlineColor: approvalSuccess ? 'success.main' : 'transparent',
+                transition: 'outline-color 0.4s ease',
+              }}
             >
               {initials}
             </Avatar>
