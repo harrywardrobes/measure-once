@@ -157,8 +157,12 @@ export function ShowMessageConfig({
   defaultMessage = '',
   onChange,
 }: ShowMessageConfigProps) {
-  const [title,   setTitle]   = useState(defaultTitle);
-  const [message, setMessage] = useState(defaultMessage);
+  const [title,          setTitle]          = useState(defaultTitle);
+  const [message,        setMessage]        = useState(defaultMessage);
+  const [msgTouched,     setMsgTouched]     = useState(false);
+
+  const messageError =
+    msgTouched && message.trim() === '' ? 'Message is required.' : '';
 
   const notify = (t: string, m: string) => onChange?.({ title: t, message: m });
 
@@ -189,8 +193,14 @@ export function ShowMessageConfig({
           rows={4}
           placeholder="What should the operator do when they click this label?"
           value={message}
+          error={!!messageError}
+          helperText={messageError || undefined}
           slotProps={{ htmlInput: { maxLength: 2000 } }}
-          onChange={e => { setMessage(e.target.value); notify(title, e.target.value); }}
+          onChange={e => {
+            setMsgTouched(true);
+            setMessage(e.target.value);
+            notify(title, e.target.value);
+          }}
         />
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
           Shown verbatim in a popup. Plain text only; line breaks are preserved.
