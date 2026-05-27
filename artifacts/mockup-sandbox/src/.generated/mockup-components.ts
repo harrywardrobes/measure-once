@@ -2,13 +2,13 @@
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/customer-card-wireframes/CustomerCardWireframes.tsx": () => import("../components/mockups/customer-card-wireframes/CustomerCardWireframes.tsx"),
+  "./components/mockups/customers-list/AccessibilityReadability.tsx": () => import("../components/mockups/customers-list/AccessibilityReadability.tsx"),
+  "./components/mockups/customers-list/AffordanceVisibility.tsx": () => import("../components/mockups/customers-list/AffordanceVisibility.tsx"),
+  "./components/mockups/customers-list/HierarchyClarity.tsx": () => import("../components/mockups/customers-list/HierarchyClarity.tsx"),
   "./components/mockups/header-variants/CommandPalette.tsx": () => import("../components/mockups/header-variants/CommandPalette.tsx"),
   "./components/mockups/header-variants/ContextualStrip.tsx": () => import("../components/mockups/header-variants/ContextualStrip.tsx"),
   "./components/mockups/header-variants/FloatingCard.tsx": () => import("../components/mockups/header-variants/FloatingCard.tsx"),
   "./components/mockups/header-variants/SearchForward.tsx": () => import("../components/mockups/header-variants/SearchForward.tsx"),
-  "./components/mockups/customers-list/AccessibilityReadability.tsx": () => import("../components/mockups/customers-list/AccessibilityReadability.tsx"),
-  "./components/mockups/customers-list/AffordanceVisibility.tsx": () => import("../components/mockups/customers-list/AffordanceVisibility.tsx"),
-  "./components/mockups/customers-list/HierarchyClarity.tsx": () => import("../components/mockups/customers-list/HierarchyClarity.tsx"),
   "./components/mockups/home-variants/CommandDashboard.tsx": () => import("../components/mockups/home-variants/CommandDashboard.tsx"),
   "./components/mockups/home-variants/NextActionFocus.tsx": () => import("../components/mockups/home-variants/NextActionFocus.tsx"),
   "./components/mockups/home-variants/PolishedSections.tsx": () => import("../components/mockups/home-variants/PolishedSections.tsx"),
