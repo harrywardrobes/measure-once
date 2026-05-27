@@ -108,7 +108,7 @@ const CHECKING_PULSE_KEYFRAMES = {
   },
 };
 
-function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps) {
+export function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps) {
   const { label, Icon } = SERVICE_CONFIG[service];
   const badgeColor = statusBadgeColor(status);
   const tip = statusLabel(service, status);
