@@ -199,7 +199,7 @@ export function InstallationSlotModal(props: Props) {
     } catch (e) {
       const code = (e as { code?: string }).code;
       if (code === 'START_IN_PAST') {
-        setError('That time has already passed — please choose a future time.');
+        setError('Visit start time is in the past. Please choose a future time.');
       } else {
         setError('Could not save: ' + (e instanceof Error ? e.message : 'error'));
       }
