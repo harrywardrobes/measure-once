@@ -11,6 +11,14 @@
 //
 //   (B) Zero results — when the search returns no contacts, no PATCH is made.
 //
+//   (C) Search failure — when the search request errors, a 'search' failure
+//       record is persisted in substatus_clear_failures and the admin can
+//       retrieve it via GET /api/admin/substatus-clear-failures.
+//
+//   (D) PATCH failure — when the contact PATCH errors (after retries), a
+//       'patch' failure record is persisted per affected contact. The manual
+//       retry endpoint re-triggers the job.
+//
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:lead-status-delete-substatus-clear
 //   PRIVTEST_ALLOW_SHARED_DB=1 npm run test:lead-status-delete-substatus-clear
@@ -28,6 +36,8 @@ const REPORT_PATH = path.join(
 
 const LS_KEY_A = 'PRIVTEST_LSDSC_A';  // scenario A: contacts to clear
 const LS_KEY_B = 'PRIVTEST_LSDSC_B';  // scenario B: no contacts
+const LS_KEY_C = 'PRIVTEST_LSDSC_C';  // scenario C: search fails
+const LS_KEY_D = 'PRIVTEST_LSDSC_D';  // scenario D: PATCH fails
 
 const findings = [];
 function record(id, ok, detail) {
@@ -39,11 +49,17 @@ function record(id, ok, detail) {
 //
 // Supports configurable per-scenario search results and records every search
 // and PATCH call so tests can assert what the server sent.
+//
+// Extra state flags:
+//   state.searchShouldFail  — if true, /search returns 500
+//   state.patchShouldFail   — if true, contact PATCH returns 500
 
 function startMockHubspot() {
   const state = {
-    searchResults: [],   // contacts returned from next /search call
-    calls: [],           // { method, url, body, at }
+    searchResults:    [],    // contacts returned from next /search call
+    calls:            [],    // { method, url, body, at }
+    searchShouldFail: false, // scenario C: search returns 500
+    patchShouldFail:  false, // scenario D: contact PATCH returns 500
   };
 
   const server = http.createServer((req, res) => {
@@ -59,6 +75,10 @@ function startMockHubspot() {
 
       // contacts search
       if (method === 'POST' && url.startsWith('/crm/v3/objects/contacts/search')) {
+        if (state.searchShouldFail) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ message: 'mock search error' }));
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
           total:   state.searchResults.length,
@@ -69,6 +89,10 @@ function startMockHubspot() {
 
       // contact PATCH (clear substatus)
       if (method === 'PATCH' && /^\/crm\/v3\/objects\/contacts\//.test(url)) {
+        if (state.patchShouldFail) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ message: 'mock patch error' }));
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ id: 'mock-id', properties: {} }));
       }
@@ -95,14 +119,36 @@ function startMockHubspot() {
 // ── Poll helper ───────────────────────────────────────────────────────────────
 // clearOrphanedSubstatusesForDeletedStatus is fire-and-forget; poll until the
 // expected calls appear or the deadline passes.
+// predicate may be sync or async.
 
 async function pollUntil(predicate, timeoutMs = 5000, intervalMs = 100) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (predicate()) return true;
+    if (await predicate()) return true;
     await new Promise(r => setTimeout(r, intervalMs));
   }
   return false;
+}
+
+// ── DB poll helper ────────────────────────────────────────────────────────────
+// Poll substatus_clear_failures for an expected row, since the INSERT is async.
+
+async function pollDbFailures(pool, { deletedKey, failureType, contactId }, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const q = contactId
+        ? `SELECT * FROM substatus_clear_failures
+             WHERE deleted_key = $1 AND failure_type = $2 AND contact_id = $3 AND resolved = FALSE`
+        : `SELECT * FROM substatus_clear_failures
+             WHERE deleted_key = $1 AND failure_type = $2 AND resolved = FALSE`;
+      const params = contactId ? [deletedKey, failureType, contactId] : [deletedKey, failureType];
+      const { rows } = await pool.query(q, params);
+      if (rows.length > 0) return rows;
+    } catch {}
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return [];
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -143,12 +189,18 @@ async function main() {
   } = require('../privileges/harness');
   setPool(pool);
 
+  const ALL_KEYS = [LS_KEY_A, LS_KEY_B, LS_KEY_C, LS_KEY_D];
+
   const cleanup = async () => {
     try { child.kill('SIGTERM'); } catch {}
     try {
       await pool.query(
         'DELETE FROM lead_status_config WHERE key = ANY($1::text[])',
-        [[LS_KEY_A, LS_KEY_B]],
+        [ALL_KEYS],
+      );
+      await pool.query(
+        'DELETE FROM substatus_clear_failures WHERE deleted_key = ANY($1::text[])',
+        [ALL_KEYS],
       );
       await cleanupTestData(pool);
     } catch {}
@@ -161,8 +213,12 @@ async function main() {
   await cleanupTestData(pool);
   await pool.query(
     'DELETE FROM lead_status_config WHERE key = ANY($1::text[])',
-    [[LS_KEY_A, LS_KEY_B]],
+    [ALL_KEYS],
   );
+  await pool.query(
+    'DELETE FROM substatus_clear_failures WHERE deleted_key = ANY($1::text[])',
+    [ALL_KEYS],
+  ).catch(() => {});
 
   const users = await seedUsers(pool, runId);
   const { child, logBuf } = spawnServer();
@@ -191,6 +247,8 @@ async function main() {
     const mockContactA1 = { id: 'privtest-lsdsc-contact-1', properties: { hs_lead_status: LS_KEY_A, hw_lead_substatus: 'SUB_OLD' } };
     const mockContactA2 = { id: 'privtest-lsdsc-contact-2', properties: { hs_lead_status: LS_KEY_A, hw_lead_substatus: 'SUB_OLD' } };
     mock.state.searchResults = [mockContactA1, mockContactA2];
+    mock.state.searchShouldFail = false;
+    mock.state.patchShouldFail = false;
     mock.state.calls = [];
 
     const delA = await admin.delete(`/api/admin/lead-statuses/${encodeURIComponent(LS_KEY_A)}`);
@@ -270,6 +328,8 @@ async function main() {
     );
 
     mock.state.searchResults = [];
+    mock.state.searchShouldFail = false;
+    mock.state.patchShouldFail = false;
     mock.state.calls = [];
 
     const delB = await admin.delete(`/api/admin/lead-statuses/${encodeURIComponent(LS_KEY_B)}`);
@@ -294,6 +354,142 @@ async function main() {
     record('B3 no PATCH issued when search returns zero contacts',
       patchesB.length === 0,
       `patches=${patchesB.length}`);
+
+    // ── (C) Search failure — failure record persisted ─────────────────────────
+    // Configure the mock to return 500 for the search, DELETE a status, and
+    // assert that a 'search' failure row appears in substatus_clear_failures.
+    // Also verify the admin API endpoint returns it.
+    console.log('\n  [C] Search failure: failure record persisted and retrievable via API');
+
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
+         VALUES ($1, 'PrivTest LSDSC C', 982, false)
+         ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label`,
+      [LS_KEY_C],
+    );
+
+    mock.state.searchResults = [];
+    mock.state.searchShouldFail = true;
+    mock.state.patchShouldFail = false;
+    mock.state.calls = [];
+
+    const delC = await admin.delete(`/api/admin/lead-statuses/${encodeURIComponent(LS_KEY_C)}`);
+    record('C1 DELETE returns 200 even when background job will fail',
+      delC.status === 200,
+      `status=${delC.status} body=${(delC.text || '').slice(0, 120)}`);
+
+    // Wait for the search call to arrive at the mock (it will fail).
+    const searchArrivedC = await pollUntil(
+      () => mock.state.calls.some(c => c.method === 'POST' && c.url.startsWith('/crm/v3/objects/contacts/search')),
+      8000,
+    );
+    record('C2 search was attempted',
+      searchArrivedC,
+      `arrived=${searchArrivedC}`);
+
+    // Wait for the failure record to be written to the DB (async after all retries).
+    const failRowsC = await pollDbFailures(pool, { deletedKey: LS_KEY_C, failureType: 'search' }, 10000);
+    record('C3 search failure persisted to substatus_clear_failures',
+      failRowsC.length > 0,
+      `rows=${failRowsC.length} first=${JSON.stringify(failRowsC[0] || null)}`);
+
+    // Verify the admin API returns the failure record.
+    const listC = await admin.get(`/api/admin/substatus-clear-failures?key=${encodeURIComponent(LS_KEY_C)}`);
+    const listCBody = listC.json || {};
+    const listCFailures = listCBody.failures || [];
+    record('C4 GET /api/admin/substatus-clear-failures returns the failure',
+      listC.status === 200 && listCFailures.some(f => f.deleted_key === LS_KEY_C && f.failure_type === 'search'),
+      `status=${listC.status} count=${listCFailures.length}`);
+
+    // Reset mock to normal mode.
+    mock.state.searchShouldFail = false;
+
+    // ── (D) PATCH failure — per-contact failure records persisted ─────────────
+    // Configure the mock to return one matching contact but fail all PATCHes.
+    // Assert that 'patch' failure rows are persisted for the affected contact,
+    // and that the retry endpoint re-triggers the job (clears stale records
+    // and runs the job again, this time successfully).
+    console.log('\n  [D] PATCH failure: per-contact failure records persisted; retry endpoint works');
+
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
+         VALUES ($1, 'PrivTest LSDSC D', 983, false)
+         ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label`,
+      [LS_KEY_D],
+    );
+
+    const mockContactD = { id: 'privtest-lsdsc-contact-d', properties: { hs_lead_status: LS_KEY_D, hw_lead_substatus: 'SUB_D' } };
+    mock.state.searchResults = [mockContactD];
+    mock.state.searchShouldFail = false;
+    mock.state.patchShouldFail = true;
+    mock.state.calls = [];
+
+    const delD = await admin.delete(`/api/admin/lead-statuses/${encodeURIComponent(LS_KEY_D)}`);
+    record('D1 DELETE returns 200 even when PATCH will fail',
+      delD.status === 200,
+      `status=${delD.status} body=${(delD.text || '').slice(0, 120)}`);
+
+    // Wait for at least one PATCH attempt (it will fail).
+    const patchAttemptedD = await pollUntil(
+      () => mock.state.calls.some(c => c.method === 'PATCH' && /\/crm\/v3\/objects\/contacts\//.test(c.url)),
+      8000,
+    );
+    record('D2 PATCH was attempted for the contact',
+      patchAttemptedD,
+      `attempted=${patchAttemptedD}`);
+
+    // Wait for the patch failure record to be persisted (async after all retries exhaust).
+    const failRowsD = await pollDbFailures(
+      pool,
+      { deletedKey: LS_KEY_D, failureType: 'patch', contactId: mockContactD.id },
+      15000,
+    );
+    record('D3 patch failure persisted to substatus_clear_failures',
+      failRowsD.length > 0,
+      `rows=${failRowsD.length} first=${JSON.stringify(failRowsD[0] || null)}`);
+
+    // Verify the admin API returns the patch failure.
+    const listD = await admin.get(`/api/admin/substatus-clear-failures?key=${encodeURIComponent(LS_KEY_D)}`);
+    const listDBody = listD.json || {};
+    const listDFailures = listDBody.failures || [];
+    record('D4 GET /api/admin/substatus-clear-failures returns the patch failure',
+      listD.status === 200 && listDFailures.some(f => f.deleted_key === LS_KEY_D && f.failure_type === 'patch' && f.contact_id === mockContactD.id),
+      `status=${listD.status} count=${listDFailures.length}`);
+
+    // Fix the mock and retry — the retry endpoint should mark old failures resolved
+    // and re-trigger the job successfully.
+    mock.state.searchResults = [mockContactD];
+    mock.state.patchShouldFail = false;
+    mock.state.calls = [];
+
+    const retryD = await admin.post('/api/admin/substatus-clear-failures/retry', { deletedKey: LS_KEY_D });
+    record('D5 retry endpoint returns 200',
+      retryD.status === 200,
+      `status=${retryD.status} body=${(retryD.text || '').slice(0, 120)}`);
+
+    // After retry, the old failure records for key D should be marked resolved.
+    const resolvedD = await pollUntil(async () => {
+      try {
+        const { rows } = await pool.query(
+          `SELECT * FROM substatus_clear_failures
+             WHERE deleted_key = $1 AND failure_type = 'patch' AND resolved = FALSE`,
+          [LS_KEY_D]
+        );
+        return rows.length === 0;
+      } catch { return false; }
+    }, 3000);
+    record('D6 prior patch failures marked resolved after retry',
+      resolvedD,
+      `resolved=${resolvedD}`);
+
+    // After retry the job should successfully PATCH the contact.
+    const retryPatchArrived = await pollUntil(
+      () => mock.state.calls.some(c => c.method === 'PATCH' && /\/crm\/v3\/objects\/contacts\//.test(c.url)),
+      8000,
+    );
+    record('D7 retry re-triggers the clear job (PATCH observed)',
+      retryPatchArrived,
+      `arrived=${retryPatchArrived}`);
 
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
@@ -338,6 +534,13 @@ async function writeReport(runId) {
     '  issued a PATCH for each contact clearing `hw_lead_substatus` to `""`.',
     '- **(B) Zero results**: same DELETE path but mock returns an empty results',
     '  array. Asserts the search was called and no PATCH was issued.',
+    '- **(C) Search failure**: mock returns 500 for the search. Asserts a',
+    '  `failure_type=search` row is persisted in `substatus_clear_failures` and',
+    '  that `GET /api/admin/substatus-clear-failures` returns it.',
+    '- **(D) PATCH failure**: mock returns 500 for contact PATCHes. Asserts a',
+    '  `failure_type=patch` row is persisted per contact. Then fixes the mock and',
+    '  calls `POST /api/admin/substatus-clear-failures/retry` — asserts the prior',
+    '  failures are marked resolved and the job re-runs successfully.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);

@@ -4487,6 +4487,42 @@ app.patch('/api/admin/page-filter-config', isAuthenticated, requireAdmin, async 
   }
 });
 
+// ── Substatus clear failure tracking ─────────────────────────────────────────
+// When the fire-and-forget orphaned-substatus clear job fails (search error or
+// per-contact PATCH error after retries), an entry is written here so admins
+// can see what was missed and re-trigger the clear manually.
+
+async function ensureSubstatusClearFailuresTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS substatus_clear_failures (
+      id            SERIAL PRIMARY KEY,
+      failed_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      deleted_key   TEXT NOT NULL,
+      failure_type  TEXT NOT NULL,  -- 'search' | 'patch'
+      contact_id    TEXT,           -- populated for 'patch' failures
+      error_message TEXT,
+      resolved      BOOLEAN NOT NULL DEFAULT FALSE,
+      resolved_at   TIMESTAMPTZ
+    )
+  `);
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS substatus_clear_failures_deleted_key_idx
+       ON substatus_clear_failures (deleted_key, resolved)`
+  );
+}
+
+async function _recordSubstatusClearFailure({ deletedKey, failureType, contactId, errorMessage }) {
+  try {
+    await pool.query(
+      `INSERT INTO substatus_clear_failures (deleted_key, failure_type, contact_id, error_message)
+         VALUES ($1, $2, $3, $4)`,
+      [deletedKey, failureType, contactId || null, errorMessage || null]
+    );
+  } catch (dbErr) {
+    console.error('[substatus-clear] Failed to persist failure record:', dbErr.message);
+  }
+}
+
 // Admin: delete a status row (null sentinel is protected)
 // After a lead status is deleted, find all HubSpot contacts that still carry
 // it as hs_lead_status AND have a hw_lead_substatus set, and clear the stale
@@ -4524,7 +4560,14 @@ async function clearOrphanedSubstatusesForDeletedStatus(deletedKey) {
           cleared++;
         } catch (patchErr) {
           failed++;
-          console.warn(`${label} PATCH contact ${cid} failed:`, patchErr.response?.data?.message || patchErr.message);
+          const errMsg = patchErr.response?.data?.message || patchErr.message;
+          console.warn(`${label} PATCH contact ${cid} failed:`, errMsg);
+          await _recordSubstatusClearFailure({
+            deletedKey,
+            failureType: 'patch',
+            contactId: cid,
+            errorMessage: errMsg,
+          });
         }
       }
     } while (after);
@@ -4532,7 +4575,14 @@ async function clearOrphanedSubstatusesForDeletedStatus(deletedKey) {
       console.log(`${label} cleared=${cleared} failed=${failed}`);
     }
   } catch (e) {
-    console.warn(`${label} search failed:`, e.response?.data?.message || e.message);
+    const errMsg = e.response?.data?.message || e.message;
+    console.warn(`${label} search failed:`, errMsg);
+    await _recordSubstatusClearFailure({
+      deletedKey,
+      failureType: 'search',
+      contactId: null,
+      errorMessage: errMsg,
+    });
   }
 }
 
@@ -4612,6 +4662,81 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
   } catch (e) {
     console.error('DELETE /api/admin/lead-statuses/:key error:', e.message);
     res.status(500).json({ error: 'Could not delete lead status.' });
+  }
+});
+
+// GET /api/admin/substatus-clear-failures — list unresolved (or all) failure records
+// Query params: ?resolved=true to include resolved entries, ?key=<deleted_key> to filter
+app.get('/api/admin/substatus-clear-failures', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const includeResolved = req.query.resolved === 'true';
+    const keyFilter = req.query.key || null;
+    const conditions = [];
+    const params = [];
+    if (!includeResolved) {
+      params.push(false);
+      conditions.push(`resolved = $${params.length}`);
+    }
+    if (keyFilter) {
+      params.push(keyFilter);
+      conditions.push(`deleted_key = $${params.length}`);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const { rows } = await pool.query(
+      `SELECT id, failed_at, deleted_key, failure_type, contact_id, error_message, resolved, resolved_at
+         FROM substatus_clear_failures
+         ${where}
+         ORDER BY failed_at DESC
+         LIMIT 200`,
+      params
+    );
+    res.json({ failures: rows });
+  } catch (e) {
+    console.error('GET /api/admin/substatus-clear-failures error:', e.message);
+    res.status(500).json({ error: 'Could not load substatus clear failures.' });
+  }
+});
+
+// POST /api/admin/substatus-clear-failures/retry — re-trigger the clear job for a deleted key
+// Body: { deletedKey: string }
+// Marks all unresolved failures for that key as resolved, then re-runs the job.
+app.post('/api/admin/substatus-clear-failures/retry', isAuthenticated, requireAdmin, async (req, res) => {
+  const { deletedKey } = req.body || {};
+  if (!deletedKey || typeof deletedKey !== 'string') {
+    return res.status(400).json({ error: 'deletedKey is required.' });
+  }
+  try {
+    await pool.query(
+      `UPDATE substatus_clear_failures
+          SET resolved = TRUE, resolved_at = NOW()
+        WHERE deleted_key = $1 AND resolved = FALSE`,
+      [deletedKey]
+    );
+    res.json({ ok: true, message: `Re-triggering substatus clear for key "${deletedKey}".` });
+    clearOrphanedSubstatusesForDeletedStatus(deletedKey).catch(e =>
+      console.warn('Orphaned substatus clear (manual retry) failed:', e.message)
+    );
+  } catch (e) {
+    console.error('POST /api/admin/substatus-clear-failures/retry error:', e.message);
+    res.status(500).json({ error: 'Could not retry substatus clear.' });
+  }
+});
+
+// DELETE /api/admin/substatus-clear-failures/:id — dismiss / mark a single record resolved
+app.delete('/api/admin/substatus-clear-failures/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id.' });
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE substatus_clear_failures SET resolved = TRUE, resolved_at = NOW()
+         WHERE id = $1 AND resolved = FALSE`,
+      [id]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'Record not found or already resolved.' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('DELETE /api/admin/substatus-clear-failures/:id error:', e.message);
+    res.status(500).json({ error: 'Could not dismiss failure record.' });
   }
 });
 
@@ -6125,6 +6250,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Ideas tables setup failed:', e.message); }
     try { await ensureLeadStatusTable(); console.log('  Lead status config table ready'); }
     catch (e) { console.error('  Lead status table setup failed:', e.message); }
+    try { await ensureSubstatusClearFailuresTable(); console.log('  Substatus clear failures table ready'); }
+    catch (e) { console.error('  Substatus clear failures table setup failed:', e.message); }
     try { await backfillLeadStatusShorthands(); }
     catch (e) { console.error('  Lead status shorthand backfill failed:', e.message); }
     try { await ensureStageActionLabelsTable(); console.log('  Stage action labels table ready'); }
