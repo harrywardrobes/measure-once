@@ -95,6 +95,7 @@ const STEPS = [
   'test:ideas:ci',
   'test:onboarding-conflicts:ci',
   'test:open-leads-stale-visibility:ci',
+  'test:project-contacts-unknown-status:ci',
   'test:keyboard-shortcuts',
   'test:handler-config-blocks',
   'test:conflict-digest-settings:ci',
