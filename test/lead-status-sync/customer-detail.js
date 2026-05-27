@@ -118,15 +118,15 @@ async function trackerSnapshot(page) {
   return page.evaluate(() => {
     const el = document.getElementById('workflow-stages');
     if (!el) return { present: false };
-    const rail = Array.from(el.querySelectorAll('.ls-rail-item')).map(r => ({
-      label:    r.querySelector('.ls-rail-label')?.textContent || '',
-      current:  r.classList.contains('ls-rail-item-current'),
-      past:     r.classList.contains('ls-rail-item-past'),
-      focused:  r.classList.contains('ls-rail-item-focused'),
+    const rail = Array.from(el.querySelectorAll('[data-ls-rail-item]')).map(r => ({
+      label:    r.querySelector('[data-ls-rail-label]')?.textContent || '',
+      current:  r.hasAttribute('data-ls-current'),
+      past:     r.hasAttribute('data-ls-past'),
+      focused:  r.hasAttribute('data-ls-focused'),
       value:    r.getAttribute('data-value') || '',
     }));
-    const tasks = Array.from(el.querySelectorAll('.status-task-row')).map(t => ({
-      label: t.querySelector('.status-label')?.textContent || '',
+    const tasks = Array.from(el.querySelectorAll('[data-substatus-key]')).map(t => ({
+      label: t.querySelector('[data-ls-status-label]')?.textContent || '',
       sub:   t.getAttribute('data-substatus-key') || '',
     }));
     return {
@@ -411,7 +411,7 @@ async function main() {
     const bcRailUpdated = await waitFor(detailTab, (args) => {
       const el = document.getElementById('workflow-stages');
       if (!el) return false;
-      return Array.from(el.querySelectorAll('.ls-rail-label'))
+      return Array.from(el.querySelectorAll('[data-ls-rail-label]'))
         .some(n => (n.textContent || '').trim() === args.label);
     }, { label: LABEL_A_BC }, 8000);
 
@@ -452,7 +452,7 @@ async function main() {
     const subUpdated = await waitFor(detailTab, (args) => {
       const el = document.getElementById('workflow-stages');
       if (!el) return false;
-      return Array.from(el.querySelectorAll('.status-task-row .status-label'))
+      return Array.from(el.querySelectorAll('[data-substatus-key] [data-ls-status-label]'))
         .some(n => (n.textContent || '').trim() === args.label);
     }, { label: SUB_A_RENAME }, 8000);
 
@@ -489,7 +489,7 @@ async function main() {
     const lsReorderUpdated = await waitFor(detailTab, (args) => {
       const el = document.getElementById('workflow-stages');
       if (!el) return false;
-      const vals = Array.from(el.querySelectorAll('.ls-rail-item'))
+      const vals = Array.from(el.querySelectorAll('[data-ls-rail-item]'))
         .map(r => r.getAttribute('data-value') || '');
       const ia = vals.indexOf(args.a);
       const ib = vals.indexOf(args.b);
@@ -536,7 +536,7 @@ async function main() {
     const subReorderUpdated = await waitFor(detailTab, (args) => {
       const el = document.getElementById('workflow-stages');
       if (!el) return false;
-      const subs = Array.from(el.querySelectorAll('.status-task-row'))
+      const subs = Array.from(el.querySelectorAll('[data-substatus-key]'))
         .map(t => t.getAttribute('data-substatus-key') || '');
       const ia  = subs.indexOf(args.a);
       const ia2 = subs.indexOf(args.a2);
@@ -598,7 +598,7 @@ async function main() {
     const visUpdated = await waitFor(detailTab, (args) => {
       const el = document.getElementById('workflow-stages');
       if (!el) return false;
-      return Array.from(el.querySelectorAll('.ls-rail-label'))
+      return Array.from(el.querySelectorAll('[data-ls-rail-label]'))
         .some(n => (n.textContent || '').trim() === args.label);
     }, { label: LABEL_A_VIS }, 8000);
 
@@ -1384,7 +1384,7 @@ async function writeReport(runId, findings) {
     '  `hs_lead_status` matches one of two visible test statuses (plus one',
     '  `excluded_from_sales` decoy), and asserts `_renderWorkflowStagesImpl` renders',
     '  one rail row per non-excluded status in admin sort order, marks the current',
-    '  status with `.ls-rail-item-current`, and lists `LEAD_SUBSTATUSES` rows for the',
+    '  status with `data-ls-current`, and lists `LEAD_SUBSTATUSES` rows for the',
     '  focused entry in order.',
     '- **(A) BroadcastChannel `lead_statuses_changed`**: renames the focused-status',
     '  label via `PATCH /api/admin/lead-statuses/:key`, posts the channel message',

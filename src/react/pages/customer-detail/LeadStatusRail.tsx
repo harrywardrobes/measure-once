@@ -1,4 +1,8 @@
 import React from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { LeadStatus, LeadSubstatus, Contact, STAGE_COLOURS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 
@@ -46,11 +50,11 @@ export function LeadStatusRail({
 
   if (rail.length === 0) {
     return (
-      <div id="workflow-stages" className="space-y-2">
-        <div className="ls-empty-tasks" style={{ padding: '1rem', textAlign: 'center', color: 'var(--ink-3)' }}>
+      <Box id="workflow-stages" sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Typography sx={{ p: '18px 16px', fontSize: '0.82rem', color: 'var(--ink-4)', fontStyle: 'italic' }}>
           No lead statuses configured. An admin can add them in Settings → Lead statuses.
-        </div>
-      </div>
+        </Typography>
+      </Box>
     );
   }
 
@@ -84,12 +88,56 @@ export function LeadStatusRail({
   const hasPrev = focusedIdx > 0;
   const hasNext = focusedIdx < rail.length - 1;
 
+  const navBtnSx = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--stone)',
+    bgcolor: '#fff',
+    color: 'var(--ink-2)',
+    cursor: 'pointer',
+    flexShrink: 0,
+    WebkitTapHighlightColor: 'transparent',
+    transition: 'background 0.1s, border-color 0.1s, opacity 0.1s',
+    p: 0,
+    '&:hover:not(:disabled)': { bgcolor: 'var(--paper-deep)', borderColor: 'var(--stone-deep)' },
+    '&:active:not(:disabled)': { bgcolor: 'var(--paper-deep)' },
+    '&:disabled': { opacity: 0.3, cursor: 'default' },
+  } as const;
+
   return (
-    <div id="workflow-stages" className="space-y-2">
-      <div className="ls-tracker">
-        <div className="ls-rail" role="list">
+    <Box id="workflow-stages" sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {/* tracker: rail + panel side by side */}
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'stretch',
+        gap: 2,
+        mb: '12px',
+        '@media (max-width: 640px)': { flexDirection: 'column', gap: '12px' },
+      }}>
+
+        {/* rail: vertical list of lead-status steps */}
+        <Box
+          role="list"
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            flex: '0 0 200px',
+            minWidth: 0,
+            p: '6px 4px',
+            bgcolor: 'var(--paper)',
+            border: '1px solid var(--stone)',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: 'var(--shadow-sm)',
+            '@media (max-width: 640px)': { flex: '0 0 auto' },
+          }}
+        >
           {rail.map((entry, i) => {
-            const colour   = STAGE_COLOURS[i % STAGE_COLOURS.length] || STAGE_COLOURS[0];
+            const colour    = STAGE_COLOURS[i % STAGE_COLOURS.length] || STAGE_COLOURS[0];
             const isCurrent = i === currentIdx;
             const isPast    = currentIdx !== -1 && i < currentIdx;
             const isFocused = entry.value === resolvedFocused;
@@ -97,145 +145,226 @@ export function LeadStatusRail({
             let badge: React.ReactNode;
             if (isPast) {
               badge = (
-                <div className="ls-rail-badge ls-rail-badge-done" style={{ background: colour.bg, borderColor: colour.bg }}>
+                <Box sx={{
+                  flexShrink: 0, width: 26, height: 26, borderRadius: '50%',
+                  border: '2px solid', borderColor: colour.bg, bgcolor: colour.bg,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.75rem', fontWeight: 700, lineHeight: 1,
+                }}>
                   <svg width="11" height="9" fill="none" stroke="#fff" viewBox="0 0 12 10" aria-hidden="true">
                     <polyline points="1,5 4.5,8.5 11,1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                </div>
+                </Box>
               );
             } else if (isCurrent) {
               badge = (
-                <div className="ls-rail-badge ls-rail-badge-current" style={{ background: colour.bg, borderColor: colour.bg, color: '#fff' }}>
+                <Box sx={{
+                  flexShrink: 0, width: 26, height: 26, borderRadius: '50%',
+                  border: '2px solid', borderColor: colour.bg, bgcolor: colour.bg, color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.75rem', fontWeight: 700, lineHeight: 1,
+                }}>
                   {i + 1}
-                </div>
+                </Box>
               );
             } else {
-              badge = <div className="ls-rail-badge ls-rail-badge-future">{i + 1}</div>;
+              badge = (
+                <Box sx={{
+                  flexShrink: 0, width: 26, height: 26, borderRadius: '50%',
+                  border: '2px solid var(--stone)', bgcolor: 'var(--paper)', color: 'var(--ink-4)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.75rem', fontWeight: 700, lineHeight: 1,
+                }}>
+                  {i + 1}
+                </Box>
+              );
             }
 
-            const labelStyle: React.CSSProperties = isCurrent
-              ? { color: colour.text, fontWeight: 700 }
-              : isPast
-                ? { color: 'var(--ink-2)', fontWeight: 600 }
-                : { color: 'var(--ink-3)', fontWeight: 500 };
-
-            const classes = [
-              'ls-rail-item',
-              isFocused ? 'ls-rail-item-focused' : '',
-              isPast ? 'ls-rail-item-past' : '',
-              isCurrent ? 'ls-rail-item-current' : '',
-            ].filter(Boolean).join(' ');
+            const labelColor  = isCurrent ? colour.text : isPast ? 'var(--ink-2)' : 'var(--ink-3)';
+            const labelWeight = isCurrent ? 700 : isPast ? 600 : 500;
 
             return (
-              <div
+              <Box
                 key={entry.value}
-                className={classes}
                 role="listitem"
+                data-ls-rail-item
                 data-ls-key={entry.value}
                 data-action="setFocusedLeadStatus"
                 data-value={entry.value}
+                data-ls-current={isCurrent || undefined}
+                data-ls-past={isPast || undefined}
+                data-ls-focused={isFocused || undefined}
                 title={entry.label}
-                style={isFocused ? ({ '--ls-focus-bg': colour.bg, '--ls-focus-tint': colour.light } as React.CSSProperties) : undefined}
                 onClick={() => onFocusChange(entry.value)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  p: '8px 10px', borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer', position: 'relative',
+                  WebkitTapHighlightColor: 'transparent',
+                  transition: 'background 0.12s', minWidth: 0,
+                  bgcolor: isFocused ? colour.light : 'transparent',
+                  boxShadow: isFocused ? `inset 3px 0 0 ${colour.bg}` : 'none',
+                  '&:hover': { bgcolor: isFocused ? colour.light : 'var(--paper-deep)' },
+                }}
               >
                 {badge}
-                <span className="ls-rail-label" style={labelStyle}>{entry.label}</span>
-              </div>
+                <Box
+                  component="span"
+                  data-ls-rail-label
+                  sx={{ fontSize: '0.82rem', lineHeight: 1.25, minWidth: 0, wordBreak: 'break-word', color: labelColor, fontWeight: labelWeight }}
+                >
+                  {entry.label}
+                </Box>
+              </Box>
             );
           })}
-        </div>
+        </Box>
 
+        {/* detail panel for the focused stage */}
         {focusedEntry && (
-          <div className="ls-panel" style={{ borderTop: `3px solid ${focusedColour.bg}` }}>
-            <div className="stage-panel-header">
-              <div className="stage-panel-header-row">
-                <div className="stage-panel-title-block">
-                  <div
-                    className="stage-panel-name"
-                    style={{ color: isFocusedFuture ? 'var(--ink-3)' : focusedColour.text }}
-                  >
+          <Box sx={{
+            flex: 1, minWidth: 0,
+            bgcolor: 'var(--paper)',
+            border: '1px solid var(--stone)',
+            borderTop: `3px solid ${focusedColour.bg}`,
+            borderRadius: 'var(--radius-lg)',
+            overflow: 'hidden',
+            boxShadow: 'var(--shadow-sm)',
+            display: 'flex', flexDirection: 'column',
+          }}>
+
+            {/* panel header */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', borderBottom: '1px solid var(--stone-light)' }}>
+              <Box sx={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: '12px', p: '14px 16px 12px',
+              }}>
+                {/* title block */}
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography sx={{
+                    fontSize: '1rem', fontWeight: 700, lineHeight: 1.2,
+                    color: isFocusedFuture ? 'var(--ink-3)' : focusedColour.text,
+                  }}>
                     {focusedEntry.label}
-                  </div>
-                  <div className="stage-panel-meta">
-                    {isFocusedCurrent && <span className="stage-sublabel">Current stage</span>}
-                    {isFocusedPast    && <span className="stage-sublabel">Completed</span>}
-                    {isFocusedFuture  && <span className="stage-sublabel">Upcoming</span>}
-                  </div>
-                </div>
-                <div className="stage-panel-nav">
-                  <button
-                    className="stage-nav-btn"
+                  </Typography>
+                  <Box sx={{ mt: '3px', display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
+                    {isFocusedCurrent && (
+                      <Typography component="span" sx={{ fontSize: '0.72rem', color: 'var(--ink-4)', mt: '2px' }}>
+                        Current stage
+                      </Typography>
+                    )}
+                    {isFocusedPast && (
+                      <Typography component="span" sx={{ fontSize: '0.72rem', color: 'var(--ink-4)', mt: '2px' }}>
+                        Completed
+                      </Typography>
+                    )}
+                    {isFocusedFuture && (
+                      <Typography component="span" sx={{ fontSize: '0.72rem', color: 'var(--ink-4)', mt: '2px' }}>
+                        Upcoming
+                      </Typography>
+                    )}
+                  </Box>
+                </Box>
+
+                {/* prev / next nav */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                  <Box
+                    component="button"
                     disabled={!hasPrev}
                     data-action="focusPrevLeadStatus"
                     title="Previous stage"
-                    onClick={() => {
-                      if (hasPrev) onFocusChange(rail[focusedIdx - 1].value);
-                    }}
+                    onClick={() => { if (hasPrev) onFocusChange(rail[focusedIdx - 1].value); }}
+                    sx={navBtnSx}
                   >
-                    <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                  <button
-                    className="stage-nav-btn"
+                    <ChevronLeftIcon sx={{ fontSize: 16 }} />
+                  </Box>
+                  <Box
+                    component="button"
                     disabled={!hasNext}
                     data-action="focusNextLeadStatus"
                     title="Next stage"
-                    onClick={() => {
-                      if (hasNext) onFocusChange(rail[focusedIdx + 1].value);
-                    }}
+                    onClick={() => { if (hasNext) onFocusChange(rail[focusedIdx + 1].value); }}
+                    sx={navBtnSx}
                   >
-                    <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
+                    <ChevronRightIcon sx={{ fontSize: 16 }} />
+                  </Box>
+                </Box>
+              </Box>
+            </Box>
 
-            <div className="stage-statuses">
+            {/* sub-status list */}
+            <Box sx={{ borderTop: '1px solid var(--stone)', p: '4px 0' }}>
               {focusedSubs.length === 0 ? (
-                <div className="ls-empty-tasks">No sub-statuses configured for this stage.</div>
+                <Typography sx={{ p: '18px 16px', fontSize: '0.82rem', color: 'var(--ink-4)', fontStyle: 'italic' }}>
+                  No sub-statuses configured for this stage.
+                </Typography>
               ) : (
                 focusedSubs.map(s => {
                   const subKey = String(s.substatus_key).toUpperCase();
                   const done   = subKey === tickedSubKey;
-                  const checkBg: React.CSSProperties = done
-                    ? { background: focusedColour.bg, borderColor: focusedColour.bg }
-                    : {};
 
                   return (
-                    <div
+                    <Box
                       key={s.substatus_key}
-                      className={`status-task-row${done ? ' status-task-done completed' : ''}`}
                       data-substatus-key={subKey}
+                      data-ls-done={done || undefined}
                       data-action={canEdit ? 'setLeadSubstatusChecked' : undefined}
                       data-status-value={resolvedFocused ?? ''}
                       data-checked={canEdit ? String(!done) : undefined}
-                      style={{ cursor: canEdit ? 'pointer' : 'default', pointerEvents: canEdit ? 'auto' : 'none' }}
                       onClick={canEdit ? () => onSubstatusChange(resolvedFocused!, subKey, !done) : undefined}
+                      sx={{
+                        display: 'flex', alignItems: 'flex-start', gap: '12px',
+                        width: '100%', p: '12px 16px', minHeight: 48,
+                        cursor: canEdit ? 'pointer' : 'default',
+                        pointerEvents: canEdit ? 'auto' : 'none',
+                        WebkitTapHighlightColor: 'transparent',
+                        transition: 'background 0.1s',
+                        opacity: done ? 0.6 : 1,
+                        '&:hover': { bgcolor: canEdit ? 'var(--paper-deep)' : 'transparent' },
+                        '&:active': { bgcolor: canEdit ? 'var(--paper-deep)' : 'transparent' },
+                      }}
                     >
-                      <div
-                        className={`status-task-check${done ? ' status-task-check-done' : ''}`}
-                        style={checkBg}
-                      >
+                      {/* checkbox indicator */}
+                      <Box sx={{
+                        width: 18, height: 18,
+                        borderRadius: 'var(--radius-sm)',
+                        border: '2px solid',
+                        borderColor: done ? 'transparent' : 'var(--stone-deep)',
+                        bgcolor: done ? focusedColour.bg : 'transparent',
+                        flexShrink: 0, mt: '2px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'background 0.15s, border-color 0.15s',
+                      }}>
                         {done && (
                           <svg width="10" height="8" fill="none" stroke="#fff" viewBox="0 0 12 10" aria-hidden="true">
                             <polyline points="1,5 4.5,8.5 11,1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                         )}
-                      </div>
-                      <div className="status-text">
-                        <span className={`status-label${done ? ' status-label-done' : ''}`}>{s.label}</span>
-                      </div>
-                    </div>
+                      </Box>
+
+                      {/* label */}
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                        <Typography
+                          component="span"
+                          data-ls-status-label
+                          sx={{
+                            fontSize: '0.875rem',
+                            color: done ? 'var(--ink-4)' : 'var(--ink-2)',
+                            lineHeight: 1.4,
+                            textDecoration: done ? 'line-through' : 'none',
+                          }}
+                        >
+                          {s.label}
+                        </Typography>
+                      </Box>
+                    </Box>
                   );
                 })
               )}
-            </div>
-          </div>
+            </Box>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
