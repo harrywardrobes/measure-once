@@ -158,26 +158,6 @@ are auto-created on boot.
 no password set. An admin must click **Resend set-password** on the Team tab
 for each of them before they can log in.
 
-## Admin database editor
-Generic table browser at `/admin/database` for inspecting/fixing data that
-has no dedicated admin UI. Allow-list lives in `db-editor.js` (`TABLES`) —
-add new editable tables there explicitly. Sensitive auth/session/token
-tables are excluded. All endpoints under `/api/admin/db/*` are gated by
-`isAuthenticated + requireAdmin`.
-
-Every write is wrapped in a transaction that also appends to
-`db_editor_audit` (admin_email, table, pk, op, before/after JSON). The
-**Audit log** tab supports one-click revert via
-`POST /api/admin/db/audit/:id/revert`.
-
-### Schema constraints used by the db editor
-A small set of cross-table FKs are `ON DELETE NO ACTION` so the editor's
-"blocking rows" preview surfaces dependents instead of silently orphaning:
-- `lead_substatuses.status_key → lead_status_config(key)`
-  (`lead_substatuses_status_key_fk`, in `ensureLeadSubstatusesTable`).
-
-`card_action_handler_bindings` FKs stay `ON DELETE CASCADE` — the admin
-handler-delete flow relies on the cascade.
 
 ## Dev-only admin features
 The admin **Dev environment** tab (`#tab-devenv` in `public/admin.html`)

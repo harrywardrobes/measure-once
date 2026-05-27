@@ -36,7 +36,7 @@
  *
  *   The explicitly listed root-level server modules:
  *     server.js, design-visits.js, design-visit-uploads.js, quickbooks.js,
- *     visits.js, db-editor.js, rate-limiters.js
+ *     visits.js, rate-limiters.js
  *
  *   auth.js is EXCLUDED — it is the canonical server-side implementation; it
  *   owns the `getReqPrivilege` helper, the `requireAdmin` / `requirePrivilege` /
@@ -124,7 +124,6 @@ const SERVER_FILES = [
   'design-visit-uploads.js',
   'quickbooks.js',
   'visits.js',
-  'db-editor.js',
   'rate-limiters.js',
 ].map(f => resolve(ROOT, f)).filter(f => existsSync(f));
 

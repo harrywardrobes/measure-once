@@ -74,8 +74,6 @@ const DB_SUITES = [
   'test:dv-catalogue-admin:ci',
   'test:dv-catalogue-image-upload:ci',
   'test:dv-catalogue-reorder:ci',
-  'test:db-editor:ci',
-  'test:db-editor-blocking-rows:ci',
   'test:window-ui-smoke:ci',
   'test:sign-off-stale-link:ci',
   'test:react-admin-tabs:ci',

@@ -17,8 +17,6 @@ const {
 const qbRoutes = require('./quickbooks');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
-const { installDbEditorRoutes, ensureDbEditorAuditTable } = require('./db-editor');
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
@@ -2589,34 +2587,6 @@ app.get('/admin', async (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// Admin database editor. Non-admins (including unauthenticated users) get a
-// 404 so the page is indistinguishable from a non-existent route — we do not
-// reveal that an admin-only editor lives at this path.
-app.get('/admin/database', async (req, res) => {
-  const notFound = () => res.status(404).type('html').send(
-    '<!doctype html><meta charset="utf-8"><title>Not found</title>' +
-    '<div style="font-family:system-ui;padding:40px;max-width:480px;margin:auto;">' +
-    '<h1 style="margin:0 0 8px;font-size:1.4rem;">404 · Not found</h1>' +
-    '<p style="color:#555;">The page you requested does not exist.</p></div>'
-  );
-  const isAuthed = req.isAuthenticated && req.isAuthenticated();
-  if (!isAuthed || !req.user?.claims) return notFound();
-  const userId = req.user.claims.sub;
-  let admin = false;
-  if (userId) {
-    try {
-      const r = await pool.query('SELECT privilege_level FROM users WHERE id = $1', [userId]);
-      admin = r.rows[0]?.privilege_level === 'admin';
-    } catch (e) {
-      console.error('GET /admin/database admin check failed:', e);
-    }
-  }
-  if (!admin) return notFound();
-  res.sendFile(path.join(__dirname, 'public', 'database.html'));
-});
-
-installDbEditorRoutes(app, { isAuthenticated, requireAdmin });
-
 app.get('/trades', isAuthenticated, (_req, res) => {
   res.redirect('/');
 });
@@ -3541,12 +3511,6 @@ app.delete('/api/ideas/:id', isAuthenticated, requireAdmin, async (req, res) => 
     }
     const before = beforeR.rows[0];
     await client.query('DELETE FROM ideas WHERE id = $1', [ideaId]);
-    const adminEmail = req.user?.claims?.email || req.user?.email || 'unknown';
-    await client.query(
-      `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
-       VALUES ($1, 'ideas', $2, 'delete', $3::jsonb, NULL)`,
-      [adminEmail, String(ideaId), JSON.stringify(before)]
-    );
     await client.query('COMMIT');
     res.json({ ok: true });
   } catch (e) {
@@ -3578,12 +3542,6 @@ app.patch('/api/ideas/:id', isAuthenticated, requireAdmin, async (req, res) => {
       [body, ideaId]
     );
     const after = rows[0];
-    const adminEmail = req.user?.claims?.email || req.user?.email || 'unknown';
-    await client.query(
-      `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
-       VALUES ($1, 'ideas', $2, 'update', $3::jsonb, $4::jsonb)`,
-      [adminEmail, String(ideaId), JSON.stringify(before), JSON.stringify(after)]
-    );
     await client.query('COMMIT');
     res.json({ id: after.id, body: after.body, edited_at: after.edited_at });
   } catch (e) {
@@ -3612,12 +3570,6 @@ app.delete('/api/ideas/:id/comments/:commentId', isAuthenticated, requireAdmin, 
     }
     const before = beforeR.rows[0];
     await client.query('DELETE FROM idea_comments WHERE id = $1 AND idea_id = $2', [commentId, ideaId]);
-    const adminEmail = req.user?.claims?.email || req.user?.email || 'unknown';
-    await client.query(
-      `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
-       VALUES ($1, 'idea_comments', $2, 'delete', $3::jsonb, NULL)`,
-      [adminEmail, String(commentId), JSON.stringify(before)]
-    );
     await client.query('COMMIT');
     res.json({ ok: true });
   } catch (e) {
@@ -3653,12 +3605,6 @@ app.patch('/api/ideas/:id/comments/:commentId', isAuthenticated, requireAdmin, a
       [body, commentId, ideaId]
     );
     const after = rows[0];
-    const adminEmail = req.user?.claims?.email || req.user?.email || 'unknown';
-    await client.query(
-      `INSERT INTO db_editor_audit (admin_email, table_name, pk, op, before_data, after_data)
-       VALUES ($1, 'idea_comments', $2, 'update', $3::jsonb, $4::jsonb)`,
-      [adminEmail, String(commentId), JSON.stringify(before), JSON.stringify(after)]
-    );
     await client.query('COMMIT');
     res.json({ id: after.id, body: after.body, edited_at: after.edited_at });
   } catch (e) {
@@ -4355,12 +4301,8 @@ async function ensureLeadSubstatusesTable() {
     )
   `);
   // Real FK so deleting a lead_status_config row that still has substatuses is
-  // blocked at the DB layer (Postgres 23503), which lets the admin db-editor
-  // surface its "blocking rows" preview instead of silently orphaning data.
-  // ON DELETE NO ACTION (the default) is intentional: the admin must remove
-  // or reassign the dependent substatuses first. There is no production code
-  // path that deletes a lead_status_config row with live substatuses, so this
-  // is a safety net, not a regression.
+  // blocked at the DB layer (Postgres 23503). ON DELETE NO ACTION is intentional:
+  // the admin must remove or reassign dependent substatuses first.
   await pool.query(`
     DO $$
     BEGIN
@@ -5607,8 +5549,6 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  WhatsApp messages table setup failed:', e.message); }
     try { await ensureDesignVisitTables(); console.log('  Design visit tables ready'); }
     catch (e) { console.error('  Design visit tables setup failed:', e.message); }
-    try { await ensureDbEditorAuditTable(); console.log('  DB editor audit table ready'); }
-    catch (e) { console.error('  DB editor audit table setup failed:', e.message); }
     try { await ensurePageFilterConfigTable(); console.log('  Page filter config table ready'); }
     catch (e) { console.error('  Page filter config table setup failed:', e.message); }
     scheduleConflictDigest();

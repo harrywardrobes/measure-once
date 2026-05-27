@@ -32,7 +32,6 @@ const SOURCE_FILES = [
   'design-visits.js',
   'visits.js',
   'quickbooks.js',
-  'db-editor.js',
 ];
 
 // Capture every `app.<verb>('/api/…')` and `router.<verb>('/api/…')` call.

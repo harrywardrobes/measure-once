@@ -255,23 +255,6 @@ const ROUTES = [
   // Admin-only design-visit deletion (design-visits.js).
   { method: 'DELETE', path: '/api/design-visits/0',                            level: 'admin' },
 
-  // Admin database editor (db-editor.js). All routes are admin-only; the
-  // :table slot is validated against the allow-list, so a bogus value like
-  // `__nope__` reaches the handler and 400s — the gate decision (which is
-  // what the matrix measures) still fires first.
-  { method: 'GET',    path: '/api/admin/db/tables',                            level: 'admin' },
-  // db-editor :table param is validated against the allow-list in db-editor.js
-  // BEFORE any handler body runs and returns 403 for unknown tables. That
-  // overlaps with the requireAdmin 403 and made the admin actor look like a
-  // gate denial. Use a real allow-listed table (`lead_status_config`, PK
-  // `key`) so the admin reaches the handler — non-admins still get 403 from
-  // requireAdmin, admin reaches the handler (200 GET / 404 on missing PK).
-  { method: 'GET',    path: '/api/admin/db/lead_status_config/rows',           level: 'admin' },
-  { method: 'POST',   path: '/api/admin/db/lead_status_config/rows',           level: 'admin', body: {} },
-  { method: 'PATCH',  path: '/api/admin/db/lead_status_config/rows/__privtest_noop__', level: 'admin', body: {} },
-  { method: 'DELETE', path: '/api/admin/db/lead_status_config/rows/__privtest_noop__', level: 'admin' },
-  { method: 'GET',    path: '/api/admin/db/audit',                             level: 'admin' },
-  { method: 'POST',   path: '/api/admin/db/audit/0/revert',                    level: 'admin', body: {} },
 
   // Design-visit catalogue admin endpoints (design-visits.js).
   { method: 'GET',    path: '/api/admin/design-visit-handles',                 level: 'admin' },

@@ -66,7 +66,6 @@ const IdeasPage              = React.lazy(() => import('./pages/IdeasPage').then
 const CustomerDetailPage     = React.lazy(() => import('./pages/CustomerDetailPage').then(m => ({ default: m.CustomerDetailPage })));
 const StandaloneInvoicesPage = React.lazy(() => import('./pages/StandaloneInvoicesPage').then(m => ({ default: m.StandaloneInvoicesPage })));
 const ProjectsPage           = React.lazy(() => import('./pages/ProjectsPage').then(m => ({ default: m.ProjectsPage })));
-const DatabaseAdminPage          = React.lazy(() => import('./pages/admin/DatabaseAdminPage').then(m => ({ default: m.DatabaseAdminPage })));
 const DesignVisitSignOffPage     = React.lazy(() => import('./pages/DesignVisitSignOffPage').then(m => ({ default: m.DesignVisitSignOffPage })));
 const NotFoundPage               = React.lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 const AccessRestrictedPage       = React.lazy(() => import('./pages/AccessRestrictedPage').then(m => ({ default: m.AccessRestrictedPage })));
@@ -169,7 +168,6 @@ const MOUNTS: Array<{ id: string; render: () => React.ReactElement; fallback?: R
   { id: 'customer-detail-root',   render: () => <CustomerDetailPage /> },
   { id: 'invoices-page-mount',    render: () => <StandaloneInvoicesPage /> },
   { id: 'projects-view',          render: () => <ProjectsPage />, fallback: <ProjectsPageSkeleton /> },
-  { id: 'db-page-mount',              render: () => <DatabaseAdminPage /> },
   { id: 'dv-signoff-mount',           render: () => <DesignVisitSignOffPage /> },
   { id: 'not-found-root',             render: () => <NotFoundPage /> },
   { id: 'access-restricted-root',     render: () => <AccessRestrictedPage /> },
