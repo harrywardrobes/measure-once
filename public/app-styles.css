@@ -1550,4 +1550,4 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 
 /* Error-banner action links/buttons (replaces Tailwind text-blue-600). */
 .mo-error-action { color: var(--orchid); }
-.mo-error-msg { color: var(--status-danger-text); }
+.mo-error-msg { color: var(--error); }

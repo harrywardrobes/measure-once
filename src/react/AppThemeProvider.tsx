@@ -92,6 +92,7 @@ const rootTokens = {
   /* ── Status colours ──────────────────────────────────────────────────────── */
   '--status-danger':        '#dc2626',
   '--status-danger-text':   '#991b1b',
+  '--error':                'var(--status-danger-text)',
   '--status-danger-bg':     '#fef2f2',
   '--status-danger-border': '#fecaca',
   '--status-success':       '#16a34a',
