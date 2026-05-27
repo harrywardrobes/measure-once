@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
 import FormHelperText from '@mui/material/FormHelperText';
 import InputAdornment from '@mui/material/InputAdornment';
 import InputLabel from '@mui/material/InputLabel';
+import LinearProgress from '@mui/material/LinearProgress';
 import OutlinedInput from '@mui/material/OutlinedInput';
 import Typography from '@mui/material/Typography';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
@@ -18,6 +20,8 @@ export interface FileUploadFieldProps {
   helperText?: React.ReactNode;
   error?: boolean;
   disabled?: boolean;
+  uploading?: boolean;
+  progress?: number;
 }
 
 export function FileUploadField({
@@ -29,12 +33,15 @@ export function FileUploadField({
   helperText,
   error = false,
   disabled = false,
+  uploading = false,
+  progress,
 }: FileUploadFieldProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [displayValue, setDisplayValue] = useState<string>(value ?? '');
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
 
   const isImageAccept = (accept ?? '').toLowerCase().includes('image');
+  const isDisabled = disabled || uploading;
 
   useEffect(() => {
     setDisplayValue(value ?? '');
@@ -70,11 +77,13 @@ export function FileUploadField({
   }
 
   function openPicker() {
-    if (!disabled) fileInputRef.current?.click();
+    if (!isDisabled) fileInputRef.current?.click();
   }
 
+  const hasProgress = uploading && progress !== undefined;
+
   return (
-    <FormControl fullWidth error={error} disabled={disabled}>
+    <FormControl fullWidth error={error} disabled={isDisabled}>
       <InputLabel htmlFor={undefined}>{label}</InputLabel>
       <OutlinedInput
         label={label}
@@ -82,30 +91,60 @@ export function FileUploadField({
         readOnly
         placeholder="No file chosen"
         onClick={openPicker}
-        sx={{ cursor: disabled ? 'default' : 'pointer', pr: 0 }}
-        inputProps={{ style: { cursor: disabled ? 'default' : 'pointer' } }}
+        sx={{ cursor: isDisabled ? 'default' : 'pointer', pr: 0 }}
+        inputProps={{ style: { cursor: isDisabled ? 'default' : 'pointer' } }}
         endAdornment={
           <InputAdornment position="end" sx={{ mr: 0 }}>
-            <Button
-              component="span"
-              variant="contained"
-              size="small"
-              disabled={disabled}
-              onClick={(e) => { e.stopPropagation(); openPicker(); }}
-              startIcon={<FolderOpenIcon fontSize="small" />}
-              sx={{
-                borderRadius: '0 6px 6px 0',
-                height: '100%',
-                px: 2,
-                boxShadow: 'none',
-                '&:hover': { boxShadow: 'none' },
-              }}
-            >
-              Browse
-            </Button>
+            {uploading ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '0 6px 6px 0',
+                  height: '100%',
+                  px: 2,
+                  minWidth: 80,
+                  bgcolor: 'action.disabledBackground',
+                }}
+              >
+                <CircularProgress
+                  size={18}
+                  thickness={4}
+                  variant={hasProgress ? 'determinate' : 'indeterminate'}
+                  value={hasProgress ? progress : undefined}
+                  color="inherit"
+                />
+              </Box>
+            ) : (
+              <Button
+                component="span"
+                variant="contained"
+                size="small"
+                disabled={isDisabled}
+                onClick={(e) => { e.stopPropagation(); openPicker(); }}
+                startIcon={<FolderOpenIcon fontSize="small" />}
+                sx={{
+                  borderRadius: '0 6px 6px 0',
+                  height: '100%',
+                  px: 2,
+                  boxShadow: 'none',
+                  '&:hover': { boxShadow: 'none' },
+                }}
+              >
+                Browse
+              </Button>
+            )}
           </InputAdornment>
         }
       />
+      {hasProgress && (
+        <LinearProgress
+          variant="determinate"
+          value={progress}
+          sx={{ mt: 0.5, borderRadius: 1 }}
+        />
+      )}
       <input
         ref={fileInputRef}
         type="file"

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import Box from '@mui/material/Box';
-import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 import { FileUploadField } from './FileUploadField';
 
@@ -10,11 +9,13 @@ const meta: Meta<typeof FileUploadField> = {
   component: FileUploadField,
   parameters: { layout: 'padded' },
   argTypes: {
-    label:    { control: 'text' },
-    accept:   { control: 'text' },
-    multiple: { control: 'boolean' },
-    disabled: { control: 'boolean' },
-    error:    { control: 'boolean' },
+    label:     { control: 'text' },
+    accept:    { control: 'text' },
+    multiple:  { control: 'boolean' },
+    disabled:  { control: 'boolean' },
+    error:     { control: 'boolean' },
+    uploading: { control: 'boolean' },
+    progress:  { control: { type: 'range', min: 0, max: 100, step: 1 } },
   },
 };
 export default meta;
@@ -86,30 +87,22 @@ function UploadInProgressDemo() {
     return () => clearInterval(timer);
   }, []);
 
+  const done = progress >= 100;
+
   return (
     <Box sx={{ maxWidth: 480 }}>
       <FileUploadField
         label="Design drawings"
         accept=".pdf,.dwg"
         value="floor-plan-v2.pdf"
-        disabled
-        helperText={
-          progress < 100
-            ? `Uploading… ${progress}%`
-            : 'Upload complete'
-        }
+        uploading={!done}
+        progress={done ? undefined : progress}
+        helperText={done ? 'Upload complete' : `Uploading… ${progress}%`}
       />
-      {progress < 100 && (
-        <LinearProgress
-          variant="determinate"
-          value={progress}
-          sx={{ mt: 0.5, borderRadius: 1 }}
-        />
-      )}
       <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-        {progress < 100
-          ? 'Please wait while the file is being uploaded.'
-          : 'File uploaded successfully.'}
+        {done
+          ? 'File uploaded successfully.'
+          : 'Please wait while the file is being uploaded.'}
       </Typography>
     </Box>
   );
