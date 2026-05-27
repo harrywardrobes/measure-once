@@ -22,8 +22,10 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DateRangePicker } from '@mui/x-date-pickers-pro/DateRangePicker';
+import { DateTimeRangePicker } from '@mui/x-date-pickers-pro/DateTimeRangePicker';
 import { TimeRangePicker } from '@mui/x-date-pickers-pro/TimeRangePicker';
 import type { DateRange, RangePosition } from '@mui/x-date-pickers-pro/models';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import type { FieldOwnerState } from '@mui/x-date-pickers/models';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -717,6 +719,182 @@ export const TimeRangePickerField: Story = {
               onChange={() => {}}
               disabled
               localeText={{ start: 'Start', end: 'End' }}
+              slotProps={{
+                textField: {
+                  size: 'small',
+                  fullWidth: true,
+                  helperText: 'Locked after order confirmation.',
+                },
+              }}
+            />
+          </Box>
+        </Stack>
+      </LocalizationProvider>
+    );
+  },
+};
+
+export const DateTimePickerField: Story = {
+  name: 'DateTimePicker',
+  render: () => {
+    const [visitDt, setVisitDt] = useState<Dayjs | null>(null);
+    const [followUpDt, setFollowUpDt] = useState<Dayjs | null>(null);
+    const [orderDt, setOrderDt] = useState<Dayjs | null>(null);
+
+    const fmt = (d: Dayjs | null) => (d ? d.format('DD MMM YYYY h:mm A') : null);
+
+    return (
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <Stack spacing={3} sx={{ maxWidth: 400 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>DateTimePicker</Typography>
+
+          <DateTimePicker
+            label="Design visit date & time"
+            value={visitDt}
+            onChange={(v) => setVisitDt(v)}
+            slotProps={{
+              textField: {
+                helperText: fmt(visitDt) ?? 'Pick a date and time for the design visit',
+                fullWidth: true,
+              },
+            }}
+          />
+
+          <DateTimePicker
+            label="Follow-up date & time"
+            value={followUpDt}
+            onChange={(v) => setFollowUpDt(v)}
+            disablePast
+            slotProps={{
+              textField: {
+                helperText: fmt(followUpDt) ?? 'Must be today or a future date/time',
+                fullWidth: true,
+              },
+            }}
+          />
+
+          <DateTimePicker
+            label="Order placed (error)"
+            value={orderDt}
+            onChange={(v) => setOrderDt(v)}
+            slotProps={{
+              textField: {
+                error: orderDt === null,
+                helperText: orderDt === null ? 'Order date and time is required.' : fmt(orderDt)!,
+                fullWidth: true,
+              },
+            }}
+          />
+
+          <DateTimePicker
+            label="Installation slot (disabled)"
+            value={null}
+            onChange={() => {}}
+            disabled
+            slotProps={{
+              textField: {
+                helperText: 'Date and time is locked once the order is confirmed.',
+                fullWidth: true,
+              },
+            }}
+          />
+        </Stack>
+      </LocalizationProvider>
+    );
+  },
+};
+
+export const DateTimeRangePickerField: Story = {
+  name: 'DateTimeRangePicker',
+  render: () => {
+    const [visitRange, setVisitRange] = useState<DateRange<Dayjs>>([null, null]);
+    const [prefilled, setPrefilled] = useState<DateRange<Dayjs>>([
+      dayjs().hour(9).minute(0).second(0),
+      dayjs().add(1, 'day').hour(17).minute(0).second(0),
+    ]);
+    const [errRange, setErrRange] = useState<DateRange<Dayjs>>([null, null]);
+
+    const fmt = (d: Dayjs | null) => (d ? d.format('DD MMM YYYY h:mm A') : '—');
+
+    const [errStart, errEnd] = errRange;
+    const bothSet = errStart !== null && errEnd !== null;
+    const rangeInvalid = bothSet && !errEnd.isAfter(errStart);
+
+    return (
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <Stack spacing={4} sx={{ maxWidth: 620 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>DateTimeRangePicker</Typography>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Default — schedule a site visit window</Typography>
+            <DateTimeRangePicker
+              value={visitRange}
+              onChange={(v) => setVisitRange(v)}
+              localeText={{ start: 'Visit start', end: 'Visit end' }}
+              slotProps={{ textField: { size: 'small', fullWidth: true } }}
+            />
+            {(visitRange[0] || visitRange[1]) && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block' }}>
+                Selected: {fmt(visitRange[0])} – {fmt(visitRange[1])}
+              </Typography>
+            )}
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Pre-filled — active project window</Typography>
+            <DateTimeRangePicker
+              value={prefilled}
+              onChange={(v) => setPrefilled(v)}
+              localeText={{ start: 'From', end: 'To' }}
+              slotProps={{ textField: { size: 'small', fullWidth: true } }}
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block' }}>
+              Window: {fmt(prefilled[0])} – {fmt(prefilled[1])}
+            </Typography>
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Error / validation — end must be after start</Typography>
+            <DateTimeRangePicker
+              value={errRange}
+              onChange={(v) => setErrRange(v)}
+              localeText={{ start: 'Start', end: 'End' }}
+              slotProps={{
+                textField: (ownerState: FieldOwnerState) => {
+                  const pos = (ownerState as FieldOwnerState & { position?: RangePosition }).position;
+                  return {
+                    size: 'small' as const,
+                    fullWidth: true,
+                    error:
+                      (pos === 'start' && errStart === null) ||
+                      (pos === 'end' && errEnd === null) ||
+                      rangeInvalid,
+                    helperText:
+                      pos === 'start' && errStart === null
+                        ? 'Start date & time is required.'
+                        : pos === 'end' && errEnd === null
+                        ? 'End date & time is required.'
+                        : rangeInvalid
+                        ? pos === 'start'
+                          ? 'Must be before end.'
+                          : 'Must be after start.'
+                        : undefined,
+                  };
+                },
+              }}
+            />
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Disabled — locked delivery window</Typography>
+            <DateTimeRangePicker
+              value={[
+                dayjs('2026-06-10').hour(8).minute(0),
+                dayjs('2026-06-10').hour(12).minute(0),
+              ]}
+              onChange={() => {}}
+              disabled
+              localeText={{ start: 'Delivery from', end: 'Delivery to' }}
               slotProps={{
                 textField: {
                   size: 'small',
