@@ -17,6 +17,13 @@ const RESULTS_DIR = join(ROOT, 'test-results');
 
 mkdirSync(RESULTS_DIR, { recursive: true });
 
+/**
+ * A step is either a plain npm script name (string) or an object:
+ *   { script: string, env?: Record<string, string> }
+ *
+ * The optional `env` map is merged on top of `process.env` for that step only.
+ */
+
 const STEPS = [
   'build:react',
   'test:stale-bundle',
@@ -92,7 +99,8 @@ const STEPS = [
   'test:conflict-digest-settings:ci',
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',
-  'test:storybook-output-clean',
+  'build:storybook',
+  { script: 'test:storybook-output-clean', env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
 ];
 
 /**
@@ -105,9 +113,9 @@ const STEPS = [
  *   test:keyboard-shortcuts       → keyboard-shortcuts.md
  *   build:react                   → null
  */
-function reportFile(step) {
-  if (!step.startsWith('test:')) return null;
-  let name = step.replace(/^test:/, '').replace(/:ci$/, '');
+function reportFile(script) {
+  if (!script.startsWith('test:')) return null;
+  let name = script.replace(/^test:/, '').replace(/:ci$/, '');
   return join(RESULTS_DIR, `${name}.md`);
 }
 
@@ -128,19 +136,27 @@ function extractReportSummary(filePath) {
   return lines.slice(0, 2).join(' · ') || null;
 }
 
+/** Normalise a STEPS entry into { script, env } regardless of input shape. */
+function normaliseStep(entry) {
+  if (typeof entry === 'string') return { script: entry, env: {} };
+  return { script: entry.script, env: entry.env ?? {} };
+}
+
 const results = [];
 let anyFailed = false;
 
 const ciStart = Date.now();
 
-for (const step of STEPS) {
+for (const entry of STEPS) {
+  const { script, env: extraEnv } = normaliseStep(entry);
   const stepStart = Date.now();
-  process.stdout.write(`\n\x1b[90m▸ npm run ${step}\x1b[0m\n`);
+  process.stdout.write(`\n\x1b[90m▸ npm run ${script}\x1b[0m\n`);
 
-  const result = spawnSync('npm', ['run', step], {
+  const result = spawnSync('npm', ['run', script], {
     stdio: 'inherit',
     shell: false,
     cwd: ROOT,
+    env: { ...process.env, ...extraEnv },
   });
 
   const elapsed = ((Date.now() - stepStart) / 1000).toFixed(1);
@@ -149,11 +165,10 @@ for (const step of STEPS) {
 
   if (!passed) anyFailed = true;
 
-  const status = passed ? 'PASS' : 'FAIL';
   const icon = passed ? '✅' : '❌';
-  process.stdout.write(`${icon} ${step} — ${elapsed}s\n`);
+  process.stdout.write(`${icon} ${script} — ${elapsed}s\n`);
 
-  results.push({ step, passed, elapsed: Number(elapsed), reportFile: reportFile(step) });
+  results.push({ step: script, passed, elapsed: Number(elapsed), reportFile: reportFile(script) });
 }
 
 const totalElapsed = ((Date.now() - ciStart) / 1000).toFixed(1);
