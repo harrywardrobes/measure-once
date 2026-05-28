@@ -356,7 +356,16 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                     </Typography>
                     {submission.emailSkippedCount > 0 && (
                       <Alert severity="warning" sx={{ mb: 1.5 }}>
-                        {submission.emailSkippedCount} photo{submission.emailSkippedCount === 1 ? ' was' : 's were'} too large to attach to the admin email — {submission.emailSkippedCount === 1 ? 'it is' : 'they are'} still viewable here.
+                        {submission.emailSkippedCount} photo{submission.emailSkippedCount === 1 ? ' was' : 's were'} too large to attach to the admin email —{' '}
+                        {submission.emailSkippedCount === 1 ? 'it is' : 'they are'}{' '}
+                        <a
+                          href={submission.photoUrls[0]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-testid="skipped-photo-link"
+                        >
+                          still viewable here
+                        </a>.
                       </Alert>
                     )}
                     <Box
