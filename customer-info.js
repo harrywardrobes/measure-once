@@ -687,6 +687,16 @@ router.post('/api/card-actions/upload-photos-and-info',
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
 
+    const expireResult = await pool.query(
+      `UPDATE customer_info_submissions
+       SET expires_at = NOW()
+       WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL`,
+      [cid]
+    );
+    if (expireResult.rowCount > 0) {
+      console.log(`[customer-info] Expired ${expireResult.rowCount} active link(s) for contact ${cid} before sending new one`);
+    }
+
     await pool.query(
       `INSERT INTO customer_info_submissions
          (contact_id, contact_name, contact_email, token_hash, expires_at,
