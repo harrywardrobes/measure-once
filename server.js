@@ -16,7 +16,7 @@ const {
   whatsappSendLimiter,
 } = require('./rate-limiters');
 const qbRoutes = require('./quickbooks');
-const { refreshCredentialCache, getCredential, getCredentialSource, maskCredential, setCredential, clearCredential, CRED_MAP } = require('./hubspot-creds');
+const { getCredential, CRED_MAP } = require('./hubspot-creds');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
 const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
@@ -1079,73 +1079,6 @@ app.delete('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (r
   } catch (e) {
     console.error('[hs-webhook] DELETE /api/admin/hubspot-webhook error:', e.response?.data || e.message);
     return res.status(502).json({ error: e.response?.data?.message || e.message });
-  }
-});
-
-// ── HubSpot: Credential management (admin only) ───────────────────────────────
-// GET /api/admin/hubspot-credentials
-// Returns masked values + source ('db' | 'env') for all three HubSpot credentials.
-// Pass ?unmasked=1 to receive the raw values (still admin-only).
-app.get('/api/admin/hubspot-credentials', isAuthenticated, requireAdmin, (req, res) => {
-  const showRaw = req.query.unmasked === '1';
-  const result = {};
-  for (const [name, entry] of Object.entries(CRED_MAP)) {
-    const value  = getCredential(name);
-    const source = getCredentialSource(name);
-    result[name] = {
-      source,
-      set: !!value,
-      masked: value ? maskCredential(value) : null,
-      ...(showRaw ? { value } : {}),
-    };
-  }
-  res.json(result);
-});
-
-// PATCH /api/admin/hubspot-credentials
-// Body: { key: 'access_token'|'app_id'|'client_secret', value: string }
-// Writes the value to admin_settings and refreshes the in-memory cache.
-app.patch('/api/admin/hubspot-credentials', isAuthenticated, requireAdmin, async (req, res) => {
-  const { key, value } = req.body || {};
-  if (!key || !CRED_MAP[key]) {
-    return res.status(400).json({ error: 'Invalid credential key. Must be one of: access_token, app_id, client_secret.' });
-  }
-  if (!value || typeof value !== 'string' || !value.trim()) {
-    return res.status(400).json({ error: 'value is required and must be a non-empty string.' });
-  }
-  try {
-    await setCredential(key, value.trim());
-    const actorEmail = req.user?.claims?.email || req.user?.email || null;
-    const auditOk = await logAdminAction(actorEmail, 'set_hubspot_credential', null, `key=${key}`);
-    if (!auditOk) {
-      process.stderr.write(JSON.stringify({ level: 'warn', event: 'audit_log_failure', route: 'PATCH /api/admin/hubspot-credentials', actor: actorEmail, action: 'set_hubspot_credential', key }) + '\n');
-    }
-    res.json({ ok: true, source: 'db', masked: maskCredential(value.trim()) });
-  } catch (e) {
-    console.error('[hubspot-creds] PATCH error:', e.message);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// DELETE /api/admin/hubspot-credentials/:key
-// Clears the DB override for one credential, falling back to the env var.
-app.delete('/api/admin/hubspot-credentials/:key', isAuthenticated, requireAdmin, async (req, res) => {
-  const name = req.params.key;
-  if (!CRED_MAP[name]) {
-    return res.status(400).json({ error: 'Invalid credential key. Must be one of: access_token, app_id, client_secret.' });
-  }
-  try {
-    await clearCredential(name);
-    const actorEmail = req.user?.claims?.email || req.user?.email || null;
-    const auditOk = await logAdminAction(actorEmail, 'clear_hubspot_credential', null, `key=${name}`);
-    if (!auditOk) {
-      process.stderr.write(JSON.stringify({ level: 'warn', event: 'audit_log_failure', route: 'DELETE /api/admin/hubspot-credentials/:key', actor: actorEmail, action: 'clear_hubspot_credential', key: name }) + '\n');
-    }
-    const remaining = getCredential(name);
-    res.json({ ok: true, source: 'env', set: !!remaining, masked: remaining ? maskCredential(remaining) : null });
-  } catch (e) {
-    console.error('[hubspot-creds] DELETE error:', e.message);
-    res.status(500).json({ error: e.message });
   }
 });
 
@@ -6594,8 +6527,6 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     if (process.env.DEBUG_HUBSPOT) {
       console.warn('[DEBUG] DEBUG_HUBSPOT is enabled — verbose HubSpot rate-limit and stale-cache logs are active. Unset this flag in production.');
     }
-    try { await refreshCredentialCache(); console.log('  HubSpot credential cache loaded'); }
-    catch (e) { console.warn('  HubSpot credential cache load failed (will use env vars):', e.message); }
     await ensureHubSpotProperties();
     try { await ensureVisitsTable(); console.log('  Visits table ready'); }
     catch (e) { console.error('  Visits table setup failed:', e.message); }
