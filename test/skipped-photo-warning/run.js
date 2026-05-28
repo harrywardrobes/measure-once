@@ -15,6 +15,9 @@
 //           "1 photo was too large…" is visible after expanding the card.
 //   [SKP-C] No warning   (email_skipped_count=0): the warning Alert is
 //           absent even after expanding the card (negative case).
+//   [SKP-D] Photo visibility (email_skipped_count=2): after the warning Alert
+//           appears, at least one photo <img> element is rendered with a non-
+//           empty src — confirming "still viewable here" is truthful.
 //
 // Strategy: boots a disposable test server, drives /customers/:contactId
 // with Puppeteer.  Uses two intercept layers:
@@ -333,6 +336,10 @@ async function writeReport(runId) {
     '  have an `href` equal to the first entry in `photoUrls`. Regression guard for the',
     '  "still viewable here" anchor added in task #1946.',
     '- **[SKP-D] Anchor href — singular**: Same check for `email_skipped_count: 1`.',
+    '- **[SKP-E] Click + photo visibility**: `email_skipped_count: 2`. Clicks the',
+    '  `[data-testid="skipped-photo-link"]` anchor inside the Alert, then asserts that',
+    '  at least one `<img>` with a non-empty `src` is rendered in the section —',
+    '  confirming the click target is real and the photo grid is populated.',
     '',
     '## Relevant files',
     '',
@@ -381,6 +388,7 @@ async function main() {
     '[SKP-C] no warning alert when email_skipped_count=0',
     '[SKP-D] plural case — "still viewable here" anchor href correct',
     '[SKP-D] singular case — "still viewable here" anchor href correct',
+    '[SKP-E] click "skipped-photo-link" anchor; photos visible in section (email_skipped_count=2)',
   ];
 
   if (!puppeteer) {
@@ -606,6 +614,66 @@ async function main() {
       );
     }
     await pageC.__ctx.close().catch(() => {});
+
+    // ── [SKP-E] email_skipped_count=2 — click anchor → photos visible ─────────
+    // Opens the same plural-warning scenario as SKP-A and expands the card.
+    // After the warning Alert appears, clicks the [data-testid="skipped-photo-link"]
+    // anchor inside the Alert, then asserts at least one <img> with a non-empty
+    // src is rendered — confirming the click target is real and photos are visible.
+
+    console.log('\n  [SKP-E] click "skipped-photo-link" anchor → photos visible (email_skipped_count=2)');
+    const pageD = await openCustomerDetail(browser, BASE, contactId, 2);
+
+    const sectionD = await waitForSection(pageD);
+    if (!sectionD) {
+      const errD = pageD.__logs.slice(0, 3).join('; ');
+      record(PROBE_LABELS[7], false, '#customer-info-submissions-section did not appear within 25 s'
+        + (errD ? ` | page errors: ${errD}` : ''));
+    } else {
+      await expandFirstCard(pageD);
+      await waitForExpanded(pageD);
+
+      // Wait for the "skipped-photo-link" anchor to appear in the DOM.
+      const anchorFound = await pollPage(pageD, () => {
+        const section = document.getElementById('customer-info-submissions-section');
+        if (!section) return null;
+        return section.querySelector('[data-testid="skipped-photo-link"]') ? 'ok' : null;
+      }, 10000);
+
+      if (!anchorFound) {
+        record(
+          PROBE_LABELS[7],
+          false,
+          '[data-testid="skipped-photo-link"] not found in the section within 10 s',
+        );
+      } else {
+        // Click the anchor inside the Alert.
+        await pageD.evaluate(() => {
+          const section = document.getElementById('customer-info-submissions-section');
+          if (!section) return;
+          const a = section.querySelector('[data-testid="skipped-photo-link"]');
+          if (a) a.click();
+        });
+
+        // Assert at least one <img> with a non-empty src is rendered — confirming
+        // the photo grid is populated and visible alongside the "viewable here" link.
+        const photoCount = await pageD.evaluate(() => {
+          const section = document.getElementById('customer-info-submissions-section');
+          if (!section) return 0;
+          const imgs = Array.from(section.querySelectorAll('img'));
+          return imgs.filter(img => (img.getAttribute('src') || '').length > 0).length;
+        });
+
+        record(
+          PROBE_LABELS[7],
+          photoCount > 0,
+          photoCount > 0
+            ? `clicked anchor; ${photoCount} photo img element(s) with non-empty src confirmed visible`
+            : 'clicked anchor but no <img> with non-empty src found — photos not rendered',
+        );
+      }
+    }
+    await pageD.__ctx.close().catch(() => {});
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;
     const failed = findings.filter(f => !f.ok).length;
