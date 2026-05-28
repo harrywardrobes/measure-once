@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
@@ -90,6 +91,12 @@ export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys,
           Choose exactly {BAR_SIZE} tabs to show in the main bar. The rest will appear in the More
           drawer.
         </Typography>
+        {isCustomized === false && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            This role currently inherits the default layout. Saving will create a custom layout for
+            this role.
+          </Alert>
+        )}
         <FormGroup>
           {availableItems.map((n) => {
             const checked = selected.includes(n.key);
