@@ -33,7 +33,7 @@ function pushSseEvent(payload) {
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const LINK_TTL_DAYS = 7;
+const LINK_TTL_DAYS = 28;
 
 // ── Utility helpers ───────────────────────────────────────────────────────────
 function appBaseUrl() {
@@ -97,12 +97,20 @@ function hsHeaders() {
 function maskEmail(email) {
   if (!email || typeof email !== 'string') return '';
   const [local, domain] = email.split('@');
-  if (!domain) return email[0] + '***';
-  const maskedLocal = local.length <= 2
-    ? local[0] + '***'
-    : local[0] + '***';
+  if (!domain) return (local.slice(0, 3) || local[0] || '') + '***';
+  // Local: first 3 chars + *** + last 3 chars (e.g. har***son), shorter names get first + ***
+  let maskedLocal;
+  if (local.length <= 3) {
+    maskedLocal = local[0] + '***';
+  } else if (local.length <= 6) {
+    maskedLocal = local.slice(0, 3) + '***';
+  } else {
+    maskedLocal = local.slice(0, 3) + '***' + local.slice(-3);
+  }
+  // Domain: first char + ** + .TLD (e.g. g**.com)
   const domainParts = domain.split('.');
-  const maskedDomain = '***.' + domainParts[domainParts.length - 1];
+  const tld = domainParts[domainParts.length - 1];
+  const maskedDomain = domain[0] + '**.' + tld;
   return `${maskedLocal}@${maskedDomain}`;
 }
 function maskPhone(phone) {
@@ -146,6 +154,24 @@ async function ensureCustomerInfoSubmissionsTable() {
     ALTER TABLE customer_info_submissions
     ADD COLUMN IF NOT EXISTS email_skipped_count INTEGER NOT NULL DEFAULT 0
   `);
+}
+
+async function ensureResendLogTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_info_resend_log (
+      id           SERIAL PRIMARY KEY,
+      token_hash   TEXT NOT NULL,
+      requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS cirl_token_hash_idx ON customer_info_resend_log (token_hash)
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS cirl_requested_at_idx ON customer_info_resend_log (requested_at)
+  `);
+  // Cleanup: delete rows older than 48 hours to keep the table small
+  await pool.query(`DELETE FROM customer_info_resend_log WHERE requested_at < NOW() - INTERVAL '48 hours'`);
 }
 
 // ── Email templates ───────────────────────────────────────────────────────────
@@ -487,6 +513,47 @@ async function lookupToken(rawToken) {
   return r.rows[0] || null;
 }
 
+// ── Turnstile verification (used by the public resend endpoint) ───────────────
+async function verifyTurnstileForResend(token, ip) {
+  if (!process.env.TURNSTILE_SECRET_KEY) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[SECURITY] TURNSTILE_SECRET_KEY is required in production — rejecting resend request.');
+      return { ok: false };
+    }
+    return { ok: true }; // dev bypass when key not configured
+  }
+  try {
+    const params = new URLSearchParams({
+      secret:   process.env.TURNSTILE_SECRET_KEY,
+      response: token || '',
+      remoteip: ip || '',
+    });
+    const r = await axios.post(
+      'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+      params.toString(),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 8000 }
+    );
+    return { ok: !!r.data?.success };
+  } catch (err) {
+    console.error('[customer-info] Turnstile verification error:', err.message);
+    return { ok: false };
+  }
+}
+
+// ── In-memory IP rate limiter for the public resend endpoint ──────────────────
+// Max 5 requests per IP per hour. Map: ip → array of timestamps.
+const _resendIpLog = new Map();
+function checkIpResendLimit(ip) {
+  const now = Date.now();
+  const windowMs = 60 * 60 * 1000;
+  const max = 5;
+  const hits = (_resendIpLog.get(ip) || []).filter(t => now - t < windowMs);
+  if (hits.length >= max) return false;
+  hits.push(now);
+  _resendIpLog.set(ip, hits);
+  return true;
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 // Authenticated: send invite link to customer
@@ -546,10 +613,16 @@ router.post('/api/card-actions/upload-photos-and-info',
 router.get('/api/customer-info/:token', async (req, res) => {
   const row = await lookupToken(req.params.token);
   if (!row) {
-    return res.status(404).json({ error: 'Link not found.' });
+    // Return 410 (same as expired) with status:"not_found" and no maskedEmail so
+    // the frontend can use the same expired-page path but omit the resend button.
+    return res.status(410).json({ error: 'Link not found.', status: 'not_found' });
   }
   if (new Date(row.expires_at) < new Date()) {
-    return res.status(410).json({ error: 'This link has expired. Please contact us for a new one.', status: 'expired' });
+    return res.status(410).json({
+      error: 'This link has expired.',
+      status: 'expired',
+      maskedEmail: row.masked_email || '',
+    });
   }
   if (row.submitted_at) {
     return res.status(410).json({ error: 'You have already submitted this form. Thank you!', status: 'submitted' });
@@ -673,6 +746,77 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
   }
 
   res.json({ ok: true });
+});
+
+// Public: self-serve resend for an expired link (Turnstile + rate-limited)
+// POST /api/customer-info/:token/resend-expired
+router.post('/api/customer-info/:token/resend-expired', express.json({ limit: '4kb' }), async (req, res) => {
+  // 1. Turnstile must be verified before any DB work or rate-limit checks.
+  const captchaResult = await verifyTurnstileForResend(
+    req.body?.captchaToken || req.body?.['cf-turnstile-response'],
+    req.ip
+  );
+  if (!captchaResult.ok) {
+    return res.status(400).json({ error: 'Captcha verification failed. Please try again.' });
+  }
+
+  // 2. IP rate limit (max 5 per IP per hour) — checked after Turnstile so bots
+  //    can't exhaust this limit without solving the captcha first.
+  if (!checkIpResendLimit(req.ip)) {
+    return res.status(429).json({ error: 'Too many requests — please try again later.' });
+  }
+
+  // 3. Look up the original token (using constant-time hash comparison via lookupToken).
+  const rawToken = req.params.token;
+  const row = await lookupToken(rawToken);
+  if (!row) {
+    return res.status(404).json({ error: 'Link not found.' });
+  }
+  if (row.submitted_at) {
+    return res.status(400).json({ error: 'This form has already been submitted.' });
+  }
+  // Must be expired (not still-active) to use self-serve resend.
+  if (new Date(row.expires_at) >= new Date()) {
+    return res.status(400).json({ error: 'This link has not expired yet — please use the original link.' });
+  }
+
+  // 4. Per-token rate limit (max 3 resends per token_hash per 24-hour rolling window).
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const countR = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM customer_info_resend_log
+     WHERE token_hash = $1 AND requested_at > NOW() - INTERVAL '24 hours'`,
+    [tokenHash]
+  );
+  if (parseInt(countR.rows[0]?.cnt ?? 0, 10) >= 3) {
+    return res.status(429).json({ error: 'Too many requests — please try again later.' });
+  }
+
+  // 5. Generate fresh token + insert new submission row (old row untouched).
+  const freshRaw   = crypto.randomBytes(32).toString('hex');
+  const freshHash  = crypto.createHash('sha256').update(freshRaw).digest('hex');
+  const freshExpiry = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+  await pool.query(
+    `INSERT INTO customer_info_submissions
+       (contact_id, contact_name, contact_email, token_hash, expires_at,
+        masked_email, masked_phone)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [row.contact_id, row.contact_name, row.contact_email, freshHash,
+     freshExpiry.toISOString(), row.masked_email, row.masked_phone]
+  );
+
+  // 6. Log the resend (stores token_hash only — never the raw token).
+  await pool.query(
+    `INSERT INTO customer_info_resend_log (token_hash) VALUES ($1)`,
+    [tokenHash]
+  );
+
+  // 7. Send invitation email.
+  const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(freshRaw)}`;
+  await sendCustomerInviteEmail(row.contact_email, row.masked_email || maskEmail(row.contact_email || ''), formLink);
+
+  console.log(`[customer-info] Self-serve resend issued for contact ${row.contact_id}`);
+  res.json({ ok: true, maskedEmail: row.masked_email || '' });
 });
 
 // Public: upload photos (before form submission)
@@ -819,6 +963,7 @@ router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, async (r
 module.exports = {
   router,
   ensureCustomerInfoSubmissionsTable,
+  ensureResendLogTable,
   signCustomerPhotoUrl,
   setSharedSseClients,
   setProjectContactsCacheInvalidator,

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -179,6 +179,84 @@ function StateBlock({ icon, title, subtitle }: {
   );
 }
 
+// ── Turnstile hook (for the expired-link resend widget) ───────────────────────
+
+type TW = { render: (el: Element, opts: object) => string; getResponse: (id: string) => string; reset: (id: string) => void };
+
+function useTurnstileResend(containerId: string, active: boolean) {
+  const [siteKey, setSiteKey] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaError, setCaptchaError] = useState(false);
+  const widgetIdRef = useRef<string | null>(null);
+  const attemptedRef = useRef(false);
+  const siteKeyRef = useRef<string>('');
+
+  const renderWidget = useCallback(() => {
+    if (attemptedRef.current) return;
+    const key = siteKeyRef.current;
+    if (!key) return;
+    const tw = (window as unknown as { turnstile?: TW }).turnstile;
+    const el = document.getElementById(containerId);
+    if (!tw || !el) return;
+    attemptedRef.current = true;
+    const id = tw.render(el, {
+      sitekey: key,
+      theme: 'light',
+      appearance: 'always',
+      size: 'flexible',
+      callback: () => { setCaptchaToken(tw.getResponse(id) || ''); setCaptchaError(false); },
+      'error-callback': () => setCaptchaError(true),
+      'unsupported-callback': () => setCaptchaError(true),
+    });
+    widgetIdRef.current = id;
+  }, [containerId]);
+
+  useEffect(() => {
+    fetch('/api/turnstile-config').then(r => r.json()).then(cfg => {
+      if (cfg?.enabled && cfg?.siteKey) {
+        siteKeyRef.current = cfg.siteKey;
+        setSiteKey(cfg.siteKey);
+        const w = window as unknown as { _turnstileApiReady?: boolean; onTurnstileReady?: () => void };
+        (window as unknown as { onTurnstileReady: () => void }).onTurnstileReady = () => renderWidget();
+        if (w._turnstileApiReady) {
+          renderWidget();
+        } else {
+          const script = document.createElement('script');
+          script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileReady';
+          script.async = true; script.defer = true;
+          document.head.appendChild(script);
+        }
+      } else {
+        setSiteKey(''); // disabled / not configured
+      }
+    }).catch(() => setSiteKey(''));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Re-attempt rendering whenever the widget becomes active (element enters the DOM)
+  // or when siteKey first resolves. attemptedRef prevents double-render.
+  useEffect(() => {
+    if (active && siteKey !== null) {
+      setTimeout(() => renderWidget(), 50);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteKey, active]);
+
+  const resetWidget = useCallback(() => {
+    const tw = (window as unknown as { turnstile?: TW }).turnstile;
+    const id = widgetIdRef.current;
+    setCaptchaToken('');
+    setCaptchaError(false);
+    attemptedRef.current = false;
+    widgetIdRef.current = null;
+    if (id != null && tw) { tw.reset(id); }
+  }, []);
+
+  // siteKey===null means still loading; siteKey==='' means disabled (no captcha required)
+  const ready = siteKey !== null && (siteKey === '' || captchaToken.length > 0);
+  return { siteKey, captchaToken, captchaError, ready, resetWidget };
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CustomerInfoPage() {
@@ -206,6 +284,11 @@ export function CustomerInfoPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr]   = useState('');
 
+  // Resend-expired flow
+  const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [resendErr, setResendErr]     = useState('');
+  const turnstile = useTurnstileResend('ts-resend-expired', pageState === 'expired' && !!maskedEmail);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const draftSavedRef = useRef(false);
 
@@ -222,6 +305,8 @@ export function CustomerInfoPage() {
         const d = await r.json();
         if (r.status === 410) {
           if (d.status === 'submitted') { setPageState('already_submitted'); return; }
+          // Capture masked email from the expired response so the resend UI can display it
+          if (d.maskedEmail) setMaskedEmail(d.maskedEmail);
           setPageState('expired');
           return;
         }
@@ -397,11 +482,117 @@ export function CustomerInfoPage() {
 
         {/* Expired */}
         {pageState === 'expired' && (
-          <StateBlock
-            icon={<HourglassBottomIcon />}
-            title="This link has expired"
-            subtitle="This link is only valid for 7 days. Please reply to the original email and we'll send you a fresh one."
-          />
+          <Box sx={{ textAlign: 'center', py: 6, px: 2.5 }}>
+            <Box sx={{ mb: 1.5, color: 'text.disabled', '& svg': { fontSize: '3rem' } }}>
+              <HourglassBottomIcon />
+            </Box>
+            <Typography variant="h3" sx={{ mb: 1 }}>This link has expired</Typography>
+            <Typography variant="body1" sx={{ color: 'text.secondary', lineHeight: 1.6, mb: maskedEmail ? 2.5 : 0 }}>
+              Links are valid for 28 days.
+              {!maskedEmail && ' Please contact us and we\'ll send you a fresh one.'}
+            </Typography>
+
+            {maskedEmail && (
+              <>
+                {resendState === 'sent' ? (
+                  <Box
+                    sx={{
+                      mt: 2,
+                      p: 2.5,
+                      bgcolor: '#f0fdf4',
+                      border: '1px solid #bbf7d0',
+                      borderRadius: 2,
+                      textAlign: 'center',
+                    }}
+                  >
+                    <CheckCircleOutlinedIcon sx={{ color: '#059669', fontSize: 32, mb: 1 }} />
+                    <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                      A new link has been sent to {maskedEmail}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                      Please check your inbox (and spam folder).
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Box
+                    sx={{
+                      mt: 2,
+                      p: 2.5,
+                      bgcolor: '#fff',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 2,
+                      textAlign: 'left',
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+                      We can send a fresh link to <strong>{maskedEmail}</strong>.
+                      Complete the check below, then click the button.
+                    </Typography>
+
+                    {/* Turnstile widget */}
+                    <Box id="ts-resend-expired" sx={{ mb: 2 }} />
+                    {turnstile.captchaError && (
+                      <Typography variant="caption" color="error" sx={{ display: 'block', mb: 1 }}>
+                        Verification failed — please refresh the page and try again.
+                      </Typography>
+                    )}
+
+                    {resendErr && (
+                      <Alert severity={resendErr.startsWith('Too many') ? 'warning' : 'error'} sx={{ mb: 1.5 }}>
+                        {resendErr}
+                      </Alert>
+                    )}
+
+                    <Button
+                      variant="contained"
+                      fullWidth
+                      disabled={!turnstile.ready || resendState === 'sending'}
+                      onClick={async () => {
+                        setResendState('sending');
+                        setResendErr('');
+                        try {
+                          const r = await fetch(
+                            `/api/customer-info/${encodeURIComponent(token)}/resend-expired`,
+                            {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ captchaToken: turnstile.captchaToken }),
+                            }
+                          );
+                          const d = await r.json();
+                          if (r.status === 429) {
+                            setResendErr('Too many requests — please try again later.');
+                            setResendState('error');
+                            turnstile.resetWidget();
+                          } else if (!r.ok) {
+                            throw new Error(d.error || 'Failed to send a new link.');
+                          } else {
+                            setResendState('sent');
+                          }
+                        } catch (e) {
+                          setResendErr((e as Error).message);
+                          setResendState('error');
+                          turnstile.resetWidget();
+                        }
+                      }}
+                      sx={{
+                        bgcolor: BRAND_COLORS.orchid,
+                        '&:hover': { bgcolor: '#6d28d9' },
+                        borderRadius: 2,
+                        py: 1.25,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {resendState === 'sending'
+                        ? <CircularProgress size={20} color="inherit" />
+                        : 'Send me a new link'}
+                    </Button>
+                  </Box>
+                )}
+              </>
+            )}
+          </Box>
         )}
 
         {/* Already submitted */}

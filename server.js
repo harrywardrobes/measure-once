@@ -19,7 +19,7 @@ const qbRoutes = require('./quickbooks');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
-const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
+const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable, ensureResendLogTable, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings } = require('./photo-reviews');
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -358,8 +358,8 @@ app.use('/api', (req, res, next) => {
   if (AUTH_WHITELIST.has(req.path)) return next();
   // Public design-visit sign-off routes (/api/design-visits/sign-off/:token)
   if (/^\/design-visits\/sign-off\/[^/]+$/.test(req.path)) return next();
-  // Public customer-info routes (/api/customer-info/:token and /api/customer-info/:token/photos)
-  if (/^\/customer-info\/[^/]+(\/photos)?$/.test(req.path)) return next();
+  // Public customer-info routes (/api/customer-info/:token, /photos, /resend-expired)
+  if (/^\/customer-info\/[^/]+(\/photos|\/resend-expired)?$/.test(req.path)) return next();
   return isAuthenticated(req, res, next);
 });
 app.use('/api', (req, res, next) => {
@@ -6666,6 +6666,8 @@ async function cleanupStaleHubSpotCredentialRows() {
     catch (e) { console.error('  Design visit tables setup failed:', e.message); }
     try { await ensureCustomerInfoSubmissionsTable(); console.log('  Customer info submissions table ready'); }
     catch (e) { console.error('  Customer info submissions table setup failed:', e.message); }
+    try { await ensureResendLogTable(); console.log('  Customer info resend log table ready'); }
+    catch (e) { console.error('  Customer info resend log table setup failed:', e.message); }
     try { await ensurePhotoReviewOutcomesTable(); console.log('  Photo review outcomes table ready'); }
     catch (e) { console.error('  Photo review outcomes table setup failed:', e.message); }
     backfillMisspelledAwphSubstatus().catch(e => console.warn('  AWPH substatus backfill error:', e.message));
