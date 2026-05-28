@@ -110,24 +110,13 @@
   }
 
   // ── Dev environment tab visibility ─────────────────────────────────────────
-  // Hides the "Dev environment" tab in production; fetches dev-mode flag once.
-  async function _applyDevEnvTabVisibility() {
-    let devMode = false;
-    try {
-      const d = await api('GET', '/api/admin/hubspot/dev-mode');
-      devMode = d?.devMode === true;
-    } catch { devMode = false; }
+  // The Dev Environment tab is always visible to admins — the DB-driven toggle
+  // inside the tab controls dev-mode filtering. No visibility gating needed.
+  function _applyDevEnvTabVisibility() {
     const btn   = document.getElementById('tab-btn-devenv');
     const panel = document.getElementById('tab-devenv');
-    if (devMode) {
-      if (btn)   btn.hidden   = false;
-      if (panel) panel.hidden = false;
-    } else {
-      if (btn)   btn.hidden   = true;
-      if (panel) panel.hidden = true;
-      // If devenv was the active tab (e.g. saved from a prior dev session), fall back to team.
-      if (panel && panel.classList.contains('active')) switchTab('team');
-    }
+    if (btn)   btn.hidden   = false;
+    if (panel) panel.hidden = false;
   }
 
   // ── Init ───────────────────────────────────────────────────────────────────
@@ -214,7 +203,7 @@
       <!-- WORKSHOP — React island (src/react/pages/WorkshopSettingsPage.tsx). -->
       <div class="tab-panel" id="tab-workshop"></div>
 
-      <!-- DEV ENVIRONMENT (hidden in production)
+      <!-- DEV ENVIRONMENT
         ============================================================
         MAINTAINER NOTE — KEEP THIS PANEL UP TO DATE
         ============================================================
@@ -235,8 +224,8 @@
         ============================================================
         Dev environment tab is a React island
         (src/react/pages/admin/DevEnvironmentPage.tsx).
-        _applyDevEnvTabVisibility() toggles the 'hidden' attribute
-        on this mount div based on /api/admin/hubspot/dev-mode.
+        The tab is always visible to admins. The DB-driven dev-mode
+        toggle inside the tab controls hw_test_user filtering.
       -->
       <div class="tab-panel" id="tab-devenv" hidden></div>
     `;
@@ -251,7 +240,7 @@
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) switchTab(savedTab);
 
-    // Apply dev-env tab visibility (hides tab in production).
+    // Show the Dev Environment tab (always visible; toggle inside controls filtering).
     _applyDevEnvTabVisibility();
   }
 

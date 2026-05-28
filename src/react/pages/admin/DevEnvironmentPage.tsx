@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, Chip, Stack, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Chip, CircularProgress, FormControlLabel, Stack, Switch, Typography } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import LinkIcon from '@mui/icons-material/Link';
 
 /**
- * Admin → Dev environment tab (#tab-devenv, hidden in production).
+ * Admin → Dev environment tab (#tab-devenv).
  *
  * This panel is the single source of truth shown to admins for "what is
  * dev-only in here". Whenever you add a new dev-only feature to the admin
@@ -129,11 +129,54 @@ export function DevEnvironmentPage() {
   const [storybookAvailable, setStorybookAvailable] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  const [devMode, setDevMode] = useState<boolean | null>(null);
+  const [devModeLoading, setDevModeLoading] = useState<boolean>(true);
+  const [devModeToggling, setDevModeToggling] = useState<boolean>(false);
+  const [devModeError, setDevModeError] = useState<string | null>(null);
+
   useEffect(() => {
     fetch('/storybook/', { method: 'HEAD' })
       .then((res) => setStorybookAvailable(res.ok))
       .catch(() => setStorybookAvailable(false));
   }, []);
+
+  useEffect(() => {
+    setDevModeLoading(true);
+    fetch('/api/admin/hubspot/dev-mode')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        setDevMode(data.devMode);
+        setDevModeError(null);
+      })
+      .catch((e) => setDevModeError(e.message))
+      .finally(() => setDevModeLoading(false));
+  }, []);
+
+  async function handleDevModeToggle() {
+    if (devMode === null) return;
+    const next = !devMode;
+    setDevModeToggling(true);
+    setDevModeError(null);
+    try {
+      const res = await fetch('/api/admin/hubspot/dev-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ devMode: next }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      setDevMode(next);
+    } catch (e: unknown) {
+      setDevModeError(e instanceof Error ? e.message : 'Could not save dev-mode setting.');
+    } finally {
+      setDevModeToggling(false);
+    }
+  }
 
   function isLinkVisible(action: DevFeatureAction): boolean {
     if (action.kind === 'link' && action.availableKey === 'storybook') return storybookAvailable;
@@ -148,17 +191,11 @@ export function DevEnvironmentPage() {
   }
 
   async function handleNavigate(tab: string, scrollTo: string) {
-    // switchTab() is a global defined in admin.html — it activates the tab
-    // panel, updates button active states, and triggers React island mounting.
     const win = window as unknown as Record<string, unknown>;
     const switchTab = win.switchTab;
     if (typeof switchTab === 'function') {
       (switchTab as (id: string) => void)(tab);
     }
-    // waitForElement() is also a global in admin.html — it uses a
-    // MutationObserver to resolve once the element is in the DOM (up to 10 s),
-    // which is necessary because the Settings tab React island may not have
-    // mounted yet when switchTab() returns.
     const waitForElement = win.waitForElement;
     if (typeof waitForElement === 'function') {
       const el = await (waitForElement as (id: string) => Promise<HTMLElement | null>)(scrollTo);
@@ -229,15 +266,57 @@ export function DevEnvironmentPage() {
 
   return (
     <Stack spacing={2}>
-      <Alert severity="warning" variant="outlined">
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-          You are in development mode
-        </Typography>
-        <Typography variant="body2">
-          The items listed below are <strong>not visible in the published app</strong>. They are
-          suppressed when <code className="adm-devenv-banner-code">NODE_ENV=production</code>.
-        </Typography>
-      </Alert>
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 0.5 }}>
+            Test-user filter (dev mode)
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            When dev mode is <strong>on</strong>, the customer list only shows contacts whose
+            HubSpot property <code className="adm-inline-code">hw_test_user</code> is set to{' '}
+            <code className="adm-inline-code">true</code>. This lets you run focused testing
+            sessions against a curated set of dummy contacts without affecting other environments.
+          </Typography>
+
+          {devModeLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CircularProgress size={18} />
+              <Typography variant="body2" color="text.secondary">Loading…</Typography>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={devMode === true}
+                    onChange={handleDevModeToggle}
+                    disabled={devModeToggling || devMode === null}
+                    color="warning"
+                  />
+                }
+                label={
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {devMode
+                      ? 'Dev mode is ON — only test users are shown'
+                      : 'Dev mode is OFF — all contacts are shown'}
+                  </Typography>
+                }
+              />
+              {devModeToggling && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CircularProgress size={14} />
+                  <Typography variant="body2" color="text.secondary">Saving…</Typography>
+                </Box>
+              )}
+              {devModeError && (
+                <Alert severity="error" sx={{ mt: 1 }}>
+                  {devModeError}
+                </Alert>
+              )}
+            </Box>
+          )}
+        </CardContent>
+      </Card>
 
       <Card variant="outlined">
         <CardContent>

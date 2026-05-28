@@ -606,8 +606,7 @@ let _allContactsInflight = null;  // Promise while a scan is running
 const ALL_CONTACTS_PROPERTIES = [
   'firstname', 'lastname', 'email', 'phone', 'mobilephone', 'hs_lead_status', 'hw_lead_substatus',
   'address', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate',
-  'measure_once_rooms',
-  ...(process.env.NODE_ENV !== 'production' ? ['hw_test_user'] : []),
+  'measure_once_rooms', 'hw_test_user',
 ];
 
 async function fetchAllContactsShared() {
@@ -1306,6 +1305,18 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     }
 
     let contacts = rawContacts;
+
+    // Dev-mode filter — when dev_mode_enabled is true, only show hw_test_user contacts.
+    try {
+      const { rows: dmRows } = await pool.query(
+        `SELECT value FROM app_settings WHERE key = 'dev_mode_enabled'`
+      );
+      if (dmRows.length > 0 && dmRows[0].value === 'true') {
+        contacts = contacts.filter(c => c.properties?.hw_test_user === 'true');
+      }
+    } catch (dbErr) {
+      console.warn('[contacts-all] could not read dev_mode_enabled:', dbErr.message);
+    }
 
     // Server-side excluded_from_sales filter — only applied for Sales-board
     // requests (stage === 'sales').  Customers, Surveys, and other consumers
@@ -5141,10 +5152,9 @@ async function ensureLeadSubstatusesTable() {
 
 // ── hw_test_user HubSpot property ─────────────────────────────────────────────
 // Registers a boolean contact property used to mark dev/test contacts.
-// Only created in non-production environments and only when HUBSPOT_ACCESS_TOKEN
-// is present. A 409 (already exists) is treated as success.
+// Provisioned in all environments when HUBSPOT_ACCESS_TOKEN is present.
+// A 409 (already exists) is treated as success.
 async function ensureHwTestUserProperty() {
-  if (process.env.NODE_ENV === 'production') return;
   if (!getCredential('access_token')) return;
   try {
     await axios.get(
@@ -5167,7 +5177,7 @@ async function ensureHwTestUserProperty() {
         groupName:   'contactinformation',
         type:        'bool',
         fieldType:   'booleancheckbox',
-        description: 'Marks a contact as a dev/test contact in Measure Once. In non-production environments only contacts with this flag are shown.',
+        description: 'Marks a contact as a dev/test contact in Measure Once. When dev mode is enabled in the admin panel, only contacts with this flag are shown.',
         options: [
           { label: 'Yes', value: 'true',  displayOrder: 0, hidden: false },
           { label: 'No',  value: 'false', displayOrder: 1, hidden: false },
@@ -5184,10 +5194,40 @@ async function ensureHwTestUserProperty() {
 }
 
 // ── Admin: dev-mode flag ──────────────────────────────────────────────────────
-// Returns whether the server is running in dev (non-production) mode.
-// The admin UI reads this to decide whether to render the test-users section.
-app.get('/api/admin/hubspot/dev-mode', isAuthenticated, requireAdmin, (req, res) => {
-  res.json({ devMode: process.env.NODE_ENV !== 'production' });
+// Reads / writes the admin-controlled dev-mode flag stored in app_settings.
+// When dev mode is on, /api/contacts-all filters to hw_test_user === 'true'.
+
+app.get('/api/admin/hubspot/dev-mode', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT value FROM app_settings WHERE key = 'dev_mode_enabled'`
+    );
+    const devMode = rows.length > 0 ? rows[0].value === 'true' : false;
+    res.json({ devMode });
+  } catch (e) {
+    console.error('GET /api/admin/hubspot/dev-mode error:', e.message);
+    res.status(500).json({ error: 'Could not read dev-mode setting.' });
+  }
+});
+
+app.post('/api/admin/hubspot/dev-mode', isAuthenticated, requireAdmin, async (req, res) => {
+  const { devMode } = req.body || {};
+  if (typeof devMode !== 'boolean') {
+    return res.status(400).json({ error: '`devMode` must be a boolean.' });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO app_settings (key, value) VALUES ('dev_mode_enabled', $1)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [devMode ? 'true' : 'false']
+    );
+    const adminEmail = req.user?.email || 'unknown';
+    await logAdminAction(adminEmail, 'set_dev_mode', null, `devMode=${devMode}`);
+    res.json({ ok: true, devMode });
+  } catch (e) {
+    console.error('POST /api/admin/hubspot/dev-mode error:', e.message);
+    res.status(500).json({ error: 'Could not save dev-mode setting.' });
+  }
 });
 
 // ── Dev-only: seed the shared contacts cache for automated tests ──────────────
@@ -6404,6 +6444,16 @@ app.patch('/api/admin/workshop-settings', isAuthenticated, requireAdmin, async (
   }
 });
 
+async function ensureAppSettingsTable() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS app_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  )`);
+  await pool.query(
+    `INSERT INTO app_settings (key, value) VALUES ('dev_mode_enabled', 'false') ON CONFLICT (key) DO NOTHING`
+  );
+}
+
 async function ensureSearchSettingsTable() {
   await pool.query(`CREATE TABLE IF NOT EXISTS search_settings (
     id INTEGER PRIMARY KEY DEFAULT 1,
@@ -6534,7 +6584,9 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Stage action labels seed failed:', e.message); }
     try { await ensureLeadSubstatusesTable(); console.log('  Lead sub-statuses table ready'); }
     catch (e) { console.error('  Lead sub-statuses table setup failed:', e.message); }
-    try { await ensureHwTestUserProperty(); console.log('  hw_test_user HubSpot property ready (dev)'); }
+    try { await ensureAppSettingsTable(); console.log('  App settings table ready'); }
+    catch (e) { console.error('  App settings table setup failed:', e.message); }
+    try { await ensureHwTestUserProperty(); console.log('  hw_test_user HubSpot property ready'); }
     catch (e) { console.error('  hw_test_user property setup failed:', e.message); }
     try { await ensureHwLeadSubstatusProperty(); console.log('  hw_lead_substatus HubSpot property ready'); }
     catch (e) { console.error('  hw_lead_substatus property setup failed:', e.message); }
