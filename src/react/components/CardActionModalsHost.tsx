@@ -7,6 +7,7 @@ import { DeliveryWindowModal } from './modals/DeliveryWindowModal';
 import { InstallationSlotModal } from './modals/InstallationSlotModal';
 import { PhoneSummaryModal } from './modals/PhoneSummaryModal';
 import { UploadPhotosModal } from './modals/UploadPhotosModal';
+import { ReviewCustomerPhotosDrawer } from './modals/ReviewCustomerPhotosDrawer';
 import { registerCardActionModalOpener } from '../utils/cardActionModalRegistry';
 import type { CardActionHandlerData } from '../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../utils/dispatchCardActionHandler';
@@ -21,7 +22,8 @@ type ModalState =
   | { type: 'schedule_installation_slot';    handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'summarise_phone_call';          handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'start_design_visit';            handler: CardActionHandlerData; ctx: CardActionContext; existingVisit?: ExistingVisit | null }
-  | { type: 'upload_photos_and_info';        handler: CardActionHandlerData; ctx: CardActionContext };
+  | { type: 'upload_photos_and_info';        handler: CardActionHandlerData; ctx: CardActionContext }
+  | { type: 'review_customer_photos';        handler: CardActionHandlerData; ctx: CardActionContext };
 
 export function CardActionModalsHost() {
   const [modal, setModal] = useState<ModalState>({ type: 'none' });
@@ -56,6 +58,9 @@ export function CardActionModalsHost() {
           break;
         case 'upload_photos_and_info':
           setModal({ type: 'upload_photos_and_info', handler, ctx });
+          break;
+        case 'review_customer_photos':
+          setModal({ type: 'review_customer_photos', handler, ctx });
           break;
         default:
           console.warn('[CardActionModalsHost] Unknown handler type:', handler.type);
@@ -108,6 +113,9 @@ export function CardActionModalsHost() {
       )}
       {modal.type === 'upload_photos_and_info' && (
         <UploadPhotosModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+      )}
+      {modal.type === 'review_customer_photos' && (
+        <ReviewCustomerPhotosDrawer handler={modal.handler} ctx={modal.ctx} open onClose={close} />
       )}
     </>
   );

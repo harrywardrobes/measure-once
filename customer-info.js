@@ -524,7 +524,12 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
       await updateHubSpotLeadStatus(row.contact_id, 'AWAITING_PHOTOS');
       // Ensure sub-status exists locally, then patch HubSpot.
       // HubSpot hw_lead_substatus values are namespaced: STATUS_KEY__SUBSTATUS_KEY
-      await ensureSubstatusExists('AWPH_RECEIVED', 'Photos Received', 'AWAITING_PHOTOS');
+      const awphId = await ensureSubstatusExists('AWPH_RECEIVED', 'Photos Received', 'AWAITING_PHOTOS');
+      // Set action label to "Review Photos" so the review handler is naturally surfaced
+      await pool.query(
+        `UPDATE lead_substatuses SET action_label = 'Review Photos' WHERE id = $1 AND (action_label IS NULL OR action_label = '' OR action_label = 'Photos Received')`,
+        [awphId]
+      );
       await updateHubSpotSubstatus(row.contact_id, 'AWAITING_PHOTOS__AWPH_RECEIVED');
     }
   } catch (err) {
@@ -684,4 +689,5 @@ router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, async (r
 module.exports = {
   router,
   ensureCustomerInfoSubmissionsTable,
+  signCustomerPhotoUrl,
 };

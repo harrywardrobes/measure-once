@@ -21,6 +21,7 @@ export const HANDLER_TYPES = [
   { value: 'schedule_delivery_window',     label: 'Schedule delivery window' },
   { value: 'schedule_installation_slot',   label: 'Schedule installation slot' },
   { value: 'upload_photos_and_info',       label: 'Upload photos & info' },
+  { value: 'review_customer_photos',       label: 'Review customer photos' },
 ];
 
 export const FIXTURE_LEAD_STATUSES: LeadStatusOption[] = [

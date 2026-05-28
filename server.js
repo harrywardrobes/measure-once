@@ -19,6 +19,7 @@ const qbRoutes = require('./quickbooks');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
 const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable } = require('./customer-info');
+const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding } = require('./photo-reviews');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
@@ -333,6 +334,7 @@ app.use(qbRoutes);
 app.use(visitsRouter);
 app.use(designVisitsRouter);
 app.use(customerInfoRouter);
+app.use(photoReviewsRouter);
 
 // Auth gate for all /api/* routes (whitelist endpoints reachable while
 // signed-out: login, account requests, the public set-password flow).
@@ -5488,6 +5490,10 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
   upload_photos_and_info(_cfg) {
     return { value: {} };
   },
+  // No required config keys — opens the review drawer which fetches submission at open time.
+  review_customer_photos(_cfg) {
+    return { value: {} };
+  },
 };
 
 const CARD_ACTION_HANDLER_TYPES = new Set(
@@ -6372,6 +6378,10 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Design visit tables setup failed:', e.message); }
     try { await ensureCustomerInfoSubmissionsTable(); console.log('  Customer info submissions table ready'); }
     catch (e) { console.error('  Customer info submissions table setup failed:', e.message); }
+    try { await ensurePhotoReviewOutcomesTable(); console.log('  Photo review outcomes table ready'); }
+    catch (e) { console.error('  Photo review outcomes table setup failed:', e.message); }
+    try { await ensureDefaultReviewHandlerBinding(); }
+    catch (e) { console.error('  Default review handler binding setup failed:', e.message); }
     try { await ensurePageFilterConfigTable(); console.log('  Page filter config table ready'); }
     catch (e) { console.error('  Page filter config table setup failed:', e.message); }
     scheduleConflictDigest();
