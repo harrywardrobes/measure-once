@@ -239,16 +239,15 @@ async function purgeFixtures(pool) {
   await pool.query(
     `DELETE FROM visits WHERE customer_id LIKE 'privtest-cah-%'`
   );
-  // Remove the conflict-test lead status if it was seeded, plus the parent
-  // lead_status_config row required by the lead_substatuses FK
-  // (`lead_substatuses_status_key_fk`). Must run AFTER the lead_substatuses
-  // delete above so the FK doesn't block this DELETE.
+  // Remove all privtest_cah_* lead_status_config rows seeded by this suite.
+  // Must run AFTER lead_substatuses deletes above so FK constraints don't
+  // block this DELETE.  The LOWER(key) LIKE pattern covers both the
+  // early-setup seeds (DV/SV/PC/OVR/ILS/NAMING) and the per-probe seeds
+  // (CONFLICT, ANAME, FALLBACK, THROWAWAY, ORPHAN, etc.) regardless of
+  // whether they were stored in upper- or lower-case.
   try {
     await pool.query(
-      `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [LBL_KEY_CONFLICT_LS, SUB_STATUS_K, LBL_KEY_ANAME, LBL_KEY_FALLBACK_STATUS,
-       LBL_KEY_SUB_ROW, 'PRIVTEST_CAH_ORPHAN_LS', 'privtest_cah_orphan_ls', 'PRIVTEST_CAH_THROWAWAY',
-       LBL_KEY_CLEAR_WARN, LBL_KEY_DEL_WARN, LBL_KEY_STALE_SLOT]
+      `DELETE FROM lead_status_config WHERE LOWER(key) LIKE 'privtest_cah_%'`
     );
   } catch (_) {}
   // Recreate the unique label-binding index if it was temporarily dropped
@@ -388,6 +387,31 @@ async function main() {
   );
   const subId = subRes.rows[0].id;
   console.log(`  Inserted lead_substatus id=${subId} (${SUB_STATUS_K}__${SUB_SUB_K})`);
+
+  // Seed the label-binding status keys used by probes (A), (B), (H), (F.2).
+  // The server validates that every label binding's status_key exists in
+  // lead_status_config (LOWER(key) match).  These keys are purged on both
+  // entry (purgeFixtures above) and exit so they don't pollute the shared DB.
+  const fixtureLabelKeys = [
+    [LBL_KEY_DV,    'PrivTest CAH DV Status',     9990],
+    [LBL_KEY_SV,    'PrivTest CAH SV Status',      9991],
+    [LBL_KEY_PC,    'PrivTest CAH PC Status',      9992],
+    [LBL_KEY_ILS,   'PrivTest CAH ILS Status',     9993],
+    [LBL_KEY_NAMING,'PrivTest CAH Naming Status',  9994],
+  ];
+  for (const [key, label, sortOrder] of fixtureLabelKeys) {
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+       VALUES ($1, $2, $3, false, 'SALES')
+       ON CONFLICT (key) DO UPDATE
+         SET label               = EXCLUDED.label,
+             sort_order          = EXCLUDED.sort_order,
+             excluded_from_sales = EXCLUDED.excluded_from_sales,
+             stage               = EXCLUDED.stage`,
+      [key, label, sortOrder]
+    );
+  }
+  console.log(`  Seeded lead_status_config fixture keys: ${fixtureLabelKeys.map(r => r[0]).join(', ')}`);
 
   // ── API pre-checks ─────────────────────────────────────────────────────────
   const adminClient = await login(users.admin.email, PASSWORD);
@@ -972,8 +996,10 @@ async function main() {
   try {
     // ── (A) BroadcastChannel cross-tab refresh ────────────────────────────────
     //
-    // Tab 1 = /sales — loads card-action-handlers.js, registers the
-    //                  card_action_handlers_changed BroadcastChannel listener.
+    // Tab 1 = /projects — the React ProjectsPage island mounts
+    //                     useCardActionHandlers, which registers
+    //                     window.cardActionHandlerFor and hooks into the
+    //                     card_action_handlers_changed BroadcastChannel.
     // Tab 2 = /admin — second same-browser tab (BC does not deliver back to
     //                  the sender's own port).
     //
@@ -987,13 +1013,13 @@ async function main() {
     const salesTab = await browser.newPage();
     await salesTab.setCacheEnabled(false);
     await injectSession(salesTab, adminClient.cookie);
-    await salesTab.goto(`${BASE}/sales`, {
+    await salesTab.goto(`${BASE}/projects`, {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
-    // Wait for the global to be installed (the IIFE in card-action-handlers.js
-    // runs synchronously when the script evaluates).
-    await pollPage(salesTab, () => typeof window.cardActionHandlerFor === 'function');
+    // Wait for the React island (ProjectsPage → useCardActionHandlers) to
+    // mount and register window.cardActionHandlerFor via its useEffect.
+    await pollPage(salesTab, () => typeof window.cardActionHandlerFor === 'function', null, 15000);
     // Give the bootstrap GET /api/card-action-handlers a moment to complete.
     await new Promise(r => setTimeout(r, 600));
 
@@ -2218,14 +2244,25 @@ async function main() {
     // Open the editor modal in "Add" mode for a fresh (sales, LBL_KEY_NAMING)
     // slot.  openHandlerEditor() does not require the slot to exist in the
     // card-actions table — it only uses stage_key/status_key for the binding.
-    const opened = await namingAdminTab.evaluate((statusKey) => {
-      if (typeof window.openHandlerEditor !== 'function') return 'fn-missing';
+    // openHandlerEditor() triggers a React state update so the modal DOM is not
+    // present synchronously — poll until #cah-action-name appears.
+    const fnMissing = await namingAdminTab.evaluate((statusKey) => {
+      if (typeof window.openHandlerEditor !== 'function') return true;
       window.openHandlerEditor(
         { kind: 'label', stage_key: 'sales', status_key: statusKey },
         null,
       );
-      return document.querySelector('#cah-action-name') ? 'opened' : 'no-input';
+      return false;
     }, LBL_KEY_NAMING);
+    const openedPoll = fnMissing
+      ? null
+      : await pollPage(
+          namingAdminTab,
+          () => document.querySelector('#cah-action-name') ? 'opened' : null,
+          null,
+          5000,
+        );
+    const opened = fnMissing ? 'fn-missing' : (openedPoll || 'no-input');
     record(
       '(F) editor modal opens via openHandlerEditor() with #cah-action-name input',
       'opened',
@@ -2245,6 +2282,7 @@ async function main() {
     // ── (F.1) invalid value path ──────────────────────────────────────────────
     await namingAdminTab.evaluate(() => {
       const input = document.querySelector('#cah-action-name');
+      if (!input) return;
       input.value = 'Send Quote';
       input.dispatchEvent(new Event('input',  { bubbles: true }));
       input.dispatchEvent(new Event('blur',   { bubbles: true }));
@@ -2306,6 +2344,7 @@ async function main() {
     // ── (F.2) valid value path ────────────────────────────────────────────────
     await namingAdminTab.evaluate(() => {
       const input = document.querySelector('#cah-action-name');
+      if (!input) return;
       input.value = 'send_quote_ok';
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('blur',  { bubbles: true }));
