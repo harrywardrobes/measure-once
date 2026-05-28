@@ -121,6 +121,7 @@ const STEPS = [
   'test:stage-scoped-pills:ci',
   'test:open-leads-stale-visibility:ci',
   'test:project-contacts-unknown-status:ci',
+  'test:project-contacts-dev-mode:ci',
   'test:keyboard-shortcuts',
   'test:handler-config-blocks',
   'test:conflict-digest-settings:ci',

@@ -168,6 +168,8 @@
     "test:open-leads-stale-visibility:ci": "node scripts/with-test-db.js test/open-leads-stale-visibility/run.js",
     "test:project-contacts-unknown-status": "node test/project-contacts-unknown-status/run.js",
     "test:project-contacts-unknown-status:ci": "node scripts/with-test-db.js test/project-contacts-unknown-status/run.js",
+    "test:project-contacts-dev-mode": "node test/project-contacts-dev-mode/run.js",
+    "test:project-contacts-dev-mode:ci": "node scripts/with-test-db.js test/project-contacts-dev-mode/run.js",
     "test:photos-received-badge": "node test/photos-received-badge/run.js",
     "test:photos-received-badge:ci": "node scripts/with-test-db.js test/photos-received-badge/run.js",
     "test:conflict-digest-settings": "node test/conflict-digest-settings/run.js",

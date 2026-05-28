@@ -146,6 +146,7 @@ const DB_SUITES = [
   'test:stage-scoped-pills:ci',
   'test:open-leads-stale-visibility:ci',
   'test:project-contacts-unknown-status:ci',
+  'test:project-contacts-dev-mode:ci',
   'test:conflict-digest-settings:ci',
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',
