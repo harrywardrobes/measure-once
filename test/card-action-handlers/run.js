@@ -84,6 +84,24 @@
 //             review_customer_photos — the value from SUBSTATUS_HANDLER_MAP
 //             for the AWPH_RECEIVED key — not the show_message fallback.
 //             Covers the map-lookup branch of ensureSubstatusHandlerBindings.
+//   (R) default_handler_type column: verifies that the admin-configured
+//       default_handler_type column on lead_substatuses takes priority over
+//       SUBSTATUS_HANDLER_MAP when non-empty, and that SUBSTATUS_HANDLER_MAP
+//       still wins when default_handler_type is NULL/empty.
+//       Pure-API + DB probe (no browser, requires one server restart after Q).
+//       Two lead_substatuses rows are seeded under a separate status_key —
+//       rSub1 has default_handler_type = 'start_design_visit' (no prior
+//       binding), rSub2 has NULL default_handler_type and substatus_key
+//       AWPH_RECEIVED (present in SUBSTATUS_HANDLER_MAP) — then a fresh
+//       server is spawned.
+//       R.1 — rSub1 receives a binding with handler type start_design_visit,
+//             confirming that default_handler_type is read from the column
+//             and used directly, bypassing SUBSTATUS_HANDLER_MAP and
+//             FALLBACK_HANDLER.
+//       R.2 — rSub2 receives a binding with handler type
+//             review_customer_photos (from SUBSTATUS_HANDLER_MAP), confirming
+//             that SUBSTATUS_HANDLER_MAP lookup is not skipped when
+//             default_handler_type is empty.
 //
 // API pre-checks run before any browser tab opens so failures in the API
 // surface clearly.
@@ -168,6 +186,13 @@ const SUB_STARTUP_PREBOUND_K     = 'PRIVTEST_Q_PREBOUND';
 const HANDLER_NAME_Q_PRE         = 'PrivTest Q pre-existing handler';
 // third substatus: key present in SUBSTATUS_HANDLER_MAP → should resolve to review_customer_photos
 const SUB_STARTUP_MAPPED_K       = 'AWPH_RECEIVED';
+// (R) default_handler_type column — regression guard for task #1825
+// Separate status_key so Q and R fixtures never collide in the same substatus group.
+const LBL_KEY_DEFAULT_TYPE       = 'PRIVTEST_CAH_DEFTYPE';
+// R.1: has default_handler_type = 'start_design_visit' → binding type must match
+const SUB_DEFAULT_TYPE_K         = 'PRIVTEST_R_DEFTYPE';
+// R.2: NULL default_handler_type + substatus_key in SUBSTATUS_HANDLER_MAP → review_customer_photos
+const SUB_DEFAULT_MAPPED_K       = 'AWPH_RECEIVED';
 
 const HANDLER_NAME_DV         = 'PrivTest design visit handler';
 const HANDLER_NAME_SV         = 'PrivTest schedule-visit handler';
@@ -308,6 +333,27 @@ async function purgeFixtures(pool) {
            )`
     );
   } catch (_) {}
+  // (R) probe default_handler_type substatuses
+  try {
+    await pool.query(
+      `DELETE FROM lead_substatuses WHERE status_key = $1`,
+      [LBL_KEY_DEFAULT_TYPE]
+    );
+  } catch (_) {}
+  // (R.1) auto-created start_design_visit handler.  Only delete when no
+  // remaining bindings reference it — shared-DB real bindings are never removed.
+  try {
+    await pool.query(
+      `DELETE FROM card_action_handlers
+         WHERE name = 'Start design visit'
+           AND NOT EXISTS (
+             SELECT 1 FROM card_action_handler_bindings
+              WHERE handler_id = card_action_handlers.id
+           )`
+    );
+  } catch (_) {}
+  // lead_status_config row for LBL_KEY_DEFAULT_TYPE is cleaned up by the
+  // WHERE LOWER(key) LIKE 'privtest_cah_%' DELETE below.
   await pool.query(
     `DELETE FROM visits WHERE customer_id LIKE 'privtest-cah-%'`
   );
@@ -4451,6 +4497,133 @@ async function main() {
     // Bindings are cascade-deleted when their substatus or handler is deleted.
   }
 
+  // ── (R) default_handler_type column ──────────────────────────────────────
+  //
+  // Verifies that:
+  //   R.1 — a lead_substatuses row whose default_handler_type column is set to
+  //          'start_design_visit' causes ensureSubstatusHandlerBindings to create
+  //          a binding pointing at a handler of that type, bypassing both
+  //          SUBSTATUS_HANDLER_MAP and FALLBACK_HANDLER.
+  //   R.2 — a row with NULL default_handler_type whose substatus_key is present
+  //          in SUBSTATUS_HANDLER_MAP (AWPH_RECEIVED) still resolves to
+  //          review_customer_photos, confirming that the map lookup is NOT
+  //          skipped when the column is empty.
+  //
+  // No server is running at this point (qChild was shut down at the end of Q).
+  // Fixtures are inserted directly into the DB, then a fresh server is spawned.
+  {
+    console.log('\n  [R] default_handler_type column — ensureSubstatusHandlerBindings');
+
+    // Seed the parent lead_status_config row (FK required by lead_substatuses).
+    // LOWER('PRIVTEST_CAH_DEFTYPE') = 'privtest_cah_deftype' matches the
+    // 'privtest_cah_%' pattern in purgeFixtures.
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+       VALUES ($1, 'PrivTest R Default-Type Status', 9987, false, 'SALES')
+       ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label`,
+      [LBL_KEY_DEFAULT_TYPE]
+    );
+
+    // R fixture 1: default_handler_type = 'start_design_visit', no prior binding.
+    // ensureSubstatusHandlerBindings must create a binding with that handler type.
+    const rSub1Res = await pool.query(
+      `INSERT INTO lead_substatuses
+         (status_key, substatus_key, label, action_label, sort_order, default_handler_type)
+       VALUES ($1, $2, 'PrivTest R sub deftype', 'PrivTest R action A', 9995, 'start_design_visit')
+       RETURNING id`,
+      [LBL_KEY_DEFAULT_TYPE, SUB_DEFAULT_TYPE_K]
+    );
+    const rSub1Id = rSub1Res.rows[0].id;
+    console.log(`  R: seeded rSub1 id=${rSub1Id} default_handler_type=start_design_visit`);
+
+    // R fixture 2: NULL default_handler_type, substatus_key = AWPH_RECEIVED.
+    // SUBSTATUS_HANDLER_MAP maps this key to review_customer_photos; with
+    // default_handler_type empty, SUBSTATUS_HANDLER_MAP should win.
+    const rSub2Res = await pool.query(
+      `INSERT INTO lead_substatuses
+         (status_key, substatus_key, label, action_label, sort_order)
+       VALUES ($1, $2, 'PrivTest R sub mapped no-deftype', 'PrivTest R action B', 9994)
+       RETURNING id`,
+      [LBL_KEY_DEFAULT_TYPE, SUB_DEFAULT_MAPPED_K]
+    );
+    const rSub2Id = rSub2Res.rows[0].id;
+    console.log(`  R: seeded rSub2 id=${rSub2Id} default_handler_type=NULL substatus_key=${SUB_DEFAULT_MAPPED_K}`);
+
+    // Spawn a fresh server — ensureSubstatusHandlerBindings will run on boot.
+    const { child: rChild, logBuf: rLogBuf } = spawnServer();
+    let rChildExited = false;
+    rChild.on('exit', () => { rChildExited = true; });
+
+    let rBootOk = false;
+    try {
+      await waitForServer(20000);
+      rBootOk = true;
+    } catch (e) {
+      console.error('R server boot failed:', e.message);
+      console.error(rLogBuf.join('').slice(-2000));
+    }
+
+    if (!rBootOk) {
+      record('(R.1) default_handler_type column drives handler type on boot', 'handler type=start_design_visit', 'SKIPPED — server restart failed', false);
+      record('(R.2) SUBSTATUS_HANDLER_MAP wins when default_handler_type is empty', 'handler type=review_customer_photos', 'SKIPPED — server restart failed', false);
+      try { if (!rChildExited) rChild.kill('SIGTERM'); } catch {}
+    } else {
+      // Poll for R.1: default_handler_type = 'start_design_visit' must produce
+      // a binding with that exact handler type.
+      const rBind1 = await pollFn(async () => {
+        const r = await pool.query(
+          `SELECT b.handler_id, h.type
+             FROM card_action_handler_bindings b
+             JOIN card_action_handlers h ON h.id = b.handler_id
+            WHERE b.substatus_id = $1`,
+          [rSub1Id]
+        );
+        return r.rows.length > 0 ? r.rows[0] : null;
+      }, 15000, 300);
+
+      record(
+        '(R.1) default_handler_type column drives handler type on boot',
+        'binding row created with handler type=start_design_visit (from default_handler_type column)',
+        `row=${JSON.stringify(rBind1)}`,
+        rBind1 !== null && rBind1.type === 'start_design_visit',
+      );
+
+      // Poll for R.2: NULL default_handler_type + AWPH_RECEIVED key in
+      // SUBSTATUS_HANDLER_MAP → must resolve to review_customer_photos.
+      const rBind2 = await pollFn(async () => {
+        const r = await pool.query(
+          `SELECT b.handler_id, h.type
+             FROM card_action_handler_bindings b
+             JOIN card_action_handlers h ON h.id = b.handler_id
+            WHERE b.substatus_id = $1`,
+          [rSub2Id]
+        );
+        return r.rows.length > 0 ? r.rows[0] : null;
+      }, 15000, 300);
+
+      record(
+        '(R.2) SUBSTATUS_HANDLER_MAP wins when default_handler_type is empty',
+        'binding row created with handler type=review_customer_photos (SUBSTATUS_HANDLER_MAP, default_handler_type=null)',
+        `row=${JSON.stringify(rBind2)}`,
+        rBind2 !== null && rBind2.type === 'review_customer_photos',
+      );
+
+      rChild.kill('SIGTERM');
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    // Fixtures are cleaned up by purgeFixtures (called from cleanupAndExit):
+    // - lead_substatuses WHERE status_key = LBL_KEY_DEFAULT_TYPE (covers rSub1,
+    //   rSub2; bindings cascade-deleted with their substatus rows)
+    // - card_action_handlers WHERE name = 'Start design visit' AND NOT EXISTS
+    //   bindings (explicit entry in purgeFixtures — removes the auto-created
+    //   handler in isolated-DB runs; in shared-DB any real binding keeps it alive)
+    // - card_action_handlers WHERE name = 'Review customer photos' AND NOT EXISTS
+    //   bindings (shared with Q.3 cleanup — same guard applies)
+    // - lead_status_config WHERE LOWER(key) LIKE 'privtest_cah_%'
+    //   (covers PRIVTEST_CAH_DEFTYPE)
+  }
+
   // ── summary & report ──────────────────────────────────────────────────────
   const pass = findings.filter(f => f.ok).length;
   const fail = findings.filter(f => !f.ok).length;
@@ -4756,6 +4929,22 @@ async function writeReport(runId, findings) {
     '    the `AWPH_RECEIVED` key — not the `show_message` fallback.  Covers the',
     '    map-lookup branch of `ensureSubstatusHandlerBindings` that was previously',
     '    untested.',
+    '- **(R) `default_handler_type` column** (task #1825): pure-API + DB probe',
+    '  (no browser) that verifies the admin-configured `default_handler_type`',
+    '  column on `lead_substatuses` is correctly consumed by',
+    '  `ensureSubstatusHandlerBindings` at startup.  Two `lead_substatuses` rows',
+    '  are inserted directly into the DB (no server running) under a dedicated',
+    '  `PRIVTEST_CAH_DEFTYPE` status key; then a fresh server is spawned.',
+    '  - **R.1** The row with `default_handler_type = \'start_design_visit\'` and',
+    '    no prior binding receives a `card_action_handler_bindings` row whose',
+    '    joined handler type is `start_design_visit`.  Confirms that the column',
+    '    value is read and used directly, bypassing both `SUBSTATUS_HANDLER_MAP`',
+    '    and `FALLBACK_HANDLER`.',
+    '  - **R.2** The row with `default_handler_type = NULL` and',
+    '    `substatus_key = \'AWPH_RECEIVED\'` (present in `SUBSTATUS_HANDLER_MAP`)',
+    '    receives a binding with handler type `review_customer_photos`,',
+    '    confirming that the `SUBSTATUS_HANDLER_MAP` lookup is not bypassed',
+    '    when `default_handler_type` is empty.',
     '',
     '## Notes',
     '',
