@@ -40,6 +40,7 @@ const STEPS = [
   'test:lead-status-sync:ci',
   'test:lead-status-counts-rate-limit:ci',
   'test:lead-status-delete-substatus-clear:ci',
+  'test:substatus-hubspot-label-format:ci',
   'test:lead-status-sync-customer-detail:ci',
   'test:lead-status-sync-customer-detail-viewer:ci',
   'test:lead-status-sync-customer-detail-editable:ci',

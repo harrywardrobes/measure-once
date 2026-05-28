@@ -26,6 +26,8 @@
     "test:lead-status-counts-rate-limit:ci": "node scripts/with-test-db.js test/lead-status-counts-rate-limit/run.js",
     "test:lead-status-delete-substatus-clear": "node test/lead-status-delete-substatus-clear/run.js",
     "test:lead-status-delete-substatus-clear:ci": "node scripts/with-test-db.js test/lead-status-delete-substatus-clear/run.js",
+    "test:substatus-hubspot-label-format": "node test/substatus-hubspot-label-format/run.js",
+    "test:substatus-hubspot-label-format:ci": "node scripts/with-test-db.js test/substatus-hubspot-label-format/run.js",
     "test:lead-status-sync-customer-detail": "node test/lead-status-sync/customer-detail.js",
     "test:lead-status-sync-customer-detail:ci": "node scripts/with-test-db.js test/lead-status-sync/customer-detail.js",
     "test:lead-status-sync-customer-detail-viewer": "node test/lead-status-sync/customer-detail-viewer.js",
