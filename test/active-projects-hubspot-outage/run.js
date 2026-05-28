@@ -209,6 +209,10 @@ async function writeReport(runId) {
     '  - show an MUI Alert with "Unable to retrieve customer info",',
     '  - render no customer `<HomeCard>` elements.',
     '',
+    '- **[AP-B] Retry button present**: The error Alert must include a Retry',
+    '  button (`<button>Retry</button>` inside `[role="alert"]`) so users can',
+    '  re-trigger `loadProjects()` without a full page refresh.',
+    '',
     'All other home-page APIs (`/api/personal-tasks`, `/api/calendar/upcoming`,',
     '`/api/workflow`, `/api/localdata/all`, `/api/quickbooks/*`) are stubbed with',
     'minimal responses so the test runs without third-party credentials.',
@@ -270,6 +274,7 @@ async function main() {
     '[AP-A] "Active Projects" section header is visible when /api/contacts-all returns 502',
     '[AP-A] Alert "Unable to retrieve customer info" is visible',
     '[AP-A] No customer cards are rendered',
+    '[AP-B] Retry button is present inside the error Alert',
   ];
 
   // ── Boot test server ────────────────────────────────────────────────────────
@@ -389,6 +394,24 @@ async function main() {
       'zero customer cards rendered in Active Projects section',
       cardCount === -1 ? 'heading not found (section absent)' : `${cardCount} card(s) found`,
       cardCount === 0,
+    );
+
+    // [AP-B] Retry button is present inside the error Alert.
+    // The Alert action renders a <button> with text "Retry" inside [role="alert"].
+    const retryFound = await page.evaluate(() => {
+      const el = document.querySelector('#home-view');
+      if (!el) return false;
+      const alerts = Array.from(el.querySelectorAll('[role="alert"]'));
+      return alerts.some(a => {
+        const buttons = Array.from(a.querySelectorAll('button'));
+        return buttons.some(b => (b.textContent || '').trim() === 'Retry');
+      });
+    });
+    record(
+      UI_LABELS[3],
+      'Retry button present inside [role="alert"] in #home-view',
+      retryFound ? 'found' : 'not found',
+      retryFound,
     );
 
     if (page.__logs.some(l => l.includes('pageerror'))) {
