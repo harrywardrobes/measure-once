@@ -113,6 +113,8 @@
     "test:invoice-admin-controls:ci": "node scripts/with-test-db.js test/invoice-admin-controls/run.js",
     "test:invoice-hash-restore": "node test/invoice-hash-restore/run.js",
     "test:invoice-hash-restore:ci": "node scripts/with-test-db.js test/invoice-hash-restore/run.js",
+    "test:invoice-bc-sync": "node test/invoice-bc-sync/run.js",
+    "test:invoice-bc-sync:ci": "node scripts/with-test-db.js test/invoice-bc-sync/run.js",
     "test:bottom-nav": "node test/bottom-nav/run.js",
     "test:bottom-nav:ci": "node scripts/with-test-db.js test/bottom-nav/run.js",
     "test:nav-active-tab": "node test/nav-active-tab/run.js",

@@ -104,6 +104,7 @@ const DB_SUITES = [
   'test:set-password:ci',
   'test:login:ci',
   'test:invoice-admin-controls:ci',
+  'test:invoice-bc-sync:ci',
   'test:bottom-nav:ci',
   'test:nav-active-tab:ci',
   'test:nav-customise:ci',
