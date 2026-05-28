@@ -1427,6 +1427,43 @@ function _invalidateLeadStatusCountsCache() {
   _leadStatusCountsCache = null;
 }
 
+// Helper: filter a contacts array to those that have at least one room in
+// the given stage. Mirrors the logic used in /api/contacts-all.
+function _filterContactsByStage(contacts, stageParam) {
+  if (!stageParam) return contacts;
+  return contacts.filter(c => {
+    const roomsJson = c.properties?.measure_once_rooms;
+    if (!roomsJson) return false;
+    try {
+      const rooms = JSON.parse(roomsJson);
+      if (!Array.isArray(rooms)) return false;
+      return rooms.some(r => (r.stageKey || 'sales') === stageParam);
+    } catch {
+      return false;
+    }
+  });
+}
+
+// Compute lead-status counts from an in-memory contacts array.
+// Returns { __no_status__: N, KEY: N, ... } matching the shape of _fetchLeadStatusCounts.
+async function _computeLeadStatusCountsFromContacts(contacts) {
+  const { rows: statusRows } = await pool.query(
+    'SELECT key FROM lead_status_config WHERE is_null_row IS NOT TRUE ORDER BY sort_order ASC, key ASC'
+  );
+  const keys = new Set(statusRows.map(r => r.key));
+  const counts = { __no_status__: 0 };
+  for (const key of keys) counts[key] = 0;
+  for (const c of contacts) {
+    const ls = c.properties?.hs_lead_status || '';
+    if (!ls) {
+      counts.__no_status__ = (counts.__no_status__ || 0) + 1;
+    } else if (keys.has(ls)) {
+      counts[ls] = (counts[ls] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
 // ── Open-Leads in-memory cache (single-flight + 60 s TTL) ────────────────────
 // Mirrors the lead-status-counts cache pattern. Invalidated on any
 // hs_lead_status mutation.
@@ -1478,6 +1515,28 @@ async function _fetchLeadStatusCounts() {
 }
 
 app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken, async (req, res) => {
+  // Stage-scoped request: compute counts from the shared contacts cache in
+  // memory rather than making N+1 HubSpot search API calls. This is fast,
+  // rate-limit-safe, and consistent with how /api/contacts-all filters by stage.
+  const stageParam = (req.query.stage || '').trim();
+  if (stageParam) {
+    try {
+      const { contacts: allContacts, stale, unavailable } = await getSharedContactsCache();
+      if (unavailable) {
+        return res.status(502).json({ error: 'HubSpot is currently unavailable. Please try again shortly.', code: 'HUBSPOT_UNAVAILABLE' });
+      }
+      if (stale) res.setHeader('X-Cache-Status', 'stale');
+      const filtered = _filterContactsByStage(allContacts, stageParam);
+      const counts = await _computeLeadStatusCountsFromContacts(filtered);
+      return res.json(counts);
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 401 || status === 403) return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+      if (status === 429) return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+      return res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+
   // Fresh cache hit — return immediately.
   if (_leadStatusCountsCache && Date.now() - _leadStatusCountsCache.fetchedAt < LEAD_STATUS_COUNTS_TTL_MS) {
     res.setHeader('X-Cache-Status', 'fresh');
@@ -1553,6 +1612,55 @@ app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken
     return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
   }
   res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+});
+
+// ── HubSpot: Substatus counts (for stage-scoped substatus chip filtering) ──────
+// Returns per-substatus contact counts for the given leadStatus (required) and
+// optional stage. When stage is provided, counts only contacts that have at
+// least one room in that stage. Uses the shared contacts cache — no extra
+// HubSpot API calls.
+// Response shape: { "STATUSKEY__SUBKEY": N, ... }
+app.get('/api/contacts-substatus-counts', isAuthenticated, requireHubspotToken, async (req, res) => {
+  const leadStatus = (req.query.leadStatus || '').trim();
+  const stageParam = (req.query.stage || '').trim();
+  if (!leadStatus) {
+    return res.status(400).json({ error: 'leadStatus query param is required.' });
+  }
+  try {
+    const { contacts: allContacts, stale, unavailable } = await getSharedContactsCache();
+    if (unavailable) {
+      return res.status(502).json({ error: 'HubSpot is currently unavailable. Please try again shortly.', code: 'HUBSPOT_UNAVAILABLE' });
+    }
+    if (stale) res.setHeader('X-Cache-Status', 'stale');
+
+    let contacts = allContacts;
+    // Filter by stage if provided.
+    if (stageParam) {
+      contacts = _filterContactsByStage(contacts, stageParam);
+    }
+    // Filter by lead status.
+    if (leadStatus === '__no_status__') {
+      contacts = contacts.filter(c => !c.properties?.hs_lead_status);
+    } else {
+      contacts = contacts.filter(c => c.properties?.hs_lead_status === leadStatus);
+    }
+
+    // Count by substatus value.
+    const counts = {};
+    for (const c of contacts) {
+      const sub = (c.properties?.hw_lead_substatus || '').toUpperCase();
+      if (sub) {
+        const key = `${leadStatus.toUpperCase()}__${sub}`;
+        counts[key] = (counts[key] || 0) + 1;
+      }
+    }
+    return res.json(counts);
+  } catch (e) {
+    const status = e.response?.status;
+    if (status === 401 || status === 403) return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    if (status === 429) return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    return res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+  }
 });
 
 // ── HubSpot: Open Leads (contacts with hs_lead_status = OPEN_DEAL) ────────────

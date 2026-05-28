@@ -221,6 +221,7 @@ type Store = {
   statuses: LeadStatus[];
   substatuses: LeadSubstatus[];
   counts: Record<string, number>;
+  substatusCounts: Record<string, number>;
   nullLabel: string;
   loaded: boolean;
   subsLoaded: boolean;
@@ -231,6 +232,7 @@ const store: Store = {
   statuses: [],
   substatuses: [],
   counts: {},
+  substatusCounts: {},
   nullLabel: 'No status',
   loaded: false,
   subsLoaded: false,
@@ -257,9 +259,29 @@ async function loadLeadStatuses(): Promise<void> {
   }
 }
 
-async function loadLeadStatusCounts(): Promise<void> {
-  const counts = await apiGet<Record<string, number>>('/api/contacts-lead-status-counts');
+async function loadLeadStatusCounts(stage?: string): Promise<void> {
+  const url = stage
+    ? `/api/contacts-lead-status-counts?stage=${encodeURIComponent(stage)}`
+    : '/api/contacts-lead-status-counts';
+  const counts = await apiGet<Record<string, number>>(url);
   if (counts && typeof counts === 'object') store.counts = counts;
+}
+
+async function loadSubstatusCounts(leadStatus: string, stage: string): Promise<void> {
+  if (!leadStatus || leadStatus === '__no_status__') {
+    store.substatusCounts = {};
+    notify();
+    return;
+  }
+  try {
+    const qs = new URLSearchParams({ leadStatus });
+    if (stage) qs.set('stage', stage);
+    const counts = await apiGet<Record<string, number>>(`/api/contacts-substatus-counts?${qs}`);
+    if (counts && typeof counts === 'object') store.substatusCounts = counts;
+  } catch (e) {
+    console.warn('loadSubstatusCounts failed:', (e as Error).message);
+  }
+  notify();
 }
 
 async function loadLeadSubstatuses(): Promise<void> {
@@ -321,7 +343,7 @@ declare global {
   interface Window {
     loadLeadStatuses?: () => Promise<void>;
     populateLeadStatusFilter?: () => void;
-    loadLeadStatusCounts?: () => Promise<void>;
+    loadLeadStatusCounts?: (stage?: string) => Promise<void>;
   }
 }
 
@@ -336,10 +358,11 @@ window.loadLeadStatusCounts = loadLeadStatusCounts;
  * native-select populator so the lead-status-sync test continues to
  * pass.
  */
-function useLeadStatusSync(onChange: () => void) {
+function useLeadStatusSync(onChange: () => void, stageRef: React.MutableRefObject<string>) {
   React.useEffect(() => {
     const refresh = () => {
-      Promise.all([loadLeadStatuses(), loadLeadStatusCounts().catch(() => {}), loadLeadSubstatuses()])
+      const stage = stageRef.current || undefined;
+      Promise.all([loadLeadStatuses(), loadLeadStatusCounts(stage).catch(() => {}), loadLeadSubstatuses()])
         .then(() => {
           populateLeadStatusFilter();
           onChange();
@@ -660,6 +683,11 @@ export function CustomersPage(): React.ReactElement {
   const notifyApiErrorRef = React.useRef(notifyApiError);
   React.useEffect(() => { notifyApiErrorRef.current = notifyApiError; }, [notifyApiError]);
 
+  // Keep a ref to the latest stageFilter so scheduleCounts (a stable callback)
+  // always passes the current stage without needing to re-create on every change.
+  const stageFilterRef = React.useRef(stageFilter);
+  React.useEffect(() => { stageFilterRef.current = stageFilter; }, [stageFilter]);
+
   const scheduleCounts = React.useCallback(() => {
     countsRetryTimersRef.current.forEach(clearTimeout);
     countsRetryTimersRef.current = [];
@@ -668,7 +696,7 @@ export function CustomersPage(): React.ReactElement {
     function scheduleCountsAttempt(retryCount: number, waitMs: number) {
       const t = setTimeout(async () => {
         try {
-          await loadLeadStatusCounts();
+          await loadLeadStatusCounts(stageFilterRef.current || undefined);
           populateLeadStatusFilter();
         } catch (e) {
           if (retryCount < MAX_COUNTS_RETRIES) {
@@ -763,7 +791,7 @@ export function CustomersPage(): React.ReactElement {
     populateLeadStatusFilter();
   }, []);
 
-  useLeadStatusSync(refreshDropdown);
+  useLeadStatusSync(refreshDropdown, stageFilterRef);
 
   // Scroll to the top of the page when the user navigates to a new page.
   // Skip on the initial mount to avoid disrupting the scroll-position restore.
@@ -803,7 +831,11 @@ export function CustomersPage(): React.ReactElement {
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
-      await Promise.all([loadLeadStatuses(), loadLeadStatusCounts().catch(() => {}), loadLeadSubstatuses()]);
+      await Promise.all([
+        loadLeadStatuses(),
+        loadLeadStatusCounts(initial.stage || undefined).catch(() => {}),
+        loadLeadSubstatuses(),
+      ]);
       if (cancelled) return;
       populateLeadStatusFilter();
       forceRender();
@@ -811,7 +843,40 @@ export function CustomersPage(): React.ReactElement {
     return () => {
       cancelled = true;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // When the stage tab changes, re-fetch lead-status counts scoped to that
+  // stage so the pills reflect what's actually in that stage.
+  const prevStageRef = React.useRef<string>(initial.stage);
+  React.useEffect(() => {
+    if (prevStageRef.current === stageFilter) return;
+    prevStageRef.current = stageFilter;
+    // Reset substatus counts immediately so stale chips don't flash.
+    store.substatusCounts = {};
+    notify();
+    loadLeadStatusCounts(stageFilter || undefined)
+      .then(() => {
+        populateLeadStatusFilter();
+        notify();
+      })
+      .catch(() => {});
+  }, [stageFilter]);
+
+  // When stage+leadStatus are both active, fetch substatus counts scoped to
+  // the stage so only substatuses with contacts in that stage are shown.
+  React.useEffect(() => {
+    if (!stageFilter || !leadStatus || leadStatus === '__no_status__') {
+      store.substatusCounts = {};
+      notify();
+      return;
+    }
+    let cancelled = false;
+    loadSubstatusCounts(leadStatus, stageFilter).then(() => {
+      if (!cancelled) notify();
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [stageFilter, leadStatus]);
 
   // Load workflow definition (for the stage tab bar + per-card stage labels)
   // and the per-contact rooms cache (for the client-side stage + archived
@@ -1094,22 +1159,39 @@ export function CustomersPage(): React.ReactElement {
             width={220}
             height={28}
           />
-        ) : availableSubstatuses.length > 0 ? (
-          <FilterChipRow
-            chips={[
-              { key: '', label: 'All sub-statuses' },
-              ...availableSubstatuses.map((s) => ({
-                key: `${String(leadStatus).toUpperCase()}__${String(s.substatus_key).toUpperCase()}`,
-                label: s.label || s.substatus_key,
-              })),
-            ]}
-            value={substatus}
-            onChange={(key) => {
-              setSubstatus(key === '' || key === substatus ? '' : key);
-              setPage(1);
-            }}
-          />
-        ) : null}
+        ) : (() => {
+          if (!availableSubstatuses.length) return null;
+          // When a stage is active, only show substatuses that have at least
+          // one contact in that stage + substatus combination.
+          const visibleSubstatuses = stageFilter
+            ? availableSubstatuses.filter((s) => {
+                const chipKey = `${String(leadStatus).toUpperCase()}__${String(s.substatus_key).toUpperCase()}`;
+                return (store.substatusCounts[chipKey] || 0) > 0;
+              })
+            : availableSubstatuses;
+          if (!visibleSubstatuses.length) return null;
+          return (
+            <FilterChipRow
+              chips={[
+                { key: '', label: 'All sub-statuses' },
+                ...visibleSubstatuses.map((s) => {
+                  const chipKey = `${String(leadStatus).toUpperCase()}__${String(s.substatus_key).toUpperCase()}`;
+                  const count = stageFilter ? (store.substatusCounts[chipKey] || 0) : undefined;
+                  return {
+                    key: chipKey,
+                    label: s.label || s.substatus_key,
+                    ...(count !== undefined ? { count } : {}),
+                  };
+                }),
+              ]}
+              value={substatus}
+              onChange={(key) => {
+                setSubstatus(key === '' || key === substatus ? '' : key);
+                setPage(1);
+              }}
+            />
+          );
+        })()}
 
         {/* ── Sort row: search | sort-by | Show all ───────────────────────── */}
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
