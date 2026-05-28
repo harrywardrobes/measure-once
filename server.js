@@ -1116,6 +1116,8 @@ app.patch('/api/admin/hubspot-credentials', isAuthenticated, requireAdmin, async
   }
   try {
     await setCredential(key, value.trim());
+    const actorEmail = req.user?.claims?.email || req.user?.email || null;
+    await logAdminAction(actorEmail, 'set_hubspot_credential', null, `key=${key}`);
     res.json({ ok: true, source: 'db', masked: maskCredential(value.trim()) });
   } catch (e) {
     console.error('[hubspot-creds] PATCH error:', e.message);
@@ -1132,6 +1134,8 @@ app.delete('/api/admin/hubspot-credentials/:key', isAuthenticated, requireAdmin,
   }
   try {
     await clearCredential(name);
+    const actorEmail = req.user?.claims?.email || req.user?.email || null;
+    await logAdminAction(actorEmail, 'clear_hubspot_credential', null, `key=${name}`);
     const remaining = getCredential(name);
     res.json({ ok: true, source: 'env', set: !!remaining, masked: remaining ? maskCredential(remaining) : null });
   } catch (e) {
