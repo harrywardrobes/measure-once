@@ -133,6 +133,7 @@ try { puppeteer = require('puppeteer'); } catch {}
 require('dotenv').config();
 
 const { pollUntil, pollFn } = require('../helpers/poll');
+const { clickMuiSelect } = require('../helpers/mui-select');
 
 // ── fixtures ──────────────────────────────────────────────────────────────────
 // Use lowercase letters/digits/underscores only — these are what the server-side
@@ -3759,16 +3760,12 @@ async function main() {
 
         // P.4 — Select a valid intermediateLeadStatus; Save/Add must enable.
         // The stale Select is the only FormControl in Mui-error state.
-        // Use Puppeteer's native ElementHandle.click() (dispatches real mouse
-        // events) instead of element.click() inside evaluate() — the latter
-        // only fires a synthetic DOM click that MUI Select ignores for opening
-        // its dropdown portal.
-        const interErrSelHandle = await staleTab.$(
+        const interErrSelHandle = await clickMuiSelect(
+          staleTab,
           '.MuiDialog-root .MuiInputBase-root.Mui-error .MuiSelect-select',
         );
         let interSelectClicked;
         if (interErrSelHandle) {
-          await interErrSelHandle.click();
           interSelectClicked = 'clicked';
         } else {
           interSelectClicked = await staleTab.evaluate(() => {
@@ -3942,13 +3939,12 @@ async function main() {
           );
 
           // P.sub.4 — Select a valid submittedLeadStatus; Save/Add must enable.
-          // Use Puppeteer's native ElementHandle.click() for the same reason as P.4.
-          const subErrSelHandle = await subTab.$(
+          const subErrSelHandle = await clickMuiSelect(
+            subTab,
             '.MuiDialog-root .MuiInputBase-root.Mui-error .MuiSelect-select',
           );
           let subSelectClicked;
           if (subErrSelHandle) {
-            await subErrSelHandle.click();
             subSelectClicked = 'clicked';
           } else {
             subSelectClicked = await subTab.evaluate(() => {
