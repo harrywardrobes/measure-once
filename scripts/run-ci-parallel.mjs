@@ -64,6 +64,7 @@ const STATIC_SUITES = [
   'test:keyboard-shortcuts',
   'test:handler-config-blocks',
   'test:status-key-fields',
+  'test:workflow-map-ordering',
   'test:ci-runner-sync',
 ];
 
