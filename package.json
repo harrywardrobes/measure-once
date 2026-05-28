@@ -186,6 +186,8 @@
     "test:profile-google-calendar:ci": "node scripts/with-test-db.js test/profile-google-calendar/run.js",
     "test:scheduling-past-time-guard": "node test/scheduling-past-time-guard/run.js",
     "test:scheduling-past-time-guard:ci": "node scripts/with-test-db.js test/scheduling-past-time-guard/run.js",
+    "test:customer-card-action-strip": "node test/customer-card-action-strip/run.js",
+    "test:customer-card-action-strip:ci": "node scripts/with-test-db.js test/customer-card-action-strip/run.js",
     "test:workflow-map": "node test/workflow-map/run.js",
     "test:workflow-map:ci": "node scripts/with-test-db.js test/workflow-map/run.js",
     "test:projects-top-spacing": "node test/projects-top-spacing/run.js",

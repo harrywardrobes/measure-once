@@ -765,6 +765,7 @@ export function CustomersPage(): React.ReactElement {
     setInvDrawerAllIds(allIds);
     setInvDrawerOpen(true);
   }, []);
+
   const { isAdmin } = usePrivilege();
 
   const { devMode } = useDevMode({ enabled: isAdmin });
