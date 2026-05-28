@@ -28,6 +28,7 @@ const fs   = require('fs');
 const path = require('path');
 const http = require('http');
 const { Pool } = require('pg');
+const { pollFn } = require('../helpers/poll');
 
 require('dotenv').config();
 
@@ -244,18 +245,14 @@ async function main() {
     // HTTP listener comes up, so /api/turnstile-config can answer before the
     // qb_estimate_history column has been added. Poll briefly until the
     // ALTER TABLE has landed.
-    {
-      const deadline = Date.now() + 15000;
-      while (Date.now() < deadline) {
-        const r = await pool.query(`
-          SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'design_visits'
-              AND column_name = 'qb_estimate_history'
-          LIMIT 1`);
-        if (r.rowCount) break;
-        await new Promise(res => setTimeout(res, 200));
-      }
-    }
+    await pollFn(async () => {
+      const r = await pool.query(`
+        SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'design_visits'
+            AND column_name = 'qb_estimate_history'
+        LIMIT 1`);
+      return r.rowCount || null;
+    }, 15000, 200);
     await cleanup(pool, runId);
 
     // Seed a long-lived QB token row so getQbTokens() short-circuits without

@@ -36,6 +36,7 @@ const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 const { Pool } = require('pg');
+const { pollFn } = require('../helpers/poll');
 
 const {
   spawnServer,
@@ -183,13 +184,11 @@ async function main() {
 
   // Wait for design-visit tables to be created (async on boot).
   const waitForTable = async (name) => {
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
+    const found = await pollFn(async () => {
       const r = await pool.query(`SELECT to_regclass($1) AS t`, [name]);
-      if (r.rows[0].t) return;
-      await new Promise(r => setTimeout(r, 200));
-    }
-    throw new Error(`Timed out waiting for table ${name}`);
+      return r.rows[0].t || null;
+    }, 15000, 200);
+    if (!found) throw new Error(`Timed out waiting for table ${name}`);
   };
   await Promise.all([
     waitForTable('design_visits'),
@@ -265,18 +264,14 @@ async function main() {
     putRes.status === 200 && putRes.json?.ok === true && putRes.json?.designVisitId === putVisit.id);
 
   // Poll the DB until the async side-effect chain writes superseded_signoff_token_hashes.
-  {
-    const putOldHashEarly = tokenHash(putRawToken);
-    const deadline = Date.now() + 8000;
-    while (Date.now() < deadline) {
-      const r = await pool.query(
-        `SELECT superseded_signoff_token_hashes FROM design_visits WHERE id=$1`,
-        [putVisit.id]);
-      const hashes = r.rows[0]?.superseded_signoff_token_hashes;
-      if (Array.isArray(hashes) && hashes.includes(putOldHashEarly)) break;
-      await new Promise(r => setTimeout(r, 100));
-    }
-  }
+  const putOldHashEarly = tokenHash(putRawToken);
+  await pollFn(async () => {
+    const r = await pool.query(
+      `SELECT superseded_signoff_token_hashes FROM design_visits WHERE id=$1`,
+      [putVisit.id]);
+    const hashes = r.rows[0]?.superseded_signoff_token_hashes;
+    return (Array.isArray(hashes) && hashes.includes(putOldHashEarly)) ? true : null;
+  }, 8000, 100);
 
   // Confirm the DB shape: old hash now lives in superseded_signoff_token_hashes
   // and signoff_token_hash is the new value.
@@ -369,18 +364,14 @@ async function main() {
   }
 
   // Poll the DB until the async side-effect chain writes superseded_signoff_token_hashes.
-  {
-    const resOldHashEarly = tokenHash(resRawToken);
-    const deadline = Date.now() + 8000;
-    while (Date.now() < deadline) {
-      const r = await pool.query(
-        `SELECT superseded_signoff_token_hashes FROM design_visits WHERE id=$1`,
-        [resVisit.id]);
-      const hashes = r.rows[0]?.superseded_signoff_token_hashes;
-      if (Array.isArray(hashes) && hashes.includes(resOldHashEarly)) break;
-      await new Promise(r => setTimeout(r, 100));
-    }
-  }
+  const resOldHashEarly = tokenHash(resRawToken);
+  await pollFn(async () => {
+    const r = await pool.query(
+      `SELECT superseded_signoff_token_hashes FROM design_visits WHERE id=$1`,
+      [resVisit.id]);
+    const hashes = r.rows[0]?.superseded_signoff_token_hashes;
+    return (Array.isArray(hashes) && hashes.includes(resOldHashEarly)) ? true : null;
+  }, 8000, 100);
 
   const resAfter = await pool.query(
     `SELECT signoff_token_hash, superseded_signoff_token_hashes, status

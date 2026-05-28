@@ -47,7 +47,7 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
-const { pollUntil } = require('../helpers/poll');
+const { pollUntil, pollFn } = require('../helpers/poll');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function parseCookieKV(jar) {
@@ -293,13 +293,11 @@ async function main() {
 
   // Wait for visits table (created async on boot).
   const waitForTable = async (name) => {
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
+    const found = await pollFn(async () => {
       const r = await pool.query(`SELECT to_regclass($1) AS t`, [name]);
-      if (r.rows[0].t) return;
-      await new Promise(r => setTimeout(r, 200));
-    }
-    throw new Error(`Timed out waiting for table ${name}`);
+      return r.rows[0].t || null;
+    }, 15000, 200);
+    if (!found) throw new Error(`Timed out waiting for table ${name}`);
   };
   await waitForTable('visits');
   console.log('  visits table ready');
@@ -445,15 +443,10 @@ async function main() {
         await clickInput(adminPage, '[data-testid="cal-workshop-wrap"] input');
         // Wait for the PATCH to land — we observe via a server-side GET.
         const targetVal = !uiBefore;
-        const prefMatched = await (async () => {
-          const deadline = Date.now() + 6000;
-          while (Date.now() < deadline) {
-            const r = await adminClient.get('/api/users/me/prefs');
-            if (r.status === 200 && r.json && !!r.json.calShowWorkshop === targetVal) return true;
-            await new Promise(r => setTimeout(r, 150));
-          }
-          return false;
-        })();
+        const prefMatched = !!(await pollFn(async () => {
+          const r = await adminClient.get('/api/users/me/prefs');
+          return (r.status === 200 && r.json && !!r.json.calShowWorkshop === targetVal) ? true : null;
+        }, 6000, 150));
         record(UI_LABELS[3],
           `PATCH succeeds; pref toggles from ${uiBefore} → ${targetVal}`,
           `matched=${prefMatched}`,
@@ -519,16 +512,11 @@ async function main() {
         if (newTaskId) {
           await clickInput(memberPage, `.cal-task-checkbox-${newTaskId} input`);
         }
-        const toggledOk = await (async () => {
-          const deadline = Date.now() + 6000;
-          while (Date.now() < deadline) {
-            const r = await memberClient.get('/api/personal-tasks');
-            const row = Array.isArray(r.json) ? r.json.find(t => t.id === newTaskId) : null;
-            if (row && row.done === true) return true;
-            await new Promise(r => setTimeout(r, 150));
-          }
-          return false;
-        })();
+        const toggledOk = !!(await pollFn(async () => {
+          const r = await memberClient.get('/api/personal-tasks');
+          const row = Array.isArray(r.json) ? r.json.find(t => t.id === newTaskId) : null;
+          return (row && row.done === true) ? true : null;
+        }, 6000, 150));
         record(UI_LABELS[6],
           'task.done === true after UI click',
           `toggled=${toggledOk}`,
@@ -541,16 +529,11 @@ async function main() {
             if (btn) btn.click();
           }, newTaskId);
         }
-        const deletedOk = await (async () => {
-          const deadline = Date.now() + 6000;
-          while (Date.now() < deadline) {
-            const r = await memberClient.get('/api/personal-tasks');
-            const row = Array.isArray(r.json) ? r.json.find(t => t.id === newTaskId) : null;
-            if (!row) return true;
-            await new Promise(r => setTimeout(r, 150));
-          }
-          return false;
-        })();
+        const deletedOk = !!(await pollFn(async () => {
+          const r = await memberClient.get('/api/personal-tasks');
+          const row = Array.isArray(r.json) ? r.json.find(t => t.id === newTaskId) : null;
+          return !row ? true : null;
+        }, 6000, 150));
         record(UI_LABELS[7],
           'task gone from /api/personal-tasks after Delete',
           `deleted=${deletedOk}`,
@@ -577,19 +560,14 @@ async function main() {
           if (b) b.click();
         });
         // Modal closes; verify DB row.
-        const created = await (async () => {
-          const deadline = Date.now() + 6000;
-          while (Date.now() < deadline) {
-            const r = await pool.query(
-              `SELECT id, notes FROM visits WHERE created_by = $1 AND notes = $2
-               ORDER BY id DESC LIMIT 1`,
-              [users.member.id, notesMarker],
-            );
-            if (r.rows[0]) return r.rows[0];
-            await new Promise(r => setTimeout(r, 150));
-          }
-          return null;
-        })();
+        const created = await pollFn(async () => {
+          const r = await pool.query(
+            `SELECT id, notes FROM visits WHERE created_by = $1 AND notes = $2
+             ORDER BY id DESC LIMIT 1`,
+            [users.member.id, notesMarker],
+          );
+          return r.rows[0] || null;
+        }, 6000, 150);
         record(UI_LABELS[8],
           `visits row inserted with notes="${notesMarker}"`,
           `created=${JSON.stringify(created)}`,
@@ -622,16 +600,10 @@ async function main() {
             const b = document.querySelector('[data-testid="cal-visit-save"]');
             if (b) b.click();
           });
-          editOk = await (async () => {
-            const deadline = Date.now() + 6000;
-            while (Date.now() < deadline) {
-              const r = await pool.query(
-                `SELECT notes FROM visits WHERE id = $1`, [editTarget]);
-              if (r.rows[0]?.notes === editedNotes) return true;
-              await new Promise(r => setTimeout(r, 150));
-            }
-            return false;
-          })();
+          editOk = !!(await pollFn(async () => {
+            const r = await pool.query(`SELECT notes FROM visits WHERE id = $1`, [editTarget]);
+            return r.rows[0]?.notes === editedNotes ? true : null;
+          }, 6000, 150));
         }
         record(UI_LABELS[9],
           'visits.notes updates after Save in edit mode',
@@ -659,15 +631,10 @@ async function main() {
               .find(b => (b.textContent || '').trim() === 'Delete');
             if (btn) btn.click();
           });
-          deleteOk = await (async () => {
-            const deadline = Date.now() + 6000;
-            while (Date.now() < deadline) {
-              const r = await pool.query(`SELECT id FROM visits WHERE id = $1`, [editTarget]);
-              if (r.rowCount === 0) return true;
-              await new Promise(r => setTimeout(r, 150));
-            }
-            return false;
-          })();
+          deleteOk = !!(await pollFn(async () => {
+            const r = await pool.query(`SELECT id FROM visits WHERE id = $1`, [editTarget]);
+            return r.rowCount === 0 ? true : null;
+          }, 6000, 150));
         }
         record(UI_LABELS[10],
           'visits row deleted after Delete in edit mode',
@@ -697,15 +664,10 @@ async function main() {
         // Clear any existing gcal pref then click the toggle.
         await memberClient.patch('/api/users/me/prefs', { gcal_sync_pref: false });
         await clickInput(gcalPage, '[data-testid="cal-visit-gcal-wrap"] input');
-        const prefSaved = await (async () => {
-          const deadline = Date.now() + 6000;
-          while (Date.now() < deadline) {
-            const r = await memberClient.get('/api/users/me/prefs');
-            if (r.json && r.json.gcal_sync_pref === true) return true;
-            await new Promise(r => setTimeout(r, 150));
-          }
-          return false;
-        })();
+        const prefSaved = !!(await pollFn(async () => {
+          const r = await memberClient.get('/api/users/me/prefs');
+          return (r.json && r.json.gcal_sync_pref === true) ? true : null;
+        }, 6000, 150));
         record(UI_LABELS[12],
           'gcal_sync_pref === true after clicking the toggle',
           `prefSaved=${prefSaved}`,

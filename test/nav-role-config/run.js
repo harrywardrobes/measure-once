@@ -46,7 +46,7 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
-const { pollUntil } = require('../helpers/poll');
+const { pollUntil, waitForNavBarStability } = require('../helpers/poll');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -119,20 +119,7 @@ async function openHomePage(browser, jar) {
   // Wait for loadNavPref() / role-config fetch to settle — poll until the nav
   // bar's item list stops changing, which confirms the async fetch and
   // re-render have completed.
-  let _prevNavIds = null;
-  {
-    const deadline = Date.now() + 3000;
-    while (Date.now() < deadline) {
-      const cur = await page.evaluate(() => {
-        const nav = document.querySelector('nav.bottom-nav#main-content');
-        if (!nav) return null;
-        return JSON.stringify([...nav.querySelectorAll('[id^="bnav-"]')].map(e => e.id));
-      }).catch(() => null);
-      if (cur !== null && cur === _prevNavIds) break;
-      _prevNavIds = cur;
-      await new Promise(r => setTimeout(r, 100));
-    }
-  }
+  await waitForNavBarStability(page, 3000, 100);
 
   page.__logs = pageLogs;
   return page;

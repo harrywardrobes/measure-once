@@ -68,7 +68,7 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
-const { pollUntil } = require('../helpers/poll');
+const { pollUntil, pollFn } = require('../helpers/poll');
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 const RUN_PREFIX = 'privtest-dvca';
@@ -206,13 +206,11 @@ async function main() {
 
   // Wait for catalogue tables to exist (auto-created on boot).
   const waitForTable = async (name) => {
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
+    const found = await pollFn(async () => {
       const r = await pool.query(`SELECT to_regclass($1) AS t`, [name]);
-      if (r.rows[0].t) return;
-      await new Promise(r => setTimeout(r, 200));
-    }
-    throw new Error(`Timed out waiting for table ${name}`);
+      return r.rows[0].t || null;
+    }, 15000, 200);
+    if (!found) throw new Error(`Timed out waiting for table ${name}`);
   };
   await waitForTable('design_visit_handles');
   await waitForTable('design_visit_furniture_ranges');
@@ -705,18 +703,14 @@ async function main() {
       if (typeof spec.assertLocalFileGone === 'string' && spec.assertLocalFileGone) {
         // _deleteLocalHandleImage is fire-and-forget (async fs.unlink), so
         // poll briefly for the file to disappear.
-        const deadline = Date.now() + 4000;
-        let stillThere = true;
-        while (Date.now() < deadline) {
-          stillThere = fs.existsSync(spec.assertLocalFileGone);
-          if (!stillThere) break;
-          await new Promise(r => setTimeout(r, 100));
-        }
+        const fileGone = !!(await pollFn(async () => (
+          !fs.existsSync(spec.assertLocalFileGone) ? true : null
+        ), 4000, 100));
         record(
           `[${label}/del] local handle image file unlinked by server`,
           `${spec.assertLocalFileGone} no longer exists`,
-          `exists=${stillThere}`,
-          stillThere === false,
+          `exists=${!fileGone}`,
+          fileGone,
         );
       }
     }

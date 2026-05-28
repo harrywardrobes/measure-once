@@ -18,6 +18,7 @@
 const fs   = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
+const { pollUntil } = require('../helpers/poll');
 
 const {
   spawnServer,
@@ -61,17 +62,17 @@ async function pollPage(page, fn, arg, timeoutMs = 8000, intervalMs = 150) {
 
 // Wait until the React bundle has mounted (checks for known React mount markers).
 async function waitForReact(page, timeoutMs = 10000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const ready = await page.evaluate(() => {
+  await pollUntil(
+    page,
+    () => (
       // The React bundle sets data-ds-rendered="1" on mount elements.
-      return document.querySelector('[data-ds-rendered="1"]') !== null
-        || document.querySelector('[data-testid]') !== null
-        || document.readyState === 'complete';
-    });
-    if (ready) return;
-    await new Promise(r => setTimeout(r, 150));
-  }
+      document.querySelector('[data-ds-rendered="1"]') !== null
+      || document.querySelector('[data-testid]') !== null
+      || document.readyState === 'complete'
+    ) ? 'ready' : null,
+    timeoutMs,
+    150,
+  );
 }
 
 // ── report ────────────────────────────────────────────────────────────────────

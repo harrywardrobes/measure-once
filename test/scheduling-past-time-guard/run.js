@@ -83,7 +83,7 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
-const { pollUntil } = require('../helpers/poll');
+const { pollUntil, pollFn } = require('../helpers/poll');
 
 // ── Fixture constants ──────────────────────────────────────────────────────────
 const HANDLER_NAME_IS  = 'PrivTest scheduling-past-time installation handler';
@@ -311,13 +311,11 @@ async function main() {
 
   // Wait for visits table to exist (created async on server boot).
   const waitForTable = async (name) => {
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
+    const found = await pollFn(async () => {
       const r = await pool.query(`SELECT to_regclass($1) AS t`, [name]);
-      if (r.rows[0].t) return;
-      await new Promise(r => setTimeout(r, 200));
-    }
-    throw new Error(`Timed out waiting for table "${name}"`);
+      return r.rows[0].t || null;
+    }, 15000, 200);
+    if (!found) throw new Error(`Timed out waiting for table "${name}"`);
   };
   await waitForTable('visits');
   await waitForTable('card_action_handlers');

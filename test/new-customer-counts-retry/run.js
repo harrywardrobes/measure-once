@@ -228,34 +228,31 @@ async function waitForRefreshFailedSnackbar(page, timeoutMs = 10000) {
 // Wait for the Snackbar to disappear after it was visible.
 // Used to confirm autoHideDuration fires and dismisses the alert.
 async function waitForSnackbarGone(page, timeoutMs = 5000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const stillVisible = await page.evaluate(() => {
+  return pollUntil(
+    page,
+    () => {
       const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
-      return alerts.some(el =>
-        (el.textContent || '').includes("Couldn't refresh live data")
-      );
-    }).catch(() => true);
-    if (!stillVisible) return 'gone';
-    await new Promise(r => setTimeout(r, 100));
-  }
-  return null; // still visible after timeout — bad
+      return alerts.some(el => (el.textContent || '').includes("Couldn't refresh live data"))
+        ? null : 'gone';
+    },
+    timeoutMs,
+    100,
+  );
 }
 
 // Assert the Snackbar does NOT appear within a window.
+// Returns 'appeared' if the snackbar shows up (bad), null if it never appears (good).
 async function assertNoSnackbar(page, waitMs = 4000) {
-  const deadline = Date.now() + waitMs;
-  while (Date.now() < deadline) {
-    const found = await page.evaluate(() => {
+  return pollUntil(
+    page,
+    () => {
       const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
-      return alerts.some(el =>
-        (el.textContent || '').includes("Couldn't refresh live data")
-      );
-    });
-    if (found) return 'appeared'; // Snackbar appeared — bad
-    await new Promise(r => setTimeout(r, 100));
-  }
-  return null; // never appeared — good
+      return alerts.some(el => (el.textContent || '').includes("Couldn't refresh live data"))
+        ? 'appeared' : null;
+    },
+    waitMs,
+    100,
+  );
 }
 
 async function waitForCustomersMounted(page) {

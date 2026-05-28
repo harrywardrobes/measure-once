@@ -27,6 +27,7 @@ const fs   = require('fs');
 const path = require('path');
 const http = require('http');
 const { Pool } = require('pg');
+const { pollFn } = require('../helpers/poll');
 
 require('dotenv').config();
 
@@ -121,34 +122,23 @@ function startMockHubspot() {
 // expected calls appear or the deadline passes.
 // predicate may be sync or async.
 
-async function pollUntil(predicate, timeoutMs = 5000, intervalMs = 100) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await predicate()) return true;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return false;
-}
+const pollUntil = (predicate, timeoutMs = 5000, intervalMs = 100) =>
+  pollFn(predicate, timeoutMs, intervalMs).then(Boolean);
 
 // ── DB poll helper ────────────────────────────────────────────────────────────
 // Poll substatus_clear_failures for an expected row, since the INSERT is async.
 
 async function pollDbFailures(pool, { deletedKey, failureType, contactId }, timeoutMs = 5000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const q = contactId
-        ? `SELECT * FROM substatus_clear_failures
-             WHERE deleted_key = $1 AND failure_type = $2 AND contact_id = $3 AND resolved = FALSE`
-        : `SELECT * FROM substatus_clear_failures
-             WHERE deleted_key = $1 AND failure_type = $2 AND resolved = FALSE`;
-      const params = contactId ? [deletedKey, failureType, contactId] : [deletedKey, failureType];
-      const { rows } = await pool.query(q, params);
-      if (rows.length > 0) return rows;
-    } catch {}
-    await new Promise(r => setTimeout(r, 100));
-  }
-  return [];
+  return await pollFn(async () => {
+    const q = contactId
+      ? `SELECT * FROM substatus_clear_failures
+           WHERE deleted_key = $1 AND failure_type = $2 AND contact_id = $3 AND resolved = FALSE`
+      : `SELECT * FROM substatus_clear_failures
+           WHERE deleted_key = $1 AND failure_type = $2 AND resolved = FALSE`;
+    const params = contactId ? [deletedKey, failureType, contactId] : [deletedKey, failureType];
+    const { rows } = await pool.query(q, params);
+    return rows.length > 0 ? rows : null;
+  }, timeoutMs, 100) ?? [];
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────

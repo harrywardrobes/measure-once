@@ -32,6 +32,7 @@ const path   = require('path');
 const http   = require('http');
 const crypto = require('crypto');
 const { Pool } = require('pg');
+const { pollFn } = require('../helpers/poll');
 
 require('dotenv').config();
 
@@ -93,16 +94,14 @@ function readMailJsonl(filePath) {
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 async function waitForTable(pool, tableName, timeoutMs = 15000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+  const found = await pollFn(async () => {
     const r = await pool.query(
       `SELECT 1 FROM information_schema.tables WHERE table_name = $1 LIMIT 1`,
       [tableName]
     );
-    if (r.rowCount) return;
-    await new Promise(res => setTimeout(res, 200));
-  }
-  throw new Error(`Table ${tableName} did not appear within ${timeoutMs}ms`);
+    return r.rowCount || null;
+  }, timeoutMs, 200);
+  if (!found) throw new Error(`Table ${tableName} did not appear within ${timeoutMs}ms`);
 }
 
 async function getTokenHashForContact(pool, contactId) {
@@ -445,12 +444,11 @@ async function main() {
           : `DB row missing or incorrect: ${JSON.stringify(row).slice(0, 200)}`);
 
       // Wait briefly for emails to land
-      const emailDeadline = Date.now() + 4000;
       let mailsAfter = readMailJsonl(mailFile);
-      while (Date.now() < emailDeadline && mailsAfter.length <= mailsBeforeSubmit) {
-        await new Promise(res => setTimeout(res, 100));
+      await pollFn(async () => {
         mailsAfter = readMailJsonl(mailFile);
-      }
+        return mailsAfter.length > mailsBeforeSubmit ? true : null;
+      }, 4000, 100);
 
       const newMails = mailsAfter.slice(mailsBeforeSubmit);
       const adminEmail = newMails.find(m =>

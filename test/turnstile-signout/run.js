@@ -47,6 +47,7 @@
 const fs   = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
+const { pollFn } = require('../helpers/poll');
 
 const {
   spawnServer,
@@ -120,16 +121,7 @@ async function injectSession(page, jar) {
   });
 }
 
-async function pollUntil(fn, timeoutMs = 10000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await fn(); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
-}
+const pollUntil = (fn, timeoutMs = 10000, intervalMs = 150) => pollFn(fn, timeoutMs, intervalMs);
 
 async function newPage(browser, jar) {
   const ctx = await (browser.createBrowserContext

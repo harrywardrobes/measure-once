@@ -24,6 +24,7 @@
 const fs   = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
+const { pollUntil, pollFn } = require('../helpers/poll');
 
 const {
   spawnServer,
@@ -73,14 +74,7 @@ async function injectSession(page, jar) {
 }
 
 async function pollFor(page, fn, arg, timeoutMs = 8000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let got = null;
-    try { got = await page.evaluate(fn, arg); } catch {}
-    if (got) return got;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return null;
+  return pollUntil(page, fn, timeoutMs, intervalMs, arg !== undefined && arg !== null ? [arg] : []);
 }
 
 async function purgeFixtures(pool) {
@@ -379,13 +373,11 @@ async function main() {
 
   // Wait for visits table to be created (done async on boot).
   const waitForTable = async (name) => {
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
+    const found = await pollFn(async () => {
       const r = await pool.query(`SELECT to_regclass($1) AS t`, [name]);
-      if (r.rows[0].t) return;
-      await new Promise(r => setTimeout(r, 200));
-    }
-    throw new Error(`Timed out waiting for table ${name}`);
+      return r.rows[0].t || null;
+    }, 15000, 200);
+    if (!found) throw new Error(`Timed out waiting for table ${name}`);
   };
   await waitForTable('visits');
   console.log('  visits table ready');

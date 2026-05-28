@@ -35,7 +35,7 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
-const { waitForSwitchTab } = require('../helpers/poll');
+const { waitForSwitchTab, pollUntil } = require('../helpers/poll');
 
 function parseCookieKV(jar) {
   if (!jar) return null;
@@ -55,17 +55,16 @@ async function injectSession(page, jar) {
 }
 
 async function waitForSelectorInPanel(page, panelId, selector, timeoutMs = 6000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const found = await page.evaluate((pid, sel) => {
+  return !!(await pollUntil(
+    page,
+    (pid, sel) => {
       const panel = document.getElementById(pid);
-      if (!panel) return false;
-      return !!panel.querySelector(sel);
-    }, panelId, selector);
-    if (found) return true;
-    await new Promise(r => setTimeout(r, 150));
-  }
-  return false;
+      return (panel && panel.querySelector(sel)) ? true : null;
+    },
+    timeoutMs,
+    150,
+    [panelId, selector],
+  ));
 }
 
 async function main() {

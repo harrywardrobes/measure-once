@@ -58,7 +58,7 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
-const { pollUntil } = require('../helpers/poll');
+const { pollUntil, pollFn } = require('../helpers/poll');
 
 // A strong new password that passes the server-side zxcvbn policy (score ≥ 2,
 // has mixed letters + numbers, not a known-weak phrase).
@@ -89,12 +89,7 @@ async function pollPage(page, fn, arg, timeoutMs = 10000, intervalMs = 150) {
 
 // Convenience boolean poller — resolves true when fn() returns truthy.
 async function waitUntil(fn, timeoutMs = 8000, intervalMs = 150) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await fn()) return true;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return false;
+  return !!(await pollFn(fn, timeoutMs, intervalMs));
 }
 
 async function newPageWithSession(browser, jar) {

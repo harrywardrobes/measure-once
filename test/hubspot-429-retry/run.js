@@ -103,6 +103,7 @@ const os   = require('os');
 const path = require('path');
 const http = require('http');
 const { Pool } = require('pg');
+const { pollFn } = require('../helpers/poll');
 
 require('dotenv').config();
 
@@ -396,18 +397,14 @@ async function main() {
     console.log(`  test server up at ${BASE}\n`);
 
     // Wait for design_visits schema columns added asynchronously on boot.
-    {
-      const deadline = Date.now() + 15000;
-      while (Date.now() < deadline) {
-        const r = await pool.query(`
-          SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'design_visits'
-              AND column_name = 'superseded_signoff_token_hashes'
-          LIMIT 1`);
-        if (r.rowCount) break;
-        await new Promise(res => setTimeout(res, 200));
-      }
-    }
+    await pollFn(async () => {
+      const r = await pool.query(`
+        SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'design_visits'
+            AND column_name = 'superseded_signoff_token_hashes'
+        LIMIT 1`);
+      return r.rowCount || null;
+    }, 15000, 200);
 
     const client  = await login(users.member.email,   PASSWORD);
     const cookie  = client.cookie;
@@ -597,10 +594,7 @@ async function main() {
     // runSubmitSideEffects is awaited inside the submit handler, so the log
     // should already be present, but we poll defensively for up to 1 second.
     const exhaustionMarker = '[design-visits/hubspot-retry] all 4 attempts exhausted';
-    const logDeadline = Date.now() + 1000;
-    while (Date.now() < logDeadline && !logBuf.join('').includes(exhaustionMarker)) {
-      await new Promise(res => setTimeout(res, 50));
-    }
+    await pollFn(() => logBuf.join('').includes(exhaustionMarker) ? true : null, 1000, 50);
 
     const dv2NoteCalls = mock.calls.filter(c => c.url === '/crm/v3/objects/notes');
     const logText      = logBuf.join('');
@@ -680,11 +674,7 @@ async function main() {
     );
 
     // Poll briefly for the exhaustion log to flush after the HTTP response.
-    const logDeadline4 = Date.now() + 1000;
-    while (Date.now() < logDeadline4 &&
-           !logBuf.join('').slice(logBeforeDV4.length).includes(exhaustionMarker)) {
-      await new Promise(res => setTimeout(res, 50));
-    }
+    await pollFn(() => logBuf.join('').slice(logBeforeDV4.length).includes(exhaustionMarker) ? true : null, 1000, 50);
 
     const dv4ContactCalls = mock.calls.filter(c =>
       c.url.startsWith('/crm/v3/objects/contacts/'),
@@ -748,11 +738,7 @@ async function main() {
     const dv6Id = await seedDesignVisit(pool, 'revision_requested');
     const dv6 = await httpPost(BASE, `/api/design-visits/${dv6Id}/submit`, cookie, {});
 
-    const logDeadline6 = Date.now() + 1000;
-    while (Date.now() < logDeadline6 &&
-           !logBuf.join('').slice(logBeforeDV6.length).includes(exhaustionMarker)) {
-      await new Promise(res => setTimeout(res, 50));
-    }
+    await pollFn(() => logBuf.join('').slice(logBeforeDV6.length).includes(exhaustionMarker) ? true : null, 1000, 50);
 
     const dv6NoteCalls = mock.calls.filter(c => c.url === '/crm/v3/objects/notes');
     const logAfterDV6  = logBuf.join('').slice(logBeforeDV6.length);
@@ -826,11 +812,7 @@ async function main() {
     const dv8Id = await seedDesignVisit(pool, 'submitted');
     const dv8 = await httpPut(BASE, `/api/design-visits/${dv8Id}`, cookie, PUT_BODY);
 
-    const logDeadline8 = Date.now() + 1000;
-    while (Date.now() < logDeadline8 &&
-           !logBuf.join('').slice(logBeforeDV8.length).includes(exhaustionMarker)) {
-      await new Promise(res => setTimeout(res, 50));
-    }
+    await pollFn(() => logBuf.join('').slice(logBeforeDV8.length).includes(exhaustionMarker) ? true : null, 1000, 50);
 
     const dv8NoteCalls = mock.calls.filter(c => c.url === '/crm/v3/objects/notes');
     const logAfterDV8  = logBuf.join('').slice(logBeforeDV8.length);
@@ -908,11 +890,7 @@ async function main() {
       { handlerConfig: { submittedLeadStatus: 'PRIVTEST_LS_STATUS' } },
     );
 
-    const logDeadline10 = Date.now() + 1000;
-    while (Date.now() < logDeadline10 &&
-           !logBuf.join('').slice(logBeforeDV10.length).includes(exhaustionMarker)) {
-      await new Promise(res => setTimeout(res, 50));
-    }
+    await pollFn(() => logBuf.join('').slice(logBeforeDV10.length).includes(exhaustionMarker) ? true : null, 1000, 50);
 
     const dv10ContactCalls = mock.calls.filter(c =>
       c.url.startsWith('/crm/v3/objects/contacts/'),
@@ -993,11 +971,7 @@ async function main() {
       { ...PUT_BODY, handlerConfig: { submittedLeadStatus: 'PRIVTEST_LS_STATUS' } },
     );
 
-    const logDeadline12 = Date.now() + 1000;
-    while (Date.now() < logDeadline12 &&
-           !logBuf.join('').slice(logBeforeDV12.length).includes(exhaustionMarker)) {
-      await new Promise(res => setTimeout(res, 50));
-    }
+    await pollFn(() => logBuf.join('').slice(logBeforeDV12.length).includes(exhaustionMarker) ? true : null, 1000, 50);
 
     const dv12ContactCalls = mock.calls.filter(c =>
       c.url.startsWith('/crm/v3/objects/contacts/'),

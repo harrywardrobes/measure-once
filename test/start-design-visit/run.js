@@ -56,7 +56,7 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
-const { pollUntil } = require('../helpers/poll');
+const { pollUntil, pollFn } = require('../helpers/poll');
 
 // ── Fixture name constants ────────────────────────────────────────────────────
 const RUN_PREFIX = 'privtest-sdv';
@@ -219,13 +219,11 @@ async function main() {
 
   // Wait for all design-visit tables to be created (async on boot)
   const waitForTable = async (name) => {
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
+    const found = await pollFn(async () => {
       const r = await pool.query(`SELECT to_regclass($1) AS t`, [name]);
-      if (r.rows[0].t) return;
-      await new Promise(r => setTimeout(r, 200));
-    }
-    throw new Error(`Timed out waiting for table ${name}`);
+      return r.rows[0].t || null;
+    }, 15000, 200);
+    if (!found) throw new Error(`Timed out waiting for table ${name}`);
   };
   await Promise.all([
     waitForTable('design_visit_handles'),
@@ -1495,17 +1493,13 @@ async function main() {
         await injectSession(eBcAdminTab, adminClient.cookie);
         await eBcAdminTab.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 25000 });
         // Poll for the admin.html window functions that the test relies on.
-        await (async () => {
-          const deadline = Date.now() + 12000;
-          while (Date.now() < deadline) {
-            const ready = await eBcAdminTab.evaluate(() =>
-              typeof window.openDvHandleEditor === 'function'
-              && typeof window.deleteDvItem === 'function',
-            ).catch(() => false);
-            if (ready) break;
-            await new Promise(r => setTimeout(r, 150));
-          }
-        })();
+        await pollUntil(
+          eBcAdminTab,
+          () => (typeof window.openDvHandleEditor === 'function' && typeof window.deleteDvItem === 'function')
+            ? 'ok' : null,
+          12000,
+          150,
+        );
 
         // Helper: read + increment the listener counter for a catalogue type
         const readCount = (key) => eBcListenTab.evaluate(k => window.__dvBcCounts[k], key);
@@ -1549,17 +1543,17 @@ async function main() {
           await eBcAdminTab.evaluate((t, id) => window.deleteDvItem(t, id), type, id);
           // Poll until the total BC count increments — the DELETE api() call fires
           // the BroadcastChannel message asynchronously before returning.
-          {
-            const deadline = Date.now() + 8000;
-            while (Date.now() < deadline) {
-              const cur = await eBcListenTab.evaluate(() => {
-                const c = window.__dvBcCounts || {};
-                return Object.values(c).reduce((s, v) => s + (Number(v) || 0), 0);
-              }).catch(() => _totalBefore);
-              if (cur > _totalBefore) break;
-              await new Promise(r => setTimeout(r, 150));
-            }
-          }
+          await pollUntil(
+            eBcListenTab,
+            (before) => {
+              const c = window.__dvBcCounts || {};
+              const cur = Object.values(c).reduce((s, v) => s + (Number(v) || 0), 0);
+              return cur > before ? cur : null;
+            },
+            8000,
+            150,
+            [_totalBefore],
+          );
         };
 
         // ── Probe loop: handle / furniture / door-style ──────────────────────
@@ -1702,16 +1696,12 @@ async function main() {
 
         // Poll for dispatchCardActionHandler to be defined — card-action-handlers.js
         // exposes it after loadCardActionHandlers() completes on boot.
-        await (async () => {
-          const deadline = Date.now() + 12000;
-          while (Date.now() < deadline) {
-            const ready = await wizardTab.evaluate(
-              () => typeof window.dispatchCardActionHandler === 'function',
-            ).catch(() => false);
-            if (ready) break;
-            await new Promise(r => setTimeout(r, 150));
-          }
-        })();
+        await pollUntil(
+          wizardTab,
+          () => (typeof window.dispatchCardActionHandler === 'function') ? 'ok' : null,
+          12000,
+          150,
+        );
 
         // Ensure at least one handle exists before opening the wizard so the
         // #dv-handle select renders (renderStep1 only emits the <select> when

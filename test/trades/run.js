@@ -928,16 +928,16 @@ async function main() {
 
                   // Step 5: Snackbar must now auto-dismiss (4 s timer restarts).
                   // Allow up to 8 s (4 s autoHide + animation buffer).
-                  const deadline = Date.now() + 8000;
-                  let gone = false;
-                  while (Date.now() < deadline) {
-                    const still = await kPage.evaluate(() => {
+                  const gone = !!(await pollUntil(
+                    kPage,
+                    () => {
                       const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
-                      return alerts.some(el => (el.textContent || '').includes('Company deleted'));
-                    }).catch(() => true);
-                    if (!still) { gone = true; break; }
-                    await new Promise(r => setTimeout(r, 100));
-                  }
+                      return alerts.some(el => (el.textContent || '').includes('Company deleted'))
+                        ? null : 'gone';
+                    },
+                    8000,
+                    100,
+                  ));
 
                   record(
                     'K.5 Snackbar dismisses after tab returns visible',
@@ -987,28 +987,22 @@ async function main() {
         return u && u.privilege_level === 'admin' ? 'admin' : null;
       }, null, 12000);
 
-      // Wait for "Add Company" button to appear, then use native Puppeteer click
+      // Wait for "Add Company" button to appear and click it via page.evaluate
       // (avoids synthetic-click edge cases with MUI buttons).
-      const addCompanyBtnHandle = await (async () => {
-        const deadline = Date.now() + 8000;
-        while (Date.now() < deadline) {
-          const handles = await page.$$('button');
-          for (const h of handles) {
-            const text = await h.evaluate(el => el.textContent || '');
-            if (text.includes('Add Company') && !text.includes('Cancel')) {
-              const isInDialog = await h.evaluate(el => !!el.closest('[role="dialog"]'));
-              if (!isInDialog) return h;
-            }
-          }
-          await new Promise(r => setTimeout(r, 200));
-        }
-        return null;
-      })();
-
-      const btnClicked = !!addCompanyBtnHandle;
-      if (addCompanyBtnHandle) {
-        await addCompanyBtnHandle.click();
-      }
+      const btnClicked = !!(await pollUntil(
+        page,
+        () => {
+          const btn = Array.from(document.querySelectorAll('button')).find(b => {
+            const text = b.textContent || '';
+            return text.includes('Add Company') && !text.includes('Cancel')
+              && !b.closest('[role="dialog"]');
+          });
+          if (btn) { btn.click(); return true; }
+          return null;
+        },
+        8000,
+        200,
+      ));
       record(
         'J.2 "Add Company" button (outside dialog) found and clicked',
         'true', `${btnClicked}`, btnClicked,
@@ -1089,24 +1083,20 @@ async function main() {
       }, null, 12000);
 
       // Locate and click the top-level "Add Company" button (not inside dialog)
-      const addBtnHandle = await (async () => {
-        const deadline = Date.now() + 8000;
-        while (Date.now() < deadline) {
-          const handles = await page.$$('button');
-          for (const h of handles) {
-            const text = await h.evaluate(el => el.textContent || '');
-            if (text.includes('Add Company') && !text.includes('Cancel')) {
-              const isInDialog = await h.evaluate(el => !!el.closest('[role="dialog"]'));
-              if (!isInDialog) return h;
-            }
-          }
-          await new Promise(r => setTimeout(r, 200));
-        }
-        return null;
-      })();
-
-      const dialogOpened = !!addBtnHandle;
-      if (addBtnHandle) await addBtnHandle.click();
+      const dialogOpened = !!(await pollUntil(
+        page,
+        () => {
+          const btn = Array.from(document.querySelectorAll('button')).find(b => {
+            const text = b.textContent || '';
+            return text.includes('Add Company') && !text.includes('Cancel')
+              && !b.closest('[role="dialog"]');
+          });
+          if (btn) { btn.click(); return true; }
+          return null;
+        },
+        8000,
+        200,
+      ));
 
       record(
         'L.1 "Add Company" button found and clicked for ContactSlot field check',

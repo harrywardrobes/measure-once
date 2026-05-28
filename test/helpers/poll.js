@@ -73,4 +73,45 @@ async function waitForWindowFn(page, name, timeoutMs = 10000) {
   );
 }
 
-module.exports = { pollUntil, waitForSwitchTab, stabilityPoll, waitForWindowFn };
+/**
+ * Poll a plain async function until fn() returns a truthy value, or until
+ * timeoutMs elapses.  Unlike pollUntil this does not require a Puppeteer page;
+ * it is suitable for polling database queries, HTTP client calls, or any other
+ * async predicate that runs in the Node.js process.
+ *
+ * Returns the first truthy value returned by fn, or null on timeout.
+ * Errors thrown by fn are silently swallowed and treated as "not ready yet".
+ */
+async function pollFn(fn, timeoutMs = 8000, intervalMs = 150) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    let got = null;
+    try { got = await fn(); } catch {}
+    if (got) return got;
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  return null;
+}
+
+/**
+ * Poll until the bottom-nav bar's rendered item list (IDs of [id^="bnav-"]
+ * elements) stops changing for two consecutive samples.  Resolves once the
+ * list is non-null and stable, confirming that the async loadNavPref() /
+ * role-config fetch and the resulting re-render have completed.
+ */
+async function waitForNavBarStability(page, timeoutMs = 3000, intervalMs = 100) {
+  let prevIds = null;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const cur = await page.evaluate(() => {
+      const nav = document.querySelector('nav.bottom-nav#main-content');
+      if (!nav) return null;
+      return JSON.stringify([...nav.querySelectorAll('[id^="bnav-"]')].map(e => e.id));
+    }).catch(() => null);
+    if (cur !== null && cur === prevIds) break;
+    prevIds = cur;
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+}
+
+module.exports = { pollUntil, waitForSwitchTab, stabilityPoll, waitForWindowFn, pollFn, waitForNavBarStability };

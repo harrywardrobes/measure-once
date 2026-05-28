@@ -53,6 +53,7 @@ const fs   = require('fs');
 const path = require('path');
 const http = require('http');
 const { Pool } = require('pg');
+const { pollFn } = require('../helpers/poll');
 
 require('dotenv').config();
 
@@ -169,16 +170,14 @@ function startMockHubspot() {
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
 async function waitForTable(pool, table, timeoutMs = 15000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
+  const found = await pollFn(async () => {
     const r = await pool.query(
       `SELECT 1 FROM information_schema.tables WHERE table_name = $1 LIMIT 1`,
       [table]
     );
-    if (r.rowCount) return;
-    await new Promise(res => setTimeout(res, 200));
-  }
-  throw new Error(`Table ${table} did not appear within ${timeoutMs}ms`);
+    return r.rowCount || null;
+  }, timeoutMs, 200);
+  if (!found) throw new Error(`Table ${table} did not appear within ${timeoutMs}ms`);
 }
 
 async function seedVisit(pool, runId) {

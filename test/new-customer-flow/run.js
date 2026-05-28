@@ -46,7 +46,7 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
-const { pollUntil } = require('../helpers/poll');
+const { pollUntil, pollFn } = require('../helpers/poll');
 
 // ── Mock HubSpot server ──────────────────────────────────────────────────────
 function startMockHubspot() {
@@ -392,17 +392,13 @@ async function main() {
             : form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
         });
 
-        const apiObserved = await (async () => {
-          const deadline = Date.now() + 8000;
-          while (Date.now() < deadline) {
-            if (mock.state.createPosts.length > beforeCreates) {
-              const last = mock.state.createPosts[mock.state.createPosts.length - 1];
-              if (last?.properties?.email === uiEmail) return last;
-            }
-            await new Promise(r => setTimeout(r, 100));
+        const apiObserved = await pollFn(async () => {
+          if (mock.state.createPosts.length > beforeCreates) {
+            const last = mock.state.createPosts[mock.state.createPosts.length - 1];
+            if (last?.properties?.email === uiEmail) return last;
           }
           return null;
-        })();
+        }, 8000, 100);
         record(UI_LABELS[2],
           'mock HubSpot received contact-create with the dialog email',
           `email seen=${apiObserved?.properties?.email}`,

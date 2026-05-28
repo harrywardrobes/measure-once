@@ -205,16 +205,13 @@ async function waitForUrl(page, substr, timeoutMs = 10000) {
 
 // Wait for the URL to NOT include a specific string.
 async function waitForUrlGone(page, substr, timeoutMs = 8000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    let gone = false;
-    try {
-      gone = await page.evaluate(s => !location.search.includes(s), substr);
-    } catch {}
-    if (gone) return 'ok';
-    await new Promise(r => setTimeout(r, 150));
-  }
-  return null;
+  return pollUntil(
+    page,
+    (s) => (!location.search.includes(s)) ? 'ok' : null,
+    timeoutMs,
+    150,
+    [substr],
+  );
 }
 
 // Return the text of the "Showing X–Y of Z" line, or null if absent.

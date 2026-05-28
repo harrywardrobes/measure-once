@@ -50,7 +50,7 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
-const { pollUntil } = require('../helpers/poll');
+const { pollUntil, waitForNavBarStability } = require('../helpers/poll');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -134,20 +134,7 @@ async function openPage(browser, jar, url) {
 
   // Wait for loadNavPref() to settle — poll until the nav bar's item list stops
   // changing, which confirms async preference fetching and re-rendering is done.
-  let _prevNavIds = null;
-  {
-    const deadline = Date.now() + 3000;
-    while (Date.now() < deadline) {
-      const cur = await page.evaluate(() => {
-        const nav = document.querySelector('nav.bottom-nav#main-content');
-        if (!nav) return null;
-        return JSON.stringify([...nav.querySelectorAll('[id^="bnav-"]')].map(e => e.id));
-      }).catch(() => null);
-      if (cur !== null && cur === _prevNavIds) break;
-      _prevNavIds = cur;
-      await new Promise(r => setTimeout(r, 100));
-    }
-  }
+  await waitForNavBarStability(page, 3000, 100);
 
   page.__logs = pageLogs;
   return page;
@@ -399,6 +386,11 @@ function getDialogCheckboxState(page) {
 /**
  * Toggle checkboxes in the open dialog to end up with exactly `desiredLabels`
  * checked. Deselects extras first (to free up slots), then checks new ones.
+ *
+ * Intentionally uses an inline interaction loop rather than pollFn/pollUntil:
+ * each iteration reads current checkbox state, performs clicks as side effects,
+ * then re-evaluates.  The loop body is not a pure condition — it drives UI
+ * state changes — so the polling helpers are not appropriate here.
  */
 async function selectNavItems(page, desiredLabels) {
   const deadline = Date.now() + 8000;

@@ -397,17 +397,15 @@ async function main() {
 
           // Poll for StrengthMeter to render — it shows role="progressbar"
           // once React has processed the input event (replaces a fixed 500ms delay).
-          {
-            const deadline = Date.now() + 5000;
-            while (Date.now() < deadline) {
-              const has = await page.evaluate(() => {
-                const root = document.getElementById('set-password-root');
-                return root ? !!root.querySelector('[role="progressbar"]') : false;
-              }).catch(() => false);
-              if (has) break;
-              await new Promise(r => setTimeout(r, 100));
-            }
-          }
+          await pollUntil(
+            page,
+            () => {
+              const root = document.getElementById('set-password-root');
+              return (root && root.querySelector('[role="progressbar"]')) ? 'ok' : null;
+            },
+            5000,
+            100,
+          );
 
           // StrengthMeter renders a role="progressbar" (indeterminate) when
           // value is truthy but zxcvbn has not loaded yet.

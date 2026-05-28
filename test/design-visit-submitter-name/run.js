@@ -39,6 +39,7 @@ const os   = require('os');
 const path = require('path');
 const http = require('http');
 const { Pool } = require('pg');
+const { pollFn } = require('../helpers/poll');
 
 require('dotenv').config();
 
@@ -168,18 +169,14 @@ async function main() {
     console.log('  test server up');
 
     // Wait for design_visits table + async ALTER columns (added async on boot).
-    {
-      const deadline = Date.now() + 15000;
-      while (Date.now() < deadline) {
-        const r = await pool.query(`
-          SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'design_visits'
-              AND column_name = 'superseded_signoff_token_hashes'
-          LIMIT 1`);
-        if (r.rowCount) break;
-        await new Promise(res => setTimeout(res, 200));
-      }
-    }
+    await pollFn(async () => {
+      const r = await pool.query(`
+        SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'design_visits'
+            AND column_name = 'superseded_signoff_token_hashes'
+        LIMIT 1`);
+      return r.rowCount || null;
+    }, 15000, 200);
     await cleanup(pool);
 
     const users  = await seedUsers(pool, runId);
@@ -198,11 +195,10 @@ async function main() {
     // The submit handler invokes runSubmitSideEffects synchronously inside the
     // POST handler (await), so by the time the 200 returns the note POST and
     // mail writes should have completed. Be defensive with a brief poll.
-    const deadline = Date.now() + 4000;
-    while (Date.now() < deadline
-      && (mockHs.state.posts.length === 0 || readMailJsonl(mailFile).length < 1)) {
-      await new Promise(res => setTimeout(res, 100));
-    }
+    await pollFn(
+      () => (mockHs.state.posts.length > 0 && readMailJsonl(mailFile).length >= 1) ? true : null,
+      4000, 100,
+    );
 
     // ── (NOTE) HubSpot note body contains "Designer: <email>" ───────────────
     const expectedDesigner = `Designer: ${member.email}`;
@@ -353,12 +349,11 @@ async function main() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'approve' }),
       });
-      const approveAfterDeadline = Date.now() + 3000;
       let approveMails = readMailJsonl(mailFile);
-      while (Date.now() < approveAfterDeadline && approveMails.length <= approveBefore) {
-        await new Promise(res => setTimeout(res, 100));
+      await pollFn(async () => {
         approveMails = readMailJsonl(mailFile);
-      }
+        return approveMails.length > approveBefore ? true : null;
+      }, 3000, 100);
       const approveTeamMail = approveMails.slice(approveBefore).find(m =>
         typeof m.subject === 'string' && m.subject.startsWith('Design visit signed off')
       );
@@ -381,18 +376,17 @@ async function main() {
         `second submit failed status=${submit2.status} body=${submit2.text.slice(0, 200)}`);
     } else {
       // Wait briefly for the second customer email to land.
-      const customerDeadline = Date.now() + 3000;
       let mails2 = readMailJsonl(mailFile);
-      let customerMail2 = mails2.reverse().find(m =>
+      let customerMail2 = mails2.slice().reverse().find(m =>
         typeof m.to === 'string' && m.to.includes('privtest-dvname-cust@privtest.local')
       );
-      while (Date.now() < customerDeadline && extractToken(customerMail2 || {}) === null) {
-        await new Promise(res => setTimeout(res, 100));
+      await pollFn(async () => {
         mails2 = readMailJsonl(mailFile);
-        customerMail2 = mails2.reverse().find(m =>
+        customerMail2 = mails2.slice().reverse().find(m =>
           typeof m.to === 'string' && m.to.includes('privtest-dvname-cust@privtest.local')
         );
-      }
+        return extractToken(customerMail2 || {}) !== null ? true : null;
+      }, 3000, 100);
       // Filter to the customer mail whose token actually matches the new visit.
       const newTokenHash = await tokenForVisit(revisionVisitId);
       const candidates = readMailJsonl(mailFile).filter(m =>
@@ -419,12 +413,11 @@ async function main() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'revision', note }),
         });
-        const revDeadline = Date.now() + 3000;
         let revMails = readMailJsonl(mailFile);
-        while (Date.now() < revDeadline && revMails.length <= beforeRev) {
-          await new Promise(res => setTimeout(res, 100));
+        await pollFn(async () => {
           revMails = readMailJsonl(mailFile);
-        }
+          return revMails.length > beforeRev ? true : null;
+        }, 3000, 100);
         const revTeamMail = revMails.slice(beforeRev).find(m =>
           typeof m.subject === 'string' && m.subject.startsWith('Design visit revision requested')
         );

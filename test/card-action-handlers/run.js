@@ -82,7 +82,7 @@ try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
-const { pollUntil } = require('../helpers/poll');
+const { pollUntil, pollFn } = require('../helpers/poll');
 
 // ── fixtures ──────────────────────────────────────────────────────────────────
 // Use lowercase letters/digits/underscores only — these are what the server-side
@@ -325,13 +325,11 @@ async function main() {
   // HTTP starts accepting requests).  Wait for them to appear before touching
   // fixtures.
   const waitForTable = async (name) => {
-    const deadline = Date.now() + 15000;
-    while (Date.now() < deadline) {
+    const found = await pollFn(async () => {
       const r = await pool.query(`SELECT to_regclass($1) AS t`, [name]);
-      if (r.rows[0].t) return;
-      await new Promise(r => setTimeout(r, 200));
-    }
-    throw new Error(`Timed out waiting for table ${name} to be created on server boot`);
+      return r.rows[0].t || null;
+    }, 15000, 200);
+    if (!found) throw new Error(`Timed out waiting for table ${name} to be created on server boot`);
   };
   await waitForTable('card_action_handlers');
   await waitForTable('card_action_handler_bindings');
@@ -2538,10 +2536,7 @@ async function main() {
         50,
       );
       // Simpler: just sleep up to 5s polling the captured array.
-      const deadline = Date.now() + 5000;
-      while (patches.length < 2 && Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 100));
-      }
+      await pollFn(() => patches.length >= 2 ? true : null, 5000, 100);
 
       const patchById = new Map(patches.map(p => [p.id, p.body?.sort_order]));
       const swappedOk = patches.length === 2
@@ -2590,13 +2585,12 @@ async function main() {
 
       // BroadcastChannel: poll until the listener has observed at least one
       // message on the per-type channel.  Allow up to 3s.
-      const bcDeadline = Date.now() + 3000;
-      let bcCount = 0;
-      while (Date.now() < bcDeadline) {
-        bcCount = await reorderTab.evaluate(() => window.__reorderBcCount || 0);
-        if (bcCount >= 1) break;
-        await new Promise(r => setTimeout(r, 100));
-      }
+      const bcCount = (await pollUntil(
+        reorderTab,
+        () => ((window.__reorderBcCount || 0) >= 1) ? (window.__reorderBcCount || 0) : null,
+        3000,
+        100,
+      )) || 0;
       record(
         `(G/${tag}) BroadcastChannel "${cfg.broadcastChannel}" fires after a swap`,
         '__reorderBcCount >= 1',
