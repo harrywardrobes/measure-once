@@ -19,7 +19,7 @@ const qbRoutes = require('./quickbooks');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
-const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable, ensureResendLogTable, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
+const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable, ensureResendLogTable, backfillMaskedEmails, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings } = require('./photo-reviews');
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -6668,6 +6668,7 @@ async function cleanupStaleHubSpotCredentialRows() {
     catch (e) { console.error('  Customer info submissions table setup failed:', e.message); }
     try { await ensureResendLogTable(); console.log('  Customer info resend log table ready'); }
     catch (e) { console.error('  Customer info resend log table setup failed:', e.message); }
+    backfillMaskedEmails().catch(e => console.warn('  masked_email backfill error:', e.message));
     try { await ensurePhotoReviewOutcomesTable(); console.log('  Photo review outcomes table ready'); }
     catch (e) { console.error('  Photo review outcomes table setup failed:', e.message); }
     backfillMisspelledAwphSubstatus().catch(e => console.warn('  AWPH substatus backfill error:', e.message));

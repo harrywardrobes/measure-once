@@ -1055,10 +1055,47 @@ router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, async (r
   res.json(rows);
 });
 
+// One-time boot backfill: re-compute masked_email for rows that are NULL or
+// still carry the old format (local: first-char-only, domain: ***.<tld>).
+// Idempotent — rows already in the new format are unaffected.
+// Runs fire-and-forget so it never blocks startup.
+async function backfillMaskedEmails() {
+  const label = '[backfill-masked-email]';
+  // Old format domain was "***.<tld>" (three literal asterisks before the dot).
+  // New format is "<char>**.<tld>" (one char + two asterisks).
+  // Select rows that are NULL or whose masked_email still uses the old pattern.
+  const { rows } = await pool.query(`
+    SELECT id, contact_email
+    FROM customer_info_submissions
+    WHERE contact_email IS NOT NULL
+      AND submitted_at IS NULL
+      AND (masked_email IS NULL OR masked_email ~ '@\\*{3}\\.')
+  `);
+  if (rows.length === 0) return;
+  console.log(`${label} ${rows.length} row(s) need masked_email backfill`);
+  let updated = 0;
+  let failed  = 0;
+  for (const row of rows) {
+    try {
+      const fresh = maskEmail(row.contact_email);
+      await pool.query(
+        `UPDATE customer_info_submissions SET masked_email = $1 WHERE id = $2`,
+        [fresh, row.id]
+      );
+      updated++;
+    } catch (e) {
+      failed++;
+      console.warn(`${label} failed to update row ${row.id}:`, e.message);
+    }
+  }
+  console.log(`${label} done — updated ${updated}, failed ${failed}`);
+}
+
 module.exports = {
   router,
   ensureCustomerInfoSubmissionsTable,
   ensureResendLogTable,
+  backfillMaskedEmails,
   signCustomerPhotoUrl,
   setSharedSseClients,
   setProjectContactsCacheInvalidator,
