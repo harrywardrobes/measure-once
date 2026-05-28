@@ -61,6 +61,10 @@
 //       N.4 — the lead_substatuses DB row is gone.  N.5 — deleting an unbound
 //       sub-status shows no dialog.  N.6 — unbound row is gone from the DOM.
 //       Guards the deleteCardActionSubstatus callback in CardActionsPage.tsx.
+//   (R) Handler-bound indicator: the Default handler type Select has opacity
+//       0.5 when a handler binding exists for the substatus (R.1) and opacity
+//       1 when no binding exists (R.2).  Guards the `hasBinding` dimming logic
+//       in CardActionsPage.tsx against silent removal.
 //   (Q) Startup seeding: ensureSubstatusHandlerBindings auto-binds on boot.
 //       Pure-API + DB probe (no browser, requires one server restart).
 //       Three lead_substatuses rows are seeded — one with no existing binding
@@ -154,6 +158,9 @@ const HANDLER_NAME_STALE_SUB = 'PrivTest stale-sub handler';
 // (Q) startup seeding — ensureSubstatusHandlerBindings — regression guard for task #1818
 // uppercase because lead_status_config.key is always stored uppercase
 const LBL_KEY_STARTUP            = 'PRIVTEST_CAH_STARTUP';
+// (R) handler-bound indicator — opacity on Default handler type selector
+const LBL_KEY_BOUND_IND      = 'PRIVTEST_CAH_BOUND_IND'; // lead_status_config.key (uppercase)
+const HANDLER_NAME_BOUND_IND = 'PrivTest bound-indicator handler';
 // NOT in SUBSTATUS_HANDLER_MAP → falls through to FALLBACK_HANDLER (show_message, empty config)
 const SUB_STARTUP_UNBOUND_K      = 'PRIVTEST_Q_UNBOUND';
 // second substatus: pre-existing binding should survive the restart unchanged
@@ -197,12 +204,12 @@ async function purgeFixtures(pool) {
   // cascades to any binding pointing at it.
   await pool.query(
     `DELETE FROM card_action_handlers
-       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
     [HANDLER_NAME_DV, HANDLER_NAME_SV, HANDLER_NAME_PC, HANDLER_NAME_LBL, HANDLER_NAME_SUB,
      HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B, HANDLER_NAME_ANAME,
      HANDLER_NAME_NAMING, HANDLER_NAME_ILS, 'PrivTest orphan cleanup handler',
      HANDLER_NAME_CLEAR_WARN, HANDLER_NAME_DEL_WARN, HANDLER_NAME_STALE,
-     HANDLER_NAME_STALE_SUB]
+     HANDLER_NAME_STALE_SUB, HANDLER_NAME_BOUND_IND]
   );
   // Prefix sweep: a previously crashed or partly-validated probe run can
   // leave behind handlers whose names don't match the constants above
@@ -270,6 +277,13 @@ async function purgeFixtures(pool) {
     await pool.query(
       `DELETE FROM lead_substatuses WHERE status_key = $1`,
       [LBL_KEY_STARTUP]
+    );
+  } catch (_) {}
+  // (R) probe bound-indicator substatuses
+  try {
+    await pool.query(
+      `DELETE FROM lead_substatuses WHERE status_key = $1`,
+      [LBL_KEY_BOUND_IND]
     );
   } catch (_) {}
   // (Q) probe pre-existing handler (by name — binding and substatus cascade-delete separately)
@@ -4073,6 +4087,169 @@ async function main() {
     await pool.query(`DELETE FROM lead_status_config WHERE key = 'PRIVTEST_CAH_THROWAWAY'`).catch(() => {});
   }
 
+  // ── (R) Handler-bound indicator on Default handler type selector ──────────
+  //
+  // Verifies that the MUI Select for "Default handler type" in CardActionsPage
+  // has opacity 0.5 when a card_action_handler_bindings row exists for that
+  // substatus_id, and opacity 1 when no binding exists.
+  //
+  // Assertions:
+  //   R.setup — seed a lead status + two sub-statuses + one bound handler.
+  //   R.1     — Select in the BOUND sub-status row has computed opacity 0.5.
+  //   R.2     — Select in the UNBOUND sub-status row has computed opacity 1.
+  {
+    console.log('\n  [R] Handler-bound indicator on Default handler type selector');
+
+    // Seed the parent lead_status_config row.
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+       VALUES ($1, 'PrivTest Bound-Ind Status', 9987, false, 'SALES')
+       ON CONFLICT (key) DO UPDATE
+         SET label               = EXCLUDED.label,
+             sort_order          = EXCLUDED.sort_order,
+             excluded_from_sales = EXCLUDED.excluded_from_sales,
+             stage               = EXCLUDED.stage`,
+      [LBL_KEY_BOUND_IND]
+    );
+
+    // Bound substatus — will receive a handler binding via substatus_id.
+    const rBoundRes = await pool.query(
+      `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order)
+       VALUES ($1, $2, 'PrivTest R bound sub', 'PrivTest R bound action', 9997)
+       ON CONFLICT DO NOTHING
+       RETURNING id`,
+      [LBL_KEY_BOUND_IND, 'PRIVTEST_R_BOUND'],
+    );
+    let rBoundSubId = rBoundRes.rows[0]?.id;
+    if (!rBoundSubId) {
+      const r = await pool.query(
+        `SELECT id FROM lead_substatuses WHERE status_key = $1 AND substatus_key = $2`,
+        [LBL_KEY_BOUND_IND, 'PRIVTEST_R_BOUND'],
+      );
+      rBoundSubId = r.rows[0]?.id;
+    }
+
+    // Unbound substatus — no handler binding.
+    const rFreeRes = await pool.query(
+      `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order)
+       VALUES ($1, $2, 'PrivTest R free sub', 'PrivTest R free action', 9996)
+       ON CONFLICT DO NOTHING
+       RETURNING id`,
+      [LBL_KEY_BOUND_IND, 'PRIVTEST_R_FREE'],
+    );
+    let rFreeSubId = rFreeRes.rows[0]?.id;
+    if (!rFreeSubId) {
+      const r = await pool.query(
+        `SELECT id FROM lead_substatuses WHERE status_key = $1 AND substatus_key = $2`,
+        [LBL_KEY_BOUND_IND, 'PRIVTEST_R_FREE'],
+      );
+      rFreeSubId = r.rows[0]?.id;
+    }
+
+    // Create a handler and bind it to the bound substatus via substatus_id.
+    let rHandlerId = null;
+    if (rBoundSubId) {
+      const rCreateRes = await adminClient.post('/api/admin/card-action-handlers', {
+        name: HANDLER_NAME_BOUND_IND,
+        type: 'summarise_phone_call',
+        config: {},
+        bindings: [{ substatus_id: rBoundSubId }],
+      });
+      rHandlerId = rCreateRes.json?.id ?? null;
+      record(
+        '(R.setup) POST handler bound to sub-status via substatus_id',
+        'status=201 with numeric id',
+        `status=${rCreateRes.status} id=${rHandlerId}`,
+        rCreateRes.status === 201 && Number.isInteger(rHandlerId),
+      );
+    } else {
+      record('(R.setup) POST handler bound to sub-status via substatus_id', 'status=201', 'SKIPPED — seed failed', false);
+    }
+
+    if (rHandlerId && rBoundSubId && rFreeSubId && browser) {
+      const rTab = await browser.newPage();
+      await rTab.setCacheEnabled(false);
+      await injectSession(rTab, adminClient.cookie);
+      await rTab.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+
+      // Switch to Card Actions tab so CardActionsPage mounts.
+      await rTab.evaluate(() => {
+        if (typeof switchTab === 'function') switchTab('cardactions');
+      });
+      await pollPage(
+        rTab,
+        () => typeof window.loadCardActionsAdmin === 'function',
+        null,
+        10000,
+      );
+
+      // Trigger a fresh data load so the newly-seeded rows are visible.
+      await rTab.evaluate(() => {
+        if (typeof window.loadCardActionsAdmin === 'function') window.loadCardActionsAdmin();
+      });
+
+      // Wait for both substatus rows to appear in the DOM.
+      await pollPage(
+        rTab,
+        (id) => !!document.querySelector(`[data-sub-id="${id}"]`),
+        String(rBoundSubId),
+        8000,
+      );
+      await pollPage(
+        rTab,
+        (id) => !!document.querySelector(`[data-sub-id="${id}"]`),
+        String(rFreeSubId),
+        8000,
+      );
+
+      // Give React a moment to finish rendering the MUI Select elements.
+      await new Promise(r => setTimeout(r, 400));
+
+      // ── R.1 — bound substatus row: Select opacity should be 0.5 ─────────────
+      const boundOpacity = await rTab.evaluate((id) => {
+        const row = document.querySelector(`[data-sub-id="${id}"]`);
+        if (!row) return 'row-absent';
+        const selectRoot = row.querySelector('.MuiInputBase-root');
+        if (!selectRoot) return 'select-absent';
+        return getComputedStyle(selectRoot).opacity;
+      }, String(rBoundSubId));
+
+      record(
+        '(R.1) Default handler type Select has opacity 0.5 when handler binding exists',
+        '0.5 — MuiInputBase-root computed opacity for bound substatus row',
+        `opacity=${boundOpacity}`,
+        boundOpacity === '0.5',
+      );
+
+      // ── R.2 — unbound substatus row: Select opacity should be 1 ─────────────
+      const freeOpacity = await rTab.evaluate((id) => {
+        const row = document.querySelector(`[data-sub-id="${id}"]`);
+        if (!row) return 'row-absent';
+        const selectRoot = row.querySelector('.MuiInputBase-root');
+        if (!selectRoot) return 'select-absent';
+        return getComputedStyle(selectRoot).opacity;
+      }, String(rFreeSubId));
+
+      record(
+        '(R.2) Default handler type Select has opacity 1 when no binding exists',
+        '1 — MuiInputBase-root computed opacity for unbound substatus row',
+        `opacity=${freeOpacity}`,
+        freeOpacity === '1',
+      );
+
+      await rTab.close();
+
+      // Clean up: delete the handler (FK cascade removes the binding).
+      await adminClient.delete(`/api/admin/card-action-handlers/${rHandlerId}`);
+    } else if (!browser) {
+      record('(R.1) Select opacity 0.5 for bound substatus', 'n/a', 'SKIPPED — Puppeteer not available', false);
+      record('(R.2) Select opacity 1 for unbound substatus', 'n/a', 'SKIPPED — Puppeteer not available', false);
+    } else {
+      record('(R.1) Select opacity 0.5 for bound substatus', 'n/a', 'SKIPPED — seed failed', false);
+      record('(R.2) Select opacity 1 for unbound substatus', 'n/a', 'SKIPPED — seed failed', false);
+    }
+  }
+
   // ── (Q) Startup seeding — ensureSubstatusHandlerBindings ──────────────────
   //
   // Verifies that the startup routine auto-inserts card_action_handler_bindings
@@ -4539,6 +4716,22 @@ async function writeReport(runId, findings) {
     '  `submittedLeadStatusInvalid` flag independently from the intermediate path.',
     '  Guards the `intermediateLeadStatusInvalid` / `submittedLeadStatusInvalid`',
     '  props and the `hasStaleLsRefs` Save-button gate in `ActionHandlersPage.tsx`.',
+    '- **(R) Handler-bound indicator on Default handler type selector**: a',
+    '  `lead_status_config` row (stage=SALES) is seeded together with two',
+    '  `lead_substatuses` rows — one that has a `card_action_handler_bindings`',
+    '  row (via `substatus_id`) and one that does not.  A fresh admin tab',
+    '  switches to the Card Actions panel and `loadCardActionsAdmin()` is',
+    '  called to load the freshly-seeded data.  Two assertions run:',
+    '  - **R.setup** POST creates the handler with a `substatus_id` binding (201).',
+    '  - **R.1** The MUI Select (`.MuiInputBase-root`) inside the bound',
+    '    `[data-sub-id]` row has `getComputedStyle().opacity === "0.5"` —',
+    '    confirming the `opacity: hasBinding ? 0.5 : 1` sx prop fires when a',
+    '    `HandlerBadge` is present for that substatus.',
+    '  - **R.2** The MUI Select inside the unbound `[data-sub-id]` row has',
+    '    `getComputedStyle().opacity === "1"` — confirming the indicator is',
+    '    absent when there is no binding.',
+    '  Guards the `hasBinding` branch in `CardActionsPage.tsx` against a',
+    '  refactor that silently removes the dimming logic.',
     '- **(Q) Startup seeding — `ensureSubstatusHandlerBindings`** (task #1818):',
     '  pure-API + DB probe (no browser) that verifies the startup routine in',
     '  `photo-reviews.js` correctly auto-binds and correctly skips on restart.',
