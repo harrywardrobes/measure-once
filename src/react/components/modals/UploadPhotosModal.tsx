@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -17,10 +17,56 @@ interface Props {
   onClose: () => void;
 }
 
+interface Submission {
+  submitted_at: string | null;
+  expires_at: string | null;
+}
+
+function hasPendingSubmission(rows: Submission[]): boolean {
+  const now = Date.now();
+  return rows.some(
+    r => r.submitted_at === null && r.expires_at !== null && new Date(r.expires_at).getTime() > now
+  );
+}
+
 export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
+  const [checkingPending, setCheckingPending] = useState(false);
+  const [hasPending, setHasPending] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const controller = new AbortController();
+
+    setCheckingPending(true);
+    setHasPending(false);
+
+    fetch(`/api/customer-info/by-contact/${encodeURIComponent(ctx.contactId)}`, {
+      signal: controller.signal,
+    })
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<Submission[]>;
+      })
+      .then(rows => {
+        setHasPending(hasPendingSubmission(rows));
+      })
+      .catch(e => {
+        if ((e as Error).name === 'AbortError') return;
+        setHasPending(false);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCheckingPending(false);
+      });
+
+    return () => {
+      controller.abort();
+      setCheckingPending(false);
+    };
+  }, [open, ctx.contactId]);
 
   async function handleSend() {
     setError('');
@@ -43,22 +89,65 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
     }
   }
 
+  async function handleResend() {
+    setError('');
+    setSubmitting(true);
+    try {
+      const r = await fetch(
+        `/api/customer-info/by-contact/${encodeURIComponent(ctx.contactId)}/resend`,
+        { method: 'POST' }
+      );
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((d as { error?: string }).error || `HTTP ${r.status}`);
+      setSent(true);
+      const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
+      w.showToast?.('Link resent to customer', false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function handleClose() {
     setSent(false);
     setError('');
+    setHasPending(false);
     onClose();
   }
+
+  const customerLabel = ctx.contactEmail
+    ? `${ctx.contactName || 'the customer'} (${ctx.contactEmail})`
+    : (ctx.contactName || 'the customer');
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
       <DialogTitle>
-        Send photo upload link
+        {hasPending ? 'Resend photo upload link' : 'Send photo upload link'}
       </DialogTitle>
       <DialogContent>
-        {sent ? (
+        {checkingPending ? (
+          <Stack alignItems="center" sx={{ py: 2 }}>
+            <CircularProgress size={28} />
+          </Stack>
+        ) : sent ? (
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            The email has been sent to <strong>{ctx.contactEmail || ctx.contactName || 'the customer'}</strong>. They'll receive a link to fill in their details and upload photos of their space.
+            {hasPending
+              ? <>A fresh link has been sent to <strong>{customerLabel}</strong>. The previous link is now invalid.</>
+              : <>The email has been sent to <strong>{ctx.contactEmail || ctx.contactName || 'the customer'}</strong>. They'll receive a link to fill in their details and upload photos of their space.</>
+            }
           </Typography>
+        ) : hasPending ? (
+          <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              A photo upload link has already been sent to{' '}
+              <strong>{customerLabel}</strong>{' '}
+              and hasn't been filled in yet. This will send them a fresh link.
+            </Typography>
+            {error && (
+              <Typography variant="caption" color="error">{error}</Typography>
+            )}
+          </Stack>
         ) : (
           <Stack spacing={1.5} sx={{ mt: 0.5 }}>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -87,15 +176,18 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
           <Button variant="contained" onClick={handleClose}>Done</Button>
         ) : (
           <>
-            <Button onClick={handleClose} disabled={submitting}>Cancel</Button>
+            <Button onClick={handleClose} disabled={submitting || checkingPending}>Cancel</Button>
             <Button
               variant="contained"
-              onClick={handleSend}
-              disabled={submitting}
+              onClick={hasPending ? handleResend : handleSend}
+              disabled={submitting || checkingPending}
               startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
               data-testid="cah-primary"
             >
-              {submitting ? 'Sending…' : 'Send email'}
+              {submitting
+                ? (hasPending ? 'Resending…' : 'Sending…')
+                : (hasPending ? 'Resend link' : 'Send email')
+              }
             </Button>
           </>
         )}
