@@ -536,18 +536,27 @@ async function ensureAuthTables() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS nav_role_configs (
       role_name    TEXT PRIMARY KEY,
-      primary_keys JSONB NOT NULL DEFAULT '["home","calendar","trades"]',
+      primary_keys JSONB NOT NULL DEFAULT '["home","customers","calendar"]',
       updated_at   TIMESTAMP DEFAULT NOW()
     );
     ALTER TABLE nav_role_configs ADD COLUMN IF NOT EXISTS is_customized BOOLEAN NOT NULL DEFAULT FALSE;
     INSERT INTO nav_role_configs (role_name, primary_keys) VALUES
-      ('__default__',  '["home","calendar","trades"]'),
-      ('Fitter',       '["home","calendar","trades"]'),
+      ('__default__',  '["home","customers","calendar"]'),
+      ('Fitter',       '["home","customers","calendar"]'),
       ('Site Manager', '["home","sales","projects"]'),
-      ('Sales',        '["home","calendar","trades"]'),
+      ('Sales',        '["home","customers","calendar"]'),
       ('Admin',        '["home","sales","projects"]'),
       ('Office',       '["home","sales","projects"]')
     ON CONFLICT (role_name) DO NOTHING;
+    -- One-time migration: fix any existing __default__ row that still contains
+    -- the invalid "trades" key (seeded before task #1892 corrected it).
+    -- Runs unconditionally so it repairs the row even if is_customized=true
+    -- (an admin who saved a layout containing "trades" would otherwise still
+    -- have their default rejected by the client-side VALID_NAV_KEYS check).
+    UPDATE nav_role_configs
+      SET primary_keys = '["home","customers","calendar"]'
+    WHERE role_name = '__default__'
+      AND primary_keys @> '"trades"';
   `);
 
   // Seed admin emails from env var + create user rows for them so the very
@@ -2354,13 +2363,15 @@ async function setupAuth(app) {
           primary_keys = r.rows[0].primary_keys;
         }
       }
+      let default_is_customized = false;
       if (primary_keys === null) {
         const r = await pool.query(
-          "SELECT primary_keys FROM nav_role_configs WHERE role_name = '__default__'"
+          "SELECT primary_keys, is_customized FROM nav_role_configs WHERE role_name = '__default__'"
         );
-        primary_keys = r.rows[0]?.primary_keys || ['home', 'calendar', 'trades'];
+        primary_keys = r.rows[0]?.primary_keys || ['home', 'customers', 'calendar'];
+        default_is_customized = r.rows[0]?.is_customized || false;
       }
-      res.json({ primary_keys, role: jobRole });
+      res.json({ primary_keys, role: jobRole, default_is_customized });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

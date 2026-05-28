@@ -95,12 +95,16 @@ async function loadRoleNavConfig(): Promise<string[] | null> {
   try {
     const r = await fetch('/api/nav-role-config', { headers: { Accept: 'application/json' } });
     if (!r.ok) return null;
-    const data = await r.json() as { primary_keys?: unknown; role?: string | null };
-    // When the user has no job_role the API falls back to the __default__
-    // config.  Treat that as "no saved pref" so the component can apply
-    // privilege-level-aware defaults (manager vs member) rather than the
-    // generic __default__ layout.
-    if (!data.role) return null;
+    const data = await r.json() as {
+      primary_keys?: unknown;
+      role?: string | null;
+      default_is_customized?: boolean;
+    };
+    // When the user has no job_role the API falls back to the __default__ config.
+    // If the admin has customised __default__ (default_is_customized=true) we
+    // honour it; otherwise fall back to privilege-level-aware defaults so that
+    // uncustomised deployments behave exactly as before.
+    if (!data.role && !data.default_is_customized) return null;
     const keys = data.primary_keys;
     if (
       Array.isArray(keys) &&
@@ -150,7 +154,8 @@ export function BottomNav() {
     return true;
   });
   // Role-aware fallback used when the API returns no saved config (or when
-  // the user has no job_role and the API fell back to the __default__ config).
+  // the user has no job_role and the admin has NOT customised the __default__
+  // layout — customised defaults are honoured directly).
   // Both managers and non-managers default to DEFAULT_PRIMARY_KEYS.
   // Filtered to actually-visible items.
   const defaultPrimaryKeys = DEFAULT_PRIMARY_KEYS

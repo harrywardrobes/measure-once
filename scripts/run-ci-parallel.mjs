@@ -119,6 +119,7 @@ const DB_SUITES = [
   'test:invoice-admin-controls:ci',
   'test:invoice-bc-sync:ci',
   'test:bottom-nav:ci',
+  'test:bottom-nav-default:ci',
   'test:nav-active-tab:ci',
   'test:nav-customise:ci',
   'test:nav-customise-reset:ci',
