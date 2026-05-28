@@ -108,6 +108,12 @@ const INTERMEDIATE_LS     = 'PRIVTEST_INPROGRESS';   // value sent on PATCH /api
 const LBL_KEY_FALLBACK_STATUS = 'PRIVTEST_CAH_FALLBACK'; // lead_status_config.key + substatus status_key
 // (L) sub-status slot row rendering — regression guard for task #1731
 const LBL_KEY_SUB_ROW         = 'PRIVTEST_CAH_SUB_ROW';  // lead_status_config.key for sub-status slot row probe
+// (M) bound-handler warning on label clear — regression guard for task #1741
+const LBL_KEY_CLEAR_WARN       = 'PRIVTEST_CAH_CLEAR_WARN';  // lead_status_config.key (uppercase)
+const LBL_KEY_CLEAR_WARN_LOWER = 'privtest_cah_clear_warn';  // binding status_key (lowercase)
+const HANDLER_NAME_CLEAR_WARN  = 'PrivTest clear-warn handler';
+const CLEAR_WARN_STATUS_LABEL  = 'PrivTest ClearWarn Status';
+const CLEAR_WARN_LABEL         = 'PrivTest Book Appointment';
 
 const HANDLER_NAME_DV         = 'PrivTest design visit handler';
 const HANDLER_NAME_SV         = 'PrivTest schedule-visit handler';
@@ -143,10 +149,11 @@ async function purgeFixtures(pool) {
   // cascades to any binding pointing at it.
   await pool.query(
     `DELETE FROM card_action_handlers
-       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [HANDLER_NAME_DV, HANDLER_NAME_PC, HANDLER_NAME_LBL, HANDLER_NAME_SUB,
      HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B, HANDLER_NAME_ANAME,
-     HANDLER_NAME_NAMING, HANDLER_NAME_ILS, 'PrivTest orphan cleanup handler']
+     HANDLER_NAME_NAMING, HANDLER_NAME_ILS, 'PrivTest orphan cleanup handler',
+     HANDLER_NAME_CLEAR_WARN]
   );
   // Prefix sweep: a previously crashed or partly-validated probe run can
   // leave behind handlers whose names don't match the constants above
@@ -211,9 +218,10 @@ async function purgeFixtures(pool) {
   // delete above so the FK doesn't block this DELETE.
   try {
     await pool.query(
-      `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [LBL_KEY_CONFLICT_LS, SUB_STATUS_K, LBL_KEY_ANAME, LBL_KEY_FALLBACK_STATUS,
-       LBL_KEY_SUB_ROW, 'PRIVTEST_CAH_ORPHAN_LS', 'privtest_cah_orphan_ls', 'PRIVTEST_CAH_THROWAWAY']
+       LBL_KEY_SUB_ROW, 'PRIVTEST_CAH_ORPHAN_LS', 'privtest_cah_orphan_ls', 'PRIVTEST_CAH_THROWAWAY',
+       LBL_KEY_CLEAR_WARN]
     );
   } catch (_) {}
   // Recreate the unique label-binding index if it was temporarily dropped
@@ -2898,6 +2906,217 @@ async function main() {
 
     await subRowTab.close();
 
+    // ── (N) Bound-handler warning on label clear ──────────────────────────────
+    //
+    // When a `ca-default-input` is cleared while a handler is still bound to
+    // that slot, `saveAllCardActionLabels` must show the "Handler still bound
+    // to this label" confirmation dialog and give the admin a chance to cancel.
+    //
+    // Flow:
+    //   N.setup        — seed a lead status + stage-action label + bound handler.
+    //   N.dialog-appears — clear the input and call Save; dialog must appear.
+    //   N.cancel       — click Cancel; dialog closes, no PUT fires.
+    //   N.clear        — call Save again, click "Clear label anyway"; PUT fires.
+    console.log('\n  [N] Bound-handler warning on label clear');
+
+    // N.setup: seed fixtures.
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+       VALUES ($1, $2, 9991, false, 'SALES')
+       ON CONFLICT (key) DO UPDATE
+         SET label               = EXCLUDED.label,
+             sort_order          = EXCLUDED.sort_order,
+             excluded_from_sales = EXCLUDED.excluded_from_sales,
+             stage               = EXCLUDED.stage`,
+      [LBL_KEY_CLEAR_WARN, CLEAR_WARN_STATUS_LABEL],
+    );
+    const seedLabelRes = await adminClient.put('/api/admin/stage-action-labels', {
+      stage_key: 'sales',
+      status_key: LBL_KEY_CLEAR_WARN_LOWER,
+      label: CLEAR_WARN_LABEL,
+    });
+    record(
+      '(N.setup) PUT /api/admin/stage-action-labels seeds the label',
+      'status=200',
+      `status=${seedLabelRes.status}`,
+      seedLabelRes.status === 200,
+    );
+    const createClearWarnRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name: HANDLER_NAME_CLEAR_WARN,
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [{ stage_key: 'sales', status_key: LBL_KEY_CLEAR_WARN_LOWER }],
+    });
+    const clearWarnHandlerId = createClearWarnRes.json?.id;
+    record(
+      '(N.setup) POST handler bound to clear-warn slot',
+      'status=201 with numeric id',
+      `status=${createClearWarnRes.status} id=${clearWarnHandlerId}`,
+      createClearWarnRes.status === 201 && Number.isInteger(clearWarnHandlerId),
+    );
+
+    // Open a fresh admin tab and navigate to the Card actions panel.
+    const clearWarnTab = await browser.newPage();
+    await clearWarnTab.setCacheEnabled(false);
+    await injectSession(clearWarnTab, adminClient.cookie);
+    await clearWarnTab.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await clearWarnTab.evaluate(() => {
+      if (typeof switchTab === 'function') switchTab('cardactions');
+    });
+    await pollPage(
+      clearWarnTab,
+      () => typeof window.loadCardActionsAdmin === 'function',
+      null,
+      10000,
+    );
+    await clearWarnTab.evaluate(() =>
+      typeof loadCardActionsAdmin === 'function' ? loadCardActionsAdmin() : Promise.resolve()
+    );
+    await new Promise(r => setTimeout(r, 800));
+
+    // Expand the Sales section (all stages start collapsed).
+    await clearWarnTab.evaluate(() => {
+      const toggle = document.querySelector('[data-stage-toggle="sales"]');
+      if (toggle) toggle.click();
+    });
+    await new Promise(r => setTimeout(r, 300));
+
+    // Verify the target input exists and clear its value.
+    const inputOriginal = await clearWarnTab.evaluate((statusKey) => {
+      const input = document.querySelector(
+        `#card-actions-table-wrap .ca-default-input[data-status="${statusKey}"]`,
+      );
+      if (!input) return null;
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, 'value',
+      ).set;
+      nativeSetter.call(input, '');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return input.dataset.original || '';
+    }, LBL_KEY_CLEAR_WARN_LOWER);
+    record(
+      '(N.setup) ca-default-input found with correct data-original',
+      `data-original="${CLEAR_WARN_LABEL}"`,
+      `original=${JSON.stringify(inputOriginal)}`,
+      inputOriginal === CLEAR_WARN_LABEL,
+    );
+
+    // Track PUT requests to /api/admin/stage-action-labels.
+    const clearWarnPuts = [];
+    const clearWarnReqListener = (req) => {
+      if (req.url().includes('/api/admin/stage-action-labels') && req.method() === 'PUT') {
+        clearWarnPuts.push(req.url());
+      }
+    };
+    clearWarnTab.on('request', clearWarnReqListener);
+
+    // M.dialog-appears: call save — dialog must appear.
+    await clearWarnTab.evaluate(() => {
+      if (typeof saveAllCardActionLabels === 'function') saveAllCardActionLabels();
+    });
+    const dialogAppeared = await pollPage(
+      clearWarnTab,
+      () => {
+        for (const d of document.querySelectorAll('[role=dialog]')) {
+          const title = d.querySelector('[class*="MuiDialogTitle"]');
+          if (title && title.textContent.includes('Handler still bound to this label')) return true;
+        }
+        return null;
+      },
+      null,
+      6000,
+    );
+    record(
+      '(N.dialog-appears) "Handler still bound to this label" dialog shown',
+      'MuiDialog with matching DialogTitle appears',
+      `appeared=${dialogAppeared}`,
+      dialogAppeared === true,
+    );
+
+    // M.cancel: click Cancel — dialog must close and no PUT must have fired.
+    const putsBeforeCancel = clearWarnPuts.length;
+    await clearWarnTab.evaluate(() => {
+      for (const d of document.querySelectorAll('[role=dialog]')) {
+        for (const btn of d.querySelectorAll('button')) {
+          if (btn.textContent.trim() === 'Cancel') { btn.click(); return; }
+        }
+      }
+    });
+    const dialogGoneAfterCancel = await pollPage(
+      clearWarnTab,
+      () => {
+        for (const d of document.querySelectorAll('[role=dialog]')) {
+          const title = d.querySelector('[class*="MuiDialogTitle"]');
+          if (title && title.textContent.includes('Handler still bound to this label')) return null;
+        }
+        return true;
+      },
+      null,
+      4000,
+    );
+    record(
+      '(N.cancel) Cancel closes the dialog',
+      'dialog gone after Cancel click',
+      `gone=${dialogGoneAfterCancel}`,
+      dialogGoneAfterCancel === true,
+    );
+    record(
+      '(N.cancel) Cancel does not fire a PUT to stage-action-labels',
+      `same PUT count (${putsBeforeCancel}) before and after Cancel`,
+      `puts_before=${putsBeforeCancel} puts_after=${clearWarnPuts.length}`,
+      clearWarnPuts.length === putsBeforeCancel,
+    );
+
+    // M.clear: the input is still "" (Cancel aborted the save without restoring
+    // the value). Call save again and click "Clear label anyway" this time.
+    const putsBeforeClear = clearWarnPuts.length;
+    await clearWarnTab.evaluate(() => {
+      if (typeof saveAllCardActionLabels === 'function') saveAllCardActionLabels();
+    });
+    const dialog2Appeared = await pollPage(
+      clearWarnTab,
+      () => {
+        for (const d of document.querySelectorAll('[role=dialog]')) {
+          const title = d.querySelector('[class*="MuiDialogTitle"]');
+          if (title && title.textContent.includes('Handler still bound to this label')) return true;
+        }
+        return null;
+      },
+      null,
+      6000,
+    );
+    record(
+      '(N.clear) Dialog appears again on second save attempt',
+      'dialog appears',
+      `appeared=${dialog2Appeared}`,
+      dialog2Appeared === true,
+    );
+    await clearWarnTab.evaluate(() => {
+      for (const d of document.querySelectorAll('[role=dialog]')) {
+        for (const btn of d.querySelectorAll('button')) {
+          if (btn.textContent.includes('Clear label anyway')) { btn.click(); return; }
+        }
+      }
+    });
+    // Give the PUT a moment to fire (the route responds quickly).
+    await new Promise(r => setTimeout(r, 1500));
+    clearWarnTab.off('request', clearWarnReqListener);
+    record(
+      '(N.clear) "Clear label anyway" fires a PUT to stage-action-labels',
+      '≥1 new PUT to /api/admin/stage-action-labels after confirming',
+      `new_puts=${clearWarnPuts.length - putsBeforeClear}`,
+      clearWarnPuts.length > putsBeforeClear,
+    );
+
+    // Clean up: delete the handler (bindings cascade) and the label row.
+    if (clearWarnHandlerId) {
+      await adminClient.delete(`/api/admin/card-action-handlers/${clearWarnHandlerId}`);
+    }
+    await adminClient.delete(
+      `/api/admin/stage-action-labels/sales/${LBL_KEY_CLEAR_WARN_LOWER}`,
+    ).catch(() => {});
+    await clearWarnTab.close();
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -3231,6 +3450,25 @@ async function writeReport(runId, findings) {
     '  Guards the `if (!action) continue` guard in `ActionHandlersPage.tsx`',
     '  line 243 against a regression that would accidentally render a slot row',
     '  for a sub-status whose `action_label` is blank.',
+    '- **(N) Bound-handler warning on label clear** (task #1741): guards the',
+    '  `saveAllCardActionLabels` confirmation-dialog path in `CardActionsPage.tsx`',
+    '  that blocks silent handler orphaning when a label input is cleared while a',
+    '  handler is still bound to the slot.  A fresh `lead_status_config` row',
+    '  (stage=SALES) is seeded, its stage-action label is set via',
+    '  `PUT /api/admin/stage-action-labels`, and a `summarise_phone_call` handler',
+    '  is bound to the slot.  The Card actions panel is opened in a fresh admin',
+    '  tab; the input is cleared via the native `HTMLInputElement.value` setter',
+    '  and `saveAllCardActionLabels()` is called.',
+    '  - **N.setup** Fixtures created: lead status, stage-action label (200), and',
+    '    bound handler (201). The `ca-default-input[data-status=…]` is found with',
+    '    `data-original` equal to the seeded label text.',
+    '  - **N.dialog-appears** The confirmation MuiDialog appears with',
+    '    `DialogTitle` = "Handler still bound to this label".',
+    '  - **N.cancel** Clicking Cancel closes the dialog without firing a PUT to',
+    '    `/api/admin/stage-action-labels`.',
+    '  - **N.clear** Calling save a second time and clicking "Clear label anyway"',
+    '    fires ≥1 PUT to `/api/admin/stage-action-labels`, confirming the save',
+    '    proceeds after confirmation.',
     '',
     '## Notes',
     '',
