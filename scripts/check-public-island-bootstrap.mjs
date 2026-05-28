@@ -52,7 +52,7 @@
  * Wired into CI via: npm run test:public-island-bootstrap
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { resolve, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -168,18 +168,21 @@ function extractAllMountIds(src) {
 
 /**
  * Parses the body of the BOOTSTRAP_ONLY_IDS Set literal in `src` and returns
- * an array of `{ id, hasAnnotation }` objects — one per line that contains a
- * string literal.
+ * an array of `{ id, hasAnnotation, annotatedFile }` objects — one per line
+ * that contains a string literal.
  *
  * The required annotation format is `// public/<file>.html` anywhere on the
  * same line as the id string.  This mirrors Pass 4a in
  * check-mount-id-conflicts.mjs.
  *
+ * `annotatedFile` is the extracted relative path (e.g. `"public/404.html"`)
+ * when the annotation is present, or `null` otherwise.
+ *
  * Returns null if the BOOTSTRAP_ONLY_IDS declaration cannot be located (parse
  * error — the caller should treat this as a hard failure).
  *
  * @param {string} src
- * @returns {Array<{ id: string, hasAnnotation: boolean }> | null}
+ * @returns {Array<{ id: string, hasAnnotation: boolean, annotatedFile: string | null }> | null}
  */
 function extractBootstrapAnnotations(src) {
   const startPattern = /(?:const|let|var)\s+BOOTSTRAP_ONLY_IDS\s*=\s*new\s+Set\s*\(\s*\[/;
@@ -197,7 +200,7 @@ function extractBootstrapAnnotations(src) {
   if (depth !== 0) return null; // unterminated
 
   const body = src.slice(bodyStart, i - 1);
-  const annotationPattern = /\/\/\s*public\/\S+\.html/;
+  const annotationPattern = /\/\/\s*(public\/\S+\.html)/;
   const strPattern = /['"]([^'"]+)['"]/g;
   const results = [];
 
@@ -205,7 +208,12 @@ function extractBootstrapAnnotations(src) {
     const m = strPattern.exec(line);
     strPattern.lastIndex = 0; // reset for next line
     if (!m) continue; // no string literal on this line — skip (e.g. blank or comment-only)
-    results.push({ id: m[1], hasAnnotation: annotationPattern.test(line) });
+    const annotationMatch = annotationPattern.exec(line);
+    results.push({
+      id: m[1],
+      hasAnnotation: annotationMatch !== null,
+      annotatedFile: annotationMatch ? annotationMatch[1] : null,
+    });
   }
 
   return results;
@@ -459,7 +467,45 @@ if (missingAnnotation.length > 0) {
 }
 
 // ---------------------------------------------------------------------------
-// 8. Final result
+// 8. Check E (file existence): every annotated public/<file>.html actually
+//    exists on disk.
+//    Catches: a typo in the filename that satisfies the annotation syntax
+//    check (E) but names a file that doesn't exist — mirrors Pass 4b in
+//    check-mount-id-conflicts.mjs.
+// ---------------------------------------------------------------------------
+
+/** @type {Array<{ id: string, annotatedFile: string }>} */
+const missingFiles = bootstrapAnnotations
+  .filter((entry) => entry.annotatedFile !== null)
+  .filter((entry) => !existsSync(join(ROOT, entry.annotatedFile)))
+  .map((entry) => ({ id: entry.id, annotatedFile: /** @type {string} */ (entry.annotatedFile) }));
+
+if (missingFiles.length > 0) {
+  process.stderr.write('\n[check-public-island-bootstrap] CHECK E (FILE EXISTENCE) FAILED — ANNOTATED FILE NOT FOUND:\n\n');
+  for (const { id, annotatedFile } of missingFiles) {
+    process.stderr.write(
+      `  "${id}" annotates "${annotatedFile}" but that file does not exist under the project root\n`,
+    );
+  }
+  process.stderr.write(
+    '\nEach `// public/<file>.html` annotation in BOOTSTRAP_ONLY_IDS\n' +
+    '(src/react/lib/publicIslands.ts) must name a file that actually exists.\n\n' +
+    'This may mean:\n' +
+    '  - A typo was introduced in the annotation filename.\n' +
+    '  - The HTML file was moved or renamed without updating the annotation.\n\n' +
+    'Fix: correct the annotation filename so it matches the actual file path\n' +
+    'relative to the project root.\n',
+  );
+  failed = true;
+} else {
+  console.log(
+    '[check-public-island-bootstrap] Check E (file existence) OK — every annotated ' +
+    'public/<file>.html path exists on disk.',
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 9. Final result
 // ---------------------------------------------------------------------------
 
 if (failed) process.exit(1);
