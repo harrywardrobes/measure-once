@@ -585,6 +585,14 @@ router.post('/api/customer-info/by-contact/:contactId/generate-link',
     const lastName  = (props.lastname  || '').trim();
     const name = [firstName, lastName].filter(Boolean).join(' ') || email;
 
+    const existingResult = await pool.query(
+      `SELECT id FROM customer_info_submissions
+       WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL
+       LIMIT 1`,
+      [cid]
+    );
+    const isResend = existingResult.rows.length > 0;
+
     const rawToken  = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
@@ -599,8 +607,8 @@ router.post('/api/customer-info/by-contact/:contactId/generate-link',
     );
 
     const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
-    console.log(`[customer-info] Generated link for contact ${cid}`);
-    res.status(201).json({ formLink, expiresAt: expiresAt.toISOString(), token: rawToken });
+    console.log(`[customer-info] Generated link for contact ${cid} (isResend=${isResend})`);
+    res.status(201).json({ formLink, expiresAt: expiresAt.toISOString(), token: rawToken, isResend });
   }
 );
 

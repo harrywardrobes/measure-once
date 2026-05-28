@@ -27,11 +27,7 @@ interface GeneratedLink {
   formLink: string;
   token: string;
   expiresAt: string;
-}
-
-interface SubmissionRow {
-  submitted_at: string | null;
-  expires_at: string;
+  isResend?: boolean;
 }
 
 function CopyLinkField({ url }: { url: string }) {
@@ -94,44 +90,10 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
   const [sent, setSent] = useState(false);
   const [copyAndClosing, setCopyAndClosing] = useState(false);
 
-  // Resend-mode detection: true when an active (non-submitted, non-expired)
-  // submission already exists for this contact.
-  const [isResendMode, setIsResendMode] = useState(false);
-
-  // Fetch the list of submissions on open to decide send vs resend mode.
-  // Falls back to normal send mode on any error so customers are never left
-  // with a broken modal.
-  useEffect(() => {
-    if (!open) {
-      setIsResendMode(false);
-      return;
-    }
-
-    const controller = new AbortController();
-
-    fetch(
-      `/api/customer-info/by-contact/${encodeURIComponent(ctx.contactId)}`,
-      { signal: controller.signal },
-    )
-      .then(r => r.json())
-      .then((rows: SubmissionRow[]) => {
-        if (controller.signal.aborted) return;
-        const now = new Date();
-        const hasPending = Array.isArray(rows) && rows.some(
-          row => row.submitted_at === null && new Date(row.expires_at) > now,
-        );
-        setIsResendMode(hasPending);
-      })
-      .catch((e: Error) => {
-        if (e.name === 'AbortError') return;
-        // Network or parse error — default to normal send mode.
-        setIsResendMode(false);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [open, ctx.contactId]);
+  // isResend comes from the generate-link response: true when an active
+  // (non-submitted, non-expired) submission already existed for this contact
+  // before the new link was created.
+  const isResend = generatedLink?.isResend ?? false;
 
   useEffect(() => {
     if (!open) return;
@@ -172,22 +134,14 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
     setError('');
     setSubmitting(true);
     try {
-      let r: Response;
-      if (isResendMode) {
-        r = await fetch(
-          `/api/customer-info/by-contact/${encodeURIComponent(ctx.contactId)}/resend`,
-          { method: 'POST' },
-        );
-      } else {
-        r = await fetch('/api/card-actions/upload-photos-and-info', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contactId: ctx.contactId,
-            ...(generatedLink ? { token: generatedLink.token } : {}),
-          }),
-        });
-      }
+      const r = await fetch('/api/card-actions/upload-photos-and-info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contactId: ctx.contactId,
+          ...(generatedLink ? { token: generatedLink.token } : {}),
+        }),
+      });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || d.message || 'Failed to send');
       setSent(true);
@@ -224,16 +178,16 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
     onClose();
   }
 
-  const title = isResendMode ? 'Resend photo upload link' : 'Send photo upload link';
-  const sendLabel = isResendMode ? 'Resend link' : 'Send email';
+  const title = isResend ? 'Resend photo upload link' : 'Send photo upload link';
+  const sendLabel = isResend ? 'Resend email' : 'Send email';
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
       <DialogTitle>
         {title}
         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25, fontWeight: 'normal' }}>
-          {isResendMode
-            ? 'A link was already sent — resend it or copy it to share directly'
+          {isResend
+            ? 'A link was already sent — sending again will replace it'
             : 'Send via email or copy the link to share directly'}
         </Typography>
       </DialogTitle>
