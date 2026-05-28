@@ -60,6 +60,10 @@ const SS_LABEL     = 'PrivTest Sub Sync';
 const SS_LABEL_BC  = 'PrivTest Sub Renamed BC';
 const SS_LABEL_VIS = 'PrivTest Sub Renamed Vis';
 
+// Card chip rename labels used by sections (K) and (L).
+const SS_LABEL_CARD_BC  = 'PrivTest Card BC';
+const SS_LABEL_CARD_VIS = 'PrivTest Card Vis';
+
 // SSE broadcast label used by section (H).
 const LABEL_SSE = 'PrivTest Renamed SSE';
 
@@ -1335,6 +1339,260 @@ async function main() {
     await iListenerTab.close();
     await iRelayTab.close();
 
+    // ── (K) Customer-card substatus chip rename — BroadcastChannel path ───────
+    // Intercept /api/contacts-all to return a synthetic contact whose
+    // hs_lead_status / hw_lead_substatus fields match the test fixtures.
+    // This causes CustomerCard to render the substatus chip.  After the
+    // chip is visible, rename the sub-status via the admin API, post a
+    // `lead_substatuses_changed` BroadcastChannel message from a second tab,
+    // and assert the chip text on the card updates in place without a reload.
+    //
+    // This probes the substatusMap memo in CustomersPage.tsx (line ~1203):
+    //   }, [store.subsLoaded, store.subsVersion]);
+    // which recomputes whenever loadLeadSubstatuses() increments subsVersion.
+    console.log('\n  [K] Customer-card substatus chip rename — BroadcastChannel path');
+
+    // Look up the current ssRow so we can PATCH it.
+    const ssListResK = await adminClient.get('/api/admin/lead-substatuses');
+    const ssRowK = Array.isArray(ssListResK.json)
+      && ssListResK.json.find(s => s.substatus_key === SS_KEY && s.status_key === LS_KEY);
+    record(
+      '[K] GET /api/admin/lead-substatuses returns the test sub-status',
+      `status=200 and substatus_key "${SS_KEY}" present`,
+      `status=${ssListResK.status} found=${!!ssRowK}`,
+      ssListResK.status === 200 && !!ssRowK,
+    );
+
+    if (ssRowK) {
+      // Build the mock contact payload once; reused by both K and L.
+      const mockContactsPayload = JSON.stringify({
+        results: [
+          {
+            id: 'privtest-card-chip-contact',
+            properties: {
+              firstname: 'PrivTest',
+              lastname: 'CardChip',
+              email: 'privtest-card-chip@example.com',
+              hs_lead_status: LS_KEY,
+              hw_lead_substatus: SS_KEY,
+            },
+          },
+        ],
+        total: 1,
+        totalPages: 1,
+        page: 1,
+      });
+
+      // ── K setup: open two fresh tabs ──────────────────────────────────────────
+      // chipCardBcTab: the tab under test — contacts are mocked so CustomerCard
+      //   always renders with hs_lead_status=LS_KEY / hw_lead_substatus=SS_KEY.
+      // chipCardAdminTab: a helper tab used only to post BroadcastChannel messages
+      //   (BC.postMessage from a different page so the listener tab receives them).
+      const chipCardBcTab = await browser.newPage();
+      await chipCardBcTab.setCacheEnabled(false);
+      await injectSession(chipCardBcTab, adminClient.cookie);
+
+      const chipCardAdminTab = await browser.newPage();
+      await chipCardAdminTab.setCacheEnabled(false);
+      await injectSession(chipCardAdminTab, adminClient.cookie);
+
+      // Intercept /api/contacts-all so the card always shows our test contact.
+      // All other requests (including /api/lead-substatuses) pass through to the
+      // real test server so the substatusMap store populates normally.
+      await chipCardBcTab.setRequestInterception(true);
+      chipCardBcTab.on('request', req => {
+        if (/\/api\/contacts-all(\?|$)/.test(req.url())) {
+          req.respond({
+            status: 200,
+            contentType: 'application/json',
+            body: mockContactsPayload,
+          });
+        } else {
+          req.continue();
+        }
+      });
+
+      await chipCardBcTab.goto(`${BASE}/customers`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000,
+      });
+
+      // Wait for the CustomersPage lazy chunk to finish loading.
+      // waitForBootstrapFns polls for window.loadLeadStatuses (15 s timeout);
+      // window.loadLeadSubstatuses lives in the same chunk so it is guaranteed
+      // to be defined by the time waitForBootstrapFns resolves.
+      await waitForBootstrapFns(chipCardBcTab);
+
+      // Explicitly call loadLeadSubstatuses() to prime store.substatuses before
+      // polling the chip.  The mount-effect fires it automatically, but with an
+      // instant contacts mock the card can render before the async fetch
+      // resolves; this explicit call guarantees the store is populated first.
+      await chipCardBcTab.evaluate(async () => {
+        await window.loadLeadSubstatuses();
+      });
+
+      // The current sub-status label is SS_LABEL_VIS (left by section G).
+      // Poll until the chip appears (requires substatusMap to be populated and
+      // the CustomerCard to re-render via notify() → forceRender()).
+      const chipKInit = await waitForChipLabel(chipCardBcTab, SS_LABEL_VIS, 6000);
+      record(
+        '[K] card substatus chip shows SS_LABEL_VIS on initial render',
+        `MuiChip with label "${SS_LABEL_VIS}" visible within 6 s`,
+        `visible=${chipKInit}`,
+        chipKInit,
+      );
+
+      // Rename the sub-status via the admin API.
+      const ssPatchK = await adminClient.patch(
+        `/api/admin/lead-substatuses/${ssRowK.id}`,
+        { label: SS_LABEL_CARD_BC },
+      );
+      record(
+        '[K] PATCH /api/admin/lead-substatuses/:id renames sub-status for card chip test',
+        `status=200 label="${SS_LABEL_CARD_BC}"`,
+        `status=${ssPatchK.status} label="${ssPatchK.json?.label}"`,
+        ssPatchK.status === 200 && ssPatchK.json?.label === SS_LABEL_CARD_BC,
+      );
+
+      // Navigate chipCardAdminTab to the same origin before posting the BC message.
+      // BroadcastChannel is origin-scoped; a page at about:blank has a null origin
+      // and cannot reach listeners on http://127.0.0.1:5050.
+      await chipCardAdminTab.goto(`${BASE}/customers`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 15000,
+      });
+      // Post the BC message from a different same-origin tab so chipCardBcTab's
+      // 'lead_substatuses_changed' listener receives it.  The listener calls
+      // refresh() → loadLeadSubstatuses() → store.subsVersion increments →
+      // notify() → forceRender() → substatusMap recomputes → CustomerCard
+      // re-renders with the renamed label.
+      await chipCardAdminTab.evaluate(() => {
+        new BroadcastChannel('lead_substatuses_changed').postMessage('changed');
+      });
+
+      const chipKBcUpdated = await waitForChipLabel(chipCardBcTab, SS_LABEL_CARD_BC, 7000);
+      record(
+        '[K] BroadcastChannel message updates card substatus chip to renamed label',
+        `MuiChip with label "${SS_LABEL_CARD_BC}" within 7 s`,
+        `found=${chipKBcUpdated}`,
+        chipKBcUpdated,
+      );
+
+      const chipKBcStale = await chipCardBcTab.evaluate((lbl) => {
+        return Array.from(document.querySelectorAll('.MuiChip-label'))
+          .some(c => c.textContent.trim() === lbl);
+      }, SS_LABEL_VIS);
+      record(
+        '[K] SS_LABEL_VIS absent from card chip after BroadcastChannel rename',
+        `no MuiChip with label "${SS_LABEL_VIS}"`,
+        `stalePresent=${chipKBcStale}`,
+        !chipKBcStale,
+      );
+
+      await chipCardBcTab.close();
+      await chipCardAdminTab.close();
+
+      // ── (L) Customer-card substatus chip rename — visibilitychange path ──────
+      // Open a fresh customers tab (same contact mock), confirm chip shows the
+      // BC-renamed label (SS_LABEL_CARD_BC, left by section K), rename again
+      // server-side, synthesise hidden→visible visibilitychange, and assert the
+      // card chip updates in place without a full reload.
+      console.log('\n  [L] Customer-card substatus chip rename — visibilitychange path');
+
+      const chipCardVisTab = await browser.newPage();
+      await chipCardVisTab.setCacheEnabled(false);
+      await injectSession(chipCardVisTab, adminClient.cookie);
+
+      await chipCardVisTab.setRequestInterception(true);
+      chipCardVisTab.on('request', req => {
+        if (/\/api\/contacts-all(\?|$)/.test(req.url())) {
+          req.respond({
+            status: 200,
+            contentType: 'application/json',
+            body: mockContactsPayload,
+          });
+        } else {
+          req.continue();
+        }
+      });
+
+      await chipCardVisTab.goto(`${BASE}/customers`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000,
+      });
+
+      // Same explicit warm-up as section K: wait for the lazy chunk, then
+      // prime store.substatuses so the chip is visible before the vis-rename.
+      await waitForBootstrapFns(chipCardVisTab);
+      await chipCardVisTab.evaluate(async () => {
+        await window.loadLeadSubstatuses();
+      });
+
+      // DB label is SS_LABEL_CARD_BC (left by section K's PATCH).
+      const chipLInit = await waitForChipLabel(chipCardVisTab, SS_LABEL_CARD_BC, 6000);
+      record(
+        '[L] card substatus chip shows SS_LABEL_CARD_BC before visibilitychange rename',
+        `MuiChip with label "${SS_LABEL_CARD_BC}" visible within 6 s`,
+        `visible=${chipLInit}`,
+        chipLInit,
+      );
+
+      // Rename server-side so the next /api/lead-substatuses returns SS_LABEL_CARD_VIS.
+      const ssPatchL = await adminClient.patch(
+        `/api/admin/lead-substatuses/${ssRowK.id}`,
+        { label: SS_LABEL_CARD_VIS },
+      );
+      record(
+        '[L] PATCH /api/admin/lead-substatuses/:id renames sub-status for visibilitychange test',
+        `status=200 label="${SS_LABEL_CARD_VIS}"`,
+        `status=${ssPatchL.status} label="${ssPatchL.json?.label}"`,
+        ssPatchL.status === 200 && ssPatchL.json?.label === SS_LABEL_CARD_VIS,
+      );
+
+      // Synthesise hidden → visible (mirrors sections B and G).
+      // The onVisibility handler checks visibilityState === 'visible' before calling
+      // refresh() → loadLeadSubstatuses() → store.subsVersion increments → notify()
+      // → substatusMap memo recomputes → CustomerCard re-renders with new label.
+      await chipCardVisTab.evaluate(() => {
+        const proto   = Document.prototype;
+        const ownDesc = Object.getOwnPropertyDescriptor(proto, 'visibilityState')
+                     || Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+        Object.defineProperty(document, 'visibilityState',
+          { get: () => 'hidden', configurable: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+
+        if (ownDesc) {
+          Object.defineProperty(document, 'visibilityState', ownDesc);
+        } else {
+          Object.defineProperty(document, 'visibilityState',
+            { get: () => 'visible', configurable: true });
+        }
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+
+      const chipLVisUpdated = await waitForChipLabel(chipCardVisTab, SS_LABEL_CARD_VIS, 7000);
+      record(
+        '[L] visibilitychange updates card substatus chip to renamed label',
+        `MuiChip with label "${SS_LABEL_CARD_VIS}" within 7 s`,
+        `found=${chipLVisUpdated}`,
+        chipLVisUpdated,
+      );
+
+      const chipLVisStale = await chipCardVisTab.evaluate((lbl) => {
+        return Array.from(document.querySelectorAll('.MuiChip-label'))
+          .some(c => c.textContent.trim() === lbl);
+      }, SS_LABEL_CARD_BC);
+      record(
+        '[L] SS_LABEL_CARD_BC absent from card chip after visibilitychange refresh',
+        `no MuiChip with label "${SS_LABEL_CARD_BC}"`,
+        `stalePresent=${chipLVisStale}`,
+        !chipLVisStale,
+      );
+
+      await chipCardVisTab.close();
+    }
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -1469,6 +1727,26 @@ async function writeReport(runId, findings) {
     '  `window.__j_bc_received` is true within 8 s, (ii) the deleted label is',
     '  absent from the filter dropdown within 8 s. Exercises the DELETE SSE',
     '  broadcast path in `server.js` (lines ~4555–4562).',
+    '- **(K) Customer-card substatus chip rename — BroadcastChannel path**: intercepts',
+    '  `GET /api/contacts-all` via Puppeteer request interception to return a',
+    '  synthetic contact with `hs_lead_status: LS_KEY` and',
+    '  `hw_lead_substatus: SS_KEY`. This causes `CustomerCard` to render the',
+    '  per-contact substatus chip (line ~686 of `CustomersPage.tsx`). Renames the',
+    '  sub-status label via `PATCH /api/admin/lead-substatuses/:id`, then posts a',
+    '  `lead_substatuses_changed` BroadcastChannel message from a second tab.',
+    '  Asserts the chip text on the card updates to the new label and the old',
+    '  label is absent — without a full page reload. Exercises the',
+    '  `subBc.addEventListener` → `loadLeadSubstatuses()` → `store.subsVersion++`',
+    '  → `notify()` → `substatusMap` memo recompute path in `CustomersPage.tsx`.',
+    '- **(L) Customer-card substatus chip rename — visibilitychange path**: opens a',
+    '  fresh customers tab with the same `contacts-all` mock (contact with',
+    '  `hs_lead_status: LS_KEY`, `hw_lead_substatus: SS_KEY`). Confirms the card',
+    '  chip shows the BC-renamed label from [K], renames the sub-status again',
+    '  server-side, then synthesises a hidden→visible `visibilitychange` sequence.',
+    '  Asserts the card chip updates to the new label and the prior label is absent.',
+    '  Exercises the `document.addEventListener("visibilitychange", onVisibility)`',
+    '  → `loadLeadSubstatuses()` → `store.subsVersion++` → `substatusMap` recompute',
+    '  path — the regression guard introduced in task #1923.',
     '',
     '## Notes',
     '',
@@ -1478,6 +1756,11 @@ async function writeReport(runId, findings) {
     '  `window.populateLeadStatusFilter()` (exposed by the React bundle, not',
     '  workflow-core.js) directly in the page context to establish the initial',
     '  filter state independently of the HubSpot contact load.',
+    '- Sections (K) and (L) use Puppeteer `req.respond()` to intercept',
+    '  `GET /api/contacts-all` and return a synthetic contact with the test',
+    '  substatus keys so the card substatus chip renders. All other requests',
+    '  (including `/api/lead-statuses` and `/api/lead-substatuses`) pass through',
+    '  normally so `substatusMap` is populated from real database rows.',
   ];
   const outPath = path.join(dir, 'lead-status-sync.md');
   fs.writeFileSync(outPath, lines.join('\n'));

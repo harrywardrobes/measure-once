@@ -351,12 +351,14 @@ declare global {
     loadLeadStatuses?: () => Promise<void>;
     populateLeadStatusFilter?: () => void;
     loadLeadStatusCounts?: (stage?: string) => Promise<void>;
+    loadLeadSubstatuses?: () => Promise<void>;
   }
 }
 
 window.loadLeadStatuses = loadLeadStatuses;
 window.populateLeadStatusFilter = populateLeadStatusFilter;
 window.loadLeadStatusCounts = loadLeadStatusCounts;
+window.loadLeadSubstatuses = loadLeadSubstatuses;
 
 /**
  * Effect that wires the existing BroadcastChannel + visibilitychange
