@@ -44,6 +44,7 @@ interface DemoCardProps {
   email?: string;
   phone?: string;
   leadStatusLabel?: string;
+  substatusLabel?: string;
   customerNum?: string;
   rooms?: DemoRoom[];
   actionLabel?: string;
@@ -81,6 +82,7 @@ function DemoCustomerCard({
   email = 'jane@example.com',
   phone,
   leadStatusLabel,
+  substatusLabel,
   customerNum,
   rooms = [{ room: 'Main', stageKey: 'sales' }],
   actionLabel,
@@ -120,9 +122,15 @@ function DemoCustomerCard({
               {name}
             </Box>
           </Typography>
-          {leadStatusLabel ? (
-            <Chip label={leadStatusLabel} size="small" color="primary" variant="outlined" />
-          ) : null}
+          {/* Right column — lead-status chip + optional substatus chip, matching the real CustomerCard layout */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.75, flexShrink: 0 }}>
+            {leadStatusLabel ? (
+              <Chip label={leadStatusLabel} size="small" color="primary" variant="outlined" />
+            ) : null}
+            {substatusLabel ? (
+              <Chip label={substatusLabel} size="small" variant="outlined" />
+            ) : null}
+          </Box>
         </Stack>
 
         <Stack direction="row" spacing={0.75} sx={{ mt: 1, flexWrap: 'wrap' }}>
@@ -383,6 +391,70 @@ export const AllStageVariants: Story = {
         />
       ))}
     </Stack>
+  ),
+};
+
+// ── Substatus chip stories ───────────────────────────────────────────────────
+
+export const SubstatusWithLeadStatus: Story = {
+  name: 'Substatus chip — lead status + substatus set',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'When both `hs_lead_status` and `hw_lead_substatus` are set and a matching label is found in `substatusMap`, **both chips** appear in the right column. The lead-status chip uses `color="primary"` (blue outlined); the substatus chip uses the default neutral outlined style, stacked below.',
+      },
+    },
+  },
+  render: () => (
+    <DemoCustomerCard
+      name="Emma Clarke"
+      email="emma@example.com"
+      phone="07700 900 456"
+      leadStatusLabel="Interested"
+      substatusLabel="Ready to book"
+      rooms={[{ room: 'Main', stageKey: 'sales' }]}
+    />
+  ),
+};
+
+export const SubstatusLeadStatusOnly: Story = {
+  name: 'Substatus chip — lead status set, no substatus',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'When `hs_lead_status` is set but `hw_lead_substatus` is absent (or has no matching label in `substatusMap`), only the lead-status chip appears. The substatus chip is not rendered.',
+      },
+    },
+  },
+  render: () => (
+    <DemoCustomerCard
+      name="Marcus Lee"
+      email="marcus@example.com"
+      leadStatusLabel="Qualified"
+      rooms={[{ room: 'Main', stageKey: 'designvisit' }]}
+    />
+  ),
+};
+
+export const SubstatusNeitherSet: Story = {
+  name: 'Substatus chip — neither lead status nor substatus set',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'When neither `hs_lead_status` nor `hw_lead_substatus` is set, no status chips are rendered at all. The right column is empty and the card shows only stage pills and contact-detail chips.',
+      },
+    },
+  },
+  render: () => (
+    <DemoCustomerCard
+      name="Fatima Hassan"
+      email="fatima@example.com"
+      phone="07700 912 345"
+      rooms={[{ room: 'Main', stageKey: 'survey' }]}
+    />
   ),
 };
 
