@@ -23,6 +23,10 @@
 //   [DEF-SAVE]     Saving from the __default__ row dispatches
 //                  PATCH /api/admin/nav-role-config/__default__ with the
 //                  correct primary_keys body.
+//   [INHERIT-BANNER-ON]  Opening the dialog for a role with is_customized=false
+//                  shows an info Alert ("inherits the default layout").
+//   [INHERIT-BANNER-OFF] After saving a custom layout (is_customized=true),
+//                  reopening the dialog shows no "inherits" Alert.
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:nav-customise
@@ -588,14 +592,18 @@ async function main() {
   const DEFAULT_LABELS = ['Home', 'Calendar', 'Trades'];
   const NON_DEFAULT_KEYS = ['home', 'sales', 'calendar'];
 
+  // INHERIT-BANNER probe constants
+  const INHERIT_ROLE = `privtest-inherit-${runId}`;
+
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
     if (teardownInFlight) return;
     teardownInFlight = true;
-    // Remove the RST test job role via API (best-effort, server must still be up)
+    // Remove the RST and INHERIT-BANNER test job roles via API (best-effort, server must still be up)
     try {
       const adminCookie = (await login(users.admin.email, PASSWORD)).cookie;
       await apiFetch(adminCookie, 'DELETE', `/api/admin/job-roles/${encodeURIComponent(TEST_ROLE)}`);
+      await apiFetch(adminCookie, 'DELETE', `/api/admin/job-roles/${encodeURIComponent(INHERIT_ROLE)}`);
     } catch {}
     try { if (!exited) child.kill('SIGTERM'); } catch {}
     try { await cleanupTestData(pool); } catch {}
@@ -1381,6 +1389,107 @@ async function main() {
       await page.__ctx.close().catch(() => {});
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // [INHERIT-BANNER-ON]  Info alert visible when isCustomized=false
+    // [INHERIT-BANNER-OFF] Info alert absent after saving a custom layout
+    //
+    // Strategy: create a fresh job role via the admin API — it starts with
+    // is_customized=false because no PATCH has been issued for it yet.  Open
+    // the NavCustomiseDialog from the Permissions tab and assert the
+    // "inherits the default layout" Alert is present.  Then save the dialog
+    // (which PATCHes the role config and sets is_customized=true), reopen the
+    // dialog, and assert the Alert is gone.
+    // ══════════════════════════════════════════════════════════════════════════
+    console.log('\n  [INHERIT-BANNER] "Inherits default" info alert visibility');
+    {
+      const inheritRoleCreated = await (async () => {
+        const r = await apiFetch(
+          adminClient.cookie, 'POST', '/api/admin/job-roles',
+          { name: INHERIT_ROLE, privilege_level: 'member' },
+        );
+        return r.status === 200 || r.status === 201;
+      })();
+
+      if (!inheritRoleCreated) {
+        record(
+          '[INHERIT-BANNER-ON] info alert visible when isCustomized=false',
+          'alert present',
+          `could not create role "${INHERIT_ROLE}" (skipped)`,
+          false,
+        );
+        record(
+          '[INHERIT-BANNER-OFF] info alert absent when isCustomized=true',
+          'alert absent',
+          'role creation failed (skipped)',
+          false,
+        );
+      } else {
+        // ── [INHERIT-BANNER-ON] ──────────────────────────────────────────────
+        {
+          const page = await openPermissionsTab(browser, adminClient.cookie, INHERIT_ROLE);
+          const dialogOpened = await clickTuneForRole(page, INHERIT_ROLE);
+
+          let bannerVisible = false;
+          if (dialogOpened) {
+            bannerVisible = await page.evaluate(() => {
+              const dialog = Array.from(document.querySelectorAll('[role="dialog"]'))
+                .find(d => d.textContent.includes('Customise navigation'));
+              if (!dialog) return false;
+              const alerts = Array.from(dialog.querySelectorAll('.MuiAlert-root'));
+              return alerts.some(a => a.textContent.includes('inherits the default layout'));
+            });
+          }
+
+          record(
+            '[INHERIT-BANNER-ON] info alert visible when isCustomized=false',
+            'alert containing "inherits the default layout" present',
+            bannerVisible
+              ? 'alert present'
+              : dialogOpened ? 'alert absent' : 'dialog did not open',
+            bannerVisible,
+          );
+
+          // Save the dialog — this PATCHes the config and sets is_customized=true.
+          if (dialogOpened) {
+            await clickSaveAndCaptureRoleConfig(page);
+          }
+
+          await page.close().catch(() => {});
+          await page.__ctx.close().catch(() => {});
+        }
+
+        // ── [INHERIT-BANNER-OFF] ─────────────────────────────────────────────
+        {
+          const page = await openPermissionsTab(browser, adminClient.cookie, INHERIT_ROLE);
+          const dialogOpened = await clickTuneForRole(page, INHERIT_ROLE);
+
+          let bannerAbsent = false;
+          if (dialogOpened) {
+            const bannerVisible = await page.evaluate(() => {
+              const dialog = Array.from(document.querySelectorAll('[role="dialog"]'))
+                .find(d => d.textContent.includes('Customise navigation'));
+              if (!dialog) return false;
+              const alerts = Array.from(dialog.querySelectorAll('.MuiAlert-root'));
+              return alerts.some(a => a.textContent.includes('inherits the default layout'));
+            });
+            bannerAbsent = !bannerVisible;
+          }
+
+          record(
+            '[INHERIT-BANNER-OFF] info alert absent when isCustomized=true',
+            'alert containing "inherits the default layout" absent',
+            bannerAbsent
+              ? 'alert absent'
+              : dialogOpened ? 'alert still present' : 'dialog did not open',
+            bannerAbsent,
+          );
+
+          await page.close().catch(() => {});
+          await page.__ctx.close().catch(() => {});
+        }
+      }
+    }
+
   } catch (e) {
     record('test harness', 'no uncaught error', `error: ${e.message}`, false);
     console.error(e);
@@ -1456,6 +1565,14 @@ async function writeReport(findings, runId) {
     '  pre-checks exactly the keys stored for `__default__` in `nav_role_configs`.',
     '- **[DEF-SAVE]** Saving from the `__default__` dialog dispatches',
     '  `PATCH /api/admin/nav-role-config/__default__` with the selected `primary_keys`.',
+    '- **[INHERIT-BANNER-ON]** A freshly-created job role (no PATCH issued) has',
+    '  `is_customized=false`. Opening its `NavCustomiseDialog` from the Permissions',
+    '  tab shows an MUI `Alert` containing "inherits the default layout". Guards the',
+    '  `{isCustomized === false && <Alert>…</Alert>}` branch in `NavCustomiseDialog`.',
+    '- **[INHERIT-BANNER-OFF]** After clicking Save (which PATCHes the nav config and',
+    '  sets `is_customized=true`), reopening the dialog for the same role shows no',
+    '  "inherits the default layout" alert — confirming the banner disappears once',
+    '  the role has its own custom layout.',
     '',
     '## Relevant files',
     '',
