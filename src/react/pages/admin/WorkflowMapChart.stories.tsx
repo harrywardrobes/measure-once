@@ -91,6 +91,12 @@ function ChartWrapper(props: React.ComponentProps<typeof WorkflowMapChart>) {
   );
 }
 
+const ALL_STAGES_FIXTURE = [
+  { kind: 'card-action' as const, key: 'sales',       label: 'Sales',         lsStage: 'SALES' },
+  { kind: 'card-action' as const, key: 'designvisit', label: 'Design Visit',  lsStage: 'DESIGN_VISIT' },
+  { kind: 'card-action' as const, key: 'survey',      label: 'Survey',        lsStage: 'SURVEY' },
+];
+
 export const MultiStageWithHandlers: Story = {
   name: 'Multi-stage with handlers',
   render: () => (
@@ -99,6 +105,7 @@ export const MultiStageWithHandlers: Story = {
       statuses={STATUSES}
       substatuses={SUBSTATUSES}
       handlers={HANDLERS_WITH_BINDINGS}
+      allStages={ALL_STAGES_FIXTURE}
       onNodeClick={() => {}}
     />
   ),
@@ -114,6 +121,7 @@ export const SubstatusNoHandler: Story = {
         { id: 10, status_key: 'IN_PROGRESS', substatus_key: 'IP_NO_HANDLER', label: 'No handler bound', action_label: 'Do action', sort_order: 0 },
       ]}
       handlers={[]}
+      allStages={ALL_STAGES_FIXTURE}
       onNodeClick={() => {}}
     />
   ),
@@ -132,6 +140,7 @@ export const EmptyOrLoading: Story = {
           statuses={[]}
           substatuses={[]}
           handlers={[]}
+          allStages={[]}
           onNodeClick={() => {}}
         />
       </Box>

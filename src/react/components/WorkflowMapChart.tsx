@@ -359,7 +359,6 @@ export function buildFlowGraph(
           stageLabel: stage.label,
           boundHandlers: [],
           isReadOnly: true,
-          ...(status.hint ? { hint: status.hint } : {}),
         },
         draggable: false,
         selectable: true,
