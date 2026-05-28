@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Box, Button, Card, CardContent, Chip, Skeleton, Stack, Typography,
+  Box, Button, Card, CardContent, Chip, Skeleton, Stack, Tooltip, Typography,
 } from '@mui/material';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { api, toast, fmtDate, onAdminChange } from './adminApi';
 
 type AuditEntry = {
@@ -31,6 +32,7 @@ const ACTION_LABELS: Record<string, string> = {
   reject_profile_photo:      'Rejected profile photo',
   resend_set_password_email: 'Resent set-password email',
   force_password_reset:      'Forced password reset',
+  startup_migration:         'System startup migration',
 };
 
 const PAGE_SIZE = 25;
@@ -119,8 +121,9 @@ export function AdminAuditLogPage() {
                   e.target_email && `Target: ${e.target_email}`,
                   e.details,
                 ].filter(Boolean).join(' · ');
+                const isSystem = e.admin_email === '[system]';
                 return (
-                  <Stack key={i} direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ py: 1.5 }}>
+                  <Stack key={i} direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ py: 1.5, opacity: isSystem ? 0.75 : 1 }}>
                     <Typography variant="caption" color="text.secondary" sx={{ minWidth: 160 }}>{fmtDate(e.ts)}</Typography>
                     <Box sx={{ flex: 1 }}>
                       <Stack direction="row" spacing={1} sx={{  alignItems: 'center', flexWrap: 'wrap' }}>
@@ -128,7 +131,16 @@ export function AdminAuditLogPage() {
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>{label}</Typography>
                       </Stack>
                       <Typography variant="caption" color="text.secondary">
-                        By <strong>{e.admin_email || ''}</strong>{meta ? ' · ' + meta : ''}
+                        {isSystem ? (
+                          <Tooltip title="Performed automatically by the server on startup">
+                            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
+                              <SettingsIcon sx={{ fontSize: 12, verticalAlign: 'middle', color: 'text.disabled' }} />
+                              <Box component="span" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>system</Box>
+                            </Box>
+                          </Tooltip>
+                        ) : (
+                          <>By <strong>{e.admin_email || ''}</strong></>
+                        )}{meta ? ' · ' + meta : ''}
                       </Typography>
                     </Box>
                   </Stack>
