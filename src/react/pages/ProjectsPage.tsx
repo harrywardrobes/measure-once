@@ -28,6 +28,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { useCardActionHandlers, CardActionHandlerData } from '../hooks/useCardActionHandlers';
+import { PhotosReceivedBadge } from '../components/PhotosReceivedBadge';
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
@@ -490,13 +491,6 @@ function ProjectCard({
   const leadStatusKey = contact.properties?.hs_lead_status;
   const hwSubstatusValue = contact.properties?.hw_lead_substatus;
 
-  // Show "Photos received" badge when the customer has submitted their upload form.
-  // Clears automatically when lead status advances away from AWAITING_PHOTOS.
-  const photosReceived =
-    leadStatusKey === 'AWAITING_PHOTOS' &&
-    typeof hwSubstatusValue === 'string' &&
-    hwSubstatusValue.includes('AWPH_RECEIVED');
-
   // Only show a strip when a matching handler is actually configured.
   const handler = cardActionHandlerFor(primaryStageKey, leadStatusKey, hwSubstatusValue);
 
@@ -619,27 +613,7 @@ function ProjectCard({
               Unknown status
             </Box>
           )}
-          {photosReceived && (
-            <Box
-              component="span"
-              title="Customer has submitted their photos and info — ready to review."
-              sx={{
-                fontSize: '0.62rem',
-                fontWeight: 700,
-                px: '6px',
-                py: '1px',
-                borderRadius: '999px',
-                background: '#dcfce7',
-                color: '#166534',
-                border: '1px solid #bbf7d0',
-                letterSpacing: '0.02em',
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-              }}
-            >
-              Photos received
-            </Box>
-          )}
+          <PhotosReceivedBadge leadStatus={leadStatusKey} hwSubstatus={hwSubstatusValue} />
         </Box>
       </Box>
 
