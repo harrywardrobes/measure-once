@@ -148,6 +148,8 @@
     "test:stage-scoped-pills:ci": "node scripts/with-test-db.js test/stage-scoped-pills/run.js",
     "test:calendar-empty-state": "node test/calendar-empty-state/run.js",
     "test:calendar-empty-state:ci": "node scripts/with-test-db.js test/calendar-empty-state/run.js",
+    "test:active-projects-hubspot-outage": "node test/active-projects-hubspot-outage/run.js",
+    "test:active-projects-hubspot-outage:ci": "node scripts/with-test-db.js test/active-projects-hubspot-outage/run.js",
     "test:turnstile-signout": "node test/turnstile-signout/run.js",
     "test:turnstile-signout:ci": "node scripts/with-test-db.js test/turnstile-signout/run.js",
     "test:nav-role-config": "node test/nav-role-config/run.js",
