@@ -140,6 +140,7 @@ const DB_SUITES = [
   'test:chunk-cache-headers:ci',
   'test:customers-pagination:ci',
   'test:active-projects-hubspot-outage:ci',
+  'test:info-card-review-resend:ci',
   'test:calendar-empty-state:ci',
   'test:turnstile-signout:ci',
   'test:nav-role-config:ci',
