@@ -556,19 +556,85 @@ function checkIpResendLimit(ip) {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
+// Authenticated: generate a customer link without sending email
+// POST /api/customer-info/by-contact/:contactId/generate-link
+router.post('/api/customer-info/by-contact/:contactId/generate-link',
+  isAuthenticated,
+  requirePrivilege('member'),
+  async (req, res) => {
+    const cid = String(req.params.contactId || '').trim();
+    if (!cid || !/^\d+$/.test(cid)) {
+      return res.status(400).json({ error: 'Invalid contactId.' });
+    }
+
+    let contact;
+    try {
+      contact = await fetchContactFromHubSpot(cid);
+    } catch (err) {
+      console.error('[customer-info] Failed to fetch contact from HubSpot:', err.message);
+      return res.status(502).json({ error: 'Could not fetch contact from HubSpot.' });
+    }
+
+    const props = contact.properties || {};
+    const email = (props.email || '').trim();
+    if (!email) {
+      return res.status(400).json({ error: 'Contact has no email address in HubSpot.' });
+    }
+    const phone     = (props.mobilephone || props.phone || '').trim();
+    const firstName = (props.firstname || '').trim();
+    const lastName  = (props.lastname  || '').trim();
+    const name = [firstName, lastName].filter(Boolean).join(' ') || email;
+
+    const rawToken  = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+    await pool.query(
+      `INSERT INTO customer_info_submissions
+         (contact_id, contact_name, contact_email, token_hash, expires_at,
+          masked_email, masked_phone)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [cid, name, email, tokenHash, expiresAt.toISOString(),
+       maskEmail(email), maskPhone(phone)]
+    );
+
+    const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
+    console.log(`[customer-info] Generated link for contact ${cid}`);
+    res.status(201).json({ formLink, expiresAt: expiresAt.toISOString(), token: rawToken });
+  }
+);
+
 // Authenticated: send invite link to customer
 // POST /api/card-actions/upload-photos-and-info
+// Body: { contactId, token? } — if token provided, sends email for that pre-generated link
 router.post('/api/card-actions/upload-photos-and-info',
   isAuthenticated,
   requirePrivilege('member'),
   async (req, res) => {
-    const { contactId } = req.body;
+    const { contactId, token: preToken } = req.body;
     if (!contactId || typeof contactId !== 'string' || !/^\d+$/.test(String(contactId).trim())) {
       return res.status(400).json({ error: 'contactId is required.' });
     }
     const cid = String(contactId).trim();
 
-    // Fetch contact from HubSpot
+    // If a pre-generated token is provided, use it — no new DB row
+    if (preToken && typeof preToken === 'string') {
+      const tokenHash = crypto.createHash('sha256').update(preToken).digest('hex');
+      const { rows } = await pool.query(
+        `SELECT contact_email, masked_email, contact_name FROM customer_info_submissions
+         WHERE token_hash = $1 AND contact_id = $2`,
+        [tokenHash, cid]
+      );
+      if (!rows.length) {
+        return res.status(404).json({ error: 'Pre-generated link not found.' });
+      }
+      const row = rows[0];
+      const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(preToken)}`;
+      await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink);
+      return res.status(200).json({ ok: true });
+    }
+
+    // Original flow: fetch from HubSpot, generate token, create row, send email
     let contact;
     try {
       contact = await fetchContactFromHubSpot(cid);
@@ -587,7 +653,6 @@ router.post('/api/card-actions/upload-photos-and-info',
     const lastName  = (props.lastname  || '').trim();
     const name = [firstName, lastName].filter(Boolean).join(' ') || email;
 
-    // Generate token
     const rawToken  = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
@@ -896,6 +961,7 @@ router.get('/api/customer-info-photos/:key', isAuthenticated, async (req, res) =
 
 // Authenticated: resend a fresh invite link for a contact
 // POST /api/customer-info/by-contact/:contactId/resend
+// Body: { token? } — if token provided, sends email for that pre-generated link
 router.post('/api/customer-info/by-contact/:contactId/resend',
   isAuthenticated,
   requirePrivilege('member'),
@@ -905,7 +971,27 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
       return res.status(400).json({ error: 'Invalid contactId.' });
     }
 
-    // Fetch contact from HubSpot
+    const preToken = req.body && typeof req.body.token === 'string' ? req.body.token : null;
+
+    // If a pre-generated token is provided, use it — no new DB row
+    if (preToken) {
+      const tokenHash = crypto.createHash('sha256').update(preToken).digest('hex');
+      const { rows } = await pool.query(
+        `SELECT contact_email, masked_email, contact_name FROM customer_info_submissions
+         WHERE token_hash = $1 AND contact_id = $2`,
+        [tokenHash, cid]
+      );
+      if (!rows.length) {
+        return res.status(404).json({ error: 'Pre-generated link not found.' });
+      }
+      const row = rows[0];
+      const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(preToken)}`;
+      await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink);
+      console.log(`[customer-info] Resent (pre-generated) invite link for contact ${cid}`);
+      return res.json({ ok: true });
+    }
+
+    // Original flow: fetch from HubSpot, generate token, create row, send email
     let contact;
     try {
       contact = await fetchContactFromHubSpot(cid);
@@ -924,7 +1010,6 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
     const lastName  = (props.lastname  || '').trim();
     const name = [firstName, lastName].filter(Boolean).join(' ') || email;
 
-    // Generate a fresh token
     const rawToken  = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
