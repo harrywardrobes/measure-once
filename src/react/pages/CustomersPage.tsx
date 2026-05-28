@@ -637,6 +637,17 @@ export function CustomersPage(): React.ReactElement {
   const [invDrawerAllIds, setInvDrawerAllIds] = React.useState<string[]>([]);
   const { isAdmin } = usePrivilege();
 
+  const [devMode, setDevMode] = React.useState<boolean>(false);
+  React.useEffect(() => {
+    if (!isAdmin) return;
+    fetch('/api/admin/hubspot/dev-mode', { headers: { Accept: 'application/json' } })
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { devMode?: boolean } | null) => {
+        if (data && typeof data.devMode === 'boolean') setDevMode(data.devMode);
+      })
+      .catch(() => {});
+  }, [isAdmin]);
+
   const handleOpenInvoice = React.useCallback((firstId: string, allIds: string[]) => {
     setInvDrawerInvId(firstId);
     setInvDrawerAllIds(allIds);
@@ -1059,6 +1070,26 @@ export function CustomersPage(): React.ReactElement {
             </Button>,
             document.getElementById('page-heading-action') as HTMLElement,
           )}
+
+        {isAdmin && devMode && (
+          <Alert
+            id="dev-mode-banner"
+            severity="warning"
+            sx={{ borderRadius: 2 }}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                component="a"
+                href="/admin#tab-devenv"
+              >
+                Turn off
+              </Button>
+            }
+          >
+            Dev mode is ON — only test contacts are shown
+          </Alert>
+        )}
 
         <PageFilterBar>
           <StageTabGroup
