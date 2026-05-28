@@ -398,9 +398,19 @@ async function main() {
         v6Ok
           ? `400 error="${noFileBody.error}"`
           : `status=${noFileRes.status} body=${JSON.stringify(noFileBody).slice(0, 200)}`);
+
+      // CI-V7 – photoKeys entry with wrong namespace prefix → 400
+      const v7 = await postSubmit(BASE, rawToken, { ...validBase, photoKeys: ['obj:dv_badkey'] });
+      const v7Ok = v7.status === 400 && v7.json?.error;
+      record('CI-V7.bad-photo-key-prefix',
+        v7Ok,
+        v7Ok
+          ? `400 error="${v7.json.error}"`
+          : `status=${v7.status} body=${JSON.stringify(v7.json).slice(0, 200)}`);
     } else {
       for (const id of ['CI-V2.missing-addressLine1', 'CI-V3.invalid-roomCount',
-                         'CI-V4.missing-city', 'CI-V5.missing-postcode', 'CI-V6.no-photos']) {
+                         'CI-V4.missing-city', 'CI-V5.missing-postcode', 'CI-V6.no-photos',
+                         'CI-V7.bad-photo-key-prefix']) {
         record(id, false, 'skipped — no rawToken');
       }
     }

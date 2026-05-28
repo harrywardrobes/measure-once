@@ -503,7 +503,12 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
   if (!postcode || typeof postcode !== 'string' || !postcode.trim()) {
     return res.status(400).json({ error: 'Postcode is required.' });
   }
-  const keys = Array.isArray(photoKeys) ? photoKeys.filter(k => typeof k === 'string' && k.startsWith('obj:ci_')) : [];
+  const rawKeys = Array.isArray(photoKeys) ? photoKeys : [];
+  const badKey = rawKeys.find(k => typeof k !== 'string' || !k.startsWith('obj:ci_'));
+  if (badKey !== undefined) {
+    return res.status(400).json({ error: 'Invalid photo key: all keys must start with obj:ci_.' });
+  }
+  const keys = rawKeys;
 
   // Mark submitted
   await pool.query(
