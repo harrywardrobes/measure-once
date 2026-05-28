@@ -5,6 +5,11 @@
  * Runs every step sequentially, regardless of earlier failures, then writes
  * test-results/summary.md and prints it to stdout.  Exits non-zero when any
  * step failed so CI still fails correctly.
+ *
+ * IMPORTANT: every test:*:ci entry in STEPS must also appear in the parallel
+ * runner (scripts/run-ci-parallel.mjs).  The test:ci-runner-sync step below
+ * enforces this automatically — do not remove it.  If you add a new :ci suite
+ * here, add it to the appropriate suite list in run-ci-parallel.mjs as well.
  */
 
 import { spawnSync } from 'child_process';
@@ -37,6 +42,7 @@ const STEPS = [
   'test:inline-styles',
   'test:no-config-handler-types',
   'test:status-key-fields',
+  'test:ci-runner-sync',
   'test:privileges:ci',
   'test:lead-status-sync:ci',
   'test:lead-status-counts-rate-limit:ci',

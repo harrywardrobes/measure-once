@@ -4,6 +4,12 @@
  *
  * Parallel CI runner for Measure Once.
  *
+ * IMPORTANT: every test:*:ci entry in scripts/run-ci.mjs must also appear in
+ * STATIC_SUITES or DB_SUITES below.  The test:ci-runner-sync step (run as part
+ * of STATIC_SUITES) enforces this automatically.  If you add a new :ci suite
+ * to run-ci.mjs, add it here too — otherwise it will be silently skipped on
+ * any project that uses the parallel runner.
+ *
  * Execution model
  * ───────────────
  *   Phase 0 — build:react  (sequential; later phases depend on the bundle)
@@ -58,6 +64,7 @@ const STATIC_SUITES = [
   'test:keyboard-shortcuts',
   'test:handler-config-blocks',
   'test:status-key-fields',
+  'test:ci-runner-sync',
 ];
 
 /**
@@ -70,6 +77,8 @@ const DB_SUITES = [
   'test:lead-status-sync:ci',
   'test:lead-status-counts-rate-limit:ci',
   'test:lead-status-delete-substatus-clear:ci',
+  'test:substatus-hubspot-label-format:ci',
+  'test:customer-info:ci',
   'test:lead-status-sync-customer-detail:ci',
   'test:lead-status-sync-customer-detail-viewer:ci',
   'test:lead-status-sync-customer-detail-editable:ci',
@@ -131,7 +140,6 @@ const DB_SUITES = [
   'test:ideas:ci',
   'test:onboarding-conflicts:ci',
   'test:open-leads-stale-visibility:ci',
-  'test:customer-info:ci',
   'test:project-contacts-unknown-status:ci',
   'test:conflict-digest-settings:ci',
   'test:settings-tab-load:ci',

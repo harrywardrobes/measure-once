@@ -185,7 +185,8 @@
     "test:storybook-output-clean": "node scripts/check-storybook-output-clean.mjs",
     "test:storybook-smoke": "node scripts/storybook-smoke.mjs",
     "test:ci": "node scripts/run-ci.mjs",
-    "test:ci:parallel": "node scripts/run-ci-parallel.mjs"
+    "test:ci:parallel": "node scripts/run-ci-parallel.mjs",
+    "test:ci-runner-sync": "node scripts/check-ci-runner-sync.mjs"
   },
   "dependencies": {
     "@acpr/rate-limit-postgresql": "^1.4.1",
