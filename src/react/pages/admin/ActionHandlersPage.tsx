@@ -557,13 +557,21 @@ function HandlerEditorModal({
                 size="small"
                 fullWidth
                 value={actionName}
-                slotProps={{ htmlInput: { maxLength: 80 } }}
+                slotProps={{ htmlInput: { id: 'cah-action-name', maxLength: 80 } }}
                 placeholder="e.g. send_quote"
                 error={!!actionNameErr}
-                helperText={actionNameErr || undefined}
                 onChange={e => { setActionName(e.target.value); validateName(e.target.value); }}
                 onBlur={e => validateName(e.target.value)}
               />
+              <Typography
+                component="span"
+                id="cah-action-name-err"
+                variant="caption"
+                color="error"
+                sx={{ display: actionNameErr ? 'block' : 'none', mt: 0.25 }}
+              >
+                {actionNameErr}
+              </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                 ⚙️ Backend automation coming soon — this name will be used to trigger workflows automatically once wired up.
               </Typography>
@@ -571,14 +579,16 @@ function HandlerEditorModal({
 
             {/* Handler type */}
             <FormControl size="small" fullWidth>
-              <InputLabel>Action type</InputLabel>
+              <InputLabel htmlFor="cah-type">Action type</InputLabel>
               <Select
+                native
                 label="Action type"
+                inputProps={{ id: 'cah-type' }}
                 value={handlerType}
-                onChange={e => { setHandlerType(e.target.value); setConflictList([]); }}
+                onChange={e => { setHandlerType(String(e.target.value)); setConflictList([]); }}
               >
                 {Object.entries(HANDLER_TYPE_LABELS).map(([k, v]) => (
-                  <MenuItem key={k} value={k}>{v}</MenuItem>
+                  <option key={k} value={k}>{v}</option>
                 ))}
               </Select>
             </FormControl>
@@ -706,18 +716,16 @@ function HandlerEditorModal({
             )}
 
             {/* Error */}
-            {editError && (
-              <Typography variant="body2" color="error">
-                {editError}
-              </Typography>
-            )}
+            <Typography id="cah-edit-err" variant="body2" color="error" sx={{ display: editError ? 'block' : 'none' }}>
+              {editError}
+            </Typography>
 
           </Stack>
         </DialogContent>
 
         <DialogActions>
           <Button onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving || hasStaleLsRefs}>
+          <Button id="cah-save" variant="contained" onClick={handleSave} disabled={saving || hasStaleLsRefs}>
             {existing ? 'Save' : 'Add'}
           </Button>
         </DialogActions>
@@ -815,6 +823,7 @@ export function ConflictResolverModal({
             return (
               <Box
                 key={h.id}
+                className="ca-conflict-row"
                 sx={{
                   display: 'flex',
                   alignItems: 'flex-start',
@@ -841,6 +850,7 @@ export function ConflictResolverModal({
                   )}
                 </Box>
                 <Button
+                  className="ca-conflict-remove-btn"
                   size="small"
                   variant="outlined"
                   color="error"
@@ -861,7 +871,7 @@ export function ConflictResolverModal({
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Close</Button>
+        <Button id="ca-conflict-close" onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>
   );

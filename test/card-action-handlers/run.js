@@ -1250,6 +1250,12 @@ async function main() {
     const svHandlerId = createSvRes.json?.id;
 
     if (svHandlerId) {
+      // Reload the handler cache so cardActionHandlerById returns the full SV
+      // handler (including config.visitType:'survey') before the card is clicked.
+      await salesTab.evaluate(async () => {
+        if (typeof window.loadCardActionHandlers === 'function') await window.loadCardActionHandlers();
+      });
+
       await salesTab.evaluate(({ id, name, email, handlerId }) => {
         const div = document.createElement('div');
         div.className = 'eq-card-action';
@@ -1446,7 +1452,16 @@ async function main() {
     // hasn't ticked, re-fetch directly).
     await salesTab.evaluate(async () => {
       if (typeof window.loadCardActionHandlers === 'function') await window.loadCardActionHandlers();
-      if (typeof window.loadLeadSubstatuses     === 'function') await window.loadLeadSubstatuses();
+      if (typeof window.loadLeadSubstatuses === 'function') {
+        await window.loadLeadSubstatuses();
+      } else {
+        // Fallback for pages that don't mount WorkflowDataProvider (e.g. /projects):
+        // fetch substatuses directly and populate the global used by the diagnostic check.
+        try {
+          const res = await fetch('/api/lead-substatuses');
+          if (res.ok) window.LEAD_SUBSTATUSES = await res.json();
+        } catch (_) {}
+      }
     });
 
     const subsLoaded = await salesTab.evaluate(
@@ -2318,7 +2333,9 @@ async function main() {
     await namingAdminTab.evaluate(() => {
       const input = document.querySelector('#cah-action-name');
       if (!input) return;
-      input.value = 'Send Quote';
+      // Use the native value setter so React's onChange fires on the controlled input.
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      nativeSetter.call(input, 'Send Quote');
       input.dispatchEvent(new Event('input',  { bubbles: true }));
       input.dispatchEvent(new Event('blur',   { bubbles: true }));
     });
@@ -2380,7 +2397,9 @@ async function main() {
     await namingAdminTab.evaluate(() => {
       const input = document.querySelector('#cah-action-name');
       if (!input) return;
-      input.value = 'send_quote_ok';
+      // Use the native value setter so React's onChange fires on the controlled input.
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      nativeSetter.call(input, 'send_quote_ok');
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('blur',  { bubbles: true }));
     });
