@@ -2,7 +2,8 @@
 // test/customer-card-action-strip/run.js
 //
 // End-to-end test verifying that the action-label strip renders correctly on
-// customer cards in CustomersPage.tsx (task #1891).
+// customer cards in CustomersPage.tsx (task #1891), and that the QB invoice
+// drawer opens correctly when the invoice badge is clicked (task #1933).
 //
 // The test fully stubs the customers-page API calls via evaluateOnNewDocument
 // fetch interception so no HubSpot token or real data is required.
@@ -17,6 +18,11 @@
 //   (D) Clicking the action strip fires the handler dispatch (captured via a
 //       window spy) and does NOT trigger the outer CardActionArea link
 //       (URL remains /customers after the click).
+//   (E) QB invoice badge click → InvoiceDetailDrawer opens. When QB is
+//       connected and invoices are returned for a contact, clicking the red
+//       invoice badge on the card opens the drawer
+//       (data-testid="invoice-detail-drawer" present + open). Regression guard
+//       for the accidental deletion of handleOpenInvoice (task #1920).
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-card-action-strip
@@ -61,6 +67,11 @@ const CONTACT_C_ID     = 'privtest-ccas-contact-c';
 const CONTACT_C_NAME   = 'Charlie PrivTest';
 const CONTACT_C_STATUS = 'privtest_ccas_design';    // bound to start_design_visit handler
 const DRAFT_VISIT_ID   = 77;
+
+// Contact with a QB invoice (probe E).
+const CONTACT_E_ID    = 'privtest-ccas-contact-e';
+const CONTACT_E_EMAIL = 'echo@privtest.invalid';
+const INV_E_ID        = 'inv-privtest-e';
 
 // The action_name on the handler for contact A (rendered as "Strip Action" in Title Case).
 const HANDLER_ACTION_NAME = 'strip_action';
@@ -111,9 +122,19 @@ async function pollPage(page, fn, arg, timeoutMs = 12000, intervalMs = 150) {
  *   contacts     – array of contact objects for /api/contacts-all
  *   handlers     – array for /api/card-action-handlers
  *   inProgress   – array for /api/design-visits/in-progress
+ *   qbConnected  – boolean; when true, stubs QB status as connected + returns qbInvoices
+ *   qbInvoices   – array of invoice summary objects returned by /api/quickbooks/invoices
+ *   qbInvoiceDetails – map of id → detail object for /api/quickbooks/invoice/:id stubs
  */
 function buildFetchInterceptScript(opts) {
-  const { contacts, handlers, inProgress } = opts;
+  const {
+    contacts,
+    handlers,
+    inProgress,
+    qbConnected = false,
+    qbInvoices = [],
+    qbInvoiceDetails = {},
+  } = opts;
 
   // Build a minimal stub for every endpoint the page fetches on load.
   const stubs = {
@@ -127,15 +148,18 @@ function buildFetchInterceptScript(opts) {
     '/api/contacts-lead-status-counts': JSON.stringify({}),
     '/api/contacts-substatus-counts':   JSON.stringify({}),
     '/api/page-filter-config':        JSON.stringify({ customers_page_size: 25 }),
-    '/api/quickbooks/status':         JSON.stringify({ connected: false }),
+    '/api/quickbooks/status':         JSON.stringify(qbConnected ? { connected: true } : { connected: false }),
+    '/api/quickbooks/invoices':       JSON.stringify({ invoices: qbInvoices }),
   };
 
-  const inProgressJson = JSON.stringify(inProgress || []);
+  const inProgressJson      = JSON.stringify(inProgress || []);
+  const qbInvoiceDetailsJson = JSON.stringify(qbInvoiceDetails);
 
   return `
 (function() {
   var STUBS = ${JSON.stringify(stubs)};
   var IN_PROGRESS = ${inProgressJson};
+  var QB_INV_DETAILS = ${qbInvoiceDetailsJson};
 
   var originalFetch = window.fetch;
 
@@ -160,6 +184,22 @@ function buildFetchInterceptScript(opts) {
       window.__ccasIntercepted.push('in-progress:' + JSON.stringify(IN_PROGRESS));
       return Promise.resolve(new Response(JSON.stringify(IN_PROGRESS), {
         status: 200, headers: { 'Content-Type': 'application/json' },
+      }));
+    }
+
+    // QB invoice detail — /api/quickbooks/invoice/:id
+    var invDetailMatch = pathname.match(/^\\/api\\/quickbooks\\/invoice\\/(.+)$/);
+    if (invDetailMatch) {
+      var invId = invDetailMatch[1];
+      var detail = QB_INV_DETAILS[invId];
+      window.__ccasIntercepted.push('qb-inv-detail:' + invId);
+      if (detail) {
+        return Promise.resolve(new Response(JSON.stringify(detail), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ error: 'Not found' }), {
+        status: 404, headers: { 'Content-Type': 'application/json' },
       }));
     }
 
@@ -248,6 +288,11 @@ function writeReport(runId) {
     '  "Continue designing" instead of the action_name label.',
     '- **(D) Click isolation**: clicking the action strip does NOT trigger the outer',
     '  CardActionArea link — the page URL remains /customers after the click.',
+    '- **(E) QB invoice badge → InvoiceDetailDrawer**: when QB is connected and the',
+    '  stubbed /api/quickbooks/invoices list contains an invoice matching the contact',
+    '  by email, the card renders a red badge button; clicking it opens the',
+    '  `InvoiceDetailDrawer` (`data-testid="invoice-detail-drawer"` present and not',
+    '  aria-hidden). Regression guard for the accidental deletion of handleOpenInvoice.',
     '',
     'All customers-page API calls are stubbed via evaluateOnNewDocument fetch',
     'interception so no HubSpot token or real contact data is required.',
@@ -326,6 +371,7 @@ async function main() {
     '(B) card with no handler shows no action strip',
     '(C) start_design_visit + in-progress draft shows "Continue designing" strip',
     '(D) clicking action strip does not navigate away from /customers',
+    '(E) QB invoice badge click opens InvoiceDetailDrawer',
   ];
 
   if (!puppeteer) {
@@ -607,6 +653,115 @@ async function main() {
     );
 
     await pageD.__ctx.close().catch(() => {});
+
+    // ── Probe E: QB invoice badge click → InvoiceDetailDrawer opens ─────────
+    console.log('\n  [E] QB invoice badge → InvoiceDetailDrawer probe');
+
+    const invSummary = {
+      id: INV_E_ID,
+      docNumber: 'INV-PRIVTEST-E',
+      customerName: 'Echo PrivTest',
+      email: CONTACT_E_EMAIL,
+      balance: 250,
+      totalAmt: 500,
+      dueDate: '2026-06-30',
+      txnDate: '2026-05-01',
+    };
+
+    const invDetail = {
+      id: INV_E_ID,
+      docNumber: 'INV-PRIVTEST-E',
+      customerName: 'Echo PrivTest',
+      email: CONTACT_E_EMAIL,
+      balance: 250,
+      totalAmt: 500,
+      dueDate: '2026-06-30',
+      txnDate: '2026-05-01',
+      syncToken: '0',
+      memo: null,
+      lines: [{ description: 'Test service', qty: 1, unitPrice: 500, amount: 500 }],
+    };
+
+    const contactE = {
+      id: CONTACT_E_ID,
+      properties: {
+        firstname: 'Echo',
+        lastname: 'PrivTest',
+        email: CONTACT_E_EMAIL,
+        hs_lead_status: 'privtest_ccas_nomatch',
+      },
+    };
+
+    const pageE = await openCustomers(browser, memberClient.cookie, {
+      contacts:         [contactE],
+      handlers:         [],
+      inProgress:       [],
+      qbConnected:      true,
+      qbInvoices:       [invSummary],
+      qbInvoiceDetails: { [INV_E_ID]: invDetail },
+    });
+
+    // Wait for the QB badge button to appear. The qbInvoicesStore fetches
+    // status+invoices asynchronously; once loaded the QBBadge renders a
+    // <button> with a title containing "outstanding invoice".
+    const badgeVisible = await pollPage(pageE, () => {
+      const btn = document.querySelector('button[title*="outstanding invoice"]');
+      return btn ? 'ok' : null;
+    }, null, 12000).catch(() => null);
+
+    if (!badgeVisible) {
+      const pageLogs = (pageE.__logs || []).filter(l =>
+        l.includes('invoice') || l.includes('qb') || l.includes('error') || l.includes('Error'),
+      );
+      const intercepted = await pageE.evaluate(() => window.__ccasIntercepted || []);
+      console.log(`  [E] debug: badge not visible. intercepted=${JSON.stringify(intercepted)}`);
+      if (pageLogs.length) console.log(`  [E] page logs:\n    ${pageLogs.join('\n    ')}`);
+    }
+
+    // Click the QB badge.
+    await pageE.evaluate(() => {
+      const btn = document.querySelector('button[title*="outstanding invoice"]');
+      if (btn) btn.click();
+    });
+
+    // Wait for the InvoiceDetailDrawer to appear in the DOM
+    // (data-testid="invoice-detail-drawer" is set on the MUI Drawer root).
+    const drawerOpened = await pollPage(pageE, () => {
+      const drawer = document.querySelector('[data-testid="invoice-detail-drawer"]');
+      return drawer ? 'ok' : null;
+    }, null, 8000).catch(() => null);
+
+    const eState = await pageE.evaluate(() => {
+      const drawer = document.querySelector('[data-testid="invoice-detail-drawer"]');
+      const badge  = document.querySelector('button[title*="outstanding invoice"]');
+      return {
+        badgeFound:  !!badge,
+        drawerFound: !!drawer,
+        drawerOpen:  drawer ? !drawer.hasAttribute('aria-hidden') ||
+          drawer.getAttribute('aria-hidden') !== 'true' : false,
+        intercepted: window.__ccasIntercepted || [],
+      };
+    });
+
+    if (!eState.drawerFound || !eState.drawerOpen) {
+      const pageLogs = (pageE.__logs || []).filter(l =>
+        l.includes('invoice') || l.includes('handleOpen') || l.includes('error'),
+      );
+      console.log(`  [E] debug: badgeFound=${eState.badgeFound} drawerFound=${eState.drawerFound} drawerOpen=${eState.drawerOpen}`);
+      console.log(`  [E] intercepted=${JSON.stringify(eState.intercepted)}`);
+      if (pageLogs.length) console.log(`  [E] page logs:\n    ${pageLogs.join('\n    ')}`);
+    }
+
+    record(
+      UI_PROBE_LABELS[5],
+      'InvoiceDetailDrawer present and open after badge click',
+      eState.drawerFound
+        ? `drawer found, open=${eState.drawerOpen}`
+        : 'drawer element not found in DOM',
+      eState.drawerFound && eState.drawerOpen,
+    );
+
+    await pageE.__ctx.close().catch(() => {});
 
   } catch (e) {
     console.error('Test error:', e);

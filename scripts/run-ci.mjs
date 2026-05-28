@@ -136,6 +136,7 @@ const STEPS = [
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',
   'test:scheduling-past-time-guard:ci',
+  'test:customer-card-action-strip:ci',
   'test:workflow-map:ci',
   'test:upload-photos-resend-mode:ci',
   'test:projects-top-spacing:ci',

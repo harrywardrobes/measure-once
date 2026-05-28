@@ -159,6 +159,7 @@ const DB_SUITES = [
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',
   'test:scheduling-past-time-guard:ci',
+  'test:customer-card-action-strip:ci',
   'test:projects-top-spacing:ci',
   'test:customer-info-live-badge:ci',
   'test:dev-mode-bc-sync:ci',
