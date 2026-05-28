@@ -585,12 +585,14 @@ async function main() {
         : `row count before=${countBefore} after=${countAfter} (expected +1)`);
 
     // Wait briefly for resend invite email to land
-    const resendEmailDeadline = Date.now() + 4000;
-    let mailsAfterResend = readMailJsonl(mailFile);
-    while (Date.now() < resendEmailDeadline && mailsAfterResend.length <= mailsBeforeResend) {
-      await new Promise(res => setTimeout(res, 100));
-      mailsAfterResend = readMailJsonl(mailFile);
-    }
+    const mailsAfterResend = await pollFn(
+      () => {
+        const mails = readMailJsonl(mailFile);
+        return mails.length > mailsBeforeResend ? mails : null;
+      },
+      4000,
+      100,
+    ) ?? readMailJsonl(mailFile);
     const resendNewMails = mailsAfterResend.slice(mailsBeforeResend);
     const resendInviteEmail = resendNewMails.find(m =>
       typeof m.to === 'string' && m.to.includes(contactProps.email)
