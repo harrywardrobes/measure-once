@@ -3759,18 +3759,26 @@ async function main() {
 
         // P.4 — Select a valid intermediateLeadStatus; Save/Add must enable.
         // The stale Select is the only FormControl in Mui-error state.
-        const interSelectClicked = await staleTab.evaluate(() => {
-          const dialog = document.querySelector('.MuiDialog-root');
-          if (!dialog) return 'no-dialog';
-          const errSel = dialog.querySelector(
-            '.MuiFormControl-root.Mui-error .MuiSelect-select',
-          );
-          if (!errSel) return 'no-error-select';
-          errSel.click();
-          return 'clicked';
-        });
+        // Use Puppeteer's native ElementHandle.click() (dispatches real mouse
+        // events) instead of element.click() inside evaluate() — the latter
+        // only fires a synthetic DOM click that MUI Select ignores for opening
+        // its dropdown portal.
+        const interErrSelHandle = await staleTab.$(
+          '.MuiDialog-root .MuiInputBase-root.Mui-error .MuiSelect-select',
+        );
+        let interSelectClicked;
+        if (interErrSelHandle) {
+          await interErrSelHandle.click();
+          interSelectClicked = 'clicked';
+        } else {
+          interSelectClicked = await staleTab.evaluate(() => {
+            return document.querySelector('.MuiDialog-root') ? 'no-error-select' : 'no-dialog';
+          });
+        }
         await new Promise(r => setTimeout(r, 500));
         // The MUI listbox portal renders at document root (outside the dialog).
+        // Option clicks via evaluate() are fine — they only need a synthetic
+        // click to trigger the onChange handler.
         const interOptionPicked = await staleTab.evaluate(() => {
           const listbox = document.querySelector('[role="listbox"]');
           if (!listbox) return 'no-listbox';
@@ -3821,7 +3829,7 @@ async function main() {
         type: 'start_design_visit',
         config: { submittedLeadStatus: STALE_SUB_LS, defaultDurationMin: 90 },
       });
-      const pSubHandlerId = pSubHandlerRes.status === 201 ? pSubHandlerRes.data?.id : null;
+      const pSubHandlerId = pSubHandlerRes.status === 201 ? pSubHandlerRes.json?.id : null;
       record(
         '(P.sub.setup) Seed start_design_visit handler with stale submittedLeadStatus',
         '201 — handler created with a submittedLeadStatus key absent from DB',
@@ -3831,11 +3839,14 @@ async function main() {
 
       if (pSubHandlerId) {
         const subTab = await browser.newPage();
-        await subTab.authenticate({
-          username: adminUser.email,
-          password: adminUser.password,
+        await subTab.setCacheEnabled(false);
+        await injectSession(subTab, adminClient.cookie);
+        await subTab.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+        // Visit cardactions first so CardActionsPage mounts and loads stage-action
+        // labels (required by _buildActionSlotGroups for slots to be visible).
+        await subTab.evaluate(() => {
+          if (typeof switchTab === 'function') switchTab('cardactions');
         });
-        await subTab.goto(`https://${replDomain}`, { waitUntil: 'networkidle0' });
         await new Promise(r => setTimeout(r, 400));
         await subTab.evaluate(() => {
           if (typeof switchTab === 'function') switchTab('actionhandlers');
@@ -3931,16 +3942,19 @@ async function main() {
           );
 
           // P.sub.4 — Select a valid submittedLeadStatus; Save/Add must enable.
-          const subSelectClicked = await subTab.evaluate(() => {
-            const dialog = document.querySelector('.MuiDialog-root');
-            if (!dialog) return 'no-dialog';
-            const errSel = dialog.querySelector(
-              '.MuiFormControl-root.Mui-error .MuiSelect-select',
-            );
-            if (!errSel) return 'no-error-select';
-            errSel.click();
-            return 'clicked';
-          });
+          // Use Puppeteer's native ElementHandle.click() for the same reason as P.4.
+          const subErrSelHandle = await subTab.$(
+            '.MuiDialog-root .MuiInputBase-root.Mui-error .MuiSelect-select',
+          );
+          let subSelectClicked;
+          if (subErrSelHandle) {
+            await subErrSelHandle.click();
+            subSelectClicked = 'clicked';
+          } else {
+            subSelectClicked = await subTab.evaluate(() => {
+              return document.querySelector('.MuiDialog-root') ? 'no-error-select' : 'no-dialog';
+            });
+          }
           await new Promise(r => setTimeout(r, 500));
           const subOptionPicked = await subTab.evaluate(() => {
             const listbox = document.querySelector('[role="listbox"]');
