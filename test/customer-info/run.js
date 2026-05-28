@@ -34,7 +34,7 @@ const path   = require('path');
 const http   = require('http');
 const crypto = require('crypto');
 const { Pool } = require('pg');
-const { pollFn } = require('../helpers/poll');
+const { pollFn, pollUntil } = require('../helpers/poll');
 
 let puppeteer = null;
 try { puppeteer = require('puppeteer'); } catch {}
@@ -168,16 +168,6 @@ async function injectSession(page, jar, base) {
     name: kv.name, value: kv.value,
     domain: hostname, path: '/', httpOnly: true,
   });
-}
-
-async function pollPage(page, predFn, timeoutMs = 8000, intervalMs = 200) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const ok = await page.evaluate(predFn).catch(() => null);
-    if (ok) return true;
-    await new Promise(r => setTimeout(r, intervalMs));
-  }
-  return false;
 }
 
 // ── Validation probe helper ───────────────────────────────────────────────────
@@ -722,9 +712,9 @@ async function main() {
           // CustomerInfoSubmissionsRail fetch completes AND privilege is non-viewer.
           // This avoids a race where we find the section element during its
           // loading state (before submissions arrive) and check too early.
-          const btnFound = await pollPage(adminPage, () =>
+          const btnFound = await pollUntil(adminPage, () =>
             !!document.querySelector('[data-testid="resend-link-btn"]'),
-          12000);
+          12000, 200);
           adminUiOk = btnFound;
           adminUiDetail = btnFound
             ? '[data-testid="resend-link-btn"] found in admin view'
@@ -752,12 +742,12 @@ async function main() {
           // Wait for the section to render AND for the loading state to clear
           // (spinner gone), so we confirm submissions loaded before asserting
           // button absence — this avoids a false pass on a still-loading section.
-          const sectionLoaded = await pollPage(viewerPage, () => {
+          const sectionLoaded = await pollUntil(viewerPage, () => {
             const section = document.getElementById('customer-info-submissions-section');
             if (!section) return false;
             // A loading state shows a CircularProgress; once gone, data has loaded.
             return !section.querySelector('[role="progressbar"]');
-          }, 12000);
+          }, 12000, 200);
           if (!sectionLoaded) {
             viewerUiDetail = '#customer-info-submissions-section did not finish loading within 12s';
           } else {
