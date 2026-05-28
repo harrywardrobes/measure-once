@@ -38,6 +38,10 @@
  *      Catches: a typo in BOOTSTRAP_ONLY_IDS, or a stale entry left behind
  *      after an error page is removed from MOUNTS.
  *
+ *   E: every BOOTSTRAP_ONLY_IDS entry carries a `// public/<file>.html` annotation
+ *      Catches: a new error/restricted page added without the required file
+ *      annotation (mirrors the Pass 4a rule in check-mount-id-conflicts.mjs).
+ *
  * Exit codes:
  *   0 — all invariants hold
  *   1 — one or more invariants are violated, or a source could not be parsed
@@ -159,6 +163,55 @@ function extractAllMountIds(src) {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: check BOOTSTRAP_ONLY_IDS entries for `// public/<file>.html` annotations
+// ---------------------------------------------------------------------------
+
+/**
+ * Parses the body of the BOOTSTRAP_ONLY_IDS Set literal in `src` and returns
+ * an array of `{ id, hasAnnotation }` objects — one per line that contains a
+ * string literal.
+ *
+ * The required annotation format is `// public/<file>.html` anywhere on the
+ * same line as the id string.  This mirrors Pass 4a in
+ * check-mount-id-conflicts.mjs.
+ *
+ * Returns null if the BOOTSTRAP_ONLY_IDS declaration cannot be located (parse
+ * error — the caller should treat this as a hard failure).
+ *
+ * @param {string} src
+ * @returns {Array<{ id: string, hasAnnotation: boolean }> | null}
+ */
+function extractBootstrapAnnotations(src) {
+  const startPattern = /(?:const|let|var)\s+BOOTSTRAP_ONLY_IDS\s*=\s*new\s+Set\s*\(\s*\[/;
+  const startMatch = startPattern.exec(src);
+  if (!startMatch) return null;
+
+  let depth = 1;
+  let i = startMatch.index + startMatch[0].length;
+  const bodyStart = i;
+  while (i < src.length && depth > 0) {
+    if (src[i] === '[') depth++;
+    else if (src[i] === ']') depth--;
+    i++;
+  }
+  if (depth !== 0) return null; // unterminated
+
+  const body = src.slice(bodyStart, i - 1);
+  const annotationPattern = /\/\/\s*public\/\S+\.html/;
+  const strPattern = /['"]([^'"]+)['"]/g;
+  const results = [];
+
+  for (const line of body.split('\n')) {
+    const m = strPattern.exec(line);
+    strPattern.lastIndex = 0; // reset for next line
+    if (!m) continue; // no string literal on this line — skip (e.g. blank or comment-only)
+    results.push({ id: m[1], hasAnnotation: annotationPattern.test(line) });
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
 // 1. Read source files
 // ---------------------------------------------------------------------------
 
@@ -172,10 +225,11 @@ const mainSrc          = readFileSync(mainTsxPath, 'utf8');
 // 2. Extract data from source files
 // ---------------------------------------------------------------------------
 
-const publicIslandIds  = extractSetLiteral(publicIslandsSrc, 'PUBLIC_ISLAND_IDS');
-const bootstrapOnlyIds = extractSetLiteral(publicIslandsSrc, 'BOOTSTRAP_ONLY_IDS');
-const annotatedIds     = extractPublicIslandIds(mainSrc);
-const allMountIds      = extractAllMountIds(mainSrc);
+const publicIslandIds        = extractSetLiteral(publicIslandsSrc, 'PUBLIC_ISLAND_IDS');
+const bootstrapOnlyIds       = extractSetLiteral(publicIslandsSrc, 'BOOTSTRAP_ONLY_IDS');
+const annotatedIds           = extractPublicIslandIds(mainSrc);
+const allMountIds            = extractAllMountIds(mainSrc);
+const bootstrapAnnotations   = extractBootstrapAnnotations(publicIslandsSrc);
 
 let failed = false;
 
@@ -212,6 +266,15 @@ if (!allMountIds) {
     '[check-public-island-bootstrap] ERROR: Could not extract any MOUNTS ids from ' +
     'src/react/main.tsx — the MOUNTS pattern may have changed. Update this script ' +
     'to match.\n',
+  );
+  failed = true;
+}
+
+if (!bootstrapAnnotations) {
+  process.stderr.write(
+    '[check-public-island-bootstrap] ERROR: Could not locate BOOTSTRAP_ONLY_IDS body ' +
+    'in src/react/lib/publicIslands.ts for annotation scanning — the declaration may ' +
+    'have been renamed or reformatted. Update this script to match.\n',
   );
   failed = true;
 }
@@ -365,7 +428,38 @@ if (bootOnlyNotInMounts.length > 0) {
 }
 
 // ---------------------------------------------------------------------------
-// 7. Final result
+// 7. Check E: every BOOTSTRAP_ONLY_IDS entry has a `// public/<file>.html` annotation
+//    Catches: a new error/restricted page added to BOOTSTRAP_ONLY_IDS without
+//    the required file annotation (mirrors Pass 4a in check-mount-id-conflicts).
+// ---------------------------------------------------------------------------
+
+/** @type {string[]} */
+const missingAnnotation = bootstrapAnnotations
+  .filter((entry) => !entry.hasAnnotation)
+  .map((entry) => entry.id);
+
+if (missingAnnotation.length > 0) {
+  process.stderr.write('\n[check-public-island-bootstrap] CHECK E FAILED — BOOTSTRAP_ONLY_IDS ENTRIES WITHOUT ANNOTATION:\n\n');
+  for (const id of missingAnnotation) {
+    process.stderr.write(`  "${id}" is in BOOTSTRAP_ONLY_IDS but its line lacks a // public/<file>.html annotation\n`);
+  }
+  process.stderr.write(
+    '\nEvery entry in BOOTSTRAP_ONLY_IDS (src/react/lib/publicIslands.ts) must carry\n' +
+    'a trailing `// public/<file>.html — <description>` annotation on the same line.\n\n' +
+    'Example:\n' +
+    "  'not-found-root', // public/404.html — 404 page, rendered after auth; never public\n\n" +
+    'Fix: add the missing annotation to each id listed above.\n',
+  );
+  failed = true;
+} else {
+  console.log(
+    '[check-public-island-bootstrap] Check E OK — every BOOTSTRAP_ONLY_IDS entry ' +
+    'has a // public/<file>.html annotation.',
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 8. Final result
 // ---------------------------------------------------------------------------
 
 if (failed) process.exit(1);
