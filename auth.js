@@ -628,8 +628,10 @@ async function logAdminAction(adminEmail, actionType, targetEmail, details) {
        VALUES ($1, $2, $3, $4)`,
       [adminEmail || 'unknown', actionType, targetEmail || null, details || null]
     );
+    return true;
   } catch (err) {
     console.error('Failed to write admin audit log:', err.message);
+    return false;
   }
 }
 

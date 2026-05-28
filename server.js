@@ -1116,7 +1116,10 @@ app.patch('/api/admin/hubspot-credentials', isAuthenticated, requireAdmin, async
   try {
     await setCredential(key, value.trim());
     const actorEmail = req.user?.claims?.email || req.user?.email || null;
-    await logAdminAction(actorEmail, 'set_hubspot_credential', null, `key=${key}`);
+    const auditOk = await logAdminAction(actorEmail, 'set_hubspot_credential', null, `key=${key}`);
+    if (!auditOk) {
+      process.stderr.write(JSON.stringify({ level: 'warn', event: 'audit_log_failure', route: 'PATCH /api/admin/hubspot-credentials', actor: actorEmail, action: 'set_hubspot_credential', key }) + '\n');
+    }
     res.json({ ok: true, source: 'db', masked: maskCredential(value.trim()) });
   } catch (e) {
     console.error('[hubspot-creds] PATCH error:', e.message);
@@ -1134,7 +1137,10 @@ app.delete('/api/admin/hubspot-credentials/:key', isAuthenticated, requireAdmin,
   try {
     await clearCredential(name);
     const actorEmail = req.user?.claims?.email || req.user?.email || null;
-    await logAdminAction(actorEmail, 'clear_hubspot_credential', null, `key=${name}`);
+    const auditOk = await logAdminAction(actorEmail, 'clear_hubspot_credential', null, `key=${name}`);
+    if (!auditOk) {
+      process.stderr.write(JSON.stringify({ level: 'warn', event: 'audit_log_failure', route: 'DELETE /api/admin/hubspot-credentials/:key', actor: actorEmail, action: 'clear_hubspot_credential', key: name }) + '\n');
+    }
     const remaining = getCredential(name);
     res.json({ ok: true, source: 'env', set: !!remaining, masked: remaining ? maskCredential(remaining) : null });
   } catch (e) {
