@@ -9,7 +9,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import MapIcon from '@mui/icons-material/Map';
 import { useToast } from '../../contexts/ToastContext';
 import { GET, POST, PATCH, PUT, DELETE } from '../../utils/api';
-import type { WorkflowMapNodeData, WMWorkflowStage } from '../../components/WorkflowMapChart';
+import type { WorkflowMapNodeData, WMAllStage } from '../../components/WorkflowMapChart';
 import { WorkflowMapDetailPanel } from '../../components/WorkflowMapDetailPanel';
 
 const WorkflowMapChart = lazy(() =>
@@ -213,7 +213,7 @@ export function CardActionsPage() {
     try { return localStorage.getItem(MAP_COLLAPSED_KEY) === 'true'; } catch { return false; }
   });
   const [detailNode, setDetailNode] = useState<WorkflowMapNodeData | null>(null);
-  const [extraStages, setExtraStages] = useState<WMWorkflowStage[]>([]);
+  const [allStages, setAllStages] = useState<WMAllStage[]>([]);
 
   const toggleMap = useCallback(() => {
     setMapCollapsed(prev => {
@@ -277,20 +277,34 @@ export function CardActionsPage() {
       setHandlerTypeEdits(new Map());
       setReloadKey(k => k + 1);
 
-      // Derive read-only extra stages: all workflow.json stages except the
-      // three that already have card-action support.
-      const cardActionKeys = new Set(CARD_ACTION_STAGES.map(s => s.key));
+      // Build the unified ordered stage list from workflow.json key order.
+      //
+      // Ordering contract: Object.keys(wf.stages) reflects the insertion order
+      // in workflow.json, which is the canonical pipeline sequence. We map each
+      // key to a WMAllStage descriptor — card-action stages (sales / designvisit
+      // / survey) get kind:'card-action' so buildFlowGraph renders their full
+      // lead-status + handler tree; every other stage gets kind:'read-only' and
+      // shows its statuses from the JSON file as informational nodes.
+      // This means a future reorder of stages in workflow.json is automatically
+      // reflected in the Workflow Map without any code change.
+      const cardActionByKey = new Map(CARD_ACTION_STAGES.map(s => [s.key, s]));
       const wfStages = wf?.stages ?? {};
-      const extra: WMWorkflowStage[] = Object.entries(wfStages)
-        .filter(([key]) => !cardActionKeys.has(key))
-        .map(([key, val]) => ({
+      const unified: WMAllStage[] = Object.keys(wfStages).map(key => {
+        const ca = cardActionByKey.get(key);
+        if (ca) {
+          return { kind: 'card-action', key: ca.key, label: ca.label, lsStage: ca.lsStage };
+        }
+        const val = wfStages[key];
+        return {
+          kind: 'read-only',
           key,
           label: val.label || key,
           statuses: Array.isArray(val.statuses)
             ? val.statuses.map(s => ({ id: s.id, label: s.label, hint: s.hint }))
             : [],
-        }));
-      setExtraStages(extra);
+        };
+      });
+      setAllStages(unified);
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
@@ -624,7 +638,7 @@ export function CardActionsPage() {
                   substatuses={substatuses}
                   handlers={handlers}
                   onNodeClick={setDetailNode}
-                  extraStages={extraStages}
+                  allStages={allStages}
                 />
               </Suspense>
             )}

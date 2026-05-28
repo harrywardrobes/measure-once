@@ -86,6 +86,25 @@ export interface WMWorkflowStage {
   statuses: WMWorkflowStageStatus[];
 }
 
+/**
+ * Unified stage descriptor for the Workflow Map.
+ *
+ * Ordering contract: `buildFlowGraph` renders stages in the exact order of
+ * this array. Callers must derive the array from `Object.keys(workflow.json
+ * .stages)` so the chart always reflects the pipeline sequence declared in
+ * that file, regardless of future edits to key insertion order.
+ *
+ * - `kind: 'card-action'` — a stage backed by the card-actions system
+ *   (Sales / Design Visit / Survey). Its lead-statuses, sub-statuses, and
+ *   handler bindings are rendered from the DB.
+ * - `kind: 'read-only'` — a stage that exists only in workflow.json and has
+ *   no card-action support. Its statuses come from the JSON file and are
+ *   rendered as informational nodes without handler bindings.
+ */
+export type WMAllStage =
+  | { kind: 'card-action'; key: string; label: string; lsStage: string }
+  | { kind: 'read-only';   key: string; label: string; statuses: WMWorkflowStageStatus[] };
+
 export type WorkflowMapNodeKind = 'stage' | 'status' | 'substatus';
 
 export interface WorkflowMapNodeData extends Record<string, unknown> {
@@ -187,12 +206,20 @@ function handlersForSlot(
   }));
 }
 
+/**
+ * Build the ReactFlow node + edge graph from a unified, ordered stage list.
+ *
+ * Ordering contract: stages are rendered in the exact order they appear in
+ * `allStages`. Callers must derive this array from `Object.keys(workflow.json
+ * .stages)` so the chart always mirrors the pipeline sequence declared in that
+ * file — a future reorder of keys there will automatically reorder the map.
+ */
 export function buildFlowGraph(
   labels: WMCALabel[],
   statuses: WMLeadStatus[],
   substatuses: WMSubstatus[],
   handlers: WMHandler[],
-  extraStages?: WMWorkflowStage[],
+  allStages: WMAllStage[],
 ): { nodes: Node<WorkflowMapNodeData>[]; edges: Edge[] } {
   const nodes: Node<WorkflowMapNodeData>[] = [];
   const edges: Edge[] = [];
@@ -204,184 +231,176 @@ export function buildFlowGraph(
     (subsByLs[k] = subsByLs[k] || []).push(s);
   }
 
-  const stageLabels: Record<string, string> = Object.fromEntries(
-    CARD_ACTION_STAGES.map(s => [s.key, s.label]),
-  );
+  // Lookup map: lsStage value → stage key (for card-action stages)
+  const stageForLs: Record<string, string> = {};
+  for (const st of allStages) {
+    if (st.kind === 'card-action') stageForLs[st.lsStage] = st.key;
+  }
 
   let currentY = 0;
 
-  // ── Card-action stages (Sales, Design Visit, Survey) ─────────────────────
+  for (const stage of allStages) {
+    const stageNodeId = `stage-${stage.key}`;
+    const sc = STAGE_COLORS[stage.key] || { bg: '#94a3b8', light: '#f1f5f9', text: '#475569' };
 
-  for (const cs of CARD_ACTION_STAGES) {
-    const stageStatuses = statuses.filter(s => {
-      const sk = STAGE_FOR_LS[s.stage || ''];
-      return sk === cs.key && !s.is_null_row;
-    }).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-    const stageNodeId = `stage-${cs.key}`;
-
-    // Stage node — spans full width
-    nodes.push({
-      id: stageNodeId,
-      type: 'stage-node',
-      position: { x: 0, y: currentY },
-      data: {
-        kind: 'stage',
-        label: cs.label,
-        key: cs.key,
-        stageKey: cs.key,
-        stageLabel: cs.label,
-        boundHandlers: [],
-      },
-      draggable: false,
-      selectable: true,
-      style: { width: CHART_TOTAL_W },
-    });
-
-    currentY += STAGE_H + 10;
-
-    for (const s of stageStatuses) {
-      const lsKey = String(s.key || '');
-      const statusNodeId = `status-${cs.key}-${lsKey}`;
-      const subs = (subsByLs[lsKey.toUpperCase()] || [])
-        .slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-      // Collect ALL handlers bound to this status slot
-      const statusHandlers = handlersForSlot(handlers, cs.key, lsKey.toLowerCase());
+    if (stage.kind === 'card-action') {
+      // ── Card-action stage (Sales / Design Visit / Survey) ────────────────
+      const stageStatuses = statuses.filter(s => {
+        const sk = stageForLs[s.stage || ''];
+        return sk === stage.key && !s.is_null_row;
+      }).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
       nodes.push({
-        id: statusNodeId,
-        type: 'status-node',
+        id: stageNodeId,
+        type: 'stage-node',
         position: { x: 0, y: currentY },
         data: {
-          kind: 'status',
-          label: s.label,
-          key: lsKey,
-          stageKey: cs.key,
-          stageLabel: stageLabels[cs.key] || cs.label,
-          statusKey: lsKey.toLowerCase(),
-          boundHandlers: statusHandlers,
+          kind: 'stage',
+          label: stage.label,
+          key: stage.key,
+          stageKey: stage.key,
+          stageLabel: stage.label,
+          boundHandlers: [],
         },
         draggable: false,
         selectable: true,
-        style: { width: STATUS_W },
+        style: { width: CHART_TOTAL_W },
       });
 
-      edges.push({
-        id: `edge-stage-${stageNodeId}-${statusNodeId}`,
-        source: stageNodeId,
-        target: statusNodeId,
-        type: 'smoothstep',
-        animated: false,
-        style: { stroke: STAGE_COLORS[cs.key]?.bg || '#94a3b8', strokeWidth: 1.5 },
-      });
+      currentY += STAGE_H + 10;
 
-      let subY = currentY;
+      for (const s of stageStatuses) {
+        const lsKey = String(s.key || '');
+        const statusNodeId = `status-${stage.key}-${lsKey}`;
+        const subs = (subsByLs[lsKey.toUpperCase()] || [])
+          .slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
-      for (const sub of subs) {
-        const subNodeId = `sub-${sub.id}`;
-
-        // Collect ALL handlers bound to this substatus slot
-        const subHandlers = handlersForSlot(handlers, cs.key, lsKey.toLowerCase(), sub.id);
+        const statusHandlers = handlersForSlot(handlers, stage.key, lsKey.toLowerCase());
 
         nodes.push({
-          id: subNodeId,
-          type: 'substatus-node',
-          position: { x: STATUS_W + H_GAP, y: subY },
+          id: statusNodeId,
+          type: 'status-node',
+          position: { x: 0, y: currentY },
           data: {
-            kind: 'substatus',
-            label: sub.label,
-            key: sub.substatus_key,
-            stageKey: cs.key,
-            stageLabel: stageLabels[cs.key] || cs.label,
+            kind: 'status',
+            label: s.label,
+            key: lsKey,
+            stageKey: stage.key,
+            stageLabel: stage.label,
             statusKey: lsKey.toLowerCase(),
-            substatusId: sub.id,
-            actionLabel: sub.action_label,
-            boundHandlers: subHandlers,
+            boundHandlers: statusHandlers,
           },
           draggable: false,
           selectable: true,
-          style: { width: SUB_W },
+          style: { width: STATUS_W },
         });
 
         edges.push({
-          id: `edge-sub-${statusNodeId}-${subNodeId}`,
-          source: statusNodeId,
-          target: subNodeId,
+          id: `edge-stage-${stageNodeId}-${statusNodeId}`,
+          source: stageNodeId,
+          target: statusNodeId,
           type: 'smoothstep',
           animated: false,
-          style: { stroke: STAGE_COLORS[cs.key]?.light || '#e2e8f0', strokeWidth: 1.5, strokeDasharray: '4 3' },
+          style: { stroke: sc.bg || '#94a3b8', strokeWidth: 1.5 },
         });
 
-        subY += SUB_H + V_GAP;
+        let subY = currentY;
+
+        for (const sub of subs) {
+          const subNodeId = `sub-${sub.id}`;
+          const subHandlers = handlersForSlot(handlers, stage.key, lsKey.toLowerCase(), sub.id);
+
+          nodes.push({
+            id: subNodeId,
+            type: 'substatus-node',
+            position: { x: STATUS_W + H_GAP, y: subY },
+            data: {
+              kind: 'substatus',
+              label: sub.label,
+              key: sub.substatus_key,
+              stageKey: stage.key,
+              stageLabel: stage.label,
+              statusKey: lsKey.toLowerCase(),
+              substatusId: sub.id,
+              actionLabel: sub.action_label,
+              boundHandlers: subHandlers,
+            },
+            draggable: false,
+            selectable: true,
+            style: { width: SUB_W },
+          });
+
+          edges.push({
+            id: `edge-sub-${statusNodeId}-${subNodeId}`,
+            source: statusNodeId,
+            target: subNodeId,
+            type: 'smoothstep',
+            animated: false,
+            style: { stroke: sc.light || '#e2e8f0', strokeWidth: 1.5, strokeDasharray: '4 3' },
+          });
+
+          subY += SUB_H + V_GAP;
+        }
+
+        const rowHeight = Math.max(STATUS_H, subs.length > 0 ? subs.length * (SUB_H + V_GAP) - V_GAP : 0);
+        currentY += rowHeight + V_GAP;
       }
-
-      const rowHeight = Math.max(STATUS_H, subs.length > 0 ? subs.length * (SUB_H + V_GAP) - V_GAP : 0);
-      currentY += rowHeight + V_GAP;
-    }
-
-    currentY += STAGE_GAP;
-  }
-
-  // ── Read-only pipeline stages (from workflow.json, no card-action support) ─
-
-  for (const ws of (extraStages || [])) {
-    const sc = STAGE_COLORS[ws.key] || { bg: '#94a3b8', light: '#f1f5f9', text: '#475569' };
-    const stageNodeId = `stage-${ws.key}`;
-
-    nodes.push({
-      id: stageNodeId,
-      type: 'stage-node',
-      position: { x: 0, y: currentY },
-      data: {
-        kind: 'stage',
-        label: ws.label,
-        key: ws.key,
-        stageKey: ws.key,
-        stageLabel: ws.label,
-        boundHandlers: [],
-        isReadOnly: true,
-      },
-      draggable: false,
-      selectable: true,
-      style: { width: CHART_TOTAL_W },
-    });
-
-    currentY += STAGE_H + 10;
-
-    for (const status of ws.statuses) {
-      const statusNodeId = `status-${ws.key}-${status.id}`;
-
+    } else {
+      // ── Read-only pipeline stage (workflow.json only, no card-action support)
       nodes.push({
-        id: statusNodeId,
-        type: 'status-node',
+        id: stageNodeId,
+        type: 'stage-node',
         position: { x: 0, y: currentY },
         data: {
-          kind: 'status',
-          label: status.label,
-          key: status.id,
-          stageKey: ws.key,
-          stageLabel: ws.label,
-          statusKey: status.id,
+          kind: 'stage',
+          label: stage.label,
+          key: stage.key,
+          stageKey: stage.key,
+          stageLabel: stage.label,
           boundHandlers: [],
           isReadOnly: true,
           ...(status.hint ? { hint: status.hint } : {}),
         },
         draggable: false,
         selectable: true,
-        style: { width: STATUS_W },
+        style: { width: CHART_TOTAL_W },
       });
 
-      edges.push({
-        id: `edge-stage-${stageNodeId}-${statusNodeId}`,
-        source: stageNodeId,
-        target: statusNodeId,
-        type: 'smoothstep',
-        animated: false,
-        style: { stroke: sc.bg, strokeWidth: 1.5, opacity: 0.5 },
-      });
+      currentY += STAGE_H + 10;
 
-      currentY += STATUS_H + V_GAP;
+      for (const status of stage.statuses) {
+        const statusNodeId = `status-${stage.key}-${status.id}`;
+
+        nodes.push({
+          id: statusNodeId,
+          type: 'status-node',
+          position: { x: 0, y: currentY },
+          data: {
+            kind: 'status',
+            label: status.label,
+            key: status.id,
+            stageKey: stage.key,
+            stageLabel: stage.label,
+            statusKey: status.id,
+            boundHandlers: [],
+            isReadOnly: true,
+          },
+          draggable: false,
+          selectable: true,
+          style: { width: STATUS_W },
+        });
+
+        edges.push({
+          id: `edge-stage-${stageNodeId}-${statusNodeId}`,
+          source: stageNodeId,
+          target: statusNodeId,
+          type: 'smoothstep',
+          animated: false,
+          style: { stroke: sc.bg, strokeWidth: 1.5, opacity: 0.5 },
+        });
+
+        currentY += STATUS_H + V_GAP;
+      }
     }
 
     currentY += STAGE_GAP;
@@ -610,8 +629,12 @@ export interface WorkflowMapChartProps {
   substatuses: WMSubstatus[];
   handlers: WMHandler[];
   onNodeClick: (data: WorkflowMapNodeData) => void;
-  /** Pipeline stages from workflow.json that have no card-action support. Rendered as read-only. */
-  extraStages?: WMWorkflowStage[];
+  /**
+   * Complete ordered stage list derived from `Object.keys(workflow.json.stages)`.
+   * Stages are rendered in the exact order they appear here, which must match
+   * the pipeline sequence in workflow.json. See `WMAllStage` for the shape.
+   */
+  allStages: WMAllStage[];
 }
 
 export function WorkflowMapChart({
@@ -620,11 +643,11 @@ export function WorkflowMapChart({
   substatuses,
   handlers,
   onNodeClick,
-  extraStages,
+  allStages,
 }: WorkflowMapChartProps) {
   const { nodes, edges } = useMemo(
-    () => buildFlowGraph(labels, statuses, substatuses, handlers, extraStages),
-    [labels, statuses, substatuses, handlers, extraStages],
+    () => buildFlowGraph(labels, statuses, substatuses, handlers, allStages),
+    [labels, statuses, substatuses, handlers, allStages],
   );
 
   const handleNodeClick = useCallback(
