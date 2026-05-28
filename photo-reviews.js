@@ -89,6 +89,75 @@ async function ensurePhotoReviewOutcomesTable() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS pro_contact_id_idx ON photo_review_outcomes (contact_id)
   `);
+
+  // One-time migration: rename the misspelled substatus_key 'AWPH_RECIEVED' to the
+  // canonical 'AWPH_RECEIVED'.  The row was originally seeded with the typo by an
+  // earlier version of customer-info.js.  customer-info.js already writes the
+  // correct spelling to HubSpot (AWAITING_PHOTOS__AWPH_RECEIVED), so only the
+  // local DB row needs updating.
+  //
+  // Conflict-safe: if BOTH rows exist (misspelled legacy + canonical inserted
+  // by a later customer-info.js boot), re-point any card_action_handler_binding
+  // from the typo row to the canonical row, then delete the typo row.
+  // The FK has ON DELETE CASCADE, so the typo binding is removed automatically
+  // after the re-point.  Idempotent — no-ops once the typo row is gone.
+  {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const typoR = await client.query(
+        `SELECT id FROM lead_substatuses
+         WHERE status_key = 'AWAITING_PHOTOS' AND substatus_key = 'AWPH_RECIEVED'
+         FOR UPDATE`
+      );
+
+      if (typoR.rows.length) {
+        const typoId = typoR.rows[0].id;
+
+        const canonR = await client.query(
+          `SELECT id FROM lead_substatuses
+           WHERE status_key = 'AWAITING_PHOTOS' AND substatus_key = 'AWPH_RECEIVED'
+           FOR UPDATE`
+        );
+
+        if (canonR.rows.length) {
+          // Both rows exist — migrate binding then delete typo row.
+          const canonId = canonR.rows[0].id;
+
+          // Move the binding only if the canonical slot is not already bound
+          // (cahb_substatus_uniq prevents two bindings on the same substatus).
+          const canonBound = await client.query(
+            `SELECT id FROM card_action_handler_bindings WHERE substatus_id = $1 LIMIT 1`,
+            [canonId]
+          );
+          if (!canonBound.rows.length) {
+            await client.query(
+              `UPDATE card_action_handler_bindings SET substatus_id = $1 WHERE substatus_id = $2`,
+              [canonId, typoId]
+            );
+          }
+          // Delete typo row (ON DELETE CASCADE removes any remaining binding).
+          await client.query(`DELETE FROM lead_substatuses WHERE id = $1`, [typoId]);
+          console.log('[photo-reviews] Migration: removed duplicate AWPH_RECIEVED row; canonical AWPH_RECEIVED retained.');
+        } else {
+          // Only typo row exists — rename in place (no conflict possible).
+          await client.query(
+            `UPDATE lead_substatuses SET substatus_key = 'AWPH_RECEIVED' WHERE id = $1`,
+            [typoId]
+          );
+          console.log('[photo-reviews] Migration: renamed AWPH_RECIEVED → AWPH_RECEIVED.');
+        }
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 // ── Email templates ───────────────────────────────────────────────────────────
@@ -358,12 +427,13 @@ router.post('/api/card-actions/review-customer-photos',
 // have both completed (they create the tables this function references).
 async function ensureDefaultReviewHandlerBinding() {
   // Step 1: resolve the AWPH_RECEIVED substatus.
-  // The DB row was originally seeded with the misspelled key 'AWPH_RECIEVED';
-  // match both spellings so this function is not a silent no-op on real databases.
+  // The misspelled 'AWPH_RECIEVED' row is renamed to 'AWPH_RECEIVED' by the
+  // one-time migration in ensurePhotoReviewOutcomesTable(), so only the
+  // canonical spelling is needed here.
   const sub = await pool.query(
     `SELECT id FROM lead_substatuses
-     WHERE status_key = 'AWAITING_PHOTOS'
-       AND substatus_key IN ('AWPH_RECEIVED', 'AWPH_RECIEVED')
+     WHERE status_key   = 'AWAITING_PHOTOS'
+       AND substatus_key = 'AWPH_RECEIVED'
      LIMIT 1`
   );
   if (!sub.rows.length) {
@@ -412,15 +482,11 @@ async function ensureDefaultReviewHandlerBinding() {
 //
 // This map has been intentionally reduced to the one hardcoded override that
 // cannot be expressed cleanly via the default_handler_type column — the
-// AWPH_RECEIVED/AWPH_RECIEVED spelling variants that both map to the same
-// review_customer_photos handler. All other substatus → handler mappings
-// should now be configured via the "Default handler type" selector on the
-// Card Actions admin panel.
+// AWPH_RECEIVED substatus that maps to the review_customer_photos handler.
+// All other substatus → handler mappings should be configured via the
+// "Default handler type" selector on the Card Actions admin panel.
 //
-// NOTE: The database row uses 'AWPH_RECIEVED' (misspelled). Both spellings
-// are listed so the binding is created whichever variant is present.
 const SUBSTATUS_HANDLER_MAP = {
-  AWPH_RECIEVED: { type: 'review_customer_photos', name: 'Review customer photos', config: {} },
   AWPH_RECEIVED: { type: 'review_customer_photos', name: 'Review customer photos', config: {} },
 };
 
