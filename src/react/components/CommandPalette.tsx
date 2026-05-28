@@ -385,6 +385,15 @@ export function CommandPalette() {
           </>
         )}
 
+        {q && !contactsLoading && matchedContacts.length === 0 && isAdmin && devMode && (
+          <>
+            <Typography sx={SECTION_LABEL_SX}>Customers</Typography>
+            <Alert severity="warning" icon={false} sx={{ mx: 2, mb: 0.5, py: 0.25, fontSize: '0.75rem' }}>
+              Dev mode ON — no test contacts matched
+            </Alert>
+          </>
+        )}
+
         {!contactsLoading && matchedContacts.length > 0 && (
           <>
             <Typography sx={SECTION_LABEL_SX}>Customers</Typography>
