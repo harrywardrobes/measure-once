@@ -1244,9 +1244,11 @@ export function ProjectsPage() {
       {/* Stage filter tabs */}
       <PageFilterBar
         sx={{
-          p: '12px 16px',
-          borderBottom: `1px solid ${BRAND_COLORS.stone}`,
-          background: BRAND_COLORS.paper,
+          px: 2,
+          py: 1,
+          bgcolor: 'background.default',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
           flexShrink: 0,
         }}
       >
@@ -1261,9 +1263,11 @@ export function ProjectsPage() {
       {/* Sort / group / extra-filters bar */}
       <PageFilterBar
         sx={{
-          p: '8px 16px',
-          background: BRAND_COLORS.paper,
-          borderBottom: `1px solid ${BRAND_COLORS.stone}`,
+          px: 2,
+          py: 1,
+          bgcolor: 'background.default',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
           flexShrink: 0,
         }}
       >

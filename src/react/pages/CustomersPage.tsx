@@ -1105,7 +1105,7 @@ export function CustomersPage(): React.ReactElement {
           </Alert>
         )}
 
-        <PageFilterBar sx={{ px: 2, py: 1, bgcolor: 'background.default', borderBottom: '1px solid', borderColor: '#D9D2C2' }}>
+        <PageFilterBar sx={{ px: 2, py: 1, bgcolor: 'background.default', borderBottom: '1px solid', borderColor: 'divider' }}>
           <StageTabGroup
             value={currentTab}
             onChange={onTabChange}
