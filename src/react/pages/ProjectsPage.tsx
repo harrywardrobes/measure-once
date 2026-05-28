@@ -1246,6 +1246,8 @@ export function ProjectsPage() {
       {/* Page heading — replaces the normal-flow PageHeadingPanel which is
           suppressed on /projects because the fixed overlay covers it */}
       <Box
+        role="region"
+        aria-label="Projects"
         sx={{
           maxWidth: 640,
           width: '100%',
