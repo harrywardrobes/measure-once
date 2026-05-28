@@ -135,7 +135,7 @@ export const NoEmail: Story = {
 export const AllStates: Story = {
   name: 'All states side by side',
   render: () => (
-    <Stack direction="row" spacing={4} flexWrap="wrap" useFlexGap>
+    <Stack direction="row" spacing={4} useFlexGap sx={{ flexWrap: 'wrap' }}>
       <Box>
         <Typography variant="subtitle2" gutterBottom>Normal (link loads then send)</Typography>
         <Demo ctx={mockCtx} generateDelay={800} />
