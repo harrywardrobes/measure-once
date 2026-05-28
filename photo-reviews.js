@@ -357,10 +357,13 @@ router.post('/api/card-actions/review-customer-photos',
 // Run after ensureCardActionHandlersTables() and ensureCustomerInfoSubmissionsTable()
 // have both completed (they create the tables this function references).
 async function ensureDefaultReviewHandlerBinding() {
-  // Step 1: resolve the AWPH_RECEIVED substatus
+  // Step 1: resolve the AWPH_RECEIVED substatus.
+  // The DB row was originally seeded with the misspelled key 'AWPH_RECIEVED';
+  // match both spellings so this function is not a silent no-op on real databases.
   const sub = await pool.query(
     `SELECT id FROM lead_substatuses
-     WHERE status_key = 'AWAITING_PHOTOS' AND substatus_key = 'AWPH_RECEIVED'
+     WHERE status_key = 'AWAITING_PHOTOS'
+       AND substatus_key IN ('AWPH_RECEIVED', 'AWPH_RECIEVED')
      LIMIT 1`
   );
   if (!sub.rows.length) {
@@ -403,8 +406,168 @@ async function ensureDefaultReviewHandlerBinding() {
   console.log('[photo-reviews] Default review_customer_photos handler bound to AWPH_RECEIVED substatus.');
 }
 
+// ── Substatus → handler-type mapping ─────────────────────────────────────────
+// Maps known substatus_key values to the handler type (and optional config)
+// that should be auto-bound on startup. Any substatus_key not listed here
+// falls back to 'show_message' so the action bar still renders.
+//
+// NOTE: The database row uses 'AWPH_RECIEVED' (misspelled). Both spellings
+// are listed so the binding is created whichever variant is present.
+const SUBSTATUS_HANDLER_MAP = {
+  // Awaiting-photos substatus (both spellings — DB uses the misspelled one)
+  AWPH_RECIEVED:               { type: 'review_customer_photos',      name: 'Review customer photos', config: {} },
+  AWPH_RECEIVED:               { type: 'review_customer_photos',      name: 'Review customer photos', config: {} },
+
+  // Upload customer photos & info
+  UPLD_PHOTOS:                 { type: 'upload_photos_and_info',      name: 'Upload photos and info', config: {} },
+  UPLOAD_PHOTOS:               { type: 'upload_photos_and_info',      name: 'Upload photos and info', config: {} },
+  UPLOAD_PHOTOS_AND_INFO:      { type: 'upload_photos_and_info',      name: 'Upload photos and info', config: {} },
+
+  // Phone-call summary
+  PHCL_DONE:                   { type: 'summarise_phone_call',        name: 'Summarise phone call',   config: {} },
+  PHONE_CALL_DONE:             { type: 'summarise_phone_call',        name: 'Summarise phone call',   config: {} },
+  SUMMARISE_PHONE_CALL:        { type: 'summarise_phone_call',        name: 'Summarise phone call',   config: {} },
+
+  // Design-visit wizard
+  START_DESIGN_VISIT:          { type: 'start_design_visit',          name: 'Start design visit',     config: {} },
+  DSGV_SCHEDULED:              { type: 'start_design_visit',          name: 'Start design visit',     config: {} },
+  DESIGN_MEETING_SCHEDULED:    { type: 'start_design_visit',          name: 'Start design visit',     config: {} },
+
+  // Add design visit to Google Calendar
+  ADD_DSGV_TO_CALENDAR:        { type: 'add_design_visit_to_calendar', name: 'Add design visit to calendar', config: {} },
+  ADD_DESIGN_VISIT_TO_CALENDAR:{ type: 'add_design_visit_to_calendar', name: 'Add design visit to calendar', config: {} },
+
+  // Survey scheduling
+  SCHD_SURVEY:                 { type: 'schedule_visit', name: 'Schedule survey',   config: { visitType: 'survey' } },
+  SCHEDULE_SURVEY:             { type: 'schedule_visit', name: 'Schedule survey',   config: { visitType: 'survey' } },
+  SUGGEST_SURVEY_DATES:        { type: 'schedule_visit', name: 'Schedule survey',   config: { visitType: 'survey' } },
+  SURVEY_DATES_SUGGESTED:      { type: 'schedule_visit', name: 'Schedule survey',   config: { visitType: 'survey' } },
+};
+
+// Fallback used for any substatus_key not present in SUBSTATUS_HANDLER_MAP.
+const FALLBACK_HANDLER = { type: 'show_message', name: 'Show message', config: {} };
+
+// ── Auto-bind handlers for all labelled substatuses ───────────────────────────
+// Queries every lead_substatuses row that has a non-empty action_label and
+// ensures a card_action_handler_bindings row exists for it. Existing bindings
+// are never overwritten (admin overrides are always respected). Idempotent.
+//
+// Run after ensureCardActionHandlersTables() and seed data are in place.
+
+// Produce a stable cache key that incorporates both the handler type and its
+// config so that two mappings with the same type but different configs (e.g.
+// schedule_visit with visitType:'survey' vs visitType:'remedial') are kept
+// separate and never share a handler.
+function _handlerCacheKey(type, config) {
+  const sorted = Object.keys(config).sort().reduce((acc, k) => { acc[k] = config[k]; return acc; }, {});
+  return `${type}|${JSON.stringify(sorted)}`;
+}
+
+// Find an existing card_action_handlers row that matches both the type and the
+// required config properties, or create a new one if none exists.
+//
+// For config-sensitive types:
+//   • schedule_visit — must match config.visitType exactly
+//   • show_message   — must have no non-empty message or title (so it behaves
+//                      as an inert placeholder until an admin configures it)
+// For all other types, any existing handler of that type is reused.
+async function _findOrCreateHandler(type, name, config) {
+  let existing;
+
+  if (type === 'schedule_visit' && config.visitType) {
+    existing = await pool.query(
+      `SELECT id FROM card_action_handlers
+       WHERE type = 'schedule_visit' AND config->>'visitType' = $1
+       ORDER BY id LIMIT 1`,
+      [String(config.visitType)]
+    );
+  } else if (type === 'show_message') {
+    // For the fallback show_message placeholder, only reuse handlers that have
+    // not been configured with a message or title yet — so that clicking the
+    // button does nothing until an admin explicitly sets content.
+    existing = await pool.query(
+      `SELECT id FROM card_action_handlers
+       WHERE type = 'show_message'
+         AND (config->>'message' IS NULL OR config->>'message' = '')
+         AND (config->>'title'   IS NULL OR config->>'title'   = '')
+       ORDER BY id LIMIT 1`
+    );
+  } else {
+    // Config-agnostic types — any existing handler of this type is fine.
+    existing = await pool.query(
+      `SELECT id FROM card_action_handlers WHERE type = $1 ORDER BY id LIMIT 1`,
+      [type]
+    );
+  }
+
+  if (existing.rows.length) {
+    return existing.rows[0].id;
+  }
+
+  const ins = await pool.query(
+    `INSERT INTO card_action_handlers (name, type, config)
+     VALUES ($1, $2, $3)
+     RETURNING id`,
+    [name, type, JSON.stringify(config)]
+  );
+  return ins.rows[0].id;
+}
+
+async function ensureSubstatusHandlerBindings() {
+  // Fetch every substatus that has an action label defined.
+  const substatuses = await pool.query(
+    `SELECT id, status_key, substatus_key, action_label
+     FROM lead_substatuses
+     WHERE action_label IS NOT NULL AND action_label != ''
+     ORDER BY id`
+  );
+  if (!substatuses.rows.length) return;
+
+  // Pre-fetch all existing bindings in one query to avoid N+1 lookups.
+  const bound = await pool.query(
+    `SELECT substatus_id FROM card_action_handler_bindings WHERE substatus_id IS NOT NULL`
+  );
+  const boundIds = new Set(bound.rows.map(r => r.substatus_id));
+
+  // Cache by (type + config fingerprint) so config-sensitive mappings each get
+  // their own handler id without redundant DB round-trips.
+  const handlerIdCache = {};
+
+  let seeded = 0;
+  for (const row of substatuses.rows) {
+    // Skip if a binding already exists for this substatus — respect admin choices.
+    if (boundIds.has(row.id)) continue;
+
+    const mapKey = String(row.substatus_key).toUpperCase();
+    const mapping = SUBSTATUS_HANDLER_MAP[mapKey] || FALLBACK_HANDLER;
+    const { type, name, config } = mapping;
+
+    const cacheKey = _handlerCacheKey(type, config);
+    if (!handlerIdCache[cacheKey]) {
+      handlerIdCache[cacheKey] = await _findOrCreateHandler(type, name, config);
+    }
+    const handlerId = handlerIdCache[cacheKey];
+
+    await pool.query(
+      `INSERT INTO card_action_handler_bindings (handler_id, substatus_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [handlerId, row.id]
+    );
+    seeded++;
+    console.log(
+      `[card-action-seeds] Bound ${type} handler to substatus ${row.status_key}/${row.substatus_key} ("${row.action_label}")`
+    );
+  }
+
+  if (seeded > 0) {
+    console.log(`[card-action-seeds] Auto-bound ${seeded} substatus handler(s).`);
+  }
+}
+
 module.exports = {
   router,
   ensurePhotoReviewOutcomesTable,
   ensureDefaultReviewHandlerBinding,
+  ensureSubstatusHandlerBindings,
 };

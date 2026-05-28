@@ -20,7 +20,7 @@ const { refreshCredentialCache, getCredential, getCredentialSource, maskCredenti
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
 const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
-const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding } = require('./photo-reviews');
+const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings } = require('./photo-reviews');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
@@ -6558,6 +6558,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Photo review outcomes table setup failed:', e.message); }
     try { await ensureDefaultReviewHandlerBinding(); }
     catch (e) { console.error('  Default review handler binding setup failed:', e.message); }
+    try { await ensureSubstatusHandlerBindings(); }
+    catch (e) { console.error('  Substatus handler auto-binding failed:', e.message); }
     try { await ensurePageFilterConfigTable(); console.log('  Page filter config table ready'); }
     catch (e) { console.error('  Page filter config table setup failed:', e.message); }
     scheduleConflictDigest();
