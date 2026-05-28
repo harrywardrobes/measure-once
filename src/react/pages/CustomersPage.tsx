@@ -654,6 +654,7 @@ export function CustomersPage(): React.ReactElement {
     setInvDrawerOpen(true);
   }, []);
 
+  const [countsLoading, setCountsLoading] = React.useState<boolean>(false);
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
   const [customersPageSize, setCustomersPageSize] = React.useState<number | undefined>(undefined);
@@ -860,18 +861,39 @@ export function CustomersPage(): React.ReactElement {
   // When the stage tab changes, re-fetch lead-status counts scoped to that
   // stage so the pills reflect what's actually in that stage.
   const prevStageRef = React.useRef<string>(initial.stage);
+  // Tracks which stage-count request is "current". Each fetch captures its
+  // own generation at launch; only the latest generation may clear the
+  // loading indicator, so rapid tab-switching never prematurely hides the
+  // skeleton when an older request resolves after a newer one.
+  const countsGenRef = React.useRef<number>(0);
   React.useEffect(() => {
     if (prevStageRef.current === stageFilter) return;
     prevStageRef.current = stageFilter;
     // Reset substatus counts immediately so stale chips don't flash.
     store.substatusCounts = {};
     notify();
-    loadLeadStatusCounts(stageFilter || undefined)
-      .then(() => {
-        populateLeadStatusFilter();
-        notify();
-      })
-      .catch(() => {});
+    // Show skeleton while stage-scoped counts are loading. "All stages" always
+    // uses cached global counts so it never needs a loading indicator.
+    if (stageFilter) {
+      const gen = ++countsGenRef.current;
+      setCountsLoading(true);
+      loadLeadStatusCounts(stageFilter)
+        .then(() => {
+          populateLeadStatusFilter();
+          notify();
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (gen === countsGenRef.current) setCountsLoading(false);
+        });
+    } else {
+      loadLeadStatusCounts(undefined)
+        .then(() => {
+          populateLeadStatusFilter();
+          notify();
+        })
+        .catch(() => {});
+    }
   }, [stageFilter]);
 
   // When stage+leadStatus are both active, fetch substatus counts scoped to
@@ -1155,7 +1177,7 @@ export function CustomersPage(): React.ReactElement {
         </Box>
 
         {/* Chip row */}
-        {!store.loaded ? (
+        {!store.loaded || countsLoading ? (
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'nowrap', overflowX: 'auto' }}>
             {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} variant="rounded" width={90} height={28} sx={{ flexShrink: 0 }} />
