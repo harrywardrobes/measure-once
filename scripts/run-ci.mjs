@@ -41,6 +41,7 @@ const STEPS = [
   'test:mount-ids',
   'test:public-island-bootstrap',
   'test:inline-styles',
+  'test:story-hex-colors',
   'test:no-config-handler-types',
   'test:status-key-fields',
   'test:workflow-map-ordering',

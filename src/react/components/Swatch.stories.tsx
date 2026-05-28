@@ -11,7 +11,7 @@ export default meta;
 type Story = StoryObj<typeof Swatch>;
 
 export const Default: Story = {
-  args: { name: '--paper', value: '#F6F1E7' },
+  args: { name: '--paper', value: '#F6F1E7' }, // story-hex-ok: Swatch displays a colour value as content, not as a style property
 };
 
 export const Loading: Story = {
