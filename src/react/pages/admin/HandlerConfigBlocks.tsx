@@ -22,6 +22,59 @@ export interface SubstatusOption {
   statusKey: string;
 }
 
+// ── Shared utilities ────────────────────────────────────────────────────────────
+
+/**
+ * Returns true if `key` is a non-empty string that matches a lead-status key
+ * in `statuses`.  An empty / absent key is considered valid (not stale).
+ */
+export function isLeadStatusKeyValid(
+  key: string | undefined | null,
+  statuses: LeadStatusOption[],
+): boolean {
+  if (!key) return true;
+  return statuses.some(s => s.key === key);
+}
+
+/**
+ * Returns true if `key` is a non-empty string that matches either a lead-status
+ * key in `statuses` OR a sub-status key in `substatuses`.
+ * An empty / absent key is considered valid (not stale).
+ */
+export function isStatusKeyValid(
+  key: string | undefined | null,
+  statuses: LeadStatusOption[],
+  substatuses: SubstatusOption[],
+): boolean {
+  if (!key) return true;
+  return statuses.some(s => s.key === key) || substatuses.some(s => s.key === key);
+}
+
+/**
+ * Canonical list of config fields that store a lead-status or sub-status key.
+ * Used by both the dedicated config blocks and the JSON fallback editor to
+ * detect stale references uniformly.
+ *
+ * - `'lead_status'`              → key must exist in lead statuses only
+ * - `'lead_status_or_substatus'` → key must exist in either lead statuses or sub-statuses
+ */
+export const KNOWN_STATUS_KEY_FIELDS: ReadonlyArray<{
+  field: string;
+  label: string;
+  type: 'lead_status' | 'lead_status_or_substatus';
+}> = [
+  {
+    field: 'intermediateLeadStatus',
+    label: 'In-progress lead status',
+    type: 'lead_status',
+  },
+  {
+    field: 'submittedLeadStatus',
+    label: 'Submitted lead status',
+    type: 'lead_status_or_substatus',
+  },
+] as const;
+
 // ── Shared sub-components ──────────────────────────────────────────────────────
 
 function ConfigLabel({ children }: { children: React.ReactNode }) {

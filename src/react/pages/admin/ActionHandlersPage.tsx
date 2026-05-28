@@ -28,6 +28,9 @@ import {
   ScheduleVisitConfig,
   ShowMessageConfig,
   StartDesignVisitConfig,
+  isLeadStatusKeyValid,
+  isStatusKeyValid,
+  KNOWN_STATUS_KEY_FIELDS,
 } from './HandlerConfigBlocks';
 import type {
   DeliveryWindowConfigValue,
@@ -395,13 +398,32 @@ function HandlerEditorModal({
   const showJson = !(showSv || showMsg || showSdv || showDw || showIs || showNoConfig);
 
   const sdvInvalidIntermediate = showSdv
-    && !!sdvVal.intermediateLeadStatus
-    && !sdvLeadStatuses.some(ls => ls.key === sdvVal.intermediateLeadStatus);
+    && !isLeadStatusKeyValid(sdvVal.intermediateLeadStatus, sdvLeadStatuses);
   const sdvInvalidSubmitted = showSdv
-    && !!sdvVal.submittedLeadStatus
-    && !sdvLeadStatuses.some(ls => ls.key === sdvVal.submittedLeadStatus)
-    && !sdvSubstatuses.some(s => s.key === sdvVal.submittedLeadStatus);
-  const hasStaleLsRefs = sdvInvalidIntermediate || sdvInvalidSubmitted;
+    && !isStatusKeyValid(sdvVal.submittedLeadStatus, sdvLeadStatuses, sdvSubstatuses);
+
+  // Detect stale status-key references inside the JSON fallback editor.
+  // We parse the JSON on every render (cheap for small configs) and check every
+  // field listed in KNOWN_STATUS_KEY_FIELDS against the live status lists.
+  const jsonStaleLsRefs: Array<{ field: string; label: string; key: string }> = [];
+  if (showJson) {
+    try {
+      const parsed: Record<string, unknown> = JSON.parse(jsonCfg.trim() || '{}');
+      for (const knownField of KNOWN_STATUS_KEY_FIELDS) {
+        const val = parsed[knownField.field];
+        if (typeof val === 'string' && val !== '') {
+          const valid = knownField.type === 'lead_status'
+            ? isLeadStatusKeyValid(val, sdvLeadStatuses)
+            : isStatusKeyValid(val, sdvLeadStatuses, sdvSubstatuses);
+          if (!valid) {
+            jsonStaleLsRefs.push({ field: knownField.field, label: knownField.label, key: val });
+          }
+        }
+      }
+    } catch { /* invalid JSON — skip stale checks; buildPayload will report the parse error */ }
+  }
+
+  const hasStaleLsRefs = sdvInvalidIntermediate || sdvInvalidSubmitted || jsonStaleLsRefs.length > 0;
 
   const buildPayload = (): Record<string, unknown> | null => {
     setEditError('');
@@ -640,6 +662,12 @@ function HandlerEditorModal({
                   onChange={e => setJsonCfg(e.target.value)}
                   slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontSize: '0.75rem' } } }}
                 />
+                {jsonStaleLsRefs.map(ref => (
+                  <Alert key={ref.field} severity="warning" sx={{ mt: 0.75 }}>
+                    <strong>{ref.label}</strong> (<code>{ref.key}</code>) no longer exists.
+                    Update or remove this field before saving.
+                  </Alert>
+                ))}
               </Box>
             )}
 
