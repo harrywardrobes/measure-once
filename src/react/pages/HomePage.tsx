@@ -387,6 +387,8 @@ function InvoicesSection({
   invoices,
   todayMs,
   onRetry,
+  connected,
+  statusKnown,
 }: {
   loading: boolean;
   error: boolean;
@@ -394,6 +396,8 @@ function InvoicesSection({
   invoices: InvoiceSummary[];
   todayMs: number;
   onRetry: () => void;
+  connected: boolean;
+  statusKnown: boolean;
 }) {
   if (loading) {
     return (
@@ -401,6 +405,23 @@ function InvoicesSection({
         <SectionHeader title="Overdue Invoices" />
         <SkeletonCard titleW="52%" badgeW={56} />
         <SkeletonCard titleW="40%" badgeW={48} />
+      </Box>
+    );
+  }
+  if (statusKnown && !connected) {
+    return (
+      <Box sx={{ mb: 3 }}>
+        <SectionHeader title="Overdue Invoices" />
+        <Alert
+          severity="info"
+          action={
+            <Button size="small" color="inherit" href="/admin#tab-settings">
+              Connect
+            </Button>
+          }
+        >
+          Connect QuickBooks to see overdue invoices
+        </Alert>
       </Box>
     );
   }
@@ -466,11 +487,13 @@ function ProjectsSection({
   contacts,
   roomsByContact,
   workflow,
+  contactsError,
 }: {
   loading: boolean;
   contacts: Contact[];
   roomsByContact: Record<string, Room[]>;
   workflow: WorkflowDef | null;
+  contactsError: boolean;
 }) {
   if (loading) {
     return (
@@ -479,6 +502,14 @@ function ProjectsSection({
         <SkeletonCard titleW="44%" badgeW={52} />
         <SkeletonCard titleW="50%" badgeW={52} />
         <SkeletonCard titleW="38%" badgeW={52} />
+      </Box>
+    );
+  }
+  if (contactsError) {
+    return (
+      <Box sx={{ mb: 3 }}>
+        <SectionHeader title="Active Projects" />
+        <Alert severity="warning">Unable to retrieve customer info</Alert>
       </Box>
     );
   }
@@ -542,7 +573,7 @@ export function HomePage(): React.ReactElement {
   const [calConnected, setCalConnected] = React.useState(false);
   const [calEvents, setCalEvents] = React.useState<CalendarEvent[]>([]);
 
-  const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, company: qbCompany, refresh: loadInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
+  const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, company: qbCompany, connected: qbConnected, statusKnown: qbStatusKnown, refresh: loadInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
 
   const [qbConnectedToast, setQbConnectedToast] = React.useState(false);
@@ -575,6 +606,7 @@ export function HomePage(): React.ReactElement {
   }, []);
 
   const [projectsLoading, setProjectsLoading] = React.useState(true);
+  const [projectsError, setProjectsError] = React.useState(false);
   const [contacts, setContacts] = React.useState<Contact[]>([]);
   const [roomsByContact, setRoomsByContact] = React.useState<Record<string, Room[]>>({});
   const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
@@ -614,10 +646,15 @@ export function HomePage(): React.ReactElement {
 
   const loadProjects = React.useCallback(() => {
     setProjectsLoading(true);
+    setProjectsError(false);
+    let contactsFailed = false;
     Promise.all([
       jget<WorkflowDef>('/api/workflow').catch(() => ({} as WorkflowDef)),
       jget<{ results?: Contact[] }>('/api/contacts-all?page=1&limit=100').catch(
-        () => ({ results: [] } as { results?: Contact[] }),
+        () => {
+          contactsFailed = true;
+          return { results: [] } as { results?: Contact[] };
+        },
       ),
       jget<Record<string, Room[]>>('/api/localdata/all').catch(
         () => ({} as Record<string, Room[]>),
@@ -627,6 +664,7 @@ export function HomePage(): React.ReactElement {
         setWorkflow(wf || null);
         setContacts(contactsResp?.results || []);
         setRoomsByContact(localdata || {});
+        setProjectsError(contactsFailed);
       })
       .finally(() => setProjectsLoading(false));
   }, []);
@@ -665,12 +703,15 @@ export function HomePage(): React.ReactElement {
         invoices={qbInvoices}
         todayMs={todayMs}
         onRetry={loadInvoices}
+        connected={qbConnected}
+        statusKnown={qbStatusKnown}
       />
       <ProjectsSection
         loading={projectsLoading}
         contacts={contacts}
         roomsByContact={roomsByContact}
         workflow={workflow}
+        contactsError={projectsError}
       />
 
       {/* QuickBooks reconnect success toast */}
