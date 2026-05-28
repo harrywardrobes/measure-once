@@ -27,7 +27,8 @@ export const PUBLIC_ISLAND_IDS = new Set([
  * CONN_TOAST_EXCLUDED) and are checked by scripts/check-public-island-bootstrap.mjs.
  *
  * When adding a new error/restricted page:
- *  1. Add its id here.
+ *  1. Add its id here WITH a `// public/<file>.html — <description>` annotation
+ *     on the same line (required — omitting it is a CI failure in test:mount-ids).
  *  2. Ensure a matching MOUNTS entry exists in src/react/main.tsx.
  *
  * BOOTSTRAP_EXCLUDED in AppBootstrapContext.tsx is derived from

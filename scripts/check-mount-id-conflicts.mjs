@@ -28,18 +28,19 @@
  *   against the full set of HTML files, regardless of what other ids the page
  *   declares.
  *
- * Pass 4 — Error-page canonical-file check (per-file):
- *   Each BOOTSTRAP_ONLY_IDS entry in publicIslands.ts may carry an inline
+ * Pass 4 — Error-page canonical-file check (annotation required + per-file):
+ *   Every BOOTSTRAP_ONLY_IDS entry in publicIslands.ts MUST carry an inline
  *   comment declaring its canonical HTML file, e.g.:
  *     'not-found-root',  // public/404.html — 404 page, rendered after auth
- *   For every entry that declares a canonical file, Pass 4 verifies that the
- *   id is present in THAT SPECIFIC file — not just somewhere in public/.  This
- *   catches the case where a typo (e.g. "not-found-roots") is introduced in
- *   the correct file while the original id happens to survive in another HTML
- *   file, allowing Pass 3 to pass silently.
+ *   Pass 4 first fails for any entry that is missing this annotation, then
+ *   verifies that every annotated id is present in THAT SPECIFIC file — not
+ *   just somewhere in public/.  This catches the case where a typo (e.g.
+ *   "not-found-roots") is introduced in the correct file while the original id
+ *   happens to survive in another HTML file, allowing Pass 3 to pass silently.
  *
- *   To declare a canonical file, add `// public/<filename>.html` as the first
- *   token after the `//` on the same line as the id string in BOOTSTRAP_ONLY_IDS.
+ *   Convention: when adding a new error/restricted page to BOOTSTRAP_ONLY_IDS,
+ *   you MUST add a `// public/<filename>.html — <description>` annotation on
+ *   the same line as the id string.  Omitting it is a CI failure.
  *
  * Exit codes:
  *   0 — no issues found
@@ -47,8 +48,8 @@
  *       one or more pages load main.js without any mount element (Pass 2), or
  *       one or more BOOTSTRAP_ONLY_IDS entries are absent from all HTML files
  *       (Pass 3), or
- *       one or more BOOTSTRAP_ONLY_IDS entries are absent from their declared
- *       canonical HTML file (Pass 4)
+ *       one or more BOOTSTRAP_ONLY_IDS entries lack a canonical-file annotation
+ *       or are absent from their declared canonical HTML file (Pass 4)
  *
  * Usage:
  *   node scripts/check-mount-id-conflicts.mjs
@@ -347,22 +348,29 @@ if (!pass3ParseError && bootstrapIdsMissingFromHtml.length === 0) {
 }
 
 // ---------------------------------------------------------------------------
-// Pass 4: Each BOOTSTRAP_ONLY_IDS entry with a declared canonical file must
-//         be present in THAT SPECIFIC HTML file.
+// Pass 4: Every BOOTSTRAP_ONLY_IDS entry must have a canonical-file annotation
+//         AND the id must be present in THAT SPECIFIC HTML file.
 // ---------------------------------------------------------------------------
 //
-// Pass 3 only checks that a BOOTSTRAP_ONLY_IDS id exists in *some* HTML file.
-// That can silently pass when, e.g., an error-page container is renamed to a
-// typo ("not-found-roots") in the correct file while the original id still
-// survives in a different HTML file.  Pass 4 closes that gap.
+// Pass 4a — Annotation required:
+//   Every entry in BOOTSTRAP_ONLY_IDS must carry a `// public/<file>.html`
+//   comment annotation.  Entries without an annotation are a CI failure —
+//   the per-file guarantee of Pass 4b would be silently skipped for them.
+//
+// Pass 4b — Per-file presence check:
+//   Pass 3 only checks that a BOOTSTRAP_ONLY_IDS id exists in *some* HTML file.
+//   That can silently pass when, e.g., an error-page container is renamed to a
+//   typo ("not-found-roots") in the correct file while the original id still
+//   survives in a different HTML file.  Pass 4b closes that gap by verifying
+//   each annotated id against its specific declared file.
 //
 // The canonical file is declared as the first `public/…html` token in the
 // inline comment on the same line as the id string in BOOTSTRAP_ONLY_IDS:
 //
 //   'not-found-root',  // public/404.html — 404 page, rendered after auth
 //
-// Entries without a recognised `public/…html` comment are silently skipped
-// (Pass 3 still covers them).
+// Convention: every BOOTSTRAP_ONLY_IDS entry MUST have this annotation.
+// Omitting it is now a CI failure (Pass 4a).  Pass 3 still applies regardless.
 
 /**
  * Extracts a Map<id, canonicalRelPath> by scanning the BOOTSTRAP_ONLY_IDS
@@ -407,6 +415,8 @@ function extractBootstrapCanonicalFiles(src) {
   return result;
 }
 
+/** @type {string[]} BOOTSTRAP_ONLY_IDS entries that are missing the annotation */
+const pass4MissingAnnotations = [];
 /** @type {Array<{id: string, canonicalFile: string}>} */
 const pass4Failures = [];
 let pass4ParseError = false;
@@ -425,6 +435,14 @@ if (!pass3ParseError && bootstrapOnlyIds) {
   }
 
   if (!pass4ParseError && canonicalMap) {
+    // Pass 4a: every BOOTSTRAP_ONLY_IDS entry must have a canonical annotation.
+    for (const id of bootstrapOnlyIds) {
+      if (!canonicalMap.has(id)) {
+        pass4MissingAnnotations.push(id);
+      }
+    }
+
+    // Pass 4b: every annotated entry must be present in its declared file.
     for (const [id, relCanonical] of canonicalMap) {
       const canonicalAbs = join(ROOT, relCanonical);
       let fileSrc;
@@ -444,31 +462,51 @@ if (!pass3ParseError && bootstrapOnlyIds) {
   }
 }
 
-if (!pass4ParseError && pass4Failures.length === 0) {
+if (!pass4ParseError && pass4MissingAnnotations.length === 0 && pass4Failures.length === 0) {
   console.log(
     '[check-mount-id-conflicts] Pass 4 OK — every BOOTSTRAP_ONLY_IDS entry ' +
-    'with a declared canonical file is present in that file.',
+    'has a canonical-file annotation and is present in that file.',
   );
-} else if (!pass4ParseError && pass4Failures.length > 0) {
-  process.stderr.write('\n[check-mount-id-conflicts] Pass 4 MISSING CANONICAL-FILE CONTAINERS:\n\n');
-  for (const { id, canonicalFile } of pass4Failures) {
+} else if (!pass4ParseError) {
+  if (pass4MissingAnnotations.length > 0) {
+    process.stderr.write('\n[check-mount-id-conflicts] Pass 4a MISSING CANONICAL-FILE ANNOTATIONS:\n\n');
+    for (const id of pass4MissingAnnotations) {
+      process.stderr.write(
+        `  id="${id}" in BOOTSTRAP_ONLY_IDS (src/react/lib/publicIslands.ts) ` +
+        `lacks a required \`// public/<file>.html\` annotation\n`,
+      );
+    }
     process.stderr.write(
-      `  id="${id}" is declared for ${canonicalFile} ` +
-      `(src/react/lib/publicIslands.ts) but that file does not contain ` +
-      `an element with that id\n`,
+      '\nEvery BOOTSTRAP_ONLY_IDS entry must declare its canonical HTML file via\n' +
+      'an inline comment.  Without this annotation, the per-file presence check\n' +
+      '(Pass 4b) is silently skipped for that entry.\n\n' +
+      'Fix: add a `// public/<filename>.html — <description>` comment to the\n' +
+      'right of the id string in src/react/lib/publicIslands.ts, e.g.:\n' +
+      '  \'not-found-root\',  // public/404.html — 404 page, rendered after auth\n',
     );
   }
-  process.stderr.write(
-    '\nEach BOOTSTRAP_ONLY_IDS entry with a `// public/…html` annotation must\n' +
-    'have a matching <… id="…"> element in the declared HTML file.  Without\n' +
-    'this, the React component silently never mounts on that page.\n\n' +
-    'Fix: ensure the correct id appears in the HTML file, e.g.:\n' +
-    '  <div id="not-found-root"></div>   in public/404.html\n' +
-    'and verify the id exactly matches the BOOTSTRAP_ONLY_IDS entry in\n' +
-    'src/react/lib/publicIslands.ts.\n\n' +
-    'If the canonical file annotation is wrong, update the `// public/…html`\n' +
-    'comment on the relevant BOOTSTRAP_ONLY_IDS line.\n',
-  );
+
+  if (pass4Failures.length > 0) {
+    process.stderr.write('\n[check-mount-id-conflicts] Pass 4b MISSING CANONICAL-FILE CONTAINERS:\n\n');
+    for (const { id, canonicalFile } of pass4Failures) {
+      process.stderr.write(
+        `  id="${id}" is declared for ${canonicalFile} ` +
+        `(src/react/lib/publicIslands.ts) but that file does not contain ` +
+        `an element with that id\n`,
+      );
+    }
+    process.stderr.write(
+      '\nEach BOOTSTRAP_ONLY_IDS entry with a `// public/…html` annotation must\n' +
+      'have a matching <… id="…"> element in the declared HTML file.  Without\n' +
+      'this, the React component silently never mounts on that page.\n\n' +
+      'Fix: ensure the correct id appears in the HTML file, e.g.:\n' +
+      '  <div id="not-found-root"></div>   in public/404.html\n' +
+      'and verify the id exactly matches the BOOTSTRAP_ONLY_IDS entry in\n' +
+      'src/react/lib/publicIslands.ts.\n\n' +
+      'If the canonical file annotation is wrong, update the `// public/…html`\n' +
+      'comment on the relevant BOOTSTRAP_ONLY_IDS line.\n',
+    );
+  }
 }
 
 if (
@@ -477,6 +515,7 @@ if (
   pass3ParseError ||
   bootstrapIdsMissingFromHtml.length > 0 ||
   pass4ParseError ||
+  pass4MissingAnnotations.length > 0 ||
   pass4Failures.length > 0
 ) {
   process.exit(1);
