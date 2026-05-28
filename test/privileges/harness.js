@@ -35,12 +35,25 @@ async function cleanupTestData(pool) {
   // Everything synthetic uses the privtest- prefix (seed users, lifecycle
   // accounts, xss probe access-requests). The session purge also catches any
   // legacy '%@privtest.local' rows from older runs.
-  await pool.query(`DELETE FROM sessions
-    WHERE sess::text LIKE '%@privtest.local%'`);
-  await pool.query(`DELETE FROM password_set_tokens WHERE email LIKE $1`, [`${PREFIX}%`]);
-  await pool.query(`DELETE FROM users WHERE email LIKE $1`, [`${PREFIX}%`]);
-  await pool.query(`DELETE FROM allowed_emails WHERE email LIKE $1`, [`${PREFIX}%`]);
-  await pool.query(`DELETE FROM account_requests WHERE email LIKE $1`, [`${PREFIX}%`]);
+  // Each statement is wrapped in try/catch so that missing tables on a
+  // fresh isolated DB (before the server has booted and run schema migrations)
+  // are silently ignored — matching the pattern used in resetRateLimitStore.
+  try {
+    await pool.query(`DELETE FROM sessions
+      WHERE sess::text LIKE '%@privtest.local%'`);
+  } catch { /* table may not exist yet on a brand-new DB */ }
+  try {
+    await pool.query(`DELETE FROM password_set_tokens WHERE email LIKE $1`, [`${PREFIX}%`]);
+  } catch { /* table may not exist yet on a brand-new DB */ }
+  try {
+    await pool.query(`DELETE FROM users WHERE email LIKE $1`, [`${PREFIX}%`]);
+  } catch { /* table may not exist yet on a brand-new DB */ }
+  try {
+    await pool.query(`DELETE FROM allowed_emails WHERE email LIKE $1`, [`${PREFIX}%`]);
+  } catch { /* table may not exist yet on a brand-new DB */ }
+  try {
+    await pool.query(`DELETE FROM account_requests WHERE email LIKE $1`, [`${PREFIX}%`]);
+  } catch { /* table may not exist yet on a brand-new DB */ }
 }
 
 async function seedUsers(pool, runId) {

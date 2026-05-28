@@ -161,8 +161,8 @@ async function purgeFixtures(pool) {
   // cascades to any binding pointing at it.
   await pool.query(
     `DELETE FROM card_action_handlers
-       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-    [HANDLER_NAME_DV, HANDLER_NAME_PC, HANDLER_NAME_LBL, HANDLER_NAME_SUB,
+       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+    [HANDLER_NAME_DV, HANDLER_NAME_SV, HANDLER_NAME_PC, HANDLER_NAME_LBL, HANDLER_NAME_SUB,
      HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B, HANDLER_NAME_ANAME,
      HANDLER_NAME_NAMING, HANDLER_NAME_ILS, 'PrivTest orphan cleanup handler',
      HANDLER_NAME_CLEAR_WARN, HANDLER_NAME_DEL_WARN]
@@ -290,9 +290,6 @@ async function main() {
   // not exist yet — they're created on server boot).
   await cleanupTestData(pool);
 
-  const users = await seedUsers(pool, runId);
-  console.log(`  Seeded users  admin=${users.admin.email}`);
-
   const { child, logBuf } = spawnServer();
   let exited = false;
   child.on('exit', () => { exited = true; });
@@ -328,6 +325,9 @@ async function main() {
   process.on('unhandledRejection', (e) => { console.error('Unhandled:', e); cleanupAndExit(2); });
 
   // ── boot test server ───────────────────────────────────────────────────────
+  // The server creates all core schema tables (users, allowed_emails, sessions,
+  // password_set_tokens, etc.) on boot, so seedUsers must run after the server
+  // is up — especially when using a fresh isolated database.
   try {
     await waitForServer();
     await resetRateLimitStore(pool);
@@ -338,6 +338,9 @@ async function main() {
     await cleanupAndExit(2);
     return;
   }
+
+  const users = await seedUsers(pool, runId);
+  console.log(`  Seeded users  admin=${users.admin.email}`);
 
   // The server creates card_action_handlers / card_action_handler_bindings /
   // lead_substatuses asynchronously inside its app.listen() callback (after

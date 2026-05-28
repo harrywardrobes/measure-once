@@ -303,6 +303,10 @@ const ROUTES = [
   { method: 'GET',    path: '/api/admin/hubspot-webhook',                      level: 'admin' },
   { method: 'POST',   path: '/api/admin/hubspot-webhook',                      level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/hubspot-webhook',                      level: 'admin' },
+  // HubSpot credential management (access_token / app_id / client_secret).
+  { method: 'GET',    path: '/api/admin/hubspot-credentials',                  level: 'admin' },
+  { method: 'PATCH',  path: '/api/admin/hubspot-credentials',                  level: 'admin', body: { key: 'access_token', value: 'test' } },
+  { method: 'DELETE', path: '/api/admin/hubspot-credentials/access_token',     level: 'admin' },
 
   // ── Logout MUST be last per actor (it destroys the session). The run.js
   // matrix loop is route-outer/actor-inner, so this row fires once per actor
