@@ -150,6 +150,7 @@ const DB_SUITES = [
   'test:scheduling-past-time-guard:ci',
   'test:customer-info-live-badge:ci',
   'test:dev-mode-bc-sync:ci',
+  'test:workflow-map:ci',
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

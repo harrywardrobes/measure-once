@@ -126,6 +126,7 @@ const STEPS = [
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',
   'test:scheduling-past-time-guard:ci',
+  'test:workflow-map:ci',
   'build:storybook',
   { script: 'test:storybook-output-clean', env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
   { script: 'test:storybook-smoke',        env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
