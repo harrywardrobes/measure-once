@@ -84,8 +84,10 @@ function ResendButton({
       showToast('A fresh link has been sent to the customer');
       onSuccess();
     } catch (e) {
-      setErrorMsg((e as Error).message);
+      const msg = (e as Error).message;
+      setErrorMsg(msg);
       setState('error');
+      showToast(msg, true);
     }
   }
 
