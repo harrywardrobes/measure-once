@@ -5148,6 +5148,12 @@ async function ensureLeadSubstatusesTable() {
       END IF;
     END$$;
   `);
+  // default_handler_type — admin-configurable override for ensureSubstatusHandlerBindings.
+  // Added after initial table creation; safe to run on every boot.
+  await pool.query(`
+    ALTER TABLE lead_substatuses
+      ADD COLUMN IF NOT EXISTS default_handler_type TEXT NOT NULL DEFAULT ''
+  `);
 }
 
 // ── hw_test_user HubSpot property ─────────────────────────────────────────────
@@ -5413,6 +5419,12 @@ function _validateSubstatusBody(body, { partial = false } = {}) {
     if (Number.isNaN(n)) return { error: 'sort_order must be an integer.' };
     out.sort_order = n;
   }
+  if (body.default_handler_type !== undefined) {
+    const v = String(body.default_handler_type || '').trim().toLowerCase();
+    if (v.length > 64) return { error: 'default_handler_type must be 64 characters or fewer.' };
+    if (v && !/^[a-z0-9_]+$/.test(v)) return { error: 'default_handler_type must contain only lowercase letters, digits, and underscores.' };
+    out.default_handler_type = v;
+  }
   return { value: out };
 }
 
@@ -5421,7 +5433,7 @@ function _validateSubstatusBody(body, { partial = false } = {}) {
 app.get('/api/lead-substatuses', isAuthenticated, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, status_key, substatus_key, label, action_label, sort_order
+      `SELECT id, status_key, substatus_key, label, action_label, sort_order, default_handler_type
        FROM lead_substatuses
        ORDER BY status_key ASC, sort_order ASC, substatus_key ASC`
     );
@@ -5436,7 +5448,7 @@ app.get('/api/lead-substatuses', isAuthenticated, async (req, res) => {
 app.get('/api/admin/lead-substatuses', isAuthenticated, requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, status_key, substatus_key, label, action_label, sort_order, updated_at
+      `SELECT id, status_key, substatus_key, label, action_label, sort_order, default_handler_type, updated_at
        FROM lead_substatuses
        ORDER BY status_key ASC, sort_order ASC, substatus_key ASC`
     );
@@ -5452,10 +5464,10 @@ app.post('/api/admin/lead-substatuses', isAuthenticated, requireAdmin, async (re
   if (error) return res.status(400).json({ error });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, status_key, substatus_key, label, action_label, sort_order, updated_at`,
-      [value.status_key, value.substatus_key, value.label, value.action_label || '', value.sort_order ?? 0]
+      `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order, default_handler_type)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, status_key, substatus_key, label, action_label, sort_order, default_handler_type, updated_at`,
+      [value.status_key, value.substatus_key, value.label, value.action_label || '', value.sort_order ?? 0, value.default_handler_type || '']
     );
     let hubspotSyncWarning;
     try {
@@ -5492,7 +5504,7 @@ app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asyn
   try {
     const { rows } = await pool.query(
       `UPDATE lead_substatuses SET ${sets.join(', ')} WHERE id = $${params.length}
-       RETURNING id, status_key, substatus_key, label, action_label, sort_order, updated_at`,
+       RETURNING id, status_key, substatus_key, label, action_label, sort_order, default_handler_type, updated_at`,
       params
     );
     if (!rows.length) return res.status(404).json({ error: 'Sub-status not found.' });

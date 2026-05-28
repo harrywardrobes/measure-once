@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typography,
   Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, ListItemText,
+  MenuItem, Select,
 } from '@mui/material';
 import { useToast } from '../../contexts/ToastContext';
 import { GET, POST, PATCH, PUT, DELETE } from '../../utils/api';
@@ -24,6 +25,22 @@ const HANDLER_TYPE_LABELS: Record<string, string> = {
   start_design_visit:           'Start design visit wizard',
 };
 
+// Ordered list of handler types available in the "Default handler type" selector.
+// Shown when an admin wants to pre-configure which handler a new substatus binding
+// uses at startup, without needing a code change.
+const SELECTABLE_HANDLER_TYPES: Array<{ value: string; label: string }> = [
+  { value: '',                            label: 'Show message (default)' },
+  { value: 'add_design_visit_to_calendar', label: 'Add design visit to calendar' },
+  { value: 'review_customer_photos',       label: 'Review customer photos' },
+  { value: 'schedule_delivery_window',     label: 'Schedule delivery window' },
+  { value: 'schedule_installation_slot',   label: 'Schedule installation slot' },
+  { value: 'schedule_visit',               label: 'Schedule visit' },
+  { value: 'show_message',                 label: 'Show informational message' },
+  { value: 'start_design_visit',           label: 'Start design visit wizard' },
+  { value: 'summarise_phone_call',         label: 'Summarise phone call' },
+  { value: 'upload_photos_and_info',       label: 'Upload photos & info' },
+];
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface LeadStatus {
@@ -33,6 +50,7 @@ interface LeadStatus {
 interface Substatus {
   id: number; status_key: string; substatus_key: string;
   label: string; action_label: string; sort_order: number;
+  default_handler_type?: string;
   hubspotSyncWarning?: string;
 }
 interface CALabel  { stage_key: string; status_key: string; label: string; }
@@ -187,6 +205,10 @@ export function CardActionsPage() {
   const statusesRef    = useRef<LeadStatus[]>([]);
   const [syncWarning, setSyncWarning] = useState<string | null>(null);
 
+  // Tracks admin edits to the "Default handler type" selector, keyed by substatus id.
+  // Reset on every fetchAll so stale edits don't linger after a reload.
+  const [handlerTypeEdits, setHandlerTypeEdits] = useState<Map<number, string>>(new Map());
+
   type ClearSlot = { stageKey: string; statusKey: string; label: string; boundHandlers: Handler[] };
   const [clearConfirm, setClearConfirm] = useState<{
     slots: ClearSlot[];
@@ -225,6 +247,7 @@ export function CardActionsPage() {
       substatusesRef.current = safeArr(sub);
       statusesRef.current    = safeArr(sta);
       setNewSubRows([]);
+      setHandlerTypeEdits(new Map());
       setReloadKey(k => k + 1);
     } catch { /* ignore */ } finally {
       setLoading(false);
@@ -344,21 +367,26 @@ export function CardActionsPage() {
           failed++; failures.push(`new sub-status (${lsKey}/${subKey}): ${(e as Error).message}`);
         }
       } else {
-        const origKey    = row.dataset.origKey    || '';
-        const origLabel  = row.dataset.origLabel  || '';
-        const origAction = row.dataset.origAction || '';
+        const origKey         = row.dataset.origKey         || '';
+        const origLabel       = row.dataset.origLabel       || '';
+        const origAction      = row.dataset.origAction      || '';
+        const origHandlerType = row.dataset.origHandlerType || '';
+        const subId           = Number(idStr);
+        const newHandlerType  = handlerTypeEdits.has(subId) ? (handlerTypeEdits.get(subId) ?? '') : origHandlerType;
         const patch: Record<string, unknown> = {};
-        if (subKey  !== origKey)    patch.substatus_key = subKey;
-        if (label   !== origLabel)  patch.label         = label;
-        if (action  !== origAction) patch.action_label  = action;
+        if (subKey          !== origKey)         patch.substatus_key       = subKey;
+        if (label           !== origLabel)       patch.label               = label;
+        if (action          !== origAction)      patch.action_label        = action;
+        if (newHandlerType  !== origHandlerType) patch.default_handler_type = newHandlerType;
         if (!Object.keys(patch).length) continue;
         if (patch.label === '') { failed++; failures.push(`sub-status #${idStr}: label cannot be empty.`); continue; }
         try {
           const updated = await PATCH<Substatus>(`/api/admin/lead-substatuses/${idStr}`, patch);
           if (updated.hubspotSyncWarning) hubSyncFailed = true;
-          row.dataset.origKey    = updated.substatus_key;
-          row.dataset.origLabel  = updated.label;
-          row.dataset.origAction = updated.action_label || '';
+          row.dataset.origKey         = updated.substatus_key;
+          row.dataset.origLabel       = updated.label;
+          row.dataset.origAction      = updated.action_label || '';
+          row.dataset.origHandlerType = updated.default_handler_type || '';
           keyInput.value = keyPrefix && updated.substatus_key.startsWith(keyPrefix)
             ? updated.substatus_key.slice(keyPrefix.length) : updated.substatus_key;
           saved++;
@@ -402,7 +430,7 @@ export function CardActionsPage() {
     try { new BroadcastChannel('stage_action_labels_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
     try { new BroadcastChannel('lead_substatuses_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
     fetchAll();
-  }, [fetchAll, showToast, handlers, confirmClear]);
+  }, [fetchAll, showToast, handlers, confirmClear, handlerTypeEdits]);
 
   const addCardActionSubstatus = useCallback((lsKey: string) => {
     const ls = statusesRef.current.find(s => s.key === lsKey);
@@ -594,7 +622,8 @@ export function CardActionsPage() {
                                 <div key={sub.id} className="ca-sub-row adm-ca-sub-row"
                                   data-sub-id={sub.id} data-sub-ls={ls.key}
                                   data-orig-key={sub.substatus_key} data-orig-label={sub.label}
-                                  data-orig-action={sub.action_label || ''}>
+                                  data-orig-action={sub.action_label || ''}
+                                  data-orig-handler-type={sub.default_handler_type || ''}>
                                   <div className="adm-ca-sub-arrows">
                                     <button type="button" className={`btn btn-ghost adm-ca-sub-arrow${isFirst ? ' adm-ca-sub-arrow--dim' : ''}`}
                                       title="Move up" disabled={isFirst}
@@ -617,6 +646,27 @@ export function CardActionsPage() {
                                     maxLength={128} defaultValue={sub.label} placeholder="Display label" />
                                   <input type="text" className="field ca-sub-action adm-ca-sub-input"
                                     maxLength={128} defaultValue={sub.action_label || ''} placeholder="Action label" />
+                                  <Select
+                                    size="small"
+                                    displayEmpty
+                                    value={handlerTypeEdits.has(sub.id) ? (handlerTypeEdits.get(sub.id) ?? '') : (sub.default_handler_type || '')}
+                                    onChange={e => setHandlerTypeEdits(prev => {
+                                      const next = new Map(prev);
+                                      next.set(sub.id, e.target.value);
+                                      return next;
+                                    })}
+                                    title="Default handler type — used when auto-binding this sub-status on startup"
+                                    sx={{
+                                      fontSize: '.8rem', minWidth: 160, flexShrink: 0,
+                                      '.MuiSelect-select': { py: '3px', px: '8px' },
+                                    }}
+                                  >
+                                    {SELECTABLE_HANDLER_TYPES.map(opt => (
+                                      <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '.8rem' }}>
+                                        {opt.label}
+                                      </MenuItem>
+                                    ))}
+                                  </Select>
                                   <HandlerBadges stageKey={stage.key} statusKey={ls.defaultStatusKey}
                                     substatusId={sub.id} handlers={handlers} />
                                   {resolvedSlots.has(`sub:${sub.id}`) && (

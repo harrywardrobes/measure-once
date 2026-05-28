@@ -408,43 +408,37 @@ async function ensureDefaultReviewHandlerBinding() {
 
 // ── Substatus → handler-type mapping ─────────────────────────────────────────
 // Maps known substatus_key values to the handler type (and optional config)
-// that should be auto-bound on startup. Any substatus_key not listed here
-// falls back to 'show_message' so the action bar still renders.
+// that should be auto-bound on startup when the DB row has no default_handler_type set.
+//
+// This map has been intentionally reduced to the one hardcoded override that
+// cannot be expressed cleanly via the default_handler_type column — the
+// AWPH_RECEIVED/AWPH_RECIEVED spelling variants that both map to the same
+// review_customer_photos handler. All other substatus → handler mappings
+// should now be configured via the "Default handler type" selector on the
+// Card Actions admin panel.
 //
 // NOTE: The database row uses 'AWPH_RECIEVED' (misspelled). Both spellings
 // are listed so the binding is created whichever variant is present.
 const SUBSTATUS_HANDLER_MAP = {
-  // Awaiting-photos substatus (both spellings — DB uses the misspelled one)
-  AWPH_RECIEVED:               { type: 'review_customer_photos',      name: 'Review customer photos', config: {} },
-  AWPH_RECEIVED:               { type: 'review_customer_photos',      name: 'Review customer photos', config: {} },
-
-  // Upload customer photos & info
-  UPLD_PHOTOS:                 { type: 'upload_photos_and_info',      name: 'Upload photos and info', config: {} },
-  UPLOAD_PHOTOS:               { type: 'upload_photos_and_info',      name: 'Upload photos and info', config: {} },
-  UPLOAD_PHOTOS_AND_INFO:      { type: 'upload_photos_and_info',      name: 'Upload photos and info', config: {} },
-
-  // Phone-call summary
-  PHCL_DONE:                   { type: 'summarise_phone_call',        name: 'Summarise phone call',   config: {} },
-  PHONE_CALL_DONE:             { type: 'summarise_phone_call',        name: 'Summarise phone call',   config: {} },
-  SUMMARISE_PHONE_CALL:        { type: 'summarise_phone_call',        name: 'Summarise phone call',   config: {} },
-
-  // Design-visit wizard
-  START_DESIGN_VISIT:          { type: 'start_design_visit',          name: 'Start design visit',     config: {} },
-  DSGV_SCHEDULED:              { type: 'start_design_visit',          name: 'Start design visit',     config: {} },
-  DESIGN_MEETING_SCHEDULED:    { type: 'start_design_visit',          name: 'Start design visit',     config: {} },
-
-  // Add design visit to Google Calendar
-  ADD_DSGV_TO_CALENDAR:        { type: 'add_design_visit_to_calendar', name: 'Add design visit to calendar', config: {} },
-  ADD_DESIGN_VISIT_TO_CALENDAR:{ type: 'add_design_visit_to_calendar', name: 'Add design visit to calendar', config: {} },
-
-  // Survey scheduling
-  SCHD_SURVEY:                 { type: 'schedule_visit', name: 'Schedule survey',   config: { visitType: 'survey' } },
-  SCHEDULE_SURVEY:             { type: 'schedule_visit', name: 'Schedule survey',   config: { visitType: 'survey' } },
-  SUGGEST_SURVEY_DATES:        { type: 'schedule_visit', name: 'Schedule survey',   config: { visitType: 'survey' } },
-  SURVEY_DATES_SUGGESTED:      { type: 'schedule_visit', name: 'Schedule survey',   config: { visitType: 'survey' } },
+  AWPH_RECIEVED: { type: 'review_customer_photos', name: 'Review customer photos', config: {} },
+  AWPH_RECEIVED: { type: 'review_customer_photos', name: 'Review customer photos', config: {} },
 };
 
-// Fallback used for any substatus_key not present in SUBSTATUS_HANDLER_MAP.
+// Human-readable names for handler types used when auto-creating handlers
+// from the admin-configured default_handler_type column.
+const HANDLER_TYPE_NAMES = {
+  add_design_visit_to_calendar: 'Add design visit to calendar',
+  schedule_visit:               'Schedule visit',
+  summarise_phone_call:         'Summarise phone call',
+  show_message:                 'Show message',
+  start_design_visit:           'Start design visit',
+  schedule_delivery_window:     'Schedule delivery window',
+  schedule_installation_slot:   'Schedule installation slot',
+  upload_photos_and_info:       'Upload photos and info',
+  review_customer_photos:       'Review customer photos',
+};
+
+// Fallback used when neither default_handler_type nor SUBSTATUS_HANDLER_MAP has an entry.
 const FALLBACK_HANDLER = { type: 'show_message', name: 'Show message', config: {} };
 
 // ── Auto-bind handlers for all labelled substatuses ───────────────────────────
@@ -516,7 +510,7 @@ async function _findOrCreateHandler(type, name, config) {
 async function ensureSubstatusHandlerBindings() {
   // Fetch every substatus that has an action label defined.
   const substatuses = await pool.query(
-    `SELECT id, status_key, substatus_key, action_label
+    `SELECT id, status_key, substatus_key, action_label, default_handler_type
      FROM lead_substatuses
      WHERE action_label IS NOT NULL AND action_label != ''
      ORDER BY id`
@@ -538,8 +532,17 @@ async function ensureSubstatusHandlerBindings() {
     // Skip if a binding already exists for this substatus — respect admin choices.
     if (boundIds.has(row.id)) continue;
 
-    const mapKey = String(row.substatus_key).toUpperCase();
-    const mapping = SUBSTATUS_HANDLER_MAP[mapKey] || FALLBACK_HANDLER;
+    // Resolve handler: prefer admin-configured default_handler_type, then fall
+    // back to the hardcoded SUBSTATUS_HANDLER_MAP (AWPH spelling variants),
+    // then fall back to the show_message placeholder.
+    let mapping;
+    if (row.default_handler_type) {
+      const t = row.default_handler_type;
+      mapping = { type: t, name: HANDLER_TYPE_NAMES[t] || t, config: {} };
+    } else {
+      const mapKey = String(row.substatus_key).toUpperCase();
+      mapping = SUBSTATUS_HANDLER_MAP[mapKey] || FALLBACK_HANDLER;
+    }
     const { type, name, config } = mapping;
 
     const cacheKey = _handlerCacheKey(type, config);
