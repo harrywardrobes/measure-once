@@ -72,6 +72,20 @@ export interface WMHandler {
   bindings: WMBinding[];
 }
 
+/** A single status entry from workflow.json (used for read-only stages). */
+export interface WMWorkflowStageStatus {
+  id: string;
+  label: string;
+  hint?: string;
+}
+
+/** A pipeline stage sourced from workflow.json that has no card-action support. */
+export interface WMWorkflowStage {
+  key: string;
+  label: string;
+  statuses: WMWorkflowStageStatus[];
+}
+
 export type WorkflowMapNodeKind = 'stage' | 'status' | 'substatus';
 
 export interface WorkflowMapNodeData extends Record<string, unknown> {
@@ -82,6 +96,8 @@ export interface WorkflowMapNodeData extends Record<string, unknown> {
   stageLabel: string;
   /** All handlers currently bound to this slot — may be empty, one, or many. */
   boundHandlers: WMHandler[];
+  /** True for stages/statuses that have no card-action support (workflow.json only). */
+  isReadOnly?: boolean;
   isNullRow?: boolean;
   statusKey?: string;
   substatusId?: number;
@@ -174,6 +190,7 @@ export function buildFlowGraph(
   statuses: WMLeadStatus[],
   substatuses: WMSubstatus[],
   handlers: WMHandler[],
+  extraStages?: WMWorkflowStage[],
 ): { nodes: Node<WorkflowMapNodeData>[]; edges: Edge[] } {
   const nodes: Node<WorkflowMapNodeData>[] = [];
   const edges: Edge[] = [];
@@ -190,6 +207,8 @@ export function buildFlowGraph(
   );
 
   let currentY = 0;
+
+  // ── Card-action stages (Sales, Design Visit, Survey) ─────────────────────
 
   for (const cs of CARD_ACTION_STAGES) {
     const stageStatuses = statuses.filter(s => {
@@ -302,6 +321,69 @@ export function buildFlowGraph(
     currentY += STAGE_GAP;
   }
 
+  // ── Read-only pipeline stages (from workflow.json, no card-action support) ─
+
+  for (const ws of (extraStages || [])) {
+    const sc = STAGE_COLORS[ws.key] || { bg: '#94a3b8', light: '#f1f5f9', text: '#475569' };
+    const stageNodeId = `stage-${ws.key}`;
+
+    nodes.push({
+      id: stageNodeId,
+      type: 'stage-node',
+      position: { x: 0, y: currentY },
+      data: {
+        kind: 'stage',
+        label: ws.label,
+        key: ws.key,
+        stageKey: ws.key,
+        stageLabel: ws.label,
+        boundHandlers: [],
+        isReadOnly: true,
+      },
+      draggable: false,
+      selectable: true,
+      style: { width: CHART_TOTAL_W },
+    });
+
+    currentY += STAGE_H + 10;
+
+    for (const status of ws.statuses) {
+      const statusNodeId = `status-${ws.key}-${status.id}`;
+
+      nodes.push({
+        id: statusNodeId,
+        type: 'status-node',
+        position: { x: 0, y: currentY },
+        data: {
+          kind: 'status',
+          label: status.label,
+          key: status.id,
+          stageKey: ws.key,
+          stageLabel: ws.label,
+          statusKey: status.id,
+          boundHandlers: [],
+          isReadOnly: true,
+        },
+        draggable: false,
+        selectable: true,
+        style: { width: STATUS_W },
+      });
+
+      edges.push({
+        id: `edge-stage-${stageNodeId}-${statusNodeId}`,
+        source: stageNodeId,
+        target: statusNodeId,
+        type: 'smoothstep',
+        animated: false,
+        style: { stroke: sc.bg, strokeWidth: 1.5, opacity: 0.5 },
+      });
+
+      currentY += STATUS_H + V_GAP;
+    }
+
+    currentY += STAGE_GAP;
+  }
+
   return { nodes, edges };
 }
 
@@ -382,6 +464,7 @@ function HandlerBadgeSummary({
 
 const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<WorkflowMapNodeData>>) {
   const sc = STAGE_COLORS[data.stageKey] || { bg: '#475569', light: '#f1f5f9', text: '#1e293b' };
+  const isReadOnly = !!data.isReadOnly;
   return (
     <Box
       sx={{
@@ -390,19 +473,37 @@ const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<Wor
         display: 'flex',
         alignItems: 'center',
         px: 2,
+        gap: 1,
         borderRadius: '8px',
-        background: sc.bg,
+        background: isReadOnly ? `linear-gradient(90deg, ${sc.bg}cc, ${sc.bg}99)` : sc.bg,
         color: '#fff',
         boxShadow: selected ? `0 0 0 2px #fff, 0 0 0 4px ${sc.bg}` : '0 1px 4px rgba(0,0,0,.18)',
         cursor: 'pointer',
         userSelect: 'none',
         transition: 'box-shadow .15s',
         '&:hover': { boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${sc.bg}` },
+        opacity: isReadOnly ? 0.85 : 1,
       }}
     >
-      <Typography variant="subtitle1" sx={{ color: '#fff', letterSpacing: '.01em', fontWeight: 700 }}>
+      <Typography variant="subtitle1" sx={{ color: '#fff', letterSpacing: '.01em', fontWeight: 700, flex: 1 }}>
         {data.label}
       </Typography>
+      {isReadOnly && (
+        <Chip
+          label="No actions"
+          size="small"
+          sx={{
+            height: 20,
+            fontSize: '0.62rem',
+            fontWeight: 600,
+            bgcolor: 'rgba(255,255,255,0.2)',
+            color: 'rgba(255,255,255,0.9)',
+            border: '1px solid rgba(255,255,255,0.3)',
+            flexShrink: 0,
+            '.MuiChip-label': { px: 0.75 },
+          }}
+        />
+      )}
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0, pointerEvents: 'none' }} />
     </Box>
   );
@@ -410,6 +511,7 @@ const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<Wor
 
 const StatusNode = memo(function StatusNode({ data, selected }: NodeProps<Node<WorkflowMapNodeData>>) {
   const sc = STAGE_COLORS[data.stageKey] || { bg: '#475569', light: '#f1f5f9', text: '#1e293b' };
+  const isReadOnly = !!data.isReadOnly;
   return (
     <Box
       sx={{
@@ -420,8 +522,8 @@ const StatusNode = memo(function StatusNode({ data, selected }: NodeProps<Node<W
         gap: 1,
         px: 1.5,
         borderRadius: '6px',
-        border: `1.5px solid ${sc.light}`,
-        background: '#fff',
+        border: isReadOnly ? '1.5px solid #e5e7eb' : `1.5px solid ${sc.light}`,
+        background: isReadOnly ? '#f9fafb' : '#fff',
         boxShadow: selected
           ? `0 0 0 2px ${sc.bg}`
           : '0 1px 3px rgba(0,0,0,.08)',
@@ -433,14 +535,18 @@ const StatusNode = memo(function StatusNode({ data, selected }: NodeProps<Node<W
     >
       <Handle type="target" position={Position.Top} style={{ opacity: 0, pointerEvents: 'none' }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography variant="body2" noWrap sx={{ color: 'text.primary', fontWeight: 600 }}>
+        <Typography
+          variant="body2"
+          noWrap
+          sx={{ color: isReadOnly ? 'text.secondary' : 'text.primary', fontWeight: 600 }}
+        >
           {data.label}
         </Typography>
-        <Typography variant="caption" noWrap sx={{ color: 'text.secondary', display: 'block' }}>
+        <Typography variant="caption" noWrap sx={{ color: 'text.disabled', display: 'block' }}>
           {data.key}
         </Typography>
       </Box>
-      <HandlerBadgeSummary handlers={data.boundHandlers as WMHandler[]} />
+      {!isReadOnly && <HandlerBadgeSummary handlers={data.boundHandlers as WMHandler[]} />}
       <Handle type="source" position={Position.Right} style={{ opacity: 0, pointerEvents: 'none' }} />
     </Box>
   );
@@ -501,6 +607,8 @@ export interface WorkflowMapChartProps {
   substatuses: WMSubstatus[];
   handlers: WMHandler[];
   onNodeClick: (data: WorkflowMapNodeData) => void;
+  /** Pipeline stages from workflow.json that have no card-action support. Rendered as read-only. */
+  extraStages?: WMWorkflowStage[];
 }
 
 export function WorkflowMapChart({
@@ -509,10 +617,11 @@ export function WorkflowMapChart({
   substatuses,
   handlers,
   onNodeClick,
+  extraStages,
 }: WorkflowMapChartProps) {
   const { nodes, edges } = useMemo(
-    () => buildFlowGraph(labels, statuses, substatuses, handlers),
-    [labels, statuses, substatuses, handlers],
+    () => buildFlowGraph(labels, statuses, substatuses, handlers, extraStages),
+    [labels, statuses, substatuses, handlers, extraStages],
   );
 
   const handleNodeClick = useCallback(

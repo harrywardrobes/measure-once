@@ -9,7 +9,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import MapIcon from '@mui/icons-material/Map';
 import { useToast } from '../../contexts/ToastContext';
 import { GET, POST, PATCH, PUT, DELETE } from '../../utils/api';
-import type { WorkflowMapNodeData } from '../../components/WorkflowMapChart';
+import type { WorkflowMapNodeData, WMWorkflowStage } from '../../components/WorkflowMapChart';
 import { WorkflowMapDetailPanel } from '../../components/WorkflowMapDetailPanel';
 
 const WorkflowMapChart = lazy(() =>
@@ -213,6 +213,7 @@ export function CardActionsPage() {
     try { return localStorage.getItem(MAP_COLLAPSED_KEY) === 'true'; } catch { return false; }
   });
   const [detailNode, setDetailNode] = useState<WorkflowMapNodeData | null>(null);
+  const [extraStages, setExtraStages] = useState<WMWorkflowStage[]>([]);
 
   const toggleMap = useCallback(() => {
     setMapCollapsed(prev => {
@@ -258,12 +259,13 @@ export function CardActionsPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [lbl, sta, sub, hdl] = await Promise.all([
+      const [lbl, sta, sub, hdl, wf] = await Promise.all([
         GET('/api/admin/stage-action-labels'),
         GET('/api/admin/lead-statuses'),
         GET('/api/admin/lead-substatuses'),
         GET('/api/admin/card-action-handlers'),
-      ]) as [CALabel[], LeadStatus[], Substatus[], Handler[]];
+        GET('/api/workflow'),
+      ]) as [CALabel[], LeadStatus[], Substatus[], Handler[], { stages?: Record<string, { label: string; statuses?: Array<{ id: string; label: string; hint?: string }> }> } | null];
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
       setLabels(safeArr(lbl));
       setStatuses(safeArr(sta));
@@ -274,6 +276,21 @@ export function CardActionsPage() {
       setNewSubRows([]);
       setHandlerTypeEdits(new Map());
       setReloadKey(k => k + 1);
+
+      // Derive read-only extra stages: all workflow.json stages except the
+      // three that already have card-action support.
+      const cardActionKeys = new Set(CARD_ACTION_STAGES.map(s => s.key));
+      const wfStages = wf?.stages ?? {};
+      const extra: WMWorkflowStage[] = Object.entries(wfStages)
+        .filter(([key]) => !cardActionKeys.has(key))
+        .map(([key, val]) => ({
+          key,
+          label: val.label || key,
+          statuses: Array.isArray(val.statuses)
+            ? val.statuses.map(s => ({ id: s.id, label: s.label, hint: s.hint }))
+            : [],
+        }));
+      setExtraStages(extra);
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
@@ -583,7 +600,7 @@ export function CardActionsPage() {
         <Collapse in={!mapCollapsed} id="workflow-map-body">
           <Box
             sx={{
-              height: 520,
+              height: 680,
               overflowX: 'auto',
               overflowY: 'hidden',
               borderRadius: '0 0 8px 8px',
@@ -607,6 +624,7 @@ export function CardActionsPage() {
                   substatuses={substatuses}
                   handlers={handlers}
                   onNodeClick={setDetailNode}
+                  extraStages={extraStages}
                 />
               </Suspense>
             )}
