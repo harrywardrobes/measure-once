@@ -249,7 +249,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
       anchor="right"
       open={open}
       onClose={handleClose}
-      PaperProps={{ sx: { width: { xs: '100%', sm: 480 }, p: 0 } }}
+      slotProps={{ paper: { sx: { width: { xs: '100%', sm: 480 }, p: 0 } } }}
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
@@ -416,7 +416,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                 onChange={e => setEmailSubject(e.target.value)}
                 size="small"
                 fullWidth
-                inputProps={{ maxLength: 500 }}
+                slotProps={{ htmlInput: { maxLength: 500 } }}
               />
               <TextField
                 label="Message"
@@ -425,7 +425,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                 multiline
                 minRows={8}
                 fullWidth
-                inputProps={{ maxLength: 5000 }}
+                slotProps={{ htmlInput: { maxLength: 5000 } }}
               />
               {submitError && (
                 <Alert severity="error">{submitError}</Alert>
@@ -447,7 +447,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                 size="small"
                 fullWidth
                 required
-                inputProps={{ maxLength: 200 }}
+                slotProps={{ htmlInput: { maxLength: 200 } }}
                 helperText="This will appear in the email body above."
               />
               <TextField
@@ -456,7 +456,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                 onChange={e => setEmailSubject(e.target.value)}
                 size="small"
                 fullWidth
-                inputProps={{ maxLength: 500 }}
+                slotProps={{ htmlInput: { maxLength: 500 } }}
               />
               <TextField
                 label="Message"
@@ -465,7 +465,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                 multiline
                 minRows={8}
                 fullWidth
-                inputProps={{ maxLength: 5000 }}
+                slotProps={{ htmlInput: { maxLength: 5000 } }}
               />
               {submitError && (
                 <Alert severity="error">{submitError}</Alert>
