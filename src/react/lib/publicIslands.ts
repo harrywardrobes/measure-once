@@ -34,6 +34,6 @@ export const PUBLIC_ISLAND_IDS = new Set([
  * PUBLIC_ISLAND_IDS ∪ BOOTSTRAP_ONLY_IDS — no manual sync needed there either.
  */
 export const BOOTSTRAP_ONLY_IDS = new Set([
-  'not-found-root',         // 404 page, rendered after auth; never public
-  'access-restricted-root', // access-denied page, rendered after auth; never public
+  'not-found-root',         // public/404.html — 404 page, rendered after auth; never public
+  'access-restricted-root', // public/access-restricted.html — access-denied page, rendered after auth; never public
 ]);

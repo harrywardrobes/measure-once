@@ -2,7 +2,7 @@
 /**
  * check-mount-id-conflicts.mjs
  *
- * Three-pass static check for React mount-point wiring in public/*.html.
+ * Four-pass static check for React mount-point wiring in public/*.html.
  *
  * Pass 1 — Duplicate-mount detection:
  *   Every id in the MOUNTS table in src/react/main.tsx must appear in at most
@@ -18,7 +18,7 @@
  *   bundle but has no matching mount element loads dead JS and likely indicates
  *   a mis-wired new page or a forgotten container element.
  *
- * Pass 3 — Error-page container check:
+ * Pass 3 — Error-page container check (aggregate):
  *   Every id in BOOTSTRAP_ONLY_IDS (src/react/lib/publicIslands.ts) must
  *   appear in at least one HTML file under public/.  Because error/restricted
  *   pages may carry other valid MOUNTS ids (chrome mounts, etc.), Pass 2
@@ -28,12 +28,27 @@
  *   against the full set of HTML files, regardless of what other ids the page
  *   declares.
  *
+ * Pass 4 — Error-page canonical-file check (per-file):
+ *   Each BOOTSTRAP_ONLY_IDS entry in publicIslands.ts may carry an inline
+ *   comment declaring its canonical HTML file, e.g.:
+ *     'not-found-root',  // public/404.html — 404 page, rendered after auth
+ *   For every entry that declares a canonical file, Pass 4 verifies that the
+ *   id is present in THAT SPECIFIC file — not just somewhere in public/.  This
+ *   catches the case where a typo (e.g. "not-found-roots") is introduced in
+ *   the correct file while the original id happens to survive in another HTML
+ *   file, allowing Pass 3 to pass silently.
+ *
+ *   To declare a canonical file, add `// public/<filename>.html` as the first
+ *   token after the `//` on the same line as the id string in BOOTSTRAP_ONLY_IDS.
+ *
  * Exit codes:
  *   0 — no issues found
  *   1 — one or more mount ids appear in multiple HTML files (Pass 1), or
  *       one or more pages load main.js without any mount element (Pass 2), or
  *       one or more BOOTSTRAP_ONLY_IDS entries are absent from all HTML files
- *       (Pass 3)
+ *       (Pass 3), or
+ *       one or more BOOTSTRAP_ONLY_IDS entries are absent from their declared
+ *       canonical HTML file (Pass 4)
  *
  * Usage:
  *   node scripts/check-mount-id-conflicts.mjs
@@ -331,7 +346,139 @@ if (!pass3ParseError && bootstrapIdsMissingFromHtml.length === 0) {
   );
 }
 
-if (conflicts.length > 0 || missingMounts.length > 0 || pass3ParseError || bootstrapIdsMissingFromHtml.length > 0) {
+// ---------------------------------------------------------------------------
+// Pass 4: Each BOOTSTRAP_ONLY_IDS entry with a declared canonical file must
+//         be present in THAT SPECIFIC HTML file.
+// ---------------------------------------------------------------------------
+//
+// Pass 3 only checks that a BOOTSTRAP_ONLY_IDS id exists in *some* HTML file.
+// That can silently pass when, e.g., an error-page container is renamed to a
+// typo ("not-found-roots") in the correct file while the original id still
+// survives in a different HTML file.  Pass 4 closes that gap.
+//
+// The canonical file is declared as the first `public/…html` token in the
+// inline comment on the same line as the id string in BOOTSTRAP_ONLY_IDS:
+//
+//   'not-found-root',  // public/404.html — 404 page, rendered after auth
+//
+// Entries without a recognised `public/…html` comment are silently skipped
+// (Pass 3 still covers them).
+
+/**
+ * Extracts a Map<id, canonicalRelPath> by scanning the BOOTSTRAP_ONLY_IDS
+ * block in publicIslands.ts for inline `// public/xxx.html` comments.
+ *
+ * Returns an empty Map if the block cannot be located or no annotations are
+ * found — the pass is then a no-op (Pass 3 still applies).
+ *
+ * @param {string} src   Full text of publicIslands.ts
+ * @returns {Map<string, string>}
+ */
+function extractBootstrapCanonicalFiles(src) {
+  const result = new Map();
+
+  // Find the BOOTSTRAP_ONLY_IDS = new Set([ … ]); block.
+  const blockStart = src.indexOf('BOOTSTRAP_ONLY_IDS');
+  if (blockStart === -1) return result;
+
+  const bracketOpen = src.indexOf('[', blockStart);
+  if (bracketOpen === -1) return result;
+
+  // Walk to the matching ']'.
+  let depth = 1;
+  let i = bracketOpen + 1;
+  while (i < src.length && depth > 0) {
+    if (src[i] === '[') depth++;
+    else if (src[i] === ']') depth--;
+    i++;
+  }
+  if (depth !== 0) return result;
+
+  const block = src.slice(bracketOpen + 1, i - 1);
+
+  // Each line may look like:
+  //   'some-id',         // public/foo.html — description
+  // We capture: the id string and the first public/…html token in the comment.
+  const linePattern = /['"]([^'"]+)['"]\s*,?\s*\/\/\s*(public\/\S+\.html)/g;
+  let lm;
+  while ((lm = linePattern.exec(block)) !== null) {
+    result.set(lm[1], lm[2]);
+  }
+  return result;
+}
+
+/** @type {Array<{id: string, canonicalFile: string}>} */
+const pass4Failures = [];
+let pass4ParseError = false;
+
+if (!pass3ParseError && bootstrapOnlyIds) {
+  let canonicalMap;
+  try {
+    const publicIslandsSrc = readFileSync(publicIslandsPath, 'utf8');
+    canonicalMap = extractBootstrapCanonicalFiles(publicIslandsSrc);
+  } catch (err) {
+    process.stderr.write(
+      `[check-mount-id-conflicts] Pass 4 ERROR: Could not re-read ` +
+      `src/react/lib/publicIslands.ts — ${err.message}\n`,
+    );
+    pass4ParseError = true;
+  }
+
+  if (!pass4ParseError && canonicalMap) {
+    for (const [id, relCanonical] of canonicalMap) {
+      const canonicalAbs = join(ROOT, relCanonical);
+      let fileSrc;
+      try {
+        fileSrc = readFileSync(canonicalAbs, 'utf8');
+      } catch {
+        // File doesn't exist — report as a failure rather than silently skipping.
+        pass4Failures.push({ id, canonicalFile: relCanonical });
+        continue;
+      }
+      const idPresent =
+        fileSrc.includes(`id="${id}"`) || fileSrc.includes(`id='${id}'`);
+      if (!idPresent) {
+        pass4Failures.push({ id, canonicalFile: relCanonical });
+      }
+    }
+  }
+}
+
+if (!pass4ParseError && pass4Failures.length === 0) {
+  console.log(
+    '[check-mount-id-conflicts] Pass 4 OK — every BOOTSTRAP_ONLY_IDS entry ' +
+    'with a declared canonical file is present in that file.',
+  );
+} else if (!pass4ParseError && pass4Failures.length > 0) {
+  process.stderr.write('\n[check-mount-id-conflicts] Pass 4 MISSING CANONICAL-FILE CONTAINERS:\n\n');
+  for (const { id, canonicalFile } of pass4Failures) {
+    process.stderr.write(
+      `  id="${id}" is declared for ${canonicalFile} ` +
+      `(src/react/lib/publicIslands.ts) but that file does not contain ` +
+      `an element with that id\n`,
+    );
+  }
+  process.stderr.write(
+    '\nEach BOOTSTRAP_ONLY_IDS entry with a `// public/…html` annotation must\n' +
+    'have a matching <… id="…"> element in the declared HTML file.  Without\n' +
+    'this, the React component silently never mounts on that page.\n\n' +
+    'Fix: ensure the correct id appears in the HTML file, e.g.:\n' +
+    '  <div id="not-found-root"></div>   in public/404.html\n' +
+    'and verify the id exactly matches the BOOTSTRAP_ONLY_IDS entry in\n' +
+    'src/react/lib/publicIslands.ts.\n\n' +
+    'If the canonical file annotation is wrong, update the `// public/…html`\n' +
+    'comment on the relevant BOOTSTRAP_ONLY_IDS line.\n',
+  );
+}
+
+if (
+  conflicts.length > 0 ||
+  missingMounts.length > 0 ||
+  pass3ParseError ||
+  bootstrapIdsMissingFromHtml.length > 0 ||
+  pass4ParseError ||
+  pass4Failures.length > 0
+) {
   process.exit(1);
 }
 process.exit(0);
