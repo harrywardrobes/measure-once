@@ -115,10 +115,20 @@ function _objectNameFromKey(key) {
 async function deleteOpaqueKey(key) {
   const name = _objectNameFromKey(key);
   if (!name) return false;
-  const client = getClient();
-  const res = await client.delete(name, { ignoreNotFound: true });
+  let client;
+  try {
+    client = getClient();
+  } catch (e) {
+    throw _friendlyStorageError(e);
+  }
+  let res;
+  try {
+    res = await client.delete(name, { ignoreNotFound: true });
+  } catch (e) {
+    throw _friendlyStorageError(e);
+  }
   if (res && res.ok === false) {
-    throw new Error('Object storage delete failed: ' + (res.error?.message || 'unknown'));
+    throw _friendlyStorageError(new Error('Object storage delete failed: ' + (res.error?.message || 'unknown')));
   }
   return true;
 }
@@ -126,12 +136,22 @@ async function deleteOpaqueKey(key) {
 async function downloadOpaqueKey(key) {
   const name = _objectNameFromKey(key);
   if (!name) return null;
-  const client = getClient();
-  const res = await client.downloadAsBytes(name);
+  let client;
+  try {
+    client = getClient();
+  } catch (e) {
+    throw _friendlyStorageError(e);
+  }
+  let res;
+  try {
+    res = await client.downloadAsBytes(name);
+  } catch (e) {
+    throw _friendlyStorageError(e);
+  }
   if (res && res.ok === false) {
     const code = res.error?.statusCode || res.error?.code;
     if (code === 404 || /not\s*found/i.test(String(res.error?.message || ''))) return null;
-    throw new Error('Object storage download failed: ' + (res.error?.message || 'unknown'));
+    throw _friendlyStorageError(new Error('Object storage download failed: ' + (res.error?.message || 'unknown')));
   }
   // SDK returns { ok: true, value: [Buffer] }
   const value = res?.value;

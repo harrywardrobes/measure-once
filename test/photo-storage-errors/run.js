@@ -1,24 +1,26 @@
 'use strict';
 // test/photo-storage-errors/run.js
 //
-// Regression guard for Task #1902: both photo-upload routes must return a
-// friendly error message when Replit Object Storage is not configured, and
-// must never leak raw SDK internals (e.g. "A bucket name is needed to use
-// Cloud Storage.") to the caller.
+// Regression guard for Task #1902 and Task #1917:
+//   - Upload routes must return friendly errors when Object Storage is broken.
+//   - Delete and download routes must apply the same guard and never leak raw
+//     SDK internals to callers.
 //
 // Probes:
-//   (STO-1) POST /api/customer-info/:token/photos — public route, no auth.
-//           Inserts a valid (non-expired, non-submitted) token row, then POSTs
-//           a multipart request. Expects:
-//             • HTTP 500
-//             • response body error contains "temporarily unavailable"
-//             • response body error does NOT contain "bucket"
+//   (STO-1) POST /api/customer-info/:token/photos — public upload, no auth.
+//   (STO-2) POST /api/design-visits/uploads — authenticated member upload.
+//   (STO-5) DELETE /api/design-visits/uploads/:key — authenticated delete.
+//   (STO-6) GET /api/design-visit-images/:key — public HMAC-signed download.
+//   (STO-7) GET /api/customer-info-photos/:key — authenticated signed photo.
+//   All Phase-1 probes use a stub whose Client constructor always throws.
+//   Expected for all: SDK error NOT present in HTTP response body.
 //
-//   (STO-2) POST /api/design-visits/uploads — authenticated member route.
-//           POSTs a tiny valid PNG data URL. Expects:
-//             • HTTP 503
-//             • response body error contains "temporarily unavailable"
-//             • response body error does NOT contain "bucket"
+//   (STO-3) POST /api/customer-info/:token/photos — upload ok:false stub.
+//   (STO-4) POST /api/design-visits/uploads — upload ok:false stub.
+//   (STO-8) DELETE /api/design-visits/uploads/:key — delete ok:false stub.
+//   (STO-9) GET /api/design-visit-images/:key — download ok:false stub.
+//   All Phase-2 probes use a stub whose operations return { ok: false }.
+//   Expected for all: SDK error NOT present in HTTP response body.
 //
 // Override used:
 //   NODE_OPTIONS=--require .../preload-failing-storage-stub.js  — swaps the
@@ -43,6 +45,25 @@ require('dotenv').config();
 const REPORT_PATH = path.join(__dirname, '..', '..', 'test-results', 'photo-storage-errors.md');
 const FRIENDLY_RE = /temporarily unavailable/i;
 const SDK_LEAK_RE = /bucket name|cloud storage/i;
+
+// ── HMAC-signed URL helpers (mirrors design-visit-uploads.js + customer-info.js) ─
+// The test generates its own valid signed URLs using the same SESSION_SECRET
+// that is passed to the spawned server (via process.env pass-through).
+function makeSignedDvImageUrl(storageKey) {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error('SESSION_SECRET must be set to generate signed DV image URLs');
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  const sig = crypto.createHmac('sha256', secret).update(`${storageKey}|${exp}`).digest('hex');
+  return `/api/design-visit-images/${encodeURIComponent(storageKey)}?exp=${exp}&sig=${sig}`;
+}
+
+function makeSignedCiPhotoUrl(storageKey) {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error('SESSION_SECRET must be set to generate signed CI photo URLs');
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  const sig = crypto.createHmac('sha256', secret).update(`${storageKey}|${exp}`).digest('hex');
+  return `/api/customer-info-photos/${encodeURIComponent(storageKey)}?exp=${exp}&sig=${sig}`;
+}
 
 const findings = [];
 
@@ -207,10 +228,13 @@ async function main() {
   process.env.HUBSPOT_ACCESS_TOKEN               = process.env.HUBSPOT_ACCESS_TOKEN || 'ci-test-fake-hs-token';
   process.env.PRIVTEST_USE_ADMIN_EMAILS          = '1';
   process.env.ADMIN_EMAILS                       = `admin-ci-${runId}@privtest.local`;
+  // Ensure SESSION_SECRET is set so the test can generate valid HMAC-signed
+  // image URLs (same value is forwarded to the spawned server via ...process.env).
+  process.env.SESSION_SECRET = process.env.SESSION_SECRET || `ci-test-session-secret-${runId}`;
 
   const harness = require('../privileges/harness');
   const { spawnServer, waitForServer, seedUsers, cleanupTestData,
-          resetRateLimitStore, login, TEST_PORT } = harness;
+          resetRateLimitStore, login, makeClient, TEST_PORT } = harness;
   const BASE = `http://127.0.0.1:${TEST_PORT}`;
   harness.setPool(pool);
 
@@ -299,6 +323,60 @@ async function main() {
         : `SDK error LEAKED: "${sto2Msg.slice(0, 200)}"`
     );
 
+    // ── STO-5: DELETE /api/design-visits/uploads/:key ───────────────────────
+    // Opaque key — must pass isOpaqueKey() regex (/^obj:[A-Za-z0-9_-]{16,}(\.[a-z0-9]{1,8})?$/)
+    // Use manager login to bypass ownership check and reach deleteOpaqueKey.
+    const manager = users.manager;
+    const managerClient1 = await login(manager.email, manager.password);
+    const dvDeleteKey = 'obj:AAAAAAAAAAAAAAAAAABB.png';
+    const dvDeleteRes = await managerClient1.delete(
+      `/api/design-visits/uploads/${encodeURIComponent(dvDeleteKey)}`
+    );
+    const sto5Body = dvDeleteRes.json?.error || dvDeleteRes.text || '';
+    record('STO-5.status',
+      dvDeleteRes.status === 500,
+      `HTTP ${dvDeleteRes.status} (expected 500)`
+    );
+    record('STO-5.no-sdk-leak',
+      !SDK_LEAK_RE.test(sto5Body),
+      !SDK_LEAK_RE.test(sto5Body)
+        ? `response does not contain raw SDK internals ✓`
+        : `SDK error LEAKED: "${sto5Body.slice(0, 200)}"`
+    );
+
+    // ── STO-6: GET /api/design-visit-images/:key (public, HMAC-signed) ──────
+    const dvImageKey = 'obj:AAAAAAAAAAAAAAAAAABB.png';
+    const dvImageUrl = makeSignedDvImageUrl(dvImageKey);
+    const anonClient = makeClient(null);
+    const dvImageRes = await anonClient.get(dvImageUrl);
+    const sto6Body = dvImageRes.text || '';
+    record('STO-6.status',
+      dvImageRes.status === 500,
+      `HTTP ${dvImageRes.status} (expected 500)`
+    );
+    record('STO-6.no-sdk-leak',
+      !SDK_LEAK_RE.test(sto6Body),
+      !SDK_LEAK_RE.test(sto6Body)
+        ? `response does not contain raw SDK internals ✓`
+        : `SDK error LEAKED: "${sto6Body.slice(0, 200)}"`
+    );
+
+    // ── STO-7: GET /api/customer-info-photos/:key (authenticated, HMAC-signed)
+    const ciPhotoKey = 'obj:ci_AAAAAAAAAAAAAAAAAABB.jpg';
+    const ciPhotoUrl = makeSignedCiPhotoUrl(ciPhotoKey);
+    const ciPhotoRes = await memberClient1.get(ciPhotoUrl);
+    const sto7Body = ciPhotoRes.json?.error || ciPhotoRes.text || '';
+    record('STO-7.status',
+      ciPhotoRes.status === 500,
+      `HTTP ${ciPhotoRes.status} (expected 500)`
+    );
+    record('STO-7.no-sdk-leak',
+      !SDK_LEAK_RE.test(sto7Body),
+      !SDK_LEAK_RE.test(sto7Body)
+        ? `response does not contain raw SDK internals ✓`
+        : `SDK error LEAKED: "${sto7Body.slice(0, 200)}"`
+    );
+
     // Tear down phase-1 server before reusing the port.
     await killAndWait(child1);
     child1 = null;
@@ -367,6 +445,40 @@ async function main() {
       !SDK_LEAK_RE.test(sto4Msg)
         ? `error does not contain raw SDK internals ✓`
         : `SDK error LEAKED: "${sto4Msg.slice(0, 200)}"`
+    );
+
+    // ── STO-8: DELETE /api/design-visits/uploads/:key — ok:false from delete()
+    const managerClient2 = await login(manager.email, manager.password);
+    const dvDeleteRes2 = await managerClient2.delete(
+      `/api/design-visits/uploads/${encodeURIComponent(dvDeleteKey)}`
+    );
+    const sto8Body = dvDeleteRes2.json?.error || dvDeleteRes2.text || '';
+    record('STO-8.status',
+      dvDeleteRes2.status === 500,
+      `HTTP ${dvDeleteRes2.status} (expected 500)`
+    );
+    record('STO-8.no-sdk-leak',
+      !SDK_LEAK_RE.test(sto8Body),
+      !SDK_LEAK_RE.test(sto8Body)
+        ? `response does not contain raw SDK internals ✓`
+        : `SDK error LEAKED: "${sto8Body.slice(0, 200)}"`
+    );
+
+    // ── STO-9: GET /api/design-visit-images/:key — ok:false from downloadAsBytes
+    // downloadOpaqueKey sees ok:false with a bucket error message, applies
+    // _friendlyStorageError, throws; the route returns 500.
+    const dvImageUrl2 = makeSignedDvImageUrl(dvImageKey);
+    const dvImageRes2 = await anonClient.get(dvImageUrl2);
+    const sto9Body = dvImageRes2.text || '';
+    record('STO-9.status',
+      dvImageRes2.status === 500,
+      `HTTP ${dvImageRes2.status} (expected 500)`
+    );
+    record('STO-9.no-sdk-leak',
+      !SDK_LEAK_RE.test(sto9Body),
+      !SDK_LEAK_RE.test(sto9Body)
+        ? `response does not contain raw SDK internals ✓`
+        : `SDK error LEAKED: "${sto9Body.slice(0, 200)}"`
     );
 
     const failed = findings.filter(f => !f.ok);

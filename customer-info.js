@@ -865,10 +865,20 @@ router.get('/api/customer-info-photos/:key', isAuthenticated, async (req, res) =
   }
   try {
     const { Client } = require('@replit/object-storage');
-    const client = new Client();
+    let client;
+    try {
+      client = new Client();
+    } catch (e) {
+      throw _friendlyStorageError(e);
+    }
     const id   = key.slice('obj:ci_'.length);
     const name = `customer-info-photos/${id}`;
-    const dl   = await client.downloadAsBytes(name);
+    let dl;
+    try {
+      dl = await client.downloadAsBytes(name);
+    } catch (e) {
+      throw _friendlyStorageError(e);
+    }
     if (!dl || dl.ok === false) {
       return res.status(404).json({ error: 'Image not found.' });
     }
