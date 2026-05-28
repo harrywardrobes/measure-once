@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typography,
   Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, ListItemText,
-  MenuItem, Select,
+  MenuItem, Select, Tooltip,
 } from '@mui/material';
 import { useToast } from '../../contexts/ToastContext';
 import { GET, POST, PATCH, PUT, DELETE } from '../../utils/api';
@@ -618,6 +618,7 @@ export function CardActionsPage() {
                               const suffix = prefix ? sub.substatus_key.slice(prefix.length) : sub.substatus_key;
                               const isFirst = i === 0;
                               const isLast  = i === ls.substatuses.length - 1 && stageNewRows.length === 0;
+                              const hasBinding = handlersForSlot(handlers, stage.key, ls.defaultStatusKey, sub.id).length > 0;
                               return (
                                 <div key={sub.id} className="ca-sub-row adm-ca-sub-row"
                                   data-sub-id={sub.id} data-sub-ls={ls.key}
@@ -646,27 +647,33 @@ export function CardActionsPage() {
                                     maxLength={128} defaultValue={sub.label} placeholder="Display label" />
                                   <input type="text" className="field ca-sub-action adm-ca-sub-input"
                                     maxLength={128} defaultValue={sub.action_label || ''} placeholder="Action label" />
-                                  <Select
-                                    size="small"
-                                    displayEmpty
-                                    value={handlerTypeEdits.has(sub.id) ? (handlerTypeEdits.get(sub.id) ?? '') : (sub.default_handler_type || '')}
-                                    onChange={e => setHandlerTypeEdits(prev => {
-                                      const next = new Map(prev);
-                                      next.set(sub.id, e.target.value);
-                                      return next;
-                                    })}
-                                    title="Default handler type — used when auto-binding this sub-status on startup"
-                                    sx={{
-                                      fontSize: '.8rem', minWidth: 160, flexShrink: 0,
-                                      '.MuiSelect-select': { py: '3px', px: '8px' },
-                                    }}
+                                  <Tooltip
+                                    title={hasBinding ? 'Binding already set — this selector applies on restart only if the binding is removed' : 'Default handler type — used when auto-binding this sub-status on startup'}
+                                    placement="top"
+                                    arrow
                                   >
-                                    {SELECTABLE_HANDLER_TYPES.map(opt => (
-                                      <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '.8rem' }}>
-                                        {opt.label}
-                                      </MenuItem>
-                                    ))}
-                                  </Select>
+                                    <Select
+                                      size="small"
+                                      displayEmpty
+                                      value={handlerTypeEdits.has(sub.id) ? (handlerTypeEdits.get(sub.id) ?? '') : (sub.default_handler_type || '')}
+                                      onChange={e => setHandlerTypeEdits(prev => {
+                                        const next = new Map(prev);
+                                        next.set(sub.id, e.target.value);
+                                        return next;
+                                      })}
+                                      sx={{
+                                        fontSize: '.8rem', minWidth: 160, flexShrink: 0,
+                                        opacity: hasBinding ? 0.5 : 1,
+                                        '.MuiSelect-select': { py: '3px', px: '8px' },
+                                      }}
+                                    >
+                                      {SELECTABLE_HANDLER_TYPES.map(opt => (
+                                        <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '.8rem' }}>
+                                          {opt.label}
+                                        </MenuItem>
+                                      ))}
+                                    </Select>
+                                  </Tooltip>
                                   <HandlerBadges stageKey={stage.key} statusKey={ls.defaultStatusKey}
                                     substatusId={sub.id} handlers={handlers} />
                                   {resolvedSlots.has(`sub:${sub.id}`) && (
