@@ -57,6 +57,7 @@ const STATIC_SUITES = [
   'test:inline-styles',
   'test:keyboard-shortcuts',
   'test:handler-config-blocks',
+  'test:status-key-fields',
 ];
 
 /**

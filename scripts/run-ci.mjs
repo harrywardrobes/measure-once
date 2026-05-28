@@ -36,6 +36,7 @@ const STEPS = [
   'test:mount-ids',
   'test:inline-styles',
   'test:no-config-handler-types',
+  'test:status-key-fields',
   'test:privileges:ci',
   'test:lead-status-sync:ci',
   'test:lead-status-counts-rate-limit:ci',
