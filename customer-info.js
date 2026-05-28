@@ -142,6 +142,10 @@ async function ensureCustomerInfoSubmissionsTable() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS cis_token_hash_idx ON customer_info_submissions (token_hash)
   `);
+  await pool.query(`
+    ALTER TABLE customer_info_submissions
+    ADD COLUMN IF NOT EXISTS email_skipped_count INTEGER NOT NULL DEFAULT 0
+  `);
 }
 
 // ── Email templates ───────────────────────────────────────────────────────────
@@ -206,7 +210,7 @@ async function sendAdminNotificationEmail(submission) {
   }
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
-  const { contact_name, contact_email, corrected_email, corrected_mobile,
+  const { id: submissionId, contact_name, contact_email, corrected_email, corrected_mobile,
           address_line1, city, postcode, room_count, room_notes } = submission;
 
   const roomLabel = room_count === '1' ? '1 room' : room_count === '2' ? '2 rooms' : '3+ rooms';
@@ -261,6 +265,19 @@ async function sendAdminNotificationEmail(submission) {
     const n = attachments.length;
     photoSummaryHtml = `<p><strong>${n} photo${n === 1 ? '' : 's'} attached, ${skippedCount} skipped (too large after compression) — see dashboard to view them.</strong></p>`;
     photoSummaryText = `Photos: ${n} attached, ${skippedCount} skipped (too large — see dashboard)`;
+  }
+
+  // Persist the skipped count so the dashboard can surface a warning notice.
+  // Do this before sending so the count is recorded even if the send fails.
+  if (submissionId) {
+    try {
+      await pool.query(
+        `UPDATE customer_info_submissions SET email_skipped_count = $1 WHERE id = $2`,
+        [skippedCount, submissionId]
+      );
+    } catch (dbErr) {
+      console.warn('[customer-info] Could not persist email_skipped_count:', dbErr.message);
+    }
   }
 
   try {
@@ -756,7 +773,7 @@ router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, async (r
   const r = await pool.query(
     `SELECT id, contact_name, contact_email, created_at, expires_at, submitted_at,
             corrected_email, corrected_mobile, address_line1, city, postcode,
-            room_count, room_notes, photo_keys, masked_email
+            room_count, room_notes, photo_keys, masked_email, email_skipped_count
      FROM customer_info_submissions
      WHERE contact_id = $1
      ORDER BY created_at DESC`,
@@ -764,6 +781,7 @@ router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, async (r
   );
   const rows = r.rows.map(row => ({
     ...row,
+    email_skipped_count: row.email_skipped_count ?? 0,
     photoUrls: (row.photo_keys || []).map(k => signCustomerPhotoUrl(k)),
   }));
   res.json(rows);

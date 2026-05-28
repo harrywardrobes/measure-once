@@ -29,6 +29,7 @@ interface Submission {
   correctedEmail: string | null;
   correctedMobile: string | null;
   submittedAt: string | null;
+  emailSkippedCount: number;
   photoUrls: string[];
 }
 
@@ -353,6 +354,11 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                     <Typography variant="overline" color="text.disabled" sx={{ display: 'block', mb: 1.5 }}>
                       Photos ({submission.photoUrls.length})
                     </Typography>
+                    {submission.emailSkippedCount > 0 && (
+                      <Alert severity="warning" sx={{ mb: 1.5 }}>
+                        {submission.emailSkippedCount} photo{submission.emailSkippedCount === 1 ? ' was' : 's were'} too large to attach to the admin email — {submission.emailSkippedCount === 1 ? 'it is' : 'they are'} still viewable here.
+                      </Alert>
+                    )}
                     <Box
                       sx={{
                         display: 'grid',

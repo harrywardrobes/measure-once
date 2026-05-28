@@ -8,6 +8,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
+import Alert from '@mui/material/Alert';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HomeIcon from '@mui/icons-material/Home';
@@ -35,6 +36,7 @@ interface Submission {
   room_notes: string | null;
   photo_keys: string[];
   photoUrls: string[];
+  email_skipped_count: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -273,6 +275,11 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
                   <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', display: 'block', mb: 0.75 }}>
                     Photos ({sub.photoUrls.length})
                   </Typography>
+                  {sub.email_skipped_count > 0 && (
+                    <Alert severity="warning" sx={{ mb: 1, py: 0.5, fontSize: '0.75rem' }}>
+                      {sub.email_skipped_count} photo{sub.email_skipped_count === 1 ? ' was' : 's were'} too large to attach to the admin email — {sub.email_skipped_count === 1 ? 'it is' : 'they are'} still viewable here.
+                    </Alert>
+                  )}
                   <Box
                     sx={{
                       display: 'grid',
