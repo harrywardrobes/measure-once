@@ -541,6 +541,7 @@ function CustomerCardSkeleton() {
 function CustomerCard({
   contact,
   statusMap,
+  substatusMap,
   rooms,
   workflow,
   invoices,
@@ -552,6 +553,7 @@ function CustomerCard({
 }: {
   contact: Contact;
   statusMap: Map<string, LeadStatus>;
+  substatusMap: Map<string, string>;
   rooms: Room[];
   workflow: WorkflowDef | null;
   invoices: QBInvoice[];
@@ -576,6 +578,11 @@ function CustomerCard({
   const customerNum = contact.properties?.customer_number || '';
   const rawLs = contact.properties?.hs_lead_status || '';
   const lsLabel = rawLs ? statusMap.get(rawLs)?.label || rawLs : '';
+  const hwSubstatusValue = contact.properties?.hw_lead_substatus;
+  const substatusLabel =
+    rawLs && hwSubstatusValue
+      ? substatusMap.get(`${rawLs}__${hwSubstatusValue}`.toUpperCase()) || ''
+      : '';
 
   const effectiveRooms: Room[] = rooms.length
     ? rooms
@@ -591,7 +598,6 @@ function CustomerCard({
   const primaryRoom = effectiveRooms.find((r) => (r.roomStatus || 'active') === 'active') || effectiveRooms[0];
   const primaryStageKey = primaryRoom?.stageKey || 'sales';
   const leadStatusKey = contact.properties?.hs_lead_status;
-  const hwSubstatusValue = contact.properties?.hw_lead_substatus;
 
   const handler = cardActionHandlerFor(primaryStageKey, leadStatusKey, hwSubstatusValue);
 
@@ -677,6 +683,7 @@ function CustomerCard({
           {/* Right column — stage pills, lead status, QB badge */}
           <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: { xs: 'flex-start', md: 'flex-end' } }}>
             {lsLabel ? <Chip label={lsLabel} size="small" color="primary" variant="outlined" /> : null}
+            {substatusLabel ? <Chip label={substatusLabel} size="small" variant="outlined" /> : null}
             <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', justifyContent: { md: 'flex-end' } }}>
               {effectiveRooms.map((r, idx) => {
                 const sk = r.stageKey || 'sales';
@@ -1193,6 +1200,17 @@ export function CustomersPage(): React.ReactElement {
     return m;
   }, []);
 
+  const substatusMap = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of store.substatuses) {
+      const key = `${s.status_key}__${s.substatus_key}`.toUpperCase();
+      m.set(key, s.label);
+    }
+    return m;
+    // Recomputes on every substatus load/rename, just like availableSubstatuses.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.subsLoaded, store.subsVersion]);
+
   const availableSubstatuses = React.useMemo<LeadSubstatus[]>(() => {
     if (!leadStatus || leadStatus === '__no_status__') return [];
     return store.substatuses
@@ -1492,6 +1510,7 @@ export function CustomersPage(): React.ReactElement {
                 <CustomerCard
                   contact={contact}
                   statusMap={statusMap}
+                  substatusMap={substatusMap}
                   rooms={rooms}
                   workflow={workflow}
                   invoices={matchInvoicesForContact(contact, qbInvoices)}
