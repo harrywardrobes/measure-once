@@ -58,6 +58,7 @@ const STATIC_SUITES = [
   'test:color-radius-vars',
   'test:privilege-reads',
   'test:mount-ids',
+  'test:public-island-bootstrap',
   'test:bottom-nav-lint',
   'test:icon-lint',
   'test:inline-styles',

@@ -39,6 +39,7 @@ const STEPS = [
   'test:color-radius-vars',
   'test:privilege-reads',
   'test:mount-ids',
+  'test:public-island-bootstrap',
   'test:inline-styles',
   'test:no-config-handler-types',
   'test:status-key-fields',
