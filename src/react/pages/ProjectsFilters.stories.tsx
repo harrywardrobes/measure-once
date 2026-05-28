@@ -9,7 +9,7 @@ import {
   Typography,
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import { BRAND_COLORS, RADIUS } from '../theme';
+import { BRAND_COLORS, RADIUS, STAGE_COLORS } from '../theme';
 import { PageFilterBar } from '../components/PageFilterBar';
 
 const meta: Meta = {
@@ -46,11 +46,11 @@ function StalenessDemo({ defaultActive = false }: { defaultActive?: boolean }) {
           height: 24,
           fontWeight: 600,
           cursor: 'pointer',
-          bgcolor: active ? '#fef3c7' : undefined,
-          color: active ? '#92400e' : undefined,
-          borderColor: active ? '#fde68a' : BRAND_COLORS.stone,
+          bgcolor: active ? STAGE_COLORS.survey.light : undefined,
+          color: active ? STAGE_COLORS.survey.text : undefined,
+          borderColor: active ? STAGE_COLORS.survey.bg : BRAND_COLORS.stone,
           '& .MuiChip-label': { px: '8px' },
-          '&:hover': { bgcolor: active ? '#fde68a' : BRAND_COLORS.stone },
+          '&:hover': { bgcolor: active ? STAGE_COLORS.survey.light : BRAND_COLORS.stone },
         }}
       />
     </PageFilterBar>
@@ -104,7 +104,7 @@ function SubstageFilterDemo({ defaultHidden = [] }: { defaultHidden?: string[] }
           fontSize: '0.75rem',
           fontWeight: 600,
           fontFamily: 'inherit',
-          color: anchor || hidden.size > 0 ? '#fff' : BRAND_COLORS.ink3,
+          color: anchor || hidden.size > 0 ? 'common.white' : BRAND_COLORS.ink3,
           background: anchor || hidden.size > 0 ? BRAND_COLORS.plum : 'transparent',
           border: `1.5px solid ${anchor || hidden.size > 0 ? BRAND_COLORS.plum : BRAND_COLORS.stone}`,
           borderRadius: `${RADIUS.pill}px`,
@@ -234,11 +234,11 @@ export const CombinedFiltersBar: Story = {
             height: 24,
             fontWeight: 600,
             cursor: 'pointer',
-            bgcolor: stale ? '#fef3c7' : undefined,
-            color: stale ? '#92400e' : undefined,
-            borderColor: stale ? '#fde68a' : BRAND_COLORS.stone,
+            bgcolor: stale ? STAGE_COLORS.survey.light : undefined,
+            color: stale ? STAGE_COLORS.survey.text : undefined,
+            borderColor: stale ? STAGE_COLORS.survey.bg : BRAND_COLORS.stone,
             '& .MuiChip-label': { px: '8px' },
-            '&:hover': { bgcolor: stale ? '#fde68a' : BRAND_COLORS.stone },
+            '&:hover': { bgcolor: stale ? STAGE_COLORS.survey.light : BRAND_COLORS.stone },
           }}
         />
         <Box
@@ -253,7 +253,7 @@ export const CombinedFiltersBar: Story = {
             fontSize: '0.75rem',
             fontWeight: 600,
             fontFamily: 'inherit',
-            color: anchor || hidden.size > 0 ? '#fff' : BRAND_COLORS.ink3,
+            color: anchor || hidden.size > 0 ? 'common.white' : BRAND_COLORS.ink3,
             background: anchor || hidden.size > 0 ? BRAND_COLORS.plum : 'transparent',
             border: `1.5px solid ${anchor || hidden.size > 0 ? BRAND_COLORS.plum : BRAND_COLORS.stone}`,
             borderRadius: `${RADIUS.pill}px`,

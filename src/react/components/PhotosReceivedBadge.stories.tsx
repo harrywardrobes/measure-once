@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import { PhotosReceivedBadge } from './PhotosReceivedBadge';
 
 const meta: Meta<typeof PhotosReceivedBadge> = {
@@ -58,21 +59,13 @@ export const InContext: Story = {
   name: 'In context — shown next to a status pill',
   render: () => (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-      <Box
+      <Chip
         component="span"
-        sx={{
-          fontSize: '0.7rem',
-          fontWeight: 700,
-          px: '8px',
-          py: '2px',
-          borderRadius: '999px',
-          background: '#e0f2fe',
-          color: '#0369a1',
-          border: '1px solid #bae6fd',
-        }}
-      >
-        Awaiting Photos
-      </Box>
+        label="Awaiting Photos"
+        size="small"
+        color="info"
+        variant="outlined"
+      />
       <PhotosReceivedBadge leadStatus="AWAITING_PHOTOS" hwSubstatus="AWPH_RECEIVED" />
     </Box>
   ),

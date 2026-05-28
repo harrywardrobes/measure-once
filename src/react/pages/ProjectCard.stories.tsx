@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { Box, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CircularProgress from '@mui/material/CircularProgress';
-import { BRAND_COLORS, STAGE_COLORS } from '../theme';
+import { BRAND_COLORS, STAGE_COLORS, STATUS_COLORS } from '../theme';
 
 const meta: Meta = {
   title: 'Features/Pages/ProjectCard',
@@ -53,8 +53,8 @@ function DemoProjectCard({
   photosReceived = false,
 }: DemoCardProps) {
   const stageColors = STAGE_COLORS[actionStageKey || rooms[0]?.stageKey || ''];
-  const actionTint = stageColors?.light || '#f3f4f6';
-  const actionTextColor = stageColors?.text || '#374151';
+  const actionTint = stageColors?.light || STATUS_COLORS.neutral.bg;
+  const actionTextColor = stageColors?.text || STATUS_COLORS.neutral.text;
 
   return (
     <Box
@@ -112,9 +112,10 @@ function DemoProjectCard({
                 px: '6px',
                 py: '1px',
                 borderRadius: '999px',
-                background: '#dcfce7',
-                color: '#166534',
-                border: '1px solid #bbf7d0',
+                bgcolor: 'success.light',
+                color: 'success.dark',
+                border: '1px solid',
+                borderColor: 'success.light',
                 letterSpacing: '0.02em',
                 whiteSpace: 'nowrap',
                 flexShrink: 0,
@@ -239,19 +240,19 @@ function DemoProjectCard({
             justifyContent: 'space-between',
             px: '14px',
             py: '9px',
-            bgcolor: '#F0FDF4',
+            bgcolor: 'success.light',
             borderTop: `1px solid ${BRAND_COLORS.stone}`,
             cursor: continuingDesign ? 'wait' : 'pointer',
             opacity: continuingDesign ? 0.7 : 1,
           }}
         >
-          <Typography sx={{ color: '#15803d', fontWeight: 600, fontSize: '0.78rem' }}>
+          <Typography sx={{ color: 'success.dark', fontWeight: 600, fontSize: '0.78rem' }}>
             {continuingDesign ? 'Opening…' : 'Continue designing'}
           </Typography>
           {continuingDesign ? (
-            <CircularProgress size={12} sx={{ color: '#15803d' }} />
+            <CircularProgress size={12} sx={{ color: 'success.dark' }} />
           ) : (
-            <ChevronRightIcon sx={{ fontSize: 15, color: '#15803d', flexShrink: 0 }} />
+            <ChevronRightIcon sx={{ fontSize: 15, color: 'success.dark', flexShrink: 0 }} />
           )}
         </Box>
       )}

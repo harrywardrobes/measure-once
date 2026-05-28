@@ -2,7 +2,7 @@ import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { Box, Card, CardActionArea, Chip, CircularProgress, Stack, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { STAGE_COLORS } from '../theme';
+import { STAGE_COLORS, STATUS_COLORS } from '../theme';
 
 const meta: Meta = {
   title: 'Features/Pages/CustomerCard',
@@ -93,8 +93,8 @@ function DemoCustomerCard({
 }: DemoCardProps) {
   const primaryStageKey = actionStageKey || rooms[0]?.stageKey || 'sales';
   const stageColors = STAGE_COLORS[primaryStageKey];
-  const actionTint = showContinueDesigning ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
-  const actionTextColor = showContinueDesigning ? '#15803d' : (stageColors?.text || '#374151');
+  const actionTint = showContinueDesigning ? 'success.light' : (stageColors?.light || STATUS_COLORS.neutral.bg);
+  const actionTextColor = showContinueDesigning ? 'success.dark' : (stageColors?.text || STATUS_COLORS.neutral.text);
   const multiRoom = rooms.length > 1;
 
   const hasStrip = actionLabel || showContinueDesigning;

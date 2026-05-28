@@ -134,7 +134,7 @@ export const EmptyOrLoading: Story = {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         When no statuses are configured the chart renders an empty ReactFlow canvas.
       </Typography>
-      <Box sx={{ height: 300, border: '1px solid #e2e8f0', borderRadius: 2, overflow: 'hidden' }}>
+      <Box sx={{ height: 300, border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
         <ChartWrapper
           labels={[]}
           statuses={[]}
