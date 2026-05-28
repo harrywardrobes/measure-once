@@ -199,8 +199,18 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
           }
         </Box>
 
-        {/* Resend button — only for non-viewer roles */}
-        {canResend && (
+        {/* Action button — Review for submitted, Resend for pending/expired */}
+        {!isPending ? (
+          <Box sx={{ flexShrink: 0 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => setOpen(v => !v)}
+            >
+              Review
+            </Button>
+          </Box>
+        ) : canResend && (
           <Box sx={{ flexShrink: 0 }}>
             <ResendButton contactId={contactId} onSuccess={onResendSuccess} />
           </Box>
