@@ -213,17 +213,62 @@ async function sendAdminNotificationEmail(submission) {
   const addressParts = [address_line1, city, postcode].filter(Boolean);
   const address = addressParts.join(', ') || '—';
 
-  const base = appBaseUrl();
-  const photoRows = (submission.photo_keys || [])
-    .map(k => `${base}${signCustomerPhotoUrl(k)}`)
-    .map(url => `<li><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></li>`)
-    .join('');
+  const photoKeys = submission.photo_keys || [];
+  const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+  const attachments = [];
+  let skippedCount = 0;
+
+  if (photoKeys.length > 0) {
+    const { Client } = require('@replit/object-storage');
+    const client = new Client();
+    const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+    for (const key of photoKeys) {
+      try {
+        const storagePath = 'customer-info-photos/' + key.replace(/^obj:ci_/, '');
+        const ext = storagePath.split('.').pop()?.toLowerCase() || 'jpg';
+        const contentType = mimeMap[ext] || 'image/jpeg';
+        const res = await client.downloadAsBytes(storagePath);
+        if (res && res.ok === false) throw new Error(res.error?.message || 'download failed');
+        const rawValue = Array.isArray(res.value) ? res.value[0] : res.value;
+        const buffer = Buffer.from(rawValue);
+        if (buffer.length > MAX_ATTACHMENT_BYTES) {
+          console.warn(`[customer-info] Skipping attachment for ${key}: ${buffer.length} bytes exceeds 8 MB limit`);
+          skippedCount++;
+          continue;
+        }
+        attachments.push({
+          filename: `photo-${attachments.length + 1}.${ext}`,
+          content: buffer,
+          contentType,
+        });
+      } catch (err) {
+        console.warn(`[customer-info] Skipping attachment for key ${key}:`, err.message);
+        skippedCount++;
+      }
+    }
+  }
+
+  let photoSummaryHtml;
+  let photoSummaryText;
+  if (photoKeys.length === 0) {
+    photoSummaryHtml = '<p>No photos uploaded.</p>';
+    photoSummaryText = 'Photos: none uploaded';
+  } else if (skippedCount === 0) {
+    const n = attachments.length;
+    photoSummaryHtml = `<p><strong>${n} photo${n === 1 ? '' : 's'} attached.</strong></p>`;
+    photoSummaryText = `Photos: ${n} attached`;
+  } else {
+    const n = attachments.length;
+    photoSummaryHtml = `<p><strong>${n} photo${n === 1 ? '' : 's'} attached, ${skippedCount} skipped (too large after compression) — see dashboard to view them.</strong></p>`;
+    photoSummaryText = `Photos: ${n} attached, ${skippedCount} skipped (too large — see dashboard)`;
+  }
 
   try {
     await transport.sendMail({
       from, replyTo,
       to:      admins.join(', '),
       subject: `New customer info submission – ${contact_name || contact_email || 'Unknown'}`,
+      attachments,
       text: [
         `New customer info submission received.`,
         '',
@@ -238,7 +283,7 @@ async function sendAdminNotificationEmail(submission) {
         `Notes:`,
         room_notes || '—',
         '',
-        `Photos: ${(submission.photo_keys || []).length} uploaded`,
+        photoSummaryText,
       ].filter(l => l !== undefined && l !== false).join('\n'),
       html: `
         <p><strong>New customer info submission received.</strong></p>
@@ -251,7 +296,7 @@ async function sendAdminNotificationEmail(submission) {
           <tr><td><strong>Rooms</strong></td><td>${escapeHtml(roomLabel)}</td></tr>
         </table>
         ${room_notes ? `<p><strong>Notes:</strong></p><p style="white-space:pre-wrap">${escapeHtml(room_notes)}</p>` : ''}
-        ${photoRows ? `<p><strong>Photos:</strong></p><ul>${photoRows}</ul>` : '<p>No photos uploaded.</p>'}
+        ${photoSummaryHtml}
       `,
     });
     console.log(`[customer-info] Admin notification sent for contact ${contact_email}`);
@@ -334,11 +379,12 @@ async function updateHubSpotSubstatus(contactId, substatusKey) {
 
 // ── Photo upload (multer → object storage) ───────────────────────────────────
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
-const MAX_PHOTO_BYTES = 15 * 1024 * 1024; // 15 MB per file
+const MAX_PHOTO_BYTES = 15 * 1024 * 1024; // 15 MB per file (client compresses to ≤1.5 MB before upload)
+const MAX_PHOTO_FILES = 15;
 
 const _photoUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_PHOTO_BYTES, files: 20 },
+  limits: { fileSize: MAX_PHOTO_BYTES, files: MAX_PHOTO_FILES },
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_MIME.has(file.mimetype.toLowerCase())) cb(null, true);
     else cb(new Error('Only JPEG, PNG, and WebP images are allowed.'));
@@ -595,7 +641,7 @@ router.post('/api/customer-info/:token/photos',
     req._cisRow = row;
     next();
   },
-  _photoUpload.array('photos', 20),
+  _photoUpload.array('photos', MAX_PHOTO_FILES),
   async (req, res) => {
     const files = req.files || [];
     if (!files.length) {

@@ -45,6 +45,12 @@ interface UploadedPhoto {
   name:     string;
 }
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const MAX_PHOTOS = 15;
+const TARGET_COMPRESSED_BYTES = 1.5 * 1024 * 1024; // 1.5 MB target after compression
+const MAX_CANVAS_DIM = 2048;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function getToken(): string {
@@ -75,6 +81,43 @@ function clearDraft(token: string) {
   try {
     localStorage.removeItem(lsKey(token));
   } catch { /* ignore */ }
+}
+
+async function compressImage(file: File): Promise<File> {
+  return new Promise(resolve => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+      if (width > MAX_CANVAS_DIM || height > MAX_CANVAS_DIM) {
+        const scale = MAX_CANVAS_DIM / Math.max(width, height);
+        width  = Math.round(width  * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width  = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve(file); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+      const baseName = file.name.replace(/\.[^.]+$/, '') || 'photo';
+      const outName  = `${baseName}.jpg`;
+      const tryQuality = (q: number) => {
+        canvas.toBlob(blob => {
+          if (!blob) { resolve(file); return; }
+          if (blob.size <= TARGET_COMPRESSED_BYTES || q <= 0.3) {
+            resolve(new File([blob], outName, { type: 'image/jpeg' }));
+          } else {
+            tryQuality(Math.max(+(q - 0.1).toFixed(1), 0.3));
+          }
+        }, 'image/jpeg', q);
+      };
+      tryQuality(0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(file); };
+    img.src = objectUrl;
+  });
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -234,12 +277,24 @@ export function CustomerInfoPage() {
   async function handlePhotoUpload(files: FileList) {
     if (!files.length) return;
     setUploadErr('');
-    setUploading(true);
-    const fd = new FormData();
-    for (let i = 0; i < files.length; i++) {
-      fd.append('photos', files[i]);
+
+    const currentCount = photos.length;
+    if (currentCount >= MAX_PHOTOS) {
+      setUploadErr(`You've reached the ${MAX_PHOTOS} photo limit — remove one to add another.`);
+      return;
     }
+
+    const remaining = MAX_PHOTOS - currentCount;
+    const fileArray = Array.from(files).slice(0, remaining);
+    const truncated = files.length > remaining;
+
+    setUploading(true);
     try {
+      const compressed = await Promise.all(fileArray.map(f => compressImage(f)));
+      const fd = new FormData();
+      for (const f of compressed) {
+        fd.append('photos', f);
+      }
       const r = await fetch(`/api/customer-info/${encodeURIComponent(token)}/photos`, {
         method: 'POST',
         body: fd,
@@ -248,14 +303,17 @@ export function CustomerInfoPage() {
       if (!r.ok) throw new Error(d.error || 'Upload failed');
       const newPhotos: UploadedPhoto[] = (d.keys as string[]).map((key, i) => ({
         key,
-        previewUrl: URL.createObjectURL(files[i]),
-        name: files[i].name,
+        previewUrl: URL.createObjectURL(compressed[i]),
+        name: compressed[i].name,
       }));
       setPhotos(prev => {
         const updated = [...prev, ...newPhotos];
         saveDraft(token, formData, updated.map(p => p.key));
         return updated;
       });
+      if (truncated) {
+        setUploadErr(`Only ${remaining} photo${remaining === 1 ? '' : 's'} added — you've reached the ${MAX_PHOTOS} photo limit.`);
+      }
     } catch (e) {
       setUploadErr((e as Error).message);
     } finally {
@@ -489,55 +547,81 @@ export function CustomerInfoPage() {
                   </Typography>
 
                   {/* Drop zone */}
-                  <Box
-                    component="label"
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 1,
-                      py: 3,
-                      px: 2,
-                      border: '2px dashed',
-                      borderColor: uploading ? BRAND_COLORS.orchid : 'grey.300',
-                      borderRadius: 2,
-                      cursor: 'pointer',
-                      bgcolor: uploading ? 'rgba(124,58,237,0.04)' : 'grey.50',
-                      transition: 'border-color 0.15s, background 0.15s',
-                      '&:hover': { borderColor: BRAND_COLORS.orchid, bgcolor: 'rgba(124,58,237,0.04)' },
-                    }}
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={e => {
-                      e.preventDefault();
-                      if (e.dataTransfer.files?.length) handlePhotoUpload(e.dataTransfer.files);
-                    }}
-                  >
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      multiple
-                      style={{ display: 'none' }}
-                      onChange={e => { if (e.target.files?.length) handlePhotoUpload(e.target.files); }}
-                    />
-                    {uploading ? (
-                      <>
-                        <CircularProgress size={24} sx={{ color: BRAND_COLORS.orchid }} />
-                        <Typography variant="caption" color="text.secondary">Uploading…</Typography>
-                      </>
-                    ) : (
-                      <>
-                        <CloudUploadIcon sx={{ fontSize: 32, color: 'grey.400' }} />
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          Tap to upload photos
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          JPEG, PNG or WebP — up to 15 MB each
-                        </Typography>
-                      </>
-                    )}
-                  </Box>
+                  {(() => {
+                    const atLimit = photos.length >= MAX_PHOTOS;
+                    const disabled = uploading || atLimit;
+                    return (
+                      <Box
+                        component={disabled ? 'div' : 'label'}
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 1,
+                          py: 3,
+                          px: 2,
+                          border: '2px dashed',
+                          borderColor: uploading
+                            ? BRAND_COLORS.orchid
+                            : atLimit
+                              ? 'grey.200'
+                              : 'grey.300',
+                          borderRadius: 2,
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          bgcolor: uploading
+                            ? 'rgba(124,58,237,0.04)'
+                            : atLimit
+                              ? 'grey.100'
+                              : 'grey.50',
+                          opacity: atLimit ? 0.6 : 1,
+                          transition: 'border-color 0.15s, background 0.15s, opacity 0.15s',
+                          '&:hover': disabled ? {} : { borderColor: BRAND_COLORS.orchid, bgcolor: 'rgba(124,58,237,0.04)' },
+                        }}
+                        onDragOver={e => e.preventDefault()}
+                        onDrop={e => {
+                          e.preventDefault();
+                          if (!disabled && e.dataTransfer.files?.length) handlePhotoUpload(e.dataTransfer.files);
+                        }}
+                      >
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          multiple
+                          disabled={disabled}
+                          style={{ display: 'none' }}
+                          onChange={e => { if (e.target.files?.length) handlePhotoUpload(e.target.files); }}
+                        />
+                        {uploading ? (
+                          <>
+                            <CircularProgress size={24} sx={{ color: BRAND_COLORS.orchid }} />
+                            <Typography variant="caption" color="text.secondary">Uploading…</Typography>
+                          </>
+                        ) : atLimit ? (
+                          <>
+                            <CloudUploadIcon sx={{ fontSize: 32, color: 'grey.300' }} />
+                            <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.disabled' }}>
+                              Photo limit reached
+                            </Typography>
+                            <Typography variant="caption" color="text.disabled">
+                              Remove a photo to add another
+                            </Typography>
+                          </>
+                        ) : (
+                          <>
+                            <CloudUploadIcon sx={{ fontSize: 32, color: 'grey.400' }} />
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              Tap to upload photos
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Up to {MAX_PHOTOS} photos · JPEG, PNG or WebP
+                            </Typography>
+                          </>
+                        )}
+                      </Box>
+                    );
+                  })()}
 
                   {uploadErr && (
                     <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
