@@ -46,6 +46,8 @@
     "test:customer-info-email-attachments:ci": "node scripts/with-test-db.js test/customer-info-email-attachments/run.js",
     "test:customer-info-resend": "node test/customer-info-resend/run.js",
     "test:customer-info-resend:ci": "node scripts/with-test-db.js test/customer-info-resend/run.js",
+    "test:masked-email-backfill": "node test/masked-email-backfill/run.js",
+    "test:masked-email-backfill:ci": "node scripts/with-test-db.js test/masked-email-backfill/run.js",
     "test:customer-info-live-badge": "node test/customer-info-live-badge/run.js",
     "test:customer-info-live-badge:ci": "node scripts/with-test-db.js test/customer-info-live-badge/run.js",
     "test:skipped-photo-warning": "node test/skipped-photo-warning/run.js",
