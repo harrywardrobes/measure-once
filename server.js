@@ -4787,6 +4787,58 @@ async function clearOrphanedSubstatusesForDeletedSubstatus(deletedSubstatusKey) 
   }
 }
 
+// One-time boot backfill: find HubSpot contacts still carrying the misspelled
+// substatus value 'AWAITING_PHOTOS__AWPH_RECIEVED' (typo from an earlier
+// customer-info.js seed) and PATCH them to the canonical 'AWAITING_PHOTOS__AWPH_RECEIVED'.
+// Idempotent — no-ops when no contacts carry the old value.
+// Runs fire-and-forget so it never blocks startup.
+async function backfillMisspelledAwphSubstatus() {
+  if (!getCredential('access_token')) return;
+  const OLD_VAL = 'AWAITING_PHOTOS__AWPH_RECIEVED';
+  const NEW_VAL = 'AWAITING_PHOTOS__AWPH_RECEIVED';
+  const label   = '[backfill-awph-typo]';
+  try {
+    let patched = 0;
+    let failed  = 0;
+    let after;
+    do {
+      const body = {
+        filterGroups: [{
+          filters: [{ propertyName: 'hw_lead_substatus', operator: 'EQ', value: OLD_VAL }],
+        }],
+        properties: ['hw_lead_substatus'],
+        limit: 100,
+      };
+      if (after) body.after = after;
+      const r = await hubspotSearchWithRetry(body);
+      const contacts = r.data.results || [];
+      after = r.data.paging?.next?.after;
+      if (contacts.length === 0 && patched === 0 && failed === 0 && !after) {
+        return;
+      }
+      for (const contact of contacts) {
+        const cid = contact.id;
+        try {
+          await hubspotRequestWithRetry(
+            'patch',
+            `${HS}/crm/v3/objects/contacts/${encodeURIComponent(cid)}`,
+            { properties: { hw_lead_substatus: NEW_VAL } }
+          );
+          patched++;
+        } catch (patchErr) {
+          failed++;
+          console.warn(`${label} PATCH contact ${cid} failed:`, patchErr.response?.data?.message || patchErr.message);
+        }
+      }
+    } while (after);
+    if (patched > 0 || failed > 0) {
+      console.log(`${label} patched=${patched} failed=${failed}`);
+    }
+  } catch (e) {
+    console.warn(`${label} search failed:`, e.response?.data?.message || e.message);
+  }
+}
+
 app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
@@ -6570,6 +6622,7 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Customer info submissions table setup failed:', e.message); }
     try { await ensurePhotoReviewOutcomesTable(); console.log('  Photo review outcomes table ready'); }
     catch (e) { console.error('  Photo review outcomes table setup failed:', e.message); }
+    backfillMisspelledAwphSubstatus().catch(e => console.warn('  AWPH substatus backfill error:', e.message));
     try { await ensureDefaultReviewHandlerBinding(); }
     catch (e) { console.error('  Default review handler binding setup failed:', e.message); }
     try { await ensureSubstatusHandlerBindings(); }
