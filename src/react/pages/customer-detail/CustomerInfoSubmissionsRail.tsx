@@ -287,7 +287,16 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
                   </Typography>
                   {sub.email_skipped_count > 0 && (
                     <Alert severity="warning" sx={{ mb: 1, py: 0.5, fontSize: '0.75rem' }}>
-                      {sub.email_skipped_count} photo{sub.email_skipped_count === 1 ? ' was' : 's were'} too large to attach to the admin email — {sub.email_skipped_count === 1 ? 'it is' : 'they are'} still viewable here.
+                      {sub.email_skipped_count} photo{sub.email_skipped_count === 1 ? ' was' : 's were'} too large to attach to the admin email —{' '}
+                      {sub.email_skipped_count === 1 ? 'it is' : 'they are'}{' '}
+                      <a
+                        href={sub.photoUrls[0]}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="skipped-photo-link"
+                      >
+                        still viewable here
+                      </a>.
                     </Alert>
                   )}
                   <Box

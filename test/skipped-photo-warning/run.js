@@ -82,11 +82,15 @@ function makeContactBody(contactId) {
   });
 }
 
+// Stable data URI used as the synthetic photo URL in every probe.
+// Defined at module scope so SKP-D probes can compare against it directly.
+const DATA_IMG = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+
 // Synthetic by-contact response.  photoUrls must be non-empty so the Photos
 // section is rendered by SubmissionCard (the warning only renders inside it).
 function makeByContactBody(emailSkippedCount) {
   // Use a data URI so no real image request is made to the test server.
-  const dataImg = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+  const dataImg = DATA_IMG;
   return JSON.stringify([
     {
       id:                  1,
@@ -324,6 +328,11 @@ async function writeReport(runId) {
     '  must contain the singular copy.',
     '- **[SKP-C] No warning**: `email_skipped_count: 0`. The Alert must be absent even',
     '  after expanding the card.',
+    '- **[SKP-D] Anchor href — plural**: `email_skipped_count: 2`. The `<a>` element',
+    '  inside the warning Alert (identified by `data-testid="skipped-photo-link"`) must',
+    '  have an `href` equal to the first entry in `photoUrls`. Regression guard for the',
+    '  "still viewable here" anchor added in task #1946.',
+    '- **[SKP-D] Anchor href — singular**: Same check for `email_skipped_count: 1`.',
     '',
     '## Relevant files',
     '',
@@ -370,6 +379,8 @@ async function main() {
     '[SKP-B] singular warning alert visible (email_skipped_count=1)',
     '[SKP-B] singular warning text correct',
     '[SKP-C] no warning alert when email_skipped_count=0',
+    '[SKP-D] plural case — "still viewable here" anchor href correct',
+    '[SKP-D] singular case — "still viewable here" anchor href correct',
   ];
 
   if (!puppeteer) {
@@ -471,6 +482,25 @@ async function main() {
           ? 'plural copy correct ("2 photos were … they are still viewable here")'
           : `alert text: "${(alertTextA || '').slice(0, 200)}"`,
       );
+
+      // ── [SKP-D] plural: assert the anchor href equals the first photo URL ──
+      const anchorHrefA = await pageA.evaluate(() => {
+        const section = document.getElementById('customer-info-submissions-section');
+        if (!section) return null;
+        const a = section.querySelector('[data-testid="skipped-photo-link"]');
+        return a ? a.getAttribute('href') : null;
+      });
+      const expectedHrefA = DATA_IMG;
+      const dPluralOk = !!anchorHrefA && anchorHrefA === expectedHrefA;
+      record(
+        PROBE_LABELS[5],
+        dPluralOk,
+        dPluralOk
+          ? `anchor href correct: "${anchorHrefA.slice(0, 60)}…"`
+          : anchorHrefA === null
+            ? '[data-testid="skipped-photo-link"] anchor not found in the warning Alert'
+            : `href mismatch — got: "${anchorHrefA.slice(0, 120)}", expected: "${expectedHrefA.slice(0, 120)}"`,
+      );
     }
     await pageA.__ctx.close().catch(() => {});
 
@@ -517,6 +547,25 @@ async function main() {
         singularOk
           ? 'singular copy correct ("1 photo was … it is still viewable here")'
           : `alert text: "${(alertTextB || '').slice(0, 200)}"`,
+      );
+
+      // ── [SKP-D] singular: assert the anchor href equals the first photo URL ─
+      const anchorHrefB = await pageB.evaluate(() => {
+        const section = document.getElementById('customer-info-submissions-section');
+        if (!section) return null;
+        const a = section.querySelector('[data-testid="skipped-photo-link"]');
+        return a ? a.getAttribute('href') : null;
+      });
+      const expectedHrefB = DATA_IMG;
+      const dSingularOk = !!anchorHrefB && anchorHrefB === expectedHrefB;
+      record(
+        PROBE_LABELS[6],
+        dSingularOk,
+        dSingularOk
+          ? `anchor href correct: "${anchorHrefB.slice(0, 60)}…"`
+          : anchorHrefB === null
+            ? '[data-testid="skipped-photo-link"] anchor not found in the warning Alert'
+            : `href mismatch — got: "${anchorHrefB.slice(0, 120)}", expected: "${expectedHrefB.slice(0, 120)}"`,
       );
     }
     await pageB.__ctx.close().catch(() => {});
