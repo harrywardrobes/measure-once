@@ -12,6 +12,7 @@ const BOOTSTRAP_EXCLUDED = new Set([
   'set-password-root',
   'onboarding-root',
   'dv-signoff-mount',
+  'customer-info-mount',
   'not-found-root',
   'access-restricted-root',
 ]);
