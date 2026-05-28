@@ -43,6 +43,7 @@ const STEPS = [
   'test:no-config-handler-types',
   'test:status-key-fields',
   'test:workflow-map-ordering',
+  'test:mui-select-click',
   'test:ci-runner-sync',
   'test:privileges:ci',
   'test:lead-status-sync:ci',

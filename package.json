@@ -195,6 +195,7 @@
     "test:no-config-handler-types": "node scripts/check-no-config-handler-types.mjs",
     "test:status-key-fields": "node scripts/check-status-key-fields.mjs",
     "test:workflow-map-ordering": "node scripts/check-workflow-map-ordering.mjs",
+    "test:mui-select-click": "node scripts/check-mui-select-click.mjs",
     "test:storybook-output-clean": "node scripts/check-storybook-output-clean.mjs",
     "test:storybook-smoke": "node scripts/storybook-smoke.mjs",
     "test:ci": "node scripts/run-ci.mjs",

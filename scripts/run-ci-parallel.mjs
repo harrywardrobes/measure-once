@@ -65,6 +65,7 @@ const STATIC_SUITES = [
   'test:handler-config-blocks',
   'test:status-key-fields',
   'test:workflow-map-ordering',
+  'test:mui-select-click',
   'test:ci-runner-sync',
 ];
 
