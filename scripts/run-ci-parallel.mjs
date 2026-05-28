@@ -135,6 +135,7 @@ const DB_SUITES = [
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',
   'test:scheduling-past-time-guard:ci',
+  'test:customer-info-live-badge:ci',
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
