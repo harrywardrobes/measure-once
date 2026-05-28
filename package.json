@@ -101,6 +101,8 @@
     "test:phone-directory-customers:ci": "node scripts/with-test-db.js test/phone-directory/run-customers.js",
     "test:dev-mode-filter": "node test/dev-mode-filter/run.js",
     "test:dev-mode-filter:ci": "node scripts/with-test-db.js test/dev-mode-filter/run.js",
+    "test:dev-mode-bc-sync": "node test/dev-mode-bc-sync/run.js",
+    "test:dev-mode-bc-sync:ci": "node scripts/with-test-db.js test/dev-mode-bc-sync/run.js",
     "test:contacts-all-stale-fallback": "node test/contacts-all-stale-fallback/run.js",
     "test:contacts-all-stale-fallback:ci": "node scripts/with-test-db.js test/contacts-all-stale-fallback/run.js",
     "test:contacts-stale-visibility": "node test/contacts-stale-visibility/run.js",

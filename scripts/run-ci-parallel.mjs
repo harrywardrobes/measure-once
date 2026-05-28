@@ -148,6 +148,7 @@ const DB_SUITES = [
   'test:profile-google-calendar:ci',
   'test:scheduling-past-time-guard:ci',
   'test:customer-info-live-badge:ci',
+  'test:dev-mode-bc-sync:ci',
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

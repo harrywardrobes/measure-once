@@ -106,6 +106,7 @@ const STEPS = [
   'test:sales-board-error-state:ci',
   'test:chunk-cache-headers:ci',
   'test:customers-pagination:ci',
+  'test:dev-mode-bc-sync:ci',
   'test:calendar-empty-state:ci',
   'test:active-projects-hubspot-outage:ci',
   'test:turnstile-signout:ci',
