@@ -63,9 +63,11 @@
 //       Guards the deleteCardActionSubstatus callback in CardActionsPage.tsx.
 //   (Q) Startup seeding: ensureSubstatusHandlerBindings auto-binds on boot.
 //       Pure-API + DB probe (no browser, requires one server restart).
-//       Two lead_substatuses rows are seeded — one with no existing binding
-//       (qSub1) and one with a pre-existing summarise_phone_call binding
-//       (qSub2) — then the server is killed and a fresh instance is spawned.
+//       Three lead_substatuses rows are seeded — one with no existing binding
+//       (qSub1), one with a pre-existing summarise_phone_call binding
+//       (qSub2), and one whose substatus_key is present in
+//       SUBSTATUS_HANDLER_MAP (qSub3, key AWPH_RECEIVED) — then the server
+//       is killed and a fresh instance is spawned.
 //       Q.1 — qSub1 receives a new card_action_handler_bindings row with
 //             handler type show_message (FALLBACK_HANDLER — substatus_key
 //             PRIVTEST_Q_UNBOUND is absent from SUBSTATUS_HANDLER_MAP).
@@ -74,6 +76,10 @@
 //       Q.2 — qSub2 keeps the same handler_id after the restart (the routine
 //             skips substatuses already present in the boundIds set so admin
 //             overrides are never silently overwritten).
+//       Q.3 — qSub3 receives a new binding whose handler type is
+//             review_customer_photos — the value from SUBSTATUS_HANDLER_MAP
+//             for the AWPH_RECEIVED key — not the show_message fallback.
+//             Covers the map-lookup branch of ensureSubstatusHandlerBindings.
 //
 // API pre-checks run before any browser tab opens so failures in the API
 // surface clearly.
@@ -153,6 +159,8 @@ const SUB_STARTUP_UNBOUND_K      = 'PRIVTEST_Q_UNBOUND';
 // second substatus: pre-existing binding should survive the restart unchanged
 const SUB_STARTUP_PREBOUND_K     = 'PRIVTEST_Q_PREBOUND';
 const HANDLER_NAME_Q_PRE         = 'PrivTest Q pre-existing handler';
+// third substatus: key present in SUBSTATUS_HANDLER_MAP → should resolve to review_customer_photos
+const SUB_STARTUP_MAPPED_K       = 'AWPH_RECEIVED';
 
 const HANDLER_NAME_DV         = 'PrivTest design visit handler';
 const HANDLER_NAME_SV         = 'PrivTest schedule-visit handler';
@@ -269,6 +277,21 @@ async function purgeFixtures(pool) {
     await pool.query(
       `DELETE FROM card_action_handlers WHERE name = $1`,
       [HANDLER_NAME_Q_PRE]
+    );
+  } catch (_) {}
+  // (Q.3) auto-created review_customer_photos handler.  Only delete it when it
+  // has no remaining bindings so shared-DB real AWPH bindings are never removed.
+  // In an isolated test DB it will have no bindings once the Q substatus row
+  // (and its cascade-deleted binding) are gone.  The substatus DELETE above runs
+  // first so this NOT EXISTS check is safe.
+  try {
+    await pool.query(
+      `DELETE FROM card_action_handlers
+         WHERE name = 'Review customer photos'
+           AND NOT EXISTS (
+             SELECT 1 FROM card_action_handler_bindings
+              WHERE handler_id = card_action_handlers.id
+           )`
     );
   } catch (_) {}
   await pool.query(
@@ -4108,6 +4131,19 @@ async function main() {
     );
     const qSub2Id = qSub2Res.rows[0].id;
 
+    // Q fixture 3: substatus whose substatus_key is present in SUBSTATUS_HANDLER_MAP
+    // (AWPH_RECEIVED → review_customer_photos).  No pre-existing binding so
+    // ensureSubstatusHandlerBindings must create one with the mapped handler type,
+    // not the show_message fallback.
+    const qSub3Res = await pool.query(
+      `INSERT INTO lead_substatuses
+         (status_key, substatus_key, label, action_label, sort_order)
+       VALUES ($1, $2, 'PrivTest Q sub mapped', 'PrivTest Q action C', 9996)
+       RETURNING id`,
+      [LBL_KEY_STARTUP, SUB_STARTUP_MAPPED_K]
+    );
+    const qSub3Id = qSub3Res.rows[0].id;
+
     // Create the pre-existing handler via the admin API (server is still running).
     const qPreRes = await adminClient.post('/api/admin/card-action-handlers', {
       name: HANDLER_NAME_Q_PRE,
@@ -4152,6 +4188,7 @@ async function main() {
     if (!qBootOk) {
       record('(Q.1) ensureSubstatusHandlerBindings inserts binding on boot', '1 binding row', 'SKIPPED — server restart failed', false);
       record('(Q.2) Pre-existing binding not overwritten on restart', 'same handler_id', 'SKIPPED — server restart failed', false);
+      record('(Q.3) SUBSTATUS_HANDLER_MAP key resolves to mapped handler type on boot', 'handler type=review_customer_photos', 'SKIPPED — server restart failed', false);
       try { qChild.kill('SIGTERM'); } catch {}
     } else {
       // Poll for the Q.1 auto-binding: ensureSubstatusHandlerBindings runs async
@@ -4197,6 +4234,29 @@ async function main() {
         );
       }
 
+      // Q.3: verify that a substatus whose substatus_key is present in
+      // SUBSTATUS_HANDLER_MAP receives a binding with the mapped handler type
+      // (review_customer_photos), NOT the show_message fallback.
+      // Poll alongside Q.1 because both bindings are created in the same
+      // ensureSubstatusHandlerBindings pass on startup.
+      const qMappedRow = await pollFn(async () => {
+        const r = await pool.query(
+          `SELECT b.handler_id, h.type
+             FROM card_action_handler_bindings b
+             JOIN card_action_handlers h ON h.id = b.handler_id
+            WHERE b.substatus_id = $1`,
+          [qSub3Id]
+        );
+        return r.rows.length > 0 ? r.rows[0] : null;
+      }, 15000, 300);
+
+      record(
+        '(Q.3) SUBSTATUS_HANDLER_MAP key (AWPH_RECEIVED) resolves to review_customer_photos on boot',
+        'binding row created with handler type=review_customer_photos (SUBSTATUS_HANDLER_MAP lookup)',
+        `row=${JSON.stringify(qMappedRow)}`,
+        qMappedRow !== null && qMappedRow.type === 'review_customer_photos',
+      );
+
       // Shut down the restarted server.
       qChild.kill('SIGTERM');
       // Wait briefly so port 5050 is released before the process exits.
@@ -4204,8 +4264,12 @@ async function main() {
     }
 
     // Fixtures are cleaned up by purgeFixtures (called from cleanupAndExit):
-    // - lead_substatuses WHERE status_key = LBL_KEY_STARTUP  (explicit entry above)
+    // - lead_substatuses WHERE status_key = LBL_KEY_STARTUP  (explicit entry above,
+    //   covers qSub1, qSub2, and qSub3; bindings cascade-deleted with their substatus)
     // - card_action_handlers WHERE name = HANDLER_NAME_Q_PRE (explicit entry above)
+    // - card_action_handlers WHERE name = 'Review customer photos' AND NOT EXISTS
+    //   bindings (explicit entry above — only removes the auto-created handler in
+    //   isolated-DB runs; in shared-DB the real AWPH binding keeps the handler alive)
     // - lead_status_config  WHERE LOWER(key) LIKE 'privtest_cah_%' (covers PRIVTEST_CAH_STARTUP)
     // Bindings are cascade-deleted when their substatus or handler is deleted.
   }
@@ -4478,10 +4542,12 @@ async function writeReport(runId, findings) {
     '- **(Q) Startup seeding — `ensureSubstatusHandlerBindings`** (task #1818):',
     '  pure-API + DB probe (no browser) that verifies the startup routine in',
     '  `photo-reviews.js` correctly auto-binds and correctly skips on restart.',
-    '  Two `lead_substatuses` rows are seeded while the original server is running:',
-    '  one with no existing binding (qSub1) and one with a pre-existing',
-    '  `summarise_phone_call` binding (qSub2).  The server is then killed and a',
-    '  fresh instance is spawned so `ensureSubstatusHandlerBindings` runs again.',
+    '  Three `lead_substatuses` rows are seeded while the original server is running:',
+    '  one with no existing binding (qSub1), one with a pre-existing',
+    '  `summarise_phone_call` binding (qSub2), and one whose `substatus_key` is',
+    '  present in `SUBSTATUS_HANDLER_MAP` (qSub3, key `AWPH_RECEIVED`).  The',
+    '  server is then killed and a fresh instance is spawned so',
+    '  `ensureSubstatusHandlerBindings` runs again.',
     '  - **Q.1** After the restart, `card_action_handler_bindings` contains a row',
     '    for qSub1 whose handler type is `show_message` — the `FALLBACK_HANDLER`',
     '    chosen because `SUB_STARTUP_UNBOUND_K` (`PRIVTEST_Q_UNBOUND`) is absent',
@@ -4492,6 +4558,11 @@ async function writeReport(runId, findings) {
     '    before the restart.  `ensureSubstatusHandlerBindings` skips any substatus',
     '    that already has a binding (`boundIds` set), so admin-configured',
     '    overrides survive a server restart without being replaced.',
+    '  - **Q.3** qSub3 receives a new binding whose handler type is',
+    '    `review_customer_photos` — the value from `SUBSTATUS_HANDLER_MAP` for',
+    '    the `AWPH_RECEIVED` key — not the `show_message` fallback.  Covers the',
+    '    map-lookup branch of `ensureSubstatusHandlerBindings` that was previously',
+    '    untested.',
     '',
     '## Notes',
     '',
