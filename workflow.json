@@ -33,51 +33,51 @@
     "order": {
       "label": "Order",
       "statuses": [
-        { "id": "order_doors", "label": "Order doors", "hint": "Order in for previous Monday or Tuesday" },
-        { "id": "order_sheets", "label": "Order sheets", "hint": "" },
-        { "id": "order_hardware", "label": "Order hardware", "hint": "" }
+        { "id": "order_doors",    "label": "Order doors",    "hint": "Order in for previous Monday or Tuesday" },
+        { "id": "order_sheets",   "label": "Order sheets",   "hint": "Order sheet materials in time for workshop prep" },
+        { "id": "order_hardware", "label": "Order hardware", "hint": "Includes hinges, handles, and any fixings for the job" }
       ]
     },
     "workshop": {
       "label": "Workshop",
       "statuses": [
-        { "id": "print_installer_pack", "label": "Print installer pack", "hint": "Renders, cutlist, any installation instructions" },
-        { "id": "print_labels", "label": "Print labels", "hint": "" },
-        { "id": "notify_customer", "label": "Notify customer production is underway", "hint": "" },
-        { "id": "prep_framework", "label": "Prep framework, timber and MDF", "hint": "" },
-        { "id": "prep_sheet_materials", "label": "Prep sheet materials", "hint": "" },
-        { "id": "cut_sheet_materials", "label": "Cut sheet materials", "hint": "" }
+        { "id": "print_installer_pack",  "label": "Print installer pack",                  "hint": "Renders, cutlist, any installation instructions" },
+        { "id": "print_labels",          "label": "Print labels",                           "hint": "Label each component to match the cutlist" },
+        { "id": "notify_customer",       "label": "Notify customer production is underway", "hint": "Send a message letting the customer know work is underway" },
+        { "id": "prep_framework",        "label": "Prep framework, timber and MDF",         "hint": "Cut and prep all timber and MDF framework components" },
+        { "id": "prep_sheet_materials",  "label": "Prep sheet materials",                   "hint": "Prepare sheet materials ready for cutting" },
+        { "id": "cut_sheet_materials",   "label": "Cut sheet materials",                    "hint": "Cut all sheet materials to size per the cutlist" }
       ]
     },
     "packing": {
       "label": "Packing",
       "statuses": [
-        { "id": "in_progress", "label": "In progress", "hint": "" },
-        { "id": "date_agreed", "label": "Date / time agreed with customer", "hint": "" },
-        { "id": "ready_to_load", "label": "Ready to load into van", "hint": "" }
+        { "id": "in_progress",  "label": "In progress",                       "hint": "Wrap and protect all components before loading" },
+        { "id": "date_agreed",  "label": "Date / time agreed with customer",  "hint": "Confirm the delivery date and time window with the customer" },
+        { "id": "ready_to_load","label": "Ready to load into van",            "hint": "All components checked, wrapped, and staged for loading" }
       ]
     },
     "delivery": {
       "label": "Delivery",
       "statuses": [
-        { "id": "loaded", "label": "Loaded into van", "hint": "" },
-        { "id": "delivered", "label": "Delivered", "hint": "Note date, time, and any comments" }
+        { "id": "loaded",    "label": "Loaded into van", "hint": "All components loaded and secured in the van" },
+        { "id": "delivered", "label": "Delivered",       "hint": "Note date, time, and any comments" }
       ]
     },
     "installation": {
       "label": "Installation",
       "statuses": [
-        { "id": "scheduled", "label": "Scheduled", "hint": "" },
-        { "id": "in_progress", "label": "In progress", "hint": "" },
-        { "id": "complete", "label": "Complete", "hint": "" },
-        { "id": "final_invoice_sent", "label": "Final invoice sent", "hint": "" }
+        { "id": "scheduled",          "label": "Scheduled",          "hint": "Confirm the installation date with both the customer and installer" },
+        { "id": "in_progress",        "label": "In progress",        "hint": "Installation is currently underway on site" },
+        { "id": "complete",           "label": "Complete",           "hint": "All components fitted and checked with the customer" },
+        { "id": "final_invoice_sent", "label": "Final invoice sent", "hint": "Send the final invoice once the installation is signed off" }
       ]
     },
     "aftercare": {
       "label": "Aftercare",
       "statuses": [
-        { "id": "final_payment", "label": "Final payment received", "hint": "" },
-        { "id": "thank_you", "label": "Thank you message sent", "hint": "Email customer thanking them and requesting a review" }
+        { "id": "final_payment", "label": "Final payment received",    "hint": "Mark once payment has cleared" },
+        { "id": "thank_you",     "label": "Thank you message sent",    "hint": "Email customer thanking them and requesting a review" }
       ]
     }
   }
