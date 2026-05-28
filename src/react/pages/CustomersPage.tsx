@@ -519,20 +519,27 @@ function saveCustomersScroll() {
 
 function CustomerCardSkeleton() {
   return (
-    <Card variant="outlined" sx={{ width: '100%', height: '100%' }}>
+    <Card variant="outlined" sx={{ width: '100%', overflow: 'hidden' }}>
       <Box sx={{ p: 2 }}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
-          <Skeleton variant="text" width="55%" height={24} />
-          <Skeleton variant="rounded" width={64} height={22} sx={{ flexShrink: 0 }} />
-        </Stack>
-        <Stack direction="row" spacing={0.75} sx={{ mb: 1, flexWrap: 'wrap' }}>
-          <Skeleton variant="rounded" width={80} height={20} />
-          <Skeleton variant="rounded" width={64} height={20} />
-        </Stack>
-        <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap' }}>
-          <Skeleton variant="rounded" width={120} height={20} />
-          <Skeleton variant="rounded" width={90} height={20} />
-        </Stack>
+        {/* Two-column on md+; single column on mobile — mirrors real CustomerCard */}
+        <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' }, alignItems: { md: 'flex-start' } }}>
+
+          {/* Left column — name + contact chips */}
+          <Box sx={{ flex: '1 1 0', minWidth: 0 }}>
+            <Skeleton variant="text" width="55%" height={24} sx={{ mb: 0.75 }} />
+            <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap' }}>
+              <Skeleton variant="rounded" width={120} height={20} />
+              <Skeleton variant="rounded" width={90} height={20} />
+            </Stack>
+          </Box>
+
+          {/* Right column — stage pill + lead status chip */}
+          <Box sx={{ flex: '0 1 auto', display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: { xs: 'flex-start', md: 'flex-end' } }}>
+            <Skeleton variant="rounded" width={80} height={22} />
+            <Skeleton variant="rounded" width={64} height={20} />
+          </Box>
+
+        </Box>
       </Box>
     </Card>
   );
