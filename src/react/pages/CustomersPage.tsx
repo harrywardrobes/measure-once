@@ -1465,7 +1465,7 @@ export function CustomersPage(): React.ReactElement {
         {loading ? (
           <Grid container spacing={2} id="customers-results">
             {Array.from({ length: 6 }).map((_, i) => (
-              <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
+              <Grid key={i} size={{ xs: 12 }}>
                 <CustomerCardSkeleton />
               </Grid>
             ))}
@@ -1477,7 +1477,7 @@ export function CustomersPage(): React.ReactElement {
         ) : (
           <Grid container spacing={2} id="customers-results">
             {visibleContacts.map(({ contact, rooms }) => (
-              <Grid key={contact.id} size={{ xs: 12, sm: 6, md: 4 }}>
+              <Grid key={contact.id} size={{ xs: 12 }}>
                 <CustomerCard
                   contact={contact}
                   statusMap={statusMap}
