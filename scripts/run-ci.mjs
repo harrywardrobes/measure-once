@@ -58,6 +58,7 @@ const STEPS = [
   'test:design-visit-qb-resubmit:ci',
   'test:design-visit-submitter-name:ci',
   'test:customer-info:ci',
+  'test:photo-storage-errors:ci',
   'test:photo-approval-notification:ci',
   'test:photo-reviews:ci',
   'test:start-design-visit:ci',
