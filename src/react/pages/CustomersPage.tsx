@@ -646,6 +646,17 @@ export function CustomersPage(): React.ReactElement {
         if (data && typeof data.devMode === 'boolean') setDevMode(data.devMode);
       })
       .catch(() => {});
+
+    let devModeBc: BroadcastChannel | null = null;
+    try {
+      devModeBc = new BroadcastChannel('dev_mode_changed');
+      devModeBc.onmessage = (e: MessageEvent<{ devMode?: boolean }>) => {
+        if (typeof e.data?.devMode === 'boolean') setDevMode(e.data.devMode);
+      };
+    } catch { /* BroadcastChannel not available */ }
+    return () => {
+      devModeBc?.close();
+    };
   }, [isAdmin]);
 
   const handleOpenInvoice = React.useCallback((firstId: string, allIds: string[]) => {

@@ -171,6 +171,11 @@ export function DevEnvironmentPage() {
         throw new Error(data.error || `HTTP ${res.status}`);
       }
       setDevMode(next);
+      try {
+        const bc = new BroadcastChannel('dev_mode_changed');
+        bc.postMessage({ devMode: next });
+        bc.close();
+      } catch { /* BroadcastChannel not available */ }
     } catch (e: unknown) {
       setDevModeError(e instanceof Error ? e.message : 'Could not save dev-mode setting.');
     } finally {
