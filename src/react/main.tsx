@@ -33,6 +33,7 @@ import { BottomNav } from './components/BottomNav';
 import { AdminTabsBar } from './components/AdminTabsBar';
 import { BottomActionBar } from './components/BottomActionBar';
 import { AppBootstrapProvider } from './contexts/AppBootstrapContext';
+import { PUBLIC_ISLAND_IDS } from './lib/publicIslands';
 const CommandPalette    = React.lazy(() => import('./components/CommandPalette').then(m => ({ default: m.CommandPalette })));
 const AccessRequestGate = React.lazy(() => import('./components/AccessRequestGate').then(m => ({ default: m.AccessRequestGate })));
 
@@ -76,14 +77,12 @@ const AccessRestrictedPage       = React.lazy(() => import('./pages/AccessRestri
  * Mounts that must NOT receive the ConnectionToastProvider:
  * - Public auth pages (no session, status endpoints return 401)
  * - Design-visit sign-off page (public, customer-facing)
+ *
+ * Derived directly from PUBLIC_ISLAND_IDS (src/react/lib/publicIslands.ts).
+ * To add a new public island, add its id there and annotate the MOUNTS entry
+ * below with `// public-island`.
  */
-const CONN_TOAST_EXCLUDED = new Set([
-  'login-root',
-  'set-password-root',
-  'onboarding-root',
-  'dv-signoff-mount',
-  'customer-info-mount',
-]);
+const CONN_TOAST_EXCLUDED = PUBLIC_ISLAND_IDS;
 
 /**
  * Every React mount goes through `AppThemeProvider` so the shared MUI
@@ -154,9 +153,11 @@ const MOUNTS: Array<{
 }> = [
   // public-island: islands below that carry this annotation are served on pages
   // accessible without an authenticated session.  Any mount tagged // public-island
-  // MUST also appear in both CONN_TOAST_EXCLUDED (in this file) and BOOTSTRAP_EXCLUDED
-  // (src/react/contexts/AppBootstrapContext.tsx).
-  // scripts/check-public-island-bootstrap.mjs enforces this as Check C / Check D.
+  // MUST also have its id added to PUBLIC_ISLAND_IDS in
+  // src/react/lib/publicIslands.ts — that is the single authoritative source.
+  // Both CONN_TOAST_EXCLUDED (this file) and BOOTSTRAP_EXCLUDED
+  // (src/react/contexts/AppBootstrapContext.tsx) are derived from it automatically.
+  // scripts/check-public-island-bootstrap.mjs enforces the annotation ↔ Set sync.
   { id: 'login-root',           render: () => <LoginPage /> },           // public-island
   { id: 'set-password-root',    render: () => <SetPasswordPage /> },     // public-island
   { id: 'onboarding-root',      render: () => <OnboardingPage /> },      // public-island

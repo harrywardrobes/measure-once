@@ -1,21 +1,24 @@
 import React, { useEffect } from 'react';
 import { useAuth } from './AuthContext';
+import { PUBLIC_ISLAND_IDS } from '../lib/publicIslands';
 
 /**
- * Island ids that must NOT receive the bootstrap guard:
- * - Public auth pages (no session; auth APIs return 401)
- * - Design-visit sign-off (public, customer-facing)
- * - Error/restricted pages (rendered before or instead of auth)
+ * Ids that must skip the bootstrap redirect guard but are NOT public-facing
+ * pages — they are error/restricted pages rendered after auth failures.
+ * These are excluded from PUBLIC_ISLAND_IDS (which drives CONN_TOAST_EXCLUDED)
+ * but still need to bypass AppBootstrapProvider's auth-redirect logic.
  */
-const BOOTSTRAP_EXCLUDED = new Set([
-  'login-root',
-  'set-password-root',
-  'onboarding-root',
-  'dv-signoff-mount',
-  'customer-info-mount',
-  'not-found-root',
-  'access-restricted-root',
+const BOOTSTRAP_ONLY_IDS = new Set([
+  'not-found-root',         // 404 page, rendered after auth; never public
+  'access-restricted-root', // access-denied page, rendered after auth; never public
 ]);
+
+/**
+ * Derived from PUBLIC_ISLAND_IDS (src/react/lib/publicIslands.ts) plus the
+ * BOOTSTRAP_ONLY_IDS above.  No manual sync required — add new public islands
+ * to PUBLIC_ISLAND_IDS; add new error/restricted pages to BOOTSTRAP_ONLY_IDS.
+ */
+const BOOTSTRAP_EXCLUDED = new Set([...PUBLIC_ISLAND_IDS, ...BOOTSTRAP_ONLY_IDS]);
 
 function AppBootstrapInner({ children }: { children: React.ReactNode }) {
   const { user, loading, privilegeLevel } = useAuth();
@@ -59,8 +62,9 @@ function AppBootstrapInner({ children }: { children: React.ReactNode }) {
  * This is the React replacement for the `bootstrap()` / `checkAuthStatus()`
  * functions that previously lived in `public/core.js`.
  *
- * Islands listed in BOOTSTRAP_EXCLUDED (public/auth pages) are rendered
- * unwrapped so they never trigger an auth-based redirect loop.
+ * Islands listed in PUBLIC_ISLAND_IDS (public auth/customer pages) are rendered
+ * unwrapped so they never trigger an auth-based redirect loop, as are the
+ * error/restricted pages in BOOTSTRAP_ONLY_IDS (not-found-root, access-restricted-root).
  */
 export function AppBootstrapProvider({
   children,
