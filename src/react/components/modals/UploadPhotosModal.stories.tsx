@@ -108,8 +108,13 @@ function Demo({
 }
 
 export const Default: Story = {
-  name: 'Normal — link generates then send email',
+  name: 'Normal — link generates, then send email or copy & close',
   render: () => <Demo ctx={mockCtx} generateDelay={800} />,
+};
+
+export const CopyAndClose: Story = {
+  name: 'Copy & close — link ready, no email sent',
+  render: () => <Demo ctx={mockCtx} generateDelay={300} />,
 };
 
 export const LinkGenerating: Story = {

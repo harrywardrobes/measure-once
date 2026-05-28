@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -87,6 +87,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
+  const [copyAndClosing, setCopyAndClosing] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -147,17 +148,38 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
     }
   }
 
+  const handleCopyAndClose = useCallback(() => {
+    if (!generatedLink) return;
+    navigator.clipboard.writeText(generatedLink.formLink).catch(() => {
+      // Clipboard write failed — close anyway
+    }).finally(() => {
+      setCopyAndClosing(false);
+      setSent(false);
+      setError('');
+      setGeneratedLink(null);
+      setLinkError('');
+      onClose();
+    });
+    setCopyAndClosing(true);
+  }, [generatedLink, onClose]);
+
   function handleClose() {
     setSent(false);
     setError('');
     setGeneratedLink(null);
     setLinkError('');
+    setCopyAndClosing(false);
     onClose();
   }
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Send photo upload link</DialogTitle>
+      <DialogTitle>
+        Share photo upload link
+        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25, fontWeight: 'normal' }}>
+          Send via email or copy the link to share directly
+        </Typography>
+      </DialogTitle>
       <DialogContent>
         {sent ? (
           <Stack spacing={1.5} sx={{ mt: 0.5 }}>
@@ -227,11 +249,21 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
           <Button variant="contained" onClick={handleClose}>Done</Button>
         ) : (
           <>
-            <Button onClick={handleClose} disabled={submitting}>Cancel</Button>
+            <Button onClick={handleClose} disabled={submitting || copyAndClosing}>Cancel</Button>
+            {generatedLink && !linkError && (
+              <Button
+                onClick={handleCopyAndClose}
+                disabled={submitting || copyAndClosing}
+                startIcon={copyAndClosing ? <CircularProgress size={16} color="inherit" /> : <ContentCopyIcon fontSize="small" />}
+                data-testid="cah-copy-close"
+              >
+                {copyAndClosing ? 'Copying…' : 'Copy & close'}
+              </Button>
+            )}
             <Button
               variant="contained"
               onClick={handleSend}
-              disabled={submitting || generatingLink || !!linkError}
+              disabled={submitting || generatingLink || !!linkError || copyAndClosing}
               startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
               data-testid="cah-primary"
             >
