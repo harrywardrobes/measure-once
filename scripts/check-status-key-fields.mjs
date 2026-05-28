@@ -23,6 +23,12 @@
  *    the staleness-flag companions for status-key string props.
  * 3. Derive the base field name (strip the trailing `Invalid` suffix) and assert it
  *    is present in the `KNOWN_STATUS_KEY_FIELDS` set.
+ * 4. Verify that ActionHandlersPage.tsx still (a) imports `KNOWN_STATUS_KEY_FIELDS`
+ *    as a value (not just a type) from `./HandlerConfigBlocks`, and (b) iterates it
+ *    with a `for (const … of KNOWN_STATUS_KEY_FIELDS)` loop — the canonical stale-
+ *    detection pattern.  If either invariant breaks, stale-key detection in the JSON
+ *    fallback editor silently stops working even though KNOWN_STATUS_KEY_FIELDS is
+ *    correctly populated.
  *
  * Exit codes:
  *   0 — all status-key fields are registered; no violations
@@ -44,6 +50,11 @@ const ROOT = resolve(__dirname, '..');
 const HANDLER_CONFIG_BLOCKS = join(
   ROOT,
   'src/react/pages/admin/HandlerConfigBlocks.tsx',
+);
+
+const ACTION_HANDLERS_PAGE = join(
+  ROOT,
+  'src/react/pages/admin/ActionHandlersPage.tsx',
 );
 
 const source = readFileSync(HANDLER_CONFIG_BLOCKS, 'utf8');
@@ -170,28 +181,119 @@ for (const entry of detected) {
   }
 }
 
+// ── Check 4: KNOWN_STATUS_KEY_FIELDS is imported and iterated in the JSON ─────
+//             fallback loop inside ActionHandlersPage.tsx
+
+/**
+ * Two invariants must hold in ActionHandlersPage.tsx:
+ *
+ * A) KNOWN_STATUS_KEY_FIELDS must be listed in a value-import from
+ *    './HandlerConfigBlocks' (not just a type import).  If the symbol is
+ *    dropped from the import the loop silently does nothing.
+ *
+ * B) KNOWN_STATUS_KEY_FIELDS must be iterated directly inside the stale-
+ *    detection loop — the canonical pattern is:
+ *      `for (const <var> of KNOWN_STATUS_KEY_FIELDS)`
+ *    If this loop is refactored away (e.g. replaced with a forEach or removed
+ *    entirely) stale-key detection in the JSON fallback editor breaks silently.
+ */
+
+const ahpSource = readFileSync(ACTION_HANDLERS_PAGE, 'utf8');
+
+/** @type {string[]} */
+const check4Errors = [];
+
+// ── 4A: value-import check ────────────────────────────────────────────────────
+// We look for `KNOWN_STATUS_KEY_FIELDS` appearing on a non-`import type` line
+// that belongs to an import from './HandlerConfigBlocks'.  We use a simple
+// multiline block match: find every `import { … } from './HandlerConfigBlocks'`
+// block that is NOT a pure type-import, then check whether the identifier
+// appears inside it.
+//
+// Regex: matches `import {…} from './HandlerConfigBlocks'` (value imports only).
+// The `s` flag lets `.` cross newlines.
+const VALUE_IMPORT_RE =
+  /import\s*\{([^}]*)\}\s*from\s*['"]\.\/HandlerConfigBlocks['"]/gs;
+
+let foundValueImport = false;
+let importMatch;
+while ((importMatch = VALUE_IMPORT_RE.exec(ahpSource)) !== null) {
+  // The block contains the symbols — check if KNOWN_STATUS_KEY_FIELDS is one
+  const importedNames = importMatch[1];
+  if (/\bKNOWN_STATUS_KEY_FIELDS\b/.test(importedNames)) {
+    foundValueImport = true;
+    break;
+  }
+}
+
+if (!foundValueImport) {
+  check4Errors.push(
+    'KNOWN_STATUS_KEY_FIELDS is not present in a value import from ' +
+    "'./HandlerConfigBlocks' in ActionHandlersPage.tsx.\n" +
+    '  If the import was converted to `import type` or removed, the stale-\n' +
+    '  detection loop will silently do nothing at runtime.',
+  );
+}
+
+// ── 4B: loop usage check ──────────────────────────────────────────────────────
+// Assert that the file contains a `for (const <var> of KNOWN_STATUS_KEY_FIELDS`
+// expression — the canonical iteration pattern used by the JSON fallback stale-
+// detection block.  Any other iteration form (forEach, reduce, map) would also
+// be acceptable, but this specific pattern is the one the codebase uses, and
+// requiring it to remain unchanged makes accidental removals detectable.
+const LOOP_RE = /for\s*\(\s*const\s+\w+\s+of\s+KNOWN_STATUS_KEY_FIELDS\b/;
+
+if (!LOOP_RE.test(ahpSource)) {
+  check4Errors.push(
+    'ActionHandlersPage.tsx no longer contains a ' +
+    '`for (const … of KNOWN_STATUS_KEY_FIELDS)` loop.\n' +
+    '  The JSON-fallback stale-detection block iterates KNOWN_STATUS_KEY_FIELDS\n' +
+    '  to flag stale lead-status / sub-status keys in the JSON editor.  If the\n' +
+    '  loop was refactored or removed, stale-key detection is silently broken.',
+  );
+}
+
+if (check4Errors.length > 0) {
+  process.stderr.write(
+    '\n[check-status-key-fields] CHECK 4 FAILURES ' +
+    `(${check4Errors.length}):\n\n`,
+  );
+  for (const msg of check4Errors) {
+    process.stderr.write(`  • ${msg}\n\n`);
+  }
+  process.stderr.write(
+    'Restore the import and/or the loop in ActionHandlersPage.tsx — see the\n' +
+    'comment block around the `jsonStaleLsRefs` variable for context.\n\n',
+  );
+  // Fall through so that Check 3 violations are also reported below.
+}
+
 // ── Report ────────────────────────────────────────────────────────────────────
 
-if (violations.length === 0) {
+const allClear = violations.length === 0 && check4Errors.length === 0;
+
+if (allClear) {
   console.log(
     '[check-status-key-fields] OK — all status-key companion props are ' +
-    'registered in KNOWN_STATUS_KEY_FIELDS.',
+    'registered in KNOWN_STATUS_KEY_FIELDS, and ActionHandlersPage.tsx ' +
+    'correctly imports and iterates the list.',
   );
   process.exit(0);
 }
 
-process.stderr.write(
-  `\n[check-status-key-fields] VIOLATIONS (${violations.length}):\n\n`,
-);
-
-for (const { interfaceName, field, line } of violations) {
+if (violations.length > 0) {
   process.stderr.write(
-    `  Line ${line}: '${field}Invalid' found in ${interfaceName} but ` +
-    `'${field}' is NOT in KNOWN_STATUS_KEY_FIELDS.\n`,
+    `\n[check-status-key-fields] CHECK 3 VIOLATIONS (${violations.length}):\n\n`,
   );
-}
 
-process.stderr.write(`
+  for (const { interfaceName, field, line } of violations) {
+    process.stderr.write(
+      `  Line ${line}: '${field}Invalid' found in ${interfaceName} but ` +
+      `'${field}' is NOT in KNOWN_STATUS_KEY_FIELDS.\n`,
+    );
+  }
+
+  process.stderr.write(`
 A *ConfigProps interface has a boolean \`<field>Invalid\` companion prop, which
 signals that \`<field>\` stores a lead-status or sub-status key.  The JSON
 fallback editor in ActionHandlersPage.tsx scans KNOWN_STATUS_KEY_FIELDS to
@@ -204,5 +306,6 @@ To fix:
   \`label\`, and \`type\` ('lead_status' or 'lead_status_or_substatus').
 
 `);
+}
 
 process.exit(1);
