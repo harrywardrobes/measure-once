@@ -105,6 +105,7 @@ const DB_SUITES = [
   'test:hubspot-429-retry-contacts:ci',
   'test:design-visit-hubspot-retry:ci',
   'test:visits-past-time:ci',
+  'test:hubspot-credential-audit:ci',
   'test:phone-directory:ci',
   'test:phone-directory-customers:ci',
   'test:contacts-all-stale-fallback:ci',
