@@ -180,6 +180,8 @@
     "test:scheduling-past-time-guard:ci": "node scripts/with-test-db.js test/scheduling-past-time-guard/run.js",
     "test:workflow-map": "node test/workflow-map/run.js",
     "test:workflow-map:ci": "node scripts/with-test-db.js test/workflow-map/run.js",
+    "test:projects-top-spacing": "node test/projects-top-spacing/run.js",
+    "test:projects-top-spacing:ci": "node scripts/with-test-db.js test/projects-top-spacing/run.js",
     "test:bundle-sizes": "node scripts/check-bundle-sizes.mjs",
     "test:stale-bundle": "node scripts/check-stale-bundle.mjs",
     "test:bundle-size-trend": "node scripts/test-bundle-size-trend.mjs",

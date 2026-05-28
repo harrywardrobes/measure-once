@@ -1241,6 +1241,35 @@ export function ProjectsPage() {
         background: BRAND_COLORS.paper,
       }}
     >
+      {/* Page heading — replaces the normal-flow PageHeadingPanel which is
+          suppressed on /projects because the fixed overlay covers it */}
+      <Box
+        sx={{
+          maxWidth: 640,
+          width: '100%',
+          mx: 'auto',
+          px: 2,
+          pt: 2,
+          pb: 1,
+          boxSizing: 'border-box',
+          flexShrink: 0,
+        }}
+      >
+        <Typography
+          component="h1"
+          sx={{
+            m: 0,
+            fontFamily: "'Anton', system-ui, sans-serif",
+            fontSize: '1.6rem',
+            lineHeight: 1.15,
+            letterSpacing: '0.01em',
+            color: 'var(--ink-1)',
+          }}
+        >
+          Projects
+        </Typography>
+      </Box>
+
       {/* Stage filter tabs */}
       <PageFilterBar
         sx={{

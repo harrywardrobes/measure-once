@@ -33,7 +33,8 @@ export function PageHeadingPanel() {
   const suppressed =
     path === '/admin' ||
     path.startsWith('/admin/') ||
-    /^\/customers\/[^/]+/.test(path);
+    /^\/customers\/[^/]+/.test(path) ||
+    path === '/projects';
   const title = PAGE_TITLES[path] || '';
 
   if (!title || suppressed) return null;
