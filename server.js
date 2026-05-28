@@ -6534,12 +6534,19 @@ async function cleanupStaleHubSpotCredentialRows() {
     'hubspot_app_id_override',
     'hubspot_client_secret_override',
   ];
-  const { rowCount } = await pool.query(
-    `DELETE FROM admin_settings WHERE key = ANY($1::text[])`,
+  const { rowCount, rows } = await pool.query(
+    `DELETE FROM admin_settings WHERE key = ANY($1::text[]) RETURNING key`,
     [STALE_KEYS],
   );
   if (rowCount > 0) {
+    const removed = rows.map(r => r.key).join(', ');
     console.log(`  [migration] Removed ${rowCount} stale HubSpot credential row(s) from admin_settings.`);
+    await logAdminAction(
+      '[system]',
+      'startup_migration',
+      null,
+      `cleanupStaleHubSpotCredentialRows: removed ${rowCount} stale admin_settings row(s): ${removed}`,
+    );
   }
 }
 
