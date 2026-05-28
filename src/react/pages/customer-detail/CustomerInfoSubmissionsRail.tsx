@@ -15,6 +15,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import SendIcon from '@mui/icons-material/Send';
 import { usePrivilege } from '../../hooks/usePrivilege';
+import { useToast } from '../../contexts/ToastContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,7 @@ function ResendButton({
 }) {
   const [state, setState] = useState<ResendState>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const showToast = useToast();
 
   async function handleResend() {
     setState('loading');
@@ -79,6 +81,7 @@ function ResendButton({
         throw new Error((body as { error?: string }).error || `HTTP ${r.status}`);
       }
       setState('sent');
+      showToast('A fresh link has been sent to the customer');
       onSuccess();
     } catch (e) {
       setErrorMsg((e as Error).message);
