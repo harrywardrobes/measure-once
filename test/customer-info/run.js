@@ -458,11 +458,20 @@ async function main() {
         v7cOk
           ? `400 error="${v7c.json.error}"`
           : `status=${v7c.status} body=${JSON.stringify(v7c.json).slice(0, 200)}`);
+
+      // CI-V7d – bare prefix with no suffix ('obj:ci_') → 400
+      const v7d = await postSubmit(BASE, rawToken, { ...validBase, photoKeys: ['obj:ci_'] });
+      const v7dOk = v7d.status === 400 && v7d.json?.error;
+      record('CI-V7.bare-prefix-photo-key',
+        v7dOk,
+        v7dOk
+          ? `400 error="${v7d.json.error}"`
+          : `status=${v7d.status} body=${JSON.stringify(v7d.json).slice(0, 200)}`);
     } else {
       for (const id of ['CI-V2.missing-addressLine1', 'CI-V3.invalid-roomCount',
                          'CI-V4.missing-city', 'CI-V5.missing-postcode', 'CI-V6.no-photos',
                          'CI-V7.bad-photo-key-prefix', 'CI-V7.empty-photo-key',
-                         'CI-V7.non-string-photo-key']) {
+                         'CI-V7.non-string-photo-key', 'CI-V7.bare-prefix-photo-key']) {
         record(id, false, 'skipped — no rawToken');
       }
     }
