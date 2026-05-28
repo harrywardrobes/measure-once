@@ -25,7 +25,7 @@ export default meta;
 type Story = StoryObj<typeof ScheduleVisitConfig>;
 
 function Wrapper({ prefilledDuration = 60 }: { prefilledDuration?: number }) {
-  const [type, setType] = useState('add_design_visit_to_calendar');
+  const [type, setType] = useState('schedule_visit');
   return (
     <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Survey booked · Default action">
       <ScheduleVisitConfig defaultDurationMin={prefilledDuration} />
@@ -65,7 +65,7 @@ export const Prefilled: Story = {
 export const DurationValidationError: Story = {
   name: 'Duration validation error',
   render: () => {
-    const [type, setType] = useState('add_design_visit_to_calendar');
+    const [type, setType] = useState('schedule_visit');
     return (
       <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Survey booked · Default action">
         <ScheduleVisitConfig defaultDurationMin={9999} />

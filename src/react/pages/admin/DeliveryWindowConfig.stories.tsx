@@ -25,7 +25,7 @@ export default meta;
 type Story = StoryObj<typeof DeliveryWindowConfig>;
 
 function Wrapper({ prefilledTitle = '' }: { prefilledTitle?: string }) {
-  const [type, setType] = useState('add_design_visit_to_calendar');
+  const [type, setType] = useState('schedule_delivery_window');
   return (
     <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Delivery ready · Default action">
       <DeliveryWindowConfig defaultTitle={prefilledTitle} />
@@ -64,7 +64,7 @@ export const Prefilled: Story = {
 export const CalendarOff: Story = {
   name: 'Google Calendar off',
   render: () => {
-    const [type, setType] = useState('add_design_visit_to_calendar');
+    const [type, setType] = useState('schedule_delivery_window');
     return (
       <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Delivery ready · Default action">
         <DeliveryWindowConfig defaultTitle="Delivery window" addToGoogleCalendar={false} />

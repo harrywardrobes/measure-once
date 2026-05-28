@@ -13,10 +13,15 @@ import { NO_CONFIG_HANDLER_TYPES } from './ActionHandlersPage';
 export { NO_CONFIG_HANDLER_TYPES };
 
 export const HANDLER_TYPES = [
-  { value: 'add_design_visit_to_calendar', label: 'Add design visit to calendar' },
-  { value: 'start_design_visit',           label: 'Start design visit wizard' },
-  { value: 'upload_photos_and_info',       label: 'Upload photos & info' },
-  { value: 'review_customer_photos',       label: 'Review customer photos' },
+  { value: 'add_design_visit_to_calendar',  label: 'Add design visit to calendar' },
+  { value: 'start_design_visit',            label: 'Start design visit wizard' },
+  { value: 'upload_photos_and_info',        label: 'Upload photos & info' },
+  { value: 'review_customer_photos',        label: 'Review customer photos' },
+  { value: 'schedule_visit',               label: 'Schedule visit (hidden from UI)' },
+  { value: 'schedule_delivery_window',     label: 'Schedule delivery window (hidden from UI)' },
+  { value: 'schedule_installation_slot',   label: 'Schedule installation slot (hidden from UI)' },
+  { value: 'summarise_phone_call',         label: 'Summarise phone call (hidden from UI)' },
+  { value: 'show_message',                 label: 'Show message (hidden from UI)' },
 ];
 
 export const FIXTURE_LEAD_STATUSES: LeadStatusOption[] = [

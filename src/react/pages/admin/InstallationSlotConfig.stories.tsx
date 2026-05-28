@@ -32,7 +32,7 @@ function Wrapper({
   prefilledTitle?: string;
   prefilledDuration?: number;
 }) {
-  const [type, setType] = useState('add_design_visit_to_calendar');
+  const [type, setType] = useState('schedule_installation_slot');
   return (
     <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Installation booked · Default action">
       <InstallationSlotConfig defaultDurationMin={prefilledDuration} defaultTitle={prefilledTitle} />
@@ -72,7 +72,7 @@ export const Prefilled: Story = {
 export const DurationValidationError: Story = {
   name: 'Duration validation error',
   render: () => {
-    const [type, setType] = useState('add_design_visit_to_calendar');
+    const [type, setType] = useState('schedule_installation_slot');
     return (
       <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Installation booked · Default action">
         <InstallationSlotConfig defaultDurationMin={9999} />
@@ -94,7 +94,7 @@ export const DurationValidationError: Story = {
 export const CalendarOff: Story = {
   name: 'Google Calendar off',
   render: () => {
-    const [type, setType] = useState('add_design_visit_to_calendar');
+    const [type, setType] = useState('schedule_installation_slot');
     return (
       <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Installation booked · Default action">
         <InstallationSlotConfig
