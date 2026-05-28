@@ -144,6 +144,7 @@ const DB_SUITES = [
   'test:info-card-review-resend:ci',
   'test:calendar-empty-state:ci',
   'test:skipped-photo-warning:ci',
+  'test:skipped-photo-dashboard-link:ci',
   'test:turnstile-signout:ci',
   'test:nav-role-config:ci',
   'test:invoice-panel-hidden:ci',

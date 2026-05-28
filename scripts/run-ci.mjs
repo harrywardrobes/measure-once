@@ -116,6 +116,7 @@ const STEPS = [
   'test:dev-mode-bc-sync:ci',
   'test:calendar-empty-state:ci',
   'test:skipped-photo-warning:ci',
+  'test:skipped-photo-dashboard-link:ci',
   'test:info-card-review-resend:ci',
   'test:active-projects-hubspot-outage:ci',
   'test:turnstile-signout:ci',
