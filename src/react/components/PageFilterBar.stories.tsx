@@ -25,9 +25,9 @@ export const Default: Story = {
   args: {
     children: (
       <>
-        <span style={{ padding: '6px 12px', background: '#E8E3D8', borderRadius: 4 }}>Chip A</span>
-        <span style={{ padding: '6px 12px', background: '#E8E3D8', borderRadius: 4 }}>Chip B</span>
-        <span style={{ padding: '6px 12px', background: '#E8E3D8', borderRadius: 4 }}>Chip C</span>
+        <Box component="span" sx={{ px: '12px', py: '6px', bgcolor: 'action.selected', borderRadius: '4px' }}>Chip A</Box>
+        <Box component="span" sx={{ px: '12px', py: '6px', bgcolor: 'action.selected', borderRadius: '4px' }}>Chip B</Box>
+        <Box component="span" sx={{ px: '12px', py: '6px', bgcolor: 'action.selected', borderRadius: '4px' }}>Chip C</Box>
       </>
     ),
   },
@@ -62,12 +62,13 @@ export const ManyItems: Story = {
   args: {
     sx: { px: 2 },
     children: Array.from({ length: 14 }, (_, i) => (
-      <span
+      <Box
         key={i}
-        style={{ padding: '6px 14px', background: '#E8E3D8', borderRadius: 4, flexShrink: 0, whiteSpace: 'nowrap' }}
+        component="span"
+        sx={{ px: '14px', py: '6px', bgcolor: 'action.selected', borderRadius: '4px', flexShrink: 0, whiteSpace: 'nowrap' }}
       >
         Item {i + 1}
-      </span>
+      </Box>
     )),
   },
   parameters: {
