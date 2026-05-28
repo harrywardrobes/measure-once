@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { fmtGBP } from '../utils/formatters';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
@@ -8,6 +8,8 @@ import { usePaginatedContacts, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/us
 import { ContactsPagination } from '../components/ContactsPagination';
 import { InvoiceDetailDrawer, type InvoiceSummary as QBInvoice } from '../components/InvoiceDetailDrawer';
 import { createPortal } from 'react-dom';
+import { useCardActionHandlers, type CardActionHandlerData } from '../hooks/useCardActionHandlers';
+import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import {
   Alert,
   Box,
@@ -35,6 +37,7 @@ import { PageFilterBar } from '../components/PageFilterBar';
 import { StageTabGroup } from '../components/StageTabGroup';
 import { FilterChipRow } from '../components/FilterChipRow';
 import { SortSelect } from '../components/SortSelect';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import AddIcon from '@mui/icons-material/Add';
@@ -540,6 +543,8 @@ function CustomerCard({
   invoices,
   urgency,
   onOpenInvoice,
+  cardActionHandlerFor,
+  resolveActionLabel,
 }: {
   contact: Contact;
   statusMap: Map<string, LeadStatus>;
@@ -548,6 +553,17 @@ function CustomerCard({
   invoices: QBInvoice[];
   urgency: Urgency;
   onOpenInvoice: (firstId: string, allIds: string[]) => void;
+  cardActionHandlerFor: (
+    stageKey: string,
+    leadStatusKey: string | undefined,
+    hwSubstatusValue: string | undefined,
+  ) => CardActionHandlerData | null;
+  resolveActionLabel: (
+    stageKey: string,
+    leadStatusKey: string | undefined,
+    substageId: string | undefined,
+    hwSubstatusValue: string | undefined,
+  ) => string;
 }) {
   const name = contactName(contact);
   const email = contact.properties?.email || '';
@@ -562,6 +578,45 @@ function CustomerCard({
   const multiRoom = effectiveRooms.length > 1;
   const allArchived = effectiveRooms.every((r) => (r.roomStatus || 'active') !== 'active');
 
+  // ── Action strip ───────────────────────────────────────────────────────────
+  // Use the primary (first) room's stage key, matching ProjectCard behaviour.
+  const primaryStageKey = effectiveRooms[0]?.stageKey || 'sales';
+  const leadStatusKey = contact.properties?.hs_lead_status;
+  const hwSubstatusValue = contact.properties?.hw_lead_substatus;
+
+  const handler = cardActionHandlerFor(primaryStageKey, leadStatusKey, hwSubstatusValue);
+
+  const cahName = handler?.config?.action_name
+    ? handler.config.action_name
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c: string) => c.toUpperCase())
+    : '';
+  const actionLabel = cahName
+    || resolveActionLabel(primaryStageKey, leadStatusKey, undefined, hwSubstatusValue);
+
+  const sc = DEFAULT_STAGE_COLOURS[primaryStageKey] || DEFAULT_STAGE_COLOURS.sales;
+  const actionTint = sc.light;
+  const actionTextColor = sc.text;
+
+  const [dispatchingAction, setDispatchingAction] = useState(false);
+
+  const handleActionClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!handler || dispatchingAction) return;
+      setDispatchingAction(true);
+      dispatchCardActionHandler(handler, {
+        contactId:    contact.id,
+        contactName:  name,
+        contactEmail: email,
+      });
+      // Reset dispatching state after a short delay (modal opening is synchronous)
+      setTimeout(() => setDispatchingAction(false), 300);
+    },
+    [handler, dispatchingAction, contact.id, name, email],
+  );
+
   return (
     <Card variant="outlined" sx={{ width: '100%', opacity: allArchived ? 0.7 : 1 }}>
       <CardActionArea
@@ -573,7 +628,6 @@ function CustomerCard({
         <Stack direction="row" spacing={1} sx={{  alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <Typography
             variant="subtitle1"
-
             noWrap
             sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
           >
@@ -610,6 +664,43 @@ function CustomerCard({
           ) : null}
         </Stack>
       </CardActionArea>
+
+      {/* Action strip — rendered outside CardActionArea so its click opens the
+          handler modal rather than navigating to the customer detail page. Only
+          shown when a configured handler matches this contact's stage/status. */}
+      {!!handler && (
+        <Box
+          role="button"
+          tabIndex={0}
+          aria-label={actionLabel || 'Run action'}
+          onClick={handleActionClick}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleActionClick(e as unknown as React.MouseEvent); }}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            px: '14px',
+            py: '9px',
+            bgcolor: actionTint,
+            borderTop: '1px solid',
+            borderColor: 'divider',
+            cursor: dispatchingAction ? 'wait' : 'pointer',
+            opacity: dispatchingAction ? 0.7 : 1,
+            transition: 'opacity 0.15s, filter 0.12s',
+            '&:hover': dispatchingAction ? undefined : { filter: 'brightness(0.96)' },
+            '&:focus-visible': { outline: `2px solid ${sc.bg}`, outlineOffset: -2 },
+          }}
+        >
+          <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
+            {dispatchingAction ? 'Opening…' : actionLabel}
+          </Typography>
+          {dispatchingAction ? (
+            <CircularProgress size={12} sx={{ color: actionTextColor }} />
+          ) : (
+            <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
+          )}
+        </Box>
+      )}
     </Card>
   );
 }
@@ -639,6 +730,8 @@ export function CustomersPage(): React.ReactElement {
   const { isAdmin } = usePrivilege();
 
   const { devMode } = useDevMode({ enabled: isAdmin });
+
+  const { cardActionHandlerFor, resolveActionLabel } = useCardActionHandlers();
 
   const handleOpenInvoice = React.useCallback((firstId: string, allIds: string[]) => {
     setInvDrawerInvId(firstId);
@@ -1335,6 +1428,8 @@ export function CustomersPage(): React.ReactElement {
                   invoices={matchInvoicesForContact(contact, qbInvoices)}
                   urgency={urgencyMap[contact.id] || null}
                   onOpenInvoice={handleOpenInvoice}
+                  cardActionHandlerFor={cardActionHandlerFor}
+                  resolveActionLabel={resolveActionLabel}
                 />
               </Grid>
             ))}
