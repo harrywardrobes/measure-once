@@ -4,21 +4,29 @@
 // End-to-end test for the nav role configuration admin API (task #968).
 //
 // Covers:
-//   [API-DEFAULT]       GET /api/nav-role-config returns __default__ keys for a
-//                       user who has no job_role assigned.
-//   [API-UNAUTH]        GET /api/nav-role-config requires authentication.
-//   [API-ROLE]          GET /api/nav-role-config returns role-specific primary_keys
-//                       when the user has a job_role with a matching config.
-//   [API-PATCH-ADMIN]   PATCH /api/admin/nav-role-config/:roleName succeeds for admin.
-//   [API-PATCH-MEMBER]  PATCH returns 403 for member.
-//   [API-PATCH-MANAGER] PATCH returns 403 for manager.
-//   [API-PATCH-VALIDATE] PATCH rejects invalid bodies with 400.
-//   [API-LIST]          GET /api/admin/nav-role-configs returns array (admin only).
-//   [API-LIST-MEMBER]   GET /api/admin/nav-role-configs returns 403 for member.
-//   [API-JOB-ROLE-CLONE] POST /api/admin/job-roles seeds nav_role_configs by
-//                        cloning __default__ primary_keys for the new role.
-//   [UI-ROLE-NAV]       BottomNav renders the role-specific primary tabs when the
-//                       user's job_role has a custom nav config.
+//   [API-DEFAULT]            GET /api/nav-role-config returns __default__ keys for a
+//                            user who has no job_role assigned.
+//   [API-UNAUTH]             GET /api/nav-role-config requires authentication.
+//   [API-ROLE]               GET /api/nav-role-config returns role-specific primary_keys
+//                            when the user has a job_role with a matching config.
+//   [API-PATCH-ADMIN]        PATCH /api/admin/nav-role-config/:roleName succeeds for admin.
+//   [API-PATCH-IS-CUSTOMIZED] PATCH sets is_customized=true (visible in the listing).
+//   [API-PATCH-MEMBER]       PATCH returns 403 for member.
+//   [API-PATCH-MANAGER]      PATCH returns 403 for manager.
+//   [API-PATCH-VALIDATE]     PATCH rejects invalid bodies with 400.
+//   [API-LIST]               GET /api/admin/nav-role-configs returns array (admin only).
+//   [API-LIST-MEMBER]        GET /api/admin/nav-role-configs returns 403 for member.
+//   [API-JOB-ROLE-CLONE]     POST /api/admin/job-roles seeds nav_role_configs by
+//                            cloning __default__ primary_keys for the new role.
+//   [API-INHERIT]            A role with is_customized=false returns __default__ keys
+//                            (not its own stored keys) from GET /api/nav-role-config.
+//   [API-DELETE]             DELETE /api/admin/nav-role-config/:roleName sets
+//                            is_customized=false; the user then inherits __default__.
+//   [API-DEFAULT-PROPAGATE]  Changing __default__ primary_keys propagates immediately
+//                            to uncustomised roles.
+//   [API-DELETE-DEFAULT-REJECT] DELETE /api/admin/nav-role-config/__default__ returns 400.
+//   [UI-ROLE-NAV]            BottomNav renders the role-specific primary tabs when the
+//                            user's job_role has a custom nav config.
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:nav-role-config
@@ -299,6 +307,19 @@ async function main() {
     );
   }
 
+  // ── [API-PATCH-IS-CUSTOMIZED] PATCH marks the role as customized ────────────
+
+  {
+    const r = await adminClient.get('/api/admin/nav-role-configs');
+    const row = Array.isArray(r.json) ? r.json.find(row => row.role_name === ROLE_NAME) : null;
+    record(
+      '[API-PATCH-IS-CUSTOMIZED] PATCH sets is_customized=true (visible in listing)',
+      'is_customized=true',
+      row ? `is_customized=${row.is_customized}` : 'row not found in listing',
+      row?.is_customized === true,
+    );
+  }
+
   // ── [API-PATCH-MEMBER] Member cannot update role config ───────────────────
 
   {
@@ -517,6 +538,212 @@ async function main() {
     // Reset job_role so subsequent browser probes start clean
     await pool.query('UPDATE users SET job_role = NULL WHERE id = $1', [users.manager.id]);
   }
+
+  // ── [API-INHERIT] Uncustomized role falls back to __default__ ────────────────
+  //
+  // Set is_customized = FALSE directly so ROLE_NAME falls back to __default__,
+  // assign the manager user to that role, and verify the API returns the
+  // __default__ keys (not the previously stored CUSTOM_KEYS).
+
+  {
+    // Grab current __default__ primary_keys for comparison
+    const listR = await adminClient.get('/api/admin/nav-role-configs');
+    const defaultRow = Array.isArray(listR.json)
+      ? listR.json.find(r => r.role_name === '__default__')
+      : null;
+    const expectedDefaultKeys = defaultRow?.primary_keys || null;
+
+    // Force is_customized = false for ROLE_NAME (bypasses the API; the DELETE
+    // endpoint also sets this, but we test it directly here to isolate the
+    // inheritance behaviour from the DELETE behaviour)
+    await pool.query(
+      'UPDATE nav_role_configs SET is_customized = FALSE WHERE role_name = $1',
+      [ROLE_NAME],
+    );
+
+    // Assign manager's job_role → ROLE_NAME
+    await pool.query(
+      'UPDATE users SET job_role = $1 WHERE id = $2',
+      [ROLE_NAME, users.manager.id],
+    );
+
+    const r = await managerClient.get('/api/nav-role-config');
+    const keys = r.json?.primary_keys;
+
+    record(
+      '[API-INHERIT] Role with is_customized=false returns __default__ keys (not custom keys)',
+      `primary_keys=${JSON.stringify(expectedDefaultKeys)}`,
+      `primary_keys=${JSON.stringify(keys)}`,
+      expectedDefaultKeys !== null
+        && JSON.stringify(keys) === JSON.stringify(expectedDefaultKeys)
+        && JSON.stringify(keys) !== JSON.stringify(CUSTOM_KEYS),
+    );
+
+    // Clean up — reset job_role; leave is_customized=false for the DELETE probe
+    await pool.query('UPDATE users SET job_role = NULL WHERE id = $1', [users.manager.id]);
+  }
+
+  // ── [API-DELETE] DELETE resets is_customized and user inherits __default__ ──
+
+  {
+    // Re-establish ROLE_NAME as customized before testing DELETE
+    await adminClient.patch(
+      `/api/admin/nav-role-config/${encodeURIComponent(ROLE_NAME)}`,
+      { primary_keys: CUSTOM_KEYS },
+    );
+
+    // Confirm it is now customized
+    const beforeList = await adminClient.get('/api/admin/nav-role-configs');
+    const beforeRow = Array.isArray(beforeList.json)
+      ? beforeList.json.find(r => r.role_name === ROLE_NAME)
+      : null;
+    record(
+      '[API-DELETE] Pre-condition: ROLE_NAME is customized before DELETE',
+      'is_customized=true',
+      beforeRow ? `is_customized=${beforeRow.is_customized}` : 'row not found',
+      beforeRow?.is_customized === true,
+    );
+
+    // Issue the DELETE
+    const delR = await adminClient.delete(
+      `/api/admin/nav-role-config/${encodeURIComponent(ROLE_NAME)}`,
+    );
+    record(
+      '[API-DELETE] DELETE /api/admin/nav-role-config/:roleName returns 200',
+      'status=200',
+      `status=${delR.status}`,
+      delR.status === 200,
+    );
+    record(
+      '[API-DELETE] DELETE response includes ok=true',
+      'ok=true',
+      `ok=${delR.json?.ok}`,
+      delR.json?.ok === true,
+    );
+
+    // Listing must show is_customized = false
+    const afterList = await adminClient.get('/api/admin/nav-role-configs');
+    const afterRow = Array.isArray(afterList.json)
+      ? afterList.json.find(r => r.role_name === ROLE_NAME)
+      : null;
+    record(
+      '[API-DELETE] Listing shows is_customized=false after DELETE',
+      'is_customized=false',
+      afterRow ? `is_customized=${afterRow.is_customized}` : 'row not found',
+      afterRow?.is_customized === false,
+    );
+
+    // User with that job_role should now inherit __default__
+    const listR = await adminClient.get('/api/admin/nav-role-configs');
+    const defaultRow = Array.isArray(listR.json)
+      ? listR.json.find(r => r.role_name === '__default__')
+      : null;
+    const expectedDefaultKeys = defaultRow?.primary_keys || null;
+
+    await pool.query(
+      'UPDATE users SET job_role = $1 WHERE id = $2',
+      [ROLE_NAME, users.manager.id],
+    );
+
+    const r = await managerClient.get('/api/nav-role-config');
+    const keys = r.json?.primary_keys;
+    record(
+      '[API-DELETE] After DELETE, user with that job_role inherits __default__ keys',
+      `primary_keys=${JSON.stringify(expectedDefaultKeys)}`,
+      `primary_keys=${JSON.stringify(keys)}`,
+      expectedDefaultKeys !== null
+        && JSON.stringify(keys) === JSON.stringify(expectedDefaultKeys),
+    );
+
+    await pool.query('UPDATE users SET job_role = NULL WHERE id = $1', [users.manager.id]);
+  }
+
+  // ── [API-DEFAULT-PROPAGATE] Changing __default__ propagates to uncustomized ──
+  //
+  // ROLE_NAME is uncustomized (is_customized=false) after the DELETE probe above.
+  // Update __default__ to a different set of keys; the uncustomized role should
+  // immediately serve the new keys when queried via GET /api/nav-role-config.
+
+  {
+    // Fetch and save the original __default__ keys so we can restore them
+    const origList = await adminClient.get('/api/admin/nav-role-configs');
+    const origDefaultRow = Array.isArray(origList.json)
+      ? origList.json.find(r => r.role_name === '__default__')
+      : null;
+    const origDefaultKeys = origDefaultRow?.primary_keys || ['home', 'calendar', 'trades'];
+
+    // Choose an alternate set that differs from the current default.
+    // Build it from valid keys that are NOT in origDefaultKeys.
+    const ALL_VALID = ['home', 'customers', 'sales', 'survey', 'projects', 'calendar', 'invoices', 'trades', 'ideas'];
+    const altKeys = ALL_VALID.filter(k => !origDefaultKeys.includes(k)).slice(0, 3);
+    // If we can't find 3 non-overlapping keys (unlikely), fall back to a fixed set
+    const newDefaultKeys = altKeys.length === 3 ? altKeys : ['customers', 'survey', 'projects'];
+
+    // Patch __default__ to the new keys
+    const patchR = await adminClient.patch(
+      '/api/admin/nav-role-config/__default__',
+      { primary_keys: newDefaultKeys },
+    );
+    record(
+      '[API-DEFAULT-PROPAGATE] PATCH __default__ to alternate keys succeeds',
+      'status=200',
+      `status=${patchR.status}`,
+      patchR.status === 200,
+    );
+
+    // Assign manager → ROLE_NAME (uncustomized) and query
+    await pool.query(
+      'UPDATE users SET job_role = $1 WHERE id = $2',
+      [ROLE_NAME, users.manager.id],
+    );
+
+    const r = await managerClient.get('/api/nav-role-config');
+    const keys = r.json?.primary_keys;
+    record(
+      '[API-DEFAULT-PROPAGATE] Uncustomized role returns new __default__ keys immediately',
+      `primary_keys=${JSON.stringify(newDefaultKeys)}`,
+      `primary_keys=${JSON.stringify(keys)}`,
+      JSON.stringify(keys) === JSON.stringify(newDefaultKeys),
+    );
+
+    // Restore __default__ to original keys
+    await adminClient.patch(
+      '/api/admin/nav-role-config/__default__',
+      { primary_keys: origDefaultKeys },
+    );
+
+    await pool.query('UPDATE users SET job_role = NULL WHERE id = $1', [users.manager.id]);
+  }
+
+  // ── [API-DELETE-DEFAULT-REJECT] DELETE __default__ is forbidden ──────────────
+
+  {
+    const r = await adminClient.delete('/api/admin/nav-role-config/__default__');
+    record(
+      '[API-DELETE-DEFAULT-REJECT] DELETE /api/admin/nav-role-config/__default__ returns 400',
+      'status=400',
+      `status=${r.status}`,
+      r.status === 400,
+    );
+    record(
+      '[API-DELETE-DEFAULT-REJECT] Response includes an error message',
+      'error field present',
+      r.json?.error ? `error="${r.json.error}"` : 'no error field',
+      typeof r.json?.error === 'string' && r.json.error.length > 0,
+    );
+  }
+
+  // ── Restore UI probe preconditions ───────────────────────────────────────
+  //
+  // The preceding API probes left ROLE_NAME in an uncustomized state (DELETE
+  // reset is_customized=false).  The [UI-ROLE-NAV] probe expects ROLE_NAME to
+  // be customized with CUSTOM_KEYS so it can verify the bar renders the correct
+  // role-specific tabs.  Re-establish that state here before opening Puppeteer.
+
+  await adminClient.patch(
+    `/api/admin/nav-role-config/${encodeURIComponent(ROLE_NAME)}`,
+    { primary_keys: CUSTOM_KEYS },
+  );
 
   // ── UI probes ─────────────────────────────────────────────────────────────
 
