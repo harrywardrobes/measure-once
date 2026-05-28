@@ -408,16 +408,36 @@ const _photoUpload = multer({
   },
 });
 
+const FRIENDLY_UPLOAD_MSG = 'Photo upload is temporarily unavailable. Please try again later.';
+
+function _friendlyStorageError(err) {
+  if (/bucket|object storage/i.test(err.message)) {
+    console.error('[customer-info] Storage config error (original):', err.message);
+    return new Error(FRIENDLY_UPLOAD_MSG);
+  }
+  return err;
+}
+
 async function uploadPhotoBufferToStorage(buffer, mimeType) {
   const { Client } = require('@replit/object-storage');
-  const client = new Client();
+  let client;
+  try {
+    client = new Client();
+  } catch (e) {
+    throw _friendlyStorageError(e);
+  }
   const extMap = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
   const ext = extMap[mimeType.toLowerCase()] || 'jpg';
   const id  = crypto.randomBytes(18).toString('base64url');
   const name = `customer-info-photos/${id}.${ext}`;
-  const res = await client.uploadFromBytes(name, buffer, { compress: false });
+  let res;
+  try {
+    res = await client.uploadFromBytes(name, buffer, { compress: false });
+  } catch (e) {
+    throw _friendlyStorageError(e);
+  }
   if (res && res.ok === false) {
-    throw new Error('Object storage upload failed: ' + (res.error?.message || 'unknown'));
+    throw _friendlyStorageError(new Error('Object storage upload failed: ' + (res.error?.message || 'unknown')));
   }
   return `obj:ci_${id}.${ext}`;
 }

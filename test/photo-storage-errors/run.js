@@ -159,6 +159,19 @@ function postMultipart(base, path, fieldName, fileBuffer, mimeType, filename) {
   });
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Kill a child process and wait until it exits (or timeout).
+function killAndWait(child, timeoutMs = 5000) {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    child.on('exit', finish);
+    child.kill();
+    setTimeout(finish, timeoutMs);
+  });
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   const hasTestDb   = !!process.env.DATABASE_URL_TEST;
@@ -205,14 +218,24 @@ async function main() {
   await resetRateLimitStore(pool);
   await cleanup(pool, contactId);
 
-  const stubPath = path.join(__dirname, 'preload-failing-storage-stub.js');
-  const { child } = spawnServer({ nodeOptions: `--require ${stubPath}` });
+  // Build a minimal JPEG-like buffer (SOI + APP0 marker — enough for multer)
+  const jpegBuf = Buffer.from(
+    'ffd8ffe000104a46494600010100000100010000' +
+    'ffdb004300080606070605080707070909080a0c140d0c0b0b0c1912130f142124',
+    'hex'
+  );
 
   let exitCode = 1;
+  let child1, child2;
 
   try {
+    // ── Phase 1: constructor-throws stub (STO-1, STO-2) ──────────────────────
+    console.log('\n  --- Phase 1: constructor-throws stub ---');
+    const stubPath1 = path.join(__dirname, 'preload-failing-storage-stub.js');
+    ({ child: child1 } = spawnServer({ nodeOptions: `--require ${stubPath1}` }));
+
     await waitForServer();
-    console.log('  test server up');
+    console.log('  test server up (phase 1)');
 
     await waitForTable(pool, 'customer_info_submissions');
 
@@ -220,39 +243,29 @@ async function main() {
     const member = users.member;
 
     // ── STO-1: POST /api/customer-info/:token/photos ────────────────────────
-    const rawToken = await insertValidRow(pool, contactId);
+    const rawToken1 = await insertValidRow(pool, contactId);
 
-    // Build a minimal JPEG-like buffer (SOI + APP0 marker — enough for multer)
-    const jpegBuf = Buffer.from(
-      'ffd8ffe000104a46494600010100000100010000' +
-      'ffdb004300080606070605080707070909080a0c140d0c0b0b0c1912130f142124',
-      'hex'
-    );
-
-    const uploadRes = await postMultipart(
+    const uploadRes1 = await postMultipart(
       BASE,
-      `/api/customer-info/${rawToken}/photos`,
+      `/api/customer-info/${rawToken1}/photos`,
       'photos',
       jpegBuf,
       'image/jpeg',
       'room.jpg'
     );
 
-    const sto1Body = uploadRes.json;
-    const sto1Msg  = sto1Body?.error || '';
+    const sto1Msg = uploadRes1.json?.error || '';
 
     record('STO-1.status',
-      uploadRes.status === 500,
-      `HTTP ${uploadRes.status} (expected 500)`
+      uploadRes1.status === 500,
+      `HTTP ${uploadRes1.status} (expected 500)`
     );
-
     record('STO-1.friendly-message',
       FRIENDLY_RE.test(sto1Msg),
       FRIENDLY_RE.test(sto1Msg)
         ? `error contains "temporarily unavailable" ✓`
         : `error="${sto1Msg.slice(0, 200)}"`
     );
-
     record('STO-1.no-sdk-leak',
       !SDK_LEAK_RE.test(sto1Msg),
       !SDK_LEAK_RE.test(sto1Msg)
@@ -261,28 +274,24 @@ async function main() {
     );
 
     // ── STO-2: POST /api/design-visits/uploads ──────────────────────────────
-    const memberClient = await login(member.email, member.password);
-
-    const dvUploadRes  = await memberClient.post(
+    const memberClient1 = await login(member.email, member.password);
+    const dvUploadRes1  = await memberClient1.post(
       '/api/design-visits/uploads',
       { dataUrl: TINY_PNG_DATA_URL }
     );
 
-    const sto2Body = dvUploadRes.json;
-    const sto2Msg  = sto2Body?.error || '';
+    const sto2Msg = dvUploadRes1.json?.error || '';
 
     record('STO-2.status',
-      dvUploadRes.status === 503,
-      `HTTP ${dvUploadRes.status} (expected 503)`
+      dvUploadRes1.status === 503,
+      `HTTP ${dvUploadRes1.status} (expected 503)`
     );
-
     record('STO-2.friendly-message',
       FRIENDLY_RE.test(sto2Msg),
       FRIENDLY_RE.test(sto2Msg)
         ? `error contains "temporarily unavailable" ✓`
         : `error="${sto2Msg.slice(0, 200)}"`
     );
-
     record('STO-2.no-sdk-leak',
       !SDK_LEAK_RE.test(sto2Msg),
       !SDK_LEAK_RE.test(sto2Msg)
@@ -290,11 +299,82 @@ async function main() {
         : `SDK error LEAKED: "${sto2Msg.slice(0, 200)}"`
     );
 
+    // Tear down phase-1 server before reusing the port.
+    await killAndWait(child1);
+    child1 = null;
+    await cleanup(pool, contactId);
+
+    // ── Phase 2: uploadFromBytes ok:false stub (STO-3, STO-4) ────────────────
+    console.log('\n  --- Phase 2: uploadFromBytes ok:false stub ---');
+    const stubPath2 = path.join(__dirname, 'preload-failing-upload-storage-stub.js');
+    ({ child: child2 } = spawnServer({ nodeOptions: `--require ${stubPath2}` }));
+
+    await waitForServer();
+    console.log('  test server up (phase 2)');
+
+    // ── STO-3: customer-info upload with ok:false SDK response ───────────────
+    const rawToken2 = await insertValidRow(pool, contactId);
+
+    const uploadRes2 = await postMultipart(
+      BASE,
+      `/api/customer-info/${rawToken2}/photos`,
+      'photos',
+      jpegBuf,
+      'image/jpeg',
+      'room2.jpg'
+    );
+
+    const sto3Msg = uploadRes2.json?.error || '';
+
+    record('STO-3.status',
+      uploadRes2.status === 500,
+      `HTTP ${uploadRes2.status} (expected 500)`
+    );
+    record('STO-3.friendly-message',
+      FRIENDLY_RE.test(sto3Msg),
+      FRIENDLY_RE.test(sto3Msg)
+        ? `error contains "temporarily unavailable" ✓`
+        : `error="${sto3Msg.slice(0, 200)}"`
+    );
+    record('STO-3.no-sdk-leak',
+      !SDK_LEAK_RE.test(sto3Msg),
+      !SDK_LEAK_RE.test(sto3Msg)
+        ? `error does not contain raw SDK internals ✓`
+        : `SDK error LEAKED: "${sto3Msg.slice(0, 200)}"`
+    );
+
+    // ── STO-4: design-visits upload with ok:false SDK response ───────────────
+    const memberClient2 = await login(member.email, member.password);
+    const dvUploadRes2  = await memberClient2.post(
+      '/api/design-visits/uploads',
+      { dataUrl: TINY_PNG_DATA_URL }
+    );
+
+    const sto4Msg = dvUploadRes2.json?.error || '';
+
+    record('STO-4.status',
+      dvUploadRes2.status === 503,
+      `HTTP ${dvUploadRes2.status} (expected 503)`
+    );
+    record('STO-4.friendly-message',
+      FRIENDLY_RE.test(sto4Msg),
+      FRIENDLY_RE.test(sto4Msg)
+        ? `error contains "temporarily unavailable" ✓`
+        : `error="${sto4Msg.slice(0, 200)}"`
+    );
+    record('STO-4.no-sdk-leak',
+      !SDK_LEAK_RE.test(sto4Msg),
+      !SDK_LEAK_RE.test(sto4Msg)
+        ? `error does not contain raw SDK internals ✓`
+        : `SDK error LEAKED: "${sto4Msg.slice(0, 200)}"`
+    );
+
     const failed = findings.filter(f => !f.ok);
     exitCode = failed.length > 0 ? 1 : 0;
 
   } finally {
-    child.kill();
+    if (child1) child1.kill();
+    if (child2) child2.kill();
     await cleanup(pool, contactId);
     await pool.end().catch(() => {});
     mockHs.server.close();
