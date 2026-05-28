@@ -608,7 +608,11 @@ router.post('/api/customer-info/:token/photos',
         keys.push(key);
       } catch (err) {
         console.error('[customer-info] Photo upload failed:', err.message);
-        return res.status(500).json({ error: 'Photo upload failed: ' + err.message });
+        const isStorageConfigErr = /bucket|object storage/i.test(err.message);
+        const userMsg = isStorageConfigErr
+          ? 'Photo uploads are temporarily unavailable. Please contact us and we\'ll be in touch to collect your photos another way.'
+          : 'Photo upload failed: ' + err.message;
+        return res.status(500).json({ error: userMsg });
       }
     }
     res.json({ ok: true, keys });

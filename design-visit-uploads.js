@@ -66,6 +66,19 @@ function parseDataUrl(dataUrl) {
   return { mime, buf };
 }
 
+const FRIENDLY_UPLOAD_MSG =
+  'Photo uploads are temporarily unavailable. Please contact us and we\'ll be in touch to collect your photos another way.';
+
+function _friendlyStorageError(err) {
+  if (/bucket|object storage/i.test(err.message)) {
+    console.error('[design-visit-uploads] Storage config error (original):', err.message);
+    const friendly = new Error(FRIENDLY_UPLOAD_MSG);
+    friendly.statusCode = 503;
+    return friendly;
+  }
+  return err;
+}
+
 async function uploadFromDataUrl(dataUrl) {
   const parsed = parseDataUrl(dataUrl);
   if (!parsed) {
@@ -76,12 +89,20 @@ async function uploadFromDataUrl(dataUrl) {
   const ext = EXT_BY_MIME[parsed.mime] || 'bin';
   const id  = crypto.randomBytes(18).toString('base64url');
   const name = `design-visit-images/${id}.${ext}`;
-  const client = getClient();
-  const res = await client.uploadFromBytes(name, parsed.buf, {
-    compress: false,
-  });
+  let client;
+  try {
+    client = getClient();
+  } catch (e) {
+    throw _friendlyStorageError(e);
+  }
+  let res;
+  try {
+    res = await client.uploadFromBytes(name, parsed.buf, { compress: false });
+  } catch (e) {
+    throw _friendlyStorageError(e);
+  }
   if (res && res.ok === false) {
-    throw new Error('Object storage upload failed: ' + (res.error?.message || 'unknown'));
+    throw _friendlyStorageError(new Error('Object storage upload failed: ' + (res.error?.message || 'unknown')));
   }
   return { storageKey: `obj:${id}.${ext}`, mimeType: parsed.mime, byteLength: parsed.buf.length };
 }
