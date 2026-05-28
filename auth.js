@@ -2317,8 +2317,8 @@ async function setupAuth(app) {
         [name, privilege_level]
       );
       await pool.query(
-        `INSERT INTO nav_role_configs (role_name, primary_keys, is_customized)
-         SELECT $1, primary_keys, FALSE FROM nav_role_configs WHERE role_name = '__default__'
+        `INSERT INTO nav_role_configs (role_name, is_customized)
+         VALUES ($1, FALSE)
          ON CONFLICT (role_name) DO NOTHING`,
         [name]
       );
@@ -2378,12 +2378,23 @@ async function setupAuth(app) {
   });
 
   // Admin: list all nav role configs.
+  // Uncustomised roles (is_customized=false, role_name !== '__default__') have
+  // their primary_keys resolved to the current __default__ value so callers see
+  // the live-inherited layout rather than a stale snapshot.
   app.get('/api/admin/nav-role-configs', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
         'SELECT role_name, primary_keys, is_customized FROM nav_role_configs ORDER BY role_name ASC'
       );
-      res.json(r.rows);
+      const defaultRow = r.rows.find(row => row.role_name === '__default__');
+      const defaultKeys = defaultRow?.primary_keys || ['home', 'customers', 'calendar'];
+      const rows = r.rows.map(row => {
+        if (!row.is_customized && row.role_name !== '__default__') {
+          return { ...row, primary_keys: defaultKeys };
+        }
+        return row;
+      });
+      res.json(rows);
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

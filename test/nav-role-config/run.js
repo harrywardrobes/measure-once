@@ -16,8 +16,9 @@
 //   [API-PATCH-VALIDATE]     PATCH rejects invalid bodies with 400.
 //   [API-LIST]               GET /api/admin/nav-role-configs returns array (admin only).
 //   [API-LIST-MEMBER]        GET /api/admin/nav-role-configs returns 403 for member.
-//   [API-JOB-ROLE-CLONE]     POST /api/admin/job-roles seeds nav_role_configs by
-//                            cloning __default__ primary_keys for the new role.
+//   [API-JOB-ROLE-CLONE]     POST /api/admin/job-roles inserts a nav_role_configs
+//                            row with is_customized=false so the new role inherits
+//                            __default__ live (no snapshot copy at creation time).
 //   [API-INHERIT]            A role with is_customized=false returns __default__ keys
 //                            (not its own stored keys) from GET /api/nav-role-config.
 //   [API-DELETE]             DELETE /api/admin/nav-role-config/:roleName sets
@@ -457,7 +458,13 @@ async function main() {
     );
   }
 
-  // ── [API-JOB-ROLE-CLONE] New job role clones __default__ nav config ───────
+  // ── [API-JOB-ROLE-CLONE] New job role inherits __default__ nav live ─────────
+  //
+  // POST /api/admin/job-roles no longer snapshots __default__ primary_keys into
+  // the new row.  Instead it inserts with is_customized=false so the role
+  // inherits __default__ live.  GET /api/admin/nav-role-configs resolves the
+  // inherited keys before returning, so the row is visible with the current
+  // __default__ layout and is_customized=false.
 
   const JOB_ROLE_NAME = `privtest-jobrole-${runId}`;
   {
@@ -480,7 +487,7 @@ async function main() {
       createR.status === 200,
     );
 
-    // Verify nav_role_configs has a row for the new role cloned from __default__
+    // Verify nav_role_configs has a row for the new role with inherited keys
     const listR = await adminClient.get('/api/admin/nav-role-configs');
     const newRow = Array.isArray(listR.json)
       ? listR.json.find(r => r.role_name === JOB_ROLE_NAME)
@@ -491,16 +498,22 @@ async function main() {
       newRow ? `found with keys=${JSON.stringify(newRow.primary_keys)}` : 'missing',
       !!newRow,
     );
+    record(
+      '[API-JOB-ROLE-CLONE] New job role is_customized=false (inherits live, no snapshot)',
+      'is_customized=false',
+      newRow ? `is_customized=${newRow.is_customized}` : 'row not found',
+      newRow?.is_customized === false,
+    );
     if (newRow && defaultKeys) {
       record(
-        '[API-JOB-ROLE-CLONE] New job role nav config matches __default__ primary_keys',
+        '[API-JOB-ROLE-CLONE] New job role resolved primary_keys match current __default__',
         `keys=${JSON.stringify(defaultKeys)}`,
         `keys=${JSON.stringify(newRow.primary_keys)}`,
         JSON.stringify(newRow.primary_keys) === JSON.stringify(defaultKeys),
       );
     } else {
       record(
-        '[API-JOB-ROLE-CLONE] New job role nav config matches __default__ primary_keys',
+        '[API-JOB-ROLE-CLONE] New job role resolved primary_keys match current __default__',
         'keys match __default__',
         defaultKeys ? 'new row missing' : '__default__ row not found',
         false,
