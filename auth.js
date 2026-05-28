@@ -557,6 +557,18 @@ async function ensureAuthTables() {
       SET primary_keys = '["home","customers","calendar"]'
     WHERE role_name = '__default__'
       AND primary_keys @> '"trades"';
+    -- One-time migration: mark pre-existing customised rows as is_customized=TRUE.
+    -- Before task #1892 added the is_customized column, the PATCH endpoint saved
+    -- custom primary_keys without setting is_customized, leaving rows with
+    -- is_customized=FALSE but non-default primary_keys. The role-config lookup
+    -- only returns keys when is_customized=TRUE, so those customisations were
+    -- silently ignored after the column was introduced. Any non-default row
+    -- whose keys differ from the column default was explicitly set by an admin.
+    UPDATE nav_role_configs
+      SET is_customized = TRUE
+    WHERE is_customized = FALSE
+      AND role_name != '__default__'
+      AND primary_keys != '["home","customers","calendar"]'::jsonb;
   `);
 
   // Seed admin emails from env var + create user rows for them so the very
