@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
+import Box from '@mui/material/Box';
 import { PageFilterBar } from './PageFilterBar';
 
 const meta: Meta<typeof PageFilterBar> = {
@@ -39,12 +40,12 @@ export const Default: Story = {
 
 export const WithBackground: Story = {
   args: {
-    sx: { px: 2, py: 1, bgcolor: '#F6F1E7', borderBottom: '1px solid #D9D2C2' },
+    sx: { px: 2, py: 1, bgcolor: 'background.default', borderBottom: '1px solid', borderColor: 'divider' },
     children: (
       <>
-        <span style={{ padding: '6px 12px', background: '#D9D2C2', borderRadius: 4 }}>Filter 1</span>
-        <span style={{ padding: '6px 12px', background: '#D9D2C2', borderRadius: 4 }}>Filter 2</span>
-        <span style={{ padding: '6px 12px', background: '#D9D2C2', borderRadius: 4 }}>Filter 3</span>
+        <Box component="span" sx={{ px: '12px', py: '6px', bgcolor: 'divider', borderRadius: '4px' }}>Filter 1</Box>
+        <Box component="span" sx={{ px: '12px', py: '6px', bgcolor: 'divider', borderRadius: '4px' }}>Filter 2</Box>
+        <Box component="span" sx={{ px: '12px', py: '6px', bgcolor: 'divider', borderRadius: '4px' }}>Filter 3</Box>
       </>
     ),
   },
