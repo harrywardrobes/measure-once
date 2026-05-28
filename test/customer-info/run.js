@@ -16,6 +16,8 @@
 //   (CI-7)  GET  /api/customer-info/:token (already submitted) → 410 status:submitted
 //   (CI-8)  POST /api/customer-info/:token (expired) → 410 status:expired
 //   (CI-9)  POST /api/customer-info/:token (already submitted) → 410 status:submitted
+//   (CI-UI-A) Admin on /customers/:contactId sees [data-testid="resend-link-btn"]
+//   (CI-UI-B) Viewer on /customers/:contactId does NOT see [data-testid="resend-link-btn"]
 //
 // Overrides used:
 //   HUBSPOT_API_BASE_OVERRIDE  — local mock HubSpot for contact fetch + PATCH
@@ -33,6 +35,9 @@ const http   = require('http');
 const crypto = require('crypto');
 const { Pool } = require('pg');
 const { pollFn } = require('../helpers/poll');
+
+let puppeteer = null;
+try { puppeteer = require('puppeteer'); } catch {}
 
 require('dotenv').config();
 
@@ -145,6 +150,34 @@ async function cleanup(pool, contactId) {
   try {
     await pool.query(`DELETE FROM customer_info_submissions WHERE contact_id = $1`, [contactId]);
   } catch {}
+}
+
+// ── Puppeteer helpers ─────────────────────────────────────────────────────────
+function parseCookieKV(jar) {
+  if (!jar) return null;
+  const idx = jar.indexOf('=');
+  if (idx < 0) return null;
+  return { name: jar.slice(0, idx), value: jar.slice(idx + 1) };
+}
+
+async function injectSession(page, jar, base) {
+  const kv = parseCookieKV(jar);
+  if (!kv) return;
+  const { hostname } = new URL(base);
+  await page.setCookie({
+    name: kv.name, value: kv.value,
+    domain: hostname, path: '/', httpOnly: true,
+  });
+}
+
+async function pollPage(page, predFn, timeoutMs = 8000, intervalMs = 200) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ok = await page.evaluate(predFn).catch(() => null);
+    if (ok) return true;
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  return false;
 }
 
 // ── Validation probe helper ───────────────────────────────────────────────────
@@ -634,6 +667,109 @@ async function main() {
       subPostOk
         ? `POST 410 status=submitted`
         : `status=${subPostRes.status} body=${JSON.stringify(subPostBody).slice(0, 200)}`);
+
+    // ── CI-UI-A/B: Puppeteer — Resend button visible for admin, hidden for viewer
+    if (!puppeteer) {
+      record('CI-UI-A.admin-sees-resend-btn', false,
+        'skipped — puppeteer not installed');
+      record('CI-UI-B.viewer-no-resend-btn', false,
+        'skipped — puppeteer not installed');
+    } else {
+      const { findChromium } = require('../shared/find-chromium');
+      const executablePath = findChromium() || undefined;
+      let uiBrowser;
+      try {
+        uiBrowser = await puppeteer.launch({
+          headless: true,
+          executablePath,
+          defaultViewport: { width: 1280, height: 900 },
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        });
+      } catch (e) {
+        record('CI-UI-A.admin-sees-resend-btn', false,
+          `skipped — browser launch failed: ${e.message}`);
+        record('CI-UI-B.viewer-no-resend-btn', false,
+          `skipped — browser launch failed: ${e.message}`);
+        uiBrowser = null;
+      }
+
+      if (uiBrowser) {
+        // ── CI-UI-A: admin sees the Resend button ──────────────────────────
+        let adminUiOk = false;
+        let adminUiDetail = '';
+        try {
+          const adminCtx = await (uiBrowser.createBrowserContext
+            ? uiBrowser.createBrowserContext()
+            : uiBrowser.createIncognitoBrowserContext());
+          const adminPage = await adminCtx.newPage();
+          await adminPage.setCacheEnabled(false);
+          await injectSession(adminPage, adminClient.cookie, BASE);
+          await adminPage.goto(`${BASE}/customers/${contactId}`, {
+            waitUntil: 'domcontentloaded', timeout: 25000,
+          });
+          // Poll directly for the Resend button — which only appears once the
+          // CustomerInfoSubmissionsRail fetch completes AND privilege is non-viewer.
+          // This avoids a race where we find the section element during its
+          // loading state (before submissions arrive) and check too early.
+          const btnFound = await pollPage(adminPage, () =>
+            !!document.querySelector('[data-testid="resend-link-btn"]'),
+          12000);
+          adminUiOk = btnFound;
+          adminUiDetail = btnFound
+            ? '[data-testid="resend-link-btn"] found in admin view'
+            : '[data-testid="resend-link-btn"] NOT found in admin view within 12s';
+          await adminPage.close();
+          await adminCtx.close().catch(() => {});
+        } catch (e) {
+          adminUiDetail = `error: ${e.message}`;
+        }
+        record('CI-UI-A.admin-sees-resend-btn', adminUiOk, adminUiDetail);
+
+        // ── CI-UI-B: viewer does NOT see the Resend button ─────────────────
+        let viewerUiOk = false;
+        let viewerUiDetail = '';
+        try {
+          const viewerCtx = await (uiBrowser.createBrowserContext
+            ? uiBrowser.createBrowserContext()
+            : uiBrowser.createIncognitoBrowserContext());
+          const viewerPage = await viewerCtx.newPage();
+          await viewerPage.setCacheEnabled(false);
+          await injectSession(viewerPage, viewerClient.cookie, BASE);
+          await viewerPage.goto(`${BASE}/customers/${contactId}`, {
+            waitUntil: 'domcontentloaded', timeout: 25000,
+          });
+          // Wait for the section to render AND for the loading state to clear
+          // (spinner gone), so we confirm submissions loaded before asserting
+          // button absence — this avoids a false pass on a still-loading section.
+          const sectionLoaded = await pollPage(viewerPage, () => {
+            const section = document.getElementById('customer-info-submissions-section');
+            if (!section) return false;
+            // A loading state shows a CircularProgress; once gone, data has loaded.
+            return !section.querySelector('[role="progressbar"]');
+          }, 12000);
+          if (!sectionLoaded) {
+            viewerUiDetail = '#customer-info-submissions-section did not finish loading within 12s';
+          } else {
+            // Brief fixed wait after load: this is a negative assertion.
+            await new Promise(r => setTimeout(r, 300));
+            const btnPresent = await viewerPage.evaluate(() =>
+              !!document.querySelector('[data-testid="resend-link-btn"]')
+            );
+            viewerUiOk = !btnPresent;
+            viewerUiDetail = !btnPresent
+              ? '[data-testid="resend-link-btn"] correctly absent in viewer view'
+              : '[data-testid="resend-link-btn"] unexpectedly present in viewer view';
+          }
+          await viewerPage.close();
+          await viewerCtx.close().catch(() => {});
+        } catch (e) {
+          viewerUiDetail = `error: ${e.message}`;
+        }
+        record('CI-UI-B.viewer-no-resend-btn', viewerUiOk, viewerUiDetail);
+
+        await uiBrowser.close().catch(() => {});
+      }
+    }
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;
   } catch (e) {

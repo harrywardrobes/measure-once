@@ -121,6 +121,7 @@ function ResendButton({
           disabled={state === 'loading'}
           onClick={handleResend}
           sx={{ fontSize: '0.75rem', py: 0.4 }}
+          data-testid="resend-link-btn"
         >
           {state === 'error' ? 'Retry' : 'Resend link'}
         </Button>
