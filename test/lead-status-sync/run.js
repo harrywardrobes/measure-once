@@ -1148,12 +1148,7 @@ async function main() {
     // The server broadcasts SSE → sseRelayTab's WorkflowDataContext receives it
     // → posts BroadcastChannel('lead_statuses_changed') → sseListenerTab's spy
     // and useLeadStatusSync listener both fire.
-    const bcFlagDeadline = Date.now() + 8000;
-    while (Date.now() < bcFlagDeadline) {
-      const bcReceived = await sseListenerTab.evaluate(() => window.__h_bc_received);
-      if (bcReceived) break;
-      await new Promise(r => setTimeout(r, 150));
-    }
+    await pollUntil(sseListenerTab, () => window.__h_bc_received);
     const bcFlagSet = await sseListenerTab.evaluate(() => !!window.__h_bc_received);
     record(
       '[H] BroadcastChannel message received on sseListenerTab (SSE relay verified)',
@@ -1260,12 +1255,7 @@ async function main() {
     );
 
     // Wait for the BC spy flag on the listener tab.
-    const iBcDeadline = Date.now() + 8000;
-    while (Date.now() < iBcDeadline) {
-      const received = await iListenerTab.evaluate(() => window.__i_bc_received);
-      if (received) break;
-      await new Promise(r => setTimeout(r, 150));
-    }
+    await pollUntil(iListenerTab, () => window.__i_bc_received);
     const iBcFlagSet = await iListenerTab.evaluate(() => !!window.__i_bc_received);
     record(
       '[I] BroadcastChannel message received on iListenerTab after POST (SSE relay verified)',
@@ -1322,12 +1312,7 @@ async function main() {
     );
 
     // Wait for the BC spy flag on the listener tab.
-    const jBcDeadline = Date.now() + 8000;
-    while (Date.now() < jBcDeadline) {
-      const received = await iListenerTab.evaluate(() => window.__j_bc_received);
-      if (received) break;
-      await new Promise(r => setTimeout(r, 150));
-    }
+    await pollUntil(iListenerTab, () => window.__j_bc_received);
     const jBcFlagSet = await iListenerTab.evaluate(() => !!window.__j_bc_received);
     record(
       '[J] BroadcastChannel message received on iListenerTab after DELETE (SSE relay verified)',
