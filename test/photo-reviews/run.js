@@ -21,7 +21,10 @@
 //                            status=ROUGH_ESTIMATE_SENT, lead_status_config upserted,
 //                            photo_review_outcomes row has price_range.
 //   (POST.404)               POST returns 404 for a submissionId that belongs to a
-//                            different contactId.
+//                            different contactId (numeric mismatch only).
+//   (POST.404.cross-contact) POST returns 404 when submissionId belongs to a real
+//                            second contact seeded separately — confirms ownership
+//                            check is truly row-level, not just a numeric mismatch.
 //   (AUTH.GET)               Unauthenticated GET → 401 or redirect.
 //   (AUTH.POST)              Unauthenticated POST → 401 or redirect.
 //
@@ -38,7 +41,8 @@ const { Pool } = require('pg');
 require('dotenv').config();
 
 const REPORT_PATH = path.join(__dirname, '..', '..', 'test-results', 'photo-reviews.md');
-const CONTACT_ID  = '99887766'; // numeric-string, won't collide with real HubSpot data
+const CONTACT_ID   = '99887766'; // numeric-string, won't collide with real HubSpot data
+const CONTACT_ID_2 = '99887755'; // second contact for cross-contact ownership probes
 const findings    = [];
 
 function record(id, ok, detail) {
@@ -125,14 +129,16 @@ async function seedSubmission(pool, { contactId, contactEmail, submitted, photoK
 
 async function cleanup(pool) {
   // Delete in FK order: outcomes → submissions → lead_status_config sentinel
-  await pool.query(
-    `DELETE FROM photo_review_outcomes WHERE contact_id = $1`,
-    [CONTACT_ID]
-  );
-  await pool.query(
-    `DELETE FROM customer_info_submissions WHERE contact_id = $1`,
-    [CONTACT_ID]
-  );
+  for (const cid of [CONTACT_ID, CONTACT_ID_2]) {
+    await pool.query(
+      `DELETE FROM photo_review_outcomes WHERE contact_id = $1`,
+      [cid]
+    );
+    await pool.query(
+      `DELETE FROM customer_info_submissions WHERE contact_id = $1`,
+      [cid]
+    );
+  }
   await pool.query(
     `DELETE FROM lead_status_config WHERE key = 'ROUGH_ESTIMATE_SENT'`
   );
@@ -401,6 +407,30 @@ async function main() {
       record('POST.404', ok,
         ok
           ? '404 for submissionId belonging to a different contactId'
+          : `status=${r.status} body=${r.text.slice(0, 200)}`);
+    }
+
+    // ── POST 404 — cross-contact: real second contact owns the submission ─────
+    // Seeds a submitted submission for CONTACT_ID_2, then tries to review it
+    // under CONTACT_ID — confirms the ownership check is truly row-level and
+    // not merely a guard against an obviously non-existent numeric ID.
+    {
+      const contactEmail2 = `privtest-pr-customer2-${runId}@example.com`;
+      const subIdOtherContact = await seedSubmission(pool, {
+        contactId: CONTACT_ID_2, contactEmail: contactEmail2,
+        submitted: true, photoKeys: ['photo-key-other'],
+      });
+      const r = await client.post('/api/card-actions/review-customer-photos', {
+        contactId:    CONTACT_ID,       // belongs to first contact
+        submissionId: subIdOtherContact, // but submission belongs to second contact
+        outcome:      'not_suitable',
+        emailSubject: 'Regarding your enquiry',
+        emailBody:    'Sorry, this is not right for us.',
+      });
+      const ok = r.status === 404;
+      record('POST.404.cross-contact', ok,
+        ok
+          ? `404 when submissionId=${subIdOtherContact} (contact=${CONTACT_ID_2}) reviewed under contactId=${CONTACT_ID}`
           : `status=${r.status} body=${r.text.slice(0, 200)}`);
     }
 
