@@ -42,6 +42,8 @@
     "test:design-visit-submitter-name:ci": "node scripts/with-test-db.js test/design-visit-submitter-name/run.js",
     "test:customer-info": "node test/customer-info/run.js",
     "test:customer-info:ci": "node scripts/with-test-db.js test/customer-info/run.js",
+    "test:customer-info-email-attachments": "node test/customer-info-email-attachments/run.js",
+    "test:customer-info-email-attachments:ci": "node scripts/with-test-db.js test/customer-info-email-attachments/run.js",
     "test:customer-info-live-badge": "node test/customer-info-live-badge/run.js",
     "test:customer-info-live-badge:ci": "node scripts/with-test-db.js test/customer-info-live-badge/run.js",
     "test:photo-storage-errors": "node test/photo-storage-errors/run.js",

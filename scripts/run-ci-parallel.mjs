@@ -82,6 +82,7 @@ const DB_SUITES = [
   'test:lead-status-delete-substatus-clear:ci',
   'test:substatus-hubspot-label-format:ci',
   'test:customer-info:ci',
+  'test:customer-info-email-attachments:ci',
   'test:lead-status-sync-customer-detail:ci',
   'test:lead-status-sync-customer-detail-viewer:ci',
   'test:lead-status-sync-customer-detail-editable:ci',
