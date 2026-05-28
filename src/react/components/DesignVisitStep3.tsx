@@ -1,4 +1,5 @@
 import React from 'react';
+import { NEUTRAL_COLORS } from '../theme';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
@@ -23,14 +24,14 @@ function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) 
         justifyContent: 'space-between',
         fontSize: '.88rem',
         py: '5px',
-        borderBottom: '1px solid #f3f4f6',
+        borderBottom: `1px solid ${NEUTRAL_COLORS[100]}`,
         '&:last-child': { borderBottom: 'none' },
       }}
     >
-      <Typography component="span" sx={{ fontWeight: 600, color: '#6b7280', fontSize: 'inherit' }/* hex-color-ok: pre-existing raw hex */}>
+      <Typography component="span" sx={{ fontWeight: 600, color: NEUTRAL_COLORS[500], fontSize: 'inherit' }}>
         {label}
       </Typography>
-      <Typography component="span" sx={{ color: '#1f2937', fontSize: 'inherit', textAlign: 'right', ml: 2 }/* hex-color-ok: pre-existing raw hex */}>
+      <Typography component="span" sx={{ color: NEUTRAL_COLORS[800], fontSize: 'inherit', textAlign: 'right', ml: 2 }}>
         {value}
       </Typography>
     </Box>
@@ -46,7 +47,7 @@ function ReviewSection({ title, children }: { title: string; children: React.Rea
           fontWeight: 700,
           textTransform: 'uppercase',
           letterSpacing: '.06em',
-          color: '#9ca3af', // hex-color-ok: pre-existing raw hex
+          color: NEUTRAL_COLORS[400],
           mb: '8px',
         }}
       >
@@ -104,26 +105,26 @@ export function DesignVisitStep3({
               justifyContent: 'space-between',
               fontSize: '.88rem',
               py: '5px',
-              borderBottom: '1px solid #f3f4f6',
+              borderBottom: `1px solid ${NEUTRAL_COLORS[100]}`,
             }}
           >
             <Box>
               <Typography
                 component="span"
-                sx={{ fontWeight: 700, fontSize: 'inherit', color: '#1f2937' }} // hex-color-ok: pre-existing raw hex
+                sx={{ fontWeight: 700, fontSize: 'inherit', color: NEUTRAL_COLORS[800] }}
               >
                 {r.roomName}
               </Typography>{' '}
               <Typography
                 component="span"
-                sx={{ fontWeight: 400, color: '#9ca3af', fontSize: 'inherit' }} // hex-color-ok: pre-existing raw hex
+                sx={{ fontWeight: 400, color: NEUTRAL_COLORS[400], fontSize: 'inherit' }}
               >
                 ({r.dsName}, {r.unitCount} unit{r.unitCount !== 1 ? 's' : ''})
               </Typography>
             </Box>
             <Typography
               component="span"
-              sx={{ fontSize: 'inherit', color: '#1f2937', ml: 2 }} // hex-color-ok: pre-existing raw hex
+              sx={{ fontSize: 'inherit', color: NEUTRAL_COLORS[800], ml: 2 }}
             >
               £{(r.tot / 100).toFixed(2)}
             </Typography>
@@ -135,7 +136,7 @@ export function DesignVisitStep3({
             fontWeight: 700,
             textAlign: 'right',
             pt: '10px',
-            color: '#1f2937', // hex-color-ok: pre-existing raw hex
+            color: NEUTRAL_COLORS[800],
           }}
         >
           Estimate total: £{(grandTotal / 100).toFixed(2)}
@@ -149,7 +150,7 @@ export function DesignVisitStep3({
             value={
               <Box
                 component="span"
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#059669' }} // hex-color-ok: pre-existing raw hex
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'success.main' }}
               >
                 <CheckIcon sx={{ fontSize: '1rem' }} />
                 {termsVersionNumber != null && (
@@ -160,8 +161,8 @@ export function DesignVisitStep3({
                       px: '7px',
                       py: '1px',
                       borderRadius: '999px',
-                      background: '#e5e7eb', // hex-color-ok: pre-existing raw hex
-                      color: '#374151', // hex-color-ok: pre-existing raw hex
+                      background: NEUTRAL_COLORS[200],
+                      color: NEUTRAL_COLORS[700],
                       fontSize: '.7rem',
                       fontWeight: 700,
                     }}

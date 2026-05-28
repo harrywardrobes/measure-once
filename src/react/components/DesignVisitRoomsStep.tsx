@@ -12,6 +12,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { FileUploadField, UploadStatus } from './FileUploadField';
+import { BRAND_COLORS, NEUTRAL_COLORS, STATUS_COLORS } from '../theme';
 
 export interface RoomImage {
   storageKey: string;
@@ -331,10 +332,10 @@ export function DesignVisitRoomsStep({
                 disabled={idx === 0}
                 onClick={() => moveRoom(clientId, -1)}
                 sx={{
-                  border: '1.5px solid #d1d5db',
+                  border: `1.5px solid ${NEUTRAL_COLORS[300]}`,
                   borderRadius: '7px',
                   p: '3px',
-                  color: '#6b7280', // hex-color-ok: pre-existing raw hex
+                  color: NEUTRAL_COLORS[500],
                   '&:disabled': { opacity: 0.35 },
                 }}
               >
@@ -346,17 +347,17 @@ export function DesignVisitRoomsStep({
                 disabled={idx === rooms.length - 1}
                 onClick={() => moveRoom(clientId, 1)}
                 sx={{
-                  border: '1.5px solid #d1d5db',
+                  border: `1.5px solid ${NEUTRAL_COLORS[300]}`,
                   borderRadius: '7px',
                   p: '3px',
-                  color: '#6b7280', // hex-color-ok: pre-existing raw hex
+                  color: NEUTRAL_COLORS[500],
                   '&:disabled': { opacity: 0.35 },
                 }}
               >
                 <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />
               </IconButton>
               <Typography
-                sx={{ fontWeight: 700, fontSize: '.9rem', color: '#374151', flex: 1 }} // hex-color-ok: pre-existing raw hex
+                sx={{ fontWeight: 700, fontSize: '.9rem', color: NEUTRAL_COLORS[700], flex: 1 }}
               >
                 Room {idx + 1}
               </Typography>
@@ -365,19 +366,19 @@ export function DesignVisitRoomsStep({
                   size="small"
                   onClick={() => removeRoom(clientId)}
                   sx={{
-                    border: '1.5px solid #d1d5db',
+                    border: `1.5px solid ${NEUTRAL_COLORS[300]}`,
                     borderRadius: '7px',
                     px: '10px',
                     py: '4px',
-                    background: '#fff', // hex-color-ok: pre-existing raw hex
+                    bgcolor: 'background.paper',
                     fontSize: '.8rem',
-                    color: '#374151', // hex-color-ok: pre-existing raw hex
+                    color: NEUTRAL_COLORS[700],
                     textTransform: 'none',
                     minWidth: 0,
                     '&:hover': {
-                      background: '#fef2f2', // hex-color-ok: pre-existing raw hex
-                      borderColor: '#fca5a5', // hex-color-ok: pre-existing raw hex
-                      color: '#dc2626', // hex-color-ok: pre-existing raw hex
+                      background: STATUS_COLORS.errorLight.bg,
+                      borderColor: STATUS_COLORS.error.border,
+                      color: 'error.main',
                     },
                   }}
                 >
@@ -391,7 +392,7 @@ export function DesignVisitRoomsStep({
               label={
                 <>
                   Room name{' '}
-                  <Box component="span" sx={{ color: '#991b1b' }/* hex-color-ok: pre-existing raw hex */}>
+                  <Box component="span" sx={{ color: STATUS_COLORS.error.text }}>
                     *
                   </Box>
                 </>
@@ -481,7 +482,7 @@ export function DesignVisitRoomsStep({
                 label={
                   <>
                     Unit count{' '}
-                    <Box component="span" sx={{ color: '#991b1b' }/* hex-color-ok: pre-existing raw hex */}>
+                    <Box component="span" sx={{ color: STATUS_COLORS.error.text }}>
                       *
                     </Box>
                   </>
@@ -570,11 +571,11 @@ export function DesignVisitRoomsStep({
                         width: 18,
                         height: 18,
                         p: 0,
-                        background: '#374151', // hex-color-ok: pre-existing raw hex
-                        color: '#fff', // hex-color-ok: pre-existing raw hex
+                        background: NEUTRAL_COLORS[700],
+                        color: 'common.white',
                         borderRadius: '50%',
                         '&:hover': {
-                          background: '#dc2626', // hex-color-ok: pre-existing raw hex
+                          background: 'error.main',
                         },
                       }}
                     >
@@ -593,17 +594,17 @@ export function DesignVisitRoomsStep({
         fullWidth
         onClick={addRoom}
         sx={{
-          border: '2px dashed #d1d5db',
+          border: `2px dashed ${NEUTRAL_COLORS[300]}`,
           borderRadius: '10px',
           py: '10px',
           background: 'transparent',
           fontSize: '.88rem',
-          color: '#6b7280', // hex-color-ok: pre-existing raw hex
+          color: NEUTRAL_COLORS[500],
           textTransform: 'none',
           mt: '4px',
           '&:hover': {
-            borderColor: '#8B2BFF', // hex-color-ok: pre-existing raw hex
-            color: '#8B2BFF', // hex-color-ok: pre-existing raw hex
+            borderColor: BRAND_COLORS.orchid,
+            color: BRAND_COLORS.orchid,
             background: 'transparent',
           },
         }}

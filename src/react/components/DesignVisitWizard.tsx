@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { BRAND_COLORS, NEUTRAL_COLORS, STATUS_COLORS } from '../theme';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -169,7 +170,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
             flex: 1,
             height: '4px',
             borderRadius: '2px',
-            background: i + 1 <= current ? '#8B2BFF' : '#e5e7eb', // hex-color-ok: pre-existing raw hex
+            background: i + 1 <= current ? BRAND_COLORS.orchid : NEUTRAL_COLORS[200],
             transition: 'background .2s',
           }}
         />
@@ -530,14 +531,14 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           px: '24px',
           pt: '18px',
           pb: '14px',
-          borderBottom: '1px solid #e5e7eb',
+          borderBottom: `1px solid ${NEUTRAL_COLORS[200]}`,
           flexShrink: 0,
         }}
       >
-        <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#1f2937' }/* hex-color-ok: pre-existing raw hex */}>
+        <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: NEUTRAL_COLORS[800] }}>
           {title}
         </Typography>
-        <IconButton onClick={handleClose} size="small" aria-label="Close" sx={{ color: '#9ca3af' }/* hex-color-ok: pre-existing raw hex */}>
+        <IconButton onClick={handleClose} size="small" aria-label="Close" sx={{ color: NEUTRAL_COLORS[400] }}>
           <CloseIcon />
         </IconButton>
       </Box>
@@ -560,7 +561,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         ) : (
           <>
             <StepIndicator current={step} total={3} />
-            <Typography sx={{ fontSize: '.82rem', color: '#6b7280', mb: '16px' }/* hex-color-ok: pre-existing raw hex */}>
+            <Typography sx={{ fontSize: '.82rem', color: NEUTRAL_COLORS[500], mb: '16px' }}>
               {stepLabel}
             </Typography>
 
@@ -610,18 +611,18 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             justifyContent: 'flex-end',
             px: '24px',
             py: '14px',
-            borderTop: '1px solid #e5e7eb',
+            borderTop: `1px solid ${NEUTRAL_COLORS[200]}`,
             flexShrink: 0,
-            background: '#fff', // hex-color-ok: pre-existing raw hex
+            bgcolor: 'background.paper',
             flexDirection: 'column',
             alignItems: 'stretch',
           }}
         >
           {(s1Error && step === 1) && (
-            <Typography sx={{ color: '#b91c1c', fontSize: '.82rem' }}>{s1Error/* hex-color-ok: pre-existing raw hex */}</Typography>
+            <Typography sx={{ color: 'error.dark', fontSize: '.82rem' }}>{s1Error}</Typography>
           )}
           {(submitError && step === 3) && (
-            <Typography sx={{ color: '#b91c1c', fontSize: '.82rem' }}>{submitError/* hex-color-ok: pre-existing raw hex */}</Typography>
+            <Typography sx={{ color: 'error.dark', fontSize: '.82rem' }}>{submitError}</Typography>
           )}
 
           <Box sx={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
@@ -631,11 +632,11 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                 onClick={() => { setSubmitError(''); setStep(s => s - 1); }}
                 disabled={submitting}
                 sx={{
-                  borderColor: '#d1d5db', // hex-color-ok: pre-existing raw hex
-                  color: '#374151', // hex-color-ok: pre-existing raw hex
+                  borderColor: NEUTRAL_COLORS[300],
+                  color: NEUTRAL_COLORS[700],
                   fontWeight: 600,
                   textTransform: 'none',
-                  '&:hover': { borderColor: '#9ca3af', background: '#f9fafb' }, // hex-color-ok: pre-existing raw hex
+                  '&:hover': { borderColor: NEUTRAL_COLORS[400], background: NEUTRAL_COLORS[50] },
                 }}
               >
                 ← Back
@@ -647,10 +648,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                 variant="contained"
                 onClick={advanceToStep2}
                 sx={{
-                  background: '#8B2BFF', // hex-color-ok: pre-existing raw hex
+                  background: BRAND_COLORS.orchid,
                   fontWeight: 600,
                   textTransform: 'none',
-                  '&:hover': { background: '#7a1fe0' }, // hex-color-ok: pre-existing raw hex
+                  '&:hover': { background: BRAND_COLORS.orchidPress },
                 }}
               >
                 Next: Rooms →
@@ -667,10 +668,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                 }}
                 disabled={uploading || rooms.some(r => !r.roomName.trim()) || rooms.length === 0}
                 sx={{
-                  background: '#8B2BFF', // hex-color-ok: pre-existing raw hex
+                  background: BRAND_COLORS.orchid,
                   fontWeight: 600,
                   textTransform: 'none',
-                  '&:hover': { background: '#7a1fe0' }, // hex-color-ok: pre-existing raw hex
+                  '&:hover': { background: BRAND_COLORS.orchidPress },
                   '&:disabled': { opacity: 0.55 },
                 }}
               >
@@ -685,10 +686,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                 disabled={submitting}
                 startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
                 sx={{
-                  background: '#8B2BFF', // hex-color-ok: pre-existing raw hex
+                  background: BRAND_COLORS.orchid,
                   fontWeight: 600,
                   textTransform: 'none',
-                  '&:hover': { background: '#7a1fe0' }, // hex-color-ok: pre-existing raw hex
+                  '&:hover': { background: BRAND_COLORS.orchidPress },
                   '&:disabled': { opacity: 0.55 },
                 }}
               >
@@ -711,7 +712,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           {editMode ? 'Discard your changes?' : 'Discard your draft?'}
         </DialogTitle>
         <DialogContent>
-          <Typography sx={{ fontSize: '.9rem', color: '#374151' }/* hex-color-ok: pre-existing raw hex */}>
+          <Typography sx={{ fontSize: '.9rem', color: NEUTRAL_COLORS[700] }}>
             {editMode
               ? 'You have unsaved changes. If you close now your edits will be lost.'
               : 'You have unsaved room data. If you close now your draft will be lost.'}
@@ -722,11 +723,11 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             onClick={() => setShowDiscardDialog(false)}
             variant="outlined"
             sx={{
-              borderColor: '#d1d5db', // hex-color-ok: pre-existing raw hex
-              color: '#374151', // hex-color-ok: pre-existing raw hex
+              borderColor: NEUTRAL_COLORS[300],
+              color: NEUTRAL_COLORS[700],
               fontWeight: 600,
               textTransform: 'none',
-              '&:hover': { borderColor: '#9ca3af', background: '#f9fafb' }, // hex-color-ok: pre-existing raw hex
+              '&:hover': { borderColor: NEUTRAL_COLORS[400], background: NEUTRAL_COLORS[50] },
             }}
           >
             Keep editing
@@ -791,10 +792,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             }}
             variant="contained"
             sx={{
-              background: '#dc2626', // hex-color-ok: pre-existing raw hex
+              background: 'error.main',
               fontWeight: 600,
               textTransform: 'none',
-              '&:hover': { background: '#b91c1c' }, // hex-color-ok: pre-existing raw hex
+              '&:hover': { background: 'error.dark' },
             }}
           >
             Discard

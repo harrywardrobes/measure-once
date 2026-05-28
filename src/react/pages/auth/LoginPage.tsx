@@ -9,12 +9,13 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import { LoginPageSkeleton } from '../../components/PageLoadingSkeleton';
+import { BRAND_COLORS } from '../../theme';
 
 type View = 'login' | 'forgot' | 'request';
 
 const LOGO_URL = '/harry-wardrobes-logo.png';
 
-const bodyStyles = { 'html, body': { margin: 0, padding: 0, minHeight: '100vh', background: '#f8f7f4' } }; // hex-color-ok: pre-existing raw hex
+const bodyStyles = { 'html, body': { margin: 0, padding: 0, minHeight: '100vh', background: BRAND_COLORS.pageBackground } };
 
 type TW = { render: (el: Element, opts: object) => string; getResponse: (id: string) => string; reset: (id: string) => void };
 

@@ -19,7 +19,7 @@ import {
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
-import { BRAND_COLORS } from '../theme';
+import { BRAND_COLORS, NEUTRAL_COLORS, STATUS_COLORS } from '../theme';
 import type { GalleryEmbedded } from '../types/gallery';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ function SectionCard({ title, versionBadge, children }: {
   return (
     <Box
       sx={{
-        bgcolor: '#ffffff', // hex-color-ok: pre-existing raw hex
+        bgcolor: 'background.paper',
         border: '1px solid',
         borderColor: 'divider',
         borderRadius: '12px',
@@ -328,7 +328,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
   return (
     <Box
       sx={{
-        bgcolor: '#f9fafb', // hex-color-ok: pre-existing raw hex
+        bgcolor: NEUTRAL_COLORS[50],
         minHeight: '100vh',
         fontFamily: 'inherit',
         color: BRAND_COLORS.ink1,
@@ -375,7 +375,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
         {/* Success */}
         {pageState === 'success' && (
           <StateBlock
-            icon={<CheckCircleOutlinedIcon sx={{ color: '#059669 !important' }} />} // hex-color-ok: pre-existing raw hex
+            icon={<CheckCircleOutlinedIcon sx={{ color: 'success.main !important' }} />}
             title={successKind === 'approved' ? 'Design signed off — thank you!' : 'Changes requested'}
             subtitle={
               successKind === 'approved'
@@ -563,7 +563,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
                               borderRadius: '8px',
                               border: '1px solid',
                               borderColor: 'divider',
-                              bgcolor: '#f3f4f6', // hex-color-ok: pre-existing raw hex
+                              bgcolor: NEUTRAL_COLORS[100],
                               cursor: 'zoom-in',
                               display: 'block',
                             }}
@@ -656,8 +656,8 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
                       fontSize: '1rem',
                       fontWeight: 600,
                       color: BRAND_COLORS.ink2,
-                      borderColor: '#d1d5db', // hex-color-ok: pre-existing raw hex
-                      '&:hover': { bgcolor: '#f9fafb', borderColor: '#d1d5db' }, // hex-color-ok: pre-existing raw hex
+                      borderColor: NEUTRAL_COLORS[300],
+                      '&:hover': { bgcolor: NEUTRAL_COLORS[50], borderColor: NEUTRAL_COLORS[300] },
                     }}
                   >
                     Request changes

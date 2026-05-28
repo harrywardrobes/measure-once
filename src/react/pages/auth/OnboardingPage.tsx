@@ -1,4 +1,5 @@
 import React from 'react';
+import { BRAND_COLORS } from '../../theme';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -10,7 +11,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
 const LOGO_URL = '/harry-wardrobes-logo.png';
-const bodyStyles = { 'html, body': { margin: 0, padding: 0, minHeight: '100vh', background: '#f8f7f4' } }; // hex-color-ok: pre-existing raw hex
+const bodyStyles = { 'html, body': { margin: 0, padding: 0, minHeight: '100vh', background: BRAND_COLORS.pageBackground } };
 const DRAFT_KEY = 'mo:onboarding:draft';
 
 interface FormData {

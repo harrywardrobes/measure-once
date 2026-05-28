@@ -1,5 +1,6 @@
 import React from 'react';
 import Box from '@mui/material/Box';
+import { STATUS_COLORS } from '../theme';
 
 /**
  * Returns true when the contact has submitted their upload form —
@@ -40,8 +41,8 @@ export function PhotosReceivedBadge({ leadStatus, hwSubstatus }: PhotosReceivedB
         px: '6px',
         py: '1px',
         borderRadius: '999px',
-        background: '#dcfce7', // hex-color-ok: pre-existing raw hex
-        color: '#166534', // hex-color-ok: pre-existing raw hex
+        background: STATUS_COLORS.success.bg,
+        color: STATUS_COLORS.success.text,
         border: '1px solid #bbf7d0',
         letterSpacing: '0.02em',
         whiteSpace: 'nowrap',

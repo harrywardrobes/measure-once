@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { STATUS_COLORS } from '../theme';
 import { SearchActionList, type SearchAction } from '../components/SearchActionList';
 
 /**
@@ -155,7 +156,7 @@ export function SearchSettingsPage() {
               <span
                 style={{
                   fontSize: '.8rem',
-                  color: status.ok ? 'var(--status-success-text, #166534)' : 'var(--error, #991b1b)', // hex-color-ok: pre-existing raw hex
+                  color: status.ok ? STATUS_COLORS.success.text : STATUS_COLORS.error.text,
                 }}
               >
                 {status.text}

@@ -57,14 +57,14 @@ const ICON_BTN_SX = {
   color: 'rgba(255,255,255,0.7)',
   bgcolor: 'rgba(255,255,255,0.08)',
   border: '1px solid rgba(255,255,255,0.12)',
-  '&:hover': { bgcolor: 'rgba(255,255,255,0.14)', color: '#fff' }, // hex-color-ok: pre-existing raw hex
+  '&:hover': { bgcolor: 'rgba(255,255,255,0.14)', color: 'common.white' },
   '&:active': { bgcolor: 'rgba(255,255,255,0.2)' },
 } as const;
 
 const ICON_BTN_ACTIVE_SX = {
   bgcolor: 'rgba(255,255,255,0.18)',
   borderColor: 'rgba(255,255,255,0.35)',
-  color: '#fff', // hex-color-ok: pre-existing raw hex
+  color: 'common.white',
 } as const;
 
 // ── Service status icon config ─────────────────────────────────────────────────
@@ -431,7 +431,7 @@ export function GlobalHeader() {
                         width: 30,
                         height: 30,
                         bgcolor: 'transparent',
-                        color: '#fff', // hex-color-ok: pre-existing raw hex
+                        color: 'common.white',
                         fontSize: '0.7rem',
                         fontWeight: 700,
                         letterSpacing: '0.03em',

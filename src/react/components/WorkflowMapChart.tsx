@@ -28,7 +28,7 @@ import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
 import BoltIcon from '@mui/icons-material/Bolt';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import { STAGE_COLORS } from '../theme';
+import { STAGE_COLORS, NEUTRAL_COLORS, STATUS_COLORS } from '../theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -430,16 +430,16 @@ function HandlerBadgeSummary({
     return (
       <Tooltip title={`${handlers.length} handlers bound — conflict`} placement="top" arrow>
         <Chip
-          icon={<WarningAmberIcon sx={{ fontSize: small ? 11 : 13, color: '#92400e !important' }} />} // hex-color-ok: pre-existing raw hex
+          icon={<WarningAmberIcon sx={{ fontSize: small ? 11 : 13, color: `${STATUS_COLORS.warning.text} !important` }} />}
           label={`⚠ ${handlers.length}`}
           size="small"
           sx={{
             height: small ? 18 : 20,
             fontSize: small ? '0.6rem' : '0.65rem',
             fontWeight: 700,
-            bgcolor: '#fef3c7', // hex-color-ok: pre-existing raw hex
-            color: '#92400e', // hex-color-ok: pre-existing raw hex
-            border: '1px solid #fbbf24',
+            bgcolor: STATUS_COLORS.warning.bg,
+            color: STATUS_COLORS.warning.text,
+            border: `1px solid ${STATUS_COLORS.warning.border}`,
             flexShrink: 0,
             '.MuiChip-label': { px: small ? 0.5 : 0.75 },
             '.MuiChip-icon': { ml: small ? 0.3 : 0.5, mr: -0.25 },
@@ -462,15 +462,15 @@ function HandlerBadgeSummary({
   return (
     <Tooltip title={tooltipTitle} placement="top" arrow>
       <Chip
-        icon={<BoltIcon sx={{ fontSize: small ? 11 : 13, color: '#5b21b6 !important' }} />} // hex-color-ok: pre-existing raw hex
+        icon={<BoltIcon sx={{ fontSize: small ? 11 : 13, color: `${STATUS_COLORS.violet.text} !important` }} />}
         label={chipLabel}
         size="small"
         sx={{
           height: small ? 18 : 20,
           fontSize: small ? '0.6rem' : '0.65rem',
           fontWeight: 700,
-          bgcolor: '#ede9fe', // hex-color-ok: pre-existing raw hex
-          color: '#5b21b6', // hex-color-ok: pre-existing raw hex
+          bgcolor: STATUS_COLORS.violet.bg,
+          color: STATUS_COLORS.violet.text,
           border: 'none',
           flexShrink: 0,
           '.MuiChip-label': { px: small ? 0.5 : 0.75 },
@@ -497,7 +497,7 @@ const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<Wor
         gap: 1,
         borderRadius: '8px',
         background: isReadOnly ? `linear-gradient(90deg, ${sc.bg}cc, ${sc.bg}99)` : sc.bg,
-        color: '#fff', // hex-color-ok: pre-existing raw hex
+        color: 'common.white',
         boxShadow: selected ? `0 0 0 2px #fff, 0 0 0 4px ${sc.bg}` : '0 1px 4px rgba(0,0,0,.18)',
         cursor: 'pointer',
         userSelect: 'none',
@@ -506,7 +506,7 @@ const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<Wor
         opacity: isReadOnly ? 0.85 : 1,
       }}
     >
-      <Typography variant="subtitle1" sx={{ color: '#fff', letterSpacing: '.01em', fontWeight: 700, flex: 1 }/* hex-color-ok: pre-existing raw hex */}>
+      <Typography variant="subtitle1" sx={{ color: 'common.white', letterSpacing: '.01em', fontWeight: 700, flex: 1 }}>
         {data.label}
       </Typography>
       {isReadOnly && (
@@ -544,7 +544,7 @@ const StatusNode = memo(function StatusNode({ data, selected }: NodeProps<Node<W
         px: 1.5,
         borderRadius: '6px',
         border: isReadOnly ? '1.5px solid #e5e7eb' : `1.5px solid ${sc.light}`,
-        background: isReadOnly ? '#f9fafb' : '#fff', // hex-color-ok: pre-existing raw hex
+        background: isReadOnly ? NEUTRAL_COLORS[50] : 'background.paper',
         boxShadow: selected
           ? `0 0 0 2px ${sc.bg}`
           : '0 1px 3px rgba(0,0,0,.08)',
@@ -674,7 +674,7 @@ export function WorkflowMapChart({
       zoomOnScroll={false}
       zoomOnPinch
     >
-      <Background variant={BackgroundVariant.Dots} gap={16} size={1/* hex-color-ok: pre-existing raw hex */} color="#e2e8f0" />
+      <Background variant={BackgroundVariant.Dots} gap={16} size={1} color={NEUTRAL_COLORS[200]} />
     </ReactFlow>
   );
 }

@@ -1,4 +1,5 @@
 import React from 'react';
+import { STATUS_COLORS } from '../theme';
 
 type Props = {
   islandId: string;
@@ -77,8 +78,8 @@ export class IslandErrorBoundary extends React.Component<Props, State> {
           margin: '12px 0',
           padding: '12px 16px',
           border: `1px solid ${chunkError ? '#fed7aa' : '#fecaca'}`,
-          background: chunkError ? '#fff7ed' : '#fef2f2', // hex-color-ok: pre-existing raw hex
-          color: chunkError ? '#9a3412' : '#991b1b', // hex-color-ok: pre-existing raw hex
+          background: chunkError ? STATUS_COLORS.chunkError.bg : STATUS_COLORS.errorLight.bg,
+          color: chunkError ? STATUS_COLORS.chunkError.text : STATUS_COLORS.error.text,
           borderRadius: 6,
           fontFamily: 'system-ui, sans-serif',
           fontSize: 14,
@@ -91,17 +92,17 @@ export class IslandErrorBoundary extends React.Component<Props, State> {
             : 'This panel failed to load.'}
         </strong>
         {chunkError ? (
-          <div style={{ fontSize: 12, color: '#7c2d12', marginTop: 4 }/* hex-color-ok: pre-existing raw hex */}>
+          <div style={{ fontSize: 12, color: STATUS_COLORS.chunkError.text, marginTop: 4 }}>
             {process.env.NODE_ENV !== 'production'
               ? 'A page chunk is missing. Run \u0060npm run build:react\u0060 and reload.'
               : 'If the problem persists, contact support.'}
           </div>
         ) : (
           <>
-            <span style={{ color: '#7f1d1d' }/* hex-color-ok: pre-existing raw hex */}>
+            <span style={{ color: STATUS_COLORS.error.text }}>
               {error.message || String(error)}
             </span>
-            <div style={{ marginTop: 6, fontSize: 12, color: '#7f1d1d' }/* hex-color-ok: pre-existing raw hex */}>
+            <div style={{ marginTop: 6, fontSize: 12, color: STATUS_COLORS.error.text }}>
               See the browser console for details. Other tabs should still work.
             </div>
           </>

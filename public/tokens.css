@@ -25,9 +25,14 @@
   --stone-deep:        #B8AE99;
   --orchid:            #8B2BFF;
   --orchid-deep:       #6A12D9;
+  --orchid-press:      #7a1fe0;
   --orchid-soft:       #A968FF;
   --orchid-tint:       #F3EAFF;
+  --orchid-tint-deep:  #EDE8FF;
+  --orchid-tint-hover: #E0D8FF;
   --plum:              #200842;
+  --plum-light:        #3d0f7a;
+  --page-background:   #f8f7f4;
   --walnut:            #8A5A3B;
   --ink-1:             #141413;
   --ink-2:             #3C3A34;
@@ -85,8 +90,30 @@
   --status-warn-bg:       #fef9c3;
   --status-warn-border:   #fde047;
   --status-warn-text:     #713f12;
-  --status-neutral-bg:       #f3f4f6;
-  --status-neutral-text:     #374151;
+  --status-warning-bg:       #fef3c7;
+  --status-warning-text:     #92400e;
+  --status-warningLight-bg:  #fffbeb;
+  --status-warningLight-text: #92400e;
+  --status-warningActive-bg: #fde68a;
+  --status-warningActive-text: #92400e;
+  --status-error-bg:         #fee2e2;
+  --status-error-text:       #991b1b;
+  --status-errorLight-bg:    #fef2f2;
+  --status-errorLight-text:  #991b1b;
+  --status-chunkError-bg:    #fff7ed;
+  --status-chunkError-text:  #9a3412;
+  --status-success-bg:       #dcfce7;
+  --status-success-text:     #166534;
+  --status-successLight-bg:  #f0fdf4;
+  --status-successLight-text: #166534;
+  --status-successDeep-bg:   #d1fae5;
+  --status-successDeep-text: #065f46;
+  --status-info-bg:          #dbeafe;
+  --status-info-text:        #1d4ed8;
+  --status-infoLight-bg:     #eff6ff;
+  --status-infoLight-text:   #1e40af;
+  --status-violet-bg:        #ede9fe;
+  --status-violet-text:      #5b21b6;
 
   /* ── Brand action accents ────────────────────────────────────────────────── */
   --brand-accent:       #3d0f7a;

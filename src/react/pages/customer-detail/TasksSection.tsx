@@ -233,8 +233,8 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
                     height: 20,
                     borderRadius: '50%',
                     border: isDone ? 'none' : '2px solid var(--stone-deep)',
-                    background: isDone ? '#16a34a' : 'none', // hex-color-ok: pre-existing raw hex
-                    color: isDone ? '#fff' : 'inherit', // hex-color-ok: pre-existing raw hex
+                    background: isDone ? 'success.dark' : 'none',
+                    color: isDone ? 'common.white' : 'inherit',
                     flexShrink: 0,
                     mt: '1px',
                     cursor: 'pointer',
@@ -247,7 +247,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
                     p: 0,
                     '&:hover': {
                       borderColor: isDone ? undefined : 'var(--orchid)',
-                      background: isDone ? '#15803d' : undefined, // hex-color-ok: pre-existing raw hex
+                      background: isDone ? 'success.dark' : undefined,
                     },
                   }}
                 >
@@ -288,7 +288,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
                           component="span"
                           sx={{
                             fontSize: '0.72rem',
-                            color: overdue ? '#dc2626' : 'var(--ink-3)', // hex-color-ok: pre-existing raw hex
+                            color: overdue ? 'error.main' : 'var(--ink-3)',
                             fontWeight: overdue ? 700 : 500,
                           }}
                         >
@@ -318,7 +318,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
                     fontFamily: 'inherit',
                     transition: 'color 0.15s',
                     mt: '2px',
-                    '&:hover': { color: '#dc2626' }, // hex-color-ok: pre-existing raw hex
+                    '&:hover': { color: 'error.main' },
                   }}
                 >
                   <CloseIcon sx={{ fontSize: '0.875rem' }} />

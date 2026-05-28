@@ -5,6 +5,7 @@ import {
   Popover,
   Typography,
 } from '@mui/material';
+import { BRAND_COLORS } from '../../theme';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -221,7 +222,7 @@ export function SubstagePicker({
               textAlign: 'left',
               border: 'none',
               background: 'none',
-              color: currentSubId ? '#ef4444' : '#B8AE99', // hex-color-ok: pre-existing raw hex
+              color: currentSubId ? 'error.main' : BRAND_COLORS.stoneDeep,
               fontWeight: 500,
               fontSize: '0.82rem',
               fontFamily: 'inherit',
@@ -230,7 +231,7 @@ export function SubstagePicker({
               cursor: currentSubId ? 'pointer' : 'not-allowed',
               borderRadius: '4px',
               transition: 'background 0.1s',
-              '&:hover:not(:disabled)': { background: '#F6F1E7' }, // hex-color-ok: pre-existing raw hex
+              '&:hover:not(:disabled)': { background: BRAND_COLORS.paper },
             }}
           >
             ✕ Clear substage
@@ -247,8 +248,8 @@ export function SubstagePicker({
                   width: '100%',
                   textAlign: 'left',
                   border: 'none',
-                  background: isActive ? '#EDE8FF' : 'none', // hex-color-ok: pre-existing raw hex
-                  color: isActive ? '#6A12D9' : '#141413', // hex-color-ok: pre-existing raw hex
+                  background: isActive ? BRAND_COLORS.orchidTintDeep : 'none',
+                  color: isActive ? BRAND_COLORS.orchidDeep : BRAND_COLORS.ink1,
                   fontWeight: isActive ? 700 : 400,
                   fontSize: '0.82rem',
                   fontFamily: 'inherit',
@@ -257,7 +258,7 @@ export function SubstagePicker({
                   cursor: 'pointer',
                   borderRadius: '4px',
                   transition: 'background 0.1s',
-                  '&:hover': { background: isActive ? '#E0D8FF' : '#F6F1E7' }, // hex-color-ok: pre-existing raw hex
+                  '&:hover': { background: isActive ? BRAND_COLORS.orchidTintHover : BRAND_COLORS.paper },
                 }}
               >
                 {s.label || s.id}

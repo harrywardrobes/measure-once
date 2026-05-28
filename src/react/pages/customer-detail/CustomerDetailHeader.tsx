@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PROVIDER_COLORS } from '../../theme';
 import { Contact, LeadStatus, LeadSubstatus, contactName } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { LeadStatusPicker } from '../../components/pickers/LeadStatusPicker';
@@ -142,7 +143,7 @@ export function CustomerDetailHeader({
                         title="Send WhatsApp message"
                         style={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          width: 22, height: 22, borderRadius: '50%', background: '#25D366', // hex-color-ok: pre-existing raw hex
+                          width: 22, height: 22, borderRadius: '50%', background: PROVIDER_COLORS.whatsApp,
                           border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0,
                           verticalAlign: 'middle',
                         }}

@@ -18,6 +18,7 @@ import SyncIcon from '@mui/icons-material/Sync';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
+import { NEUTRAL_COLORS, STATUS_COLORS } from '../../theme';
 
 const STAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: '—' },
@@ -63,11 +64,11 @@ function notifyLsChanged() {
 const TH: React.CSSProperties = {
   padding: '6px 8px',
   textAlign: 'left',
-  borderBottom: '1px solid #e5e7eb',
-  background: '#f9fafb', // hex-color-ok: pre-existing raw hex
+  borderBottom: `1px solid ${NEUTRAL_COLORS[200]}`,
+  background: NEUTRAL_COLORS[50],
   fontSize: '0.75rem',
   fontWeight: 600,
-  color: '#6b7280', // hex-color-ok: pre-existing raw hex
+  color: NEUTRAL_COLORS[500],
   whiteSpace: 'nowrap',
 };
 const TD: React.CSSProperties = {
@@ -78,13 +79,13 @@ const TD: React.CSSProperties = {
 
 function NullStatusRow({ status }: { status: LeadStatus }) {
   return (
-    <tr style={{ background: '#f9fafb' }} data-ls-key={status.key/* hex-color-ok: pre-existing raw hex */} data-ls-no-delete="1">
+    <tr style={{ background: NEUTRAL_COLORS[50] }} data-ls-key={status.key} data-ls-no-delete="1">
       <td style={{ ...TD, textAlign: 'center' }}>
         <button className="btn btn-ghost" disabled style={{ fontSize: '.75rem', padding: '0 4px', opacity: 0.35 }}>↑</button>
         <button className="btn btn-ghost" disabled style={{ fontSize: '.75rem', padding: '0 4px', opacity: 0.35 }}>↓</button>
       </td>
-      <td style={{ ...TD, color: '#9ca3af' }/* hex-color-ok: pre-existing raw hex */}>—</td>
-      <td style={{ ...TD, fontFamily: 'monospace', color: '#9ca3af', fontSize: '0.75rem' }/* hex-color-ok: pre-existing raw hex */}>— none —</td>
+      <td style={{ ...TD, color: NEUTRAL_COLORS[400] }}>—</td>
+      <td style={{ ...TD, fontFamily: 'monospace', color: NEUTRAL_COLORS[400], fontSize: '0.75rem' }}>— none —</td>
       <td style={TD}>
         <input type="text" className="field ls-shorthand-input" maxLength={4}
           defaultValue={status.shorthand || ''} data-key={status.key}
@@ -100,7 +101,7 @@ function NullStatusRow({ status }: { status: LeadStatus }) {
           style={{ width: '100%', minWidth: 140 }}
         />
       </td>
-      <td style={{ ...TD, textAlign: 'center', color: '#9ca3af' }/* hex-color-ok: pre-existing raw hex */}>—</td>
+      <td style={{ ...TD, textAlign: 'center', color: NEUTRAL_COLORS[400] }}>—</td>
     </tr>
   );
 }
@@ -112,7 +113,7 @@ function StatusRow({ status, index, total, onMove }: {
   onMove: (key: string, dir: 'up' | 'down') => void;
 }) {
   return (
-    <tr style={{ background: index % 2 ? '#f9fafb' : '#fff' }} data-ls-key={status.key/* hex-color-ok: pre-existing raw hex */}>
+    <tr style={{ background: index % 2 ? NEUTRAL_COLORS[50] : 'white' }} data-ls-key={status.key}>
       <td style={{ ...TD, textAlign: 'center', whiteSpace: 'nowrap' }}>
         <button className="btn btn-ghost" title="Move up" disabled={index === 0}
           onClick={() => onMove(status.key, 'up')} style={{ fontSize: '.75rem', padding: '0 4px' }}>↑</button>
@@ -516,15 +517,15 @@ export function SettingsPage() {
   }, [saveAll, moveStatus, addStatus, fetchStatuses, fetchHubStatus]);
 
   const badge = (() => {
-    if (!hubStatus) return { text: 'Checking…', bg: '#f3f4f6', color: '#6b7280' }; // hex-color-ok: pre-existing raw hex
-    if (hubStatus.connected) return { text: 'Connected', bg: '#dcfce7', color: '#166534' }; // hex-color-ok: pre-existing raw hex
+    if (!hubStatus) return { text: 'Checking…', bg: NEUTRAL_COLORS[100], color: NEUTRAL_COLORS[500] };
+    if (hubStatus.connected) return { text: 'Connected', bg: STATUS_COLORS.success.bg, color: STATUS_COLORS.success.text };
     if (hubStatus.code === 'HUBSPOT_RATE_LIMIT') {
       const secs = hubStatus.cooldownSecondsRemaining;
-      return { text: secs && secs > 0 ? `Rate limited — retrying in ${secs} s` : 'Rate limited — rechecking…', bg: '#fef3c7', color: '#92400e' }; // hex-color-ok: pre-existing raw hex
+      return { text: secs && secs > 0 ? `Rate limited — retrying in ${secs} s` : 'Rate limited — rechecking…', bg: STATUS_COLORS.warning.bg, color: STATUS_COLORS.warning.text };
     }
-    if (hubStatus.code === 'NO_TOKEN')  return { text: 'No token set', bg: '#fee2e2', color: '#991b1b' }; // hex-color-ok: pre-existing raw hex
-    if (hubStatus.code === 'ERROR')     return { text: 'Could not check', bg: '#fef3c7', color: '#92400e' }; // hex-color-ok: pre-existing raw hex
-    return { text: 'Not connected — check your token', bg: '#fee2e2', color: '#991b1b' }; // hex-color-ok: pre-existing raw hex
+    if (hubStatus.code === 'NO_TOKEN')  return { text: 'No token set', bg: STATUS_COLORS.error.bg, color: STATUS_COLORS.error.text };
+    if (hubStatus.code === 'ERROR')     return { text: 'Could not check', bg: STATUS_COLORS.warning.bg, color: STATUS_COLORS.warning.text };
+    return { text: 'Not connected — check your token', bg: STATUS_COLORS.error.bg, color: STATUS_COLORS.error.text };
   })();
 
   const real    = statuses.filter(s => !s.is_null_row);
@@ -657,7 +658,7 @@ export function SettingsPage() {
               <Box sx={{ minWidth: 160, display: 'flex', flexDirection: 'column' }}>
                 <Typography component="label" htmlFor="ls-new-stage" variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>Stage</Typography>
                 <select id="ls-new-stage" value={newStage} onChange={(e) => setNewStage(e.target.value)}
-                  style={{ height: 40, padding: '8px 12px', borderRadius: 4, border: '1px solid rgba(0,0,0,0.23)', background: '#fff', font: 'inherit' }/* hex-color-ok: pre-existing raw hex */}>
+                  style={{ height: 40, padding: '8px 12px', borderRadius: 4, border: '1px solid rgba(0,0,0,0.23)', background: 'white', font: 'inherit' }}>
                   {STAGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </Box>

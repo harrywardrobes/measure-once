@@ -1,5 +1,5 @@
 import { Box, Popover, Typography } from '@mui/material';
-import { STAGE_COLORS } from '../../theme';
+import { STAGE_COLORS, BRAND_COLORS } from '../../theme';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -125,8 +125,8 @@ export function StagePicker({
               width: '100%',
               textAlign: 'left',
               border: 'none',
-              background: isActive ? (color?.light || '#F6F1E7') : 'none', // hex-color-ok: pre-existing raw hex
-              color: isActive ? (color?.text || '#141413') : '#141413', // hex-color-ok: pre-existing raw hex
+              background: isActive ? (color?.light || BRAND_COLORS.paper) : 'none',
+              color: isActive ? (color?.text || BRAND_COLORS.ink1) : BRAND_COLORS.ink1,
               fontWeight: isActive ? 700 : 400,
               fontSize: '0.82rem',
               fontFamily: 'inherit',
@@ -136,7 +136,7 @@ export function StagePicker({
               borderRadius: '4px',
               transition: 'background 0.1s',
               '&:hover': {
-                background: color?.light || '#F6F1E7', // hex-color-ok: pre-existing raw hex
+                background: color?.light || BRAND_COLORS.paper,
               },
             }}
           >
@@ -145,7 +145,7 @@ export function StagePicker({
                 width: 10,
                 height: 10,
                 borderRadius: '50%',
-                bgcolor: color?.bg || '#97927F', // hex-color-ok: pre-existing raw hex
+                bgcolor: color?.bg || BRAND_COLORS.ink4,
                 flexShrink: 0,
               }}
             />

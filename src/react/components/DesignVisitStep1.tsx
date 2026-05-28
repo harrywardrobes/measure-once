@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { NEUTRAL_COLORS } from '../theme';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
 import FormControl from '@mui/material/FormControl';
@@ -199,18 +200,18 @@ export function DesignVisitStep1({
           <>
             <Typography
               variant="caption"
-              sx={{ fontWeight: 600, color: '#4b5563', display: 'block', mb: '4px', mt: '12px' }} // hex-color-ok: pre-existing raw hex
+              sx={{ fontWeight: 600, color: NEUTRAL_COLORS[600], display: 'block', mb: '4px', mt: '12px' }}
             >
               Terms &amp; Conditions
             </Typography>
             <Box
               sx={{
-                background: '#f9fafb', // hex-color-ok: pre-existing raw hex
-                border: '1px solid #e5e7eb',
+                background: NEUTRAL_COLORS[50],
+                border: `1px solid ${NEUTRAL_COLORS[200]}`,
                 borderRadius: '8px',
                 p: '10px 12px',
                 fontSize: '.78rem',
-                color: '#4b5563', // hex-color-ok: pre-existing raw hex
+                color: NEUTRAL_COLORS[600],
                 maxHeight: 120,
                 overflowY: 'auto',
                 whiteSpace: 'pre-wrap',
@@ -233,7 +234,7 @@ export function DesignVisitStep1({
             />
           }
           label={
-            <Typography sx={{ fontSize: '.82rem', color: '#374151' }/* hex-color-ok: pre-existing raw hex */}>
+            <Typography sx={{ fontSize: '.82rem', color: NEUTRAL_COLORS[700] }}>
               Customer has read and accepted the terms &amp; conditions
             </Typography>
           }

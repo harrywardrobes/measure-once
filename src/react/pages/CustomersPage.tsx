@@ -43,7 +43,7 @@ import { useCardActionHandlers, type CardActionHandlerData } from '../hooks/useC
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
-import { STAGE_COLORS } from '../theme';
+import { STAGE_COLORS, STATUS_COLORS } from '../theme';
 
 type LeadStatus = {
   key: string;
@@ -485,9 +485,9 @@ function QBBadge({
       title={`${invoices.length} outstanding invoice${invoices.length !== 1 ? 's' : ''}`}
       sx={{
         appearance: 'none',
-        border: '1px solid #fecaca',
-        bgcolor: '#fef2f2', // hex-color-ok: pre-existing raw hex
-        color: '#b91c1c', // hex-color-ok: pre-existing raw hex
+        border: `1px solid ${STATUS_COLORS.error.border}`,
+        bgcolor: STATUS_COLORS.error.bg,
+        color: STATUS_COLORS.error.text,
         px: 1,
         py: 0.25,
         borderRadius: 1,
@@ -495,7 +495,7 @@ function QBBadge({
         fontWeight: 600,
         cursor: 'pointer',
         lineHeight: 1.4,
-        '&:hover': { bgcolor: '#fee2e2' }, // hex-color-ok: pre-existing raw hex
+        '&:hover': { bgcolor: STATUS_COLORS.errorLight.bg },
       }}
     >
       {fmtGBP(total)}

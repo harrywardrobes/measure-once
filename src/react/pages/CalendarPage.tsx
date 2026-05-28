@@ -32,6 +32,7 @@ import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { CALENDAR_EVENT_COLORS, PROVIDER_COLORS } from '../theme';
 import AddIcon from '@mui/icons-material/Add';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -76,12 +77,12 @@ type PersonalTask = { id: string; title: string; done?: boolean; dueDate?: strin
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const VISIT_TYPE_META: Record<string, { label: string; color: string }> = {
-  design: { label: 'Design visit', color: '#3b82f6' }, // hex-color-ok: pre-existing raw hex
-  survey: { label: 'Survey', color: '#f59e0b' }, // hex-color-ok: pre-existing raw hex
-  installation: { label: 'Installation', color: '#10b981' }, // hex-color-ok: pre-existing raw hex
-  remedial: { label: 'Remedial', color: '#ef4444' }, // hex-color-ok: pre-existing raw hex
-  workshop: { label: 'Workshop time', color: '#8b5cf6' }, // hex-color-ok: pre-existing raw hex
-  other: { label: 'Other', color: '#6b7280' }, // hex-color-ok: pre-existing raw hex
+  design: { label: 'Design visit', color: CALENDAR_EVENT_COLORS.design.color },
+  survey: { label: 'Survey', color: CALENDAR_EVENT_COLORS.survey.color },
+  installation: { label: 'Installation', color: CALENDAR_EVENT_COLORS.installation.color },
+  remedial: { label: 'Remedial', color: CALENDAR_EVENT_COLORS.remedial.color },
+  workshop: { label: 'Workshop time', color: CALENDAR_EVENT_COLORS.workshop.color },
+  other: { label: 'Other', color: CALENDAR_EVENT_COLORS.other.color },
 };
 const DAY_START_HOUR = 7;
 const DAY_END_HOUR = 20;
@@ -143,9 +144,9 @@ function contactDisplayName(c: Contact): string {
 // ── Sync providers (placeholder UI) ──────────────────────────────────────────
 
 const SYNC_PROVIDERS = [
-  { id: 'google', name: 'Google Calendar', desc: 'Sync events from your Google account.', Icon: CalendarMonthIcon, color: '#4285F4' }, // hex-color-ok: pre-existing raw hex
-  { id: 'outlook', name: 'Microsoft Outlook', desc: 'Sync events from your Outlook account.', Icon: MailOutlineIcon, color: '#0078D4' }, // hex-color-ok: pre-existing raw hex
-  { id: 'apple', name: 'Apple Calendar', desc: 'Sync events from your iCloud account.', Icon: AppleIcon, color: '#1C1C1E' }, // hex-color-ok: pre-existing raw hex
+  { id: 'google', name: 'Google Calendar', desc: 'Sync events from your Google account.', Icon: CalendarMonthIcon, color: PROVIDER_COLORS.google },
+  { id: 'outlook', name: 'Microsoft Outlook', desc: 'Sync events from your Outlook account.', Icon: MailOutlineIcon, color: PROVIDER_COLORS.microsoft },
+  { id: 'apple', name: 'Apple Calendar', desc: 'Sync events from your iCloud account.', Icon: AppleIcon, color: PROVIDER_COLORS.apple },
 ];
 
 // ── Calendar Page ────────────────────────────────────────────────────────────
@@ -775,7 +776,7 @@ function AgendaRow({ visit, platformUsers, onClick, testId }: { visit: Visit; pl
       </Typography>
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Stack direction="row" spacing={0.75} sx={{  flexWrap: 'wrap', alignItems: 'center' }}>
-          <Chip label={meta.label} size="small" sx={{ bgcolor: meta.color, color: '#fff', height: 18, fontSize: 11 }/* hex-color-ok: pre-existing raw hex */} />
+          <Chip label={meta.label} size="small" sx={{ bgcolor: meta.color, color: 'common.white', height: 18, fontSize: 11 }} />
           <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{customer}</Typography>
         </Stack>
         {(visit.location || assigneeLabel) && (
@@ -914,7 +915,7 @@ function PersonalTaskRow({ task, onToggle, onDelete }: { task: PersonalTask; onT
         onChange={onToggle}
         className={`cal-task-checkbox-${task.id}`}
         icon={<Box sx={{ width: 18, height: 18, borderRadius: '50%', border: '1.5px solid', borderColor: 'text.secondary' }} />}
-        checkedIcon={<Box sx={{ width: 18, height: 18, borderRadius: '50%', bgcolor: 'success.main', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckIcon sx={{ fontSize: 14 }} /></Box>} // hex-color-ok: pre-existing raw hex
+        checkedIcon={<Box sx={{ width: 18, height: 18, borderRadius: '50%', bgcolor: 'success.main', color: 'common.white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckIcon sx={{ fontSize: 14 }} /></Box>}
         sx={{ p: 0.25 }}
       />
       <Box sx={{ flex: 1, minWidth: 0 }}>

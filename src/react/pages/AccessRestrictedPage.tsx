@@ -71,7 +71,7 @@ export function AccessRestrictedPage({ embedded }: AccessRestrictedPageProps = {
           disableElevation
           sx={{
             bgcolor: BRAND_COLORS.plum,
-            color: '#fff', // hex-color-ok: pre-existing raw hex
+            color: 'common.white',
             px: '28px',
             py: '14px',
             borderRadius: '8px',

@@ -26,6 +26,7 @@ import {
 } from '../components/InvoiceDetailDrawer';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { reset as resetQBStore, broadcastDisconnect } from '../lib/qbInvoicesStore';
+import { PROVIDER_COLORS, STATUS_COLORS } from '../theme';
 
 type _Icons = typeof RefreshIcon | typeof SearchIcon | typeof WarningAmberIcon;
 
@@ -205,7 +206,7 @@ export function StandaloneInvoicesPage() {
         </Typography>
         {isAdmin && (
           <Button variant="contained" href="/auth/quickbooks"
-            sx={{ bgcolor: '#2ca01c', '&:hover': { bgcolor: '#208015' } }/* hex-color-ok: pre-existing raw hex */}>
+            sx={{ bgcolor: PROVIDER_COLORS.quickBooks, '&:hover': { bgcolor: PROVIDER_COLORS.quickBooksHover } }}>
             Connect QuickBooks
           </Button>
         )}
@@ -266,7 +267,7 @@ export function StandaloneInvoicesPage() {
               variant="outlined"
               onClick={handleDisconnect}
               color="inherit"
-              sx={{ '&:hover': { borderColor: 'error.main', color: 'error.main', bgcolor: '#fee2e2' } }} // hex-color-ok: pre-existing raw hex
+              sx={{ '&:hover': { borderColor: 'error.main', color: 'error.main', bgcolor: STATUS_COLORS.error.bg } }}
             >
               Disconnect
             </Button>

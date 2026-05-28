@@ -12,6 +12,7 @@ import { DesignVisitsList } from './customer-detail/DesignVisitsList';
 import { CustomerInfoSubmissionsRail } from './customer-detail/CustomerInfoSubmissionsRail';
 import { GoogleEmailSection } from './customer-detail/GoogleEmailSection';
 import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSection';
+import { NEUTRAL_COLORS } from '../theme';
 import {
   Contact, Room, HubSpotTask, LeadStatus, LeadSubstatus,
   DesignVisit, Visit, GoogleEmail, WhatsAppMessage,
@@ -582,7 +583,7 @@ export function CustomerDetailPage() {
           <p className="text-sm text-red-500">{error}</p>
           <button
             onClick={() => void bootstrap()}
-            style={{ marginTop: '0.5rem', padding: '0.35rem 0.9rem', border: '1px solid #6b7280', borderRadius: '0.375rem', background: '#f9fafb', cursor: 'pointer', fontSize: '0.875rem', color: '#374151' }} // hex-color-ok: pre-existing raw hex
+            style={{ marginTop: '0.5rem', padding: '0.35rem 0.9rem', border: `1px solid ${NEUTRAL_COLORS[500]}`, borderRadius: '0.375rem', background: NEUTRAL_COLORS[50], cursor: 'pointer', fontSize: '0.875rem', color: NEUTRAL_COLORS[700] }}
           >
             Retry
           </button>

@@ -268,7 +268,7 @@ export function BottomNav() {
           bottom: 0,
           left: 0,
           right: 0,
-          bgcolor: '#fff', // hex-color-ok: pre-existing raw hex
+          bgcolor: 'background.paper',
           borderTop: '1px solid',
           borderColor: 'divider',
           zIndex: (t) => t.zIndex.appBar,

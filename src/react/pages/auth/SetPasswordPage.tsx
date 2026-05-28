@@ -10,9 +10,10 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { StrengthMeter, StrengthMeterErrorBoundary, checkPasswordPolicy } from '../../utils/passwordStrength';
+import { BRAND_COLORS } from '../../theme';
 
 const LOGO_URL = '/harry-wardrobes-logo.png';
-const bodyStyles = { 'html, body': { margin: 0, padding: 0, minHeight: '100vh', background: '#f8f7f4' } }; // hex-color-ok: pre-existing raw hex
+const bodyStyles = { 'html, body': { margin: 0, padding: 0, minHeight: '100vh', background: BRAND_COLORS.pageBackground } };
 
 type PageState = 'loading' | 'invalid' | 'form';
 

@@ -58,12 +58,12 @@ export function StageTabGroup({ value, onChange, tabs, stageColors }: StageTabGr
               selected
                 ? {
                     bgcolor: activeBg,
-                    color: '#fff', // hex-color-ok: pre-existing raw hex
+                    color: 'common.white',
                     borderColor: activeBg,
                     '&:hover': { bgcolor: activeBg, opacity: 0.9 },
                     '&.Mui-selected': {
                       bgcolor: activeBg,
-                      color: '#fff', // hex-color-ok: pre-existing raw hex
+                      color: 'common.white',
                       '&:hover': { bgcolor: activeBg, opacity: 0.9 },
                     },
                   }

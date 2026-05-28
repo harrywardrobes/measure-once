@@ -44,7 +44,7 @@ const outlinedSx = {
 
 const filledSx = {
   bgcolor: 'var(--orchid)',
-  color: '#fff', // hex-color-ok: pre-existing raw hex
+  color: 'common.white',
   '&:hover': { bgcolor: 'var(--orchid-deep)' },
 } as const;
 
@@ -152,7 +152,7 @@ export function BottomActionBar() {
             left: 0,
             right: 0,
             bgcolor: 'var(--plum)',
-            color: '#fff', // hex-color-ok: pre-existing raw hex
+            color: 'common.white',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -178,7 +178,7 @@ export function BottomActionBar() {
               size="small"
               onClick={() => window.runBottomAction()}
               sx={{
-                color: '#fff', // hex-color-ok: pre-existing raw hex
+                color: 'common.white',
                 borderColor: 'rgba(255,255,255,0.3)',
                 '&:hover': {
                   bgcolor: 'rgba(255,255,255,0.12)',

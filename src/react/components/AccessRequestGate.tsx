@@ -10,6 +10,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import DoNotDisturbAltIcon from '@mui/icons-material/DoNotDisturbAlt';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import { BRAND_COLORS } from '../theme';
 import type { GalleryEmbedded } from '../types/gallery';
 
 type TW = { render: (el: Element, opts: object) => string; getResponse: (id: string) => string; reset: (id: string) => void };
@@ -104,12 +105,12 @@ function resolveInitialView(params?: URLSearchParams): ViewState {
 }
 
 const SUBMIT_BTN_SX = {
-  bgcolor: '#200842', // hex-color-ok: pre-existing raw hex
-  '&:hover': { bgcolor: '#3d0f7a' }, // hex-color-ok: pre-existing raw hex
+  bgcolor: BRAND_COLORS.plum,
+  '&:hover': { bgcolor: BRAND_COLORS.plumLight },
   fontWeight: 700,
 } as const;
 
-const LINK_SX = { color: '#200842', fontWeight: 600 } as const; // hex-color-ok: pre-existing raw hex
+const LINK_SX = { color: BRAND_COLORS.plum, fontWeight: 600 } as const;
 
 const BRAND_MARK = (
   <Box sx={{ textAlign: 'center', mb: 3 }}>
@@ -119,7 +120,7 @@ const BRAND_MARK = (
         fontSize: '1.35rem',
         letterSpacing: '0.06em',
         textTransform: 'uppercase',
-        color: '#0f172a', // hex-color-ok: pre-existing raw hex
+        color: BRAND_COLORS.ink1,
       }}
     >
       Measure Once

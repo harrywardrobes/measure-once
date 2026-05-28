@@ -8,6 +8,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import MapIcon from '@mui/icons-material/Map';
 import { useToast } from '../../contexts/ToastContext';
+import { STATUS_COLORS } from '../../theme';
 import { GET, POST, PATCH, PUT, DELETE } from '../../utils/api';
 import type { WorkflowMapNodeData, WMAllStage } from '../../components/WorkflowMapChart';
 import { WorkflowMapDetailPanel } from '../../components/WorkflowMapDetailPanel';
@@ -165,7 +166,7 @@ function HandlerBadges({
           title={`${HANDLER_TYPE_LABELS[h.type] || h.type} — manage in Action handlers`}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 3,
-            padding: '1px 7px', background: '#ede9fe', color: '#5b21b6', // hex-color-ok: pre-existing raw hex
+            padding: '1px 7px', background: STATUS_COLORS.violet.bg, color: STATUS_COLORS.violet.text,
             borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
           }}>
           <span aria-hidden="true">⚡</span>
@@ -178,8 +179,8 @@ function HandlerBadges({
           onClick={openFix}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 3,
-            padding: '1px 8px', marginLeft: 4, background: '#fef3c7', // hex-color-ok: pre-existing raw hex
-            color: '#92400e', border: '1px solid #fbbf24', // hex-color-ok: pre-existing raw hex
+            padding: '1px 8px', marginLeft: 4, background: STATUS_COLORS.warning.bg,
+            color: STATUS_COLORS.warning.text, border: `1px solid ${STATUS_COLORS.warning.border}`,
             borderRadius: 999, fontSize: '.7rem', fontWeight: 700,
             lineHeight: 1.5, whiteSpace: 'nowrap', cursor: 'pointer',
           }}>
@@ -720,7 +721,7 @@ export function CardActionsPage() {
                               <span className="ca-resolved-pill" style={{
                                 display: 'inline-flex', alignItems: 'center',
                                 padding: '1px 8px', marginLeft: 6,
-                                background: '#d1fae5', color: '#065f46', // hex-color-ok: pre-existing raw hex
+                                background: STATUS_COLORS.successDeep.bg, color: STATUS_COLORS.successDeep.text,
                                 borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
                                 lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
                               }}>✓ Resolved</span>
@@ -796,7 +797,7 @@ export function CardActionsPage() {
                                     <span className="ca-resolved-pill" style={{
                                       display: 'inline-flex', alignItems: 'center',
                                       padding: '1px 8px', marginLeft: 6,
-                                      background: '#d1fae5', color: '#065f46', // hex-color-ok: pre-existing raw hex
+                                      background: STATUS_COLORS.successDeep.bg, color: STATUS_COLORS.successDeep.text,
                                       borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
                                       lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
                                     }}>✓ Resolved</span>
@@ -806,7 +807,7 @@ export function CardActionsPage() {
                                     className="btn btn-ghost adm-ca-sub-delete"
                                     title="Delete this sub-status"
                                     onClick={() => deleteCardActionSubstatus(sub.id)}
-                                    style={{ marginLeft: 'auto', color: '#b91c1c', opacity: 0.7, flexShrink: 0 }} // hex-color-ok: pre-existing raw hex
+                                    style={{ marginLeft: 'auto', color: STATUS_COLORS.error.text, opacity: 0.7, flexShrink: 0 }}
                                   >✕</button>
                                 </div>
                               );
