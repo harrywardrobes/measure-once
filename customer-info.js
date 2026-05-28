@@ -210,7 +210,7 @@ async function sendAdminNotificationEmail(submission) {
   }
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
-  const { id: submissionId, contact_name, contact_email, corrected_email, corrected_mobile,
+  const { id: submissionId, contact_id, contact_name, contact_email, corrected_email, corrected_mobile,
           address_line1, city, postcode, room_count, room_notes } = submission;
 
   const roomLabel = room_count === '1' ? '1 room' : room_count === '2' ? '2 rooms' : '3+ rooms';
@@ -263,8 +263,17 @@ async function sendAdminNotificationEmail(submission) {
     photoSummaryText = `Photos: ${n} attached`;
   } else {
     const n = attachments.length;
-    photoSummaryHtml = `<p><strong>${n} photo${n === 1 ? '' : 's'} attached, ${skippedCount} skipped (too large after compression) — see dashboard to view them.</strong></p>`;
-    photoSummaryText = `Photos: ${n} attached, ${skippedCount} skipped (too large — see dashboard)`;
+    const dashboardUrl = contact_id
+      ? `${appBaseUrl()}/customers/${encodeURIComponent(contact_id)}`
+      : null;
+    const dashboardLinkHtml = dashboardUrl
+      ? ` <a href="${escapeHtml(dashboardUrl)}">View all photos on the dashboard</a>`
+      : ' See dashboard to view them.';
+    const dashboardLinkText = dashboardUrl
+      ? ` View all photos on the dashboard: ${dashboardUrl}`
+      : ' See dashboard to view them.';
+    photoSummaryHtml = `<p><strong>${n} photo${n === 1 ? '' : 's'} attached, ${skippedCount} skipped (too large after compression) —${dashboardLinkHtml}</strong></p>`;
+    photoSummaryText = `Photos: ${n} attached, ${skippedCount} skipped (too large).${dashboardLinkText}`;
   }
 
   // Persist the skipped count so the dashboard can surface a warning notice.
