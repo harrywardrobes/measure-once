@@ -52,6 +52,15 @@
 //       #card-action-handlers-wrap — either the group is absent entirely or,
 //       if present, it contains zero slot-label rows.  Guards the
 //       `if (!action) continue` guard in ActionHandlersPage.tsx line 243.
+//   (N) Sub-status delete bound-handler warning: seeds a sub-status + a
+//       card_action_handler_bindings row pointing at it via substatus_id.
+//       N.1 — clicking .adm-ca-sub-delete on the bound row opens the MUI
+//       Dialog titled "Handler still bound to this sub-status".  N.2 — Cancel
+//       closes the dialog; the row stays in the DOM.  N.3 — clicking delete
+//       again and confirming "Delete anyway" removes the row from the DOM.
+//       N.4 — the lead_substatuses DB row is gone.  N.5 — deleting an unbound
+//       sub-status shows no dialog.  N.6 — unbound row is gone from the DOM.
+//       Guards the deleteCardActionSubstatus callback in CardActionsPage.tsx.
 //
 // API pre-checks run before any browser tab opens so failures in the API
 // surface clearly.
@@ -108,12 +117,14 @@ const INTERMEDIATE_LS     = 'PRIVTEST_INPROGRESS';   // value sent on PATCH /api
 const LBL_KEY_FALLBACK_STATUS = 'PRIVTEST_CAH_FALLBACK'; // lead_status_config.key + substatus status_key
 // (L) sub-status slot row rendering — regression guard for task #1731
 const LBL_KEY_SUB_ROW         = 'PRIVTEST_CAH_SUB_ROW';  // lead_status_config.key for sub-status slot row probe
-// (M) bound-handler warning on label clear — regression guard for task #1741
+// (N) bound-handler warning on label clear — regression guard for task #1741
 const LBL_KEY_CLEAR_WARN       = 'PRIVTEST_CAH_CLEAR_WARN';  // lead_status_config.key (uppercase)
 const LBL_KEY_CLEAR_WARN_LOWER = 'privtest_cah_clear_warn';  // binding status_key (lowercase)
 const HANDLER_NAME_CLEAR_WARN  = 'PrivTest clear-warn handler';
 const CLEAR_WARN_STATUS_LABEL  = 'PrivTest ClearWarn Status';
 const CLEAR_WARN_LABEL         = 'PrivTest Book Appointment';
+// (O) sub-status delete bound-handler warning — regression guard for task #1740
+const LBL_KEY_DEL_WARN        = 'PRIVTEST_CAH_DEL_WARN'; // lead_status_config.key for probe (O)
 
 const HANDLER_NAME_DV         = 'PrivTest design visit handler';
 const HANDLER_NAME_SV         = 'PrivTest schedule-visit handler';
@@ -125,6 +136,7 @@ const HANDLER_NAME_CONFLICT_B = 'PrivTest conflict handler B';
 const HANDLER_NAME_ANAME      = 'PrivTest action-name handler';
 const HANDLER_NAME_NAMING     = 'PrivTest naming handler';
 const HANDLER_NAME_ILS        = 'PrivTest intermediate-status handler';
+const HANDLER_NAME_DEL_WARN   = 'PrivTest del-warn handler';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function parseCookieKV(jar) {
@@ -153,7 +165,7 @@ async function purgeFixtures(pool) {
     [HANDLER_NAME_DV, HANDLER_NAME_PC, HANDLER_NAME_LBL, HANDLER_NAME_SUB,
      HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B, HANDLER_NAME_ANAME,
      HANDLER_NAME_NAMING, HANDLER_NAME_ILS, 'PrivTest orphan cleanup handler',
-     HANDLER_NAME_CLEAR_WARN]
+     HANDLER_NAME_CLEAR_WARN, HANDLER_NAME_DEL_WARN]
   );
   // Prefix sweep: a previously crashed or partly-validated probe run can
   // leave behind handlers whose names don't match the constants above
@@ -209,6 +221,13 @@ async function purgeFixtures(pool) {
       [LBL_KEY_SUB_ROW]
     );
   } catch (_) {}
+  // (N) probe del-warn substatuses
+  try {
+    await pool.query(
+      `DELETE FROM lead_substatuses WHERE status_key = $1`,
+      [LBL_KEY_DEL_WARN]
+    );
+  } catch (_) {}
   await pool.query(
     `DELETE FROM visits WHERE customer_id LIKE 'privtest-cah-%'`
   );
@@ -221,7 +240,7 @@ async function purgeFixtures(pool) {
       `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [LBL_KEY_CONFLICT_LS, SUB_STATUS_K, LBL_KEY_ANAME, LBL_KEY_FALLBACK_STATUS,
        LBL_KEY_SUB_ROW, 'PRIVTEST_CAH_ORPHAN_LS', 'privtest_cah_orphan_ls', 'PRIVTEST_CAH_THROWAWAY',
-       LBL_KEY_CLEAR_WARN]
+       LBL_KEY_CLEAR_WARN, LBL_KEY_DEL_WARN]
     );
   } catch (_) {}
   // Recreate the unique label-binding index if it was temporarily dropped
@@ -3111,6 +3130,275 @@ async function main() {
     ).catch(() => {});
     await clearWarnTab.close();
 
+    // ── (O) Sub-status delete bound-handler warning ────────────────────────────
+    //
+    // Verifies that clicking ✕ on a sub-status that still has a
+    // card_action_handler_bindings row (via substatus_id) shows the MUI Dialog
+    // titled "Handler still bound to this sub-status" rather than silently
+    // deleting the row.
+    //
+    // Six assertions:
+    //   O.setup — seed a lead status + two sub-statuses + a bound handler.
+    //   O.1 — dialog appears when delete is clicked on a bound sub-status.
+    //   O.2 — clicking Cancel closes the dialog; row is still in the DOM.
+    //   O.3 — clicking delete again → "Delete anyway" removes the row from DOM.
+    //   O.4 — DB row is gone after the confirmed delete.
+    //   O.5 — deleting an unbound sub-status shows no dialog (row just disappears).
+    //   O.6 — unbound sub-status row is gone from DOM after the no-dialog delete.
+    {
+      console.log('\n  [O] Sub-status delete bound-handler warning');
+
+      const DEL_WARN_STATUS_LABEL = 'PrivTest Del-Warn Status';
+
+      // Seed the lead_status_config parent row required by the FK.
+      await pool.query(
+        `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+         VALUES ($1, $2, 9992, false, 'SALES')
+         ON CONFLICT (key) DO UPDATE
+           SET label               = EXCLUDED.label,
+               sort_order          = EXCLUDED.sort_order,
+               excluded_from_sales = EXCLUDED.excluded_from_sales,
+               stage               = EXCLUDED.stage`,
+        [LBL_KEY_DEL_WARN, DEL_WARN_STATUS_LABEL],
+      );
+
+      // Seed a bound sub-status (will have a handler binding via substatus_id).
+      const boundRes = await pool.query(
+        `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order)
+         VALUES ($1, $2, 'Bound sub label', 'Bound action', 9992)
+         ON CONFLICT DO NOTHING
+         RETURNING id`,
+        [LBL_KEY_DEL_WARN, 'PRIVTEST_CAH_DEL_WARN_BOUND'],
+      );
+      let boundSubId = boundRes.rows[0]?.id;
+      if (!boundSubId) {
+        const r = await pool.query(
+          `SELECT id FROM lead_substatuses WHERE status_key = $1 AND substatus_key = $2`,
+          [LBL_KEY_DEL_WARN, 'PRIVTEST_CAH_DEL_WARN_BOUND']
+        );
+        boundSubId = r.rows[0]?.id;
+      }
+
+      // Seed an unbound sub-status (no handler binding — for the O.5/O.6 case).
+      const freeRes = await pool.query(
+        `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order)
+         VALUES ($1, $2, 'Free sub label', 'Free action', 9991)
+         ON CONFLICT DO NOTHING
+         RETURNING id`,
+        [LBL_KEY_DEL_WARN, 'PRIVTEST_CAH_DEL_WARN_FREE'],
+      );
+      let freeSubId = freeRes.rows[0]?.id;
+      if (!freeSubId) {
+        const r = await pool.query(
+          `SELECT id FROM lead_substatuses WHERE status_key = $1 AND substatus_key = $2`,
+          [LBL_KEY_DEL_WARN, 'PRIVTEST_CAH_DEL_WARN_FREE']
+        );
+        freeSubId = r.rows[0]?.id;
+      }
+
+      // Create a handler bound to the bound sub-status via substatus_id.
+      let delWarnHandlerId = null;
+      if (boundSubId) {
+        const createRes = await adminClient.post('/api/admin/card-action-handlers', {
+          name: HANDLER_NAME_DEL_WARN,
+          type: 'summarise_phone_call',
+          config: {},
+          bindings: [{ substatus_id: boundSubId }],
+        });
+        delWarnHandlerId = createRes.json?.id ?? null;
+        record(
+          '(O.setup) POST handler bound to sub-status via substatus_id',
+          'status=201 with numeric id',
+          `status=${createRes.status} id=${delWarnHandlerId}`,
+          createRes.status === 201 && Number.isInteger(delWarnHandlerId),
+        );
+      } else {
+        record('(O.setup) POST handler bound to sub-status via substatus_id', 'status=201', 'SKIPPED — seed failed', false);
+      }
+
+      if (delWarnHandlerId && boundSubId && freeSubId) {
+        const delWarnTab = await browser.newPage();
+        await delWarnTab.setCacheEnabled(false);
+        await injectSession(delWarnTab, adminClient.cookie);
+        await delWarnTab.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+
+        // Switch to the Card Actions tab so CardActionsPage mounts and exposes
+        // window.deleteCardActionSubstatus and window.loadCardActionsAdmin.
+        await delWarnTab.evaluate(() => {
+          if (typeof switchTab === 'function') switchTab('cardactions');
+        });
+        await pollPage(
+          delWarnTab,
+          () => typeof window.deleteCardActionSubstatus === 'function',
+          null,
+          10000,
+        );
+
+        // Trigger a fresh data load so the newly-seeded rows are visible.
+        await delWarnTab.evaluate(() => {
+          if (typeof window.loadCardActionsAdmin === 'function') window.loadCardActionsAdmin();
+        });
+
+        // Wait for the bound sub-status row to appear in the Card Actions DOM.
+        await pollPage(
+          delWarnTab,
+          (id) => !!document.querySelector(`[data-sub-id="${id}"]`),
+          String(boundSubId),
+          8000,
+        );
+
+        // ── O.1 — dialog appears when delete is clicked on a bound sub-status ──
+        await delWarnTab.evaluate((id) => {
+          const row = document.querySelector(`[data-sub-id="${id}"]`);
+          const btn = row && row.querySelector('.adm-ca-sub-delete');
+          if (btn) btn.click();
+        }, String(boundSubId));
+
+        const dialogShown = await pollPage(
+          delWarnTab,
+          () => {
+            const dlg = document.querySelector('.MuiDialog-root');
+            if (!dlg) return null;
+            const title = dlg.querySelector('.MuiDialogTitle-root');
+            return title && title.textContent.includes('Handler still bound to this sub-status')
+              ? 'shown' : null;
+          },
+          null,
+          6000,
+        );
+        record(
+          '(O.1) "Handler still bound to this sub-status" dialog appears on delete click',
+          '"shown" — MuiDialog-root visible with correct title',
+          `result=${dialogShown}`,
+          dialogShown === 'shown',
+        );
+
+        // ── O.2 — Cancel: dialog closes, row still in DOM ────────────────────
+        await delWarnTab.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll('.MuiDialogActions-root button'));
+          const cancel = btns.find(b => b.textContent.trim() === 'Cancel');
+          if (cancel) cancel.click();
+        });
+
+        // Wait for the dialog to close.
+        await pollPage(
+          delWarnTab,
+          () => !document.querySelector('.MuiDialog-root') ? 'closed' : null,
+          null,
+          6000,
+        );
+
+        const rowStillPresent = await delWarnTab.evaluate(
+          (id) => !!document.querySelector(`[data-sub-id="${id}"]`),
+          String(boundSubId),
+        );
+        record(
+          '(O.2) After Cancel: bound sub-status row still present in DOM',
+          'true — [data-sub-id] element still in DOM',
+          `rowPresent=${rowStillPresent}`,
+          rowStillPresent === true,
+        );
+
+        // ── O.3 — Delete again → confirm: row removed from DOM ───────────────
+        await delWarnTab.evaluate((id) => {
+          const row = document.querySelector(`[data-sub-id="${id}"]`);
+          const btn = row && row.querySelector('.adm-ca-sub-delete');
+          if (btn) btn.click();
+        }, String(boundSubId));
+
+        // Wait for the dialog to reappear.
+        await pollPage(
+          delWarnTab,
+          () => !!document.querySelector('.MuiDialog-root') ? 'open' : null,
+          null,
+          6000,
+        );
+
+        // Click "Delete anyway".
+        await delWarnTab.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll('.MuiDialogActions-root button'));
+          const del = btns.find(b => b.textContent.trim() === 'Delete anyway');
+          if (del) del.click();
+        });
+
+        const rowGone = await pollPage(
+          delWarnTab,
+          (id) => !document.querySelector(`[data-sub-id="${id}"]`) ? 'gone' : null,
+          String(boundSubId),
+          8000,
+        );
+        record(
+          '(O.3) After "Delete anyway": bound sub-status row removed from DOM',
+          '"gone" — [data-sub-id] element no longer in DOM',
+          `result=${rowGone}`,
+          rowGone === 'gone',
+        );
+
+        // ── O.4 — DB row is deleted ───────────────────────────────────────────
+        const dbAfter = await pool.query(
+          `SELECT COUNT(*)::int AS cnt FROM lead_substatuses WHERE id = $1`,
+          [boundSubId],
+        );
+        record(
+          '(O.4) Bound sub-status DB row deleted after confirmed delete',
+          '0 rows in lead_substatuses',
+          `${dbAfter.rows[0].cnt} row(s)`,
+          dbAfter.rows[0].cnt === 0,
+        );
+
+        // ── O.5 — Unbound sub-status: no dialog on delete ────────────────────
+        // Wait for the unbound row to be in the DOM (it may already be there).
+        await pollPage(
+          delWarnTab,
+          (id) => !!document.querySelector(`[data-sub-id="${id}"]`),
+          String(freeSubId),
+          6000,
+        );
+
+        await delWarnTab.evaluate((id) => {
+          const row = document.querySelector(`[data-sub-id="${id}"]`);
+          const btn = row && row.querySelector('.adm-ca-sub-delete');
+          if (btn) btn.click();
+        }, String(freeSubId));
+
+        // Give MUI a moment to render any dialog that might appear.
+        await new Promise(r => setTimeout(r, 600));
+
+        const noDialogForFree = await delWarnTab.evaluate(
+          () => !document.querySelector('.MuiDialog-root'),
+        );
+        record(
+          '(O.5) Deleting unbound sub-status shows no confirmation dialog',
+          'true — no MuiDialog-root visible after click',
+          `noDialog=${noDialogForFree}`,
+          noDialogForFree === true,
+        );
+
+        // ── O.6 — Unbound row disappears from DOM ─────────────────────────────
+        const freeRowGone = await pollPage(
+          delWarnTab,
+          (id) => !document.querySelector(`[data-sub-id="${id}"]`) ? 'gone' : null,
+          String(freeSubId),
+          8000,
+        );
+        record(
+          '(O.6) Unbound sub-status row removed from DOM without dialog',
+          '"gone" — [data-sub-id] element no longer in DOM',
+          `result=${freeRowGone}`,
+          freeRowGone === 'gone',
+        );
+
+        await delWarnTab.close();
+
+        // Clean up the handler (FK cascade removes the binding).
+        await adminClient.delete(`/api/admin/card-action-handlers/${delWarnHandlerId}`);
+      } else {
+        ['O.1', 'O.2', 'O.3', 'O.4', 'O.5', 'O.6'].forEach((p) => {
+          record(`(${p}) sub-status delete bound-handler warning`, 'n/a', 'SKIPPED — seed failed', false);
+        });
+      }
+    }
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -3463,6 +3751,26 @@ async function writeReport(runId, findings) {
     '  - **N.clear** Calling save a second time and clicking "Clear label anyway"',
     '    fires ≥1 PUT to `/api/admin/stage-action-labels`, confirming the save',
     '    proceeds after confirmation.',
+    '- **(O) Sub-status delete bound-handler warning** (task #1740): a',
+    '  `lead_status_config` row (stage=SALES) is seeded together with two',
+    '  `lead_substatuses` rows — one with a `card_action_handler_bindings` row',
+    '  pointing at it via `substatus_id` (bound), and one with no binding (free).',
+    '  A fresh admin tab switches to the Card Actions panel.  Six assertions run:',
+    '  - **O.setup** POST creates the handler with a substatus_id binding (201).',
+    '  - **O.1** Clicking `.adm-ca-sub-delete` on the bound row opens a',
+    '    `MuiDialog-root` whose `DialogTitle` reads "Handler still bound to this',
+    '    sub-status" — the confirmation dialog from `deleteCardActionSubstatus`.',
+    '  - **O.2** Clicking "Cancel" closes the dialog; the',
+    '    `[data-sub-id]` row is still present in the DOM (delete was aborted).',
+    '  - **O.3** Clicking delete again and then "Delete anyway" removes the row',
+    '    from the DOM.',
+    '  - **O.4** The `lead_substatuses` DB row count for the deleted id is 0.',
+    '  - **O.5** Clicking `.adm-ca-sub-delete` on the unbound sub-status opens',
+    '    no `MuiDialog-root` — the row is deleted silently.',
+    '  - **O.6** The unbound `[data-sub-id]` row is gone from the DOM.',
+    '  Guards the `deleteCardActionSubstatus` callback in `CardActionsPage.tsx`',
+    '  against regressions that skip the `confirmDeleteSub` dialog or fail to',
+    '  delete when the user confirms.',
     '',
     '## Notes',
     '',
