@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -228,6 +229,10 @@ export interface StartDesignVisitConfigProps {
   addToGoogleCalendar?: boolean;
   leadStatuses?: LeadStatusOption[];
   substatuses?: SubstatusOption[];
+  /** True when the stored intermediateLeadStatus key no longer exists in the current lead status list. */
+  intermediateLeadStatusInvalid?: boolean;
+  /** True when the stored submittedLeadStatus key no longer exists in any current lead status or sub-status list. */
+  submittedLeadStatusInvalid?: boolean;
   onChange?: (value: StartDesignVisitConfigValue) => void;
 }
 
@@ -239,6 +244,8 @@ export function StartDesignVisitConfig({
   addToGoogleCalendar: initialGcal = true,
   leadStatuses = [],
   substatuses = [],
+  intermediateLeadStatusInvalid = false,
+  submittedLeadStatusInvalid = false,
   onChange,
 }: StartDesignVisitConfigProps) {
   const [dur,          setDur]          = useState<number | ''>(initialDur);
@@ -296,6 +303,7 @@ export function StartDesignVisitConfig({
           fullWidth
           displayEmpty
           value={intermediate}
+          error={intermediateLeadStatusInvalid}
           onChange={e => {
             setIntermediate(e.target.value);
             notify(dur, e.target.value, submitted, terms, gcal);
@@ -306,6 +314,11 @@ export function StartDesignVisitConfig({
             <MenuItem key={ls.key} value={ls.key}>{ls.label || ls.key}</MenuItem>
           ))}
         </Select>
+        {intermediateLeadStatusInvalid && (
+          <Alert severity="warning" sx={{ mt: 0.75 }}>
+            This lead status no longer exists. Select a valid option or clear it before saving.
+          </Alert>
+        )}
       </Box>
 
       <Box
@@ -333,6 +346,7 @@ export function StartDesignVisitConfig({
           fullWidth
           displayEmpty
           value={submitted}
+          error={submittedLeadStatusInvalid}
           onChange={e => {
             setSubmitted(e.target.value);
             notify(dur, intermediate, e.target.value, terms, gcal);
@@ -362,6 +376,11 @@ export function StartDesignVisitConfig({
             ]
           )}
         </Select>
+        {submittedLeadStatusInvalid && (
+          <Alert severity="warning" sx={{ mt: 0.75 }}>
+            This lead status no longer exists. Select a valid option or clear it before saving.
+          </Alert>
+        )}
       </Box>
 
       <Box>

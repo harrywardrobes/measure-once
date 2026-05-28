@@ -394,6 +394,15 @@ function HandlerEditorModal({
   const showNoConfig = NO_CONFIG_HANDLER_TYPES.has(handlerType);
   const showJson = !(showSv || showMsg || showSdv || showDw || showIs || showNoConfig);
 
+  const sdvInvalidIntermediate = showSdv
+    && !!sdvVal.intermediateLeadStatus
+    && !sdvLeadStatuses.some(ls => ls.key === sdvVal.intermediateLeadStatus);
+  const sdvInvalidSubmitted = showSdv
+    && !!sdvVal.submittedLeadStatus
+    && !sdvLeadStatuses.some(ls => ls.key === sdvVal.submittedLeadStatus)
+    && !sdvSubstatuses.some(s => s.key === sdvVal.submittedLeadStatus);
+  const hasStaleLsRefs = sdvInvalidIntermediate || sdvInvalidSubmitted;
+
   const buildPayload = (): Record<string, unknown> | null => {
     setEditError('');
     if (!validateName(actionName.trim())) {
@@ -584,6 +593,8 @@ function HandlerEditorModal({
                 addToGoogleCalendar={sdvVal.addToGoogleCalendar}
                 leadStatuses={sdvLeadStatuses}
                 substatuses={sdvSubstatuses}
+                intermediateLeadStatusInvalid={sdvInvalidIntermediate}
+                submittedLeadStatusInvalid={sdvInvalidSubmitted}
                 onChange={setSdvVal}
               />
             )}
@@ -678,7 +689,7 @@ function HandlerEditorModal({
 
         <DialogActions>
           <Button onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving}>
+          <Button variant="contained" onClick={handleSave} disabled={saving || hasStaleLsRefs}>
             {existing ? 'Save' : 'Add'}
           </Button>
         </DialogActions>
@@ -847,17 +858,52 @@ function HandlerSummary({ h }: { h: Handler }) {
     <span className="adm-handler-actionname">{String(h.config.action_name)}</span>
   ) : null;
   const extraRows: React.ReactNode[] = [];
+  let hasStaleStatusRef = false;
   if (h.type === 'start_design_visit') {
-    if (h.config?.intermediateLeadStatus) {
+    const liveStatusKeys = new Set(
+      _statusesRef.current.filter(s => !s.is_null_row).map(s => s.key),
+    );
+    const liveSubstatusKeys = new Set(
+      _substatusesRef.current.map(s => s.substatus_key),
+    );
+    const interKey = h.config?.intermediateLeadStatus ? String(h.config.intermediateLeadStatus) : '';
+    const submKey  = h.config?.submittedLeadStatus    ? String(h.config.submittedLeadStatus)    : '';
+    const interStale = !!interKey && !liveStatusKeys.has(interKey);
+    const submStale  = !!submKey  && !liveStatusKeys.has(submKey) && !liveSubstatusKeys.has(submKey);
+    hasStaleStatusRef = interStale || submStale;
+
+    if (interKey) {
       extraRows.push(
-        <div key="inter"><span className="adm-muted-inline">In-progress status:</span>{' '}
-          <strong>{_resolveLeadStatusLabel(String(h.config.intermediateLeadStatus))}</strong></div>
+        <div key="inter">
+          <span className="adm-muted-inline">In-progress status:</span>{' '}
+          <strong>{_resolveLeadStatusLabel(interKey)}</strong>
+          {interStale && (
+            <Chip
+              data-testid="stale-status-warning"
+              color="warning"
+              size="small"
+              label="Status deleted"
+              sx={{ ml: 1, verticalAlign: 'middle' }}
+            />
+          )}
+        </div>,
       );
     }
-    if (h.config?.submittedLeadStatus) {
+    if (submKey) {
       extraRows.push(
-        <div key="subm"><span className="adm-muted-inline">Submitted status:</span>{' '}
-          <strong>{_resolveLeadStatusLabel(String(h.config.submittedLeadStatus))}</strong></div>
+        <div key="subm">
+          <span className="adm-muted-inline">Submitted status:</span>{' '}
+          <strong>{_resolveLeadStatusLabel(submKey)}</strong>
+          {submStale && (
+            <Chip
+              data-testid="stale-status-warning"
+              color="warning"
+              size="small"
+              label="Status deleted"
+              sx={{ ml: 1, verticalAlign: 'middle' }}
+            />
+          )}
+        </div>,
       );
     }
   }
@@ -867,6 +913,14 @@ function HandlerSummary({ h }: { h: Handler }) {
         <span aria-hidden="true">⚡</span>
         <span>{typeLbl}</span>
         {actionName}
+        {hasStaleStatusRef && (
+          <Chip
+            color="warning"
+            size="small"
+            label="Contains deleted status"
+            sx={{ ml: 1, verticalAlign: 'middle' }}
+          />
+        )}
       </div>
       <div className="adm-handler-summary-desc">
         {HANDLER_TYPE_DESCRIPTIONS[h.type] || 'No description available for this handler type.'}
