@@ -488,12 +488,14 @@ function ProjectsSection({
   roomsByContact,
   workflow,
   contactsError,
+  onRetry,
 }: {
   loading: boolean;
   contacts: Contact[];
   roomsByContact: Record<string, Room[]>;
   workflow: WorkflowDef | null;
   contactsError: boolean;
+  onRetry?: () => void;
 }) {
   if (loading) {
     return (
@@ -509,7 +511,18 @@ function ProjectsSection({
     return (
       <Box sx={{ mb: 3 }}>
         <SectionHeader title="Active Projects" />
-        <Alert severity="warning">Unable to retrieve customer info</Alert>
+        <Alert
+          severity="warning"
+          action={
+            onRetry ? (
+              <Button color="inherit" size="small" onClick={onRetry}>
+                Retry
+              </Button>
+            ) : undefined
+          }
+        >
+          Unable to retrieve customer info
+        </Alert>
       </Box>
     );
   }
@@ -712,6 +725,7 @@ export function HomePage(): React.ReactElement {
         roomsByContact={roomsByContact}
         workflow={workflow}
         contactsError={projectsError}
+        onRetry={loadProjects}
       />
 
       {/* QuickBooks reconnect success toast */}
