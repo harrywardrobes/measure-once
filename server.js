@@ -16,6 +16,7 @@ const {
   whatsappSendLimiter,
 } = require('./rate-limiters');
 const qbRoutes = require('./quickbooks');
+const { refreshCredentialCache, getCredential, getCredentialSource, maskCredential, setCredential, clearCredential, CRED_MAP } = require('./hubspot-creds');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
 const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
@@ -68,7 +69,7 @@ setProjectContactsCacheInvalidator(() => _invalidateProjectContactsCache());
 app.post('/api/hubspot/webhook',
   express.raw({ type: '*/*', limit: '2mb' }),
   (req, res) => {
-    const secret = process.env.HUBSPOT_CLIENT_SECRET;
+    const secret = getCredential('client_secret');
     if (!secret) {
       if (process.env.NODE_ENV === 'production') {
         console.warn('[hs-webhook] HUBSPOT_CLIENT_SECRET not set — rejecting webhook (production)');
@@ -208,7 +209,7 @@ installSession(app);
 // ── HubSpot ───────────────────────────────────────────────────────────────────
 const HS = process.env.HUBSPOT_API_URL || 'https://api.hubapi.com';
 const hsHeaders = () => ({
-  Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+  Authorization: `Bearer ${getCredential('access_token')}`,
   'Content-Type': 'application/json'
 });
 
@@ -326,7 +327,7 @@ async function hubspotRequestWithRetry(method, url, data, { timeout = 15000, max
 
 // Guard: return a clear error if no token is set
 function requireHubspotToken(req, res, next) {
-  if (!process.env.HUBSPOT_ACCESS_TOKEN) {
+  if (!getCredential('access_token')) {
     return res.status(503).json({
       error: 'HUBSPOT_ACCESS_TOKEN is not set. Add it to your .env file and restart the server.'
     });
@@ -885,7 +886,7 @@ app.get('/api/google/status', isAuthenticated, async (req, res) => {
 app.get('/auth/status', (req, res) => {
   res.json({
     google:  !!req.session.googleTokens,
-    hubspot: !!process.env.HUBSPOT_ACCESS_TOKEN
+    hubspot: !!getCredential('access_token')
   });
 });
 
@@ -901,7 +902,7 @@ app.get('/api/database/status', isAuthenticated, async (_req, res) => {
 
 // ── HubSpot: Connection status (lightweight ping, no requireHubspotToken guard) ─
 app.get('/api/hubspot/status', async (req, res) => {
-  if (!process.env.HUBSPOT_ACCESS_TOKEN) {
+  if (!getCredential('access_token')) {
     return res.json({ connected: false, code: 'NO_TOKEN' });
   }
   // Expose cooldown state from the lead-status-counts fan-out so the admin
@@ -968,8 +969,8 @@ const HS_WATCHED_PROPS = ['hs_lead_status', 'hw_lead_substatus'];
 
 // GET /api/admin/hubspot-webhook — returns webhook config status
 app.get('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req, res) => {
-  const hasSecret      = !!process.env.HUBSPOT_CLIENT_SECRET;
-  const appId          = process.env.HUBSPOT_APP_ID;
+  const hasSecret      = !!getCredential('client_secret');
+  const appId          = getCredential('app_id');
   const webhookBaseUrl = _getWebhookBaseUrl(req);
   const webhookUrl     = `${webhookBaseUrl}/api/hubspot/webhook`;
 
@@ -1004,9 +1005,9 @@ app.get('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req,
 
 // POST /api/admin/hubspot-webhook — register subscriptions + set webhook URL
 app.post('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req, res) => {
-  const appId = process.env.HUBSPOT_APP_ID;
+  const appId = getCredential('app_id');
   if (!appId) return res.status(400).json({ error: 'HUBSPOT_APP_ID is not configured.' });
-  if (!process.env.HUBSPOT_CLIENT_SECRET) {
+  if (!getCredential('client_secret')) {
     return res.status(400).json({ error: 'HUBSPOT_CLIENT_SECRET is not configured — webhook signature verification would be disabled. Set the secret before registering.' });
   }
 
@@ -1056,7 +1057,7 @@ app.post('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req
 
 // DELETE /api/admin/hubspot-webhook — unregister subscriptions for watched properties
 app.delete('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req, res) => {
-  const appId = process.env.HUBSPOT_APP_ID;
+  const appId = getCredential('app_id');
   if (!appId) return res.status(400).json({ error: 'HUBSPOT_APP_ID is not configured.' });
 
   try {
@@ -1079,6 +1080,63 @@ app.delete('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (r
   } catch (e) {
     console.error('[hs-webhook] DELETE /api/admin/hubspot-webhook error:', e.response?.data || e.message);
     return res.status(502).json({ error: e.response?.data?.message || e.message });
+  }
+});
+
+// ── HubSpot: Credential management (admin only) ───────────────────────────────
+// GET /api/admin/hubspot-credentials
+// Returns masked values + source ('db' | 'env') for all three HubSpot credentials.
+// Pass ?unmasked=1 to receive the raw values (still admin-only).
+app.get('/api/admin/hubspot-credentials', isAuthenticated, requireAdmin, (req, res) => {
+  const showRaw = req.query.unmasked === '1';
+  const result = {};
+  for (const [name, entry] of Object.entries(CRED_MAP)) {
+    const value  = getCredential(name);
+    const source = getCredentialSource(name);
+    result[name] = {
+      source,
+      set: !!value,
+      masked: value ? maskCredential(value) : null,
+      ...(showRaw ? { value } : {}),
+    };
+  }
+  res.json(result);
+});
+
+// PATCH /api/admin/hubspot-credentials
+// Body: { key: 'access_token'|'app_id'|'client_secret', value: string }
+// Writes the value to admin_settings and refreshes the in-memory cache.
+app.patch('/api/admin/hubspot-credentials', isAuthenticated, requireAdmin, async (req, res) => {
+  const { key, value } = req.body || {};
+  if (!key || !CRED_MAP[key]) {
+    return res.status(400).json({ error: 'Invalid credential key. Must be one of: access_token, app_id, client_secret.' });
+  }
+  if (!value || typeof value !== 'string' || !value.trim()) {
+    return res.status(400).json({ error: 'value is required and must be a non-empty string.' });
+  }
+  try {
+    await setCredential(key, value.trim());
+    res.json({ ok: true, source: 'db', masked: maskCredential(value.trim()) });
+  } catch (e) {
+    console.error('[hubspot-creds] PATCH error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/admin/hubspot-credentials/:key
+// Clears the DB override for one credential, falling back to the env var.
+app.delete('/api/admin/hubspot-credentials/:key', isAuthenticated, requireAdmin, async (req, res) => {
+  const name = req.params.key;
+  if (!CRED_MAP[name]) {
+    return res.status(400).json({ error: 'Invalid credential key. Must be one of: access_token, app_id, client_secret.' });
+  }
+  try {
+    await clearCredential(name);
+    const remaining = getCredential(name);
+    res.json({ ok: true, source: 'env', set: !!remaining, masked: remaining ? maskCredential(remaining) : null });
+  } catch (e) {
+    console.error('[hubspot-creds] DELETE error:', e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -4019,7 +4077,7 @@ app.patch('/api/ideas/:id/comments/:commentId', isAuthenticated, requireAdmin, a
 // Called after every create / update / delete so HubSpot stays in sync.
 // Fire-and-forget callers should catch and log errors themselves.
 async function syncLeadStatusesToHubSpot() {
-  if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
+  if (!getCredential('access_token')) return;
   const { rows } = await pool.query(
     'SELECT key, label, sort_order FROM lead_status_config WHERE is_null_row IS NOT TRUE ORDER BY sort_order ASC, key ASC'
   );
@@ -4169,7 +4227,7 @@ async function ensureLeadStatusTable() {
   if (parseInt(countRows[0].cnt, 10) > 0) return;
 
   // ── Seed from HubSpot if a token is available ──────────────────────────────
-  if (process.env.HUBSPOT_ACCESS_TOKEN) {
+  if (getCredential('access_token')) {
     try {
       const r = await axios.get(
         `${HS}/crm/v3/properties/contacts/hs_lead_status`,
@@ -4562,7 +4620,7 @@ async function _recordSubstatusClearFailure({ deletedKey, failureType, contactId
 // it as hs_lead_status AND have a hw_lead_substatus set, and clear the stale
 // substatus value.  Runs fire-and-forget so it never blocks the DELETE response.
 async function clearOrphanedSubstatusesForDeletedStatus(deletedKey) {
-  if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
+  if (!getCredential('access_token')) return;
   const label = `[clear-orphaned-substatuses key=${deletedKey}]`;
   try {
     let cleared = 0;
@@ -4624,7 +4682,7 @@ async function clearOrphanedSubstatusesForDeletedStatus(deletedKey) {
 // it as hw_lead_substatus and clear the stale value.  Runs fire-and-forget.
 async function clearOrphanedSubstatusesForDeletedSubstatus(deletedSubstatusKey) {
   if (!deletedSubstatusKey) return;
-  if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
+  if (!getCredential('access_token')) return;
   const label = `[clear-orphaned-substatuses substatus_key=${deletedSubstatusKey}]`;
   try {
     let cleared = 0;
@@ -4975,7 +5033,7 @@ async function ensureLeadSubstatusesTable() {
 // is present. A 409 (already exists) is treated as success.
 async function ensureHwTestUserProperty() {
   if (process.env.NODE_ENV === 'production') return;
-  if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
+  if (!getCredential('access_token')) return;
   try {
     await axios.get(
       `${HS}/crm/v3/properties/contacts/hw_test_user`,
@@ -5090,7 +5148,7 @@ app.post('/api/admin/test/reset-lead-status-counts-cooldown', isAuthenticated, r
 });
 
 async function ensureHwLeadSubstatusProperty() {
-  if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
+  if (!getCredential('access_token')) return;
   try {
     await axios.get(
       `${HS}/crm/v3/properties/contacts/hw_lead_substatus`,
@@ -5134,7 +5192,7 @@ async function ensureHwLeadSubstatusProperty() {
 //   "null →" prefix).
 // Called after every create / update / delete, and at server startup.
 async function syncLeadSubstatusesToHubSpot() {
-  if (!process.env.HUBSPOT_ACCESS_TOKEN) return;
+  if (!getCredential('access_token')) return;
   const { rows } = await pool.query(`
     SELECT s.status_key, s.substatus_key, s.label AS sub_label, s.sort_order AS sub_order,
            c.label AS ls_label, c.sort_order AS ls_order
@@ -6027,7 +6085,7 @@ app.post('/api/whatsapp/send', isAuthenticated, requireAdmin, requireWhatsAppCon
 
   // Verify the supplied phone number matches the contact's phone in HubSpot
   // to prevent sending to arbitrary numbers or poisoning the audit log
-  if (!process.env.HUBSPOT_ACCESS_TOKEN) {
+  if (!getCredential('access_token')) {
     return res.status(503).json({ error: 'HubSpot is not configured — cannot verify contact phone number.' });
   }
   try {
@@ -6343,6 +6401,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     if (process.env.DEBUG_HUBSPOT) {
       console.warn('[DEBUG] DEBUG_HUBSPOT is enabled — verbose HubSpot rate-limit and stale-cache logs are active. Unset this flag in production.');
     }
+    try { await refreshCredentialCache(); console.log('  HubSpot credential cache loaded'); }
+    catch (e) { console.warn('  HubSpot credential cache load failed (will use env vars):', e.message); }
     await ensureHubSpotProperties();
     try { await ensureVisitsTable(); console.log('  Visits table ready'); }
     catch (e) { console.error('  Visits table setup failed:', e.message); }

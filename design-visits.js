@@ -11,6 +11,7 @@ const fs        = require('fs');
 const multer    = require('multer');
 const { isAuthenticated, requireAdmin, requirePrivilege, getReqPrivilege } = require('./auth');
 const dvUploads = require('./design-visit-uploads');
+const { getCredential: hsGetCredential } = require('./hubspot-creds');
 
 const HANDLES_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'handles');
 if (!fs.existsSync(HANDLES_UPLOAD_DIR)) fs.mkdirSync(HANDLES_UPLOAD_DIR, { recursive: true });
@@ -150,7 +151,7 @@ function hubspotApiBase() {
 }
 function dvHsHeaders() {
   return {
-    Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+    Authorization: `Bearer ${hsGetCredential('access_token')}`,
     'Content-Type': 'application/json',
   };
 }
@@ -502,7 +503,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
   const submitterPrivilege = submitterUser?.privilege_level || 'member'; // privilege-read-ok: checking the submitter's privilege, not the current request user's
   const submitterCanEditPipeline = submitterPrivilege === 'admin' || submitterPrivilege === 'manager';
   const submittedLeadStatus = submitterCanEditPipeline ? handlerConfig?.submittedLeadStatus : null;
-  if (submittedLeadStatus && process.env.HUBSPOT_ACCESS_TOKEN && visit.contact_id) {
+  if (submittedLeadStatus && hsGetCredential('access_token') && visit.contact_id) {
     try {
       await dvHubspotRequestWithRetry('patch',
         `${hubspotApiBase()}/crm/v3/objects/contacts/${encodeURIComponent(visit.contact_id)}`,
@@ -514,7 +515,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
   }
 
   // 3. HubSpot note (non-fatal)
-  if (process.env.HUBSPOT_ACCESS_TOKEN && visit.contact_id) {
+  if (hsGetCredential('access_token') && visit.contact_id) {
     try {
       const roomLines = (visit.rooms || []).map(r =>
         `  • ${r.room_name}: ${r.unit_count} unit(s) @ £${penceToGbp(r.unit_price_pence)} each`

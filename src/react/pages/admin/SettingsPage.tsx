@@ -5,10 +5,17 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
+  IconButton,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
@@ -17,6 +24,10 @@ import HubIcon from '@mui/icons-material/Hub';
 import SyncIcon from '@mui/icons-material/Sync';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
+import EditIcon from '@mui/icons-material/Edit';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
 
 const STAGE_OPTIONS: Array<{ value: string; label: string }> = [
@@ -170,6 +181,25 @@ interface WebhookStatus {
   subscriptions: WebhookSubscription[];
 }
 
+interface HubCredentialInfo {
+  source: 'db' | 'env';
+  set: boolean;
+  masked: string | null;
+  value?: string;
+}
+
+type HubCredentials = Record<string, HubCredentialInfo>;
+
+const HUB_CRED_LABELS: Record<string, string> = {
+  access_token:  'Access Token',
+  app_id:        'App ID',
+  client_secret: 'Webhook Secret',
+};
+
+const HUB_CRED_KEYS = ['access_token', 'app_id', 'client_secret'] as const;
+
+const CRED_SESSION_KEY = (k: string) => `hubspot_cred_draft_${k}`;
+
 interface PageFilterConfigEntry {
   label: string;
   type: 'number' | 'json';
@@ -206,6 +236,15 @@ export function SettingsPage() {
 
   const [syncingHubspot, setSyncingHubspot] = useState(false);
   const [syncResult, setSyncResult] = useState<'success' | { error: string } | null>(null);
+
+  const [hubCredentials, setHubCredentials] = useState<HubCredentials | null>(null);
+  const [credEditKey, setCredEditKey] = useState<string | null>(null);
+  const [credEditValue, setCredEditValue] = useState('');
+  const [credRevealKeys, setCredRevealKeys] = useState<Set<string>>(new Set());
+  const [credRevealedValues, setCredRevealedValues] = useState<Record<string, string>>({});
+  const [credSaving, setCredSaving] = useState(false);
+  const [credConfirmKey, setCredConfirmKey] = useState<string | null>(null);
+  const [credClearConfirmKey, setCredClearConfirmKey] = useState<string | null>(null);
 
   const statusesRef = useRef<LeadStatus[]>([]);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -265,6 +304,90 @@ export function SettingsPage() {
       setWebhookLoading(false);
     }
   }, []);
+
+  const fetchHubCredentials = useCallback(async () => {
+    try {
+      const data = await GET<HubCredentials>('/api/admin/hubspot-credentials');
+      setHubCredentials(data);
+    } catch {}
+  }, []);
+
+  const openCredEdit = useCallback((key: string) => {
+    const draft = sessionStorage.getItem(CRED_SESSION_KEY(key)) ?? '';
+    setCredEditValue(draft);
+    setCredEditKey(key);
+  }, []);
+
+  const cancelCredEdit = useCallback(() => {
+    if (credEditKey) sessionStorage.removeItem(CRED_SESSION_KEY(credEditKey));
+    setCredEditKey(null);
+    setCredEditValue('');
+  }, [credEditKey]);
+
+  const handleCredEditChange = useCallback((key: string, value: string) => {
+    setCredEditValue(value);
+    if (value) sessionStorage.setItem(CRED_SESSION_KEY(key), value);
+    else sessionStorage.removeItem(CRED_SESSION_KEY(key));
+  }, []);
+
+  const requestCredSave = useCallback((key: string) => {
+    if (!credEditValue.trim()) return;
+    setCredConfirmKey(key);
+  }, [credEditValue]);
+
+  const confirmCredSave = useCallback(async () => {
+    const key = credConfirmKey;
+    if (!key || !credEditValue.trim()) return;
+    setCredConfirmKey(null);
+    setCredSaving(true);
+    try {
+      await PATCH('/api/admin/hubspot-credentials', { key, value: credEditValue.trim() });
+      sessionStorage.removeItem(CRED_SESSION_KEY(key));
+      setCredEditKey(null);
+      setCredEditValue('');
+      await fetchHubCredentials();
+      await fetchHubStatus();
+      showToast(`HubSpot ${HUB_CRED_LABELS[key]} updated.`);
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to save credential.', true);
+    } finally {
+      setCredSaving(false);
+    }
+  }, [credConfirmKey, credEditValue, fetchHubCredentials, fetchHubStatus]);
+
+  const confirmCredClear = useCallback(async () => {
+    const key = credClearConfirmKey;
+    if (!key) return;
+    setCredClearConfirmKey(null);
+    setCredSaving(true);
+    try {
+      await DELETE(`/api/admin/hubspot-credentials/${encodeURIComponent(key)}`);
+      setCredRevealKeys(s => { const n = new Set(s); n.delete(key); return n; });
+      setCredRevealedValues(v => { const n = { ...v }; delete n[key]; return n; });
+      await fetchHubCredentials();
+      await fetchHubStatus();
+      showToast(`HubSpot ${HUB_CRED_LABELS[key]} override cleared — using env var.`);
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to clear credential.', true);
+    } finally {
+      setCredSaving(false);
+    }
+  }, [credClearConfirmKey, fetchHubCredentials, fetchHubStatus]);
+
+  const toggleCredReveal = useCallback(async (key: string) => {
+    if (credRevealKeys.has(key)) {
+      setCredRevealKeys(s => { const n = new Set(s); n.delete(key); return n; });
+      return;
+    }
+    try {
+      const data = await GET<HubCredentials>('/api/admin/hubspot-credentials?unmasked=1');
+      const val = data[key]?.value;
+      if (val) setCredRevealedValues(v => ({ ...v, [key]: val }));
+      setCredRevealKeys(s => new Set([...s, key]));
+    } catch {
+      showToast('Could not load credential value.', true);
+    }
+  }, [credRevealKeys]);
 
   const registerWebhook = useCallback(async () => {
     setWebhookActing(true);
@@ -385,11 +508,12 @@ export function SettingsPage() {
     fetchDigestSettings();
     fetchWebhookStatus();
     fetchPageFilterConfig();
+    fetchHubCredentials();
     fetch('/storybook/index.html', { method: 'HEAD' })
       .then((r) => setStorybookBuilt(r.ok))
       .catch(() => setStorybookBuilt(false));
     return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
-  }, [fetchHubStatus, fetchStatuses, fetchDigestSettings, fetchWebhookStatus, fetchPageFilterConfig]);
+  }, [fetchHubStatus, fetchStatuses, fetchDigestSettings, fetchWebhookStatus, fetchPageFilterConfig, fetchHubCredentials]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
@@ -669,6 +793,158 @@ export function SettingsPage() {
           </Box>
         </CardContent>
       </Card>
+
+      <Card variant="outlined" id="hubspot-credentials-card">
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 0.5 }}>HubSpot Credentials</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Manage HubSpot credentials from here without touching environment secrets. A DB override takes
+            precedence over the environment variable for that credential.
+          </Typography>
+
+          {hubCredentials === null ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1 }}>
+              <CircularProgress size={16} />
+              <Typography variant="body2" color="text.secondary">Loading credentials…</Typography>
+            </Box>
+          ) : (
+            <Stack spacing={1.5}>
+              {HUB_CRED_KEYS.map(key => {
+                const info = hubCredentials[key];
+                const isEditing = credEditKey === key;
+                const isRevealed = credRevealKeys.has(key);
+                const displayValue = isRevealed
+                  ? (credRevealedValues[key] ?? info?.masked ?? '—')
+                  : (info?.masked ?? '—');
+
+                return (
+                  <Box
+                    key={key}
+                    sx={{ p: 1.5, borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: isEditing ? 'action.hover' : 'transparent' }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap', mb: isEditing ? 1.5 : 0 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600, flexShrink: 0 }}>
+                          {HUB_CRED_LABELS[key]}
+                        </Typography>
+                        <Chip
+                          label={info?.source === 'db' ? 'DB override' : 'Env var'}
+                          size="small"
+                          color={info?.source === 'db' ? 'primary' : 'default'}
+                          variant={info?.source === 'db' ? 'filled' : 'outlined'}
+                          sx={{ fontSize: '0.7rem', height: 20 }}
+                        />
+                        {info?.set ? (
+                          <Typography
+                            variant="body2"
+                            sx={{ fontFamily: 'monospace', fontSize: '0.8rem', color: isRevealed ? 'text.primary' : 'text.secondary', wordBreak: 'break-all' }}
+                          >
+                            {displayValue}
+                          </Typography>
+                        ) : (
+                          <Typography variant="body2" color="text.disabled" sx={{ fontStyle: 'italic' }}>Not set</Typography>
+                        )}
+                      </Box>
+
+                      {!isEditing && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+                          {info?.set && (
+                            <Tooltip title={isRevealed ? 'Hide' : 'Reveal'}>
+                              <IconButton size="small" onClick={() => toggleCredReveal(key)}>
+                                {isRevealed ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          <Tooltip title={`Edit ${HUB_CRED_LABELS[key]}`}>
+                            <IconButton size="small" onClick={() => openCredEdit(key)} disabled={credSaving}>
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          {info?.source === 'db' && (
+                            <Tooltip title="Clear override (revert to env var)">
+                              <IconButton size="small" color="error" onClick={() => setCredClearConfirmKey(key)} disabled={credSaving}>
+                                <DeleteOutlinedIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Box>
+                      )}
+                    </Box>
+
+                    {isEditing && (
+                      <Stack spacing={1.5}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label={`New ${HUB_CRED_LABELS[key]}`}
+                          type="password"
+                          value={credEditValue}
+                          onChange={e => handleCredEditChange(key, e.target.value)}
+                          autoFocus
+                          placeholder="Paste new value here"
+                          slotProps={{ htmlInput: { autoComplete: 'new-password' } }}
+                          helperText="Draft is saved to session storage — a page refresh won't lose your work."
+                        />
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Button
+                            variant="contained"
+                            size="small"
+                            disabled={!credEditValue.trim() || credSaving}
+                            onClick={() => requestCredSave(key)}
+                            startIcon={credSaving ? <CircularProgress size={12} color="inherit" /> : undefined}
+                          >
+                            {credSaving ? 'Saving…' : 'Save'}
+                          </Button>
+                          <Button variant="text" size="small" onClick={cancelCredEdit} disabled={credSaving}>
+                            Cancel
+                          </Button>
+                        </Box>
+                      </Stack>
+                    )}
+                  </Box>
+                );
+              })}
+            </Stack>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Save confirmation dialog */}
+      <Dialog open={!!credConfirmKey} onClose={() => setCredConfirmKey(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Replace active credential?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            This will overwrite the active HubSpot{' '}
+            <strong>{credConfirmKey ? HUB_CRED_LABELS[credConfirmKey] : ''}</strong> with
+            the new value. The change takes effect immediately for all new requests.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCredConfirmKey(null)}>Cancel</Button>
+          <Button variant="contained" onClick={confirmCredSave} disabled={credSaving}>
+            {credSaving ? 'Saving…' : 'Replace'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Clear override confirmation dialog */}
+      <Dialog open={!!credClearConfirmKey} onClose={() => setCredClearConfirmKey(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Clear DB override?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            This removes the DB override for{' '}
+            <strong>{credClearConfirmKey ? HUB_CRED_LABELS[credClearConfirmKey] : ''}</strong>.
+            The environment variable value will be used instead. If no env var is set the
+            credential will be unset.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCredClearConfirmKey(null)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={confirmCredClear} disabled={credSaving}>
+            Clear override
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Card variant="outlined" id="hubspot-webhooks-card">
         <CardContent>
