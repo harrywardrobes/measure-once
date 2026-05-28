@@ -2,50 +2,41 @@
 /**
  * check-public-island-bootstrap.mjs
  *
- * Guards the single-source-of-truth contract introduced in task #1909.
+ * Guards the single-source-of-truth contract introduced in task #1909 and
+ * extended in task #1919.
  *
  * Background
  * ----------
- * Public island wiring is now driven by one authoritative Set:
+ * All island-id sets are now authoritative in ONE file:
  *
- *   PUBLIC_ISLAND_IDS  (src/react/lib/publicIslands.ts)
- *     The canonical list of island ids that are served on pages accessible
- *     without an authenticated session.
+ *   src/react/lib/publicIslands.ts
  *
- * Both downstream consumers derive from it:
+ *     PUBLIC_ISLAND_IDS  — islands on pages accessible without an auth session.
+ *     BOOTSTRAP_ONLY_IDS — error/restricted pages that skip the bootstrap
+ *                          auth-redirect guard but are NOT public-facing.
+ *
+ * Downstream consumers derive from those sets at runtime:
  *
  *   CONN_TOAST_EXCLUDED (main.tsx)
  *     Set to PUBLIC_ISLAND_IDS directly — no separate literal.
  *
  *   BOOTSTRAP_EXCLUDED (AppBootstrapContext.tsx)
  *     Derived as: new Set([...PUBLIC_ISLAND_IDS, ...BOOTSTRAP_ONLY_IDS])
- *     where BOOTSTRAP_ONLY_IDS holds error/restricted pages (not-found-root,
- *     access-restricted-root) that must also skip the auth-redirect guard but
- *     are never themselves public-facing pages.
  *
- * Because both consumers are derived, the only drift that matters is between
- * PUBLIC_ISLAND_IDS and the `// public-island` annotations in the MOUNTS table
- * of src/react/main.tsx (which serve as developer-visible documentation of
- * which islands are public-facing).
+ * Checks
+ * ------
+ *   A: every `// public-island`-annotated MOUNTS id ⊆ PUBLIC_ISLAND_IDS
+ *      Catches: annotation without a matching Set entry.
  *
- * Invariant A: every `// public-island`-annotated MOUNTS id ⊆ PUBLIC_ISLAND_IDS
- *   A developer annotated a MOUNTS entry but forgot to add the id to the Set.
- *   The island would silently receive ConnectionToastProvider and the bootstrap
- *   auth-redirect guard, breaking the public-facing page.
+ *   B: PUBLIC_ISLAND_IDS ⊆ `// public-island`-annotated MOUNTS ids
+ *      Catches: stale Set entry or MOUNTS entry removed without updating the Set.
  *
- * Invariant B: PUBLIC_ISLAND_IDS ⊆ `// public-island`-annotated MOUNTS ids
- *   A developer added an id to PUBLIC_ISLAND_IDS but forgot the annotation on
- *   the MOUNTS entry — or the MOUNTS entry was removed without updating the Set.
+ *   C: no BOOTSTRAP_ONLY_IDS id ∈ PUBLIC_ISLAND_IDS
+ *      Catches: error/restricted page accidentally added to PUBLIC_ISLAND_IDS.
  *
- * BOOTSTRAP_ONLY_IDS
- * ------------------
- * These ids appear in AppBootstrapContext's BOOTSTRAP_ONLY_IDS: they are
- * error/restricted pages that skip the bootstrap redirect but are not public.
- * They must NOT appear in PUBLIC_ISLAND_IDS.  This script checks that none of
- * them are accidentally present in PUBLIC_ISLAND_IDS.
- *
- *   not-found-root         — 404 page, rendered after auth; never public
- *   access-restricted-root — access-denied page, rendered after auth; never public
+ *   D: every BOOTSTRAP_ONLY_IDS id ∈ MOUNTS ids (src/react/main.tsx)
+ *      Catches: a typo in BOOTSTRAP_ONLY_IDS, or a stale entry left behind
+ *      after an error page is removed from MOUNTS.
  *
  * Exit codes:
  *   0 — all invariants hold
@@ -63,16 +54,6 @@ import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = resolve(__dirname, '..');
-
-// ---------------------------------------------------------------------------
-// Ids that live in AppBootstrapContext's BOOTSTRAP_ONLY_IDS — they skip the
-// bootstrap redirect guard but are NOT public-facing.  They must never appear
-// in PUBLIC_ISLAND_IDS.
-// ---------------------------------------------------------------------------
-const BOOTSTRAP_ONLY_IDS = new Set([
-  'not-found-root',         // 404 page, rendered after auth; never public
-  'access-restricted-root', // access-denied page, rendered after auth; never public
-]);
 
 // ---------------------------------------------------------------------------
 // Helper: extract string literals from a `new Set([…])` declaration
@@ -154,6 +135,30 @@ function extractPublicIslandIds(src) {
 }
 
 // ---------------------------------------------------------------------------
+// Helper: extract ALL mount ids from the MOUNTS array in main.tsx
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts every id string from `{ id: 'some-id', … }` entries in the MOUNTS
+ * array of src/react/main.tsx.
+ *
+ * Returns the Set of id strings, or null if no entries are found (indicating
+ * the MOUNTS pattern has changed and this script needs updating).
+ *
+ * @param {string} src
+ * @returns {Set<string> | null}
+ */
+function extractAllMountIds(src) {
+  const pattern = /\{\s*id:\s*['"]([^'"]+)['"]/g;
+  const ids = new Set();
+  let m;
+  while ((m = pattern.exec(src)) !== null) {
+    ids.add(m[1]);
+  }
+  return ids.size > 0 ? ids : null;
+}
+
+// ---------------------------------------------------------------------------
 // 1. Read source files
 // ---------------------------------------------------------------------------
 
@@ -164,17 +169,28 @@ const publicIslandsSrc = readFileSync(publicIslandsPath, 'utf8');
 const mainSrc          = readFileSync(mainTsxPath, 'utf8');
 
 // ---------------------------------------------------------------------------
-// 2. Extract data from both sources
+// 2. Extract data from source files
 // ---------------------------------------------------------------------------
 
 const publicIslandIds  = extractSetLiteral(publicIslandsSrc, 'PUBLIC_ISLAND_IDS');
+const bootstrapOnlyIds = extractSetLiteral(publicIslandsSrc, 'BOOTSTRAP_ONLY_IDS');
 const annotatedIds     = extractPublicIslandIds(mainSrc);
+const allMountIds      = extractAllMountIds(mainSrc);
 
 let failed = false;
 
 if (!publicIslandIds) {
   process.stderr.write(
     '[check-public-island-bootstrap] ERROR: Could not extract PUBLIC_ISLAND_IDS ' +
+    'from src/react/lib/publicIslands.ts — the declaration may have been renamed ' +
+    'or reformatted. Update this script to match.\n',
+  );
+  failed = true;
+}
+
+if (!bootstrapOnlyIds) {
+  process.stderr.write(
+    '[check-public-island-bootstrap] ERROR: Could not extract BOOTSTRAP_ONLY_IDS ' +
     'from src/react/lib/publicIslands.ts — the declaration may have been renamed ' +
     'or reformatted. Update this script to match.\n',
   );
@@ -191,11 +207,22 @@ if (!annotatedIds) {
   failed = true;
 }
 
+if (!allMountIds) {
+  process.stderr.write(
+    '[check-public-island-bootstrap] ERROR: Could not extract any MOUNTS ids from ' +
+    'src/react/main.tsx — the MOUNTS pattern may have changed. Update this script ' +
+    'to match.\n',
+  );
+  failed = true;
+}
+
 if (failed) process.exit(1);
 
 console.log(
   `[check-public-island-bootstrap] Found ${annotatedIds.size} // public-island annotation(s) in MOUNTS; ` +
-  `PUBLIC_ISLAND_IDS has ${publicIslandIds.size} id(s).`,
+  `PUBLIC_ISLAND_IDS has ${publicIslandIds.size} id(s); ` +
+  `BOOTSTRAP_ONLY_IDS has ${bootstrapOnlyIds.size} id(s); ` +
+  `MOUNTS has ${allMountIds.size} total id(s).`,
 );
 
 // ---------------------------------------------------------------------------
@@ -270,14 +297,14 @@ if (setNotAnnotated.length > 0) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Sanity check: BOOTSTRAP_ONLY_IDS must not appear in PUBLIC_ISLAND_IDS
+// 5. Check C: BOOTSTRAP_ONLY_IDS ∩ PUBLIC_ISLAND_IDS must be empty
 //    Catches: an error/restricted page accidentally added to PUBLIC_ISLAND_IDS,
 //    which would incorrectly route it through ConnectionToastProvider exclusion.
 // ---------------------------------------------------------------------------
 
 /** @type {string[]} */
 const bootOnlyInPublic = [];
-for (const id of BOOTSTRAP_ONLY_IDS) {
+for (const id of bootstrapOnlyIds) {
   if (publicIslandIds.has(id)) {
     bootOnlyInPublic.push(id);
   }
@@ -289,11 +316,9 @@ if (bootOnlyInPublic.length > 0) {
     process.stderr.write(`  "${id}" is a BOOTSTRAP_ONLY_IDS entry (error/restricted page) but also appears in PUBLIC_ISLAND_IDS\n`);
   }
   process.stderr.write(
-    '\nThe following ids are designated error/restricted pages (BOOTSTRAP_ONLY_IDS\n' +
-    'in AppBootstrapContext.tsx) and must NOT appear in PUBLIC_ISLAND_IDS:\n\n' +
-    Array.from(BOOTSTRAP_ONLY_IDS).map(id => `  ${id}`).join('\n') + '\n\n' +
-    'Remove the conflicting id(s) from PUBLIC_ISLAND_IDS in\n' +
-    'src/react/lib/publicIslands.ts.\n',
+    '\nError/restricted pages in BOOTSTRAP_ONLY_IDS must NOT appear in\n' +
+    'PUBLIC_ISLAND_IDS (src/react/lib/publicIslands.ts).\n\n' +
+    'Remove the conflicting id(s) from PUBLIC_ISLAND_IDS.\n',
   );
   failed = true;
 } else {
@@ -303,7 +328,44 @@ if (bootOnlyInPublic.length > 0) {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Final result
+// 6. Check D: every BOOTSTRAP_ONLY_IDS id ∈ all MOUNTS ids
+//    Catches: a typo in BOOTSTRAP_ONLY_IDS, or a stale entry left after an
+//    error page's MOUNTS entry is removed.
+// ---------------------------------------------------------------------------
+
+/** @type {string[]} */
+const bootOnlyNotInMounts = [];
+for (const id of bootstrapOnlyIds) {
+  if (!allMountIds.has(id)) {
+    bootOnlyNotInMounts.push(id);
+  }
+}
+
+if (bootOnlyNotInMounts.length > 0) {
+  process.stderr.write('\n[check-public-island-bootstrap] CHECK D FAILED — BOOTSTRAP_ONLY_IDS WITHOUT MOUNTS ENTRY:\n\n');
+  for (const id of bootOnlyNotInMounts) {
+    process.stderr.write(`  "${id}" is in BOOTSTRAP_ONLY_IDS (src/react/lib/publicIslands.ts) but has no matching entry in the MOUNTS array (src/react/main.tsx)\n`);
+  }
+  process.stderr.write(
+    '\nEvery id in BOOTSTRAP_ONLY_IDS must correspond to an actual MOUNTS entry\n' +
+    'in src/react/main.tsx.\n\n' +
+    'This may mean:\n' +
+    '  - A typo was introduced in BOOTSTRAP_ONLY_IDS.\n' +
+    '  - An error page was removed from MOUNTS without removing its id from\n' +
+    '    BOOTSTRAP_ONLY_IDS in src/react/lib/publicIslands.ts.\n\n' +
+    'Fix: either correct the id in BOOTSTRAP_ONLY_IDS, or remove the stale\n' +
+    'entry from BOOTSTRAP_ONLY_IDS.\n',
+  );
+  failed = true;
+} else {
+  console.log(
+    '[check-public-island-bootstrap] Check D OK — every BOOTSTRAP_ONLY_IDS id ' +
+    'has a corresponding MOUNTS entry.',
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 7. Final result
 // ---------------------------------------------------------------------------
 
 if (failed) process.exit(1);

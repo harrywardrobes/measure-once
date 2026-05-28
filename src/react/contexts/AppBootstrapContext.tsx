@@ -1,22 +1,14 @@
 import React, { useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { PUBLIC_ISLAND_IDS } from '../lib/publicIslands';
+import { PUBLIC_ISLAND_IDS, BOOTSTRAP_ONLY_IDS } from '../lib/publicIslands';
 
 /**
- * Ids that must skip the bootstrap redirect guard but are NOT public-facing
- * pages — they are error/restricted pages rendered after auth failures.
- * These are excluded from PUBLIC_ISLAND_IDS (which drives CONN_TOAST_EXCLUDED)
- * but still need to bypass AppBootstrapProvider's auth-redirect logic.
- */
-const BOOTSTRAP_ONLY_IDS = new Set([
-  'not-found-root',         // 404 page, rendered after auth; never public
-  'access-restricted-root', // access-denied page, rendered after auth; never public
-]);
-
-/**
- * Derived from PUBLIC_ISLAND_IDS (src/react/lib/publicIslands.ts) plus the
- * BOOTSTRAP_ONLY_IDS above.  No manual sync required — add new public islands
- * to PUBLIC_ISLAND_IDS; add new error/restricted pages to BOOTSTRAP_ONLY_IDS.
+ * Derived from PUBLIC_ISLAND_IDS ∪ BOOTSTRAP_ONLY_IDS, both defined in
+ * src/react/lib/publicIslands.ts — the single authoritative source.
+ * No manual sync required:
+ *   - add new public islands to PUBLIC_ISLAND_IDS
+ *   - add new error/restricted pages to BOOTSTRAP_ONLY_IDS
+ * scripts/check-public-island-bootstrap.mjs enforces both sets against MOUNTS.
  */
 const BOOTSTRAP_EXCLUDED = new Set([...PUBLIC_ISLAND_IDS, ...BOOTSTRAP_ONLY_IDS]);
 

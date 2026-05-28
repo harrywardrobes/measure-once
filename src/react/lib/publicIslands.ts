@@ -19,3 +19,21 @@ export const PUBLIC_ISLAND_IDS = new Set([
   'dv-signoff-mount',
   'customer-info-mount',
 ]);
+
+/**
+ * Ids that must skip the AppBootstrapProvider auth-redirect guard but are NOT
+ * public-facing pages — they are error/restricted pages rendered after auth
+ * failures.  They must never appear in PUBLIC_ISLAND_IDS (which drives
+ * CONN_TOAST_EXCLUDED) and are checked by scripts/check-public-island-bootstrap.mjs.
+ *
+ * When adding a new error/restricted page:
+ *  1. Add its id here.
+ *  2. Ensure a matching MOUNTS entry exists in src/react/main.tsx.
+ *
+ * BOOTSTRAP_EXCLUDED in AppBootstrapContext.tsx is derived from
+ * PUBLIC_ISLAND_IDS ∪ BOOTSTRAP_ONLY_IDS — no manual sync needed there either.
+ */
+export const BOOTSTRAP_ONLY_IDS = new Set([
+  'not-found-root',         // 404 page, rendered after auth; never public
+  'access-restricted-root', // access-denied page, rendered after auth; never public
+]);
