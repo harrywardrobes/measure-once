@@ -24,11 +24,13 @@
  * 3. Derive the base field name (strip the trailing `Invalid` suffix) and assert it
  *    is present in the `KNOWN_STATUS_KEY_FIELDS` set.
  * 4. Verify that ActionHandlersPage.tsx still (a) imports `KNOWN_STATUS_KEY_FIELDS`
- *    as a value (not just a type) from `./HandlerConfigBlocks`, and (b) iterates it
+ *    as a value (not just a type) from `./HandlerConfigBlocks`, (b) iterates it
  *    with a `for (const … of KNOWN_STATUS_KEY_FIELDS)` loop — the canonical stale-
- *    detection pattern.  If either invariant breaks, stale-key detection in the JSON
- *    fallback editor silently stops working even though KNOWN_STATUS_KEY_FIELDS is
- *    correctly populated.
+ *    detection pattern — and (c) the loop body still references `jsonStaleLsRefs`
+ *    (the push target), so a gutted body (e.g. from a bad merge) is also caught.
+ *    If any of these invariants breaks, stale-key detection in the JSON fallback
+ *    editor silently stops working even though KNOWN_STATUS_KEY_FIELDS is correctly
+ *    populated.
  *
  * Exit codes:
  *   0 — all status-key fields are registered; no violations
@@ -251,6 +253,55 @@ if (!LOOP_RE.test(ahpSource)) {
     '  to flag stale lead-status / sub-status keys in the JSON editor.  If the\n' +
     '  loop was refactored or removed, stale-key detection is silently broken.',
   );
+}
+
+// ── 4C: loop body check ───────────────────────────────────────────────────────
+// The loop header can survive while the body is accidentally deleted or gutted
+// (e.g. during a merge-conflict resolution).  This check finds the loop header,
+// extracts the brace-balanced body that follows it, and asserts that the push
+// target `jsonStaleLsRefs` is present inside that body.
+//
+// We only run this check when the loop header was found (4B passed), so that
+// 4B and 4C failures are reported independently rather than cascading.
+if (LOOP_RE.test(ahpSource)) {
+  const loopHeaderMatch = LOOP_RE.exec(ahpSource);
+  // Find the opening `{` of the loop body (search forward from the header end)
+  const afterHeader = ahpSource.slice(loopHeaderMatch.index + loopHeaderMatch[0].length);
+  const openBraceIdx = afterHeader.indexOf('{');
+  if (openBraceIdx === -1) {
+    check4Errors.push(
+      'ActionHandlersPage.tsx: the `for (const … of KNOWN_STATUS_KEY_FIELDS)` ' +
+      'loop header was found but is not followed by an opening `{`.\n' +
+      '  The stale-detection loop body appears to be missing entirely.',
+    );
+  } else {
+    // Walk forward tracking brace depth to extract the full loop body
+    let depth = 0;
+    let bodyEnd = -1;
+    for (let i = openBraceIdx; i < afterHeader.length; i++) {
+      if (afterHeader[i] === '{') depth++;
+      else if (afterHeader[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          bodyEnd = i;
+          break;
+        }
+      }
+    }
+    const loopBody = bodyEnd !== -1
+      ? afterHeader.slice(openBraceIdx, bodyEnd + 1)
+      : afterHeader.slice(openBraceIdx);
+
+    if (!/\bjsonStaleLsRefs\b/.test(loopBody)) {
+      check4Errors.push(
+        'ActionHandlersPage.tsx: the `for (const … of KNOWN_STATUS_KEY_FIELDS)` ' +
+        'loop body no longer references `jsonStaleLsRefs`.\n' +
+        '  The loop header is present but the body appears to have been emptied or\n' +
+        '  gutted — stale-key detection in the JSON fallback editor is silently\n' +
+        '  broken.  Restore the loop body that pushes to `jsonStaleLsRefs`.',
+      );
+    }
+  }
 }
 
 if (check4Errors.length > 0) {
