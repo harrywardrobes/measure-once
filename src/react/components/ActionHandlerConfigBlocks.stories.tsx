@@ -86,7 +86,7 @@ type Story = StoryObj;
 export const LiveAddActionFlow: Story = {
   name: 'Live — full Add action modal flow',
   args: {
-    initialType: 'schedule_visit',
+    initialType: 'add_design_visit_to_calendar',
     slotLabel: 'Survey booked · Default action',
   },
   argTypes: {
@@ -107,7 +107,7 @@ export const LiveAddActionFlow: Story = {
   },
   render: (args: { initialType?: string; slotLabel?: string }) => (
     <LiveAddActionFlowDemo
-      initialType={args.initialType ?? 'schedule_visit'}
+      initialType={args.initialType ?? 'add_design_visit_to_calendar'}
       slotLabel={args.slotLabel ?? 'Survey booked · Default action'}
     />
   ),
@@ -127,7 +127,7 @@ export const LiveAddActionFlow: Story = {
 };
 
 function ScheduleVisitWrapper() {
-  const [type, setType] = useState('schedule_visit');
+  const [type, setType] = useState('add_design_visit_to_calendar');
   return (
     <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Survey booked · Default action">
       <ScheduleVisitConfig defaultDurationMin={60} />
@@ -136,7 +136,7 @@ function ScheduleVisitWrapper() {
 }
 
 function ShowMessageWrapper() {
-  const [type, setType] = useState('show_message');
+  const [type, setType] = useState('start_design_visit');
   return (
     <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Quote sent · Default action">
       <ShowMessageConfig defaultMessage="Send the quote PDF." />
@@ -159,7 +159,7 @@ function StartDesignVisitWrapper() {
 }
 
 function DeliveryWindowWrapper() {
-  const [type, setType] = useState('schedule_delivery_window');
+  const [type, setType] = useState('add_design_visit_to_calendar');
   return (
     <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Delivery ready · Default action">
       <DeliveryWindowConfig defaultTitle="Delivery window" />
@@ -168,7 +168,7 @@ function DeliveryWindowWrapper() {
 }
 
 function InstallationSlotWrapper() {
-  const [type, setType] = useState('schedule_installation_slot');
+  const [type, setType] = useState('add_design_visit_to_calendar');
   return (
     <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Installation booked · Default action">
       <InstallationSlotConfig defaultTitle="Installation" defaultDurationMin={240} />

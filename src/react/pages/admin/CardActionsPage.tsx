@@ -31,8 +31,6 @@ const STAGE_FOR_LS: Record<string, string> = Object.fromEntries(
 
 const HANDLER_TYPE_LABELS: Record<string, string> = {
   add_design_visit_to_calendar: 'Add design visit to calendar',
-  summarise_phone_call:         'Summarise phone call',
-  show_message:                 'Show informational message',
   start_design_visit:           'Start design visit wizard',
 };
 
@@ -40,15 +38,10 @@ const HANDLER_TYPE_LABELS: Record<string, string> = {
 // Shown when an admin wants to pre-configure which handler a new substatus binding
 // uses at startup, without needing a code change.
 const SELECTABLE_HANDLER_TYPES: Array<{ value: string; label: string }> = [
-  { value: '',                            label: 'Show message (default)' },
+  { value: '',                             label: 'Show message (default)' },
   { value: 'add_design_visit_to_calendar', label: 'Add design visit to calendar' },
   { value: 'review_customer_photos',       label: 'Review customer photos' },
-  { value: 'schedule_delivery_window',     label: 'Schedule delivery window' },
-  { value: 'schedule_installation_slot',   label: 'Schedule installation slot' },
-  { value: 'schedule_visit',               label: 'Schedule visit' },
-  { value: 'show_message',                 label: 'Show informational message' },
   { value: 'start_design_visit',           label: 'Start design visit wizard' },
-  { value: 'summarise_phone_call',         label: 'Summarise phone call' },
   { value: 'upload_photos_and_info',       label: 'Upload photos & info' },
 ];
 

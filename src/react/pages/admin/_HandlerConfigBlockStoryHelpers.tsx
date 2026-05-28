@@ -14,12 +14,7 @@ export { NO_CONFIG_HANDLER_TYPES };
 
 export const HANDLER_TYPES = [
   { value: 'add_design_visit_to_calendar', label: 'Add design visit to calendar' },
-  { value: 'schedule_visit',               label: 'Schedule visit (any type)' },
-  { value: 'summarise_phone_call',         label: 'Summarise phone call' },
-  { value: 'show_message',                 label: 'Show informational message' },
   { value: 'start_design_visit',           label: 'Start design visit wizard' },
-  { value: 'schedule_delivery_window',     label: 'Schedule delivery window' },
-  { value: 'schedule_installation_slot',   label: 'Schedule installation slot' },
   { value: 'upload_photos_and_info',       label: 'Upload photos & info' },
   { value: 'review_customer_photos',       label: 'Review customer photos' },
 ];

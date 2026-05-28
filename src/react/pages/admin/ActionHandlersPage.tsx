@@ -45,12 +45,7 @@ import type {
 
 const HANDLER_TYPE_LABELS: Record<string, string> = {
   add_design_visit_to_calendar: 'Add design visit to calendar',
-  schedule_visit:               'Schedule visit (any type)',
-  summarise_phone_call:         'Summarise phone call',
-  show_message:                 'Show informational message',
   start_design_visit:           'Start design visit wizard',
-  schedule_delivery_window:     'Schedule delivery window',
-  schedule_installation_slot:   'Schedule installation slot',
   upload_photos_and_info:       'Upload photos & info',
   review_customer_photos:       'Review customer photos',
 };
