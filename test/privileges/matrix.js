@@ -191,6 +191,7 @@ const ROUTES = [
   { method: 'DELETE', path: '/api/admin/job-roles/__nope__',                   level: 'admin' },
   { method: 'GET',    path: '/api/admin/nav-role-configs',                     level: 'admin' },
   { method: 'PATCH',  path: '/api/admin/nav-role-config/__default__',          level: 'admin', body: { primary_keys: ['home', 'calendar', 'trades'] } },
+  { method: 'DELETE', path: '/api/admin/nav-role-config/__nope__',             level: 'admin' },
   { method: 'GET',    path: '/api/admin/photo-requests',                       level: 'admin' },
   { method: 'POST',   path: '/api/admin/photo-requests/0/approve',             level: 'admin', body: {} },
   { method: 'POST',   path: '/api/admin/photo-requests/0/reject',              level: 'admin', body: {} },

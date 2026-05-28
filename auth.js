@@ -539,6 +539,7 @@ async function ensureAuthTables() {
       primary_keys JSONB NOT NULL DEFAULT '["home","calendar","trades"]',
       updated_at   TIMESTAMP DEFAULT NOW()
     );
+    ALTER TABLE nav_role_configs ADD COLUMN IF NOT EXISTS is_customized BOOLEAN NOT NULL DEFAULT FALSE;
     INSERT INTO nav_role_configs (role_name, primary_keys) VALUES
       ('__default__',  '["home","calendar","trades"]'),
       ('Fitter',       '["home","calendar","trades"]'),
@@ -2305,8 +2306,8 @@ async function setupAuth(app) {
         [name, privilege_level]
       );
       await pool.query(
-        `INSERT INTO nav_role_configs (role_name, primary_keys)
-         SELECT $1, primary_keys FROM nav_role_configs WHERE role_name = '__default__'
+        `INSERT INTO nav_role_configs (role_name, primary_keys, is_customized)
+         SELECT $1, primary_keys, FALSE FROM nav_role_configs WHERE role_name = '__default__'
          ON CONFLICT (role_name) DO NOTHING`,
         [name]
       );
@@ -2341,19 +2342,22 @@ async function setupAuth(app) {
       const userId = req.user.claims.sub;
       const u = await pool.query('SELECT job_role FROM users WHERE id = $1', [userId]);
       const jobRole = u.rows[0]?.job_role || null;
-      let r = null;
+      let primary_keys = null;
       if (jobRole) {
-        r = await pool.query(
-          'SELECT primary_keys FROM nav_role_configs WHERE role_name = $1',
+        const r = await pool.query(
+          'SELECT primary_keys, is_customized FROM nav_role_configs WHERE role_name = $1',
           [jobRole]
         );
+        if (r.rows.length > 0 && r.rows[0].is_customized) {
+          primary_keys = r.rows[0].primary_keys;
+        }
       }
-      if (!r || r.rows.length === 0) {
-        r = await pool.query(
+      if (primary_keys === null) {
+        const r = await pool.query(
           "SELECT primary_keys FROM nav_role_configs WHERE role_name = '__default__'"
         );
+        primary_keys = r.rows[0]?.primary_keys || ['home', 'calendar', 'trades'];
       }
-      const primary_keys = r.rows[0]?.primary_keys || ['home', 'calendar', 'trades'];
       res.json({ primary_keys, role: jobRole });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -2364,7 +2368,7 @@ async function setupAuth(app) {
   app.get('/api/admin/nav-role-configs', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
-        'SELECT role_name, primary_keys FROM nav_role_configs ORDER BY role_name ASC'
+        'SELECT role_name, primary_keys, is_customized FROM nav_role_configs ORDER BY role_name ASC'
       );
       res.json(r.rows);
     } catch (e) {
@@ -2391,10 +2395,10 @@ async function setupAuth(app) {
     }
     try {
       await pool.query(
-        `INSERT INTO nav_role_configs (role_name, primary_keys, updated_at)
-         VALUES ($1, $2::jsonb, NOW())
+        `INSERT INTO nav_role_configs (role_name, primary_keys, is_customized, updated_at)
+         VALUES ($1, $2::jsonb, TRUE, NOW())
          ON CONFLICT (role_name) DO UPDATE
-           SET primary_keys = EXCLUDED.primary_keys, updated_at = NOW()`,
+           SET primary_keys = EXCLUDED.primary_keys, is_customized = TRUE, updated_at = NOW()`,
         [roleName, JSON.stringify(primary_keys)]
       );
       const adminEmail = req.user?.claims?.email || null;
@@ -2405,6 +2409,31 @@ async function setupAuth(app) {
         `Updated nav config for role "${roleName}": ${primary_keys.join(', ')}`
       );
       res.json({ ok: true, role_name: roleName, primary_keys });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Admin: reset a role's nav config back to default (clears is_customized).
+  app.delete('/api/admin/nav-role-config/:roleName', isAuthenticated, requireAdmin, async (req, res) => {
+    const roleName = req.params.roleName;
+    if (roleName === '__default__') {
+      return res.status(400).json({ error: 'Cannot reset the default layout itself.' });
+    }
+    try {
+      await pool.query(
+        `UPDATE nav_role_configs SET is_customized = FALSE, updated_at = NOW()
+         WHERE role_name = $1`,
+        [roleName]
+      );
+      const adminEmail = req.user?.claims?.email || null;
+      await logAdminAction(
+        adminEmail,
+        'reset_nav_role_config',
+        null,
+        `Reset nav config for role "${roleName}" to default`
+      );
+      res.json({ ok: true, role_name: roleName });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

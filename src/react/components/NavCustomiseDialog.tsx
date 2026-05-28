@@ -20,6 +20,17 @@ type Props = {
   currentKeys: string[];
   defaultKeys: string[];
   onSave: (keys: string[]) => void;
+  /**
+   * When defined (admin Permissions context), indicates whether this role has
+   * been explicitly customised. When true, a "Reset to default" button is
+   * shown that calls onReset and closes the dialog.
+   */
+  isCustomized?: boolean;
+  /**
+   * Called when the admin clicks "Reset to default". Should call the DELETE
+   * endpoint and close the dialog. Only rendered when provided.
+   */
+  onReset?: () => void;
 };
 
 /**
@@ -30,7 +41,7 @@ type Props = {
  * - cancelled edits are discarded on next open, and
  * - prefs loaded asynchronously after mount are reflected correctly.
  */
-export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys, defaultKeys, onSave }: Props) {
+export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys, defaultKeys, onSave, isCustomized, onReset }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
 
   useEffect(() => {
@@ -105,9 +116,21 @@ export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys,
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={handleReset} color="inherit" disabled={isAtDefaults} sx={{ mr: 'auto' }}>
-          Reset to defaults
-        </Button>
+        {onReset ? (
+          <Button
+            onClick={onReset}
+            color="inherit"
+            disabled={!isCustomized}
+            sx={{ mr: 'auto' }}
+            title={isCustomized ? 'Clear custom layout and inherit default' : 'Already using default'}
+          >
+            Reset to default
+          </Button>
+        ) : (
+          <Button onClick={handleReset} color="inherit" disabled={isAtDefaults} sx={{ mr: 'auto' }}>
+            Reset to defaults
+          </Button>
+        )}
         <Button onClick={onClose} color="inherit">
           Cancel
         </Button>

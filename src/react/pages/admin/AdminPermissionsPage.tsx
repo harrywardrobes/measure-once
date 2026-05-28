@@ -20,7 +20,9 @@ type _Icons = typeof CheckIcon | typeof CloseIcon | typeof DeleteIcon | typeof T
 type JobRole = { name: string; privilege_level?: string }; // privilege-read-ok: data field managed by admin
 type Feature = { feat: string; desc?: string; levels?: string[]; group?: string };
 type Capabilities = { levels: string[]; features: Feature[] };
-type NavRoleConfig = { role_name: string; primary_keys: string[] };
+type NavRoleConfig = { role_name: string; primary_keys: string[]; is_customized: boolean };
+
+type NavConfigEntry = { primary_keys: string[]; is_customized: boolean };
 
 export function AdminPermissionsPage() {
   const [loading, setLoading] = useState(true);
@@ -31,7 +33,7 @@ export function AdminPermissionsPage() {
   const [saving, setSaving] = useState(false);
 
   // Nav role configs
-  const [navConfigs, setNavConfigs] = useState<Record<string, string[]>>({});
+  const [navConfigs, setNavConfigs] = useState<Record<string, NavConfigEntry>>({});
   const [navEditTarget, setNavEditTarget] = useState<string | null>(null);
 
   // Add-role form
@@ -52,9 +54,9 @@ export function AdminPermissionsPage() {
       (c.features || []).forEach(f => { if (!f.group) seed[f.feat] = [...(f.levels || [])]; });
       setEdits(seed);
       setDirty(false);
-      const navMap: Record<string, string[]> = {};
+      const navMap: Record<string, NavConfigEntry> = {};
       (Array.isArray(navConfigRows) ? navConfigRows : []).forEach(row => {
-        navMap[row.role_name] = row.primary_keys;
+        navMap[row.role_name] = { primary_keys: row.primary_keys, is_customized: row.is_customized };
       });
       setNavConfigs(navMap);
     } catch (e: unknown) {
@@ -114,8 +116,22 @@ export function AdminPermissionsPage() {
   async function saveNavConfig(roleName: string, keys: string[]) {
     try {
       await api('PATCH', `/api/admin/nav-role-config/${encodeURIComponent(roleName)}`, { primary_keys: keys });
-      setNavConfigs(prev => ({ ...prev, [roleName]: keys }));
+      setNavConfigs(prev => ({ ...prev, [roleName]: { primary_keys: keys, is_customized: true } }));
       toast(`Nav layout saved for "${roleName}"`);
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : String(e), true);
+    }
+  }
+
+  async function resetNavConfig(roleName: string) {
+    try {
+      await api('DELETE', `/api/admin/nav-role-config/${encodeURIComponent(roleName)}`);
+      setNavConfigs(prev => ({
+        ...prev,
+        [roleName]: { primary_keys: prev[roleName]?.primary_keys ?? defaultNavKeys, is_customized: false },
+      }));
+      setNavEditTarget(null);
+      toast(`Nav layout for "${roleName}" reset to default`);
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : String(e), true);
     }
@@ -148,9 +164,14 @@ export function AdminPermissionsPage() {
   const levels = caps.levels.length ? caps.levels : [...PRIVILEGE_LEVELS];
 
   const FALLBACK_NAV_KEYS = ['home', 'calendar', 'trades'];
-  const defaultNavKeys = navConfigs['__default__'] || FALLBACK_NAV_KEYS;
-  const editingNavKeys = navEditTarget
-    ? (navConfigs[navEditTarget] || defaultNavKeys)
+  const defaultNavKeys = navConfigs['__default__']?.primary_keys || FALLBACK_NAV_KEYS;
+
+  const editingTargetEntry = navEditTarget ? navConfigs[navEditTarget] : null;
+  const editingIsCustomized = editingTargetEntry?.is_customized ?? false;
+  // When the role is not customised (or has no entry), start the dialog from
+  // the live default so the admin sees what the role actually inherits.
+  const editingNavKeys = (editingIsCustomized && editingTargetEntry?.primary_keys)
+    ? editingTargetEntry.primary_keys
     : defaultNavKeys;
   const dialogDefaultKeys = navEditTarget === '__default__' ? FALLBACK_NAV_KEYS : defaultNavKeys;
 
@@ -190,7 +211,11 @@ export function AdminPermissionsPage() {
             ) : (
               <Stack spacing={1}>
                 {jobRoles.map((r) => {
-                  const roleNavKeys: string[] = navConfigs[r.name] || defaultNavKeys;
+                  const roleEntry = navConfigs[r.name];
+                  const isCustomized = roleEntry?.is_customized ?? false;
+                  const roleNavKeys: string[] = isCustomized
+                    ? (roleEntry?.primary_keys ?? defaultNavKeys)
+                    : defaultNavKeys;
                   return (
                     <Stack key={r.name} direction="row" spacing={1.5}
                       sx={{ p: 1, border: 1, borderColor: 'divider', borderRadius: 1, flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
@@ -204,12 +229,18 @@ export function AdminPermissionsPage() {
                         </Select>
                       </FormControl>
                       <Stack direction="row" spacing={0.5} sx={{ flex: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-                        {roleNavKeys.map(k => {
-                          const item = NAV.find(n => n.key === k);
-                          return item ? (
-                            <Chip key={k} label={item.label} size="small" variant="outlined" />
-                          ) : null;
-                        })}
+                        {isCustomized ? (
+                          roleNavKeys.map(k => {
+                            const item = NAV.find(n => n.key === k);
+                            return item ? (
+                              <Chip key={k} label={item.label} size="small" variant="outlined" />
+                            ) : null;
+                          })
+                        ) : (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                            Using default
+                          </Typography>
+                        )}
                         <Tooltip title="Edit navigation layout">
                           <IconButton size="small" onClick={() => setNavEditTarget(r.name)}>
                             <TuneIcon fontSize="small" />
@@ -230,7 +261,7 @@ export function AdminPermissionsPage() {
             <>
               <Divider sx={{ my: 1.5 }} />
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                The row below is the fallback layout used for any user whose job role is not listed above (or who has no job role set).
+                The row below is the fallback layout used for any user whose job role is not listed above (or who has no job role set). Roles that show "Using default" inherit this layout automatically.
               </Typography>
               <Stack direction="row" spacing={1.5}
                 sx={{ p: 1, border: 1, borderColor: 'divider', borderRadius: 1, flexWrap: 'wrap', gap: 1, alignItems: 'center', bgcolor: 'action.hover' }}>
@@ -256,7 +287,7 @@ export function AdminPermissionsPage() {
 
           <Alert severity="info" variant="outlined" sx={{ mt: 2 }}>
             The navigation chips show which tabs appear in the bottom bar for each role.
-            Click the <strong>tune icon</strong> to change a role's primary tabs. Changes take effect the next time users with that role load the app.
+            Click the <strong>tune icon</strong> to change a role's primary tabs. Roles showing <em>Using default</em> automatically inherit the default layout. Changes take effect the next time users with that role load the app.
           </Alert>
         </CardContent>
       </Card>
@@ -268,10 +299,12 @@ export function AdminPermissionsPage() {
         availableItems={NAV.filter(n => !n.adminOnly)}
         currentKeys={editingNavKeys}
         defaultKeys={dialogDefaultKeys}
+        isCustomized={navEditTarget !== '__default__' ? editingIsCustomized : undefined}
         onSave={(keys) => {
           if (navEditTarget) saveNavConfig(navEditTarget, keys);
           setNavEditTarget(null);
         }}
+        onReset={navEditTarget && navEditTarget !== '__default__' ? () => resetNavConfig(navEditTarget) : undefined}
       />
 
       {/* Permissions matrix */}
