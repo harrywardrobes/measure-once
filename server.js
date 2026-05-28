@@ -1683,12 +1683,30 @@ app.get('/api/open-leads', async (req, res) => {
 });
 
 // ── HubSpot: Project Contacts (contacts across all pipeline stages) ───────────
+
+// Dev-mode filter helper — applied at response time so the cache always holds
+// the full unfiltered list (same pattern as /api/contacts-all).
+async function applyProjectContactsDevModeFilter(results) {
+  try {
+    const { rows: dmRows } = await pool.query(
+      `SELECT value FROM app_settings WHERE key = 'dev_mode_enabled'`
+    );
+    if (dmRows.length > 0 && dmRows[0].value === 'true') {
+      return results.filter(c => c.properties?.hw_test_user === 'true');
+    }
+  } catch (dbErr) {
+    console.warn('[project-contacts] could not read dev_mode_enabled:', dbErr.message);
+  }
+  return results;
+}
+
 app.get('/api/project-contacts', async (req, res) => {
   // Fresh cache hit — return immediately.
   if (_projectContactsCache && Date.now() - _projectContactsCache.fetchedAt < PROJECT_CONTACTS_TTL_MS) {
+    const results = await applyProjectContactsDevModeFilter(_projectContactsCache.results);
     res.setHeader('X-Cache-Status', 'fresh');
     res.setHeader('X-Cache-Age', String(Math.round((Date.now() - _projectContactsCache.fetchedAt) / 1000)));
-    return res.json({ results: _projectContactsCache.results, total: _projectContactsCache.total });
+    return res.json({ results, total: results.length });
   }
 
   // Single-flight: all concurrent cold-cache callers share one HubSpot fan-out.
@@ -1718,7 +1736,7 @@ app.get('/api/project-contacts', async (req, res) => {
                 { propertyName: 'hs_lead_status', operator: 'IN', values: keys },
               ]
             }],
-            properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'hw_lead_substatus', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
+            properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'hw_lead_substatus', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate', 'hw_test_user'],
             sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
             limit: 100
           };
@@ -1762,8 +1780,9 @@ app.get('/api/project-contacts', async (req, res) => {
   const outcome = await _projectContactsInFlight;
 
   if (outcome.ok) {
+    const results = await applyProjectContactsDevModeFilter(outcome.results);
     res.setHeader('X-Cache-Status', 'fresh');
-    return res.json({ results: outcome.results, total: outcome.total });
+    return res.json({ results, total: results.length });
   }
 
   // Fetch failed — serve stale cache if available rather than surfacing an error.
@@ -1771,8 +1790,9 @@ app.get('/api/project-contacts', async (req, res) => {
     if (process.env.DEBUG_HUBSPOT) {
       console.warn('[project-contacts] HubSpot fetch failed; serving stale cache age=%dms', Date.now() - _projectContactsCache.fetchedAt);
     }
+    const results = await applyProjectContactsDevModeFilter(_projectContactsCache.results);
     res.setHeader('X-Cache-Status', 'stale');
-    return res.json({ results: _projectContactsCache.results, total: _projectContactsCache.total });
+    return res.json({ results, total: results.length });
   }
 
   const e = outcome.err;

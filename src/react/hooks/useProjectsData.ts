@@ -191,6 +191,19 @@ export function useProjectsData(): ProjectsData {
     return () => document.removeEventListener('localdata-updated', onLocalData);
   }, []);
 
+  // ── Re-fetch when dev mode is toggled in another tab ──────────────────────
+  // The server filters /api/project-contacts at response time based on
+  // dev_mode_enabled, so a toggle requires a fresh fetch to update the list.
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('dev_mode_changed');
+      bc.onmessage = () => setFetchNonce((n) => n + 1);
+    } catch { /* BroadcastChannel not available */ }
+    return () => { bc?.close(); };
+  }, []);
+
   // ── Draft visit detection ──────────────────────────────────────────────────
   // Batch-fetch in-progress (draft) design visit IDs for all visible contacts
   // so the "Continue designing" action can be shown on relevant cards.

@@ -34,6 +34,7 @@ import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { BRAND_COLORS, RADIUS, STAGE_COLORS } from '../theme';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { useDevMode } from '../hooks/useDevMode';
 import { usePrefs } from '../hooks/usePrefs';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { InvoiceDetailDrawer, fmtGBP as fmtGBPShared } from '../components/InvoiceDetailDrawer';
@@ -857,6 +858,7 @@ function EmptyState({ message }: { message: string }) {
 
 export function ProjectsPage() {
   const { isAdmin, isManager } = usePrivilege();
+  const { devMode } = useDevMode({ enabled: isAdmin });
   const canAssign = isManager || isAdmin;
   const { notifyApiError } = useConnectionToast();
   useConnectionCheck();
@@ -1269,6 +1271,27 @@ export function ProjectsPage() {
           Projects
         </Typography>
       </Box>
+
+      {/* Dev-mode banner */}
+      {isAdmin && devMode && (
+        <Alert
+          id="dev-mode-banner"
+          severity="warning"
+          sx={{ borderRadius: 0, flexShrink: 0 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              component="a"
+              href="/admin#tab-devenv"
+            >
+              Turn off
+            </Button>
+          }
+        >
+          Dev mode is ON — only test contacts are shown
+        </Alert>
+      )}
 
       {/* Stage filter tabs */}
       <PageFilterBar
