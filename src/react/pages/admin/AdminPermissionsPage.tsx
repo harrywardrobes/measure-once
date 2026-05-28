@@ -7,6 +7,7 @@ import {
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import TuneIcon from '@mui/icons-material/Tune';
 import {
   api, toast, emitAdminChange, onAdminChange, PRIVILEGE_LEVELS, PRIVILEGE_LABEL,
@@ -15,7 +16,7 @@ import { NAV } from '../../components/BottomNav';
 import { NavCustomiseDialog } from '../../components/NavCustomiseDialog';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
-type _Icons = typeof CheckIcon | typeof CloseIcon | typeof DeleteIcon | typeof TuneIcon;
+type _Icons = typeof CheckIcon | typeof CloseIcon | typeof DeleteIcon | typeof InfoOutlinedIcon | typeof TuneIcon;
 
 type JobRole = { name: string; privilege_level?: string }; // privilege-read-ok: data field managed by admin
 type Feature = { feat: string; desc?: string; levels?: string[]; group?: string };
@@ -237,9 +238,31 @@ export function AdminPermissionsPage() {
                             ) : null;
                           })
                         ) : (
-                          <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                            Using default
-                          </Typography>
+                          <>
+                            <Tooltip
+                              title="This role inherits the Default layout — changes to the Default row will apply here automatically. Click the tune icon to give this role its own custom layout."
+                              arrow
+                            >
+                              <Chip
+                                label="Inheriting default"
+                                size="small"
+                                icon={<InfoOutlinedIcon />}
+                                sx={{ fontStyle: 'italic', cursor: 'help' }}
+                              />
+                            </Tooltip>
+                            {defaultNavKeys.map(k => {
+                              const item = NAV.find(n => n.key === k);
+                              return item ? (
+                                <Chip
+                                  key={k}
+                                  label={item.label}
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{ opacity: 0.45 }}
+                                />
+                              ) : null;
+                            })}
+                          </>
                         )}
                         <Tooltip title="Edit navigation layout">
                           <IconButton size="small" onClick={() => setNavEditTarget(r.name)}>
@@ -261,7 +284,7 @@ export function AdminPermissionsPage() {
             <>
               <Divider sx={{ my: 1.5 }} />
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                The row below is the fallback layout used for any user whose job role is not listed above (or who has no job role set). Roles that show "Using default" inherit this layout automatically.
+                The row below is the fallback layout used for any user whose job role is not listed above (or who has no job role set). Roles showing "Inheriting default" inherit this layout automatically.
               </Typography>
               <Stack direction="row" spacing={1.5}
                 sx={{ p: 1, border: 1, borderColor: 'divider', borderRadius: 1, flexWrap: 'wrap', gap: 1, alignItems: 'center', bgcolor: 'action.hover' }}>
@@ -287,7 +310,7 @@ export function AdminPermissionsPage() {
 
           <Alert severity="info" variant="outlined" sx={{ mt: 2 }}>
             The navigation chips show which tabs appear in the bottom bar for each role.
-            Click the <strong>tune icon</strong> to change a role's primary tabs. Roles showing <em>Using default</em> automatically inherit the default layout. Changes take effect the next time users with that role load the app.
+            Click the <strong>tune icon</strong> to change a role's primary tabs. Roles showing <em>Inheriting default</em> automatically pick up whatever is set in the Default row — their faded chips preview that layout. Changes take effect the next time users with that role load the app.
           </Alert>
         </CardContent>
       </Card>
