@@ -81,6 +81,17 @@ function CopyLinkField({ url }: { url: string }) {
   );
 }
 
+function formatExpiry(expiresAt: string): string {
+  const now = new Date();
+  const exp = new Date(expiresAt);
+  if (isNaN(exp.getTime())) return 'expiry date unavailable';
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const diffDays = Math.ceil((exp.getTime() - now.getTime()) / msPerDay);
+  if (diffDays <= 0) return 'expires today';
+  if (diffDays === 1) return 'expires tomorrow';
+  return `expires in ${diffDays} days`;
+}
+
 export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Props) {
   const [generatingLink, setGeneratingLink] = useState(false);
   const [generatedLink, setGeneratedLink] = useState<GeneratedLink | null>(null);
@@ -187,7 +198,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
         {title}
         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25, fontWeight: 'normal' }}>
           {isResend
-            ? 'A link was already sent — sending again will replace it'
+            ? `A link was already sent — it ${formatExpiry(generatedLink!.expiresAt)}. Sending again will replace it.`
             : 'Send via email or copy the link to share directly'}
         </Typography>
       </DialogTitle>
