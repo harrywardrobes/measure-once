@@ -142,6 +142,7 @@ const DB_SUITES = [
   'test:active-projects-hubspot-outage:ci',
   'test:info-card-review-resend:ci',
   'test:calendar-empty-state:ci',
+  'test:skipped-photo-warning:ci',
   'test:turnstile-signout:ci',
   'test:nav-role-config:ci',
   'test:invoice-panel-hidden:ci',
