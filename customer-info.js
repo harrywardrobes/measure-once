@@ -504,7 +504,7 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     return res.status(400).json({ error: 'Postcode is required.' });
   }
   const rawKeys = Array.isArray(photoKeys) ? photoKeys : [];
-  const badKey = rawKeys.find(k => typeof k !== 'string' || !k.startsWith('obj:ci_'));
+  const badKey = rawKeys.find(k => typeof k !== 'string' || !k.startsWith('obj:ci_') || k.length <= 'obj:ci_'.length);
   if (badKey !== undefined) {
     return res.status(400).json({ error: 'Invalid photo key: all keys must start with obj:ci_.' });
   }

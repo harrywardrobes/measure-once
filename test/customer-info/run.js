@@ -407,10 +407,29 @@ async function main() {
         v7Ok
           ? `400 error="${v7.json.error}"`
           : `status=${v7.status} body=${JSON.stringify(v7.json).slice(0, 200)}`);
+
+      // CI-V7b – empty-string key → 400
+      const v7b = await postSubmit(BASE, rawToken, { ...validBase, photoKeys: [''] });
+      const v7bOk = v7b.status === 400 && v7b.json?.error;
+      record('CI-V7.empty-photo-key',
+        v7bOk,
+        v7bOk
+          ? `400 error="${v7b.json.error}"`
+          : `status=${v7b.status} body=${JSON.stringify(v7b.json).slice(0, 200)}`);
+
+      // CI-V7c – non-string key (integer) → 400
+      const v7c = await postSubmit(BASE, rawToken, { ...validBase, photoKeys: [42] });
+      const v7cOk = v7c.status === 400 && v7c.json?.error;
+      record('CI-V7.non-string-photo-key',
+        v7cOk,
+        v7cOk
+          ? `400 error="${v7c.json.error}"`
+          : `status=${v7c.status} body=${JSON.stringify(v7c.json).slice(0, 200)}`);
     } else {
       for (const id of ['CI-V2.missing-addressLine1', 'CI-V3.invalid-roomCount',
                          'CI-V4.missing-city', 'CI-V5.missing-postcode', 'CI-V6.no-photos',
-                         'CI-V7.bad-photo-key-prefix']) {
+                         'CI-V7.bad-photo-key-prefix', 'CI-V7.empty-photo-key',
+                         'CI-V7.non-string-photo-key']) {
         record(id, false, 'skipped — no rawToken');
       }
     }
