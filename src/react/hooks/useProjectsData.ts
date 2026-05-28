@@ -218,6 +218,62 @@ export function useProjectsData(): ProjectsData {
     return () => bc.close();
   }, []);
 
+  // ── Re-fetch when a customer submits their info (photos received badge) ─────
+  // Opens a direct EventSource to /api/hubspot/webhook-events and listens for
+  // `customer_info_submitted` events pushed by the server after a successful
+  // POST /api/customer-info/:token.  Using a direct connection here means the
+  // projects board reacts immediately without requiring WorkflowDataProvider
+  // (which is only mounted on the customer-detail page) to be open in another
+  // tab.  A BroadcastChannel relay from WorkflowDataContext would only work if
+  // the staff member happened to have a customer-detail tab open simultaneously.
+  useEffect(() => {
+    if (typeof EventSource === 'undefined') return;
+    let source: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectDelay = 2000;
+    let destroyed = false;
+
+    function connect() {
+      if (destroyed) return;
+      try {
+        source = new EventSource('/api/hubspot/webhook-events');
+        source.addEventListener('message', (e) => {
+          try {
+            const payload = JSON.parse(e.data as string) as { type?: string };
+            // Primary trigger: customer just submitted, cache already invalidated.
+            // Fallback: HubSpot webhook fires after the substatus is applied,
+            // catching any race where the SSE fired before HubSpot propagated.
+            if (
+              payload.type === 'customer_info_submitted' ||
+              payload.type === 'hs_lead_status_changed'
+            ) {
+              setFetchNonce((n) => n + 1);
+            }
+          } catch { /* malformed frame — ignore */ }
+        });
+        source.addEventListener('open', () => { reconnectDelay = 2000; });
+        source.addEventListener('error', () => {
+          source?.close();
+          source = null;
+          if (destroyed) return;
+          if (reconnectTimer) clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(() => {
+            reconnectDelay = Math.min(reconnectDelay * 2, 60000);
+            connect();
+          }, reconnectDelay);
+        });
+      } catch { /* SSE not supported in this environment */ }
+    }
+
+    const initialTimer = setTimeout(connect, 500);
+    return () => {
+      destroyed = true;
+      clearTimeout(initialTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      source?.close();
+    };
+  }, []);
+
   // ── Optimistic room-assignment update ──────────────────────────────────────
   const updateRoomAssignment = useCallback(
     (contactId: string, roomIdx: number, fitterId: string | null) => {

@@ -7,7 +7,9 @@ import { DeliveryWindowModal } from './modals/DeliveryWindowModal';
 import { InstallationSlotModal } from './modals/InstallationSlotModal';
 import { PhoneSummaryModal } from './modals/PhoneSummaryModal';
 import { UploadPhotosModal } from './modals/UploadPhotosModal';
-import { ReviewCustomerPhotosDrawer } from './modals/ReviewCustomerPhotosDrawer';
+const ReviewCustomerPhotosDrawer = React.lazy(() =>
+  import('./modals/ReviewCustomerPhotosDrawer').then(m => ({ default: m.ReviewCustomerPhotosDrawer }))
+);
 import { registerCardActionModalOpener } from '../utils/cardActionModalRegistry';
 import type { CardActionHandlerData } from '../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../utils/dispatchCardActionHandler';
@@ -115,7 +117,9 @@ export function CardActionModalsHost() {
         <UploadPhotosModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
       )}
       {modal.type === 'review_customer_photos' && (
-        <ReviewCustomerPhotosDrawer handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+        <React.Suspense fallback={null}>
+          <ReviewCustomerPhotosDrawer handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+        </React.Suspense>
       )}
     </>
   );

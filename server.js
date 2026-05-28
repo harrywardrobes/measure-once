@@ -18,7 +18,7 @@ const {
 const qbRoutes = require('./quickbooks');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
-const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable } = require('./customer-info');
+const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding } = require('./photo-reviews');
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -60,6 +60,10 @@ app.use('/__mockup', (req, res) => {
 // signature verification. A separate express.raw() middleware is applied
 // inline to this single route only.
 const _hsWebhookSseClients = new Set();
+setCustomerInfoSseClients(_hsWebhookSseClients);
+// Wire in the cache invalidator — called by customer-info.js before pushing
+// customer_info_submitted SSE so the board refetch gets fresh HubSpot data.
+setProjectContactsCacheInvalidator(() => _invalidateProjectContactsCache());
 
 app.post('/api/hubspot/webhook',
   express.raw({ type: '*/*', limit: '2mb' }),

@@ -324,6 +324,13 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
           if (payload.type === 'lead_substatuses_changed') {
             void fetchLeadSubstatusesRef.current();
           }
+          if (payload.type === 'customer_info_submitted') {
+            try {
+              const bc = new BroadcastChannel('customer_info_submitted');
+              bc.postMessage({ ts: Date.now(), contactId: (payload as { type?: string; contactId?: string }).contactId });
+              bc.close();
+            } catch { /* ignore */ }
+          }
         });
         sseSource.addEventListener('open', () => { reconnectDelay = 2000; });
         sseSource.addEventListener('error', () => {

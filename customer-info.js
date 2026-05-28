@@ -15,6 +15,23 @@ const { isAuthenticated, requirePrivilege } = require('./auth');
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
 
+// ── Shared SSE client registry (wired by server.js at startup) ────────────────
+let _sseClients = null;
+function setSharedSseClients(clients) { _sseClients = clients; }
+
+// ── Cache invalidator (wired by server.js at startup) ─────────────────────────
+// Called before emitting SSE so the next board refetch gets fresh HubSpot data.
+let _invalidateProjectContactsCache = null;
+function setProjectContactsCacheInvalidator(fn) { _invalidateProjectContactsCache = fn; }
+
+function pushSseEvent(payload) {
+  if (!_sseClients) return;
+  const msg = `data: ${JSON.stringify(payload)}\n\n`;
+  for (const client of _sseClients) {
+    try { client.write(msg); } catch { _sseClients.delete(client); }
+  }
+}
+
 // ── Config ────────────────────────────────────────────────────────────────────
 const LINK_TTL_DAYS = 7;
 
@@ -536,6 +553,17 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     console.error('[customer-info] HubSpot update failed (non-fatal):', err.message);
   }
 
+  // Bust the project-contacts cache so the board refetch gets fresh HubSpot data
+  // (the cache has a 60 s TTL; without this the refetch would return the
+  // pre-submission snapshot and the badge would not appear).
+  if (typeof _invalidateProjectContactsCache === 'function') {
+    _invalidateProjectContactsCache();
+  }
+
+  // Notify all connected dashboard tabs so the "Photos received" badge appears
+  // on the projects board without a page refresh.
+  pushSseEvent({ type: 'customer_info_submitted', contactId: row.contact_id });
+
   // Send emails (non-fatal)
   try { await sendAdminNotificationEmail(fresh); } catch (e) {
     console.error('[customer-info] Admin notification failed:', e.message);
@@ -690,4 +718,6 @@ module.exports = {
   router,
   ensureCustomerInfoSubmissionsTable,
   signCustomerPhotoUrl,
+  setSharedSseClients,
+  setProjectContactsCacheInvalidator,
 };
