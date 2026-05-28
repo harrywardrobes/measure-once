@@ -6524,6 +6524,25 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
   }
 });
 
+// ── One-time startup cleanup ───────────────────────────────────────────────────
+// Removes HubSpot credential override rows that were previously stored in
+// admin_settings but are no longer read by any code path.  Safe to re-run on
+// every boot because DELETE WHERE key = '…' is a no-op once the rows are gone.
+async function cleanupStaleHubSpotCredentialRows() {
+  const STALE_KEYS = [
+    'hubspot_access_token_override',
+    'hubspot_app_id_override',
+    'hubspot_client_secret_override',
+  ];
+  const { rowCount } = await pool.query(
+    `DELETE FROM admin_settings WHERE key = ANY($1::text[])`,
+    [STALE_KEYS],
+  );
+  if (rowCount > 0) {
+    console.log(`  [migration] Removed ${rowCount} stale HubSpot credential row(s) from admin_settings.`);
+  }
+}
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 (async () => {
   try {
@@ -6629,6 +6648,8 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     catch (e) { console.error('  Substatus handler auto-binding failed:', e.message); }
     try { await ensurePageFilterConfigTable(); console.log('  Page filter config table ready'); }
     catch (e) { console.error('  Page filter config table setup failed:', e.message); }
+    try { await cleanupStaleHubSpotCredentialRows(); }
+    catch (e) { console.error('  HubSpot credential row cleanup failed:', e.message); }
     scheduleConflictDigest();
   });
 })();
