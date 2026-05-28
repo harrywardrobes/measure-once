@@ -750,6 +750,11 @@ export function CustomersPage(): React.ReactElement {
   const [invDrawerOpen, setInvDrawerOpen]     = React.useState(false);
   const [invDrawerInvId, setInvDrawerInvId]   = React.useState<string | null>(null);
   const [invDrawerAllIds, setInvDrawerAllIds] = React.useState<string[]>([]);
+  const handleOpenInvoice = useCallback((firstId: string, allIds: string[]) => {
+    setInvDrawerInvId(firstId);
+    setInvDrawerAllIds(allIds);
+    setInvDrawerOpen(true);
+  }, []);
   const { isAdmin } = usePrivilege();
 
   const { devMode } = useDevMode({ enabled: isAdmin });
