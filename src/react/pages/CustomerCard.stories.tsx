@@ -1,19 +1,26 @@
-import React, { useState } from 'react';
+import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { Box, Card, CardActionArea, Chip, CircularProgress, Stack, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { STAGE_COLORS } from '../theme';
 
-const DEFAULT_STAGE_COLOURS: Record<string, { bg: string; light: string; text: string }> = {
-  sales:        { bg: '#8B2BFF', light: '#F3EAFF', text: '#6A12D9' },
-  designvisit:  { bg: '#0d9488', light: '#ccfbf1', text: '#0f766e' },
-  survey:       { bg: '#d97706', light: '#fef3c7', text: '#b45309' },
-  order:        { bg: '#2563eb', light: '#dbeafe', text: '#1d4ed8' },
-  workshop:     { bg: '#dc2626', light: '#fee2e2', text: '#b91c1c' },
-  packing:      { bg: '#059669', light: '#d1fae5', text: '#047857' },
-  delivery:     { bg: '#0891b2', light: '#cffafe', text: '#0e7490' },
-  installation: { bg: '#8A5A3B', light: '#fdf6ee', text: '#5c3820' },
-  aftercare:    { bg: '#200842', light: '#ede0ff', text: '#3d0f7a' },
+const meta: Meta = {
+  title: 'Features/Pages/CustomerCard',
+  parameters: {
+    layout: 'padded',
+    docs: {
+      description: {
+        component:
+          "The **CustomerCard** component shown on the Customers page. Cards display contact details, pipeline stage pills, and invoice/customer-number chips. When a card action handler is configured for the contact's primary stage/lead-status, an **action strip** appears at the bottom — tinted with the stage colour. A **\"Continue designing\"** strip appears when the contact has a saved draft design visit. Clicking the strip opens the handler modal; clicking the rest of the card navigates to the customer detail page.",
+      },
+    },
+  },
 };
+export default meta;
+
+type Story = StoryObj;
+
+// ── Shared demo card shell ──────────────────────────────────────────────────
 
 const DEFAULT_STAGE_LABELS: Record<string, string> = {
   sales: 'Sales',
@@ -27,52 +34,39 @@ const DEFAULT_STAGE_LABELS: Record<string, string> = {
   aftercare: 'Aftercare',
 };
 
-const meta: Meta = {
-  title: 'Features/Pages/CustomerCard',
-  parameters: {
-    layout: 'padded',
-    docs: {
-      description: {
-        component:
-          'The **CustomerCard** component shown on the Customers page. Cards display contact details, pipeline stage pills, and invoice/customer-number chips. When a card action handler is configured for the contact\'s primary stage/lead-status, an **action strip** appears at the bottom — tinted with the stage colour. Clicking the strip opens the handler modal; clicking the rest of the card navigates to the customer detail page.',
-      },
-    },
-  },
-};
-export default meta;
-
-type Story = StoryObj;
-
-// ── Shared demo card shell ──────────────────────────────────────────────────
-
 interface DemoRoom {
+  room: string;
   stageKey: string;
-  roomLabel: string;
 }
 
-interface DemoCustomerCardProps {
+interface DemoCardProps {
   name: string;
   email?: string;
   phone?: string;
   leadStatusLabel?: string;
-  customerNumber?: string;
-  rooms: DemoRoom[];
+  customerNum?: string;
+  rooms?: DemoRoom[];
   actionLabel?: string;
+  actionStageKey?: string;
+  showContinueDesigning?: boolean;
+  continuingDesign?: boolean;
   showInvoiceBadge?: boolean;
 }
 
 function StagePill({ stageKey, label }: { stageKey: string; label: string }) {
-  const sc = DEFAULT_STAGE_COLOURS[stageKey] || DEFAULT_STAGE_COLOURS.sales;
+  const sc = STAGE_COLORS[stageKey] || STAGE_COLORS.sales;
   return (
     <Box
       component="span"
       sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
         fontSize: '0.72rem',
         fontWeight: 700,
         px: '8px',
         py: '2px',
         borderRadius: '999px',
-        background: sc.light,
+        bgcolor: sc.light,
         color: sc.text,
         whiteSpace: 'nowrap',
       }}
@@ -84,37 +78,47 @@ function StagePill({ stageKey, label }: { stageKey: string; label: string }) {
 
 function DemoCustomerCard({
   name,
-  email,
+  email = 'jane@example.com',
   phone,
   leadStatusLabel,
-  customerNumber,
-  rooms,
+  customerNum,
+  rooms = [{ room: 'Main', stageKey: 'sales' }],
   actionLabel,
+  actionStageKey,
+  showContinueDesigning = false,
+  continuingDesign = false,
   showInvoiceBadge = false,
-}: DemoCustomerCardProps) {
-  const primaryStageKey = rooms[0]?.stageKey || 'sales';
-  const sc = DEFAULT_STAGE_COLOURS[primaryStageKey] || DEFAULT_STAGE_COLOURS.sales;
-  const [dispatching, setDispatching] = useState(false);
+}: DemoCardProps) {
+  const primaryStageKey = actionStageKey || rooms[0]?.stageKey || 'sales';
+  const stageColors = STAGE_COLORS[primaryStageKey];
+  const actionTint = showContinueDesigning ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
+  const actionTextColor = showContinueDesigning ? '#15803d' : (stageColors?.text || '#374151');
+  const multiRoom = rooms.length > 1;
 
-  const handleActionClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (dispatching) return;
-    setDispatching(true);
-    setTimeout(() => setDispatching(false), 1200);
-  };
+  const hasStrip = actionLabel || showContinueDesigning;
+  const stripLabel = showContinueDesigning
+    ? continuingDesign
+      ? 'Opening…'
+      : 'Continue designing'
+    : actionLabel;
 
   return (
-    <Card variant="outlined" sx={{ width: '100%', maxWidth: 340 }}>
+    <Card variant="outlined" sx={{ width: '100%', maxWidth: 360, overflow: 'hidden' }}>
       <CardActionArea
         component="a"
         href="#"
-        onClick={(e) => e.preventDefault()}
+        onClick={(e: React.MouseEvent) => e.preventDefault()}
         sx={{ p: 2, display: 'block' }}
       >
         <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <Typography variant="subtitle1" noWrap sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {name}
+          <Typography
+            variant="subtitle1"
+            noWrap
+            sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
+          >
+            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {name}
+            </Box>
           </Typography>
           {leadStatusLabel ? (
             <Chip label={leadStatusLabel} size="small" color="primary" variant="outlined" />
@@ -122,9 +126,11 @@ function DemoCustomerCard({
         </Stack>
 
         <Stack direction="row" spacing={0.75} sx={{ mt: 1, flexWrap: 'wrap' }}>
-          {rooms.map((r, i) => (
-            <StagePill key={i} stageKey={r.stageKey} label={r.roomLabel || DEFAULT_STAGE_LABELS[r.stageKey] || r.stageKey} />
-          ))}
+          {rooms.map((r, idx) => {
+            const lbl = DEFAULT_STAGE_LABELS[r.stageKey] || r.stageKey;
+            const pillText = multiRoom && r.room && r.room !== 'Main' ? `${lbl} — ${r.room}` : lbl;
+            return <StagePill key={idx} stageKey={r.stageKey} label={pillText} />;
+          })}
         </Stack>
 
         <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
@@ -133,44 +139,46 @@ function DemoCustomerCard({
           {showInvoiceBadge ? (
             <Chip label="1 invoice" size="small" color="success" variant="outlined" />
           ) : null}
-          {customerNumber ? (
-            <Chip label={customerNumber} size="small" color="secondary" variant="outlined" />
+          {customerNum ? (
+            <Chip label={customerNum} size="small" color="secondary" variant="outlined" />
           ) : null}
         </Stack>
       </CardActionArea>
 
-      {actionLabel ? (
+      {hasStrip && (
         <Box
           role="button"
-          tabIndex={0}
-          aria-label={actionLabel}
-          onClick={handleActionClick}
+          tabIndex={-1}
+          title={stripLabel || 'Run action'}
+          onClick={(e: React.MouseEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           sx={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            px: '14px',
+            px: 2,
             py: '9px',
-            bgcolor: sc.light,
+            bgcolor: actionTint,
             borderTop: '1px solid',
             borderColor: 'divider',
-            cursor: dispatching ? 'wait' : 'pointer',
-            opacity: dispatching ? 0.7 : 1,
+            cursor: continuingDesign ? 'wait' : 'pointer',
+            opacity: continuingDesign ? 0.7 : 1,
             transition: 'opacity 0.15s, filter 0.12s',
-            '&:hover': dispatching ? undefined : { filter: 'brightness(0.96)' },
-            '&:focus-visible': { outline: `2px solid ${sc.bg}`, outlineOffset: -2 },
+            '&:hover': continuingDesign ? undefined : { filter: 'brightness(0.96)' },
           }}
         >
-          <Typography sx={{ color: sc.text, fontWeight: 600, fontSize: '0.78rem' }}>
-            {dispatching ? 'Opening…' : actionLabel}
+          <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
+            {stripLabel}
           </Typography>
-          {dispatching ? (
-            <CircularProgress size={12} sx={{ color: sc.text }} />
+          {continuingDesign ? (
+            <CircularProgress size={12} sx={{ color: actionTextColor }} />
           ) : (
-            <ChevronRightIcon sx={{ fontSize: 15, color: sc.text, flexShrink: 0 }} />
+            <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
           )}
         </Box>
-      ) : null}
+      )}
     </Card>
   );
 }
@@ -182,7 +190,8 @@ export const NoActionStrip: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'A standard customer card with no handler configured for this stage. The card navigates to the customer detail page on click.',
+        story:
+          'A standard customer card with no handler configured for this stage. The card navigates to the customer detail page on click.',
       },
     },
   },
@@ -192,108 +201,139 @@ export const NoActionStrip: Story = {
       email="sarah@example.com"
       phone="07700 900 123"
       leadStatusLabel="Qualified"
-      rooms={[{ stageKey: 'sales', roomLabel: 'Sales' }]}
+      customerNum="C-0042"
+      rooms={[{ room: 'Main', stageKey: 'sales' }]}
     />
   ),
 };
 
 export const WithActionStrip: Story = {
-  name: 'With action strip — Book design visit',
+  name: 'With action strip (handler matched)',
   parameters: {
     docs: {
       description: {
-        story: 'Card with a handler configured for the Sales stage. The tinted strip at the bottom opens the action modal; clicking the rest of the card still navigates.',
+        story:
+          "A handler is configured for the card's stage/lead-status combination. The coloured strip uses the primary stage's colour from `STAGE_COLORS`.",
       },
     },
   },
   render: () => (
     <DemoCustomerCard
-      name="James Carter"
-      email="james@example.com"
-      phone="07700 900 456"
-      leadStatusLabel="New Lead"
-      rooms={[{ stageKey: 'sales', roomLabel: 'Sales' }]}
+      name="Alex Johnson"
+      email="alex@example.com"
+      leadStatusLabel="Interested"
+      rooms={[{ room: 'Main', stageKey: 'designvisit' }]}
       actionLabel="Book Design Visit"
+      actionStageKey="designvisit"
     />
   ),
 };
 
-export const DesignVisitStage: Story = {
-  name: 'Action strip — Design Visit stage',
+export const WithContinueDesigning: Story = {
+  name: 'With "Continue designing" strip (draft visit)',
   parameters: {
     docs: {
       description: {
-        story: 'The Design Visit stage colour (teal) tints the action strip.',
+        story:
+          'When the handler type is `start_design_visit` and a draft visit exists for this contact, the strip shows "Continue designing" with a green tint regardless of stage colour.',
       },
     },
   },
   render: () => (
     <DemoCustomerCard
-      name="Emily Walsh"
-      email="emily@example.com"
-      rooms={[{ stageKey: 'designvisit', roomLabel: 'Design Visit' }]}
-      actionLabel="Start Design Visit"
+      name="Sam Williams"
+      email="sam@example.com"
+      leadStatusLabel="Design visit booked"
+      rooms={[{ room: 'Main', stageKey: 'designvisit' }]}
+      showContinueDesigning
+    />
+  ),
+};
+
+export const ContinueDesigningLoading: Story = {
+  name: '"Continue designing" — loading state',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'While the draft visit is being fetched after the strip is tapped, the strip shows "Opening…" with a spinner and a wait cursor.',
+      },
+    },
+  },
+  render: () => (
+    <DemoCustomerCard
+      name="Sam Williams"
+      email="sam@example.com"
+      leadStatusLabel="Design visit booked"
+      rooms={[{ room: 'Main', stageKey: 'designvisit' }]}
+      showContinueDesigning
+      continuingDesign
+    />
+  ),
+};
+
+export const MultiRoomWithStrip: Story = {
+  name: 'Multi-room card with action strip',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The primary stage is the first active room (rooms sorted by stage descending). The strip colour matches the primary stage.',
+      },
+    },
+  },
+  render: () => (
+    <DemoCustomerCard
+      name="Chris Taylor"
+      email="chris@example.com"
+      customerNum="C-0117"
+      rooms={[
+        { room: 'Kitchen', stageKey: 'order' },
+        { room: 'Bedroom', stageKey: 'survey' },
+      ]}
+      actionLabel="Confirm Order"
+      actionStageKey="order"
+    />
+  ),
+};
+
+export const SalesStageAction: Story = {
+  name: 'Sales stage — action strip',
+  render: () => (
+    <DemoCustomerCard
+      name="Dana Brown"
+      email="dana@example.com"
+      phone="07700 911234"
+      leadStatusLabel="New lead"
+      rooms={[{ room: 'Main', stageKey: 'sales' }]}
+      actionLabel="Follow Up Call"
+      actionStageKey="sales"
     />
   ),
 };
 
 export const SurveyStage: Story = {
   name: 'Action strip — Survey stage',
-  parameters: {
-    docs: {
-      description: {
-        story: 'The Survey stage colour (amber) tints the action strip.',
-      },
-    },
-  },
   render: () => (
     <DemoCustomerCard
       name="Tom Richards"
       email="tom@example.com"
-      rooms={[{ stageKey: 'survey', roomLabel: 'Survey' }]}
+      rooms={[{ room: 'Main', stageKey: 'survey' }]}
       actionLabel="Schedule Survey"
+      actionStageKey="survey"
     />
   ),
 };
 
 export const InstallationStage: Story = {
   name: 'Action strip — Installation stage',
-  parameters: {
-    docs: {
-      description: {
-        story: 'The Installation stage colour (brown) tints the action strip.',
-      },
-    },
-  },
   render: () => (
     <DemoCustomerCard
       name="Priya Patel"
       email="priya@example.com"
-      rooms={[{ stageKey: 'installation', roomLabel: 'Installation' }]}
+      rooms={[{ room: 'Main', stageKey: 'installation' }]}
       actionLabel="Schedule Installation"
-    />
-  ),
-};
-
-export const MultiRoom: Story = {
-  name: 'Multi-room — primary stage drives strip',
-  parameters: {
-    docs: {
-      description: {
-        story: 'When a contact has multiple rooms at different stages, the **first** room\'s stage key drives the action strip colour and handler. All room stage pills are shown.',
-      },
-    },
-  },
-  render: () => (
-    <DemoCustomerCard
-      name="Olivia Grant"
-      email="olivia@example.com"
-      customerNumber="C-1042"
-      rooms={[
-        { stageKey: 'order', roomLabel: 'Kitchen — Order' },
-        { stageKey: 'workshop', roomLabel: 'Utility — Workshop' },
-      ]}
-      actionLabel="Send Order Confirmation"
+      actionStageKey="installation"
     />
   ),
 };
@@ -312,9 +352,10 @@ export const WithInvoiceBadge: Story = {
       name="Daniel Kim"
       email="daniel@example.com"
       leadStatusLabel="Won"
-      customerNumber="C-0887"
-      rooms={[{ stageKey: 'delivery', roomLabel: 'Delivery' }]}
+      customerNum="C-0887"
+      rooms={[{ room: 'Main', stageKey: 'delivery' }]}
       actionLabel="Confirm Delivery"
+      actionStageKey="delivery"
       showInvoiceBadge
     />
   ),
@@ -336,10 +377,12 @@ export const AllStageVariants: Story = {
           key={stageKey}
           name={`Demo Customer — ${stageLabel}`}
           email="demo@example.com"
-          rooms={[{ stageKey, roomLabel: stageLabel }]}
+          rooms={[{ room: 'Main', stageKey }]}
           actionLabel={`Action for ${stageLabel}`}
+          actionStageKey={stageKey}
         />
       ))}
     </Stack>
   ),
 };
+

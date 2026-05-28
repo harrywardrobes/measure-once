@@ -8,8 +8,6 @@ import { usePaginatedContacts, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/us
 import { ContactsPagination } from '../components/ContactsPagination';
 import { InvoiceDetailDrawer, type InvoiceSummary as QBInvoice } from '../components/InvoiceDetailDrawer';
 import { createPortal } from 'react-dom';
-import { useCardActionHandlers, type CardActionHandlerData } from '../hooks/useCardActionHandlers';
-import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import {
   Alert,
   Box,
@@ -37,10 +35,15 @@ import { PageFilterBar } from '../components/PageFilterBar';
 import { StageTabGroup } from '../components/StageTabGroup';
 import { FilterChipRow } from '../components/FilterChipRow';
 import { SortSelect } from '../components/SortSelect';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import AddIcon from '@mui/icons-material/Add';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { useCardActionHandlers, type CardActionHandlerData } from '../hooks/useCardActionHandlers';
+import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
+import { openCardActionModal } from '../utils/cardActionModalRegistry';
+import type { ExistingVisit } from '../components/DesignVisitWizard';
+import { STAGE_COLORS } from '../theme';
 
 type LeadStatus = {
   key: string;
@@ -545,6 +548,7 @@ function CustomerCard({
   onOpenInvoice,
   cardActionHandlerFor,
   resolveActionLabel,
+  draftVisitId,
 }: {
   contact: Contact;
   statusMap: Map<string, LeadStatus>;
@@ -564,6 +568,7 @@ function CustomerCard({
     substageId: string | undefined,
     hwSubstatusValue: string | undefined,
   ) => string;
+  draftVisitId?: number | string | null;
 }) {
   const name = contactName(contact);
   const email = contact.properties?.email || '';
@@ -578,9 +583,13 @@ function CustomerCard({
   const multiRoom = effectiveRooms.length > 1;
   const allArchived = effectiveRooms.every((r) => (r.roomStatus || 'active') !== 'active');
 
-  // ── Action strip ───────────────────────────────────────────────────────────
-  // Use the primary (first) room's stage key, matching ProjectCard behaviour.
-  const primaryStageKey = effectiveRooms[0]?.stageKey || 'sales';
+  // ── Action strip ─────────────────────────────────────────────────────────────
+  const [dispatchingAction, setDispatchingAction] = useState(false);
+
+  // Pick the highest-stage active room as the primary stage (rooms are
+  // already sorted by stage descending in resolveRooms; first active wins).
+  const primaryRoom = effectiveRooms.find((r) => (r.roomStatus || 'active') === 'active') || effectiveRooms[0];
+  const primaryStageKey = primaryRoom?.stageKey || 'sales';
   const leadStatusKey = contact.properties?.hs_lead_status;
   const hwSubstatusValue = contact.properties?.hw_lead_substatus;
 
@@ -591,34 +600,50 @@ function CustomerCard({
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (c: string) => c.toUpperCase())
     : '';
+  const isDesignHandler = handler?.type === 'start_design_visit';
+  const hasDraft = !!draftVisitId && isDesignHandler;
   const actionLabel = cahName
+    || (hasDraft ? 'Continue designing' : '')
     || resolveActionLabel(primaryStageKey, leadStatusKey, undefined, hwSubstatusValue);
 
-  const sc = DEFAULT_STAGE_COLOURS[primaryStageKey] || DEFAULT_STAGE_COLOURS.sales;
-  const actionTint = sc.light;
-  const actionTextColor = sc.text;
-
-  const [dispatchingAction, setDispatchingAction] = useState(false);
+  const stageColors = STAGE_COLORS[primaryStageKey];
+  const actionTint = hasDraft ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
+  const actionTextColor = hasDraft ? '#15803d' : (stageColors?.text || '#374151');
 
   const handleActionClick = useCallback(
-    (e: React.MouseEvent) => {
+    async (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       if (!handler || dispatchingAction) return;
-      setDispatchingAction(true);
-      dispatchCardActionHandler(handler, {
-        contactId:    contact.id,
-        contactName:  name,
-        contactEmail: email,
-      });
-      // Reset dispatching state after a short delay (modal opening is synchronous)
-      setTimeout(() => setDispatchingAction(false), 300);
+      if (hasDraft && draftVisitId) {
+        setDispatchingAction(true);
+        try {
+          const resp = await fetch(`/api/design-visits/${encodeURIComponent(String(draftVisitId))}`);
+          if (!resp.ok) throw new Error('Could not load visit');
+          const visit: ExistingVisit = await resp.json();
+          openCardActionModal(handler, {
+            contactId:    contact.id,
+            contactName:  name,
+            contactEmail: contact.properties?.email || '',
+          }, visit);
+        } catch {
+          // Silent failure — user can navigate to customer detail instead
+        } finally {
+          setDispatchingAction(false);
+        }
+      } else {
+        dispatchCardActionHandler(handler, {
+          contactId:    contact.id,
+          contactName:  name,
+          contactEmail: contact.properties?.email || '',
+        });
+      }
     },
-    [handler, dispatchingAction, contact.id, name, email],
+    [handler, hasDraft, draftVisitId, dispatchingAction, contact, name],
   );
 
   return (
-    <Card variant="outlined" sx={{ width: '100%', opacity: allArchived ? 0.7 : 1 }}>
+    <Card variant="outlined" sx={{ width: '100%', opacity: allArchived ? 0.7 : 1, overflow: 'hidden' }}>
       <CardActionArea
         component="a"
         href={`/customers/${encodeURIComponent(contact.id)}`}
@@ -665,21 +690,20 @@ function CustomerCard({
         </Stack>
       </CardActionArea>
 
-      {/* Action strip — rendered outside CardActionArea so its click opens the
-          handler modal rather than navigating to the customer detail page. Only
-          shown when a configured handler matches this contact's stage/status. */}
+      {/* Action strip — only rendered when a configured handler matches this
+          card's stage/lead-status/substatus. Clicking fires the handler
+          without also triggering the CardActionArea navigation link. */}
       {!!handler && (
         <Box
           role="button"
-          tabIndex={0}
-          aria-label={actionLabel || 'Run action'}
+          tabIndex={-1}
+          title={actionLabel || 'Run action'}
           onClick={handleActionClick}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleActionClick(e as unknown as React.MouseEvent); }}
           sx={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            px: '14px',
+            px: 2,
             py: '9px',
             bgcolor: actionTint,
             borderTop: '1px solid',
@@ -688,7 +712,6 @@ function CustomerCard({
             opacity: dispatchingAction ? 0.7 : 1,
             transition: 'opacity 0.15s, filter 0.12s',
             '&:hover': dispatchingAction ? undefined : { filter: 'brightness(0.96)' },
-            '&:focus-visible': { outline: `2px solid ${sc.bg}`, outlineOffset: -2 },
           }}
         >
           <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
@@ -731,14 +754,15 @@ export function CustomersPage(): React.ReactElement {
 
   const { devMode } = useDevMode({ enabled: isAdmin });
 
+  // ── Card action handlers ────────────────────────────────────────────────────
   const { cardActionHandlerFor, resolveActionLabel } = useCardActionHandlers();
 
-  const handleOpenInvoice = React.useCallback((firstId: string, allIds: string[]) => {
-    setInvDrawerInvId(firstId);
-    setInvDrawerAllIds(allIds);
-    setInvDrawerOpen(true);
-  }, []);
+  // ── Draft visit IDs ─────────────────────────────────────────────────────────
+  // Batch-fetched for visible contacts so "Continue designing" strips appear.
+  const [draftVisitIds, setDraftVisitIds] = React.useState<Record<string, number | string>>({});
+  const [draftRefreshTick, setDraftRefreshTick] = React.useState(0);
 
+  // ── Counts state ────────────────────────────────────────────────────────────
   const [countsLoading, setCountsLoading] = React.useState<boolean>(false);
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
@@ -828,6 +852,35 @@ export function CustomersPage(): React.ReactElement {
     const p = new URLSearchParams(location.search);
     return p.get('new') === '1';
   });
+
+  // Batch-fetch draft design-visit IDs for the visible contacts so
+  // "Continue designing" action strips appear on matching cards.
+  React.useEffect(() => {
+    if (contacts.length === 0) {
+      setDraftVisitIds({});
+      return;
+    }
+    let cancelled = false;
+    const ids = contacts.map((c) => c.id).join(',');
+    fetch(`/api/design-visits/in-progress?contactIds=${encodeURIComponent(ids)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Array<{ id: number | string; contactId: string }>) => {
+        if (cancelled) return;
+        const map: Record<string, number | string> = {};
+        for (const row of rows) map[row.contactId] = row.id;
+        setDraftVisitIds(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [contacts, draftRefreshTick]);
+
+  // Listen for design_visit_draft_changed broadcast to refresh draft IDs.
+  React.useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const bc = new BroadcastChannel('design_visit_draft_changed');
+    bc.addEventListener('message', () => setDraftRefreshTick((t) => t + 1));
+    return () => bc.close();
+  }, []);
 
   // After the first successful contacts render, restore the scroll
   // position saved when the user navigated into a customer (see
@@ -1430,6 +1483,7 @@ export function CustomersPage(): React.ReactElement {
                   onOpenInvoice={handleOpenInvoice}
                   cardActionHandlerFor={cardActionHandlerFor}
                   resolveActionLabel={resolveActionLabel}
+                  draftVisitId={draftVisitIds[contact.id] ?? null}
                 />
               </Grid>
             ))}
