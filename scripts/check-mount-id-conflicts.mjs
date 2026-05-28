@@ -2,7 +2,7 @@
 /**
  * check-mount-id-conflicts.mjs
  *
- * Two-pass static check for React mount-point wiring in public/*.html.
+ * Three-pass static check for React mount-point wiring in public/*.html.
  *
  * Pass 1 — Duplicate-mount detection:
  *   Every id in the MOUNTS table in src/react/main.tsx must appear in at most
@@ -18,10 +18,22 @@
  *   bundle but has no matching mount element loads dead JS and likely indicates
  *   a mis-wired new page or a forgotten container element.
  *
+ * Pass 3 — Error-page container check:
+ *   Every id in BOOTSTRAP_ONLY_IDS (src/react/lib/publicIslands.ts) must
+ *   appear in at least one HTML file under public/.  Because error/restricted
+ *   pages may carry other valid MOUNTS ids (chrome mounts, etc.), Pass 2
+ *   would not catch a typo or accidental removal of the page's own container
+ *   id — the React component would silently never mount.  This pass makes
+ *   the check targeted: each BOOTSTRAP_ONLY_IDS entry is verified individually
+ *   against the full set of HTML files, regardless of what other ids the page
+ *   declares.
+ *
  * Exit codes:
  *   0 — no issues found
  *   1 — one or more mount ids appear in multiple HTML files (Pass 1), or
- *       one or more pages load main.js without any mount element (Pass 2)
+ *       one or more pages load main.js without any mount element (Pass 2), or
+ *       one or more BOOTSTRAP_ONLY_IDS entries are absent from all HTML files
+ *       (Pass 3)
  *
  * Usage:
  *   node scripts/check-mount-id-conflicts.mjs
@@ -197,7 +209,129 @@ if (missingMounts.length === 0) {
   );
 }
 
-if (conflicts.length > 0 || missingMounts.length > 0) {
+// ---------------------------------------------------------------------------
+// Pass 3: Every BOOTSTRAP_ONLY_IDS entry must appear in at least one HTML file
+// ---------------------------------------------------------------------------
+//
+// Pass 2 only checks that a page loading main.js has *some* valid MOUNTS id.
+// Error/restricted pages (like access-restricted.html) carry chrome mounts
+// alongside their own container id, so Pass 2 would not catch a typo or
+// accidental removal of the specific container id for the error component.
+// Pass 3 checks each BOOTSTRAP_ONLY_IDS entry individually against all HTML
+// files, ensuring the container element is actually present.
+
+/**
+ * Extracts the string values from a `new Set([ 'a', 'b', … ])` declaration
+ * in the given source text, identified by the variable name.
+ *
+ * Returns a Set of strings, or null if the declaration cannot be found.
+ *
+ * @param {string} src
+ * @param {string} varName
+ * @returns {Set<string> | null}
+ */
+function extractSetLiteral(src, varName) {
+  const startPattern = new RegExp(
+    `(?:const|let|var)\\s+${varName}\\s*=\\s*new\\s+Set\\s*\\(\\s*\\[`,
+  );
+  const startMatch = startPattern.exec(src);
+  if (!startMatch) return null;
+
+  let depth = 1;
+  let i = startMatch.index + startMatch[0].length;
+  const bodyStart = i;
+  while (i < src.length && depth > 0) {
+    if (src[i] === '[') depth++;
+    else if (src[i] === ']') depth--;
+    i++;
+  }
+  if (depth !== 0) return null;
+
+  const body = src.slice(bodyStart, i - 1);
+  const ids = new Set();
+  const strPattern = /['"]([^'"]+)['"]/g;
+  let sm;
+  while ((sm = strPattern.exec(body)) !== null) {
+    ids.add(sm[1]);
+  }
+  return ids;
+}
+
+const publicIslandsPath = join(ROOT, 'src', 'react', 'lib', 'publicIslands.ts');
+let bootstrapOnlyIds = null;
+let pass3ParseError = false;
+
+try {
+  const publicIslandsSrc = readFileSync(publicIslandsPath, 'utf8');
+  bootstrapOnlyIds = extractSetLiteral(publicIslandsSrc, 'BOOTSTRAP_ONLY_IDS');
+} catch (err) {
+  process.stderr.write(
+    `[check-mount-id-conflicts] Pass 3 ERROR: Could not read ` +
+    `src/react/lib/publicIslands.ts — ${err.message}\n`,
+  );
+  pass3ParseError = true;
+}
+
+if (!pass3ParseError && !bootstrapOnlyIds) {
+  process.stderr.write(
+    '[check-mount-id-conflicts] Pass 3 ERROR: Could not extract BOOTSTRAP_ONLY_IDS ' +
+    'from src/react/lib/publicIslands.ts — the declaration may have been renamed ' +
+    'or reformatted. Update this script to match.\n',
+  );
+  pass3ParseError = true;
+}
+
+// Build a combined HTML source string for a quick membership test.
+// We already read all files above; re-read here for clarity (files are small).
+/** @type {string[]} ids whose container element is missing from every HTML file */
+const bootstrapIdsMissingFromHtml = [];
+
+if (!pass3ParseError) {
+  // Collect every id="…" value found across all HTML files.
+  const allHtmlIds = new Set();
+  for (const htmlFile of htmlFiles) {
+    const src = readFileSync(htmlFile, 'utf8');
+    let hm;
+    htmlIdPattern.lastIndex = 0;
+    while ((hm = htmlIdPattern.exec(src)) !== null) {
+      allHtmlIds.add(hm[1]);
+    }
+    htmlIdPattern.lastIndex = 0;
+  }
+
+  for (const id of bootstrapOnlyIds) {
+    if (!allHtmlIds.has(id)) {
+      bootstrapIdsMissingFromHtml.push(id);
+    }
+  }
+}
+
+if (!pass3ParseError && bootstrapIdsMissingFromHtml.length === 0) {
+  console.log(
+    '[check-mount-id-conflicts] Pass 3 OK — every BOOTSTRAP_ONLY_IDS entry ' +
+    'has a matching container element in public/*.html.',
+  );
+} else if (!pass3ParseError) {
+  process.stderr.write('\n[check-mount-id-conflicts] Pass 3 MISSING ERROR-PAGE CONTAINERS:\n\n');
+  for (const id of bootstrapIdsMissingFromHtml) {
+    process.stderr.write(
+      `  id="${id}" is in BOOTSTRAP_ONLY_IDS (src/react/lib/publicIslands.ts) ` +
+      `but no element with that id was found in any public/*.html file\n`,
+    );
+  }
+  process.stderr.write(
+    '\nEvery id in BOOTSTRAP_ONLY_IDS must have a matching <… id="…"> element\n' +
+    'in its corresponding HTML page under public/.  Without this, the React\n' +
+    'component silently never mounts.\n\n' +
+    'Fix: ensure the HTML file for the error/restricted page declares the\n' +
+    'correct container element, e.g.:\n' +
+    '  <div id="not-found-root"></div>\n' +
+    'and verify that the id exactly matches the BOOTSTRAP_ONLY_IDS entry in\n' +
+    'src/react/lib/publicIslands.ts.\n',
+  );
+}
+
+if (conflicts.length > 0 || missingMounts.length > 0 || pass3ParseError || bootstrapIdsMissingFromHtml.length > 0) {
   process.exit(1);
 }
 process.exit(0);
