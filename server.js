@@ -5521,11 +5521,24 @@ app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asyn
       hubspotSyncWarning = se.response?.data?.message || se.message || 'HubSpot sync failed.';
       console.warn('  hw_lead_substatus sync failed after update:', hubspotSyncWarning);
     }
+    // If default_handler_type was updated, run auto-binding immediately so the
+    // new binding takes effect without a server restart.
+    let newBindingsCreated;
+    if ('default_handler_type' in value) {
+      try {
+        newBindingsCreated = await ensureSubstatusHandlerBindings();
+      } catch (be) {
+        console.warn('  ensureSubstatusHandlerBindings failed after default_handler_type update:', be.message);
+      }
+    }
     const sseMsg = `data: ${JSON.stringify({ type: 'lead_substatuses_changed' })}\n\n`;
     for (const client of _hsWebhookSseClients) {
       try { client.write(sseMsg); } catch { _hsWebhookSseClients.delete(client); }
     }
-    res.json(hubspotSyncWarning ? { ...rows[0], hubspotSyncWarning } : rows[0]);
+    const responseBody = { ...rows[0] };
+    if (hubspotSyncWarning) responseBody.hubspotSyncWarning = hubspotSyncWarning;
+    if (typeof newBindingsCreated === 'number') responseBody.newBindingsCreated = newBindingsCreated;
+    res.json(responseBody);
   } catch (e) {
     if (e.code === '23505') {
       return res.status(409).json({ error: 'A sub-status with that key already exists for this lead status.' });

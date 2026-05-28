@@ -632,6 +632,7 @@ async function ensureSubstatusHandlerBindings() {
   if (seeded > 0) {
     console.log(`[card-action-seeds] Auto-bound ${seeded} substatus handler(s).`);
   }
+  return seeded;
 }
 
 module.exports = {

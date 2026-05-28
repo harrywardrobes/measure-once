@@ -52,6 +52,7 @@ interface Substatus {
   label: string; action_label: string; sort_order: number;
   default_handler_type?: string;
   hubspotSyncWarning?: string;
+  newBindingsCreated?: number;
 }
 interface CALabel  { stage_key: string; status_key: string; label: string; }
 interface Binding  { stage_key?: string; status_key?: string; substatus_id?: number | null; }
@@ -274,7 +275,7 @@ export function CardActionsPage() {
   // ── Window exposures ───────────────────────────────────────────────────────
 
   const saveAllCardActionLabels = useCallback(async () => {
-    let saved = 0, failed = 0;
+    let saved = 0, failed = 0, newBindings = 0;
     const failures: string[] = [];
     let hubSyncFailed = false;
 
@@ -383,6 +384,7 @@ export function CardActionsPage() {
         try {
           const updated = await PATCH<Substatus>(`/api/admin/lead-substatuses/${idStr}`, patch);
           if (updated.hubspotSyncWarning) hubSyncFailed = true;
+          if (updated.newBindingsCreated) newBindings += updated.newBindingsCreated;
           row.dataset.origKey         = updated.substatus_key;
           row.dataset.origLabel       = updated.label;
           row.dataset.origAction      = updated.action_label || '';
@@ -424,7 +426,10 @@ export function CardActionsPage() {
 
     if (saved === 0 && failed === 0) { showToast('No changes to save.'); return; }
     if (failed) showToast(`Saved ${saved}, failed ${failed}.`, true);
-    else        showToast(`${saved} change${saved !== 1 ? 's' : ''} saved.`);
+    else {
+      const bindingNote = newBindings > 0 ? ` ${newBindings} handler binding${newBindings !== 1 ? 's' : ''} created.` : '';
+      showToast(`${saved} change${saved !== 1 ? 's' : ''} saved.${bindingNote}`);
+    }
     if (hubSyncFailed) setSyncWarning('Sub-status saved locally, but the HubSpot property sync failed. Use the Re-sync button in the Settings tab to retry.');
 
     try { new BroadcastChannel('stage_action_labels_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
