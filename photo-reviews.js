@@ -480,14 +480,35 @@ async function ensureDefaultReviewHandlerBinding() {
 // Maps known substatus_key values to the handler type (and optional config)
 // that should be auto-bound on startup when the DB row has no default_handler_type set.
 //
-// This map has been intentionally reduced to the one hardcoded override that
-// cannot be expressed cleanly via the default_handler_type column — the
-// AWPH_RECEIVED substatus that maps to the review_customer_photos handler.
-// All other substatus → handler mappings should be configured via the
-// "Default handler type" selector on the Card Actions admin panel.
+// Entries here cover well-known substatus keys whose intended handler type is
+// unambiguous from their label or role in the workflow.  Existing bindings are
+// never overwritten — admin choices always win.
+//
+// AWPH_RECEIVED / AWPH_RECIEVED  — the canonical and legacy-misspelled photo-
+//   received substatus; both map to review_customer_photos.  AWPH_RECIEVED is
+//   renamed to AWPH_RECEIVED by ensurePhotoReviewOutcomesTable(), but the entry
+//   is kept here as a safety net for databases that haven't yet migrated.
+// DSSC_AGREED    — "Design Date Agreed" → add_design_visit_to_calendar
+// DSSC_CONFIRMED — "Design Date Confirmed" → start_design_visit (full wizard)
+// SRSC_AGREED    — "Survey Date Agreed" → schedule_visit (visitType: survey)
+// SRSC_CONFIRMED — "Survey Visit Confirmed" → schedule_visit (visitType: survey)
+// NEWC_CALL      — "Phone Call" new-contact substatus → summarise_phone_call
 //
 const SUBSTATUS_HANDLER_MAP = {
-  AWPH_RECEIVED: { type: 'review_customer_photos', name: 'Review customer photos', config: {} },
+  // ── Photo review ──────────────────────────────────────────────────────────
+  AWPH_RECEIVED:  { type: 'review_customer_photos', name: 'Review customer photos', config: {} },
+  AWPH_RECIEVED:  { type: 'review_customer_photos', name: 'Review customer photos', config: {} },
+
+  // ── Design visit ──────────────────────────────────────────────────────────
+  DSSC_AGREED:    { type: 'add_design_visit_to_calendar', name: 'Add design visit to calendar', config: {} },
+  DSSC_CONFIRMED: { type: 'start_design_visit',           name: 'Start design visit',           config: {} },
+
+  // ── Survey scheduling ─────────────────────────────────────────────────────
+  SRSC_AGREED:    { type: 'schedule_visit', name: 'Schedule visit', config: { visitType: 'survey' } },
+  SRSC_CONFIRMED: { type: 'schedule_visit', name: 'Schedule visit', config: { visitType: 'survey' } },
+
+  // ── New contact ───────────────────────────────────────────────────────────
+  NEWC_CALL:      { type: 'summarise_phone_call', name: 'Summarise phone call', config: {} },
 };
 
 // Human-readable names for handler types used when auto-creating handlers
@@ -599,7 +620,7 @@ async function ensureSubstatusHandlerBindings() {
     if (boundIds.has(row.id)) continue;
 
     // Resolve handler: prefer admin-configured default_handler_type, then fall
-    // back to the hardcoded SUBSTATUS_HANDLER_MAP (AWPH spelling variants),
+    // back to SUBSTATUS_HANDLER_MAP (well-known substatus keys),
     // then fall back to the show_message placeholder.
     let mapping;
     if (row.default_handler_type) {
