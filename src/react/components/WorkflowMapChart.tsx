@@ -98,6 +98,8 @@ export interface WorkflowMapNodeData extends Record<string, unknown> {
   boundHandlers: WMHandler[];
   /** True for stages/statuses that have no card-action support (workflow.json only). */
   isReadOnly?: boolean;
+  /** Optional hint text surfaced in the detail drawer for read-only status nodes. */
+  hint?: string;
   isNullRow?: boolean;
   statusKey?: string;
   substatusId?: number;
@@ -363,6 +365,7 @@ export function buildFlowGraph(
           statusKey: status.id,
           boundHandlers: [],
           isReadOnly: true,
+          ...(status.hint ? { hint: status.hint } : {}),
         },
         draggable: false,
         selectable: true,

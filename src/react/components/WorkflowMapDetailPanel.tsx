@@ -20,6 +20,8 @@ import TouchAppIcon from '@mui/icons-material/TouchApp';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
 import LabelIcon from '@mui/icons-material/Label';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { STAGE_COLORS } from '../theme';
 import {
   type WorkflowMapNodeData,
@@ -255,45 +257,87 @@ export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanel
 
             <Divider />
 
-            {/* Handlers */}
-            <Stack spacing={1.5}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="overline" color="text.secondary">
-                  Bound handlers
-                </Typography>
-                {boundHandlers.length > 0 && (
-                  <Chip
-                    label={boundHandlers.length}
-                    size="small"
+            {/* Read-only stage explanation */}
+            {node.isReadOnly ? (
+              <Stack spacing={1.5}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 1.25,
+                    px: 1.5,
+                    py: 1.25,
+                    borderRadius: '8px',
+                    bgcolor: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                  }}
+                >
+                  <LockOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', mt: '1px', flexShrink: 0 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    This is a read-only pipeline stage. Card-action handlers are not supported here.
+                  </Typography>
+                </Box>
+                {node.hint && (
+                  <Box
                     sx={{
-                      height: 18,
-                      fontSize: '0.65rem',
-                      fontWeight: 700,
-                      bgcolor: hasConflict ? '#fef3c7' : '#ede9fe',
-                      color: hasConflict ? '#92400e' : '#5b21b6',
-                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 1.25,
+                      px: 1.5,
+                      py: 1.25,
+                      borderRadius: '8px',
+                      bgcolor: '#eff6ff',
+                      border: '1px solid #bfdbfe',
                     }}
-                  />
+                  >
+                    <InfoOutlinedIcon sx={{ fontSize: 16, color: '#3b82f6', mt: '1px', flexShrink: 0 }} />
+                    <Typography variant="body2" sx={{ color: '#1e40af' }}>
+                      {node.hint as string}
+                    </Typography>
+                  </Box>
                 )}
-                {hasConflict && (
-                  <Tooltip title="Multiple handlers bound to this slot — resolve in the Action handlers tab" arrow>
-                    <WarningAmberIcon sx={{ fontSize: 16, color: 'warning.main' }} />
-                  </Tooltip>
-                )}
-              </Box>
+              </Stack>
+            ) : (
+              /* Handlers */
+              <Stack spacing={1.5}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="overline" color="text.secondary">
+                    Bound handlers
+                  </Typography>
+                  {boundHandlers.length > 0 && (
+                    <Chip
+                      label={boundHandlers.length}
+                      size="small"
+                      sx={{
+                        height: 18,
+                        fontSize: '0.65rem',
+                        fontWeight: 700,
+                        bgcolor: hasConflict ? '#fef3c7' : '#ede9fe',
+                        color: hasConflict ? '#92400e' : '#5b21b6',
+                        border: 'none',
+                      }}
+                    />
+                  )}
+                  {hasConflict && (
+                    <Tooltip title="Multiple handlers bound to this slot — resolve in the Action handlers tab" arrow>
+                      <WarningAmberIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+                    </Tooltip>
+                  )}
+                </Box>
 
-              {boundHandlers.length === 0 ? (
-                <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                  No handler bound to this {kindLabel(node.kind).toLowerCase()}.
-                </Typography>
-              ) : (
-                <Stack spacing={1.25}>
-                  {boundHandlers.map((h, i) => (
-                    <HandlerBlock key={h.id} handler={h} index={i} total={boundHandlers.length} />
-                  ))}
-                </Stack>
-              )}
-            </Stack>
+                {boundHandlers.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    No handler bound to this {kindLabel(node.kind).toLowerCase()}.
+                  </Typography>
+                ) : (
+                  <Stack spacing={1.25}>
+                    {boundHandlers.map((h, i) => (
+                      <HandlerBlock key={h.id} handler={h} index={i} total={boundHandlers.length} />
+                    ))}
+                  </Stack>
+                )}
+              </Stack>
+            )}
           </Stack>
         )}
       </Box>
