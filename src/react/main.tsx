@@ -152,9 +152,14 @@ const MOUNTS: Array<{
   fallback?: React.ReactElement;
   preSuspenseWrap?: (children: React.ReactNode) => React.ReactElement;
 }> = [
-  { id: 'login-root',           render: () => <LoginPage /> },
-  { id: 'set-password-root',    render: () => <SetPasswordPage /> },
-  { id: 'onboarding-root',      render: () => <OnboardingPage /> },
+  // public-island: islands below that carry this annotation are served on pages
+  // accessible without an authenticated session.  Any mount tagged // public-island
+  // MUST also appear in both CONN_TOAST_EXCLUDED (in this file) and BOOTSTRAP_EXCLUDED
+  // (src/react/contexts/AppBootstrapContext.tsx).
+  // scripts/check-public-island-bootstrap.mjs enforces this as Check C / Check D.
+  { id: 'login-root',           render: () => <LoginPage /> },           // public-island
+  { id: 'set-password-root',    render: () => <SetPasswordPage /> },     // public-island
+  { id: 'onboarding-root',      render: () => <OnboardingPage /> },      // public-island
   // chrome-global: these six mounts are declared statically in every HTML shell
   // so they appear on all pages simultaneously.  The duplicate-mount check in
   // scripts/check-mount-id-conflicts.mjs skips ids annotated with this comment.
@@ -185,8 +190,8 @@ const MOUNTS: Array<{
   { id: 'customer-detail-root',   render: () => <CustomerDetailPage />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },
   { id: 'invoices-page-mount',    render: () => <StandaloneInvoicesPage /> },
   { id: 'projects-view',          render: () => <ProjectsPage />, fallback: <ProjectsPageSkeleton /> },
-  { id: 'dv-signoff-mount',           render: () => <DesignVisitSignOffPage /> },
-  { id: 'customer-info-mount',        render: () => <CustomerInfoPage /> },
+  { id: 'dv-signoff-mount',           render: () => <DesignVisitSignOffPage /> }, // public-island
+  { id: 'customer-info-mount',        render: () => <CustomerInfoPage /> },        // public-island
   { id: 'not-found-root',             render: () => <NotFoundPage /> },
   { id: 'access-restricted-root',     render: () => <AccessRestrictedPage /> },
 ];
