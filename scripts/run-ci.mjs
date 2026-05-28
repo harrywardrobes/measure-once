@@ -118,6 +118,7 @@ const STEPS = [
   'test:skipped-photo-warning:ci',
   'test:skipped-photo-dashboard-link:ci',
   'test:info-card-review-resend:ci',
+  'test:upload-photos-copyable-link:ci',
   'test:active-projects-hubspot-outage:ci',
   'test:turnstile-signout:ci',
   'test:nav-customise-reset:ci',

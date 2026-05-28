@@ -54,6 +54,8 @@
     "test:skipped-photo-dashboard-link:ci": "node scripts/with-test-db.js test/skipped-photo-dashboard-link/run.js",
     "test:info-card-review-resend": "node test/info-card-review-resend/run.js",
     "test:info-card-review-resend:ci": "node scripts/with-test-db.js test/info-card-review-resend/run.js",
+    "test:upload-photos-copyable-link": "node test/upload-photos-copyable-link/run.js",
+    "test:upload-photos-copyable-link:ci": "node scripts/with-test-db.js test/upload-photos-copyable-link/run.js",
     "test:photo-storage-errors": "node test/photo-storage-errors/run.js",
     "test:photo-storage-errors:ci": "node scripts/with-test-db.js test/photo-storage-errors/run.js",
     "test:photo-approval-notification": "node test/photo-approval-notification/run.js",
