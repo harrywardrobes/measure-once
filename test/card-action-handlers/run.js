@@ -61,6 +61,19 @@
 //       N.4 — the lead_substatuses DB row is gone.  N.5 — deleting an unbound
 //       sub-status shows no dialog.  N.6 — unbound row is gone from the DOM.
 //       Guards the deleteCardActionSubstatus callback in CardActionsPage.tsx.
+//   (Q) Startup seeding: ensureSubstatusHandlerBindings auto-binds on boot.
+//       Pure-API + DB probe (no browser, requires one server restart).
+//       Two lead_substatuses rows are seeded — one with no existing binding
+//       (qSub1) and one with a pre-existing summarise_phone_call binding
+//       (qSub2) — then the server is killed and a fresh instance is spawned.
+//       Q.1 — qSub1 receives a new card_action_handler_bindings row with
+//             handler type show_message (FALLBACK_HANDLER — substatus_key
+//             PRIVTEST_Q_UNBOUND is absent from SUBSTATUS_HANDLER_MAP).
+//             Binding is polled because ensureSubstatusHandlerBindings runs
+//             async inside app.listen() after HTTP is already accepting.
+//       Q.2 — qSub2 keeps the same handler_id after the restart (the routine
+//             skips substatuses already present in the boundIds set so admin
+//             overrides are never silently overwritten).
 //
 // API pre-checks run before any browser tab opens so failures in the API
 // surface clearly.
@@ -132,6 +145,14 @@ const STALE_INTER_LS        = 'privtest_stale_inter_nonexistent'; // intermediat
 const STALE_SUB_LS          = 'privtest_stale_sub_nonexistent';   // submittedLeadStatus that no longer exists
 const HANDLER_NAME_STALE    = 'PrivTest stale-status handler';
 const HANDLER_NAME_STALE_SUB = 'PrivTest stale-sub handler';
+// (Q) startup seeding — ensureSubstatusHandlerBindings — regression guard for task #1818
+// uppercase because lead_status_config.key is always stored uppercase
+const LBL_KEY_STARTUP            = 'PRIVTEST_CAH_STARTUP';
+// NOT in SUBSTATUS_HANDLER_MAP → falls through to FALLBACK_HANDLER (show_message, empty config)
+const SUB_STARTUP_UNBOUND_K      = 'PRIVTEST_Q_UNBOUND';
+// second substatus: pre-existing binding should survive the restart unchanged
+const SUB_STARTUP_PREBOUND_K     = 'PRIVTEST_Q_PREBOUND';
+const HANDLER_NAME_Q_PRE         = 'PrivTest Q pre-existing handler';
 
 const HANDLER_NAME_DV         = 'PrivTest design visit handler';
 const HANDLER_NAME_SV         = 'PrivTest schedule-visit handler';
@@ -234,6 +255,20 @@ async function purgeFixtures(pool) {
     await pool.query(
       `DELETE FROM lead_substatuses WHERE status_key = $1`,
       [LBL_KEY_DEL_WARN]
+    );
+  } catch (_) {}
+  // (Q) probe startup-seeding substatuses
+  try {
+    await pool.query(
+      `DELETE FROM lead_substatuses WHERE status_key = $1`,
+      [LBL_KEY_STARTUP]
+    );
+  } catch (_) {}
+  // (Q) probe pre-existing handler (by name — binding and substatus cascade-delete separately)
+  try {
+    await pool.query(
+      `DELETE FROM card_action_handlers WHERE name = $1`,
+      [HANDLER_NAME_Q_PRE]
     );
   } catch (_) {}
   await pool.query(
@@ -3996,6 +4031,166 @@ async function main() {
     await pool.query(`DELETE FROM lead_status_config WHERE key = 'PRIVTEST_CAH_THROWAWAY'`).catch(() => {});
   }
 
+  // ── (Q) Startup seeding — ensureSubstatusHandlerBindings ──────────────────
+  //
+  // Verifies that the startup routine auto-inserts card_action_handler_bindings
+  // rows for every lead_substatuses row that has a non-empty action_label and
+  // no existing binding, and that it does NOT overwrite a binding that was
+  // set by an admin before the server restarted.
+  //
+  // The probe is pure-API + DB: no browser required.  It requires one server
+  // restart: fixtures are seeded while the current server is running (so the
+  // admin API is available for creating the pre-existing handler/binding), then
+  // the server is killed and a fresh one is spawned.  ensureSubstatusHandlerBindings
+  // runs inside app.listen() so the DB is polled — not just waitForServer — to
+  // confirm the async startup routine completed before asserting.
+  //
+  // Assertions:
+  //   Q.1 — A substatus with action_label and no prior binding receives a new
+  //          card_action_handler_bindings row after server boot.  The auto-chosen
+  //          handler type is show_message (FALLBACK_HANDLER — SUB_STARTUP_UNBOUND_K
+  //          is intentionally absent from SUBSTATUS_HANDLER_MAP).
+  //   Q.2 — A substatus with action_label that already has a binding keeps the
+  //          same handler_id after the restart.  The pre-existing binding is NOT
+  //          overwritten (admin overrides are always respected).
+  {
+    console.log('\n  [Q] Startup seeding — ensureSubstatusHandlerBindings');
+
+    // Seed the parent lead_status_config row (FK required by lead_substatuses).
+    // LOWER('PRIVTEST_CAH_STARTUP') = 'privtest_cah_startup' matches the
+    // 'privtest_cah_%' pattern in purgeFixtures, so no extra lead_status_config
+    // cleanup is needed here.
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+       VALUES ($1, 'PrivTest Q Startup Status', 9988, false, 'SALES')
+       ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label`,
+      [LBL_KEY_STARTUP]
+    );
+
+    // Q fixture 1: substatus with action_label, no existing binding.
+    // ensureSubstatusHandlerBindings should create a binding for this one.
+    const qSub1Res = await pool.query(
+      `INSERT INTO lead_substatuses
+         (status_key, substatus_key, label, action_label, sort_order)
+       VALUES ($1, $2, 'PrivTest Q sub unbound', 'PrivTest Q action A', 9997)
+       RETURNING id`,
+      [LBL_KEY_STARTUP, SUB_STARTUP_UNBOUND_K]
+    );
+    const qSub1Id = qSub1Res.rows[0].id;
+
+    // Q fixture 2: substatus with action_label + a manually-created binding.
+    // ensureSubstatusHandlerBindings should SKIP this one (binding already exists).
+    const qSub2Res = await pool.query(
+      `INSERT INTO lead_substatuses
+         (status_key, substatus_key, label, action_label, sort_order)
+       VALUES ($1, $2, 'PrivTest Q sub prebound', 'PrivTest Q action B', 9998)
+       RETURNING id`,
+      [LBL_KEY_STARTUP, SUB_STARTUP_PREBOUND_K]
+    );
+    const qSub2Id = qSub2Res.rows[0].id;
+
+    // Create the pre-existing handler via the admin API (server is still running).
+    const qPreRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name: HANDLER_NAME_Q_PRE,
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [],
+    });
+    const qPreHandlerId = qPreRes.json?.id ?? null;
+    const qPreOk = Number.isInteger(qPreHandlerId);
+
+    if (qPreOk) {
+      // Bind the pre-existing handler directly in the DB (substatus_id binding).
+      await pool.query(
+        `INSERT INTO card_action_handler_bindings (handler_id, substatus_id)
+         VALUES ($1, $2)
+         ON CONFLICT DO NOTHING`,
+        [qPreHandlerId, qSub2Id]
+      );
+      console.log(`  Q: pre-existing binding created — handler_id=${qPreHandlerId} substatus_id=${qSub2Id}`);
+    } else {
+      console.warn(`  Q: pre-existing handler create failed — Q.2 will be skipped`);
+    }
+
+    // Kill the current server and wait for it to exit cleanly.
+    child.kill('SIGTERM');
+    await new Promise(r => setTimeout(r, 2500));
+
+    // Spawn a fresh server — ensureSubstatusHandlerBindings will run on boot.
+    const { child: qChild, logBuf: qLogBuf } = spawnServer();
+    let qChildExited = false;
+    qChild.on('exit', () => { qChildExited = true; });
+
+    let qBootOk = false;
+    try {
+      await waitForServer(20000);
+      qBootOk = true;
+    } catch (e) {
+      console.error('Q server boot failed:', e.message);
+      console.error(qLogBuf.join('').slice(-2000));
+    }
+
+    if (!qBootOk) {
+      record('(Q.1) ensureSubstatusHandlerBindings inserts binding on boot', '1 binding row', 'SKIPPED — server restart failed', false);
+      record('(Q.2) Pre-existing binding not overwritten on restart', 'same handler_id', 'SKIPPED — server restart failed', false);
+      try { qChild.kill('SIGTERM'); } catch {}
+    } else {
+      // Poll for the Q.1 auto-binding: ensureSubstatusHandlerBindings runs async
+      // inside app.listen() so the server may respond to HTTP before the routine
+      // finishes.  Poll up to 15 s.
+      const qBindRow = await pollFn(async () => {
+        const r = await pool.query(
+          `SELECT b.handler_id, h.type
+             FROM card_action_handler_bindings b
+             JOIN card_action_handlers h ON h.id = b.handler_id
+            WHERE b.substatus_id = $1`,
+          [qSub1Id]
+        );
+        return r.rows.length > 0 ? r.rows[0] : null;
+      }, 15000, 300);
+
+      record(
+        '(Q.1) ensureSubstatusHandlerBindings inserts binding for labelled substatus on boot',
+        'binding row created with handler type=show_message (FALLBACK_HANDLER)',
+        `row=${JSON.stringify(qBindRow)}`,
+        qBindRow !== null && qBindRow.type === 'show_message',
+      );
+
+      // Q.2: verify the pre-existing binding is unchanged (same handler_id).
+      if (qPreOk) {
+        const qPreboundRow = await pool.query(
+          `SELECT handler_id FROM card_action_handler_bindings WHERE substatus_id = $1`,
+          [qSub2Id]
+        );
+        const q2HandlerId = qPreboundRow.rows[0]?.handler_id ?? null;
+        record(
+          '(Q.2) Pre-existing admin binding not overwritten by ensureSubstatusHandlerBindings',
+          `handler_id=${qPreHandlerId} (unchanged after restart)`,
+          `handler_id=${q2HandlerId}`,
+          q2HandlerId === qPreHandlerId,
+        );
+      } else {
+        record(
+          '(Q.2) Pre-existing admin binding not overwritten by ensureSubstatusHandlerBindings',
+          'handler_id unchanged after restart',
+          'SKIPPED — pre-existing handler seed failed',
+          false,
+        );
+      }
+
+      // Shut down the restarted server.
+      qChild.kill('SIGTERM');
+      // Wait briefly so port 5050 is released before the process exits.
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    // Fixtures are cleaned up by purgeFixtures (called from cleanupAndExit):
+    // - lead_substatuses WHERE status_key = LBL_KEY_STARTUP  (explicit entry above)
+    // - card_action_handlers WHERE name = HANDLER_NAME_Q_PRE (explicit entry above)
+    // - lead_status_config  WHERE LOWER(key) LIKE 'privtest_cah_%' (covers PRIVTEST_CAH_STARTUP)
+    // Bindings are cascade-deleted when their substatus or handler is deleted.
+  }
+
   // ── summary & report ──────────────────────────────────────────────────────
   const pass = findings.filter(f => f.ok).length;
   const fail = findings.filter(f => !f.ok).length;
@@ -4261,6 +4456,23 @@ async function writeReport(runId, findings) {
     '  `submittedLeadStatusInvalid` flag independently from the intermediate path.',
     '  Guards the `intermediateLeadStatusInvalid` / `submittedLeadStatusInvalid`',
     '  props and the `hasStaleLsRefs` Save-button gate in `ActionHandlersPage.tsx`.',
+    '- **(Q) Startup seeding — `ensureSubstatusHandlerBindings`** (task #1818):',
+    '  pure-API + DB probe (no browser) that verifies the startup routine in',
+    '  `photo-reviews.js` correctly auto-binds and correctly skips on restart.',
+    '  Two `lead_substatuses` rows are seeded while the original server is running:',
+    '  one with no existing binding (qSub1) and one with a pre-existing',
+    '  `summarise_phone_call` binding (qSub2).  The server is then killed and a',
+    '  fresh instance is spawned so `ensureSubstatusHandlerBindings` runs again.',
+    '  - **Q.1** After the restart, `card_action_handler_bindings` contains a row',
+    '    for qSub1 whose handler type is `show_message` — the `FALLBACK_HANDLER`',
+    '    chosen because `SUB_STARTUP_UNBOUND_K` (`PRIVTEST_Q_UNBOUND`) is absent',
+    '    from `SUBSTATUS_HANDLER_MAP`.  The binding is polled (not just',
+    '    `waitForServer`) because `ensureSubstatusHandlerBindings` runs async',
+    '    inside `app.listen()` after HTTP starts accepting connections.',
+    '  - **Q.2** qSub2\'s binding still references the same `handler_id` it had',
+    '    before the restart.  `ensureSubstatusHandlerBindings` skips any substatus',
+    '    that already has a binding (`boundIds` set), so admin-configured',
+    '    overrides survive a server restart without being replaced.',
     '',
     '## Notes',
     '',
