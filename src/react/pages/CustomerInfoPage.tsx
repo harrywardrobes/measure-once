@@ -578,8 +578,8 @@ export function CustomerInfoPage() {
                           transition: 'border-color 0.15s, background 0.15s, opacity 0.15s',
                           '&:hover': disabled ? {} : { borderColor: BRAND_COLORS.orchid, bgcolor: 'rgba(124,58,237,0.04)' },
                         }}
-                        onDragOver={e => e.preventDefault()}
-                        onDrop={e => {
+                        onDragOver={(e: React.DragEvent) => e.preventDefault()}
+                        onDrop={(e: React.DragEvent) => {
                           e.preventDefault();
                           if (!disabled && e.dataTransfer.files?.length) handlePhotoUpload(e.dataTransfer.files);
                         }}

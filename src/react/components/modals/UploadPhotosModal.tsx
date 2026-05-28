@@ -127,7 +127,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
       </DialogTitle>
       <DialogContent>
         {checkingPending ? (
-          <Stack alignItems="center" sx={{ py: 2 }}>
+          <Stack sx={{ alignItems: 'center', py: 2 }}>
             <CircularProgress size={28} />
           </Stack>
         ) : sent ? (
