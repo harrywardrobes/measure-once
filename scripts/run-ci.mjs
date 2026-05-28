@@ -49,6 +49,7 @@ const STEPS = [
   'test:design-visit-submitter-name:ci',
   'test:customer-info:ci',
   'test:photo-approval-notification:ci',
+  'test:photo-reviews:ci',
   'test:start-design-visit:ci',
   'test:design-visit:ci',
   'test:design-visit-list:ci',

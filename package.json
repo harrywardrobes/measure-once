@@ -44,6 +44,8 @@
     "test:customer-info:ci": "node scripts/with-test-db.js test/customer-info/run.js",
     "test:photo-approval-notification": "node test/photo-approval-notification/run.js",
     "test:photo-approval-notification:ci": "node scripts/with-test-db.js test/photo-approval-notification/run.js",
+    "test:photo-reviews": "node test/photo-reviews/run.js",
+    "test:photo-reviews:ci": "node scripts/with-test-db.js test/photo-reviews/run.js",
     "test:start-design-visit": "node test/start-design-visit/run.js",
     "test:start-design-visit:ci": "node scripts/with-test-db.js test/start-design-visit/run.js",
     "test:design-visit": "node test/design-visit/run.js",
