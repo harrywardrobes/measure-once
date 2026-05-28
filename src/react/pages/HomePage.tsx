@@ -17,6 +17,8 @@ import { EmptyState } from '../components/EmptyState';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { broadcastConnect } from '../lib/qbInvoicesStore';
 import type { InvoiceSummary } from '../components/InvoiceDetailDrawer';
+import { usePrivilege } from '../hooks/usePrivilege';
+import { useDevMode } from '../hooks/useDevMode';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
 type _Icons = typeof RefreshIcon | typeof WarningAmberIcon;
@@ -576,6 +578,8 @@ function ProjectsSection({
 export function HomePage(): React.ReactElement {
   const now = new Date();
   const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const { isAdmin } = usePrivilege();
+  const { devMode } = useDevMode({ enabled: isAdmin });
 
   const [tasks, setTasks] = React.useState<PersonalTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(true);
@@ -700,6 +704,25 @@ export function HomePage(): React.ReactElement {
       }}
     >
       <DateHeader />
+      {isAdmin && devMode && (
+        <Alert
+          id="dev-mode-banner"
+          severity="warning"
+          sx={{ borderRadius: 2, mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              component="a"
+              href="/admin#tab-devenv"
+            >
+              Turn off
+            </Button>
+          }
+        >
+          Dev mode is ON — only test contacts are shown
+        </Alert>
+      )}
       <TaskSection tasks={tasks} loading={tasksLoading} todayMs={todayMs} />
       <CalendarSection
         loading={calLoading}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { useDevMode } from '../hooks/useDevMode';
 import { usePrefs } from '../hooks/usePrefs';
 import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 import {
@@ -152,7 +153,8 @@ const SYNC_PROVIDERS = [
 export function CalendarPage(): React.ReactElement {
   useConnectionCheck();
   const { notifyApiError } = useConnectionToast();
-  const { isViewer } = usePrivilege();
+  const { isViewer, isAdmin } = usePrivilege();
+  const { devMode } = useDevMode({ enabled: isAdmin });
   const { prefs, loading: prefsLoading, patchPref } = usePrefs();
   const [cursor, setCursor] = React.useState<Date>(() => startOfDay(new Date()));
   const [showWorkshop, setShowWorkshop] = React.useState<boolean>(true);
@@ -258,6 +260,25 @@ export function CalendarPage(): React.ReactElement {
 
   return (
     <Box sx={{ maxWidth: 960, mx: 'auto', px: { xs: 1, sm: 2 }, pt: 1, pb: 4 }}>
+      {isAdmin && devMode && (
+        <Alert
+          id="dev-mode-banner"
+          severity="warning"
+          sx={{ borderRadius: 2, mb: 1.5 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              component="a"
+              href="/admin#tab-devenv"
+            >
+              Turn off
+            </Button>
+          }
+        >
+          Dev mode is ON — only test contacts are shown
+        </Alert>
+      )}
       <SyncSection />
       <CalendarHeader
         cursor={cursor}

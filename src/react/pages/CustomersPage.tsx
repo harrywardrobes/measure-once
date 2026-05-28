@@ -2,6 +2,7 @@ import React from 'react';
 import { fmtGBP } from '../utils/formatters';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { useDevMode } from '../hooks/useDevMode';
 import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 import { usePaginatedContacts, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
 import { ContactsPagination } from '../components/ContactsPagination';
@@ -637,27 +638,7 @@ export function CustomersPage(): React.ReactElement {
   const [invDrawerAllIds, setInvDrawerAllIds] = React.useState<string[]>([]);
   const { isAdmin } = usePrivilege();
 
-  const [devMode, setDevMode] = React.useState<boolean>(false);
-  React.useEffect(() => {
-    if (!isAdmin) return;
-    fetch('/api/admin/hubspot/dev-mode', { headers: { Accept: 'application/json' } })
-      .then(r => r.ok ? r.json() : null)
-      .then((data: { devMode?: boolean } | null) => {
-        if (data && typeof data.devMode === 'boolean') setDevMode(data.devMode);
-      })
-      .catch(() => {});
-
-    let devModeBc: BroadcastChannel | null = null;
-    try {
-      devModeBc = new BroadcastChannel('dev_mode_changed');
-      devModeBc.onmessage = (e: MessageEvent<{ devMode?: boolean }>) => {
-        if (typeof e.data?.devMode === 'boolean') setDevMode(e.data.devMode);
-      };
-    } catch { /* BroadcastChannel not available */ }
-    return () => {
-      devModeBc?.close();
-    };
-  }, [isAdmin]);
+  const { devMode } = useDevMode({ enabled: isAdmin });
 
   const handleOpenInvoice = React.useCallback((firstId: string, allIds: string[]) => {
     setInvDrawerInvId(firstId);

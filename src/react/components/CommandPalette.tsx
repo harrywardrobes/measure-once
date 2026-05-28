@@ -5,6 +5,8 @@ import { useQBInvoices } from '../hooks/useQBInvoices';
 import { useContactSearch } from '../hooks/useContactSearch';
 import { triggerLoad as triggerQBLoad } from '../lib/qbInvoicesStore';
 import type { InvoiceSummary } from './InvoiceDetailDrawer';
+import { usePrivilege } from '../hooks/usePrivilege';
+import { useDevMode } from '../hooks/useDevMode';
 import Dialog from '@mui/material/Dialog';
 import Box from '@mui/material/Box';
 import InputBase from '@mui/material/InputBase';
@@ -12,6 +14,7 @@ import Typography from '@mui/material/Typography';
 import ButtonBase from '@mui/material/ButtonBase';
 import Avatar from '@mui/material/Avatar';
 import Skeleton from '@mui/material/Skeleton';
+import Alert from '@mui/material/Alert';
 
 import SearchIcon from '@mui/icons-material/Search';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
@@ -143,6 +146,8 @@ export function CommandPalette() {
   const listRef = useRef<HTMLDivElement>(null);
   const { invoices: qbInvoices, loading: invoicesLoading } = useQBInvoices();
   const { contacts: searchedContacts, loading: contactsLoading } = useContactSearch(query, open);
+  const { isAdmin } = usePrivilege();
+  const { devMode } = useDevMode({ enabled: isAdmin });
 
   useEffect(() => {
     if (settings !== null) return;
@@ -363,6 +368,11 @@ export function CommandPalette() {
         {q && contactsLoading && (
           <>
             <Typography sx={SECTION_LABEL_SX}>Customers</Typography>
+            {isAdmin && devMode && (
+              <Alert severity="warning" icon={false} sx={{ mx: 2, mb: 0.5, py: 0.25, fontSize: '0.75rem' }}>
+                Dev mode ON — test contacts only
+              </Alert>
+            )}
             {[0, 1, 2].map(i => (
               <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2, py: 1 }}>
                 <Skeleton variant="circular" width={26} height={26} />
@@ -378,6 +388,11 @@ export function CommandPalette() {
         {!contactsLoading && matchedContacts.length > 0 && (
           <>
             <Typography sx={SECTION_LABEL_SX}>Customers</Typography>
+            {isAdmin && devMode && (
+              <Alert severity="warning" icon={false} sx={{ mx: 2, mb: 0.5, py: 0.25, fontSize: '0.75rem' }}>
+                Dev mode ON — test contacts only
+              </Alert>
+            )}
             {matchedContacts.map(c => {
               const name = contactName(c) || 'Unknown';
               const initials = contactInitials(name);
