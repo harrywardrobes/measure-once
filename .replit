@@ -96,3 +96,6 @@ APP_URL = "https://handle.harrywardrobes.co.uk"
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 180000
+
+[objectStorage]
+defaultBucketID = "replit-objstore-a126686a-62c4-4b6f-98fe-45e6369588f2"
