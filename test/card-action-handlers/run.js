@@ -125,6 +125,13 @@ const CLEAR_WARN_STATUS_LABEL  = 'PrivTest ClearWarn Status';
 const CLEAR_WARN_LABEL         = 'PrivTest Book Appointment';
 // (O) sub-status delete bound-handler warning — regression guard for task #1740
 const LBL_KEY_DEL_WARN        = 'PRIVTEST_CAH_DEL_WARN'; // lead_status_config.key for probe (O)
+// (P) stale lead-status warning in handler editor — regression guard for task #1761
+const LBL_KEY_STALE_SLOT    = 'PRIVTEST_CAH_STALE'; // lead_status_config.key for the slot (uppercase)
+const LBL_KEY_STALE_BINDING = 'privtest_cah_stale'; // binding status_key (lowercase)
+const STALE_INTER_LS        = 'privtest_stale_inter_nonexistent'; // intermediateLeadStatus that no longer exists
+const STALE_SUB_LS          = 'privtest_stale_sub_nonexistent';   // submittedLeadStatus that no longer exists
+const HANDLER_NAME_STALE    = 'PrivTest stale-status handler';
+const HANDLER_NAME_STALE_SUB = 'PrivTest stale-sub handler';
 
 const HANDLER_NAME_DV         = 'PrivTest design visit handler';
 const HANDLER_NAME_SV         = 'PrivTest schedule-visit handler';
@@ -161,11 +168,12 @@ async function purgeFixtures(pool) {
   // cascades to any binding pointing at it.
   await pool.query(
     `DELETE FROM card_action_handlers
-       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+       WHERE name IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
     [HANDLER_NAME_DV, HANDLER_NAME_SV, HANDLER_NAME_PC, HANDLER_NAME_LBL, HANDLER_NAME_SUB,
      HANDLER_NAME_CONFLICT_A, HANDLER_NAME_CONFLICT_B, HANDLER_NAME_ANAME,
      HANDLER_NAME_NAMING, HANDLER_NAME_ILS, 'PrivTest orphan cleanup handler',
-     HANDLER_NAME_CLEAR_WARN, HANDLER_NAME_DEL_WARN]
+     HANDLER_NAME_CLEAR_WARN, HANDLER_NAME_DEL_WARN, HANDLER_NAME_STALE,
+     HANDLER_NAME_STALE_SUB]
   );
   // Prefix sweep: a previously crashed or partly-validated probe run can
   // leave behind handlers whose names don't match the constants above
@@ -237,10 +245,10 @@ async function purgeFixtures(pool) {
   // delete above so the FK doesn't block this DELETE.
   try {
     await pool.query(
-      `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      `DELETE FROM lead_status_config WHERE key IN ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [LBL_KEY_CONFLICT_LS, SUB_STATUS_K, LBL_KEY_ANAME, LBL_KEY_FALLBACK_STATUS,
        LBL_KEY_SUB_ROW, 'PRIVTEST_CAH_ORPHAN_LS', 'privtest_cah_orphan_ls', 'PRIVTEST_CAH_THROWAWAY',
-       LBL_KEY_CLEAR_WARN, LBL_KEY_DEL_WARN]
+       LBL_KEY_CLEAR_WARN, LBL_KEY_DEL_WARN, LBL_KEY_STALE_SLOT]
     );
   } catch (_) {}
   // Recreate the unique label-binding index if it was temporarily dropped
@@ -3402,6 +3410,422 @@ async function main() {
       }
     }
 
+  // ── (P) Stale lead-status warning in the handler editor ──────────────────
+  //
+  // Seeds a start_design_visit handler whose config.intermediateLeadStatus
+  // references a key that does NOT exist in lead_status_config, making it
+  // "stale" from the Action Handlers panel's perspective.  Three assertions:
+  //   P.setup — handler created (201) with the stale intermediateLeadStatus.
+  //   P.1     — HandlerSummary shows the "Status deleted" Chip
+  //             ([data-testid="stale-status-warning"]).
+  //   P.2     — Clicking "Change" opens the HandlerEditorModal and the
+  //             warning Alert ("This lead status no longer exists…") is
+  //             visible inside the dialog.
+  //   P.3     — The Save/Add button inside the dialog is disabled while the
+  //             stale reference is unresolved (hasStaleLsRefs=true).
+  {
+    console.log('\n  [P] Stale lead-status warning in the handler editor');
+
+    // Seed the lead_status_config row for the binding slot so the group
+    // appears in the Action Handlers table.
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+       VALUES ($1, 'PrivTest Stale Status', 9988, false, 'SALES')
+       ON CONFLICT (key) DO UPDATE
+         SET label               = EXCLUDED.label,
+             sort_order          = EXCLUDED.sort_order,
+             excluded_from_sales = EXCLUDED.excluded_from_sales,
+             stage               = EXCLUDED.stage`,
+      [LBL_KEY_STALE_SLOT]
+    );
+    // Add a stage-action label so the slot is rendered in the table
+    // (groups with no label and no handler are hidden by _buildActionSlotGroups).
+    await adminClient.put('/api/admin/stage-action-labels', {
+      stage_key: 'sales',
+      status_key: LBL_KEY_STALE_BINDING,
+      label: 'PrivTest Stale Slot',
+    });
+
+    // Create the handler.  config.intermediateLeadStatus is a key that does
+    // not exist in lead_status_config, so it will be flagged as stale.
+    const createStaleRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name: HANDLER_NAME_STALE,
+      type: 'start_design_visit',
+      config: { intermediateLeadStatus: STALE_INTER_LS, defaultDurationMin: 90 },
+      bindings: [{ stage_key: 'sales', status_key: LBL_KEY_STALE_BINDING }],
+    });
+    const staleHandlerId = createStaleRes.json?.id;
+    record(
+      '(P.setup) POST start_design_visit handler with stale intermediateLeadStatus',
+      `status=201 with numeric id; config.intermediateLeadStatus="${STALE_INTER_LS}"`,
+      `status=${createStaleRes.status} id=${staleHandlerId} ils=${createStaleRes.json?.config?.intermediateLeadStatus}`,
+      createStaleRes.status === 201 && Number.isInteger(staleHandlerId)
+        && createStaleRes.json?.config?.intermediateLeadStatus === STALE_INTER_LS,
+    );
+
+    if (staleHandlerId) {
+      // Open a fresh admin tab on the Action Handlers panel.
+      const staleTab = await browser.newPage();
+      await staleTab.setCacheEnabled(false);
+      await injectSession(staleTab, adminClient.cookie);
+      await staleTab.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+      // Visit cardactions first so CardActionsPage mounts and loads stage-action
+      // labels (required by _buildActionSlotGroups for the slot to be visible).
+      await staleTab.evaluate(() => {
+        if (typeof switchTab === 'function') switchTab('cardactions');
+      });
+      await new Promise(r => setTimeout(r, 400));
+      await staleTab.evaluate(() => {
+        if (typeof switchTab === 'function') switchTab('actionhandlers');
+      });
+      // Wait for ActionHandlersPage to mount and expose openHandlerEditor.
+      await pollPage(
+        staleTab,
+        () => typeof window.openHandlerEditor === 'function',
+        null,
+        10000,
+      );
+      await staleTab.evaluate(async () => {
+        const p1 = typeof loadCardActionsAdmin === 'function'
+          ? loadCardActionsAdmin() : Promise.resolve();
+        const p2 = typeof loadCardActionHandlersAdmin === 'function'
+          ? loadCardActionHandlersAdmin() : Promise.resolve();
+        return Promise.all([p1, p2]);
+      });
+      await new Promise(r => setTimeout(r, 800));
+
+      // ── P.1: "Status deleted" chip visible in HandlerSummary ───────────────
+      const staleChipVisible = await pollPage(
+        staleTab,
+        () => document.querySelector('[data-testid="stale-status-warning"]') ? 'visible' : null,
+        null,
+        8000,
+      );
+      record(
+        '(P.1) HandlerSummary shows "Status deleted" chip for stale intermediateLeadStatus',
+        '"visible" — [data-testid="stale-status-warning"] present in DOM',
+        `result=${staleChipVisible}`,
+        staleChipVisible === 'visible',
+      );
+
+      // ── P.2 + P.3: open the editor via the "Change" button ─────────────────
+      // Find the row whose summary contains the stale-status chip and click
+      // its "Change" (non-Remove ghost) button.
+      const changeClicked = await staleTab.evaluate(() => {
+        const rows = document.querySelectorAll('tr.adm-handlers-row');
+        for (const row of rows) {
+          if (!row.querySelector('[data-testid="stale-status-warning"]')) continue;
+          const btns = row.querySelectorAll('button.btn-ghost:not(.adm-btn-remove)');
+          for (const btn of btns) {
+            if (btn.textContent.trim() === 'Change') { btn.click(); return 'clicked'; }
+          }
+        }
+        return 'not-found';
+      });
+      record(
+        '(P.2) "Change" button clicked to open HandlerEditorModal for stale handler',
+        '"clicked" — "Change" button found in stale-chip row and clicked',
+        `result=${changeClicked}`,
+        changeClicked === 'clicked',
+      );
+
+      // Wait for the MUI dialog to appear.
+      const dialogOpened = await pollPage(
+        staleTab,
+        () => document.querySelector('.MuiDialog-root') ? 'open' : null,
+        null,
+        6000,
+      );
+      record(
+        '(P.2) HandlerEditorModal dialog opens after clicking Change',
+        '"open" — .MuiDialog-root present in DOM',
+        `result=${dialogOpened}`,
+        dialogOpened === 'open',
+      );
+
+      if (dialogOpened === 'open') {
+        // P.2 — warning Alert visible inside the dialog.
+        const alertVisible = await staleTab.evaluate(() => {
+          const dialog = document.querySelector('.MuiDialog-root');
+          if (!dialog) return 'no-dialog';
+          const alerts = dialog.querySelectorAll('.MuiAlert-root');
+          for (const a of alerts) {
+            if (a.textContent.includes('no longer exists')) return 'visible';
+          }
+          return 'absent';
+        });
+        record(
+          '(P.2) warning Alert "…no longer exists…" visible inside HandlerEditorModal',
+          '"visible" — .MuiAlert-root with text containing "no longer exists" found in dialog',
+          `result=${alertVisible}`,
+          alertVisible === 'visible',
+        );
+
+        // P.3 — Save/Add button is disabled while stale reference is unresolved.
+        const saveDisabled = await staleTab.evaluate(() => {
+          const dialog = document.querySelector('.MuiDialog-root');
+          if (!dialog) return 'no-dialog';
+          const btns = dialog.querySelectorAll('button');
+          for (const btn of btns) {
+            const text = btn.textContent.trim();
+            if (text === 'Save' || text === 'Add') {
+              return btn.disabled ? 'disabled' : 'enabled';
+            }
+          }
+          return 'btn-not-found';
+        });
+        record(
+          '(P.3) Save/Add button disabled while stale lead-status ref is unresolved',
+          '"disabled" — Save/Add button in dialog has disabled attribute',
+          `result=${saveDisabled}`,
+          saveDisabled === 'disabled',
+        );
+
+        // P.4 — Select a valid intermediateLeadStatus; Save/Add must enable.
+        // The stale Select is the only FormControl in Mui-error state.
+        const interSelectClicked = await staleTab.evaluate(() => {
+          const dialog = document.querySelector('.MuiDialog-root');
+          if (!dialog) return 'no-dialog';
+          const errSel = dialog.querySelector(
+            '.MuiFormControl-root.Mui-error .MuiSelect-select',
+          );
+          if (!errSel) return 'no-error-select';
+          errSel.click();
+          return 'clicked';
+        });
+        await new Promise(r => setTimeout(r, 500));
+        // The MUI listbox portal renders at document root (outside the dialog).
+        const interOptionPicked = await staleTab.evaluate(() => {
+          const listbox = document.querySelector('[role="listbox"]');
+          if (!listbox) return 'no-listbox';
+          const opts = listbox.querySelectorAll('[role="option"]');
+          for (const opt of opts) {
+            const text = opt.textContent.trim();
+            if (text && text !== '— none —' &&
+                opt.getAttribute('aria-disabled') !== 'true') {
+              opt.click();
+              return `picked:${text}`;
+            }
+          }
+          return 'no-pickable-option';
+        });
+        await new Promise(r => setTimeout(r, 400));
+        const saveEnabled = await staleTab.evaluate(() => {
+          const dialog = document.querySelector('.MuiDialog-root');
+          if (!dialog) return 'no-dialog';
+          const btns = dialog.querySelectorAll('button');
+          for (const btn of btns) {
+            const text = btn.textContent.trim();
+            if (text === 'Save' || text === 'Add') {
+              return btn.disabled ? 'still-disabled' : 'enabled';
+            }
+          }
+          return 'btn-not-found';
+        });
+        record(
+          '(P.4) Save/Add enabled after selecting a valid intermediateLeadStatus',
+          '"enabled" — Save/Add transitions disabled→enabled after valid option chosen',
+          `click=${interSelectClicked} pick=${interOptionPicked} save=${saveEnabled}`,
+          saveEnabled === 'enabled',
+        );
+      } else {
+        record('(P.2) warning Alert in HandlerEditorModal', 'n/a', 'SKIPPED — dialog did not open', false);
+        record('(P.3) Save/Add button disabled', 'n/a', 'SKIPPED — dialog did not open', false);
+        record('(P.4) Save/Add enabled after fix', 'n/a', 'SKIPPED — dialog did not open', false);
+      }
+
+      await staleTab.close();
+      // Clean up the handler (FK cascade removes the binding).
+      await adminClient.delete(`/api/admin/card-action-handlers/${staleHandlerId}`);
+
+      // ── P.sub: stale submittedLeadStatus path ────────────────────────────────
+      // Seed a separate handler whose submittedLeadStatus is a nonexistent key.
+      const pSubHandlerRes = await adminClient.post('/api/admin/card-action-handlers', {
+        name: HANDLER_NAME_STALE_SUB,
+        type: 'start_design_visit',
+        config: { submittedLeadStatus: STALE_SUB_LS, defaultDurationMin: 90 },
+      });
+      const pSubHandlerId = pSubHandlerRes.status === 201 ? pSubHandlerRes.data?.id : null;
+      record(
+        '(P.sub.setup) Seed start_design_visit handler with stale submittedLeadStatus',
+        '201 — handler created with a submittedLeadStatus key absent from DB',
+        `status=${pSubHandlerRes.status} id=${pSubHandlerId}`,
+        pSubHandlerRes.status === 201,
+      );
+
+      if (pSubHandlerId) {
+        const subTab = await browser.newPage();
+        await subTab.authenticate({
+          username: adminUser.email,
+          password: adminUser.password,
+        });
+        await subTab.goto(`https://${replDomain}`, { waitUntil: 'networkidle0' });
+        await new Promise(r => setTimeout(r, 400));
+        await subTab.evaluate(() => {
+          if (typeof switchTab === 'function') switchTab('actionhandlers');
+        });
+        await pollPage(
+          subTab,
+          () => typeof window.openHandlerEditor === 'function',
+          null,
+          10000,
+        );
+        await subTab.evaluate(async () => {
+          const p1 = typeof loadCardActionsAdmin === 'function'
+            ? loadCardActionsAdmin() : Promise.resolve();
+          const p2 = typeof loadCardActionHandlersAdmin === 'function'
+            ? loadCardActionHandlersAdmin() : Promise.resolve();
+          return Promise.all([p1, p2]);
+        });
+        await new Promise(r => setTimeout(r, 800));
+
+        // P.sub.1 — stale chip for submittedLeadStatus
+        const subChip = await pollPage(
+          subTab,
+          () => document.querySelector('[data-testid="stale-status-warning"]') ? 'visible' : null,
+          null,
+          8000,
+        );
+        record(
+          '(P.sub.1) HandlerSummary shows "Status deleted" chip for stale submittedLeadStatus',
+          '"visible" — [data-testid="stale-status-warning"] present for submitted path',
+          `result=${subChip}`,
+          subChip === 'visible',
+        );
+
+        // P.sub.2 + P.sub.3 — open editor via the "Change" button
+        const subChangeClicked = await subTab.evaluate(() => {
+          const rows = document.querySelectorAll('tr.adm-handlers-row');
+          for (const row of rows) {
+            if (!row.querySelector('[data-testid="stale-status-warning"]')) continue;
+            const btns = row.querySelectorAll('button');
+            for (const btn of btns) {
+              const text = btn.textContent.trim();
+              if (text && text !== 'Remove' && text !== 'Delete') {
+                btn.click();
+                return 'clicked';
+              }
+            }
+          }
+          return 'no-change-btn';
+        });
+        await new Promise(r => setTimeout(r, 800));
+
+        const subDialogOpen = await subTab.evaluate(
+          () => !!document.querySelector('.MuiDialog-root'),
+        );
+        record(
+          '(P.sub.2 (dialog)) HandlerEditorModal opens for stale submittedLeadStatus handler',
+          'true — .MuiDialog-root present after clicking Change',
+          `clicked=${subChangeClicked} dialog=${subDialogOpen}`,
+          subDialogOpen,
+        );
+
+        if (subDialogOpen) {
+          const subAlertText = await subTab.evaluate(() => {
+            const dialog = document.querySelector('.MuiDialog-root');
+            if (!dialog) return null;
+            const alert = dialog.querySelector('.MuiAlert-root');
+            return alert ? alert.textContent : null;
+          });
+          record(
+            '(P.sub.2 (alert)) Warning Alert visible in editor for stale submittedLeadStatus',
+            'Alert contains "no longer exists"',
+            `text=${(subAlertText || '').slice(0, 80)}`,
+            (subAlertText || '').includes('no longer exists'),
+          );
+
+          const subSaveDisabled = await subTab.evaluate(() => {
+            const dialog = document.querySelector('.MuiDialog-root');
+            if (!dialog) return 'no-dialog';
+            const btns = dialog.querySelectorAll('button');
+            for (const btn of btns) {
+              const text = btn.textContent.trim();
+              if (text === 'Save' || text === 'Add') {
+                return btn.disabled ? 'disabled' : 'enabled';
+              }
+            }
+            return 'btn-not-found';
+          });
+          record(
+            '(P.sub.3) Save/Add disabled while stale submittedLeadStatus is unresolved',
+            '"disabled" — Save/Add has disabled attribute',
+            `result=${subSaveDisabled}`,
+            subSaveDisabled === 'disabled',
+          );
+
+          // P.sub.4 — Select a valid submittedLeadStatus; Save/Add must enable.
+          const subSelectClicked = await subTab.evaluate(() => {
+            const dialog = document.querySelector('.MuiDialog-root');
+            if (!dialog) return 'no-dialog';
+            const errSel = dialog.querySelector(
+              '.MuiFormControl-root.Mui-error .MuiSelect-select',
+            );
+            if (!errSel) return 'no-error-select';
+            errSel.click();
+            return 'clicked';
+          });
+          await new Promise(r => setTimeout(r, 500));
+          const subOptionPicked = await subTab.evaluate(() => {
+            const listbox = document.querySelector('[role="listbox"]');
+            if (!listbox) return 'no-listbox';
+            const opts = listbox.querySelectorAll('[role="option"]');
+            for (const opt of opts) {
+              const text = opt.textContent.trim();
+              if (text && text !== '— none —' &&
+                  opt.getAttribute('aria-disabled') !== 'true') {
+                opt.click();
+                return `picked:${text}`;
+              }
+            }
+            return 'no-pickable-option';
+          });
+          await new Promise(r => setTimeout(r, 400));
+          const subSaveEnabled = await subTab.evaluate(() => {
+            const dialog = document.querySelector('.MuiDialog-root');
+            if (!dialog) return 'no-dialog';
+            const btns = dialog.querySelectorAll('button');
+            for (const btn of btns) {
+              const text = btn.textContent.trim();
+              if (text === 'Save' || text === 'Add') {
+                return btn.disabled ? 'still-disabled' : 'enabled';
+              }
+            }
+            return 'btn-not-found';
+          });
+          record(
+            '(P.sub.4) Save/Add enabled after selecting a valid submittedLeadStatus',
+            '"enabled" — Save/Add transitions disabled→enabled after valid option chosen',
+            `click=${subSelectClicked} pick=${subOptionPicked} save=${subSaveEnabled}`,
+            subSaveEnabled === 'enabled',
+          );
+        } else {
+          record('(P.sub.2 (alert))', 'n/a', 'SKIPPED — dialog did not open', false);
+          record('(P.sub.3) Save/Add disabled', 'n/a', 'SKIPPED — dialog did not open', false);
+          record('(P.sub.4) Save/Add enabled after fix', 'n/a', 'SKIPPED — dialog did not open', false);
+        }
+
+        await subTab.close();
+        await adminClient.delete(`/api/admin/card-action-handlers/${pSubHandlerId}`);
+      } else {
+        [
+          'P.sub.1', 'P.sub.2 (dialog)', 'P.sub.2 (alert)', 'P.sub.3', 'P.sub.4',
+        ].forEach(p => {
+          record(`(${p}) stale submittedLeadStatus`, 'n/a', 'SKIPPED — P.sub handler seed failed', false);
+        });
+      }
+    } else {
+      [
+        'P.1', 'P.2 (chip)', 'P.2 (dialog)', 'P.2 (alert)', 'P.3', 'P.4',
+        'P.sub.setup', 'P.sub.1', 'P.sub.2 (dialog)', 'P.sub.2 (alert)', 'P.sub.3', 'P.sub.4',
+      ].forEach(p => {
+        record(`(${p}) stale lead-status warning`, 'n/a', 'SKIPPED — handler seed failed', false);
+      });
+    }
+    // Clean up the slot's lead_status_config row.
+    await pool.query(`DELETE FROM lead_status_config WHERE key = $1`, [LBL_KEY_STALE_SLOT]).catch(() => {});
+  }
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -3774,6 +4198,30 @@ async function writeReport(runId, findings) {
     '  Guards the `deleteCardActionSubstatus` callback in `CardActionsPage.tsx`',
     '  against regressions that skip the `confirmDeleteSub` dialog or fail to',
     '  delete when the user confirms.',
+    '- **(P) Stale lead-status warning in the handler editor** (task #1761): a',
+    '  `start_design_visit` handler is seeded whose `config.intermediateLeadStatus`',
+    '  references a key that does not exist in `lead_status_config` (making it',
+    '  "stale").  The handler is bound to a labelled slot so the group appears in',
+    '  the Action Handlers panel.  Four assertions run:',
+    '  - **P.setup** POST creates the handler (201) with the stale',
+    '    `intermediateLeadStatus` preserved in the response.',
+    '  - **P.1** After loading the Action Handlers panel, `HandlerSummary` renders',
+    '    a `[data-testid="stale-status-warning"]` Chip ("Status deleted") next to',
+    '    the in-progress status row.',
+    '  - **P.2** Clicking the "Change" button opens the `HandlerEditorModal`; a',
+    '    `.MuiAlert-root` containing "no longer exists" is visible inside the dialog.',
+    '  - **P.3** The Save/Add button inside the dialog has the `disabled` attribute',
+    '    while `hasStaleLsRefs` is true (`intermediateLeadStatusInvalid` set by the',
+    '    editor because the stored key is absent from the live status list).',
+    '  - **P.4** After clicking the error-state Select and picking a valid',
+    '    lead-status option from the MUI listbox portal, Save/Add transitions',
+    '    from disabled to enabled (verifying the gate clears on resolution).',
+    '  A companion **P.sub** sub-probe repeats the chip → editor → disabled →',
+    '  enabled flow for a stale `config.submittedLeadStatus` (a key absent from',
+    '  both `lead_status_config` and `lead_substatuses`), covering the',
+    '  `submittedLeadStatusInvalid` flag independently from the intermediate path.',
+    '  Guards the `intermediateLeadStatusInvalid` / `submittedLeadStatusInvalid`',
+    '  props and the `hasStaleLsRefs` Save-button gate in `ActionHandlersPage.tsx`.',
     '',
     '## Notes',
     '',

@@ -308,6 +308,55 @@ describe('StartDesignVisitConfig', () => {
       expect.objectContaining({ defaultDurationMin: '' }),
     );
   });
+
+  it('shows warning alert when intermediateLeadStatusInvalid is true', () => {
+    render(
+      <StartDesignVisitConfig
+        intermediateLeadStatus="deleted_status"
+        intermediateLeadStatusInvalid={true}
+      />,
+    );
+    expect(
+      screen.getByText(/This lead status no longer exists/i),
+    ).toBeInTheDocument();
+  });
+
+  it('shows warning alert when submittedLeadStatusInvalid is true', () => {
+    render(
+      <StartDesignVisitConfig
+        submittedLeadStatus="deleted_status"
+        submittedLeadStatusInvalid={true}
+      />,
+    );
+    expect(
+      screen.getByText(/This lead status no longer exists/i),
+    ).toBeInTheDocument();
+  });
+
+  it('does not show warning alert when both invalid flags are false', () => {
+    render(
+      <StartDesignVisitConfig
+        intermediateLeadStatus="live_status"
+        submittedLeadStatus="live_sub"
+        intermediateLeadStatusInvalid={false}
+        submittedLeadStatusInvalid={false}
+      />,
+    );
+    expect(screen.queryByText(/This lead status no longer exists/i)).toBeNull();
+  });
+
+  it('shows two warning alerts when both invalid flags are true', () => {
+    render(
+      <StartDesignVisitConfig
+        intermediateLeadStatus="gone_inter"
+        submittedLeadStatus="gone_sub"
+        intermediateLeadStatusInvalid={true}
+        submittedLeadStatusInvalid={true}
+      />,
+    );
+    const alerts = screen.getAllByText(/This lead status no longer exists/i);
+    expect(alerts).toHaveLength(2);
+  });
 });
 
 // ── DeliveryWindowConfig ─────────────────────────────────────────────────────
