@@ -26,8 +26,10 @@
  * 4. Verify that ActionHandlersPage.tsx still (a) imports `KNOWN_STATUS_KEY_FIELDS`
  *    as a value (not just a type) from `./HandlerConfigBlocks`, (b) iterates it
  *    with a `for (const … of KNOWN_STATUS_KEY_FIELDS)` loop — the canonical stale-
- *    detection pattern — and (c) the loop body still references `jsonStaleLsRefs`
- *    (the push target), so a gutted body (e.g. from a bad merge) is also caught.
+ *    detection pattern — (c) the loop body still references `jsonStaleLsRefs`
+ *    (the push target variable), and (d) the loop body also contains a `.push(`
+ *    call, so a gutted body or one where the push target was renamed but only a
+ *    stale comment remains is also caught.
  *    If any of these invariants breaks, stale-key detection in the JSON fallback
  *    editor silently stops working even though KNOWN_STATUS_KEY_FIELDS is correctly
  *    populated.
@@ -258,8 +260,18 @@ if (!LOOP_RE.test(ahpSource)) {
 // ── 4C: loop body check ───────────────────────────────────────────────────────
 // The loop header can survive while the body is accidentally deleted or gutted
 // (e.g. during a merge-conflict resolution).  This check finds the loop header,
-// extracts the brace-balanced body that follows it, and asserts that the push
-// target `jsonStaleLsRefs` is present inside that body.
+// extracts the brace-balanced body that follows it, and asserts two things:
+//
+//   C1. The push-target variable `jsonStaleLsRefs` is referenced in the body.
+//       Catches a gutted body or one cleared during a bad merge.
+//
+//   C2. A `.push(` call appears in the body.
+//       Catches the case where `jsonStaleLsRefs` survives only in a comment
+//       while the actual push was deleted, or where the variable was renamed
+//       and only a stale comment preserving the old name remains.
+//
+// Requiring both C1 and C2 means either a variable rename or a comment-only
+// reference will be detected, whichever happens first.
 //
 // We only run this check when the loop header was found (4B passed), so that
 // 4B and 4C failures are reported independently rather than cascading.
@@ -292,13 +304,29 @@ if (LOOP_RE.test(ahpSource)) {
       ? afterHeader.slice(openBraceIdx, bodyEnd + 1)
       : afterHeader.slice(openBraceIdx);
 
+    // C1: push-target variable name must appear in the body
     if (!/\bjsonStaleLsRefs\b/.test(loopBody)) {
       check4Errors.push(
         'ActionHandlersPage.tsx: the `for (const … of KNOWN_STATUS_KEY_FIELDS)` ' +
         'loop body no longer references `jsonStaleLsRefs`.\n' +
-        '  The loop header is present but the body appears to have been emptied or\n' +
-        '  gutted — stale-key detection in the JSON fallback editor is silently\n' +
-        '  broken.  Restore the loop body that pushes to `jsonStaleLsRefs`.',
+        '  The loop header is present but the body appears to have been emptied,\n' +
+        '  gutted, or the push-target variable was renamed — stale-key detection\n' +
+        '  in the JSON fallback editor is silently broken.  Restore the loop body\n' +
+        '  that pushes to `jsonStaleLsRefs` (or update this check if the variable\n' +
+        '  is intentionally renamed).',
+      );
+    }
+
+    // C2: an actual `.push(` call must appear in the body.
+    // Prevents a comment-only reference to `jsonStaleLsRefs` from satisfying C1
+    // while the real push statement is absent.
+    if (!/\.push\(/.test(loopBody)) {
+      check4Errors.push(
+        'ActionHandlersPage.tsx: the `for (const … of KNOWN_STATUS_KEY_FIELDS)` ' +
+        'loop body does not contain a `.push(` call.\n' +
+        '  The loop header (and possibly the variable name) are present, but the\n' +
+        '  actual push that accumulates stale-key warnings appears to be missing.\n' +
+        '  Restore the `.push(…)` statement inside the loop body.',
       );
     }
   }
