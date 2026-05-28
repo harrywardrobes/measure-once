@@ -112,18 +112,22 @@ function DemoCustomerCard({
         onClick={(e: React.MouseEvent) => e.preventDefault()}
         sx={{ p: 2, display: 'block' }}
       >
-        <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <Typography
-            variant="subtitle1"
-            noWrap
-            sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
-          >
-            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {name}
-            </Box>
-          </Typography>
+        {/* Two-column layout on md+; single column on mobile — mirrors real CustomerCard */}
+        <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' }, alignItems: { md: 'flex-start' } }}>
+          {/* Left column — name */}
+          <Box sx={{ flex: '1 1 0', minWidth: 0 }}>
+            <Typography
+              variant="subtitle1"
+              noWrap
+              sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
+            >
+              <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {name}
+              </Box>
+            </Typography>
+          </Box>
           {/* Right column — lead-status chip + optional substatus chip, matching the real CustomerCard layout */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.75, flexShrink: 0 }}>
+          <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: { xs: 'flex-start', md: 'flex-end' }, gap: 0.75 }}>
             {leadStatusLabel ? (
               <Chip label={leadStatusLabel} size="small" color="primary" variant="outlined" />
             ) : null}
@@ -131,7 +135,7 @@ function DemoCustomerCard({
               <Chip label={substatusLabel} size="small" variant="outlined" />
             ) : null}
           </Box>
-        </Stack>
+        </Box>
 
         <Stack direction="row" spacing={0.75} sx={{ mt: 1, flexWrap: 'wrap' }}>
           {rooms.map((r, idx) => {
@@ -454,6 +458,31 @@ export const SubstatusNeitherSet: Story = {
       email="fatima@example.com"
       phone="07700 912 345"
       rooms={[{ room: 'Main', stageKey: 'survey' }]}
+    />
+  ),
+};
+
+export const NarrowWidthBothChips: Story = {
+  name: 'Substatus chip — narrow width (mobile stacking)',
+  parameters: {
+    viewport: {
+      defaultViewport: 'mobile2',
+    },
+    docs: {
+      description: {
+        story:
+          'At ~375 px (mobile viewport) the right column switches to `alignItems: flex-start`, so the lead-status chip and substatus chip both align to the **left edge** below the contact name. This mirrors the real CustomerCard responsive layout (`alignItems: { xs: "flex-start", md: "flex-end" }`) and lets designers verify that both chips are visible and correctly stacked when the card is narrow.',
+      },
+    },
+  },
+  render: () => (
+    <DemoCustomerCard
+      name="Emma Clarke"
+      email="emma@example.com"
+      phone="07700 900 456"
+      leadStatusLabel="Interested"
+      substatusLabel="Ready to book"
+      rooms={[{ room: 'Main', stageKey: 'sales' }]}
     />
   ),
 };
