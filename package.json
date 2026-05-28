@@ -198,6 +198,8 @@
     "test:scheduling-past-time-guard:ci": "node scripts/with-test-db.js test/scheduling-past-time-guard/run.js",
     "test:customer-card-action-strip": "node test/customer-card-action-strip/run.js",
     "test:customer-card-action-strip:ci": "node scripts/with-test-db.js test/customer-card-action-strip/run.js",
+    "test:copyable-link": "node test/copyable-link/run.js",
+    "test:copyable-link:ci": "node scripts/with-test-db.js test/copyable-link/run.js",
     "test:workflow-map": "node test/workflow-map/run.js",
     "test:workflow-map:ci": "node scripts/with-test-db.js test/workflow-map/run.js",
     "test:upload-photos-resend-mode": "node test/upload-photos-resend-mode/run.js",
