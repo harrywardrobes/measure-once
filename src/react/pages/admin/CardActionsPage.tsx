@@ -1,11 +1,22 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
 import {
-  Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typography,
+  Alert, Box, Button, Card, CardContent, CircularProgress, Collapse, Stack, Typography,
   Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, ListItemText,
   MenuItem, Select, Tooltip,
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import MapIcon from '@mui/icons-material/Map';
 import { useToast } from '../../contexts/ToastContext';
 import { GET, POST, PATCH, PUT, DELETE } from '../../utils/api';
+import type { WorkflowMapNodeData } from '../../components/WorkflowMapChart';
+import { WorkflowMapDetailPanel } from '../../components/WorkflowMapDetailPanel';
+
+const WorkflowMapChart = lazy(() =>
+  import('../../components/WorkflowMapChart').then(m => ({ default: m.WorkflowMapChart })),
+);
+
+const MAP_COLLAPSED_KEY = 'mo:card-actions:map-collapsed';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -197,6 +208,19 @@ export function CardActionsPage() {
   const [collapsed,   setCollapsed]   = useState<Set<string>>(
     new Set(CARD_ACTION_STAGES.map(s => s.key)),
   );
+
+  const [mapCollapsed, setMapCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem(MAP_COLLAPSED_KEY) === 'true'; } catch { return false; }
+  });
+  const [detailNode, setDetailNode] = useState<WorkflowMapNodeData | null>(null);
+
+  const toggleMap = useCallback(() => {
+    setMapCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem(MAP_COLLAPSED_KEY, String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
   const [newSubRows,    setNewSubRows]    = useState<NewSubRow[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [reloadKey,     setReloadKey]     = useState(0);
@@ -530,6 +554,68 @@ export function CardActionsPage() {
 
   return (
     <Stack spacing={2}>
+      {/* ── Workflow Map ────────────────────────────────────────────────── */}
+      <Card variant="outlined">
+        <Box
+          sx={{
+            display: 'flex', alignItems: 'center', gap: 1,
+            px: 2, py: 1.25,
+            borderBottom: mapCollapsed ? 'none' : '1px solid',
+            borderColor: 'divider',
+            cursor: 'pointer',
+            userSelect: 'none',
+            '&:hover': { bgcolor: 'action.hover' },
+          }}
+          onClick={toggleMap}
+          role="button"
+          aria-expanded={!mapCollapsed}
+          aria-controls="workflow-map-body"
+        >
+          <MapIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Workflow Map</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Visual overview of stages, lead statuses, and sub-statuses with their handlers
+            </Typography>
+          </Box>
+          {mapCollapsed ? <ExpandMoreIcon sx={{ color: 'text.secondary' }} /> : <ExpandLessIcon sx={{ color: 'text.secondary' }} />}
+        </Box>
+        <Collapse in={!mapCollapsed} id="workflow-map-body">
+          <Box
+            sx={{
+              height: 520,
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              borderRadius: '0 0 8px 8px',
+            }}
+          >
+            {loading ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 3 }}>
+                <CircularProgress size={16} />
+                <Typography variant="body2" color="text.secondary">Loading workflow map…</Typography>
+              </Box>
+            ) : (
+              <Suspense fallback={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 3 }}>
+                  <CircularProgress size={16} />
+                  <Typography variant="body2" color="text.secondary">Loading chart…</Typography>
+                </Box>
+              }>
+                <WorkflowMapChart
+                  labels={labels}
+                  statuses={statuses}
+                  substatuses={substatuses}
+                  handlers={handlers}
+                  onNodeClick={setDetailNode}
+                />
+              </Suspense>
+            )}
+          </Box>
+        </Collapse>
+      </Card>
+
+      <WorkflowMapDetailPanel node={detailNode} onClose={() => setDetailNode(null)} />
+
       {syncWarning && (
         <Alert
           severity="warning"

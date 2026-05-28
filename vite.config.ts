@@ -133,6 +133,12 @@ export default defineConfig({
             return 'vendor-mui';
           }
 
+          // @xyflow/react (ReactFlow) — only loaded on the Card Actions page.
+          // Give it a stable named chunk so its cache key is predictable.
+          if (id.includes('/@xyflow/') || id.includes('/node_modules/@xyflow/')) {
+            return 'vendor-xyflow';
+          }
+
           // All other node_modules: let Rollup split them automatically.
           return undefined;
         },
