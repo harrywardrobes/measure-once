@@ -140,6 +140,7 @@ const DB_SUITES = [
   'test:permissions-ui:ci',
   'test:ideas:ci',
   'test:onboarding-conflicts:ci',
+  'test:stage-scoped-pills:ci',
   'test:open-leads-stale-visibility:ci',
   'test:project-contacts-unknown-status:ci',
   'test:conflict-digest-settings:ci',
