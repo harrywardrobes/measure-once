@@ -198,6 +198,8 @@
     "test:customer-card-action-strip:ci": "node scripts/with-test-db.js test/customer-card-action-strip/run.js",
     "test:workflow-map": "node test/workflow-map/run.js",
     "test:workflow-map:ci": "node scripts/with-test-db.js test/workflow-map/run.js",
+    "test:upload-photos-resend-mode": "node test/upload-photos-resend-mode/run.js",
+    "test:upload-photos-resend-mode:ci": "node scripts/with-test-db.js test/upload-photos-resend-mode/run.js",
     "test:projects-top-spacing": "node test/projects-top-spacing/run.js",
     "test:projects-top-spacing:ci": "node scripts/with-test-db.js test/projects-top-spacing/run.js",
     "test:bundle-sizes": "node scripts/check-bundle-sizes.mjs",

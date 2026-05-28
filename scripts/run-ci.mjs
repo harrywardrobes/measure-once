@@ -136,6 +136,7 @@ const STEPS = [
   'test:profile-google-calendar:ci',
   'test:scheduling-past-time-guard:ci',
   'test:workflow-map:ci',
+  'test:upload-photos-resend-mode:ci',
   'test:projects-top-spacing:ci',
   'build:storybook',
   { script: 'test:storybook-output-clean', env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
