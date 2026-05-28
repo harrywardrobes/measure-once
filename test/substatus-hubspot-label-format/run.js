@@ -25,6 +25,12 @@
 //   (S5) Trigger via API: POST /api/admin/lead-substatuses fires a fresh sync.
 //        The captured PATCH reflects the newly-added substatus label.
 //
+//   (S6) Trigger via API: PATCH /api/admin/lead-substatuses/:id (relabel) fires a
+//        fresh sync. The captured PATCH reflects the updated arrow-prefixed label.
+//
+//   (S7) Trigger via API: DELETE /api/admin/lead-substatuses/:id fires a fresh sync.
+//        The captured PATCH no longer contains the deleted substatus option.
+//
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:substatus-hubspot-label-format
 //   PRIVTEST_ALLOW_SHARED_DB=1     npm run test:substatus-hubspot-label-format
@@ -327,6 +333,83 @@ async function main() {
       optS5?.label === expectedLabelS5,
       `got=${JSON.stringify(optS5?.label)} expected=${JSON.stringify(expectedLabelS5)}`);
 
+    // ── (S6) API-triggered sync: PATCH /api/admin/lead-substatuses/:id ──────────
+    // Relabelling a substatus via the API must trigger a fresh sync PATCH whose
+    // options contain the updated arrow-prefixed label.
+    console.log(`\n  [S6] API-triggered sync — PATCH /api/admin/lead-substatuses/:id`);
+
+    // Fetch the row id of the substatus we created in S5.
+    const { rows: s6Rows } = await pool.query(
+      `SELECT id FROM lead_substatuses WHERE status_key = $1 AND substatus_key = $2`,
+      [LS_KEY_A, SUB_KEY_S5],
+    );
+    const s6Id = s6Rows[0]?.id;
+    record('S6a SUB_KEY_S5 row exists in DB after S5 creation',
+      !!s6Id,
+      `id=${s6Id}`);
+
+    if (s6Id) {
+      const patchCountBeforeS6 = mock.state.propertyPatches.length;
+      const patchRes = await admin.patch(`/api/admin/lead-substatuses/${s6Id}`, {
+        label: 'API Renamed',
+      });
+      record('S6b PATCH /api/admin/lead-substatuses/:id returns 200',
+        patchRes.status === 200,
+        `status=${patchRes.status} body=${(patchRes.text || '').slice(0, 120)}`);
+
+      const s6SyncArrived = await pollUntil(
+        () => mock.state.propertyPatches.length > patchCountBeforeS6,
+        6000,
+      );
+      record('S6c PATCH triggers a fresh HubSpot sync PATCH',
+        s6SyncArrived,
+        `patchesBefore=${patchCountBeforeS6} patchesNow=${mock.state.propertyPatches.length}`);
+
+      const s6Patch = mock.state.propertyPatches[mock.state.propertyPatches.length - 1];
+      const s6Opts  = s6Patch?.body?.options ?? [];
+      const optS6   = s6Opts.find(o => o.value === `${LS_KEY_A}__${SUB_KEY_S5}`);
+      const expectedLabelS6 = 'Status Alpha \u2192 API Renamed';
+      record('S6d relabelled substatus option has updated arrow-prefixed label in sync PATCH',
+        optS6?.label === expectedLabelS6,
+        `got=${JSON.stringify(optS6?.label)} expected=${JSON.stringify(expectedLabelS6)}`);
+    } else {
+      record('S6b PATCH /api/admin/lead-substatuses/:id returns 200', false, 'skipped — row missing');
+      record('S6c PATCH triggers a fresh HubSpot sync PATCH',          false, 'skipped — row missing');
+      record('S6d relabelled substatus option has updated label',       false, 'skipped — row missing');
+    }
+
+    // ── (S7) API-triggered sync: DELETE /api/admin/lead-substatuses/:id ─────────
+    // Deleting a substatus via the API must trigger a fresh sync PATCH that no
+    // longer contains the deleted substatus option.
+    console.log(`\n  [S7] API-triggered sync — DELETE /api/admin/lead-substatuses/:id`);
+
+    if (s6Id) {
+      const patchCountBeforeS7 = mock.state.propertyPatches.length;
+      const deleteRes = await admin.delete(`/api/admin/lead-substatuses/${s6Id}`);
+      record('S7a DELETE /api/admin/lead-substatuses/:id returns 200',
+        deleteRes.status === 200,
+        `status=${deleteRes.status} body=${(deleteRes.text || '').slice(0, 120)}`);
+
+      const s7SyncArrived = await pollUntil(
+        () => mock.state.propertyPatches.length > patchCountBeforeS7,
+        6000,
+      );
+      record('S7b DELETE triggers a fresh HubSpot sync PATCH',
+        s7SyncArrived,
+        `patchesBefore=${patchCountBeforeS7} patchesNow=${mock.state.propertyPatches.length}`);
+
+      const s7Patch = mock.state.propertyPatches[mock.state.propertyPatches.length - 1];
+      const s7Opts  = s7Patch?.body?.options ?? [];
+      const optS7   = s7Opts.find(o => o.value === `${LS_KEY_A}__${SUB_KEY_S5}`);
+      record('S7c deleted substatus option is absent from the sync PATCH options',
+        !optS7,
+        `found=${!!optS7} value=${optS7?.value}`);
+    } else {
+      record('S7a DELETE /api/admin/lead-substatuses/:id returns 200',            false, 'skipped — row missing');
+      record('S7b DELETE triggers a fresh HubSpot sync PATCH',                    false, 'skipped — row missing');
+      record('S7c deleted substatus option is absent from the sync PATCH options', false, 'skipped — row missing');
+    }
+
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
@@ -377,6 +460,12 @@ async function writeReport(runId) {
     '- **(S5)** API-triggered sync: `POST /api/admin/lead-substatuses` fires a fresh',
     '  `syncLeadSubstatusesToHubSpot()` call; the resulting PATCH contains the',
     '  newly-created option with the correct arrow-prefixed label.',
+    '- **(S6)** API-triggered sync: `PATCH /api/admin/lead-substatuses/:id` (relabel)',
+    '  fires a fresh `syncLeadSubstatusesToHubSpot()` call; the resulting PATCH',
+    '  contains the updated arrow-prefixed label for the renamed sub-status.',
+    '- **(S7)** API-triggered sync: `DELETE /api/admin/lead-substatuses/:id` fires a',
+    '  fresh `syncLeadSubstatusesToHubSpot()` call; the resulting PATCH no longer',
+    '  contains the deleted sub-status option.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
