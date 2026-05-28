@@ -33,7 +33,7 @@ type Story = StoryObj;
 function StalenessDemo({ defaultActive = false }: { defaultActive?: boolean }) {
   const [active, setActive] = useState(defaultActive);
   return (
-    <PageFilterBar sx={{ p: '8px 16px', border: `1px solid ${BRAND_COLORS.stone}`, borderRadius: 1 }}>
+    <PageFilterBar sx={{ px: 2, py: 1, bgcolor: 'background.default', borderBottom: '1px solid', borderColor: 'divider' }}>
       <Typography sx={{ fontSize: '0.78rem', color: BRAND_COLORS.ink4, mr: 1 }}>Stage: Sales</Typography>
       <Chip
         label="Stale >30d"
@@ -90,7 +90,7 @@ function SubstageFilterDemo({ defaultHidden = [] }: { defaultHidden?: string[] }
     });
 
   return (
-    <PageFilterBar sx={{ p: '8px 16px', border: `1px solid ${BRAND_COLORS.stone}`, borderRadius: 1 }}>
+    <PageFilterBar sx={{ px: 2, py: 1, bgcolor: 'background.default', borderBottom: '1px solid', borderColor: 'divider' }}>
       <Typography sx={{ fontSize: '0.78rem', color: BRAND_COLORS.ink4, mr: 1 }}>Stage: Survey</Typography>
       <Box
         component="button"
@@ -222,7 +222,7 @@ export const CombinedFiltersBar: Story = {
       });
 
     return (
-      <PageFilterBar sx={{ p: '8px 16px', border: `1px solid ${BRAND_COLORS.stone}`, borderRadius: 1 }}>
+      <PageFilterBar sx={{ px: 2, py: 1, bgcolor: 'background.default', borderBottom: '1px solid', borderColor: 'divider' }}>
         <Typography sx={{ fontSize: '0.78rem', color: BRAND_COLORS.ink4, mr: 1 }}>Stage: Survey</Typography>
         <Chip
           label="Stale >30d"
