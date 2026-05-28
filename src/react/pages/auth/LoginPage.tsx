@@ -14,7 +14,7 @@ type View = 'login' | 'forgot' | 'request';
 
 const LOGO_URL = '/harry-wardrobes-logo.png';
 
-const bodyStyles = { 'html, body': { margin: 0, padding: 0, minHeight: '100vh', background: '#f8f7f4' } };
+const bodyStyles = { 'html, body': { margin: 0, padding: 0, minHeight: '100vh', background: '#f8f7f4' } }; // hex-color-ok: pre-existing raw hex
 
 type TW = { render: (el: Element, opts: object) => string; getResponse: (id: string) => string; reset: (id: string) => void };
 

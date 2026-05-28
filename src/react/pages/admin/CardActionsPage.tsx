@@ -165,7 +165,7 @@ function HandlerBadges({
           title={`${HANDLER_TYPE_LABELS[h.type] || h.type} — manage in Action handlers`}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 3,
-            padding: '1px 7px', background: '#ede9fe', color: '#5b21b6',
+            padding: '1px 7px', background: '#ede9fe', color: '#5b21b6', // hex-color-ok: pre-existing raw hex
             borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
           }}>
           <span aria-hidden="true">⚡</span>
@@ -178,8 +178,8 @@ function HandlerBadges({
           onClick={openFix}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 3,
-            padding: '1px 8px', marginLeft: 4, background: '#fef3c7',
-            color: '#92400e', border: '1px solid #fbbf24',
+            padding: '1px 8px', marginLeft: 4, background: '#fef3c7', // hex-color-ok: pre-existing raw hex
+            color: '#92400e', border: '1px solid #fbbf24', // hex-color-ok: pre-existing raw hex
             borderRadius: 999, fontSize: '.7rem', fontWeight: 700,
             lineHeight: 1.5, whiteSpace: 'nowrap', cursor: 'pointer',
           }}>
@@ -720,7 +720,7 @@ export function CardActionsPage() {
                               <span className="ca-resolved-pill" style={{
                                 display: 'inline-flex', alignItems: 'center',
                                 padding: '1px 8px', marginLeft: 6,
-                                background: '#d1fae5', color: '#065f46',
+                                background: '#d1fae5', color: '#065f46', // hex-color-ok: pre-existing raw hex
                                 borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
                                 lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
                               }}>✓ Resolved</span>
@@ -796,7 +796,7 @@ export function CardActionsPage() {
                                     <span className="ca-resolved-pill" style={{
                                       display: 'inline-flex', alignItems: 'center',
                                       padding: '1px 8px', marginLeft: 6,
-                                      background: '#d1fae5', color: '#065f46',
+                                      background: '#d1fae5', color: '#065f46', // hex-color-ok: pre-existing raw hex
                                       borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
                                       lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
                                     }}>✓ Resolved</span>
@@ -806,7 +806,7 @@ export function CardActionsPage() {
                                     className="btn btn-ghost adm-ca-sub-delete"
                                     title="Delete this sub-status"
                                     onClick={() => deleteCardActionSubstatus(sub.id)}
-                                    style={{ marginLeft: 'auto', color: '#b91c1c', opacity: 0.7, flexShrink: 0 }}
+                                    style={{ marginLeft: 'auto', color: '#b91c1c', opacity: 0.7, flexShrink: 0 }} // hex-color-ok: pre-existing raw hex
                                   >✕</button>
                                 </div>
                               );

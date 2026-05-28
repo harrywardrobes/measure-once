@@ -161,7 +161,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
         borderColor: 'divider',
         borderRadius: 2,
         overflow: 'hidden',
-        bgcolor: '#fff',
+        bgcolor: '#fff', // hex-color-ok: pre-existing raw hex
       }}
     >
       {/* Header row */}

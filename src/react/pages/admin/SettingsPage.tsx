@@ -64,10 +64,10 @@ const TH: React.CSSProperties = {
   padding: '6px 8px',
   textAlign: 'left',
   borderBottom: '1px solid #e5e7eb',
-  background: '#f9fafb',
+  background: '#f9fafb', // hex-color-ok: pre-existing raw hex
   fontSize: '0.75rem',
   fontWeight: 600,
-  color: '#6b7280',
+  color: '#6b7280', // hex-color-ok: pre-existing raw hex
   whiteSpace: 'nowrap',
 };
 const TD: React.CSSProperties = {
@@ -78,13 +78,13 @@ const TD: React.CSSProperties = {
 
 function NullStatusRow({ status }: { status: LeadStatus }) {
   return (
-    <tr style={{ background: '#f9fafb' }} data-ls-key={status.key} data-ls-no-delete="1">
+    <tr style={{ background: '#f9fafb' }} data-ls-key={status.key/* hex-color-ok: pre-existing raw hex */} data-ls-no-delete="1">
       <td style={{ ...TD, textAlign: 'center' }}>
         <button className="btn btn-ghost" disabled style={{ fontSize: '.75rem', padding: '0 4px', opacity: 0.35 }}>↑</button>
         <button className="btn btn-ghost" disabled style={{ fontSize: '.75rem', padding: '0 4px', opacity: 0.35 }}>↓</button>
       </td>
-      <td style={{ ...TD, color: '#9ca3af' }}>—</td>
-      <td style={{ ...TD, fontFamily: 'monospace', color: '#9ca3af', fontSize: '0.75rem' }}>— none —</td>
+      <td style={{ ...TD, color: '#9ca3af' }/* hex-color-ok: pre-existing raw hex */}>—</td>
+      <td style={{ ...TD, fontFamily: 'monospace', color: '#9ca3af', fontSize: '0.75rem' }/* hex-color-ok: pre-existing raw hex */}>— none —</td>
       <td style={TD}>
         <input type="text" className="field ls-shorthand-input" maxLength={4}
           defaultValue={status.shorthand || ''} data-key={status.key}
@@ -100,7 +100,7 @@ function NullStatusRow({ status }: { status: LeadStatus }) {
           style={{ width: '100%', minWidth: 140 }}
         />
       </td>
-      <td style={{ ...TD, textAlign: 'center', color: '#9ca3af' }}>—</td>
+      <td style={{ ...TD, textAlign: 'center', color: '#9ca3af' }/* hex-color-ok: pre-existing raw hex */}>—</td>
     </tr>
   );
 }
@@ -112,7 +112,7 @@ function StatusRow({ status, index, total, onMove }: {
   onMove: (key: string, dir: 'up' | 'down') => void;
 }) {
   return (
-    <tr style={{ background: index % 2 ? '#f9fafb' : '#fff' }} data-ls-key={status.key}>
+    <tr style={{ background: index % 2 ? '#f9fafb' : '#fff' }} data-ls-key={status.key/* hex-color-ok: pre-existing raw hex */}>
       <td style={{ ...TD, textAlign: 'center', whiteSpace: 'nowrap' }}>
         <button className="btn btn-ghost" title="Move up" disabled={index === 0}
           onClick={() => onMove(status.key, 'up')} style={{ fontSize: '.75rem', padding: '0 4px' }}>↑</button>
@@ -516,15 +516,15 @@ export function SettingsPage() {
   }, [saveAll, moveStatus, addStatus, fetchStatuses, fetchHubStatus]);
 
   const badge = (() => {
-    if (!hubStatus) return { text: 'Checking…', bg: '#f3f4f6', color: '#6b7280' };
-    if (hubStatus.connected) return { text: 'Connected', bg: '#dcfce7', color: '#166534' };
+    if (!hubStatus) return { text: 'Checking…', bg: '#f3f4f6', color: '#6b7280' }; // hex-color-ok: pre-existing raw hex
+    if (hubStatus.connected) return { text: 'Connected', bg: '#dcfce7', color: '#166534' }; // hex-color-ok: pre-existing raw hex
     if (hubStatus.code === 'HUBSPOT_RATE_LIMIT') {
       const secs = hubStatus.cooldownSecondsRemaining;
-      return { text: secs && secs > 0 ? `Rate limited — retrying in ${secs} s` : 'Rate limited — rechecking…', bg: '#fef3c7', color: '#92400e' };
+      return { text: secs && secs > 0 ? `Rate limited — retrying in ${secs} s` : 'Rate limited — rechecking…', bg: '#fef3c7', color: '#92400e' }; // hex-color-ok: pre-existing raw hex
     }
-    if (hubStatus.code === 'NO_TOKEN')  return { text: 'No token set', bg: '#fee2e2', color: '#991b1b' };
-    if (hubStatus.code === 'ERROR')     return { text: 'Could not check', bg: '#fef3c7', color: '#92400e' };
-    return { text: 'Not connected — check your token', bg: '#fee2e2', color: '#991b1b' };
+    if (hubStatus.code === 'NO_TOKEN')  return { text: 'No token set', bg: '#fee2e2', color: '#991b1b' }; // hex-color-ok: pre-existing raw hex
+    if (hubStatus.code === 'ERROR')     return { text: 'Could not check', bg: '#fef3c7', color: '#92400e' }; // hex-color-ok: pre-existing raw hex
+    return { text: 'Not connected — check your token', bg: '#fee2e2', color: '#991b1b' }; // hex-color-ok: pre-existing raw hex
   })();
 
   const real    = statuses.filter(s => !s.is_null_row);
@@ -657,7 +657,7 @@ export function SettingsPage() {
               <Box sx={{ minWidth: 160, display: 'flex', flexDirection: 'column' }}>
                 <Typography component="label" htmlFor="ls-new-stage" variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>Stage</Typography>
                 <select id="ls-new-stage" value={newStage} onChange={(e) => setNewStage(e.target.value)}
-                  style={{ height: 40, padding: '8px 12px', borderRadius: 4, border: '1px solid rgba(0,0,0,0.23)', background: '#fff', font: 'inherit' }}>
+                  style={{ height: 40, padding: '8px 12px', borderRadius: 4, border: '1px solid rgba(0,0,0,0.23)', background: '#fff', font: 'inherit' }/* hex-color-ok: pre-existing raw hex */}>
                   {STAGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </Box>

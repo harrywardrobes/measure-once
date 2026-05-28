@@ -82,7 +82,7 @@ export function NotFoundPage({ embedded }: NotFoundPageProps = {}) {
           disableElevation
           sx={{
             bgcolor: BRAND_COLORS.plum,
-            color: '#fff',
+            color: '#fff', // hex-color-ok: pre-existing raw hex
             px: '28px',
             py: '14px',
             borderRadius: '8px',

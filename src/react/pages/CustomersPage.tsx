@@ -486,8 +486,8 @@ function QBBadge({
       sx={{
         appearance: 'none',
         border: '1px solid #fecaca',
-        bgcolor: '#fef2f2',
-        color: '#b91c1c',
+        bgcolor: '#fef2f2', // hex-color-ok: pre-existing raw hex
+        color: '#b91c1c', // hex-color-ok: pre-existing raw hex
         px: 1,
         py: 0.25,
         borderRadius: 1,
@@ -495,7 +495,7 @@ function QBBadge({
         fontWeight: 600,
         cursor: 'pointer',
         lineHeight: 1.4,
-        '&:hover': { bgcolor: '#fee2e2' },
+        '&:hover': { bgcolor: '#fee2e2' }, // hex-color-ok: pre-existing raw hex
       }}
     >
       {fmtGBP(total)}

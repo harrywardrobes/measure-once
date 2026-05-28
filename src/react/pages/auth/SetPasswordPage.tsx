@@ -12,7 +12,7 @@ import Typography from '@mui/material/Typography';
 import { StrengthMeter, StrengthMeterErrorBoundary, checkPasswordPolicy } from '../../utils/passwordStrength';
 
 const LOGO_URL = '/harry-wardrobes-logo.png';
-const bodyStyles = { 'html, body': { margin: 0, padding: 0, minHeight: '100vh', background: '#f8f7f4' } };
+const bodyStyles = { 'html, body': { margin: 0, padding: 0, minHeight: '100vh', background: '#f8f7f4' } }; // hex-color-ok: pre-existing raw hex
 
 type PageState = 'loading' | 'invalid' | 'form';
 

@@ -77,7 +77,7 @@ function HandlerBlock({ handler, index, total }: { handler: WMHandler; index: nu
         borderColor: total > 1 ? 'warning.light' : 'divider',
         borderRadius: '6px',
         p: 1.5,
-        bgcolor: total > 1 ? '#fffbeb' : 'background.paper',
+        bgcolor: total > 1 ? '#fffbeb' : 'background.paper', // hex-color-ok: pre-existing raw hex
       }}
     >
       {total > 1 && (
@@ -88,7 +88,7 @@ function HandlerBlock({ handler, index, total }: { handler: WMHandler; index: nu
 
       {/* Handler name */}
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, mb: 1 }}>
-        <BoltIcon sx={{ fontSize: 15, color: '#5b21b6', mt: '1px', flexShrink: 0 }} />
+        <BoltIcon sx={{ fontSize: 15, color: '#5b21b6', mt: '1px', flexShrink: 0 }/* hex-color-ok: pre-existing raw hex */} />
         <Box>
           <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.3 }}>
             {displayName}
@@ -106,7 +106,7 @@ function HandlerBlock({ handler, index, total }: { handler: WMHandler; index: nu
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700, fontSize: '0.65rem' }}>
           Handler type
         </Typography>
-        <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.78rem', background: '#f3f4f6', px: 0.75, py: 0.25, borderRadius: 1 }}>
+        <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.78rem', background: '#f3f4f6', px: 0.75, py: 0.25, borderRadius: 1 }/* hex-color-ok: pre-existing raw hex */}>
           {handler.type}
         </Box>
         {!HANDLER_TYPE_LABELS[handler.type] && (
@@ -123,8 +123,8 @@ function HandlerBlock({ handler, index, total }: { handler: WMHandler; index: nu
             display: 'flex', alignItems: 'center', gap: 1,
             px: 1.25, py: 0.75, mt: 1,
             borderRadius: '6px',
-            bgcolor: interaction === 'user-input' ? '#fef3c7' : '#dbeafe',
-            color: interaction === 'user-input' ? '#92400e' : '#1d4ed8',
+            bgcolor: interaction === 'user-input' ? '#fef3c7' : '#dbeafe', // hex-color-ok: pre-existing raw hex
+            color: interaction === 'user-input' ? '#92400e' : '#1d4ed8', // hex-color-ok: pre-existing raw hex
           }}
         >
           {interaction === 'user-input'
@@ -179,7 +179,7 @@ export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanel
           px: 2.5,
           py: 2,
           background: sc?.bg || 'background.paper',
-          color: '#fff',
+          color: '#fff', // hex-color-ok: pre-existing raw hex
           display: 'flex',
           alignItems: 'flex-start',
           gap: 1,
@@ -190,7 +190,7 @@ export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanel
           <Typography variant="caption" sx={{ color: 'rgba(255,255,255,.75)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', fontSize: '0.65rem', display: 'block', mb: 0.25 }}>
             {node ? kindLabel(node.kind) : ''}
           </Typography>
-          <Typography variant="h6" sx={{ color: '#fff', wordBreak: 'break-word', fontWeight: 700 }}>
+          <Typography variant="h6" sx={{ color: '#fff', wordBreak: 'break-word', fontWeight: 700 }/* hex-color-ok: pre-existing raw hex */}>
             {node?.label}
           </Typography>
         </Box>
@@ -214,7 +214,7 @@ export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanel
               <DetailRow
                 label="Key"
                 value={
-                  <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.82rem', background: '#f3f4f6', px: 0.75, py: 0.25, borderRadius: 1 }}>
+                  <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.82rem', background: '#f3f4f6', px: 0.75, py: 0.25, borderRadius: 1 }/* hex-color-ok: pre-existing raw hex */}>
                     {node.key}
                   </Box>
                 }
@@ -236,7 +236,7 @@ export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanel
                 <DetailRow
                   label="Parent lead status"
                   value={
-                    <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.82rem', background: '#f3f4f6', px: 0.75, py: 0.25, borderRadius: 1 }}>
+                    <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.82rem', background: '#f3f4f6', px: 0.75, py: 0.25, borderRadius: 1 }/* hex-color-ok: pre-existing raw hex */}>
                       {node.statusKey}
                     </Box>
                   }
@@ -268,7 +268,7 @@ export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanel
                     px: 1.5,
                     py: 1.25,
                     borderRadius: '8px',
-                    bgcolor: '#f8fafc',
+                    bgcolor: '#f8fafc', // hex-color-ok: pre-existing raw hex
                     border: '1px solid #e2e8f0',
                   }}
                 >
@@ -286,12 +286,12 @@ export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanel
                       px: 1.5,
                       py: 1.25,
                       borderRadius: '8px',
-                      bgcolor: '#eff6ff',
+                      bgcolor: '#eff6ff', // hex-color-ok: pre-existing raw hex
                       border: '1px solid #bfdbfe',
                     }}
                   >
-                    <InfoOutlinedIcon sx={{ fontSize: 16, color: '#3b82f6', mt: '1px', flexShrink: 0 }} />
-                    <Typography variant="body2" sx={{ color: '#1e40af' }}>
+                    <InfoOutlinedIcon sx={{ fontSize: 16, color: '#3b82f6', mt: '1px', flexShrink: 0 }/* hex-color-ok: pre-existing raw hex */} />
+                    <Typography variant="body2" sx={{ color: '#1e40af' }/* hex-color-ok: pre-existing raw hex */}>
                       {node.hint as string}
                     </Typography>
                   </Box>
@@ -312,8 +312,8 @@ export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanel
                         height: 18,
                         fontSize: '0.65rem',
                         fontWeight: 700,
-                        bgcolor: hasConflict ? '#fef3c7' : '#ede9fe',
-                        color: hasConflict ? '#92400e' : '#5b21b6',
+                        bgcolor: hasConflict ? '#fef3c7' : '#ede9fe', // hex-color-ok: pre-existing raw hex
+                        color: hasConflict ? '#92400e' : '#5b21b6', // hex-color-ok: pre-existing raw hex
                         border: 'none',
                       }}
                     />

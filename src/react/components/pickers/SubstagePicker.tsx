@@ -221,7 +221,7 @@ export function SubstagePicker({
               textAlign: 'left',
               border: 'none',
               background: 'none',
-              color: currentSubId ? '#ef4444' : '#B8AE99',
+              color: currentSubId ? '#ef4444' : '#B8AE99', // hex-color-ok: pre-existing raw hex
               fontWeight: 500,
               fontSize: '0.82rem',
               fontFamily: 'inherit',
@@ -230,7 +230,7 @@ export function SubstagePicker({
               cursor: currentSubId ? 'pointer' : 'not-allowed',
               borderRadius: '4px',
               transition: 'background 0.1s',
-              '&:hover:not(:disabled)': { background: '#F6F1E7' },
+              '&:hover:not(:disabled)': { background: '#F6F1E7' }, // hex-color-ok: pre-existing raw hex
             }}
           >
             ✕ Clear substage
@@ -247,8 +247,8 @@ export function SubstagePicker({
                   width: '100%',
                   textAlign: 'left',
                   border: 'none',
-                  background: isActive ? '#EDE8FF' : 'none',
-                  color: isActive ? '#6A12D9' : '#141413',
+                  background: isActive ? '#EDE8FF' : 'none', // hex-color-ok: pre-existing raw hex
+                  color: isActive ? '#6A12D9' : '#141413', // hex-color-ok: pre-existing raw hex
                   fontWeight: isActive ? 700 : 400,
                   fontSize: '0.82rem',
                   fontFamily: 'inherit',
@@ -257,7 +257,7 @@ export function SubstagePicker({
                   cursor: 'pointer',
                   borderRadius: '4px',
                   transition: 'background 0.1s',
-                  '&:hover': { background: isActive ? '#E0D8FF' : '#F6F1E7' },
+                  '&:hover': { background: isActive ? '#E0D8FF' : '#F6F1E7' }, // hex-color-ok: pre-existing raw hex
                 }}
               >
                 {s.label || s.id}

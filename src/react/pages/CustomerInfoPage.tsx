@@ -143,7 +143,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
   return (
     <Box
       sx={{
-        bgcolor: '#ffffff',
+        bgcolor: '#ffffff', // hex-color-ok: pre-existing raw hex
         border: '1px solid',
         borderColor: 'divider',
         borderRadius: '12px',
@@ -454,7 +454,7 @@ export function CustomerInfoPage() {
   return (
     <Box
       sx={{
-        bgcolor: '#f9fafb',
+        bgcolor: '#f9fafb', // hex-color-ok: pre-existing raw hex
         minHeight: '100vh',
         fontFamily: 'inherit',
         color: BRAND_COLORS.ink1,
@@ -499,13 +499,13 @@ export function CustomerInfoPage() {
                     sx={{
                       mt: 2,
                       p: 2.5,
-                      bgcolor: '#f0fdf4',
+                      bgcolor: '#f0fdf4', // hex-color-ok: pre-existing raw hex
                       border: '1px solid #bbf7d0',
                       borderRadius: 2,
                       textAlign: 'center',
                     }}
                   >
-                    <CheckCircleOutlinedIcon sx={{ color: '#059669', fontSize: 32, mb: 1 }} />
+                    <CheckCircleOutlinedIcon sx={{ color: '#059669', fontSize: 32, mb: 1 }/* hex-color-ok: pre-existing raw hex */} />
                     <Typography variant="body1" sx={{ fontWeight: 600 }}>
                       A new link has been sent to {maskedEmail}
                     </Typography>
@@ -518,7 +518,7 @@ export function CustomerInfoPage() {
                     sx={{
                       mt: 2,
                       p: 2.5,
-                      bgcolor: '#fff',
+                      bgcolor: '#fff', // hex-color-ok: pre-existing raw hex
                       border: '1px solid',
                       borderColor: 'divider',
                       borderRadius: 2,
@@ -578,7 +578,7 @@ export function CustomerInfoPage() {
                       }}
                       sx={{
                         bgcolor: BRAND_COLORS.orchid,
-                        '&:hover': { bgcolor: '#6d28d9' },
+                        '&:hover': { bgcolor: '#6d28d9' }, // hex-color-ok: pre-existing raw hex
                         borderRadius: 2,
                         py: 1.25,
                         fontWeight: 600,
@@ -598,7 +598,7 @@ export function CustomerInfoPage() {
         {/* Already submitted */}
         {pageState === 'already_submitted' && (
           <StateBlock
-            icon={<CheckCircleOutlinedIcon sx={{ color: '#059669 !important' }} />}
+            icon={<CheckCircleOutlinedIcon sx={{ color: '#059669 !important' }} />} // hex-color-ok: pre-existing raw hex
             title="Already submitted"
             subtitle="We've already received your information — thank you! We'll be in touch shortly."
           />
@@ -607,7 +607,7 @@ export function CustomerInfoPage() {
         {/* Thank you */}
         {pageState === 'submitted' && (
           <StateBlock
-            icon={<CheckCircleOutlinedIcon sx={{ color: '#059669 !important' }} />}
+            icon={<CheckCircleOutlinedIcon sx={{ color: '#059669 !important' }} />} // hex-color-ok: pre-existing raw hex
             title="Thank you!"
             subtitle="We've received your information and photos. We'll be in touch shortly."
           />
@@ -869,7 +869,7 @@ export function CustomerInfoPage() {
                               width: 22, height: 22,
                               borderRadius: '50%',
                               bgcolor: 'rgba(0,0,0,0.6)',
-                              color: '#fff',
+                              color: '#fff', // hex-color-ok: pre-existing raw hex
                               fontSize: '0.7rem',
                               p: 0,
                               lineHeight: 1,
@@ -917,7 +917,7 @@ export function CustomerInfoPage() {
               disabled={submitting || uploading}
               sx={{
                 bgcolor: BRAND_COLORS.orchid,
-                '&:hover': { bgcolor: '#6d28d9' },
+                '&:hover': { bgcolor: '#6d28d9' }, // hex-color-ok: pre-existing raw hex
                 borderRadius: 2,
                 py: 1.5,
                 fontSize: '1rem',

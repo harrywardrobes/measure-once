@@ -169,7 +169,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
             flex: 1,
             height: '4px',
             borderRadius: '2px',
-            background: i + 1 <= current ? '#8B2BFF' : '#e5e7eb',
+            background: i + 1 <= current ? '#8B2BFF' : '#e5e7eb', // hex-color-ok: pre-existing raw hex
             transition: 'background .2s',
           }}
         />
@@ -534,10 +534,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           flexShrink: 0,
         }}
       >
-        <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#1f2937' }}>
+        <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#1f2937' }/* hex-color-ok: pre-existing raw hex */}>
           {title}
         </Typography>
-        <IconButton onClick={handleClose} size="small" aria-label="Close" sx={{ color: '#9ca3af' }}>
+        <IconButton onClick={handleClose} size="small" aria-label="Close" sx={{ color: '#9ca3af' }/* hex-color-ok: pre-existing raw hex */}>
           <CloseIcon />
         </IconButton>
       </Box>
@@ -560,7 +560,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         ) : (
           <>
             <StepIndicator current={step} total={3} />
-            <Typography sx={{ fontSize: '.82rem', color: '#6b7280', mb: '16px' }}>
+            <Typography sx={{ fontSize: '.82rem', color: '#6b7280', mb: '16px' }/* hex-color-ok: pre-existing raw hex */}>
               {stepLabel}
             </Typography>
 
@@ -612,16 +612,16 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             py: '14px',
             borderTop: '1px solid #e5e7eb',
             flexShrink: 0,
-            background: '#fff',
+            background: '#fff', // hex-color-ok: pre-existing raw hex
             flexDirection: 'column',
             alignItems: 'stretch',
           }}
         >
           {(s1Error && step === 1) && (
-            <Typography sx={{ color: '#b91c1c', fontSize: '.82rem' }}>{s1Error}</Typography>
+            <Typography sx={{ color: '#b91c1c', fontSize: '.82rem' }}>{s1Error/* hex-color-ok: pre-existing raw hex */}</Typography>
           )}
           {(submitError && step === 3) && (
-            <Typography sx={{ color: '#b91c1c', fontSize: '.82rem' }}>{submitError}</Typography>
+            <Typography sx={{ color: '#b91c1c', fontSize: '.82rem' }}>{submitError/* hex-color-ok: pre-existing raw hex */}</Typography>
           )}
 
           <Box sx={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
@@ -631,11 +631,11 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                 onClick={() => { setSubmitError(''); setStep(s => s - 1); }}
                 disabled={submitting}
                 sx={{
-                  borderColor: '#d1d5db',
-                  color: '#374151',
+                  borderColor: '#d1d5db', // hex-color-ok: pre-existing raw hex
+                  color: '#374151', // hex-color-ok: pre-existing raw hex
                   fontWeight: 600,
                   textTransform: 'none',
-                  '&:hover': { borderColor: '#9ca3af', background: '#f9fafb' },
+                  '&:hover': { borderColor: '#9ca3af', background: '#f9fafb' }, // hex-color-ok: pre-existing raw hex
                 }}
               >
                 ← Back
@@ -647,10 +647,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                 variant="contained"
                 onClick={advanceToStep2}
                 sx={{
-                  background: '#8B2BFF',
+                  background: '#8B2BFF', // hex-color-ok: pre-existing raw hex
                   fontWeight: 600,
                   textTransform: 'none',
-                  '&:hover': { background: '#7a1fe0' },
+                  '&:hover': { background: '#7a1fe0' }, // hex-color-ok: pre-existing raw hex
                 }}
               >
                 Next: Rooms →
@@ -667,10 +667,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                 }}
                 disabled={uploading || rooms.some(r => !r.roomName.trim()) || rooms.length === 0}
                 sx={{
-                  background: '#8B2BFF',
+                  background: '#8B2BFF', // hex-color-ok: pre-existing raw hex
                   fontWeight: 600,
                   textTransform: 'none',
-                  '&:hover': { background: '#7a1fe0' },
+                  '&:hover': { background: '#7a1fe0' }, // hex-color-ok: pre-existing raw hex
                   '&:disabled': { opacity: 0.55 },
                 }}
               >
@@ -685,10 +685,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                 disabled={submitting}
                 startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
                 sx={{
-                  background: '#8B2BFF',
+                  background: '#8B2BFF', // hex-color-ok: pre-existing raw hex
                   fontWeight: 600,
                   textTransform: 'none',
-                  '&:hover': { background: '#7a1fe0' },
+                  '&:hover': { background: '#7a1fe0' }, // hex-color-ok: pre-existing raw hex
                   '&:disabled': { opacity: 0.55 },
                 }}
               >
@@ -711,7 +711,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           {editMode ? 'Discard your changes?' : 'Discard your draft?'}
         </DialogTitle>
         <DialogContent>
-          <Typography sx={{ fontSize: '.9rem', color: '#374151' }}>
+          <Typography sx={{ fontSize: '.9rem', color: '#374151' }/* hex-color-ok: pre-existing raw hex */}>
             {editMode
               ? 'You have unsaved changes. If you close now your edits will be lost.'
               : 'You have unsaved room data. If you close now your draft will be lost.'}
@@ -722,11 +722,11 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             onClick={() => setShowDiscardDialog(false)}
             variant="outlined"
             sx={{
-              borderColor: '#d1d5db',
-              color: '#374151',
+              borderColor: '#d1d5db', // hex-color-ok: pre-existing raw hex
+              color: '#374151', // hex-color-ok: pre-existing raw hex
               fontWeight: 600,
               textTransform: 'none',
-              '&:hover': { borderColor: '#9ca3af', background: '#f9fafb' },
+              '&:hover': { borderColor: '#9ca3af', background: '#f9fafb' }, // hex-color-ok: pre-existing raw hex
             }}
           >
             Keep editing
@@ -791,10 +791,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             }}
             variant="contained"
             sx={{
-              background: '#dc2626',
+              background: '#dc2626', // hex-color-ok: pre-existing raw hex
               fontWeight: 600,
               textTransform: 'none',
-              '&:hover': { background: '#b91c1c' },
+              '&:hover': { background: '#b91c1c' }, // hex-color-ok: pre-existing raw hex
             }}
           >
             Discard

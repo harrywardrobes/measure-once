@@ -40,8 +40,8 @@ export function PhotosReceivedBadge({ leadStatus, hwSubstatus }: PhotosReceivedB
         px: '6px',
         py: '1px',
         borderRadius: '999px',
-        background: '#dcfce7',
-        color: '#166534',
+        background: '#dcfce7', // hex-color-ok: pre-existing raw hex
+        color: '#166534', // hex-color-ok: pre-existing raw hex
         border: '1px solid #bbf7d0',
         letterSpacing: '0.02em',
         whiteSpace: 'nowrap',

@@ -334,7 +334,7 @@ export function DesignVisitRoomsStep({
                   border: '1.5px solid #d1d5db',
                   borderRadius: '7px',
                   p: '3px',
-                  color: '#6b7280',
+                  color: '#6b7280', // hex-color-ok: pre-existing raw hex
                   '&:disabled': { opacity: 0.35 },
                 }}
               >
@@ -349,14 +349,14 @@ export function DesignVisitRoomsStep({
                   border: '1.5px solid #d1d5db',
                   borderRadius: '7px',
                   p: '3px',
-                  color: '#6b7280',
+                  color: '#6b7280', // hex-color-ok: pre-existing raw hex
                   '&:disabled': { opacity: 0.35 },
                 }}
               >
                 <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />
               </IconButton>
               <Typography
-                sx={{ fontWeight: 700, fontSize: '.9rem', color: '#374151', flex: 1 }}
+                sx={{ fontWeight: 700, fontSize: '.9rem', color: '#374151', flex: 1 }} // hex-color-ok: pre-existing raw hex
               >
                 Room {idx + 1}
               </Typography>
@@ -369,15 +369,15 @@ export function DesignVisitRoomsStep({
                     borderRadius: '7px',
                     px: '10px',
                     py: '4px',
-                    background: '#fff',
+                    background: '#fff', // hex-color-ok: pre-existing raw hex
                     fontSize: '.8rem',
-                    color: '#374151',
+                    color: '#374151', // hex-color-ok: pre-existing raw hex
                     textTransform: 'none',
                     minWidth: 0,
                     '&:hover': {
-                      background: '#fef2f2',
-                      borderColor: '#fca5a5',
-                      color: '#dc2626',
+                      background: '#fef2f2', // hex-color-ok: pre-existing raw hex
+                      borderColor: '#fca5a5', // hex-color-ok: pre-existing raw hex
+                      color: '#dc2626', // hex-color-ok: pre-existing raw hex
                     },
                   }}
                 >
@@ -391,7 +391,7 @@ export function DesignVisitRoomsStep({
               label={
                 <>
                   Room name{' '}
-                  <Box component="span" sx={{ color: '#991b1b' }}>
+                  <Box component="span" sx={{ color: '#991b1b' }/* hex-color-ok: pre-existing raw hex */}>
                     *
                   </Box>
                 </>
@@ -481,7 +481,7 @@ export function DesignVisitRoomsStep({
                 label={
                   <>
                     Unit count{' '}
-                    <Box component="span" sx={{ color: '#991b1b' }}>
+                    <Box component="span" sx={{ color: '#991b1b' }/* hex-color-ok: pre-existing raw hex */}>
                       *
                     </Box>
                   </>
@@ -570,11 +570,11 @@ export function DesignVisitRoomsStep({
                         width: 18,
                         height: 18,
                         p: 0,
-                        background: '#374151',
-                        color: '#fff',
+                        background: '#374151', // hex-color-ok: pre-existing raw hex
+                        color: '#fff', // hex-color-ok: pre-existing raw hex
                         borderRadius: '50%',
                         '&:hover': {
-                          background: '#dc2626',
+                          background: '#dc2626', // hex-color-ok: pre-existing raw hex
                         },
                       }}
                     >
@@ -598,12 +598,12 @@ export function DesignVisitRoomsStep({
           py: '10px',
           background: 'transparent',
           fontSize: '.88rem',
-          color: '#6b7280',
+          color: '#6b7280', // hex-color-ok: pre-existing raw hex
           textTransform: 'none',
           mt: '4px',
           '&:hover': {
-            borderColor: '#8B2BFF',
-            color: '#8B2BFF',
+            borderColor: '#8B2BFF', // hex-color-ok: pre-existing raw hex
+            color: '#8B2BFF', // hex-color-ok: pre-existing raw hex
             background: 'transparent',
           },
         }}

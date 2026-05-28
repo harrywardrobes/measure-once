@@ -94,7 +94,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         dismissCurrent();
       }}
       sx={{
-        color: '#fff',
+        color: '#fff', // hex-color-ok: pre-existing raw hex
         fontWeight: 700,
         textTransform: 'none',
         fontSize: '.82rem',

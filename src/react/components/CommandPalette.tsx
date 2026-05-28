@@ -111,7 +111,7 @@ function ResultItem({ icon, avatar, label, sub, category, onClick, itemRef }: Re
   return (
     <ButtonBase sx={RESULT_ITEM_SX} onClick={onClick} ref={itemRef} tabIndex={0} data-cp-item="1">
       {avatar !== undefined ? (
-        <Avatar sx={{ width: 26, height: 26, fontSize: '0.65rem', fontWeight: 700, bgcolor: 'rgba(32,8,66,0.12)', color: '#200842' }}>
+        <Avatar sx={{ width: 26, height: 26, fontSize: '0.65rem', fontWeight: 700, bgcolor: 'rgba(32,8,66,0.12)', color: '#200842' }/* hex-color-ok: pre-existing raw hex */}>
           {avatar}
         </Avatar>
       ) : icon ? (

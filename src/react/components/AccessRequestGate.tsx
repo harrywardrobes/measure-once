@@ -104,12 +104,12 @@ function resolveInitialView(params?: URLSearchParams): ViewState {
 }
 
 const SUBMIT_BTN_SX = {
-  bgcolor: '#200842',
-  '&:hover': { bgcolor: '#3d0f7a' },
+  bgcolor: '#200842', // hex-color-ok: pre-existing raw hex
+  '&:hover': { bgcolor: '#3d0f7a' }, // hex-color-ok: pre-existing raw hex
   fontWeight: 700,
 } as const;
 
-const LINK_SX = { color: '#200842', fontWeight: 600 } as const;
+const LINK_SX = { color: '#200842', fontWeight: 600 } as const; // hex-color-ok: pre-existing raw hex
 
 const BRAND_MARK = (
   <Box sx={{ textAlign: 'center', mb: 3 }}>
@@ -119,7 +119,7 @@ const BRAND_MARK = (
         fontSize: '1.35rem',
         letterSpacing: '0.06em',
         textTransform: 'uppercase',
-        color: '#0f172a',
+        color: '#0f172a', // hex-color-ok: pre-existing raw hex
       }}
     >
       Measure Once

@@ -582,7 +582,7 @@ export function CustomerDetailPage() {
           <p className="text-sm text-red-500">{error}</p>
           <button
             onClick={() => void bootstrap()}
-            style={{ marginTop: '0.5rem', padding: '0.35rem 0.9rem', border: '1px solid #6b7280', borderRadius: '0.375rem', background: '#f9fafb', cursor: 'pointer', fontSize: '0.875rem', color: '#374151' }}
+            style={{ marginTop: '0.5rem', padding: '0.35rem 0.9rem', border: '1px solid #6b7280', borderRadius: '0.375rem', background: '#f9fafb', cursor: 'pointer', fontSize: '0.875rem', color: '#374151' }} // hex-color-ok: pre-existing raw hex
           >
             Retry
           </button>

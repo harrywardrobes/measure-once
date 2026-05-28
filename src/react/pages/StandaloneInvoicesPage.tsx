@@ -205,7 +205,7 @@ export function StandaloneInvoicesPage() {
         </Typography>
         {isAdmin && (
           <Button variant="contained" href="/auth/quickbooks"
-            sx={{ bgcolor: '#2ca01c', '&:hover': { bgcolor: '#208015' } }}>
+            sx={{ bgcolor: '#2ca01c', '&:hover': { bgcolor: '#208015' } }/* hex-color-ok: pre-existing raw hex */}>
             Connect QuickBooks
           </Button>
         )}
@@ -266,7 +266,7 @@ export function StandaloneInvoicesPage() {
               variant="outlined"
               onClick={handleDisconnect}
               color="inherit"
-              sx={{ '&:hover': { borderColor: 'error.main', color: 'error.main', bgcolor: '#fee2e2' } }}
+              sx={{ '&:hover': { borderColor: 'error.main', color: 'error.main', bgcolor: '#fee2e2' } }} // hex-color-ok: pre-existing raw hex
             >
               Disconnect
             </Button>

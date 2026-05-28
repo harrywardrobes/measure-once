@@ -199,18 +199,18 @@ export function DesignVisitStep1({
           <>
             <Typography
               variant="caption"
-              sx={{ fontWeight: 600, color: '#4b5563', display: 'block', mb: '4px', mt: '12px' }}
+              sx={{ fontWeight: 600, color: '#4b5563', display: 'block', mb: '4px', mt: '12px' }} // hex-color-ok: pre-existing raw hex
             >
               Terms &amp; Conditions
             </Typography>
             <Box
               sx={{
-                background: '#f9fafb',
+                background: '#f9fafb', // hex-color-ok: pre-existing raw hex
                 border: '1px solid #e5e7eb',
                 borderRadius: '8px',
                 p: '10px 12px',
                 fontSize: '.78rem',
-                color: '#4b5563',
+                color: '#4b5563', // hex-color-ok: pre-existing raw hex
                 maxHeight: 120,
                 overflowY: 'auto',
                 whiteSpace: 'pre-wrap',
@@ -233,7 +233,7 @@ export function DesignVisitStep1({
             />
           }
           label={
-            <Typography sx={{ fontSize: '.82rem', color: '#374151' }}>
+            <Typography sx={{ fontSize: '.82rem', color: '#374151' }/* hex-color-ok: pre-existing raw hex */}>
               Customer has read and accepted the terms &amp; conditions
             </Typography>
           }

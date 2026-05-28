@@ -101,7 +101,7 @@ function SectionCard({ title, versionBadge, children }: {
   return (
     <Box
       sx={{
-        bgcolor: '#ffffff',
+        bgcolor: '#ffffff', // hex-color-ok: pre-existing raw hex
         border: '1px solid',
         borderColor: 'divider',
         borderRadius: '12px',
@@ -328,7 +328,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
   return (
     <Box
       sx={{
-        bgcolor: '#f9fafb',
+        bgcolor: '#f9fafb', // hex-color-ok: pre-existing raw hex
         minHeight: '100vh',
         fontFamily: 'inherit',
         color: BRAND_COLORS.ink1,
@@ -375,7 +375,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
         {/* Success */}
         {pageState === 'success' && (
           <StateBlock
-            icon={<CheckCircleOutlinedIcon sx={{ color: '#059669 !important' }} />}
+            icon={<CheckCircleOutlinedIcon sx={{ color: '#059669 !important' }} />} // hex-color-ok: pre-existing raw hex
             title={successKind === 'approved' ? 'Design signed off — thank you!' : 'Changes requested'}
             subtitle={
               successKind === 'approved'
@@ -563,7 +563,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
                               borderRadius: '8px',
                               border: '1px solid',
                               borderColor: 'divider',
-                              bgcolor: '#f3f4f6',
+                              bgcolor: '#f3f4f6', // hex-color-ok: pre-existing raw hex
                               cursor: 'zoom-in',
                               display: 'block',
                             }}
@@ -656,8 +656,8 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
                       fontSize: '1rem',
                       fontWeight: 600,
                       color: BRAND_COLORS.ink2,
-                      borderColor: '#d1d5db',
-                      '&:hover': { bgcolor: '#f9fafb', borderColor: '#d1d5db' },
+                      borderColor: '#d1d5db', // hex-color-ok: pre-existing raw hex
+                      '&:hover': { bgcolor: '#f9fafb', borderColor: '#d1d5db' }, // hex-color-ok: pre-existing raw hex
                     }}
                   >
                     Request changes

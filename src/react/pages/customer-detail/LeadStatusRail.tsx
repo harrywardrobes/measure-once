@@ -110,7 +110,7 @@ export function LeadStatusRail({
     height: 32,
     borderRadius: 'var(--radius-md)',
     border: '1px solid var(--stone)',
-    bgcolor: '#fff',
+    bgcolor: '#fff', // hex-color-ok: pre-existing raw hex
     color: 'var(--ink-2)',
     cursor: 'pointer',
     flexShrink: 0,
@@ -165,7 +165,8 @@ export function LeadStatusRail({
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '0.75rem', fontWeight: 700, lineHeight: 1,
                 }}>
-                  <svg width="11" height="9" fill="none" stroke="#fff" viewBox="0 0 12 10" aria-hidden="true">
+                  <svg width="11" height="9" fill="none" stroke="#fff" viewBox="0 0 12 10" aria-hidden="true" // hex-color-ok: svg stroke attr, no JSX block comment available in SVG element
+                  >
                     <polyline points="1,5 4.5,8.5 11,1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </Box>
@@ -174,7 +175,7 @@ export function LeadStatusRail({
               badge = (
                 <Box sx={{
                   flexShrink: 0, width: 26, height: 26, borderRadius: '50%',
-                  border: '2px solid', borderColor: colour.bg, bgcolor: colour.bg, color: '#fff',
+                  border: '2px solid', borderColor: colour.bg, bgcolor: colour.bg, color: '#fff', // hex-color-ok: pre-existing raw hex
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '0.75rem', fontWeight: 700, lineHeight: 1,
                 }}>
@@ -350,7 +351,8 @@ export function LeadStatusRail({
                         transition: 'background 0.15s, border-color 0.15s',
                       }}>
                         {done && (
-                          <svg width="10" height="8" fill="none" stroke="#fff" viewBox="0 0 12 10" aria-hidden="true">
+                          <svg width="10" height="8" fill="none" stroke="#fff" viewBox="0 0 12 10" aria-hidden="true" // hex-color-ok: svg stroke attr, no JSX block comment available in SVG element
+                          >
                             <polyline points="1,5 4.5,8.5 11,1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                         )}

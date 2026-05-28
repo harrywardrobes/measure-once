@@ -428,7 +428,7 @@ function InvoiceBadge({
           fontSize: '0.68rem', fontWeight: 700,
           fontFamily: 'inherit',
           padding: '2px 7px', borderRadius: '999px',
-          background: '#fef3c7', color: '#92400e', /* amber-100 / amber-800 — warning semantic, matches Tailwind */
+          background: '#fef3c7', color: '#92400e', /* amber-100 / amber-800 — warning semantic, matches Tailwind */ // hex-color-ok: pre-existing raw hex
           border: '1px solid #fde68a', /* amber-200 — warning semantic border */
           whiteSpace: 'nowrap',
           cursor: 'pointer',
@@ -603,8 +603,8 @@ function ProjectCard({
                 px: '6px',
                 py: '1px',
                 borderRadius: '999px',
-                background: '#fef3c7',
-                color: '#92400e',
+                background: '#fef3c7', // hex-color-ok: pre-existing raw hex
+                color: '#92400e', // hex-color-ok: pre-existing raw hex
                 border: '1px solid #fde68a',
                 letterSpacing: '0.02em',
                 whiteSpace: 'nowrap',
@@ -1351,12 +1351,12 @@ export function ProjectsPage() {
               height: 24,
               fontWeight: 600,
               cursor: 'pointer',
-              bgcolor: stalenessActive ? '#fef3c7' : undefined,
-              color: stalenessActive ? '#92400e' : undefined,
-              borderColor: stalenessActive ? '#fde68a' : BRAND_COLORS.stone,
+              bgcolor: stalenessActive ? '#fef3c7' : undefined, // hex-color-ok: pre-existing raw hex
+              color: stalenessActive ? '#92400e' : undefined, // hex-color-ok: pre-existing raw hex
+              borderColor: stalenessActive ? '#fde68a' : BRAND_COLORS.stone, // hex-color-ok: pre-existing raw hex
               '& .MuiChip-label': { px: '8px' },
               '&:hover': {
-                bgcolor: stalenessActive ? '#fde68a' : BRAND_COLORS.stone,
+                bgcolor: stalenessActive ? '#fde68a' : BRAND_COLORS.stone, // hex-color-ok: pre-existing raw hex
               },
             }}
           />
@@ -1377,7 +1377,7 @@ export function ProjectsPage() {
                 fontSize: '0.75rem',
                 fontWeight: 600,
                 fontFamily: 'inherit',
-                color: substageFilterAnchor || hiddenSubstages.size > 0 ? '#fff' : BRAND_COLORS.ink3,
+                color: substageFilterAnchor || hiddenSubstages.size > 0 ? '#fff' : BRAND_COLORS.ink3, // hex-color-ok: pre-existing raw hex
                 background: substageFilterAnchor || hiddenSubstages.size > 0 ? BRAND_COLORS.plum : 'transparent',
                 border: `1.5px solid ${substageFilterAnchor || hiddenSubstages.size > 0 ? BRAND_COLORS.plum : BRAND_COLORS.stone}`,
                 borderRadius: `${RADIUS.pill}px`,
@@ -1389,7 +1389,7 @@ export function ProjectsPage() {
                 WebkitTapHighlightColor: 'transparent',
                 '&:hover': {
                   background: substageFilterAnchor || hiddenSubstages.size > 0 ? BRAND_COLORS.plum : BRAND_COLORS.stone,
-                  color: substageFilterAnchor || hiddenSubstages.size > 0 ? '#fff' : BRAND_COLORS.ink2,
+                  color: substageFilterAnchor || hiddenSubstages.size > 0 ? '#fff' : BRAND_COLORS.ink2, // hex-color-ok: pre-existing raw hex
                 },
               }}
             >
@@ -1482,7 +1482,7 @@ export function ProjectsPage() {
             fontSize: '0.78rem',
             fontWeight: 600,
             fontFamily: 'inherit',
-            color: groupBy ? '#fff' : BRAND_COLORS.ink3,
+            color: groupBy ? '#fff' : BRAND_COLORS.ink3, // hex-color-ok: pre-existing raw hex
             background: groupBy ? BRAND_COLORS.plum : 'transparent',
             border: `1.5px solid ${groupBy ? BRAND_COLORS.plum : BRAND_COLORS.stone}`,
             borderRadius: `${RADIUS.pill}px`,
@@ -1495,7 +1495,7 @@ export function ProjectsPage() {
             opacity: stageKeyFilter || myRooms ? 0.4 : 1,
             '&:hover:not(:disabled)': {
               background: groupBy ? BRAND_COLORS.plum : BRAND_COLORS.stone,
-              color: groupBy ? '#fff' : BRAND_COLORS.ink2,
+              color: groupBy ? '#fff' : BRAND_COLORS.ink2, // hex-color-ok: pre-existing raw hex
             },
             '@media (pointer: coarse)': { minHeight: '44px', py: '10px' },
           }}
@@ -1514,12 +1514,12 @@ export function ProjectsPage() {
             gap: 1,
             px: '16px',
             py: '8px',
-            background: '#fffbeb',
+            background: '#fffbeb', // hex-color-ok: pre-existing raw hex
             borderBottom: `1px solid #fde68a`,
             flexShrink: 0,
           }}
         >
-          <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#92400e', flex: 1 }}>
+          <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: '#92400e', flex: 1 }/* hex-color-ok: pre-existing raw hex */}>
             {unknownStatusCount === 1
               ? '1 project card has a missing or unconfigured HubSpot lead status — it is still visible but may need attention.'
               : `${unknownStatusCount} project cards have a missing or unconfigured HubSpot lead status — they are still visible but may need attention.`}
@@ -1528,7 +1528,7 @@ export function ProjectsPage() {
             size="small"
             aria-label="dismiss"
             onClick={() => setUnknownStatusDismissed(true)}
-            sx={{ color: '#92400e', p: '2px', flexShrink: 0 }}
+            sx={{ color: '#92400e', p: '2px', flexShrink: 0 }} // hex-color-ok: pre-existing raw hex
           >
             <CloseIcon sx={{ fontSize: 15 }} />
           </IconButton>

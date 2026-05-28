@@ -142,7 +142,7 @@ export function CustomerDetailHeader({
                         title="Send WhatsApp message"
                         style={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          width: 22, height: 22, borderRadius: '50%', background: '#25D366',
+                          width: 22, height: 22, borderRadius: '50%', background: '#25D366', // hex-color-ok: pre-existing raw hex
                           border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0,
                           verticalAlign: 'middle',
                         }}

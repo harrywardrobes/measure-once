@@ -63,6 +63,7 @@ const STATIC_SUITES = [
   'test:icon-lint',
   'test:inline-styles',
   'test:story-hex-colors',
+  'test:component-hex-colors',
   'test:keyboard-shortcuts',
   'test:handler-config-blocks',
   'test:status-key-fields',

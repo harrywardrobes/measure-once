@@ -94,8 +94,8 @@ function PickerButton({
         width: '100%',
         textAlign: 'left',
         border: 'none',
-        background: isActive ? '#EDE8FF' : 'none',
-        color: isClear ? '#ef4444' : isActive ? '#6A12D9' : isDisabled ? '#B8AE99' : '#141413',
+        background: isActive ? '#EDE8FF' : 'none', // hex-color-ok: pre-existing raw hex
+        color: isClear ? '#ef4444' : isActive ? '#6A12D9' : isDisabled ? '#B8AE99' : '#141413', // hex-color-ok: pre-existing raw hex
         fontWeight: isActive ? 700 : isClear ? 500 : 400,
         fontSize: isSub ? '0.78rem' : '0.82rem',
         fontFamily: 'inherit',
@@ -106,7 +106,7 @@ function PickerButton({
         lineHeight: 1.35,
         letterSpacing: 0,
         transition: 'background 0.1s',
-        '&:hover:not(:disabled)': { background: isActive ? '#E0D8FF' : '#F6F1E7' },
+        '&:hover:not(:disabled)': { background: isActive ? '#E0D8FF' : '#F6F1E7' }, // hex-color-ok: pre-existing raw hex
       }}
     >
       {label}

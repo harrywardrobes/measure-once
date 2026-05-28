@@ -27,10 +27,10 @@ function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) 
         '&:last-child': { borderBottom: 'none' },
       }}
     >
-      <Typography component="span" sx={{ fontWeight: 600, color: '#6b7280', fontSize: 'inherit' }}>
+      <Typography component="span" sx={{ fontWeight: 600, color: '#6b7280', fontSize: 'inherit' }/* hex-color-ok: pre-existing raw hex */}>
         {label}
       </Typography>
-      <Typography component="span" sx={{ color: '#1f2937', fontSize: 'inherit', textAlign: 'right', ml: 2 }}>
+      <Typography component="span" sx={{ color: '#1f2937', fontSize: 'inherit', textAlign: 'right', ml: 2 }/* hex-color-ok: pre-existing raw hex */}>
         {value}
       </Typography>
     </Box>
@@ -46,7 +46,7 @@ function ReviewSection({ title, children }: { title: string; children: React.Rea
           fontWeight: 700,
           textTransform: 'uppercase',
           letterSpacing: '.06em',
-          color: '#9ca3af',
+          color: '#9ca3af', // hex-color-ok: pre-existing raw hex
           mb: '8px',
         }}
       >
@@ -110,20 +110,20 @@ export function DesignVisitStep3({
             <Box>
               <Typography
                 component="span"
-                sx={{ fontWeight: 700, fontSize: 'inherit', color: '#1f2937' }}
+                sx={{ fontWeight: 700, fontSize: 'inherit', color: '#1f2937' }} // hex-color-ok: pre-existing raw hex
               >
                 {r.roomName}
               </Typography>{' '}
               <Typography
                 component="span"
-                sx={{ fontWeight: 400, color: '#9ca3af', fontSize: 'inherit' }}
+                sx={{ fontWeight: 400, color: '#9ca3af', fontSize: 'inherit' }} // hex-color-ok: pre-existing raw hex
               >
                 ({r.dsName}, {r.unitCount} unit{r.unitCount !== 1 ? 's' : ''})
               </Typography>
             </Box>
             <Typography
               component="span"
-              sx={{ fontSize: 'inherit', color: '#1f2937', ml: 2 }}
+              sx={{ fontSize: 'inherit', color: '#1f2937', ml: 2 }} // hex-color-ok: pre-existing raw hex
             >
               £{(r.tot / 100).toFixed(2)}
             </Typography>
@@ -135,7 +135,7 @@ export function DesignVisitStep3({
             fontWeight: 700,
             textAlign: 'right',
             pt: '10px',
-            color: '#1f2937',
+            color: '#1f2937', // hex-color-ok: pre-existing raw hex
           }}
         >
           Estimate total: £{(grandTotal / 100).toFixed(2)}
@@ -149,7 +149,7 @@ export function DesignVisitStep3({
             value={
               <Box
                 component="span"
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#059669' }}
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#059669' }} // hex-color-ok: pre-existing raw hex
               >
                 <CheckIcon sx={{ fontSize: '1rem' }} />
                 {termsVersionNumber != null && (
@@ -160,8 +160,8 @@ export function DesignVisitStep3({
                       px: '7px',
                       py: '1px',
                       borderRadius: '999px',
-                      background: '#e5e7eb',
-                      color: '#374151',
+                      background: '#e5e7eb', // hex-color-ok: pre-existing raw hex
+                      color: '#374151', // hex-color-ok: pre-existing raw hex
                       fontSize: '.7rem',
                       fontWeight: 700,
                     }}

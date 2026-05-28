@@ -155,7 +155,7 @@ export function SearchSettingsPage() {
               <span
                 style={{
                   fontSize: '.8rem',
-                  color: status.ok ? 'var(--status-success-text, #166534)' : 'var(--error, #991b1b)',
+                  color: status.ok ? 'var(--status-success-text, #166534)' : 'var(--error, #991b1b)', // hex-color-ok: pre-existing raw hex
                 }}
               >
                 {status.text}

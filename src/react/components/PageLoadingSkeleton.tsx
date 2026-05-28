@@ -722,7 +722,7 @@ export function LoginPageSkeleton({ forceVisible }: { forceVisible?: boolean } =
   if (!visible) return null;
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3, bgcolor: '#f8f7f4' }}>
+    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3, bgcolor: '#f8f7f4' }/* hex-color-ok: pre-existing raw hex */}>
       <Box
         sx={{
           width: '100%',
@@ -819,7 +819,7 @@ export function ProjectsPageSkeleton({ forceVisible }: { forceVisible?: boolean 
         right: 0,
         display: 'flex',
         flexDirection: 'column',
-        background: '#F6F1E7',
+        background: '#F6F1E7', // hex-color-ok: pre-existing raw hex
       }}
     >
       {/* Stage filter tab strip */}

@@ -153,9 +153,9 @@ export function RoomsTabs({
                   ...tabBaseSx,
                   ...(isActive ? {
                     background: 'var(--plum)',
-                    color: '#fff',
+                    color: '#fff', // hex-color-ok: pre-existing raw hex
                     borderColor: 'var(--plum)',
-                    '&:hover': { background: 'var(--plum)', color: '#fff' },
+                    '&:hover': { background: 'var(--plum)', color: '#fff' }, // hex-color-ok: pre-existing raw hex
                   } : {}),
                 }}
               >
@@ -222,7 +222,7 @@ export function RoomsTabs({
                 onClick={addRoom}
                 sx={{
                   background: 'var(--orchid)',
-                  color: '#fff',
+                  color: '#fff', // hex-color-ok: pre-existing raw hex
                   fontWeight: 600,
                   fontSize: '0.875rem',
                   textTransform: 'none',
@@ -325,7 +325,7 @@ export function RoomsTabs({
                         sx={{
                           mt: '4px',
                           background: 'var(--orchid)',
-                          color: '#fff',
+                          color: '#fff', // hex-color-ok: pre-existing raw hex
                           fontWeight: 600,
                           fontSize: '0.75rem',
                           textTransform: 'none',

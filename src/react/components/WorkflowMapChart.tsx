@@ -430,15 +430,15 @@ function HandlerBadgeSummary({
     return (
       <Tooltip title={`${handlers.length} handlers bound — conflict`} placement="top" arrow>
         <Chip
-          icon={<WarningAmberIcon sx={{ fontSize: small ? 11 : 13, color: '#92400e !important' }} />}
+          icon={<WarningAmberIcon sx={{ fontSize: small ? 11 : 13, color: '#92400e !important' }} />} // hex-color-ok: pre-existing raw hex
           label={`⚠ ${handlers.length}`}
           size="small"
           sx={{
             height: small ? 18 : 20,
             fontSize: small ? '0.6rem' : '0.65rem',
             fontWeight: 700,
-            bgcolor: '#fef3c7',
-            color: '#92400e',
+            bgcolor: '#fef3c7', // hex-color-ok: pre-existing raw hex
+            color: '#92400e', // hex-color-ok: pre-existing raw hex
             border: '1px solid #fbbf24',
             flexShrink: 0,
             '.MuiChip-label': { px: small ? 0.5 : 0.75 },
@@ -462,15 +462,15 @@ function HandlerBadgeSummary({
   return (
     <Tooltip title={tooltipTitle} placement="top" arrow>
       <Chip
-        icon={<BoltIcon sx={{ fontSize: small ? 11 : 13, color: '#5b21b6 !important' }} />}
+        icon={<BoltIcon sx={{ fontSize: small ? 11 : 13, color: '#5b21b6 !important' }} />} // hex-color-ok: pre-existing raw hex
         label={chipLabel}
         size="small"
         sx={{
           height: small ? 18 : 20,
           fontSize: small ? '0.6rem' : '0.65rem',
           fontWeight: 700,
-          bgcolor: '#ede9fe',
-          color: '#5b21b6',
+          bgcolor: '#ede9fe', // hex-color-ok: pre-existing raw hex
+          color: '#5b21b6', // hex-color-ok: pre-existing raw hex
           border: 'none',
           flexShrink: 0,
           '.MuiChip-label': { px: small ? 0.5 : 0.75 },
@@ -497,7 +497,7 @@ const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<Wor
         gap: 1,
         borderRadius: '8px',
         background: isReadOnly ? `linear-gradient(90deg, ${sc.bg}cc, ${sc.bg}99)` : sc.bg,
-        color: '#fff',
+        color: '#fff', // hex-color-ok: pre-existing raw hex
         boxShadow: selected ? `0 0 0 2px #fff, 0 0 0 4px ${sc.bg}` : '0 1px 4px rgba(0,0,0,.18)',
         cursor: 'pointer',
         userSelect: 'none',
@@ -506,7 +506,7 @@ const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<Wor
         opacity: isReadOnly ? 0.85 : 1,
       }}
     >
-      <Typography variant="subtitle1" sx={{ color: '#fff', letterSpacing: '.01em', fontWeight: 700, flex: 1 }}>
+      <Typography variant="subtitle1" sx={{ color: '#fff', letterSpacing: '.01em', fontWeight: 700, flex: 1 }/* hex-color-ok: pre-existing raw hex */}>
         {data.label}
       </Typography>
       {isReadOnly && (
@@ -544,7 +544,7 @@ const StatusNode = memo(function StatusNode({ data, selected }: NodeProps<Node<W
         px: 1.5,
         borderRadius: '6px',
         border: isReadOnly ? '1.5px solid #e5e7eb' : `1.5px solid ${sc.light}`,
-        background: isReadOnly ? '#f9fafb' : '#fff',
+        background: isReadOnly ? '#f9fafb' : '#fff', // hex-color-ok: pre-existing raw hex
         boxShadow: selected
           ? `0 0 0 2px ${sc.bg}`
           : '0 1px 3px rgba(0,0,0,.08)',
@@ -674,7 +674,7 @@ export function WorkflowMapChart({
       zoomOnScroll={false}
       zoomOnPinch
     >
-      <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#e2e8f0" />
+      <Background variant={BackgroundVariant.Dots} gap={16} size={1/* hex-color-ok: pre-existing raw hex */} color="#e2e8f0" />
     </ReactFlow>
   );
 }
