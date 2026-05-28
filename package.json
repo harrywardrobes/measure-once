@@ -144,6 +144,8 @@
     "test:chunk-cache-headers:ci": "node scripts/with-test-db.js test/chunk-cache-headers/run.js",
     "test:customers-pagination": "node test/customers-pagination/run.js",
     "test:customers-pagination:ci": "node scripts/with-test-db.js test/customers-pagination/run.js",
+    "test:stage-scoped-pills": "node test/stage-scoped-pills/run.js",
+    "test:stage-scoped-pills:ci": "node scripts/with-test-db.js test/stage-scoped-pills/run.js",
     "test:calendar-empty-state": "node test/calendar-empty-state/run.js",
     "test:calendar-empty-state:ci": "node scripts/with-test-db.js test/calendar-empty-state/run.js",
     "test:turnstile-signout": "node test/turnstile-signout/run.js",
