@@ -9,6 +9,9 @@
 //   (CI-3)  POST /api/customer-info/:token/photos → 200, key list returned
 //   (CI-4)  POST /api/customer-info/:token (submit) → 200, emails sent
 //   (CI-5)  GET  /api/customer-info/by-contact/:contactId → list with photoUrls
+//   (CI-R1) POST /api/customer-info/by-contact/:contactId/resend (admin) → 200, new DB row, old rows preserved
+//   (CI-R2) POST /api/customer-info/by-contact/:contactId/resend (viewer) → 403
+//   (CI-R3) POST /api/customer-info/by-contact/not-a-number/resend → 400
 //   (CI-6)  GET  /api/customer-info/:token (expired) → 410 status:expired
 //   (CI-7)  GET  /api/customer-info/:token (already submitted) → 410 status:submitted
 //   (CI-8)  POST /api/customer-info/:token (expired) → 410 status:expired
@@ -235,8 +238,10 @@ async function main() {
     const users  = await seedUsers(pool, runId);
     const member = users.member;
     const admin  = users.admin;
+    const viewer = users.viewer;
     const client = await login(member.email, member.password);
-    const adminClient = await login(admin.email, admin.password);
+    const adminClient  = await login(admin.email,  admin.password);
+    const viewerClient = await login(viewer.email, viewer.password);
 
     // ── CI-1: POST /api/card-actions/upload-photos-and-info ─────────────────
     const createRes = await client.post('/api/card-actions/upload-photos-and-info', { contactId });
@@ -492,6 +497,64 @@ async function main() {
     } else {
       record('CI-5.photo-urls', false, 'skipped — list response was not 200 array');
     }
+
+    // ── CI-R1: POST resend (admin) → 200, new row in DB, old rows preserved ──
+    const rowsBeforeResend = await pool.query(
+      `SELECT id FROM customer_info_submissions WHERE contact_id = $1`,
+      [contactId]
+    );
+    const countBefore = rowsBeforeResend.rowCount;
+
+    const mailsBeforeResend = readMailJsonl(mailFile).length;
+    const resendRes = await adminClient.post(`/api/customer-info/by-contact/${contactId}/resend`);
+    const resendOk = resendRes.status === 200 && resendRes.json?.ok === true;
+    record('CI-R1.resend-200', resendOk,
+      resendOk
+        ? `POST 200 ok=true`
+        : `status=${resendRes.status} body=${resendRes.text.slice(0, 200)}`);
+
+    const rowsAfterResend = await pool.query(
+      `SELECT id FROM customer_info_submissions WHERE contact_id = $1`,
+      [contactId]
+    );
+    const countAfter = rowsAfterResend.rowCount;
+    const newRowAdded = countAfter === countBefore + 1;
+    record('CI-R1.new-row-added', newRowAdded,
+      newRowAdded
+        ? `row count grew from ${countBefore} to ${countAfter}`
+        : `row count before=${countBefore} after=${countAfter} (expected +1)`);
+
+    // Wait briefly for resend invite email to land
+    const resendEmailDeadline = Date.now() + 4000;
+    let mailsAfterResend = readMailJsonl(mailFile);
+    while (Date.now() < resendEmailDeadline && mailsAfterResend.length <= mailsBeforeResend) {
+      await new Promise(res => setTimeout(res, 100));
+      mailsAfterResend = readMailJsonl(mailFile);
+    }
+    const resendNewMails = mailsAfterResend.slice(mailsBeforeResend);
+    const resendInviteEmail = resendNewMails.find(m =>
+      typeof m.to === 'string' && m.to.includes(contactProps.email)
+    );
+    record('CI-R1.resend-email-sent', !!resendInviteEmail,
+      resendInviteEmail
+        ? `resend invite email captured to ${contactProps.email} subject="${resendInviteEmail.subject}"`
+        : `no resend invite email (${resendNewMails.length} new mail(s): ${resendNewMails.map(m => m.to).join(', ')})`);
+
+    // ── CI-R2: Viewer → 403 ───────────────────────────────────────────────────
+    const viewerResendRes = await viewerClient.post(`/api/customer-info/by-contact/${contactId}/resend`);
+    const viewerResend403 = viewerResendRes.status === 403;
+    record('CI-R2.viewer-403', viewerResend403,
+      viewerResend403
+        ? `viewer correctly received 403`
+        : `status=${viewerResendRes.status} body=${viewerResendRes.text.slice(0, 200)}`);
+
+    // ── CI-R3: Invalid (non-numeric) contactId → 400 ──────────────────────────
+    const badIdResendRes = await adminClient.post(`/api/customer-info/by-contact/not-a-valid-id/resend`);
+    const badIdResend400 = badIdResendRes.status === 400;
+    record('CI-R3.invalid-id-400', badIdResend400,
+      badIdResend400
+        ? `non-numeric contactId correctly received 400`
+        : `status=${badIdResendRes.status} body=${badIdResendRes.text.slice(0, 200)}`);
 
     // ── CI-6: Expired token → 410 status:expired (GET) ──────────────────────
     const expiredToken = await insertExpiredRow(pool, `${contactId}-exp`);
