@@ -650,44 +650,54 @@ function CustomerCard({
         onClick={saveCustomersScroll}
         sx={{ p: 2, display: 'block' }}
       >
-        <Stack direction="row" spacing={1} sx={{  alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <Typography
-            variant="subtitle1"
-            noWrap
-            sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
-          >
-            <UrgencyDot urgency={urgency} />
-            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {name}
-            </Box>
-          </Typography>
-          {lsLabel ? <Chip label={lsLabel} size="small" color="primary" variant="outlined" /> : null}
-        </Stack>
-        <Stack direction="row" spacing={0.75} sx={{  mt: 1, flexWrap: 'wrap' }}>
-          {effectiveRooms.map((r, idx) => {
-            const sk = r.stageKey || 'sales';
-            const lbl =
-              workflow?.stages?.[sk]?.label || DEFAULT_STAGE_LABELS[sk] || sk;
-            const pillText =
-              multiRoom && r.room && r.room !== 'Main' ? `${lbl} — ${r.room}` : lbl;
-            return (
-              <StagePill
-                key={`${sk}-${r.room || 'Main'}-${idx}`}
-                stageKey={sk}
-                label={pillText}
-                archived={(r.roomStatus || 'active') !== 'active'}
-              />
-            );
-          })}
-        </Stack>
-        <Stack direction="row" spacing={1} sx={{  mt: 1, flexWrap: 'wrap' }}>
-          {email ? <Chip label={email} size="small" variant="outlined" /> : null}
-          {phone ? <Chip label={phone} size="small" variant="outlined" /> : null}
-          <QBBadge invoices={invoices} onOpen={onOpenInvoice} />
-          {customerNum ? (
-            <Chip label={customerNum} size="small" color="secondary" variant="outlined" />
-          ) : null}
-        </Stack>
+        {/* Two-column layout on md+; single column on mobile */}
+        <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' }, alignItems: { md: 'flex-start' } }}>
+
+          {/* Left column — name + contact identifiers */}
+          <Box sx={{ flex: '1 1 0', minWidth: 0 }}>
+            <Typography
+              variant="subtitle1"
+              noWrap
+              sx={{ display: 'flex', alignItems: 'center', minWidth: 0, mb: 0.75 }}
+            >
+              <UrgencyDot urgency={urgency} />
+              <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {name}
+              </Box>
+            </Typography>
+            <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap' }}>
+              {email ? <Chip label={email} size="small" variant="outlined" /> : null}
+              {phone ? <Chip label={phone} size="small" variant="outlined" /> : null}
+              {customerNum ? (
+                <Chip label={customerNum} size="small" color="secondary" variant="outlined" />
+              ) : null}
+            </Stack>
+          </Box>
+
+          {/* Right column — stage pills, lead status, QB badge */}
+          <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: { xs: 'flex-start', md: 'flex-end' } }}>
+            {lsLabel ? <Chip label={lsLabel} size="small" color="primary" variant="outlined" /> : null}
+            <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', justifyContent: { md: 'flex-end' } }}>
+              {effectiveRooms.map((r, idx) => {
+                const sk = r.stageKey || 'sales';
+                const lbl =
+                  workflow?.stages?.[sk]?.label || DEFAULT_STAGE_LABELS[sk] || sk;
+                const pillText =
+                  multiRoom && r.room && r.room !== 'Main' ? `${lbl} — ${r.room}` : lbl;
+                return (
+                  <StagePill
+                    key={`${sk}-${r.room || 'Main'}-${idx}`}
+                    stageKey={sk}
+                    label={pillText}
+                    archived={(r.roomStatus || 'active') !== 'active'}
+                  />
+                );
+              })}
+            </Stack>
+            <QBBadge invoices={invoices} onOpen={onOpenInvoice} />
+          </Box>
+
+        </Box>
       </CardActionArea>
 
       {/* Action strip — only rendered when a configured handler matches this
