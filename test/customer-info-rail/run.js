@@ -17,7 +17,8 @@
 //   (F) Skipped-email count badge: present with correct count when non-zero;
 //       absent when email_skipped_count is 0.
 //   (G) Clicking the Review button on a submitted card opens the card body
-//       (MuiCollapse transitions to the "entered" state).
+//       (MuiCollapse transitions to the "entered" state); the expanded body
+//       renders the correct address and room-count text.
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-info-rail
@@ -439,9 +440,13 @@ function writeReport(runId) {
     '  render `[data-testid="skipped-photo-link"]` inside an Alert whose text contains',
     '  the count ("3"). **(F2)** A card with `email_skipped_count: 0` (same `photoUrls`)',
     '  must not render the Alert or the link element at all.',
-    '- **(G) Review button opens card body**: clicking `[data-testid="review-btn"]`',
-    '  on the submitted card triggers the MUI Collapse to enter the open state',
-    '  (`MuiCollapse-entered` class appears inside `[data-testid="submission-card-3"]`).',
+    '- **(G) Review button opens card body and renders correct content**: clicking',
+    '  `[data-testid="review-btn"]` on the submitted card triggers the MUI Collapse',
+    '  to enter the open state (`MuiCollapse-entered` class appears inside',
+    '  `[data-testid="submission-card-3"]`). Three sub-probes: **(G1)** the Collapse',
+    '  enters; **(G2)** the address text "12 Test Street, Testville, TE1 1ST" is',
+    '  visible with a non-zero bounding height; **(G3)** the room-count text',
+    '  "2 rooms" is rendered in the expanded body.',
     '',
     'All API calls are stubbed via evaluateOnNewDocument fetch interception.',
     'No HubSpot token or real contact data is required.',
@@ -527,6 +532,8 @@ async function main() {
     '(F1) email_skipped_count=3: skipped-email Alert renders with count in text',
     '(F2) email_skipped_count=0: skipped-email Alert is absent',
     '(G) clicking Review button opens submitted card body',
+    '(G) address "12 Test Street, Testville, TE1 1ST" visible in expanded card body',
+    '(G) "2 rooms" text rendered in expanded card body',
   ];
 
   if (!puppeteer) {
@@ -801,6 +808,62 @@ async function main() {
           ? 'review-btn found but card body did not open'
           : 'review-btn not found',
       cardBodyOpen,
+    );
+
+    // G2 + G3: content assertions — only meaningful if the body opened, but
+    // always recorded so failures are visible in the report.
+    let addressVisible = false;
+    let roomsVisible = false;
+    if (cardBodyOpen) {
+      const bodyState = await page.evaluate(() => {
+        const card = document.querySelector('[data-testid="submission-card-3"]');
+        if (!card) return { addressFound: false, addressHeight: 0, roomsFound: false };
+
+        const expectedAddress = '12 Test Street, Testville, TE1 1ST';
+        let addressFound = false;
+        let addressHeight = 0;
+        let roomsFound = false;
+
+        const allEls = Array.from(card.querySelectorAll('*'));
+        for (const el of allEls) {
+          const text = (el.textContent || '').trim();
+          if (!addressFound && text === expectedAddress) {
+            const rect = el.getBoundingClientRect();
+            addressHeight = rect.height;
+            addressFound = true;
+          }
+          if (!roomsFound && text === '2 rooms') {
+            roomsFound = true;
+          }
+          if (addressFound && roomsFound) break;
+        }
+
+        return { addressFound, addressHeight, roomsFound };
+      });
+
+      addressVisible = bodyState.addressFound && bodyState.addressHeight > 0;
+      roomsVisible = bodyState.roomsFound;
+    }
+
+    record(
+      PROBE_LABELS[12],
+      'address "12 Test Street, Testville, TE1 1ST" visible with non-zero height after Review',
+      addressVisible
+        ? 'address text found with non-zero height (correct)'
+        : cardBodyOpen
+          ? 'card body open but address text not found or zero height'
+          : 'card body did not open',
+      addressVisible,
+    );
+    record(
+      PROBE_LABELS[13],
+      '"2 rooms" text rendered in card body after Review',
+      roomsVisible
+        ? '"2 rooms" text found (correct)'
+        : cardBodyOpen
+          ? 'card body open but "2 rooms" text not found'
+          : 'card body did not open',
+      roomsVisible,
     );
 
     await page.__ctx.close().catch(() => {});
