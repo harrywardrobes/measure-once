@@ -9,7 +9,7 @@ const nodemailer = require('nodemailer');
 const path      = require('path');
 const fs        = require('fs');
 const multer    = require('multer');
-const { isAuthenticated, requireAdmin, requirePrivilege, getReqPrivilege } = require('./auth');
+const { isAuthenticated, requireAdmin, requirePrivilege, getRequestPrivilegeLevel } = require('./auth');
 const dvUploads = require('./design-visit-uploads');
 const { getCredential: hsGetCredential } = require('./hubspot-creds');
 
@@ -207,7 +207,7 @@ function adminEmails() {
 
 // ── QuickBooks helpers (reads from qb_tokens table) ───────────────────────────
 const QB_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
-function qbBase() {
+function getQuickBooksBaseUrl() {
   // Test-only override so the integration suite can point QuickBooks HTTP
   // traffic at a local mock server. Never set in production.
   if (process.env.QB_API_BASE_OVERRIDE) return process.env.QB_API_BASE_OVERRIDE;
@@ -473,7 +473,7 @@ function penceToGbp(pence) {
 }
 
 // ── Side-effect chain: submit visit ──────────────────────────────────────────
-async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
+async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
   const visit = await loadVisitWithRooms(visitId);
   if (!visit) throw new Error('Visit not found');
 
@@ -600,7 +600,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
       if (priorId) {
         try {
           const getResp = await axios.get(
-            `${qbBase()}/v3/company/${qbt.realm_id}/estimate/${encodeURIComponent(priorId)}`,
+            `${getQuickBooksBaseUrl()}/v3/company/${qbt.realm_id}/estimate/${encodeURIComponent(priorId)}`,
             qbHeaders
           );
           const existing = getResp.data?.Estimate;
@@ -612,7 +612,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
             (txnStatus === '' || txnStatus === 'pending');
           if (isUpdatable) {
             const updResp = await axios.post(
-              `${qbBase()}/v3/company/${qbt.realm_id}/estimate`,
+              `${getQuickBooksBaseUrl()}/v3/company/${qbt.realm_id}/estimate`,
               { ...basePayload, Id: existing.Id, SyncToken: existing.SyncToken, sparse: true },
               qbHeaders
             );
@@ -635,7 +635,7 @@ async function runSubmitSideEffects(visitId, handlerConfig, submitterUser) {
 
       if (!updated) {
         const qbResp = await axios.post(
-          `${qbBase()}/v3/company/${qbt.realm_id}/estimate`,
+          `${getQuickBooksBaseUrl()}/v3/company/${qbt.realm_id}/estimate`,
           basePayload,
           qbHeaders
         );
@@ -1245,7 +1245,7 @@ router.get('/api/design-visit-door-styles', isAuthenticated, async (req, res) =>
 router.get('/api/design-visits', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   try {
     const contactId = req.query.contactId;
-    const callerPrivilege = getReqPrivilege(req);
+    const callerPrivilege = getRequestPrivilegeLevel(req);
     const isMemberOnly = callerPrivilege === 'member';
     const callerId = req.user?.claims?.sub;
     const conditions = [];
@@ -1293,7 +1293,7 @@ router.get('/api/design-visits/in-progress', isAuthenticated, requirePrivilege('
       ),
     ).slice(0, 100);
     if (!contactIds.length) return res.json([]);
-    const callerPrivilege = getReqPrivilege(req);
+    const callerPrivilege = getRequestPrivilegeLevel(req);
     const isMemberOnly = callerPrivilege === 'member';
     const callerId = req.user?.claims?.sub;
     let r;
@@ -1333,7 +1333,7 @@ router.get('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
     const visit = await loadVisitWithRooms(id);
     if (!visit) return res.status(404).json({ error: 'Not found' });
     // Members may only read their own visits; managers and admins may read all.
-    const callerPrivilege = getReqPrivilege(req);
+    const callerPrivilege = getRequestPrivilegeLevel(req);
     if (callerPrivilege === 'member') {
       const callerId = req.user?.claims?.sub;
       if (visit.created_by !== String(callerId)) {
@@ -1407,7 +1407,7 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
     // POST /api/design-visits/uploads. This prevents a member from attaching a
     // leaked foreign key to their visit and then using the DELETE endpoint to
     // destroy another user's object.
-    const postCallerPrivilege = getReqPrivilege(req);
+    const postCallerPrivilege = getRequestPrivilegeLevel(req);
     if (postCallerPrivilege === 'member') {
       const opaqueKeys = [];
       for (const rm of rooms) {
@@ -1483,7 +1483,7 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
     // Non-fatal integration failures are caught inside; we await so the DB
     // status transition to 'submitted' is guaranteed before we respond.
     try {
-      await runSubmitSideEffects(visitId, handlerConfig || {}, req.user);
+      await submitDesignVisitAndSync(visitId, handlerConfig || {}, req.user);
     } catch (e) {
       console.error('[design-visits] Side effect chain error:', e.message);
     }
@@ -1503,7 +1503,7 @@ router.patch('/api/design-visits/:id', isAuthenticated, requirePrivilege('member
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   const { location, notes, visitDate, durationMin, handleId, furnitureRangeId } = req.body;
   try {
-    const callerPrivilege = getReqPrivilege(req);
+    const callerPrivilege = getRequestPrivilegeLevel(req);
     const isMemberOnly = callerPrivilege === 'member';
     const callerId = req.user?.claims?.sub;
     // Members may only patch their own draft visits; managers and admins may patch any.
@@ -1575,7 +1575,7 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
     }
     const status = cur.rows[0].status;
     // Members may only replace their own visits; managers and admins may replace any.
-    const callerPrivilegeForPut = getReqPrivilege(req);
+    const callerPrivilegeForPut = getRequestPrivilegeLevel(req);
     if (callerPrivilegeForPut === 'member' && cur.rows[0].created_by !== String(userId)) {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Forbidden' });
@@ -1713,7 +1713,7 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
     // new sign-off token, creates a new QB estimate, re-sends the customer
     // email). The previous sign-off link is invalidated by the new token hash.
     try {
-      await runSubmitSideEffects(id, handlerConfig || {}, req.user);
+      await submitDesignVisitAndSync(id, handlerConfig || {}, req.user);
     } catch (e) {
       console.error('[design-visits] Side effect chain error on PUT:', e.message);
     }
@@ -1831,7 +1831,7 @@ router.post('/api/design-visits/:id/submit', isAuthenticated, requirePrivilege('
     const vr = await pool.query(`SELECT status, created_by FROM design_visits WHERE id=$1`, [id]);
     if (!vr.rows.length) return res.status(404).json({ error: 'Visit not found' });
     // Members may only submit their own visits; managers and admins may submit any.
-    const callerPrivilege = getReqPrivilege(req);
+    const callerPrivilege = getRequestPrivilegeLevel(req);
     if (callerPrivilege === 'member' && vr.rows[0].created_by !== String(userId)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
@@ -1839,7 +1839,7 @@ router.post('/api/design-visits/:id/submit', isAuthenticated, requirePrivilege('
     if (status !== 'draft' && status !== 'revision_requested') {
       return res.status(400).json({ error: `Cannot submit from status: ${status}` });
     }
-    await runSubmitSideEffects(id, req.body?.handlerConfig || {}, req.user);
+    await submitDesignVisitAndSync(id, req.body?.handlerConfig || {}, req.user);
     res.json({ ok: true });
   } catch (e) {
     console.error('[design-visits] POST /api/design-visits/:id/submit error:', e.message);
@@ -2161,7 +2161,7 @@ router.delete('/api/design-visits/uploads/:storageKey', isAuthenticated, require
   // The "belongs to my visit" heuristic is intentionally NOT used here because a
   // member could attach a foreign key to their own visit (via POST/PUT) and then
   // pass that check to destroy another user's object.
-  const callerPrivilege = getReqPrivilege(req);
+  const callerPrivilege = getRequestPrivilegeLevel(req);
   if (callerPrivilege === 'member') {
     const callerId = String(req.user?.claims?.sub);
     try {

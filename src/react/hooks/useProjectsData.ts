@@ -75,7 +75,7 @@ export function useProjectsData(): ProjectsData {
   const [workflow, setWorkflow] = useState<ProjectWorkflowDef | undefined>(undefined);
   const [platformUsers, setPlatformUsers] = useState<ProjectPlatformUser[]>([]);
   const [roomAssignmentsStale, setRoomAssignmentsStale] = useState(false);
-  const [fetchNonce, setFetchNonce] = useState(0);
+  const [refetchTrigger, setRefetchTrigger] = useState(0);
   const [draftVisitIds, setDraftVisitIds] = useState<Record<string, number | string>>({});
   const [draftRefreshTick, setDraftRefreshTick] = useState(0);
 
@@ -85,7 +85,7 @@ export function useProjectsData(): ProjectsData {
   // Keep a ref to latest contacts for draft-visit refetch.
   const contactsRef = useRef<ProjectContact[]>([]);
 
-  const refresh = useCallback(() => setFetchNonce((n) => n + 1), []);
+  const refresh = useCallback(() => setRefetchTrigger((n) => n + 1), []);
 
   // ── Expose test hook for visibility integration tests ──────────────────────
   // Lets the room-stale-banner-visibility test drive pendingRoomStaleRef
@@ -182,11 +182,11 @@ export function useProjectsData(): ProjectsData {
     })();
 
     return () => { cancelled = true; };
-  }, [fetchNonce]);
+  }, [refetchTrigger]);
 
   // ── Re-fetch when localdata changes in another tab ─────────────────────────
   useEffect(() => {
-    const onLocalData = () => setFetchNonce((n) => n + 1);
+    const onLocalData = () => setRefetchTrigger((n) => n + 1);
     document.addEventListener('localdata-updated', onLocalData);
     return () => document.removeEventListener('localdata-updated', onLocalData);
   }, []);
@@ -199,7 +199,7 @@ export function useProjectsData(): ProjectsData {
     let bc: BroadcastChannel | null = null;
     try {
       bc = new BroadcastChannel('dev_mode_changed');
-      bc.onmessage = () => setFetchNonce((n) => n + 1);
+      bc.onmessage = () => setRefetchTrigger((n) => n + 1);
     } catch { /* BroadcastChannel not available */ }
     return () => { bc?.close(); };
   }, []);
@@ -260,7 +260,7 @@ export function useProjectsData(): ProjectsData {
               payload.type === 'customer_info_submitted' ||
               payload.type === 'hs_lead_status_changed'
             ) {
-              setFetchNonce((n) => n + 1);
+              setRefetchTrigger((n) => n + 1);
             }
           } catch { /* malformed frame — ignore */ }
         });

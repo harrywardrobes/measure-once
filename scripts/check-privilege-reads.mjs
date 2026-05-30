@@ -6,7 +6,7 @@
  *
  *   All privilege checks MUST go through the canonical helper for that surface:
  *     - React / TypeScript → usePrivilege()         (defined in src/react/hooks/usePrivilege.ts)
- *     - Server route code  → getReqPrivilege(req)   (defined in auth.js)
+ *     - Server route code  → getRequestPrivilegeLevel(req)   (defined in auth.js)
  *
  *   Note: the former vanilla-JS helper getPrivilegeLevel() (previously in
  *   public/legacy-shim.js) was removed when legacy-shim.js was deleted. All
@@ -41,7 +41,7 @@
  *     visits.js, rate-limiters.js
  *
  *   auth.js is EXCLUDED — it is the canonical server-side implementation; it
- *   owns the `getReqPrivilege` helper, the `requireAdmin` / `requirePrivilege` /
+ *   owns the `getRequestPrivilegeLevel` helper, the `requireAdmin` / `requirePrivilege` /
  *   `requireManagerOrAdmin` middleware, schema DDL, and user-management code.
  *
  *   Unlike the client surfaces, server-side files legitimately contain many
@@ -49,7 +49,7 @@
  *   and in data-management code.  Flagging every occurrence would produce far
  *   too many false positives.  Instead, this surface specifically detects
  *   direct reads of `req.user` → `privilege_level`, i.e. accessing the
- *   session-cached privilege without going through `getReqPrivilege(req)`.
+ *   session-cached privilege without going through `getRequestPrivilegeLevel(req)`.
  *
  *   Pattern flagged: the token `req.user` (with optional `?`) immediately
  *   followed (possibly after a chain of optional-chaining steps) by
@@ -267,7 +267,7 @@ if (violations.length === 0) {
   console.log(
     '✓ No direct privilege_level reads found.\n' +
     '  Client checks use usePrivilege() (React hook).\n' +
-    '  Server checks use getReqPrivilege(req) (Express route code).'
+    '  Server checks use getRequestPrivilegeLevel(req) (Express route code).'
   );
   process.exit(0);
 }
@@ -294,7 +294,7 @@ if (serverCount > 0) {
 console.error(
   'Fix (client): replace direct .privilege_level reads with getPrivilegeLevel() (vanilla JS)\n' +
   '              or usePrivilege() (React). See the "Privilege checks" section in replit.md.\n' +
-  'Fix (server): replace req.user?.privilege_level reads with getReqPrivilege(req) (auth.js).\n' +
+  'Fix (server): replace req.user?.privilege_level reads with getRequestPrivilegeLevel(req) (auth.js).\n' +
   '              For route-level gating prefer requireAdmin / requirePrivilege / requireManagerOrAdmin\n' +
   '              — those re-query the database and are always up-to-date after a privilege change.\n' +
   'Suppression:  for lines that legitimately reference ANOTHER user\'s privilege_level field,\n' +

@@ -83,7 +83,7 @@ function fmtDate(d: string | Date): string {
   return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function fmtGBP(n: number): string {
+function formatCurrency(n: number): string {
   return (
     '£' +
     Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -472,7 +472,7 @@ function InvoicesSection({
             <Typography variant="body2" noWrap sx={{  minWidth: 0, fontWeight: 600 }}>
               {inv.customerName || '—'}
             </Typography>
-            <Chip label={fmtGBP(inv.balance)} size="small" color="error" sx={{ height: 20 }} />
+            <Chip label={formatCurrency(inv.balance)} size="small" color="error" sx={{ height: 20 }} />
           </Stack>
           {inv.dueDate ? (
             <Typography variant="caption" color="error.main">

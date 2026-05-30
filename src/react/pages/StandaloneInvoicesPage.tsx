@@ -20,7 +20,7 @@ import { ContactsPagination } from '../components/ContactsPagination';
 import {
   InvoiceDetailDrawer,
   InvoiceSummary,
-  fmtGBP,
+  formatCurrency,
   fmtDate,
   invoiceStatus,
 } from '../components/InvoiceDetailDrawer';
@@ -254,7 +254,7 @@ export function StandaloneInvoicesPage() {
             <Typography variant="caption" color="text.secondary">
               {company || 'QuickBooks'}
               {visible.length > 0 && (
-                ` · ${visible.length} invoice${visible.length !== 1 ? 's' : ''} · ${fmtGBP(totalBalance)} total`
+                ` · ${visible.length} invoice${visible.length !== 1 ? 's' : ''} · ${formatCurrency(totalBalance)} total`
               )}
             </Typography>
           )}
@@ -280,7 +280,7 @@ export function StandaloneInvoicesPage() {
       {/* Overdue alert */}
       {!isLoading && overdueCount > 0 && (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          {overdueCount} overdue invoice{overdueCount !== 1 ? 's' : ''} — total outstanding: {fmtGBP(sorted.filter(inv => ['overdue','open','partial'].includes(invoiceStatus(inv))).reduce((s, inv) => s + (inv.balance ?? 0), 0))}
+          {overdueCount} overdue invoice{overdueCount !== 1 ? 's' : ''} — total outstanding: {formatCurrency(sorted.filter(inv => ['overdue','open','partial'].includes(invoiceStatus(inv))).reduce((s, inv) => s + (inv.balance ?? 0), 0))}
         </Alert>
       )}
 
@@ -374,7 +374,7 @@ export function StandaloneInvoicesPage() {
                   <StatusChip inv={inv} />
                   {/* Balance */}
                   <Typography variant="body2" sx={{ fontWeight: 700, minWidth: 80, textAlign: 'right', flexShrink: 0 }}>
-                    {fmtGBP(inv.balance)}
+                    {formatCurrency(inv.balance)}
                   </Typography>
                   {/* Chevron */}
                   <Box component="span" sx={{ color: 'text.disabled', flexShrink: 0, display: 'flex', alignItems: 'center' }}>

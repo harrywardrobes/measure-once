@@ -50,10 +50,10 @@ function createMailTransport() {
     auth:   { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
   });
 }
-function hsBase() {
+function getHubSpotBaseUrl() {
   return process.env.HUBSPOT_API_BASE_OVERRIDE || 'https://api.hubapi.com';
 }
-function hsHeaders() {
+function getHubSpotHeaders() {
   return {
     Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
     'Content-Type': 'application/json',
@@ -209,13 +209,13 @@ function roughEstimateBody(contactName, priceRange) {
 
 // ── HubSpot helpers ───────────────────────────────────────────────────────────
 async function updateHubSpotLeadStatus(contactId, status) {
-  const url = `${hsBase()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
-  await axios.patch(url, { properties: { hs_lead_status: status } }, { headers: hsHeaders() });
+  const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
+  await axios.patch(url, { properties: { hs_lead_status: status } }, { headers: getHubSpotHeaders() });
 }
 
 async function clearHubSpotSubstatus(contactId) {
-  const url = `${hsBase()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
-  await axios.patch(url, { properties: { hw_lead_substatus: '' } }, { headers: hsHeaders() });
+  const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
+  await axios.patch(url, { properties: { hw_lead_substatus: '' } }, { headers: getHubSpotHeaders() });
 }
 
 async function ensureLeadStatusExists(key, label) {

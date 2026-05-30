@@ -165,7 +165,7 @@ function _signingSecret() {
   if (!s) throw new Error('SESSION_SECRET is required to sign image URLs');
   return s;
 }
-function _sign(key, exp) {
+function _createUrlSignature(key, exp) {
   return crypto
     .createHmac('sha256', _signingSecret())
     .update(`${key}|${exp}`)
@@ -175,7 +175,7 @@ function _sign(key, exp) {
 function signImageUrl(storageKey, ttlSec = SIGNED_URL_TTL_SEC) {
   if (!isOpaqueKey(storageKey)) return storageKey; // pass through legacy URLs/data URIs
   const exp = Math.floor(Date.now() / 1000) + Math.max(60, ttlSec | 0);
-  const sig = _sign(storageKey, exp);
+  const sig = _createUrlSignature(storageKey, exp);
   return `/api/design-visit-images/${encodeURIComponent(storageKey)}?exp=${exp}&sig=${sig}`;
 }
 
@@ -184,7 +184,7 @@ function verifySignedUrl(storageKey, exp, sig) {
   const expNum = parseInt(exp, 10);
   if (!Number.isFinite(expNum) || expNum < Math.floor(Date.now() / 1000)) return false;
   if (typeof sig !== 'string' || sig.length !== 64) return false;
-  const expected = _sign(storageKey, expNum);
+  const expected = _createUrlSignature(storageKey, expNum);
   const a = Buffer.from(expected, 'hex');
   const b = Buffer.from(sig, 'hex');
   if (a.length !== b.length) return false;

@@ -39,7 +39,7 @@ async function ensureVisitsTable() {
   `);
 }
 
-function rowToVisit(r) {
+function mapDatabaseRowToVisit(r) {
   return {
     id:             r.id,
     createdBy:      r.created_by,
@@ -127,7 +127,7 @@ router.get('/api/visits', isAuthenticated, visitsRateLimiter, async (req, res) =
   try {
     const sql = 'SELECT * FROM visits WHERE start_at < $1 AND end_at > $2 ORDER BY start_at ASC';
     const r = await pool.query(sql, [to.toISOString(), from.toISOString()]);
-    res.json(r.rows.map(rowToVisit));
+    res.json(r.rows.map(mapDatabaseRowToVisit));
   } catch (e) {
     console.error('GET /api/visits failed:', e.message);
     res.status(500).json({ error: 'Failed to load visits' });
@@ -155,7 +155,7 @@ router.post('/api/visits', isAuthenticated, requirePrivilege('member'), async (r
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [userId, v.customerId, v.customerName, v.type, v.title, v.startAt, v.endAt, v.isWorkshop, v.notes, v.location, v.assigneeId, v.assigneeRole]
     );
-    res.json(rowToVisit(r.rows[0]));
+    res.json(mapDatabaseRowToVisit(r.rows[0]));
   } catch (e) {
     console.error('POST /api/visits failed:', e.message);
     res.status(500).json({ error: 'Failed to create visit' });
@@ -177,7 +177,7 @@ router.patch('/api/visits/:id', isAuthenticated, requirePrivilege('member'), asy
       [v.customerId, v.customerName, v.type, v.title, v.startAt, v.endAt, v.isWorkshop, v.notes, v.location, v.assigneeId, v.assigneeRole, id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
-    res.json(rowToVisit(r.rows[0]));
+    res.json(mapDatabaseRowToVisit(r.rows[0]));
   } catch (e) {
     console.error('PATCH /api/visits failed:', e.message);
     res.status(500).json({ error: 'Failed to update visit' });

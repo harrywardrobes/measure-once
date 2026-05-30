@@ -5,7 +5,7 @@ const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction, getReqPrivilege, scheduleConflictDigest } = require('./auth');
+const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction, getRequestPrivilegeLevel, scheduleConflictDigest } = require('./auth');
 const {
   hubspotMutationLimiter,
   gmailSendLimiter,
@@ -124,7 +124,7 @@ app.post('/api/hubspot/webhook',
 
     if (affectedIds.size > 0) {
       // Bust server-side caches so the next poll returns fresh data.
-      bustSharedCache();
+      clearContactCache();
       _invalidateLeadStatusCountsCache();
       _invalidateOpenLeadsCache();
       _invalidateProjectContactsCache();
@@ -222,7 +222,7 @@ installSession(app);
 
 // ── HubSpot ───────────────────────────────────────────────────────────────────
 const HS = process.env.HUBSPOT_API_URL || 'https://api.hubapi.com';
-const hsHeaders = () => ({
+const getHubSpotHeaders = () => ({
   Authorization: `Bearer ${getCredential('access_token')}`,
   'Content-Type': 'application/json'
 });
@@ -260,7 +260,7 @@ async function hubspotSearchWithRetry(body, { maxAttempts = 4, baseDelayMs = 300
       return await axios.post(
         `${HS}/crm/v3/objects/contacts/search`,
         body,
-        { headers: hsHeaders(), timeout: 15000 }
+        { headers: getHubSpotHeaders(), timeout: 15000 }
       );
     } catch (err) {
       lastErr = err;
@@ -310,7 +310,7 @@ async function hubspotRequestWithRetry(method, url, data, { timeout = 15000, max
     return null;
   };
 
-  const cfg = { headers: hsHeaders(), timeout };
+  const cfg = { headers: getHubSpotHeaders(), timeout };
   let lastErr;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -412,7 +412,7 @@ async function ensureHubSpotProperties() {
       await axios.post(
         `${HS}/crm/v3/properties/contacts`,
         { ...prop, groupName: 'contactinformation' },
-        { headers: hsHeaders() }
+        { headers: getHubSpotHeaders() }
       );
       console.log(`  Created HubSpot property: ${prop.name}`);
     } catch (e) {
@@ -433,7 +433,7 @@ app.get('/api/contacts/:id/localdata', requireHubspotToken, async (req, res) => 
   try {
     const r = await axios.get(
       `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
-      { headers: hsHeaders(), params: { properties: 'measure_once_rooms,measure_once_notes' } }
+      { headers: getHubSpotHeaders(), params: { properties: 'measure_once_rooms,measure_once_notes' } }
     );
     const roomsJson = r.data.properties?.measure_once_rooms;
     const notes     = r.data.properties?.measure_once_notes || '';
@@ -466,7 +466,7 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
         try {
           const cur = await axios.get(
             `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
-            { headers: hsHeaders(), params: { properties: 'measure_once_rooms' } }
+            { headers: getHubSpotHeaders(), params: { properties: 'measure_once_rooms' } }
           );
           const json = cur.data?.properties?.measure_once_rooms;
           if (json) existingRoomsForStageGuard = JSON.parse(json) || [];
@@ -528,7 +528,7 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
           try {
             const cur = await axios.get(
               `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
-              { headers: hsHeaders(), params: { properties: 'measure_once_rooms' } }
+              { headers: getHubSpotHeaders(), params: { properties: 'measure_once_rooms' } }
             );
             const json = cur.data?.properties?.measure_once_rooms;
             if (json) existingRooms = JSON.parse(json) || [];
@@ -592,7 +592,7 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
     } catch (hsErr) {
       console.error('[localdata] HubSpot PATCH failed after retries (non-fatal):', hsErr.message);
     }
-    bustSharedCache();
+    clearContactCache();
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message || 'Unexpected error.' });
@@ -699,7 +699,7 @@ async function getSharedContactsCache() {
 // HubSpot scan. Call this from every mutation route that changes contact data.
 // `_allContactsLastGood` is intentionally preserved so a failed refetch can
 // still serve the prior snapshot instead of returning a 502.
-function bustSharedCache() {
+function clearContactCache() {
   _allContactsCache = null;
 }
 
@@ -719,7 +719,7 @@ app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireMan
   try {
     const r = await axios.get(
       `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
-      { headers: hsHeaders(), params: { properties: 'measure_once_rooms' } }
+      { headers: getHubSpotHeaders(), params: { properties: 'measure_once_rooms' } }
     );
     const roomsJson = r.data.properties?.measure_once_rooms;
     if (!roomsJson) return res.status(404).json({ error: 'No rooms found' });
@@ -748,7 +748,7 @@ app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireMan
     }
 
     // Bust shared cache so next /api/localdata/all and /api/contacts-all reflect the new assignment
-    bustSharedCache();
+    clearContactCache();
 
     res.json({ success: true, rooms, ...(syncFailed ? { syncFailed: true } : {}) });
   } catch (e) {
@@ -929,7 +929,7 @@ app.get('/api/hubspot/status', async (req, res) => {
     });
   }
   try {
-    await axios.get(`${HS}/account-info/v3/details`, { headers: hsHeaders(), timeout: 8000 });
+    await axios.get(`${HS}/account-info/v3/details`, { headers: getHubSpotHeaders(), timeout: 8000 });
     res.json({ connected: true });
   } catch (e) {
     const status = e.response?.status;
@@ -993,8 +993,8 @@ app.get('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req,
 
   try {
     const [subsResp, settingsResp] = await Promise.allSettled([
-      axios.get(`${HS}/webhooks/v3/${encodeURIComponent(appId)}/subscriptions`, { headers: hsHeaders(), timeout: 10000 }),
-      axios.get(`${HS}/webhooks/v3/${encodeURIComponent(appId)}/settings`,      { headers: hsHeaders(), timeout: 10000 }),
+      axios.get(`${HS}/webhooks/v3/${encodeURIComponent(appId)}/subscriptions`, { headers: getHubSpotHeaders(), timeout: 10000 }),
+      axios.get(`${HS}/webhooks/v3/${encodeURIComponent(appId)}/settings`,      { headers: getHubSpotHeaders(), timeout: 10000 }),
     ]);
     const subs     = subsResp.status === 'fulfilled'     ? (subsResp.value.data?.results || [])           : [];
     const settings = settingsResp.status === 'fulfilled' ? settingsResp.value.data                         : null;
@@ -1031,7 +1031,7 @@ app.post('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req
     await axios.put(
       `${HS}/webhooks/v3/${encodeURIComponent(appId)}/settings`,
       { webhookUrl, maxConcurrentRequests: 10 },
-      { headers: hsHeaders(), timeout: 10000 }
+      { headers: getHubSpotHeaders(), timeout: 10000 }
     );
 
     // 2. Fetch existing subscriptions to avoid duplicates.
@@ -1039,7 +1039,7 @@ app.post('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req
     try {
       const r = await axios.get(
         `${HS}/webhooks/v3/${encodeURIComponent(appId)}/subscriptions`,
-        { headers: hsHeaders(), timeout: 10000 }
+        { headers: getHubSpotHeaders(), timeout: 10000 }
       );
       existing = r.data?.results || [];
     } catch { /* treat as no existing subscriptions */ }
@@ -1055,7 +1055,7 @@ app.post('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req
       const r = await axios.post(
         `${HS}/webhooks/v3/${encodeURIComponent(appId)}/subscriptions`,
         { eventType: 'contact.propertyChange', propertyName: prop, active: true },
-        { headers: hsHeaders(), timeout: 10000 }
+        { headers: getHubSpotHeaders(), timeout: 10000 }
       );
       created.push(r.data);
     }
@@ -1076,7 +1076,7 @@ app.delete('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (r
   try {
     const r = await axios.get(
       `${HS}/webhooks/v3/${encodeURIComponent(appId)}/subscriptions`,
-      { headers: hsHeaders(), timeout: 10000 }
+      { headers: getHubSpotHeaders(), timeout: 10000 }
     );
     const toDelete = (r.data?.results || []).filter(
       s => s.eventType === 'contact.propertyChange' && HS_WATCHED_PROPS.includes(s.propertyName)
@@ -1085,7 +1085,7 @@ app.delete('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (r
     await Promise.all(toDelete.map(s =>
       axios.delete(
         `${HS}/webhooks/v3/${encodeURIComponent(appId)}/subscriptions/${encodeURIComponent(s.id)}`,
-        { headers: hsHeaders(), timeout: 10000 }
+        { headers: getHubSpotHeaders(), timeout: 10000 }
       ).catch(err => console.warn('[hs-webhook] delete subscription error:', err.response?.data || err.message))
     ));
 
@@ -1099,7 +1099,7 @@ app.delete('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (r
 // ── HubSpot: Account ──────────────────────────────────────────────────────────
 app.get('/api/account', async (req, res) => {
   try {
-    const r = await axios.get(`${HS}/account-info/v3/details`, { headers: hsHeaders() });
+    const r = await axios.get(`${HS}/account-info/v3/details`, { headers: getHubSpotHeaders() });
     res.json(r.data);
   } catch (e) {
     const status = e.response?.status;
@@ -1116,7 +1116,7 @@ app.get('/api/account', async (req, res) => {
 // ── HubSpot: Pipeline ─────────────────────────────────────────────────────────
 app.get('/api/pipeline', async (req, res) => {
   try {
-    const r = await axios.get(`${HS}/crm/v3/pipelines/deals`, { headers: hsHeaders() });
+    const r = await axios.get(`${HS}/crm/v3/pipelines/deals`, { headers: getHubSpotHeaders() });
     res.json(r.data);
   } catch (e) {
     const status = e.response?.status;
@@ -1141,7 +1141,7 @@ function normalizeHubspotObjectId(id) {
 app.get('/api/deals', requireHubspotToken, async (req, res) => {
   try {
     const r = await axios.get(`${HS}/crm/v3/objects/deals`, {
-      headers: hsHeaders(),
+      headers: getHubSpotHeaders(),
       params: {
         limit: 100,
         properties: 'dealname,dealstage,amount,closedate,pipeline,hs_lastmodifieddate,createdate,hubspot_owner_id',
@@ -1168,7 +1168,7 @@ app.get('/api/deals/:id', requireHubspotToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid deal id' });
     }
     const r = await axios.get(`${HS}/crm/v3/objects/deals/${safeDealId}`, {
-      headers: hsHeaders(),
+      headers: getHubSpotHeaders(),
       params: {
         properties: 'dealname,dealstage,amount,closedate,pipeline,hs_lastmodifieddate,createdate',
         associations: 'contacts,notes'
@@ -1849,7 +1849,7 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHu
     const createRes = await axios.post(
       `${HS}/crm/v3/objects/contacts`,
       createBody,
-      { headers: hsHeaders() }
+      { headers: getHubSpotHeaders() }
     );
     const contact = createRes.data;
     const contactId = contact.id;
@@ -1862,11 +1862,11 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHu
     await axios.patch(
       `${HS}/crm/v3/objects/contacts/${contactId}`,
       { properties: { customer_number: customerNumber } },
-      { headers: hsHeaders() }
+      { headers: getHubSpotHeaders() }
     );
 
     contact.properties.customer_number = customerNumber;
-    bustSharedCache();
+    clearContactCache();
     return res.status(201).json(contact);
   } catch (e) {
     const status = e.response?.status;
@@ -1891,7 +1891,7 @@ app.get('/api/contacts/:id', requireHubspotToken, async (req, res) => {
     }
     const safeContactId = encodeURIComponent(contactId);
     const r = await axios.get(`${HS}/crm/v3/objects/contacts/${safeContactId}`, {
-      headers: hsHeaders(),
+      headers: getHubSpotHeaders(),
       params: { properties: 'firstname,lastname,email,phone,address,city,zip,customer_number,hs_lead_status,createdate' }
     });
     res.json(r.data);
@@ -1962,7 +1962,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
         patchResp = await axios.patch(
           `${HS}/crm/v3/objects/contacts/${safeContactId}`,
           { properties },
-          { headers: hsHeaders() }
+          { headers: getHubSpotHeaders() }
         );
         lastErr = null;
         break;
@@ -1984,7 +1984,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
       try {
         verifyResp = await axios.get(
           `${HS}/crm/v3/objects/contacts/${safeContactId}`,
-          { headers: hsHeaders(), params: { properties: propsToVerify.join(',') } }
+          { headers: getHubSpotHeaders(), params: { properties: propsToVerify.join(',') } }
         );
         verifyErr = null;
         break;
@@ -2016,7 +2016,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
       }
     }
 
-    bustSharedCache();
+    clearContactCache();
     if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status')) {
       _invalidateLeadStatusCountsCache();
       _invalidateOpenLeadsCache();
@@ -2045,7 +2045,7 @@ app.get('/api/deals/:id/notes', requireHubspotToken, async (req, res) => {
 
     const assocR = await axios.get(
       `${HS}/crm/v3/objects/deals/${dealId}/associations/notes`,
-      { headers: hsHeaders() }
+      { headers: getHubSpotHeaders() }
     );
     const noteIds = assocR.data.results?.map(r => r.id) || [];
     if (!noteIds.length) return res.json({ results: [] });
@@ -2056,7 +2056,7 @@ app.get('/api/deals/:id/notes', requireHubspotToken, async (req, res) => {
         properties: ['hs_note_body', 'hs_timestamp'],
         inputs: noteIds.map(id => ({ id }))
       },
-      { headers: hsHeaders() }
+      { headers: getHubSpotHeaders() }
     );
     res.json(noteR.data);
   } catch (e) {
@@ -2071,7 +2071,7 @@ async function verifyNoteAssociation(noteId, objectType, objectId) {
   try {
     const r = await axios.get(
       `${HS}/crm/v3/objects/notes/${encodeURIComponent(noteId)}/associations/${encodeURIComponent(objectType)}`,
-      { headers: hsHeaders(), timeout: 8000 }
+      { headers: getHubSpotHeaders(), timeout: 8000 }
     );
     const ids = (r.data?.results || []).map(a => String(a.id));
     return ids.includes(String(objectId));
@@ -2087,7 +2087,7 @@ async function verifyTaskAssociation(taskId, objectType, objectId) {
   try {
     const r = await axios.get(
       `${HS}/crm/v3/objects/tasks/${encodeURIComponent(taskId)}/associations/${encodeURIComponent(objectType)}`,
-      { headers: hsHeaders(), timeout: 8000 }
+      { headers: getHubSpotHeaders(), timeout: 8000 }
     );
     const ids = (r.data?.results || []).map(a => String(a.id));
     return ids.includes(String(objectId));
@@ -2306,7 +2306,7 @@ app.get('/api/contacts/:id/notes', requireHubspotToken, async (req, res) => {
   try {
     const assocR = await axios.get(
       `${HS}/crm/v3/objects/contacts/${contactId}/associations/notes`,
-      { headers: hsHeaders() }
+      { headers: getHubSpotHeaders() }
     );
     const noteIds = assocR.data.results?.map(r => r.id) || [];
     if (!noteIds.length) return res.json({ results: [] });
@@ -2317,7 +2317,7 @@ app.get('/api/contacts/:id/notes', requireHubspotToken, async (req, res) => {
         properties: ['hs_note_body', 'hs_timestamp'],
         inputs: noteIds.map(id => ({ id }))
       },
-      { headers: hsHeaders() }
+      { headers: getHubSpotHeaders() }
     );
     res.json(noteR.data);
   } catch (e) {
@@ -2423,7 +2423,7 @@ app.get('/api/contacts/:id/tasks', requireHubspotToken, async (req, res) => {
 
     const assocR = await axios.get(
       `${HS}/crm/v3/objects/contacts/${contactId}/associations/tasks`,
-      { headers: hsHeaders() }
+      { headers: getHubSpotHeaders() }
     );
     const taskIds = assocR.data.results?.map(r => r.id) || [];
     if (!taskIds.length) return res.json({ results: [] });
@@ -2434,7 +2434,7 @@ app.get('/api/contacts/:id/tasks', requireHubspotToken, async (req, res) => {
         properties: ['hs_task_subject', 'hs_timestamp', 'hs_task_status', 'hs_task_body'],
         inputs: taskIds.map(id => ({ id }))
       },
-      { headers: hsHeaders() }
+      { headers: getHubSpotHeaders() }
     );
     res.json(taskR.data);
   } catch (e) {
@@ -3151,7 +3151,7 @@ app.get('/trades', isAuthenticated, (_req, res) => {
 // Sales, Projects, Invoices — manager/admin only
 function requireManagerOrAdminPage(req, res, next) {
   if (!req.isAuthenticated || !req.isAuthenticated()) return res.redirect('/login');
-  const priv = getReqPrivilege(req);
+  const priv = getRequestPrivilegeLevel(req);
   if (priv === 'manager' || priv === 'admin') return next();
   return res.redirect('/access-restricted');
 }
@@ -4186,7 +4186,7 @@ async function syncLeadStatusesToHubSpot() {
   await axios.patch(
     `${HS}/crm/v3/properties/contacts/hs_lead_status`,
     { options },
-    { headers: hsHeaders() }
+    { headers: getHubSpotHeaders() }
   );
 }
 
@@ -4327,7 +4327,7 @@ async function ensureLeadStatusTable() {
     try {
       const r = await axios.get(
         `${HS}/crm/v3/properties/contacts/hs_lead_status`,
-        { headers: hsHeaders() }
+        { headers: getHubSpotHeaders() }
       );
       const options = (r.data.options || []).filter(o => !o.hidden);
       if (options.length > 0) {
@@ -5190,7 +5190,7 @@ async function ensureHwTestUserProperty() {
   try {
     await axios.get(
       `${HS}/crm/v3/properties/contacts/hw_test_user`,
-      { headers: hsHeaders() }
+      { headers: getHubSpotHeaders() }
     );
     return; // already exists
   } catch (e) {
@@ -5214,7 +5214,7 @@ async function ensureHwTestUserProperty() {
           { label: 'No',  value: 'false', displayOrder: 1, hidden: false },
         ],
       },
-      { headers: hsHeaders() }
+      { headers: getHubSpotHeaders() }
     );
     console.log('  Created HubSpot property: hw_test_user');
   } catch (e) {
@@ -5259,6 +5259,12 @@ app.post('/api/admin/hubspot/dev-mode', isAuthenticated, requireAdmin, async (re
     console.error('POST /api/admin/hubspot/dev-mode error:', e.message);
     res.status(500).json({ error: 'Could not save dev-mode setting.' });
   }
+});
+
+// Returns whether the server is running in a non-production environment.
+// Used by the DevEnvironmentPage cheatsheet to show the rename reference table.
+app.get('/api/admin/server-env', isAuthenticated, requireAdmin, (_req, res) => {
+  res.json({ isDevelopment: process.env.NODE_ENV !== 'production' });
 });
 
 // ── Dev-only: seed the shared contacts cache for automated tests ──────────────
@@ -5335,7 +5341,7 @@ async function ensureHwLeadSubstatusProperty() {
   try {
     await axios.get(
       `${HS}/crm/v3/properties/contacts/hw_lead_substatus`,
-      { headers: hsHeaders() }
+      { headers: getHubSpotHeaders() }
     );
     return; // already exists
   } catch (e) {
@@ -5356,7 +5362,7 @@ async function ensureHwLeadSubstatusProperty() {
         description: 'Sub-status within the current Lead Status (Measure Once CRM). Options are namespaced as STATUS_KEY__SUBSTATUS_KEY.',
         options: [{ value: '__placeholder__', label: '—', displayOrder: 0, hidden: true }],
       },
-      { headers: hsHeaders() }
+      { headers: getHubSpotHeaders() }
     );
     console.log('  Created HubSpot property: hw_lead_substatus');
   } catch (e) {
@@ -5410,7 +5416,7 @@ async function syncLeadSubstatusesToHubSpot() {
   await axios.patch(
     `${HS}/crm/v3/properties/contacts/hw_lead_substatus`,
     { options },
-    { headers: hsHeaders() }
+    { headers: getHubSpotHeaders() }
   );
 }
 
@@ -6292,7 +6298,7 @@ app.post('/api/whatsapp/send', isAuthenticated, requireAdmin, requireWhatsAppCon
   }
   try {
     const hsContact = await axios.get(`${HS}/crm/v3/objects/contacts/${encodeURIComponent(safeContactId)}`, {
-      headers: hsHeaders(),
+      headers: getHubSpotHeaders(),
       params: { properties: 'phone,mobilephone' },
     });
     const hsPhone       = (hsContact.data?.properties?.phone       || '').replace(/[^\d]/g, '');

@@ -37,7 +37,7 @@ import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
 import { usePrefs } from '../hooks/usePrefs';
 import { useQBInvoices } from '../hooks/useQBInvoices';
-import { InvoiceDetailDrawer, fmtGBP as fmtGBPShared } from '../components/InvoiceDetailDrawer';
+import { InvoiceDetailDrawer, formatCurrency as formatCurrencyShared } from '../components/InvoiceDetailDrawer';
 import { PageFilterBar } from '../components/PageFilterBar';
 import { StageTabGroup } from '../components/StageTabGroup';
 import { SortSelect } from '../components/SortSelect';
@@ -152,8 +152,8 @@ function fmtInstallDate(isoStr: string | null | undefined): string | null {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-function fmtGBP(amount: number): string {
-  return fmtGBPShared(amount);
+function formatCurrency(amount: number): string {
+  return formatCurrencyShared(amount);
 }
 
 // ── Row computation ────────────────────────────────────────────────────────────
@@ -436,7 +436,7 @@ function InvoiceBadge({
           lineHeight: 1.4,
         }}
       >
-        {fmtGBP(total)}
+        {formatCurrency(total)}
       </button>
     </Box>
   );

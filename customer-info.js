@@ -83,10 +83,10 @@ function escapeHtml(str) {
 function adminEmails() {
   return (process.env.ADMIN_EMAILS || '').split(',').map(s => s.trim()).filter(Boolean);
 }
-function hsBase() {
+function getHubSpotBaseUrl() {
   return process.env.HUBSPOT_API_BASE_OVERRIDE || 'https://api.hubapi.com';
 }
-function hsHeaders() {
+function getHubSpotHeaders() {
   return {
     Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
     'Content-Type': 'application/json',
@@ -428,17 +428,17 @@ async function sendCustomerThankYouEmail(contactEmail, contactName) {
 
 // ── HubSpot helpers ───────────────────────────────────────────────────────────
 async function fetchContactFromHubSpot(contactId) {
-  const url = `${hsBase()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
+  const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
   const r = await axios.get(url, {
-    headers: hsHeaders(),
+    headers: getHubSpotHeaders(),
     params: { properties: 'email,phone,mobilephone,firstname,lastname' },
   });
   return r.data;
 }
 
 async function updateHubSpotLeadStatus(contactId, status) {
-  const url = `${hsBase()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
-  await axios.patch(url, { properties: { hs_lead_status: status } }, { headers: hsHeaders() });
+  const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
+  await axios.patch(url, { properties: { hs_lead_status: status } }, { headers: getHubSpotHeaders() });
 }
 
 async function ensureSubstatusExists(substatusKey, label, parentStatusKey) {
@@ -460,8 +460,8 @@ async function ensureSubstatusExists(substatusKey, label, parentStatusKey) {
 }
 
 async function updateHubSpotSubstatus(contactId, substatusKey) {
-  const url = `${hsBase()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
-  await axios.patch(url, { properties: { hw_lead_substatus: substatusKey } }, { headers: hsHeaders() });
+  const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
+  await axios.patch(url, { properties: { hw_lead_substatus: substatusKey } }, { headers: getHubSpotHeaders() });
 }
 
 // ── Photo upload (multer → object storage) ───────────────────────────────────

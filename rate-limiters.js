@@ -2,7 +2,7 @@ const rateLimit = require('express-rate-limit');
 const { ipKeyGenerator } = require('express-rate-limit');
 const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
 
-function userKey(req) {
+function getUserRateLimitKey(req) {
   return req.user?.claims?.sub || ipKeyGenerator(req.ip);
 }
 
@@ -12,7 +12,7 @@ function createUserRateLimiter({ windowMs, max, prefix, message }) {
     max,
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: userKey,
+    keyGenerator: getUserRateLimitKey,
     store: new PostgresStoreIndividualIP(
       { connectionString: process.env.DATABASE_URL },
       prefix
@@ -95,7 +95,7 @@ const visitsReadLimiter = createUserRateLimiter({
 
 module.exports = {
   createUserRateLimiter,
-  userKey,
+  getUserRateLimitKey,
   hubspotMutationLimiter,
   gmailSendLimiter,
   photoUploadLimiter,

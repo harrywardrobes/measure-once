@@ -15,7 +15,7 @@ const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const QB_AUTH_BASE = 'https://appcenter.intuit.com/connect/oauth2';
 const QB_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 
-function qbBase() {
+function getQuickBooksBaseUrl() {
   if (process.env.QB_API_BASE_OVERRIDE) return process.env.QB_API_BASE_OVERRIDE;
   return process.env.QB_ENVIRONMENT === 'sandbox'
     ? 'https://sandbox-quickbooks.api.intuit.com'
@@ -29,7 +29,7 @@ function getValidatedInvoiceId(rawId) {
   return id;
 }
 
-function qbRedirectUri() {
+function getQuickBooksRedirectUri() {
   if (process.env.QB_REDIRECT_URI) return process.env.QB_REDIRECT_URI;
   const domain = (process.env.REPLIT_DOMAINS || '').split(',')[0].trim();
   return domain ? `https://${domain}/auth/quickbooks/callback` : '';
@@ -108,11 +108,11 @@ async function getValidTokens() {
   return persistTokens({ ...r.data, realm_id: t.realm_id });
 }
 
-async function qbGet(path, params = {}) {
+async function fetchFromQuickBooks(path, params = {}) {
   const t = await getValidTokens();
   if (!t) throw new Error('QuickBooks not connected');
   const r = await axios.get(
-    `${qbBase()}/v3/company/${t.realm_id}${path}`,
+    `${getQuickBooksBaseUrl()}/v3/company/${t.realm_id}${path}`,
     {
       headers: { Authorization: `Bearer ${t.access_token}`, Accept: 'application/json' },
       params:  { minorversion: 65, ...params },
@@ -131,7 +131,7 @@ router.get('/auth/quickbooks', isAuthenticated, requireAdmin, (req, res) => {
   req.session.qbOAuthState = state;
   const params = new URLSearchParams({
     client_id:     process.env.QB_CLIENT_ID,
-    redirect_uri:  qbRedirectUri(),
+    redirect_uri:  getQuickBooksRedirectUri(),
     response_type: 'code',
     scope:         'com.intuit.quickbooks.accounting',
     state,
@@ -154,7 +154,7 @@ router.get('/auth/quickbooks/callback', isAuthenticated, requireAdmin, async (re
     const creds = Buffer.from(`${process.env.QB_CLIENT_ID}:${process.env.QB_CLIENT_SECRET}`).toString('base64');
     const r = await axios.post(
       QB_TOKEN_URL,
-      new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: qbRedirectUri() }).toString(),
+      new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: getQuickBooksRedirectUri() }).toString(),
       { headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
     );
     await persistTokens({ ...r.data, realm_id: realmId });
@@ -176,7 +176,7 @@ router.get('/api/quickbooks/status', isAuthenticated, async (req, res) => {
   try {
     const t = await getValidTokens();
     if (!t) return res.json({ connected: false });
-    const data = await qbGet(`/companyinfo/${t.realm_id}`);
+    const data = await fetchFromQuickBooks(`/companyinfo/${t.realm_id}`);
     res.json({ connected: true, company: data.CompanyInfo?.CompanyName || 'QuickBooks' });
   } catch {
     res.json({ connected: false });
@@ -186,7 +186,7 @@ router.get('/api/quickbooks/status', isAuthenticated, async (req, res) => {
 // ── API: all outstanding invoices ──────────────────────────────────────────────
 router.get('/api/quickbooks/invoices', isAuthenticated, requireAdmin, quickbooksReadWriteLimiter, async (req, res) => {
   try {
-    const data = await qbGet('/query', {
+    const data = await fetchFromQuickBooks('/query', {
       query: "SELECT * FROM Invoice WHERE Balance > '0.0' MAXRESULTS 1000"
     });
     const invoices = (data.QueryResponse?.Invoice || []).map(inv => ({
@@ -211,7 +211,7 @@ router.get('/api/quickbooks/invoices', isAuthenticated, requireAdmin, quickbooks
 // ── API: single invoice detail ─────────────────────────────────────────────────
 router.get('/api/quickbooks/invoice/:id', isAuthenticated, requireAdmin, quickbooksReadWriteLimiter, async (req, res) => {
   try {
-    const data = await qbGet(`/invoice/${req.params.id}`);
+    const data = await fetchFromQuickBooks(`/invoice/${req.params.id}`);
     const inv  = data.Invoice;
     if (!inv) return res.status(404).json({ error: 'Invoice not found' });
 
@@ -263,7 +263,7 @@ router.post('/api/quickbooks/invoice/:id', isAuthenticated, requireAdmin, quickb
     if (email   !== undefined) body.BillEmail    = { Address: email };
 
     const r = await axios.post(
-      `${qbBase()}/v3/company/${t.realm_id}/invoice`,
+      `${getQuickBooksBaseUrl()}/v3/company/${t.realm_id}/invoice`,
       body,
       {
         headers: { Authorization: `Bearer ${t.access_token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -289,7 +289,7 @@ router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, requireAdmin, qui
     if (!invoiceId) return res.status(400).json({ error: 'Invalid invoice id' });
 
     const r = await axios.get(
-      `${qbBase()}/v3/company/${t.realm_id}/invoice/${invoiceId}/pdf`,
+      `${getQuickBooksBaseUrl()}/v3/company/${t.realm_id}/invoice/${invoiceId}/pdf`,
       {
         headers: { Authorization: `Bearer ${t.access_token}`, Accept: 'application/pdf' },
         params:  { minorversion: 65 },
@@ -334,7 +334,7 @@ router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requireAdmin, a
     }
 
     const r = await axios.post(
-      `${qbBase()}/v3/company/${t.realm_id}/invoice/${invoiceId}/send`,
+      `${getQuickBooksBaseUrl()}/v3/company/${t.realm_id}/invoice/${invoiceId}/send`,
       {},
       {
         headers: { Authorization: `Bearer ${t.access_token}`, 'Content-Type': 'application/octet-stream', Accept: 'application/json' },

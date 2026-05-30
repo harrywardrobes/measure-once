@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { fmtGBP } from '../utils/formatters';
+import { formatCurrency } from '../utils/formatters';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
@@ -495,7 +495,7 @@ function QBBadge({
         '&:hover': { bgcolor: STATUS_COLORS.errorLight.bg },
       }}
     >
-      {fmtGBP(total)}
+      {formatCurrency(total)}
     </Box>
   );
 }

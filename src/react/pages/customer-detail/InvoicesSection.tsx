@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Contact } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { InvoiceDetailDrawer, type InvoiceSummary } from '../../components/InvoiceDetailDrawer';
-import { fmtQBDate, fmtGBP } from '../../utils/formatters';
+import { formatQuickBooksDate, formatCurrency } from '../../utils/formatters';
 import type { QBInvoicesResult } from '../../hooks/useQBInvoices';
 
 interface Props {
@@ -151,10 +151,10 @@ export function InvoicesSection({ contact, qb }: Props) {
                   {statusPill(inv)}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, fontSize: '0.75rem', color: 'var(--ink-4)' }}>
-                  <span>{fmtQBDate(inv.txnDate)}</span>
-                  <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{fmtGBP(inv.totalAmt)}</span>
+                  <span>{formatQuickBooksDate(inv.txnDate)}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--ink-2)' }}>{formatCurrency(inv.totalAmt)}</span>
                   {inv.balance != null && Number(inv.balance) > 0 && (
-                    <span style={{ color: 'var(--stone-deep)' }}>due {fmtGBP(inv.balance)}</span>
+                    <span style={{ color: 'var(--stone-deep)' }}>due {formatCurrency(inv.balance)}</span>
                   )}
                   <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/>

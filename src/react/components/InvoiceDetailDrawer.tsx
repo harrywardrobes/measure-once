@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useConnectionToast } from '../context/ConnectionToastContext';
-import { fmtGBP as _fmtGBP, fmtQBDate as _fmtQBDate } from '../utils/formatters';
+import { formatCurrency as _formatCurrency, formatQuickBooksDate as _formatQuickBooksDate } from '../utils/formatters';
 import {
   Box,
   Button,
@@ -97,12 +97,12 @@ export function clearDraft(invId: string) {
 
 // ── Formatting helpers (re-exported from shared utils) ─────────────────────────
 
-export function fmtGBP(amount?: number | string | null): string {
-  return _fmtGBP(amount);
+export function formatCurrency(amount?: number | string | null): string {
+  return _formatCurrency(amount);
 }
 
 export function fmtDate(iso?: string | null): string {
-  return _fmtQBDate(iso) || '—';
+  return _formatQuickBooksDate(iso) || '—';
 }
 
 export function invoiceStatus(inv: Pick<InvoiceSummary, 'balance' | 'totalAmt' | 'dueDate'>): 'paid' | 'overdue' | 'partial' | 'open' {
@@ -388,9 +388,9 @@ export function InvoiceDetailDrawer({
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
                 {([
                   { label: 'Invoice date', value: fmtDate(inv.txnDate) },
-                  { label: 'Balance due',  value: fmtGBP(inv.balance), big: true },
+                  { label: 'Balance due',  value: formatCurrency(inv.balance), big: true },
                   { label: 'Due date',     value: fmtDate(inv.dueDate), err: invoiceStatus(inv) === 'overdue' },
-                  { label: 'Total',        value: fmtGBP(inv.totalAmt) },
+                  { label: 'Total',        value: formatCurrency(inv.totalAmt) },
                 ] as Array<{ label: string; value: string; big?: boolean; err?: boolean }>).map(item => (
                   <Box key={item.label}>
                     <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
@@ -429,15 +429,15 @@ export function InvoiceDetailDrawer({
                       <TableRow key={i}>
                         <TableCell sx={{ fontSize: '0.8rem', color: 'text.secondary', pl: 0 }}>{l.description || '—'}</TableCell>
                         <TableCell align="right" sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>{l.qty ?? ''}</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>{l.unitPrice != null ? fmtGBP(l.unitPrice) : ''}</TableCell>
-                        <TableCell align="right" sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'text.primary', pr: 0 }}>{fmtGBP(l.amount)}</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>{l.unitPrice != null ? formatCurrency(l.unitPrice) : ''}</TableCell>
+                        <TableCell align="right" sx={{ fontSize: '0.8rem', fontWeight: 700, color: 'text.primary', pr: 0 }}>{formatCurrency(l.amount)}</TableCell>
                       </TableRow>
                     ))}
                 </TableBody>
                 <TableFooter>
                   <TableRow>
                     <TableCell colSpan={3} sx={{ fontWeight: 600, fontSize: '0.8rem', pl: 0, borderTop: '2px solid', borderColor: 'divider' }}>Total</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.8rem', pr: 0, borderTop: '2px solid', borderColor: 'divider' }}>{fmtGBP(inv.totalAmt)}</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.8rem', pr: 0, borderTop: '2px solid', borderColor: 'divider' }}>{formatCurrency(inv.totalAmt)}</TableCell>
                   </TableRow>
                 </TableFooter>
               </Table>

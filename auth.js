@@ -22,7 +22,7 @@ const zxcvbn = require('zxcvbn');
 // captcha. In development/test mode the check is a no-op when the key is
 // absent, allowing local operation without Turnstile credentials.
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
-async function verifyTurnstile(token, ip) {
+async function verifyCaptchaToken(token, ip) {
   if (!process.env.TURNSTILE_SECRET_KEY) {
     if (process.env.NODE_ENV === 'production') {
       // Fail closed: captcha is a required abuse control in production.
@@ -717,7 +717,7 @@ const requireManagerOrAdmin = async (req, res, next) => {
 };
 
 /**
- * getReqPrivilege(req)
+ * getRequestPrivilegeLevel(req)
  *
  * Canonical helper for reading the current request user's privilege level
  * from the Passport session object.  Always defaults to 'member' when
@@ -735,7 +735,7 @@ const requireManagerOrAdmin = async (req, res, next) => {
  * @param {import('express').Request} req
  * @returns {'viewer'|'member'|'manager'|'admin'}
  */
-function getReqPrivilege(req) {
+function getRequestPrivilegeLevel(req) {
   return req.user?.privilege_level || 'member';
 }
 
@@ -962,7 +962,7 @@ async function setupAuth(app) {
     if (!email || !password || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Please enter your email and password.' });
     }
-    const captcha = await verifyTurnstile(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
+    const captcha = await verifyCaptchaToken(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
     if (!captcha.ok) return turnstileError(res);
     try {
       if (!(await isEmailApproved(email)) && !isAdminEmail(email)) {
@@ -1047,7 +1047,7 @@ async function setupAuth(app) {
       if (!name || !email || !/^[a-zA-Z0-9.!#$%&*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/.test(email)) {
         return res.status(400).json({ error: 'Please provide a valid name and email.' });
       }
-      const captcha = await verifyTurnstile(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
+      const captcha = await verifyCaptchaToken(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
       if (!captcha.ok) return turnstileError(res);
       // Intentionally return the same success shape whether the email is already
       // approved, already has a pending request, or is genuinely new. Returning
@@ -1087,7 +1087,7 @@ async function setupAuth(app) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Please provide a valid email address.' });
     }
-    const captcha = await verifyTurnstile(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
+    const captcha = await verifyCaptchaToken(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
     if (!captcha.ok) return turnstileError(res);
     try {
       if (await isEmailApproved(email) || isAdminEmail(email)) {
@@ -2760,6 +2760,6 @@ function scheduleConflictDigest() {
 module.exports = {
   installSession, setupAuth, isAuthenticated, requireAdmin,
   requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete,
-  isAdminEmail, userIdExists, pool, logAdminAction, getReqPrivilege,
+  isAdminEmail, userIdExists, pool, logAdminAction, getRequestPrivilegeLevel,
   scheduleConflictDigest,
 };

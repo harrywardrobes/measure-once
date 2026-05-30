@@ -71,7 +71,7 @@ export function contactDisplayName(
  * Formats a number as GBP currency (e.g. £1,234.56).
  * Returns '—' for null/undefined/NaN (em dash, suitable for UI display).
  */
-export function fmtGBP(amount: number | string | null | undefined): string {
+export function formatCurrency(amount: number | string | null | undefined): string {
   if (amount == null) return '—';
   const n = Number(amount);
   if (isNaN(n)) return '—';
@@ -81,7 +81,7 @@ export function fmtGBP(amount: number | string | null | undefined): string {
 /**
  * HTML-escapes a string. Handles null/undefined by returning ''.
  */
-export function escHtml(str: string | null | undefined): string {
+export function escapeHtml(str: string | null | undefined): string {
   return (str || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -93,7 +93,7 @@ export function escHtml(str: string | null | undefined): string {
  * Formats a QuickBooks date string (YYYY-MM-DD) as "D Mon YYYY" in en-GB locale.
  * Returns '' for falsy input.
  */
-export function fmtQBDate(iso: string | null | undefined): string {
+export function formatQuickBooksDate(iso: string | null | undefined): string {
   if (!iso) return '';
   const [y, m, d] = iso.split('-');
   return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10))

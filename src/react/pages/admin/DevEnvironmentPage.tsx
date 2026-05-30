@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, Chip, CircularProgress, FormControlLabel, Stack, Switch, Typography } from '@mui/material';
+import { Alert, Accordion, AccordionDetails, AccordionSummary, Box, Button, Card, CardContent, Chip, CircularProgress, Divider, FormControlLabel, Stack, Switch, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import LinkIcon from '@mui/icons-material/Link';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 /**
  * Admin → Dev environment tab (#tab-devenv).
@@ -130,6 +131,7 @@ export function DevEnvironmentPage() {
   usePageTitle('Developer · Measure Once');
   const [storybookAvailable, setStorybookAvailable] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isDevelopment, setIsDevelopment] = useState<boolean>(false);
 
   const [devMode, setDevMode] = useState<boolean | null>(null);
   const [devModeLoading, setDevModeLoading] = useState<boolean>(true);
@@ -140,6 +142,10 @@ export function DevEnvironmentPage() {
     fetch('/storybook/', { method: 'HEAD' })
       .then((res) => setStorybookAvailable(res.ok))
       .catch(() => setStorybookAvailable(false));
+    fetch('/api/admin/server-env')
+      .then((res) => res.ok ? res.json() : { isDevelopment: false })
+      .then((data) => setIsDevelopment(Boolean(data.isDevelopment)))
+      .catch(() => setIsDevelopment(false));
   }, []);
 
   useEffect(() => {
@@ -324,6 +330,128 @@ export function DevEnvironmentPage() {
           )}
         </CardContent>
       </Card>
+
+      {isDevelopment && (
+        <Accordion variant="outlined" disableGutters>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              Developer cheatsheet
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              Quick reference for key server modules and recently renamed helpers.
+              Only visible in non-production environments.
+            </Typography>
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+              Key server-side modules
+            </Typography>
+            <Table size="small" sx={{ mb: 3 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700, width: '22%' }}>File</TableCell>
+                  <TableCell sx={{ fontWeight: 700, width: '40%' }}>Purpose</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Key exports</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {([
+                  { file: 'server.js', purpose: 'Main Express entry point — all routes, SSE, caches', exports: 'app, clearContactCache' },
+                  { file: 'auth.js', purpose: 'Authentication, sessions, privilege middleware', exports: 'isAuthenticated, requireAdmin, requirePrivilege, getRequestPrivilegeLevel, verifyCaptchaToken' },
+                  { file: 'design-visits.js', purpose: 'Design visit CRUD, QB/HubSpot sync, sign-off', exports: 'router, submitDesignVisitAndSync' },
+                  { file: 'visits.js', purpose: 'Visit DB helpers and route handlers', exports: 'router, mapDatabaseRowToVisit' },
+                  { file: 'quickbooks.js', purpose: 'QuickBooks OAuth and invoice API wrapper', exports: 'router, getQuickBooksBaseUrl, fetchFromQuickBooks' },
+                  { file: 'customer-info.js', purpose: 'Customer info form, photo upload, SSE push', exports: 'router, getHubSpotBaseUrl, getHubSpotHeaders' },
+                  { file: 'photo-reviews.js', purpose: 'Photo review outcomes and HubSpot status updates', exports: 'router, getHubSpotBaseUrl, getHubSpotHeaders' },
+                  { file: 'design-visit-uploads.js', purpose: 'Signed URL generation for visit file storage', exports: 'router, uploadFromDataUrl, signImageUrl, verifySignedUrl' },
+                  { file: 'rate-limiters.js', purpose: 'Express rate-limit middleware factory', exports: 'hubspotMutationLimiter, gmailSendLimiter, getUserRateLimitKey' },
+                  { file: 'hubspot-creds.js', purpose: 'HubSpot credential lookup from DB', exports: 'getCredential, CRED_MAP' },
+                ] as Array<{ file: string; purpose: string; exports: string }>).map((row) => (
+                  <TableRow key={row.file}>
+                    <TableCell><code className="adm-inline-code">{row.file}</code></TableCell>
+                    <TableCell><Typography variant="caption" color="text.secondary">{row.purpose}</Typography></TableCell>
+                    <TableCell><Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{row.exports}</Typography></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            <Divider sx={{ mb: 2 }} />
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+              Recently renamed helpers — use new names in all new code
+            </Typography>
+            {[
+              {
+                heading: 'Server-side',
+                rows: [
+                  { old: 'bustSharedCache()', next: 'clearContactCache()', file: 'server.js', note: 'Clears the shared contacts cache' },
+                  { old: 'rowToVisit()', next: 'mapDatabaseRowToVisit()', file: 'visits.js', note: 'Maps a DB row to a visit object' },
+                  { old: 'runSubmitSideEffects()', next: 'submitDesignVisitAndSync()', file: 'design-visits.js', note: 'Submits a visit and syncs QB / HubSpot' },
+                  { old: 'verifyTurnstile()', next: 'verifyCaptchaToken()', file: 'auth.js', note: 'Verifies a Cloudflare Turnstile token' },
+                  { old: 'getReqPrivilege(req)', next: 'getRequestPrivilegeLevel(req)', file: 'auth.js', note: 'Returns privilege level for a request' },
+                  { old: 'qbBase()', next: 'getQuickBooksBaseUrl()', file: 'quickbooks.js', note: 'Returns QuickBooks API base URL' },
+                  { old: 'qbRedirectUri()', next: 'getQuickBooksRedirectUri()', file: 'quickbooks.js', note: 'Returns OAuth redirect URI' },
+                  { old: 'qbGet(path, params)', next: 'fetchFromQuickBooks(path, params)', file: 'quickbooks.js', note: 'Authenticated GET to QuickBooks API' },
+                  { old: 'hsBase()', next: 'getHubSpotBaseUrl()', file: 'customer-info.js / photo-reviews.js', note: 'Returns HubSpot API base URL' },
+                  { old: 'hsHeaders()', next: 'getHubSpotHeaders()', file: 'server.js / customer-info.js / photo-reviews.js', note: 'Returns HubSpot auth headers' },
+                  { old: 'userKey(req)', next: 'getUserRateLimitKey(req)', file: 'rate-limiters.js', note: 'Returns per-user rate-limit key' },
+                  { old: '_sign(key, exp)', next: '_createUrlSignature(key, exp)', file: 'design-visit-uploads.js', note: 'Creates HMAC signature for signed URL' },
+                ],
+              },
+              {
+                heading: 'React — formatters',
+                rows: [
+                  { old: 'fmtGBP()', next: 'formatCurrency()', file: 'src/react/utils/formatters.ts', note: 'Formats a number as GBP currency' },
+                  { old: 'fmtQBDate()', next: 'formatQuickBooksDate()', file: 'src/react/utils/formatters.ts', note: 'Formats a QuickBooks ISO date string' },
+                  { old: 'escHtml()', next: 'escapeHtml()', file: 'src/react/utils/formatters.ts', note: 'Escapes HTML special characters' },
+                ],
+              },
+              {
+                heading: 'React — hooks',
+                rows: [
+                  { old: 'fetchNonce / setFetchNonce', next: 'refetchTrigger / setRefetchTrigger', file: 'src/react/hooks/useProjectsData.ts', note: 'Counter incremented to trigger a data refetch' },
+                ],
+              },
+            ].map((section) => (
+              <Box key={section.heading} sx={{ mb: 2 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {section.heading}
+                </Typography>
+                <Table size="small" sx={{ mt: 0.5 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700, width: '28%' }}>Old name</TableCell>
+                      <TableCell sx={{ fontWeight: 700, width: '28%' }}>New name</TableCell>
+                      <TableCell sx={{ fontWeight: 700, width: '18%' }}>File</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Notes</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {section.rows.map((row) => (
+                      <TableRow key={row.old}>
+                        <TableCell>
+                          <code className="adm-inline-code" style={{ textDecoration: 'line-through', opacity: 0.55 }}>{row.old}</code>
+                        </TableCell>
+                        <TableCell>
+                          <code className="adm-inline-code">{row.next}</code>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>{row.file}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption" color="text.secondary">{row.note}</Typography>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            ))}
+          </AccordionDetails>
+        </Accordion>
+      )}
 
       <Card variant="outlined">
         <CardContent>
