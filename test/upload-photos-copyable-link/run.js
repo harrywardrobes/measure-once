@@ -6,11 +6,13 @@
 // silently remove it or break its close-after-copy behaviour.
 //
 // Probes:
-//   [CC-A] After the generate-link stub resolves, [data-testid="cah-copy-close"]
-//          is present and enabled in the open dialog.
+//   [CC-A]  After the generate-link stub resolves, [data-testid="cah-copy-close"]
+//           is present in the open dialog.
 //
-//   [CC-B] Clicking "Copy & close" causes the MuiDialog-root to leave the DOM
-//          (i.e. the modal closes).
+//   [CC-A2] The button is not disabled (enabled state check).
+//
+//   [CC-B]  Clicking "Copy & close" causes the MuiDialog-root to leave the DOM
+//           (i.e. the modal closes).
 //
 // Strategy:
 //   - Boots a disposable test server with the privileges harness (same pattern
@@ -247,7 +249,8 @@ async function writeReport(runId) {
     '- **[CC-A] Copy & close button visible**: Opens `UploadPhotosModal` via the',
     '  global `window.openCardActionModal` bridge with an `upload_photos_and_info`',
     '  handler. The generate-link API stub responds immediately with a synthetic',
-    '  link. Asserts `[data-testid="cah-copy-close"]` is present and not disabled.',
+    '  link. Asserts `[data-testid="cah-copy-close"]` is present in the dialog.',
+    '- **[CC-A2] Button is enabled**: Asserts the same button is not in a disabled state.',
     '- **[CC-B] Modal closes after click**: Clicks the button and asserts the',
     '  `MuiDialog-root` element leaves the DOM within the polling window.',
     '  `navigator.clipboard.writeText` is stubbed to resolve immediately so the',
@@ -291,14 +294,9 @@ async function main() {
 
   const PROBE_LABELS = [
     '[CC-A] Copy & close button appears once link is ready',
-    '[CC-A] Copy & close button is not disabled',
+    '[CC-A2] Copy & close button is not disabled',
     '[CC-B] Clicking Copy & close closes the modal',
   ];
-
-  // CC-A2 is documented in TEST_SUITES.md as a finer-grained alias for the
-  // second CC-A probe above ("button is enabled").  Both share the [CC-A]
-  // label in the implementation, so CC-A2 has no dedicated PROBE_LABELS entry.
-  const PROBE_LABELS_DOC_EXTRAS = ['CC-A2'];
 
   if (!puppeteer) {
     for (const l of PROBE_LABELS) record(l, false, 'puppeteer not installed — skipped');
