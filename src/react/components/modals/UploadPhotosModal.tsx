@@ -391,7 +391,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
             onClick={() => generateLink(ctx.contactId)}
             data-testid="cah-proceed-anyway"
           >
-            Send anyway
+            Generate anyway
           </Button>
         </>
       );
