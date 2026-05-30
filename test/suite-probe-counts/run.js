@@ -7,6 +7,8 @@
 // missing-PROBE_LABELS warning when a test file has doc probe callouts but
 // omits the PROBE_LABELS array entirely, fails (exit 1) when
 // PROBE_LABELS_DOC_EXTRAS contains an ID that is not present in the docs row,
+// fails (exit 1) when PROBE_LABELS_DOC_EXTRAS contains an ID that is also
+// already covered by a dedicated PROBE_LABELS entry (redundant suppression),
 // AND suppresses the missing-array warning when the suite is listed in
 // NO_PROBE_LABELS_ALLOWLIST.
 //
@@ -104,6 +106,19 @@ const PROBE_LABELS = [
 const PROBE_LABELS_DOC_EXTRAS = ['STALE'];
 `;
 
+// Test file with a PROBE_LABELS_DOC_EXTRAS entry ('A') that IS already
+// covered by a dedicated PROBE_LABELS entry.  The suppression is redundant
+// because the ID will pass the reverse check naturally via PROBE_LABELS.
+// The script should fail (exit 1) with a clear error about the redundant entry.
+const SYNTH_WITH_REDUNDANT_EXTRAS = `\
+'use strict';
+const PROBE_LABELS = [
+  '(A) first probe',
+  '(B) second probe',
+];
+const PROBE_LABELS_DOC_EXTRAS = ['A'];
+`;
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function buildFixture(docsSrc, synthSrc, { allowlistSuites = [] } = {}) {
@@ -152,54 +167,71 @@ function cleanFixture(dir) {
 
 const scenarios = [
   {
-    name:                   'advisory fires when PROBE_LABELS_DOC_EXTRAS is present',
-    docsSrc:                DOCS_WITH_ALIAS,
-    synthSrc:               SYNTH_WITH_EXTRAS,
-    expectAdvisory:         true,
-    expectMissingWarn:      false,
-    expectExit0:            true,
-    expectIds:              ['A2'],
-    expectStaleExtrasFail:  false,
+    name:                      'advisory fires when PROBE_LABELS_DOC_EXTRAS is present',
+    docsSrc:                   DOCS_WITH_ALIAS,
+    synthSrc:                  SYNTH_WITH_EXTRAS,
+    expectAdvisory:            true,
+    expectMissingWarn:         false,
+    expectExit0:               true,
+    expectIds:                 ['A2'],
+    expectStaleExtrasFail:     false,
+    expectRedundantExtrasFail: false,
   },
   {
-    name:                   'no advisory when PROBE_LABELS_DOC_EXTRAS is absent and probes match docs',
-    docsSrc:                DOCS_WITHOUT_ALIAS,
-    synthSrc:               SYNTH_WITHOUT_EXTRAS,
-    expectAdvisory:         false,
-    expectMissingWarn:      false,
-    expectExit0:            true,
-    expectIds:              [],
-    expectStaleExtrasFail:  false,
+    name:                      'no advisory when PROBE_LABELS_DOC_EXTRAS is absent and probes match docs',
+    docsSrc:                   DOCS_WITHOUT_ALIAS,
+    synthSrc:                  SYNTH_WITHOUT_EXTRAS,
+    expectAdvisory:            false,
+    expectMissingWarn:         false,
+    expectExit0:               true,
+    expectIds:                 [],
+    expectStaleExtrasFail:     false,
+    expectRedundantExtrasFail: false,
   },
   {
-    name:                   'missing-PROBE_LABELS warning fires when test file omits PROBE_LABELS entirely',
-    docsSrc:                DOCS_WITHOUT_ALIAS,
-    synthSrc:               SYNTH_NO_PROBE_LABELS,
-    expectAdvisory:         false,
-    expectMissingWarn:      true,
-    expectExit0:            true,
-    expectIds:              [],
-    expectStaleExtrasFail:  false,
+    name:                      'missing-PROBE_LABELS warning fires when test file omits PROBE_LABELS entirely',
+    docsSrc:                   DOCS_WITHOUT_ALIAS,
+    synthSrc:                  SYNTH_NO_PROBE_LABELS,
+    expectAdvisory:            false,
+    expectMissingWarn:         true,
+    expectExit0:               true,
+    expectIds:                 [],
+    expectStaleExtrasFail:     false,
+    expectRedundantExtrasFail: false,
   },
   {
-    name:                   'stale PROBE_LABELS_DOC_EXTRAS entry causes failure when ID absent from docs',
-    docsSrc:                DOCS_WITHOUT_ALIAS,
-    synthSrc:               SYNTH_WITH_STALE_EXTRAS,
-    expectAdvisory:         true,
-    expectMissingWarn:      false,
-    expectExit0:            false,
-    expectIds:              ['STALE'],
-    expectStaleExtrasFail:  true,
+    name:                      'stale PROBE_LABELS_DOC_EXTRAS entry causes failure when ID absent from docs',
+    docsSrc:                   DOCS_WITHOUT_ALIAS,
+    synthSrc:                  SYNTH_WITH_STALE_EXTRAS,
+    expectAdvisory:            true,
+    expectMissingWarn:         false,
+    expectExit0:               false,
+    expectIds:                 ['STALE'],
+    expectStaleExtrasFail:     true,
+    expectRedundantExtrasFail: false,
   },
   {
-    name:              'missing-PROBE_LABELS warning suppressed when suite is in NO_PROBE_LABELS_ALLOWLIST',
-    docsSrc:           DOCS_WITHOUT_ALIAS,
-    synthSrc:          SYNTH_NO_PROBE_LABELS,
-    allowlistSuites:   ['test:synth'],
-    expectAdvisory:    false,
-    expectMissingWarn: false,
-    expectExit0:       true,
-    expectIds:         [],
+    name:                      'redundant PROBE_LABELS_DOC_EXTRAS entry causes failure when ID is already in PROBE_LABELS',
+    docsSrc:                   DOCS_WITHOUT_ALIAS,
+    synthSrc:                  SYNTH_WITH_REDUNDANT_EXTRAS,
+    expectAdvisory:            true,
+    expectMissingWarn:         false,
+    expectExit0:               false,
+    expectIds:                 ['A'],
+    expectStaleExtrasFail:     false,
+    expectRedundantExtrasFail: true,
+  },
+  {
+    name:                      'missing-PROBE_LABELS warning suppressed when suite is in NO_PROBE_LABELS_ALLOWLIST',
+    docsSrc:                   DOCS_WITHOUT_ALIAS,
+    synthSrc:                  SYNTH_NO_PROBE_LABELS,
+    allowlistSuites:           ['test:synth'],
+    expectAdvisory:            false,
+    expectMissingWarn:         false,
+    expectExit0:               true,
+    expectIds:                 [],
+    expectStaleExtrasFail:     false,
+    expectRedundantExtrasFail: false,
   },
 ];
 
@@ -212,6 +244,10 @@ const MISSING_WARN_PHRASE = 'lack a PROBE_LABELS array';
 // Phrase emitted when PROBE_LABELS_DOC_EXTRAS contains IDs absent from docs.
 const STALE_EXTRAS_PHRASE = 'Unnecessary suppressions';
 
+// Phrase emitted when PROBE_LABELS_DOC_EXTRAS contains IDs already covered
+// by a dedicated PROBE_LABELS entry (redundant suppressions).
+const REDUNDANT_EXTRAS_PHRASE = 'Redundant suppressions';
+
 const results = [];
 
 for (const sc of scenarios) {
@@ -223,22 +259,24 @@ for (const sc of scenarios) {
     cleanFixture(dir);
   }
 
-  const combined          = (result.stdout || '') + (result.stderr || '');
-  const hasAdvisory       = combined.includes('PROBE_LABELS_DOC_EXTRAS');
-  const hasMissingWarn    = combined.includes(MISSING_WARN_PHRASE);
-  const hasStaleExtrasFail = combined.includes(STALE_EXTRAS_PHRASE);
-  const exit0             = result.status === 0;
+  const combined               = (result.stdout || '') + (result.stderr || '');
+  const hasAdvisory            = combined.includes('PROBE_LABELS_DOC_EXTRAS');
+  const hasMissingWarn         = combined.includes(MISSING_WARN_PHRASE);
+  const hasStaleExtrasFail     = combined.includes(STALE_EXTRAS_PHRASE);
+  const hasRedundantExtrasFail = combined.includes(REDUNDANT_EXTRAS_PHRASE);
+  const exit0                  = result.status === 0;
 
-  const pass_advisory        = sc.expectAdvisory       ? hasAdvisory        : !hasAdvisory;
-  const pass_missing_warn    = sc.expectMissingWarn    ? hasMissingWarn     : !hasMissingWarn;
-  const pass_stale_extras    = sc.expectStaleExtrasFail ? hasStaleExtrasFail : !hasStaleExtrasFail;
-  const pass_exit            = sc.expectExit0          ? exit0              : !exit0;
-  const pass_ids             = sc.expectIds.every((id) => combined.includes(id));
+  const pass_advisory          = sc.expectAdvisory            ? hasAdvisory            : !hasAdvisory;
+  const pass_missing_warn      = sc.expectMissingWarn         ? hasMissingWarn         : !hasMissingWarn;
+  const pass_stale_extras      = sc.expectStaleExtrasFail     ? hasStaleExtrasFail     : !hasStaleExtrasFail;
+  const pass_redundant_extras  = sc.expectRedundantExtrasFail ? hasRedundantExtrasFail : !hasRedundantExtrasFail;
+  const pass_exit              = sc.expectExit0               ? exit0                  : !exit0;
+  const pass_ids               = sc.expectIds.every((id) => combined.includes(id));
 
-  const pass = pass_advisory && pass_missing_warn && pass_stale_extras && pass_exit && pass_ids;
+  const pass = pass_advisory && pass_missing_warn && pass_stale_extras && pass_redundant_extras && pass_exit && pass_ids;
   results.push({
     sc,
-    pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_exit, pass_ids,
+    pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_exit, pass_ids,
     combined,
     status: result.status,
   });
@@ -256,18 +294,19 @@ const lines = [
   '`PROBE_LABELS_DOC_EXTRAS` advisory exactly when the constant is present,',
   'stays silent otherwise, emits the missing-PROBE_LABELS warning when a',
   'test file omits PROBE_LABELS entirely, fails when PROBE_LABELS_DOC_EXTRAS',
-  'contains an ID absent from the docs row, and suppresses the missing-array',
-  'warning when the suite is in NO_PROBE_LABELS_ALLOWLIST.',
+  'contains an ID absent from the docs row, fails when PROBE_LABELS_DOC_EXTRAS',
+  'contains an ID already covered by a dedicated PROBE_LABELS entry (redundant),',
+  'and suppresses the missing-array warning when the suite is in NO_PROBE_LABELS_ALLOWLIST.',
   '',
   `Ran ${results.length} scenario${results.length === 1 ? '' : 's'}.`,
   '',
-  '| Scenario | advisory correct | missing-array warning correct | stale-extras failure correct | exit correct | IDs found | result |',
-  '| --- | --- | --- | --- | --- | --- | --- |',
+  '| Scenario | advisory correct | missing-array warning correct | stale-extras failure correct | redundant-extras failure correct | exit correct | IDs found | result |',
+  '| --- | --- | --- | --- | --- | --- | --- | --- |',
 ];
 
-for (const { sc, pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_exit, pass_ids } of results) {
+for (const { sc, pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_exit, pass_ids } of results) {
   lines.push(
-    `| ${sc.name} | ${pass_advisory ? '✓' : '✗'} | ${pass_missing_warn ? '✓' : '✗'} | ${pass_stale_extras ? '✓' : '✗'} | ${pass_exit ? '✓' : '✗'} | ${pass_ids ? '✓' : '✗'} | ${pass ? 'PASS' : '**FAIL**'} |`,
+    `| ${sc.name} | ${pass_advisory ? '✓' : '✗'} | ${pass_missing_warn ? '✓' : '✗'} | ${pass_stale_extras ? '✓' : '✗'} | ${pass_redundant_extras ? '✓' : '✗'} | ${pass_exit ? '✓' : '✗'} | ${pass_ids ? '✓' : '✗'} | ${pass ? 'PASS' : '**FAIL**'} |`,
   );
 }
 
@@ -277,7 +316,7 @@ if (failures.length === 0) {
   lines.push(`**All ${passed} scenario${passed === 1 ? '' : 's'} passed.**`);
 } else {
   lines.push(`**${failures.length} scenario${failures.length === 1 ? '' : 's'} failed:**`);
-  for (const { sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_exit, pass_ids, combined, status } of failures) {
+  for (const { sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_exit, pass_ids, combined, status } of failures) {
     lines.push('');
     lines.push(`### ${sc.name}`);
     if (!pass_advisory) {
@@ -299,6 +338,13 @@ if (failures.length === 0) {
         sc.expectStaleExtrasFail
           ? `- Expected stale-extras failure ("${STALE_EXTRAS_PHRASE}") but it was absent from output.`
           : `- Expected no stale-extras failure but "${STALE_EXTRAS_PHRASE}" appeared in output.`,
+      );
+    }
+    if (!pass_redundant_extras) {
+      lines.push(
+        sc.expectRedundantExtrasFail
+          ? `- Expected redundant-extras failure ("${REDUNDANT_EXTRAS_PHRASE}") but it was absent from output.`
+          : `- Expected no redundant-extras failure but "${REDUNDANT_EXTRAS_PHRASE}" appeared in output.`,
       );
     }
     if (!pass_exit) {
@@ -328,7 +374,7 @@ if (failures.length === 0) {
   console.log(`[suite-probe-counts-advisory] All ${passed} scenario${passed === 1 ? '' : 's'} passed. ✓`);
 } else {
   console.error(`[suite-probe-counts-advisory] ${failures.length} scenario${failures.length === 1 ? '' : 's'} failed:`);
-  for (const { sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_exit, pass_ids, status } of failures) {
+  for (const { sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_exit, pass_ids, status } of failures) {
     console.error(`  • ${sc.name}`);
     if (!pass_advisory) {
       console.error(
@@ -349,6 +395,13 @@ if (failures.length === 0) {
         sc.expectStaleExtrasFail
           ? '    stale-extras failure expected but not found in output'
           : '    stale-extras failure unexpectedly present in output',
+      );
+    }
+    if (!pass_redundant_extras) {
+      console.error(
+        sc.expectRedundantExtrasFail
+          ? '    redundant-extras failure expected but not found in output'
+          : '    redundant-extras failure unexpectedly present in output',
       );
     }
     if (!pass_exit) {

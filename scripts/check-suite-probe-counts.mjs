@@ -184,14 +184,15 @@ for (const line of docsSrc.split('\n')) {
   if (m) suiteRows.set(m[1], m[2]);
 }
 
-const forwardFailures      = [];
-const reverseFailures      = [];
-const docExtrasStaleFailures = [];  // PROBE_LABELS_DOC_EXTRAS entries not present in docs
-const noArrayWarn          = [];  // suites with doc probes but no PROBE_LABELS, not in allowlist
-const docExtrasWarn        = [];  // suites using PROBE_LABELS_DOC_EXTRAS (non-failing advisory)
-let   checked              = 0;
-let   skipped              = 0;
-let   allowlisted          = 0;
+const forwardFailures            = [];
+const reverseFailures            = [];
+const docExtrasStaleFailures     = [];  // PROBE_LABELS_DOC_EXTRAS entries not present in docs
+const docExtrasRedundantFailures = [];  // PROBE_LABELS_DOC_EXTRAS entries that also have a dedicated PROBE_LABELS entry
+const noArrayWarn                = [];  // suites with doc probes but no PROBE_LABELS, not in allowlist
+const docExtrasWarn              = [];  // suites using PROBE_LABELS_DOC_EXTRAS (non-failing advisory)
+let   checked                    = 0;
+let   skipped                    = 0;
+let   allowlisted                = 0;
 
 for (const [suiteName, rowText] of suiteRows) {
   const docIds = extractDocProbeIds(rowText);
@@ -255,6 +256,22 @@ for (const [suiteName, rowText] of suiteRows) {
         file:        filePath.replace(ROOT + '/', ''),
         staleExtras,
         docIds:      [...docIds].sort(),
+      });
+    }
+  }
+
+  // Redundant-extras check (failing): each ID in PROBE_LABELS_DOC_EXTRAS must
+  // NOT already have a dedicated PROBE_LABELS entry.  If an ID appears in both,
+  // the suppression is unnecessary — the ID will pass the reverse check naturally
+  // because it is already covered by a PROBE_LABELS label.
+  if (docExtras.size > 0) {
+    const redundantExtras = [...docExtras].filter((id) => runIds.has(id)).sort();
+    if (redundantExtras.length > 0) {
+      docExtrasRedundantFailures.push({
+        suite:           suiteName,
+        file:            filePath.replace(ROOT + '/', ''),
+        redundantExtras,
+        docIds:          [...docIds].sort(),
       });
     }
   }
@@ -331,7 +348,7 @@ if (docExtrasWarn.length > 0) {
 // Report failures (exit 1) for probe mismatches in either direction
 // ---------------------------------------------------------------------------
 
-const totalFailures = forwardFailures.length + reverseFailures.length + docExtrasStaleFailures.length;
+const totalFailures = forwardFailures.length + reverseFailures.length + docExtrasStaleFailures.length + docExtrasRedundantFailures.length;
 
 if (totalFailures === 0) {
   const parts = [`all ${checked} suites with documented probes are up-to-date`];
@@ -406,6 +423,28 @@ if (docExtrasStaleFailures.length > 0) {
     'Remove the listed IDs from the PROBE_LABELS_DOC_EXTRAS array in each\n' +
     'test file above.  Only IDs that genuinely appear in the docs row as\n' +
     'bold **(X)** callouts should be listed there.\n',
+  );
+}
+
+if (docExtrasRedundantFailures.length > 0) {
+  console.error(
+    `❌  suite-probe-counts: ${docExtrasRedundantFailures.length} suite` +
+    `${docExtrasRedundantFailures.length === 1 ? '' : 's'} ` +
+    `${docExtrasRedundantFailures.length === 1 ? 'has' : 'have'} redundant` +
+    ` PROBE_LABELS_DOC_EXTRAS entries — the suppressed IDs already have a` +
+    ` dedicated PROBE_LABELS entry and pass the reverse check naturally:\n`,
+  );
+
+  for (const { suite, file, redundantExtras, docIds } of docExtrasRedundantFailures) {
+    console.error(`  ${suite}  (${file})`);
+    console.error(`    Documented probes        : ${docIds.join(', ')}`);
+    console.error(`    Redundant suppressions   : ${redundantExtras.join(', ')}\n`);
+  }
+
+  console.error(
+    'Remove the listed IDs from the PROBE_LABELS_DOC_EXTRAS array in each\n' +
+    'test file above.  An ID only belongs in PROBE_LABELS_DOC_EXTRAS when it\n' +
+    'appears in docs but has no corresponding PROBE_LABELS entry of its own.\n',
   );
 }
 
