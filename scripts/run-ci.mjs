@@ -50,6 +50,7 @@ const STEPS = [
   'test:workflow-map-ordering',
   'test:mui-select-click',
   'test:ci-runner-sync',
+  'test:ci-doc-sync',
   'test:suite-descriptions',
   'test:privileges:ci',
   'test:lead-status-sync:ci',

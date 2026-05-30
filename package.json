@@ -252,6 +252,7 @@
     "test:ci": "node scripts/run-ci.mjs",
     "test:ci:parallel": "node scripts/run-ci-parallel.mjs",
     "test:ci-runner-sync": "node scripts/check-ci-runner-sync.mjs",
+    "test:ci-doc-sync": "node scripts/check-ci-doc-sync.mjs",
     "test:suite-descriptions": "node scripts/check-suite-descriptions.mjs"
   },
   "dependencies": {
