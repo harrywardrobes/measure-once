@@ -567,6 +567,7 @@ async function main() {
     '(A-open-blocked) no conflict Alert when popup is blocked',
     '(A-open-blocked) fallback window.open called with form_link URL',
     '(B) conflict Alert text correct',
+    '(B-open) conflict Alert text correct',
   ];
 
   if (!puppeteer) {
@@ -854,6 +855,30 @@ async function main() {
     );
 
     if (conflictBtnBOpen) {
+      // ── Probe B-open-text: conflict Alert contains expected message ───────
+      const alertTextBOpen = await pageBOpen.evaluate(() => {
+        const el = document.querySelector('[data-testid="conflict-proceed-btn"]');
+        if (!el) return '';
+        // Walk up to the MUI Alert root (role="alert" or the nearest ancestor
+        // that contains the warning text).
+        let node = el.parentElement;
+        while (node && node.getAttribute('role') !== 'alert') {
+          node = node.parentElement;
+        }
+        return node ? node.textContent || '' : '';
+      });
+
+      const expectedFragmentBOpen = 'A newer link has already been sent for this contact';
+      const alertTextBOpenOk = alertTextBOpen.includes(expectedFragmentBOpen);
+      record(
+        PROBE_LABELS[13],
+        'conflict Alert contains expected message text',
+        alertTextBOpenOk
+          ? `Alert text correct (found "${expectedFragmentBOpen}")`
+          : `Alert text wrong — got: "${alertTextBOpen.slice(0, 120)}"`,
+        alertTextBOpenOk,
+      );
+
       // ── Probe B2-open: "Open anyway" dismisses Alert and calls window.open ──
       console.log('\n  [B2-open] Open-anyway probe');
       const openCallsBeforeB2Open = await pageBOpen.evaluate(() =>
@@ -883,6 +908,7 @@ async function main() {
       );
     } else {
       record(PROBE_LABELS[8], 'probe B-open must pass first', 'skipped — probe B-open failed', false);
+      record(PROBE_LABELS[13], 'probe B-open must pass first', 'skipped — probe B-open failed', false);
     }
 
     await pageBOpen.__ctx.close().catch(() => {});
