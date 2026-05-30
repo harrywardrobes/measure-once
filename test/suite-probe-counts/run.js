@@ -3,9 +3,10 @@
 //
 // Meta-test: verifies that scripts/check-suite-probe-counts.mjs correctly
 // emits the PROBE_LABELS_DOC_EXTRAS advisory when a test file declares that
-// constant, stays silent (no advisory) when the constant is absent, AND emits
-// the missing-PROBE_LABELS warning when a test file has doc probe callouts but
-// omits the PROBE_LABELS array entirely.
+// constant, stays silent (no advisory) when the constant is absent, emits the
+// missing-PROBE_LABELS warning when a test file has doc probe callouts but
+// omits the PROBE_LABELS array entirely, AND fails (exit 1) when
+// PROBE_LABELS_DOC_EXTRAS contains an ID that is not present in the docs row.
 //
 // Strategy: for each scenario, build a minimal synthetic fixture in a temp
 // directory that has its own docs/TEST_SUITES.md, package.json, and a test
@@ -89,6 +90,18 @@ function runTests() {
 runTests();
 `;
 
+// Test file with a PROBE_LABELS_DOC_EXTRAS entry ('STALE') that does NOT
+// appear in the matching docs row (which only documents A and B).  The script
+// should fail (exit 1) with a clear error about the unnecessary suppression.
+const SYNTH_WITH_STALE_EXTRAS = `\
+'use strict';
+const PROBE_LABELS = [
+  '(A) first probe',
+  '(B) second probe',
+];
+const PROBE_LABELS_DOC_EXTRAS = ['STALE'];
+`;
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function buildFixture(docsSrc, synthSrc) {
@@ -124,31 +137,44 @@ function cleanFixture(dir) {
 
 const scenarios = [
   {
-    name:              'advisory fires when PROBE_LABELS_DOC_EXTRAS is present',
-    docsSrc:           DOCS_WITH_ALIAS,
-    synthSrc:          SYNTH_WITH_EXTRAS,
-    expectAdvisory:    true,
-    expectMissingWarn: false,
-    expectExit0:       true,
-    expectIds:         ['A2'],
+    name:                   'advisory fires when PROBE_LABELS_DOC_EXTRAS is present',
+    docsSrc:                DOCS_WITH_ALIAS,
+    synthSrc:               SYNTH_WITH_EXTRAS,
+    expectAdvisory:         true,
+    expectMissingWarn:      false,
+    expectExit0:            true,
+    expectIds:              ['A2'],
+    expectStaleExtrasFail:  false,
   },
   {
-    name:              'no advisory when PROBE_LABELS_DOC_EXTRAS is absent and probes match docs',
-    docsSrc:           DOCS_WITHOUT_ALIAS,
-    synthSrc:          SYNTH_WITHOUT_EXTRAS,
-    expectAdvisory:    false,
-    expectMissingWarn: false,
-    expectExit0:       true,
-    expectIds:         [],
+    name:                   'no advisory when PROBE_LABELS_DOC_EXTRAS is absent and probes match docs',
+    docsSrc:                DOCS_WITHOUT_ALIAS,
+    synthSrc:               SYNTH_WITHOUT_EXTRAS,
+    expectAdvisory:         false,
+    expectMissingWarn:      false,
+    expectExit0:            true,
+    expectIds:              [],
+    expectStaleExtrasFail:  false,
   },
   {
-    name:              'missing-PROBE_LABELS warning fires when test file omits PROBE_LABELS entirely',
-    docsSrc:           DOCS_WITHOUT_ALIAS,
-    synthSrc:          SYNTH_NO_PROBE_LABELS,
-    expectAdvisory:    false,
-    expectMissingWarn: true,
-    expectExit0:       true,
-    expectIds:         [],
+    name:                   'missing-PROBE_LABELS warning fires when test file omits PROBE_LABELS entirely',
+    docsSrc:                DOCS_WITHOUT_ALIAS,
+    synthSrc:               SYNTH_NO_PROBE_LABELS,
+    expectAdvisory:         false,
+    expectMissingWarn:      true,
+    expectExit0:            true,
+    expectIds:              [],
+    expectStaleExtrasFail:  false,
+  },
+  {
+    name:                   'stale PROBE_LABELS_DOC_EXTRAS entry causes failure when ID absent from docs',
+    docsSrc:                DOCS_WITHOUT_ALIAS,
+    synthSrc:               SYNTH_WITH_STALE_EXTRAS,
+    expectAdvisory:         true,
+    expectMissingWarn:      false,
+    expectExit0:            false,
+    expectIds:              ['STALE'],
+    expectStaleExtrasFail:  true,
   },
 ];
 
@@ -157,6 +183,9 @@ const scenarios = [
 // Phrase emitted by check-suite-probe-counts.mjs when a suite has doc probe
 // callouts but its test file lacks a PROBE_LABELS array.
 const MISSING_WARN_PHRASE = 'lack a PROBE_LABELS array';
+
+// Phrase emitted when PROBE_LABELS_DOC_EXTRAS contains IDs absent from docs.
+const STALE_EXTRAS_PHRASE = 'Unnecessary suppressions';
 
 const results = [];
 
@@ -169,20 +198,22 @@ for (const sc of scenarios) {
     cleanFixture(dir);
   }
 
-  const combined       = (result.stdout || '') + (result.stderr || '');
-  const hasAdvisory    = combined.includes('PROBE_LABELS_DOC_EXTRAS');
-  const hasMissingWarn = combined.includes(MISSING_WARN_PHRASE);
-  const exit0          = result.status === 0;
+  const combined          = (result.stdout || '') + (result.stderr || '');
+  const hasAdvisory       = combined.includes('PROBE_LABELS_DOC_EXTRAS');
+  const hasMissingWarn    = combined.includes(MISSING_WARN_PHRASE);
+  const hasStaleExtrasFail = combined.includes(STALE_EXTRAS_PHRASE);
+  const exit0             = result.status === 0;
 
-  const pass_advisory     = sc.expectAdvisory    ? hasAdvisory    : !hasAdvisory;
-  const pass_missing_warn = sc.expectMissingWarn ? hasMissingWarn : !hasMissingWarn;
-  const pass_exit         = sc.expectExit0       ? exit0          : !exit0;
-  const pass_ids          = sc.expectIds.every((id) => !sc.expectAdvisory || combined.includes(id));
+  const pass_advisory        = sc.expectAdvisory       ? hasAdvisory        : !hasAdvisory;
+  const pass_missing_warn    = sc.expectMissingWarn    ? hasMissingWarn     : !hasMissingWarn;
+  const pass_stale_extras    = sc.expectStaleExtrasFail ? hasStaleExtrasFail : !hasStaleExtrasFail;
+  const pass_exit            = sc.expectExit0          ? exit0              : !exit0;
+  const pass_ids             = sc.expectIds.every((id) => combined.includes(id));
 
-  const pass = pass_advisory && pass_missing_warn && pass_exit && pass_ids;
+  const pass = pass_advisory && pass_missing_warn && pass_stale_extras && pass_exit && pass_ids;
   results.push({
     sc,
-    pass, pass_advisory, pass_missing_warn, pass_exit, pass_ids,
+    pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_exit, pass_ids,
     combined,
     status: result.status,
   });
@@ -198,18 +229,19 @@ const lines = [
   '',
   'Meta-test: verifies that `check-suite-probe-counts.mjs` emits the',
   '`PROBE_LABELS_DOC_EXTRAS` advisory exactly when the constant is present,',
-  'stays silent otherwise, and emits the missing-PROBE_LABELS warning when a',
-  'test file omits PROBE_LABELS entirely while its docs row has probe callouts.',
+  'stays silent otherwise, emits the missing-PROBE_LABELS warning when a',
+  'test file omits PROBE_LABELS entirely while its docs row has probe callouts,',
+  'and fails when PROBE_LABELS_DOC_EXTRAS contains an ID absent from the docs row.',
   '',
   `Ran ${results.length} scenario${results.length === 1 ? '' : 's'}.`,
   '',
-  '| Scenario | advisory correct | missing-array warning correct | exit 0 | suppressed IDs found | result |',
-  '| --- | --- | --- | --- | --- | --- |',
+  '| Scenario | advisory correct | missing-array warning correct | stale-extras failure correct | exit correct | IDs found | result |',
+  '| --- | --- | --- | --- | --- | --- | --- |',
 ];
 
-for (const { sc, pass, pass_advisory, pass_missing_warn, pass_exit, pass_ids } of results) {
+for (const { sc, pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_exit, pass_ids } of results) {
   lines.push(
-    `| ${sc.name} | ${pass_advisory ? '✓' : '✗'} | ${pass_missing_warn ? '✓' : '✗'} | ${pass_exit ? '✓' : '✗'} | ${pass_ids ? '✓' : '✗'} | ${pass ? 'PASS' : '**FAIL**'} |`,
+    `| ${sc.name} | ${pass_advisory ? '✓' : '✗'} | ${pass_missing_warn ? '✓' : '✗'} | ${pass_stale_extras ? '✓' : '✗'} | ${pass_exit ? '✓' : '✗'} | ${pass_ids ? '✓' : '✗'} | ${pass ? 'PASS' : '**FAIL**'} |`,
   );
 }
 
@@ -219,7 +251,7 @@ if (failures.length === 0) {
   lines.push(`**All ${passed} scenario${passed === 1 ? '' : 's'} passed.**`);
 } else {
   lines.push(`**${failures.length} scenario${failures.length === 1 ? '' : 's'} failed:**`);
-  for (const { sc, pass_advisory, pass_missing_warn, pass_exit, pass_ids, combined, status } of failures) {
+  for (const { sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_exit, pass_ids, combined, status } of failures) {
     lines.push('');
     lines.push(`### ${sc.name}`);
     if (!pass_advisory) {
@@ -236,11 +268,22 @@ if (failures.length === 0) {
           : `- Expected no missing-PROBE_LABELS warning but "${MISSING_WARN_PHRASE}" appeared in output.`,
       );
     }
+    if (!pass_stale_extras) {
+      lines.push(
+        sc.expectStaleExtrasFail
+          ? `- Expected stale-extras failure ("${STALE_EXTRAS_PHRASE}") but it was absent from output.`
+          : `- Expected no stale-extras failure but "${STALE_EXTRAS_PHRASE}" appeared in output.`,
+      );
+    }
     if (!pass_exit) {
-      lines.push(`- Expected exit 0 but script exited with status ${status}.`);
+      lines.push(
+        sc.expectExit0
+          ? `- Expected exit 0 but script exited with status ${status}.`
+          : `- Expected non-zero exit but script exited with status ${status}.`,
+      );
     }
     if (!pass_ids) {
-      lines.push(`- Expected suppressed IDs [${sc.expectIds.join(', ')}] to appear in advisory output.`);
+      lines.push(`- Expected IDs [${sc.expectIds.join(', ')}] to appear in output.`);
     }
     lines.push('');
     lines.push('Script output:');
@@ -259,7 +302,7 @@ if (failures.length === 0) {
   console.log(`[suite-probe-counts-advisory] All ${passed} scenario${passed === 1 ? '' : 's'} passed. ✓`);
 } else {
   console.error(`[suite-probe-counts-advisory] ${failures.length} scenario${failures.length === 1 ? '' : 's'} failed:`);
-  for (const { sc, pass_advisory, pass_missing_warn, pass_exit, pass_ids, status } of failures) {
+  for (const { sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_exit, pass_ids, status } of failures) {
     console.error(`  • ${sc.name}`);
     if (!pass_advisory) {
       console.error(
@@ -275,8 +318,21 @@ if (failures.length === 0) {
           : '    missing-PROBE_LABELS warning unexpectedly present in output',
       );
     }
-    if (!pass_exit)  console.error(`    expected exit 0, got ${status}`);
-    if (!pass_ids)   console.error(`    suppressed IDs [${sc.expectIds.join(', ')}] not found in output`);
+    if (!pass_stale_extras) {
+      console.error(
+        sc.expectStaleExtrasFail
+          ? '    stale-extras failure expected but not found in output'
+          : '    stale-extras failure unexpectedly present in output',
+      );
+    }
+    if (!pass_exit) {
+      console.error(
+        sc.expectExit0
+          ? `    expected exit 0, got ${status}`
+          : `    expected non-zero exit, got ${status}`,
+      );
+    }
+    if (!pass_ids)   console.error(`    IDs [${sc.expectIds.join(', ')}] not found in output`);
   }
   process.exit(1);
 }

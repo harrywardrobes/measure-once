@@ -184,13 +184,14 @@ for (const line of docsSrc.split('\n')) {
   if (m) suiteRows.set(m[1], m[2]);
 }
 
-const forwardFailures = [];
-const reverseFailures = [];
-const noArrayWarn     = [];  // suites with doc probes but no PROBE_LABELS, not in allowlist
-const docExtrasWarn   = [];  // suites using PROBE_LABELS_DOC_EXTRAS (non-failing advisory)
-let   checked         = 0;
-let   skipped         = 0;
-let   allowlisted     = 0;
+const forwardFailures      = [];
+const reverseFailures      = [];
+const docExtrasStaleFailures = [];  // PROBE_LABELS_DOC_EXTRAS entries not present in docs
+const noArrayWarn          = [];  // suites with doc probes but no PROBE_LABELS, not in allowlist
+const docExtrasWarn        = [];  // suites using PROBE_LABELS_DOC_EXTRAS (non-failing advisory)
+let   checked              = 0;
+let   skipped              = 0;
+let   allowlisted          = 0;
 
 for (const [suiteName, rowText] of suiteRows) {
   const docIds = extractDocProbeIds(rowText);
@@ -242,6 +243,21 @@ for (const [suiteName, rowText] of suiteRows) {
   // Reverse check: probes documented in docs not found in the test file.
   // PROBE_LABELS_DOC_EXTRAS in the test file suppresses known doc-only aliases.
   const docExtras = extractDocExtrasProbeIds(src);
+
+  // Stale-extras check (failing): each ID in PROBE_LABELS_DOC_EXTRAS must
+  // actually appear in the docs row.  An entry that doesn't appear in docs is
+  // unnecessary — the suppression can never be triggered.
+  if (docExtras.size > 0) {
+    const staleExtras = [...docExtras].filter((id) => !docIds.has(id)).sort();
+    if (staleExtras.length > 0) {
+      docExtrasStaleFailures.push({
+        suite:       suiteName,
+        file:        filePath.replace(ROOT + '/', ''),
+        staleExtras,
+        docIds:      [...docIds].sort(),
+      });
+    }
+  }
 
   // Advisory (non-failing): warn when PROBE_LABELS_DOC_EXTRAS is used.
   // The preferred fix is to give each probe a distinct label so no suppression
@@ -315,7 +331,7 @@ if (docExtrasWarn.length > 0) {
 // Report failures (exit 1) for probe mismatches in either direction
 // ---------------------------------------------------------------------------
 
-const totalFailures = forwardFailures.length + reverseFailures.length;
+const totalFailures = forwardFailures.length + reverseFailures.length + docExtrasStaleFailures.length;
 
 if (totalFailures === 0) {
   const parts = [`all ${checked} suites with documented probes are up-to-date`];
@@ -368,6 +384,28 @@ if (reverseFailures.length > 0) {
     "docs/TEST_SUITES.md, or add them back to the suite's PROBE_LABELS array.\n" +
     'If a doc ID is intentionally a finer-grained alias for an existing label,\n' +
     "add it to a PROBE_LABELS_DOC_EXTRAS = ['<id>'] constant in the test file.\n",
+  );
+}
+
+if (docExtrasStaleFailures.length > 0) {
+  console.error(
+    `❌  suite-probe-counts: ${docExtrasStaleFailures.length} suite` +
+    `${docExtrasStaleFailures.length === 1 ? '' : 's'} ` +
+    `${docExtrasStaleFailures.length === 1 ? 'has' : 'have'} unnecessary` +
+    ` PROBE_LABELS_DOC_EXTRAS entries — the suppressed IDs do not appear` +
+    ` in docs/TEST_SUITES.md and can never be triggered:\n`,
+  );
+
+  for (const { suite, file, staleExtras, docIds } of docExtrasStaleFailures) {
+    console.error(`  ${suite}  (${file})`);
+    console.error(`    Documented probes       : ${docIds.join(', ')}`);
+    console.error(`    Unnecessary suppressions: ${staleExtras.join(', ')}\n`);
+  }
+
+  console.error(
+    'Remove the listed IDs from the PROBE_LABELS_DOC_EXTRAS array in each\n' +
+    'test file above.  Only IDs that genuinely appear in the docs row as\n' +
+    'bold **(X)** callouts should be listed there.\n',
   );
 }
 
