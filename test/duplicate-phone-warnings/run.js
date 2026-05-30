@@ -514,7 +514,7 @@ async function main() {
 
       // 300ms debounce + a useMemo render tick.
       const alertText = await pollPage(page, () => {
-        const alerts = Array.from(document.querySelectorAll('.MuiAlert-root'));
+        const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
         const hit = alerts.find(a => /phone number is already in use/i.test(a.textContent || ''));
         return hit ? hit.textContent : null;
       }, null, 4000);
@@ -560,7 +560,7 @@ async function main() {
       // Click "View approved entry" inside the duplicate alert and verify
       // the allowed-list row gains the admin-row-flash highlight class.
       const clicked = await page.evaluate(() => {
-        const alerts = Array.from(document.querySelectorAll('.MuiAlert-root'));
+        const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
         const hit = alerts.find(a => /phone number is already in use/i.test(a.textContent || ''));
         if (!hit) return false;
         const btn = Array.from(hit.querySelectorAll('button'))
@@ -602,7 +602,7 @@ async function main() {
       });
 
       const alertGone = await pollPage(page, () => {
-        const alerts = Array.from(document.querySelectorAll('.MuiAlert-root'));
+        const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
         const hit = alerts.find(a => /phone number is already in use/i.test(a.textContent || ''));
         return !hit;
       }, null, 4000);
@@ -641,7 +641,7 @@ async function main() {
 
       // Poll for the duplicate-email Alert (debounce + render tick).
       const emailAlertText = await pollPage(page, () => {
-        const alerts = Array.from(document.querySelectorAll('.MuiAlert-root'));
+        const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
         const hit = alerts.find(a => /This email is already on the allow-list/i.test(a.textContent || ''));
         return hit ? hit.textContent : null;
       }, null, 4000);
@@ -678,7 +678,7 @@ async function main() {
       });
 
       const emailAlertGone = await pollPage(page, () => {
-        const alerts = Array.from(document.querySelectorAll('.MuiAlert-root'));
+        const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
         const hit = alerts.find(a => /This email is already on the allow-list/i.test(a.textContent || ''));
         return !hit;
       }, null, 4000);
@@ -1358,7 +1358,7 @@ async function main() {
       const noticeShown = await pollPage(page, () => {
         const n = document.getElementById('tf-company-phone-notice');
         if (!n || n.classList.contains('hidden')) return null;
-        const alert = n.querySelector('.MuiAlert-root');
+        const alert = n.querySelector('[role="alert"]');
         return alert ? { text: (alert.textContent || '').trim() } : null;
       }, null, 4000);
       const custLabel = CUSTOMER_LABEL;
@@ -1472,7 +1472,7 @@ async function main() {
       const noticeShown = await pollPage(page, () => {
         const n = document.getElementById('tf-cphone-notice-0');
         if (!n || n.classList.contains('hidden')) return null;
-        const alert = n.querySelector('.MuiAlert-root');
+        const alert = n.querySelector('[role="alert"]');
         return alert ? { text: (alert.textContent || '').trim() } : null;
       }, null, 4000);
       const noticeOk = !!noticeShown

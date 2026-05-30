@@ -518,7 +518,7 @@ function GoogleCalendarCard() {
   const connected = status?.connected === true;
 
   return (
-    <Card variant="outlined" sx={{ mb: 1.5 }}>
+    <Card variant="outlined" sx={{ mb: 1.5 }} data-testid="gc-card">
       <CardContent>
         <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
           Google Calendar
@@ -535,6 +535,7 @@ function GoogleCalendarCard() {
                 color={connected ? 'success' : 'default'}
                 variant={connected ? 'filled' : 'outlined'}
                 sx={{ fontWeight: 600 }}
+                data-testid="gc-status-chip"
               />
             )}
           </Stack>

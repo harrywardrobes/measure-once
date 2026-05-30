@@ -38,7 +38,7 @@ export function SortSelect({
   const selectId = `sort-select-${label.toLowerCase().replace(/\s+/g, '-')}`;
 
   return (
-    <FormControl size="small" sx={{ minWidth, flexShrink: 0 }}>
+    <FormControl size="small" data-testid="sort-select" sx={{ minWidth, flexShrink: 0 }}>
       <InputLabel id={labelId}>{label}</InputLabel>
       <Select
         labelId={labelId}

@@ -319,7 +319,7 @@ export function InvoiceDetailDrawer({
       open={open}
       onClose={handleClose}
       data-testid="invoice-detail-drawer"
-      slotProps={{ paper: { sx: { width: { xs: '100vw', sm: 520 }, display: 'flex', flexDirection: 'column' } } }}
+      slotProps={{ paper: { sx: { width: { xs: '100vw', sm: 520 }, display: 'flex', flexDirection: 'column' }, ref: (el: HTMLElement | null) => { if (el) el.setAttribute('data-testid', 'invoice-drawer-paper'); } } }}
     >
       {/* Header */}
       <Box sx={{

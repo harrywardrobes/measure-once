@@ -192,13 +192,13 @@ async function getFilterOptions(page) {
   });
 }
 
-// Poll .MuiChip-label elements until one whose text includes `label` is
+// Poll [data-testid="filter-chip"] elements until one whose text includes `label` is
 // found, or until `timeoutMs` elapses.
 async function waitForChipLabel(page, label, timeoutMs = 7000) {
   return !!(await pollUntil(
     page,
     (lbl) => {
-      const chips = document.querySelectorAll('.MuiChip-label');
+      const chips = document.querySelectorAll('[data-testid="filter-chip"]');
       return Array.from(chips).some(c => c.textContent.includes(lbl)) ? true : null;
     },
     timeoutMs,
@@ -649,19 +649,19 @@ async function main() {
     await new Promise(r => setTimeout(r, 300));
 
     // ── assert skeleton is visible ──
-    // Look for .MuiSkeleton-root inside the Box[data-testid="lead-status-filter-wrap"]
+    // Look for [data-testid="loading-skeleton"] inside the Box[data-testid="lead-status-filter-wrap"]
     // that wraps the off-screen <select> and its loading skeleton.
     const skelVisible = await skelTab.evaluate(() => {
       const box = document.querySelector('[data-testid="lead-status-filter-wrap"]');
       if (!box) return false;
-      const skel = box.querySelector('.MuiSkeleton-root');
+      const skel = box.querySelector('[data-testid="loading-skeleton"]');
       if (!skel) return false;
       const st = window.getComputedStyle(skel);
       return st.display !== 'none' && st.visibility !== 'hidden';
     });
     record(
       'lead-status skeleton is present in DOM while /api/lead-statuses is in-flight',
-      '.MuiSkeleton-root visible next to #lead-status-filter',
+      '[data-testid="loading-skeleton"] visible next to #lead-status-filter',
       `visible=${skelVisible}`,
       skelVisible,
     );
@@ -690,13 +690,13 @@ async function main() {
     const skelGone = await skelTab.waitForFunction(
       () => {
         const box = document.querySelector('[data-testid="lead-status-filter-wrap"]');
-        return !box || !box.querySelector('.MuiSkeleton-root');
+        return !box || !box.querySelector('[data-testid="loading-skeleton"]');
       },
       { timeout: 5000 },
     ).then(() => true).catch(() => false);
     record(
       'lead-status skeleton disappears after /api/lead-statuses resolves',
-      '.MuiSkeleton-root absent within 5 s',
+      '[data-testid="loading-skeleton"] absent within 5 s',
       `gone=${skelGone}`,
       skelGone,
     );
@@ -849,7 +849,7 @@ async function main() {
     // The chip label text should contain SS_LABEL (the test sub-status label).
     const chipVisible = await subSkelTab.waitForFunction(
       (label) => {
-        const chips = document.querySelectorAll('.MuiChip-label');
+        const chips = document.querySelectorAll('[data-testid="filter-chip"]');
         return Array.from(chips).some(c => c.textContent.includes(label));
       },
       { timeout: 5000 },
@@ -945,7 +945,7 @@ async function main() {
 
       // Original label must be gone from the chip list.
       const chipFBcStale = await chipBcTab.evaluate((lbl) => {
-        const chips = document.querySelectorAll('.MuiChip-label');
+        const chips = document.querySelectorAll('[data-testid="filter-chip"]');
         return Array.from(chips).some(c => c.textContent.includes(lbl));
       }, SS_LABEL);
       record(
@@ -1035,7 +1035,7 @@ async function main() {
       );
 
       const chipGVisStale = await chipVisTab.evaluate((lbl) => {
-        const chips = document.querySelectorAll('.MuiChip-label');
+        const chips = document.querySelectorAll('[data-testid="filter-chip"]');
         return Array.from(chips).some(c => c.textContent.includes(lbl));
       }, SS_LABEL_BC);
       record(
@@ -1517,7 +1517,7 @@ async function main() {
       );
 
       const chipKBcStale = await chipCardBcTab.evaluate((lbl) => {
-        return Array.from(document.querySelectorAll('.MuiChip-label'))
+        return Array.from(document.querySelectorAll('[data-testid="filter-chip"]'))
           .some(c => c.textContent.trim() === lbl);
       }, SS_LABEL_VIS);
       record(
@@ -1618,7 +1618,7 @@ async function main() {
       );
 
       const chipLVisStale = await chipCardVisTab.evaluate((lbl) => {
-        return Array.from(document.querySelectorAll('.MuiChip-label'))
+        return Array.from(document.querySelectorAll('[data-testid="filter-chip"]'))
           .some(c => c.textContent.trim() === lbl);
       }, SS_LABEL_CARD_BC);
       record(
@@ -1990,7 +1990,7 @@ async function main() {
     // component failed to re-render after the concurrent settle.
     const oChipOk = await oRaceTab.waitForFunction(
       (label) => {
-        const chips = document.querySelectorAll('.MuiChip-label');
+        const chips = document.querySelectorAll('[data-testid="filter-chip"]');
         return Array.from(chips).some(c => c.textContent.includes(label));
       },
       { timeout: 7000 },
@@ -2122,7 +2122,7 @@ async function main() {
     // component failed to re-render after the concurrent settle.
     const pChipOk = await pRaceTab.waitForFunction(
       (label) => {
-        const chips = document.querySelectorAll('.MuiChip-label');
+        const chips = document.querySelectorAll('[data-testid="filter-chip"]');
         return Array.from(chips).some(c => c.textContent.includes(label));
       },
       { timeout: 7000 },

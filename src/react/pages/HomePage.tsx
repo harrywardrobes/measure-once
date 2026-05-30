@@ -138,7 +138,7 @@ function HomeCard({
   return (
     <Card variant="outlined" sx={{ mb: 1 }}>
       {onClick && !disabled ? (
-        <CardActionArea onClick={onClick}>{content}</CardActionArea>
+        <CardActionArea data-testid="home-card-action" onClick={onClick}>{content}</CardActionArea>
       ) : (
         content
       )}

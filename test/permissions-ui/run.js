@@ -373,7 +373,7 @@ async function main() {
       const tuneButtonPaths = await page.evaluate(() => {
         const rolesBox = document.getElementById('roles-list');
         if (!rolesBox) return [];
-        const allIconBtns = Array.from(rolesBox.querySelectorAll('.MuiIconButton-root'));
+        const allIconBtns = Array.from(rolesBox.querySelectorAll('[data-testid="role-tune-btn"]'));
         const tuneBtns = allIconBtns.filter(btn => btn.getAttribute('title') !== 'Remove role');
         return tuneBtns.map(btn => {
           const pathEl = btn.querySelector('svg path');

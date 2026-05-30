@@ -302,6 +302,7 @@ export function BottomNav() {
                 href={n.href}
                 label={n.label}
                 icon={<IconComponent />}
+                data-selected={isSelected ? 'true' : undefined}
                 sx={{
                   ...actionSx,
                   '&.Mui-selected': {
@@ -321,6 +322,7 @@ export function BottomNav() {
             value="__more__"
             label="More"
             icon={<MoreHorizIcon />}
+            data-selected={barValue === '__more__' ? 'true' : undefined}
             onClick={(e) => {
               e.preventDefault();
               setDrawerOpen((prev) => !prev);
@@ -382,6 +384,7 @@ export function BottomNav() {
                 component="a"
                 href={n.href}
                 selected={isSelected}
+                data-selected={isSelected ? 'true' : undefined}
                 onClick={() => setDrawerOpen(false)}
                 sx={{
                   py: 1.5,

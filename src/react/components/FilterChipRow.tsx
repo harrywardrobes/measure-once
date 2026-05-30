@@ -39,6 +39,7 @@ export function FilterChipRow({ chips, value, onChange }: FilterChipRowProps) {
           return (
             <Chip
               key={chip.key}
+              data-testid="filter-chip"
               label={label}
               variant={active ? 'filled' : 'outlined'}
               color={active ? 'primary' : 'default'}

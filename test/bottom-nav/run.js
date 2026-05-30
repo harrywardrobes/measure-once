@@ -115,7 +115,7 @@ function readBarState(page) {
     const inBar = id => !!nav.querySelector(`#${id}`);
     const moreSelected = !!document.querySelector('[data-more-selected]');
     const moreHasMuiSelected = nav.querySelector('#bnav-more')
-      ? nav.querySelector('#bnav-more').classList.contains('Mui-selected')
+      ? nav.querySelector('#bnav-more').getAttribute('data-selected') === 'true'
       : false;
     return {
       home:     inBar('bnav-home'),
@@ -182,10 +182,7 @@ async function clickMoreAndWaitForDrawer(page, timeoutMs = 6000) {
  * Close the drawer by clicking the MUI Backdrop element.
  */
 async function closeDrawerViaBackdrop(page) {
-  await page.evaluate(() => {
-    const bd = document.querySelector('.MuiBackdrop-root');
-    if (bd) bd.click();
-  });
+  await page.keyboard.press('Escape');
   // Wait for drawer to slide away
   await poll(page, () => {
     const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');

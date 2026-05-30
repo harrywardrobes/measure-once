@@ -456,7 +456,7 @@ async function main() {
 
         // Capture page-1 first contact name for comparison
         const page1Name = await page.evaluate(() => {
-          const first = document.querySelector('#customers-results .MuiCard-root');
+          const first = document.querySelector('#customers-results [data-testid="customer-card"]');
           return first ? (first.textContent || '').slice(0, 50) : '';
         });
 
@@ -490,7 +490,7 @@ async function main() {
 
           // [A.3] Page-2 results differ from page-1
           const page2Name = await page.evaluate(() => {
-            const first = document.querySelector('#customers-results .MuiCard-root');
+            const first = document.querySelector('#customers-results [data-testid="customer-card"]');
             return first ? (first.textContent || '').slice(0, 50) : '';
           });
           const differ = page1Name !== '' && page2Name !== '' && page1Name !== page2Name;

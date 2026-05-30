@@ -97,7 +97,7 @@ async function pollPage(page, fn, arg, timeoutMs = 6000) {
 async function waitForSkeletonInPanel(page, panelId, timeoutMs = 6000) {
   return pollPage(page, (pid) => {
     const el = document.getElementById(pid);
-    return !!el && el.querySelectorAll('.MuiSkeleton-root').length > 0;
+    return !!el && el.querySelectorAll('[data-testid="loading-skeleton"]').length > 0;
   }, panelId, timeoutMs);
 }
 
@@ -107,7 +107,7 @@ async function waitForSkeletonInPanel(page, panelId, timeoutMs = 6000) {
 async function skeletonCount(page, panelId) {
   return page.evaluate((pid) => {
     const el = document.getElementById(pid);
-    return el ? el.querySelectorAll('.MuiSkeleton-root').length : -1;
+    return el ? el.querySelectorAll('[data-testid="loading-skeleton"]').length : -1;
   }, panelId);
 }
 
@@ -119,7 +119,7 @@ async function waitForSkeletonGone(page, panelId, timeoutMs = 10000) {
   return pollPage(page, (pid) => {
     const el = document.getElementById(pid);
     if (!el) return false;
-    return el.querySelectorAll('.MuiSkeleton-root').length === 0;
+    return el.querySelectorAll('[data-testid="loading-skeleton"]').length === 0;
   }, panelId, timeoutMs);
 }
 

@@ -270,7 +270,7 @@ async function openCustomersPage(browser, jar, byContactResponse) {
   await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
   // Wait for the customers grid to render at least one card.
-  await pollPage(page, () => !!document.querySelector('#customers-results .MuiCard-root'), null, 20000);
+  await pollPage(page, () => !!document.querySelector('#customers-results [data-testid="customer-card"]'), null, 20000);
 
   page.__logs = pageLogs;
   return page;

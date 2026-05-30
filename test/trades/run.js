@@ -150,8 +150,9 @@ async function pollPage(page, fn, arg, timeoutMs = 10000, intervalMs = 200) {
 // heading is emitted in the first render so it's a reliable mount signal.
 async function waitForTradesPageMounted(page) {
   return pollPage(page, () => {
-    const found = Array.from(document.querySelectorAll('h1, [class*="Anton"], .MuiTypography-root'))
-      .some(el => /Vendors.*Trades/i.test(el.textContent || ''));
+    const found = Array.from(document.querySelectorAll('h1, [class*="Anton"]'))
+      .some(el => /Vendors.*Trades/i.test(el.textContent || ''))
+      || /Vendors.*Trades/i.test(document.body.textContent || '');
     return found ? 'mounted' : null;
   }, null, 15000);
 }
@@ -160,9 +161,9 @@ async function waitForTradesPageMounted(page) {
 // and either real cards or the empty-state are present).
 async function waitForTradesLoaded(page, minCards = 0) {
   return pollPage(page, (min) => {
-    const skeletons = document.querySelectorAll('.MuiSkeleton-root');
+    const skeletons = document.querySelectorAll('[data-testid="loading-skeleton"]');
     if (skeletons.length > 0) return null;
-    const cards = document.querySelectorAll('.MuiCard-root');
+    const cards = document.querySelectorAll('[data-testid="trade-card"]');
     return cards.length >= min ? cards.length : null;
   }, minCards, 15000);
 }
@@ -548,7 +549,7 @@ async function main() {
 
       // Confirm CO_ALPHA is visible before searching
       const alphaCardBefore = await page.evaluate((name) => {
-        return Array.from(document.querySelectorAll('.MuiCard-root'))
+        return Array.from(document.querySelectorAll('[data-testid="trade-card"]'))
           .some(c => (c.textContent || '').includes(name));
       }, CO_ALPHA);
       record(
@@ -583,7 +584,7 @@ async function main() {
       await new Promise(r => setTimeout(r, 500));
 
       const alphaVisibleAfter = await page.evaluate((name) => {
-        return Array.from(document.querySelectorAll('.MuiCard-root'))
+        return Array.from(document.querySelectorAll('[data-testid="trade-card"]'))
           .some(c => (c.textContent || '').includes(name));
       }, CO_ALPHA);
       record(
@@ -594,7 +595,7 @@ async function main() {
       );
 
       const betaHidden = await page.evaluate((name) => {
-        return !Array.from(document.querySelectorAll('.MuiCard-root'))
+        return !Array.from(document.querySelectorAll('[data-testid="trade-card"]'))
           .some(c => (c.textContent || '').includes(name));
       }, CO_BETA);
       record(
@@ -622,7 +623,7 @@ async function main() {
       await new Promise(r => setTimeout(r, 500));
 
       const gammaByContact = await page.evaluate((name) => {
-        return Array.from(document.querySelectorAll('.MuiCard-root'))
+        return Array.from(document.querySelectorAll('[data-testid="trade-card"]'))
           .some(c => (c.textContent || '').includes(name));
       }, CO_GAMMA);
       record(
@@ -633,7 +634,7 @@ async function main() {
       );
 
       const alphaHiddenByContact = await page.evaluate((name) => {
-        return !Array.from(document.querySelectorAll('.MuiCard-root'))
+        return !Array.from(document.querySelectorAll('[data-testid="trade-card"]'))
           .some(c => (c.textContent || '').includes(name));
       }, CO_ALPHA);
       record(
@@ -664,7 +665,7 @@ async function main() {
 
       // Verify both CO_ALPHA (Plumbing) and CO_GAMMA (Carpentry / Roofing) visible initially
       const bothBefore = await page.evaluate(([a, g]) => {
-        const cards = Array.from(document.querySelectorAll('.MuiCard-root'));
+        const cards = Array.from(document.querySelectorAll('[data-testid="trade-card"]'));
         return cards.some(c => (c.textContent || '').includes(a))
             && cards.some(c => (c.textContent || '').includes(g));
       }, [CO_ALPHA, CO_GAMMA]);
@@ -675,7 +676,7 @@ async function main() {
 
       // Click the "Carpentry / Roofing" chip
       const chipClicked = await page.evaluate(() => {
-        const chips = Array.from(document.querySelectorAll('.MuiChip-root'));
+        const chips = Array.from(document.querySelectorAll('[data-testid="filter-chip"]'));
         const chip = chips.find(c => (c.textContent || '').trim() === 'Carpentry / Roofing');
         if (!chip) return false;
         chip.click();
@@ -689,7 +690,7 @@ async function main() {
       await new Promise(r => setTimeout(r, 500));
 
       const gammaOnly = await page.evaluate(([gammaName, alphaName]) => {
-        const cards = Array.from(document.querySelectorAll('.MuiCard-root'));
+        const cards = Array.from(document.querySelectorAll('[data-testid="trade-card"]'));
         return cards.some(c => (c.textContent || '').includes(gammaName))
             && !cards.some(c => (c.textContent || '').includes(alphaName));
       }, [CO_GAMMA, CO_ALPHA]);
@@ -713,7 +714,7 @@ async function main() {
       await waitForTradesLoaded(page, 1);
 
       const filterRestored = await page.evaluate(([gammaName, alphaName]) => {
-        const cards = Array.from(document.querySelectorAll('.MuiCard-root'));
+        const cards = Array.from(document.querySelectorAll('[data-testid="trade-card"]'));
         const hasGamma = cards.some(c => (c.textContent || '').includes(gammaName));
         const hasAlpha = cards.some(c => (c.textContent || '').includes(alphaName));
         return hasGamma && !hasAlpha;
@@ -835,9 +836,9 @@ async function main() {
 
       // React component should show a load error (API returns 403 for viewer)
       const loadError = await pollPage(viewerPage, () => {
-        const alerts = Array.from(document.querySelectorAll('.MuiAlert-root'));
+        const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
         if (alerts.some(a => (a.textContent || '').length > 0)) return 'error';
-        const cards = document.querySelectorAll('.MuiCard-root');
+        const cards = document.querySelectorAll('[data-testid="trade-card"]');
         if (cards.length === 0) {
           const body = document.body.textContent || '';
           return /error|failed|unable|forbidden|403/i.test(body) ? 'error' : null;
@@ -890,7 +891,7 @@ async function main() {
 
           // Find and click the delete button for "PrivTest Trades Kappa".
           const deleteClicked = await kPage.evaluate(() => {
-            const cards = Array.from(document.querySelectorAll('.MuiCard-root'));
+            const cards = Array.from(document.querySelectorAll('[data-testid="trade-card"]'));
             for (const card of cards) {
               if ((card.textContent || '').includes('PrivTest Trades Kappa')) {
                 const btn = card.querySelector('[aria-label="Delete company"]');
@@ -1078,7 +1079,7 @@ async function main() {
 
         // Wait for the 300ms debounce + React re-render → duplicate warning
         const warnAppeared = await pollPage(page, () => {
-          const alerts = Array.from(document.querySelectorAll('.MuiAlert-root'));
+          const alerts = Array.from(document.querySelectorAll('[role="alert"]'));
           return alerts.some(a => /phone number is already in use/i.test(a.textContent || ''))
             ? 'warning' : null;
         }, null, 3000);

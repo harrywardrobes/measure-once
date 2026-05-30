@@ -862,7 +862,7 @@ function PersonalTasksSection(props: {
                 />
                 <Box sx={{ flex: 1 }} />
                 <Button size="small" onClick={() => { setTitle(''); setDue(''); onShowAdd(false); }}>Cancel</Button>
-                <Button size="small" variant="contained" onClick={submit}>Add task</Button>
+                <Button size="small" variant="contained" onClick={submit} data-testid="cal-task-submit-btn">Add task</Button>
               </Stack>
             </Card>
           ) : (
@@ -1045,7 +1045,7 @@ function VisitModal(props: {
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth data-testid="cal-visit-dialog">
       <DialogTitle data-testid="cal-visit-modal" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         {existing ? 'Edit visit' : 'New visit'}
         <IconButton aria-label="Close" onClick={onClose} size="small"><CloseIcon /></IconButton>

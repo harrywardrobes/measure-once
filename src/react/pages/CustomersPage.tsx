@@ -518,7 +518,7 @@ function saveCustomersScroll() {
 
 function CustomerCardSkeleton() {
   return (
-    <Card variant="outlined" sx={{ width: '100%', overflow: 'hidden' }}>
+    <Card data-testid="loading-skeleton" variant="outlined" sx={{ width: '100%', overflow: 'hidden' }}>
       <Box sx={{ p: 2 }}>
         {/* Two-column on md+; single column on mobile — mirrors real CustomerCard */}
         <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' }, alignItems: { md: 'flex-start' } }}>
@@ -655,7 +655,7 @@ function CustomerCard({
   );
 
   return (
-    <Card variant="outlined" sx={{ width: '100%', opacity: allArchived ? 0.7 : 1, overflow: 'hidden' }}>
+    <Card data-testid="customer-card" variant="outlined" sx={{ width: '100%', opacity: allArchived ? 0.7 : 1, overflow: 'hidden' }}>
       <CardActionArea
         component="a"
         href={`/customers/${encodeURIComponent(contact.id)}`}

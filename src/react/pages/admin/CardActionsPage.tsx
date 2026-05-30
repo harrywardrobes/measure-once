@@ -771,6 +771,7 @@ export function CardActionsPage() {
                                     placement="top"
                                     arrow
                                   >
+                                    <Box sx={{ opacity: hasBinding ? 0.5 : 1 }} data-testid="handler-type-select-root">
                                     <Select
                                       size="small"
                                       displayEmpty
@@ -782,7 +783,6 @@ export function CardActionsPage() {
                                       })}
                                       sx={{
                                         fontSize: '.8rem', minWidth: 160, flexShrink: 0,
-                                        opacity: hasBinding ? 0.5 : 1,
                                         '.MuiSelect-select': { py: '3px', px: '8px' },
                                       }}
                                     >
@@ -792,6 +792,7 @@ export function CardActionsPage() {
                                         </MenuItem>
                                       ))}
                                     </Select>
+                                    </Box>
                                   </Tooltip>
                                   <HandlerBadges stageKey={stage.key} statusKey={ls.defaultStatusKey}
                                     substatusId={sub.id} handlers={handlers} />
@@ -858,7 +859,7 @@ export function CardActionsPage() {
           maxWidth="sm"
           fullWidth
         >
-          <DialogTitle>Handler still bound to this label</DialogTitle>
+          <DialogTitle data-testid="bound-handler-warning-title">Handler still bound to this label</DialogTitle>
           <DialogContent>
             <Alert severity="warning" sx={{ mb: 2 }}>
               {clearConfirm.slots.length === 1

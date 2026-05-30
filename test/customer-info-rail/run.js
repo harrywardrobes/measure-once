@@ -658,7 +658,7 @@ async function main() {
       // The expired card is pending, so if it were rendered it would add a third
       // "Awaiting submission" chip.  Visible cards: 2×pending + 1×submitted = 3 chips.
       const chipLabels = Array.from(
-        section.querySelectorAll('[class*="MuiChip-label"]'),
+        section.querySelectorAll('[data-testid="status-chip"]'),
       ).map(el => (el.textContent || '').trim());
       const awaitingCount  = chipLabels.filter(t => t === 'Awaiting submission').length;
       const submittedCount = chipLabels.filter(t => t === 'Submitted').length;
@@ -717,16 +717,7 @@ async function main() {
       // are the SubmissionCard boxes.
       // Strategy: find the MuiStack that is a descendant of the section Collapse
       // and whose direct children contain "Awaiting submission" or "Submitted" chips.
-      const stacks = Array.from(section.querySelectorAll('[class*="MuiStack-root"]'));
-      // The card-list Stack has spacing and its children are the cards.
-      // Find the deepest Stack that directly contains chip elements.
-      let cardStack = null;
-      for (const s of stacks) {
-        const chips = Array.from(s.children).filter(c =>
-          c.querySelector && c.querySelector('[class*="MuiChip-label"]')
-        );
-        if (chips.length >= 2) { cardStack = s; break; }
-      }
+      const cardStack = section.querySelector('[data-testid="submission-cards-stack"]');
       if (!cardStack) return { stackFound: false };
 
       // Direct children of the card stack are the SubmissionCard boxes.
@@ -737,10 +728,9 @@ async function main() {
 
       // Card with "Awaiting submission" but no copy-link-btn is the active-no-link card.
       const activeNoLink = cardBoxes.find(b =>
-        b.querySelector('[class*="MuiChip-label"]') &&
-        (b.querySelector('[class*="MuiChip-label"]')?.textContent || '') === 'Awaiting submission' &&
+        b.textContent.includes('Awaiting submission') &&
         !b.querySelector('[data-testid="copy-link-btn"]') &&
-        !b.querySelector('button.MuiButton-root')  // no Review button either
+        !Array.from(b.querySelectorAll('button')).some(btn => /review/i.test(btn.textContent || ''))
       );
 
       return {
@@ -808,8 +798,8 @@ async function main() {
       if (!section) return {};
 
       // Find the box containing "Submitted" chip text.
-      const allBoxes = Array.from(section.querySelectorAll('[class*="MuiBox-root"]'));
-      const submittedCard = allBoxes.find(b =>
+      const allCards = Array.from(section.querySelectorAll('[data-testid^="submission-card-"]'));
+      const submittedCard = allCards.find(b =>
         (b.textContent || '').includes('Submitted') &&
         !(b.textContent || '').includes('Awaiting submission')
       );

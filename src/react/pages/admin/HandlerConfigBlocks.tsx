@@ -361,6 +361,7 @@ export function StartDesignVisitConfig({
             setIntermediate(e.target.value);
             notify(dur, e.target.value, submitted, terms, gcal);
           }}
+          SelectDisplayProps={{ 'data-testid': 'intermediate-ls-select-trigger' } as React.HTMLAttributes<HTMLDivElement>}
         >
           <MenuItem value=""><em>— none —</em></MenuItem>
           {leadStatuses.map(ls => (
@@ -404,6 +405,7 @@ export function StartDesignVisitConfig({
             setSubmitted(e.target.value);
             notify(dur, intermediate, e.target.value, terms, gcal);
           }}
+          SelectDisplayProps={{ 'data-testid': 'submitted-ls-select-trigger' } as React.HTMLAttributes<HTMLDivElement>}
         >
           <MenuItem value=""><em>— none —</em></MenuItem>
           {leadStatuses.length > 0 && (

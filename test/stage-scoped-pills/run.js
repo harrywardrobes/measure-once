@@ -228,9 +228,9 @@ async function getLeadStatusChipLabels(page) {
     // We collect all chip labels from .MuiChip-label elements that are children
     // of a .MuiChip-root, excluding those inside the off-screen native select
     // wrapper (left: -9999).
-    const chips = Array.from(document.querySelectorAll('.MuiChip-root'));
+    const chips = Array.from(document.querySelectorAll('[data-testid="filter-chip"]'));
     return chips
-      .map((c) => (c.querySelector('.MuiChip-label') || c).textContent?.trim() || '')
+      .map((c) => c.textContent?.trim() || '')
       .filter(Boolean);
   });
 }
@@ -240,13 +240,13 @@ async function getLeadStatusChipLabels(page) {
  */
 async function getSubstatusChipLabels(page) {
   return page.evaluate(() => {
-    const chipRows = Array.from(document.querySelectorAll('.MuiChip-root'));
+    const chipRows = Array.from(document.querySelectorAll('[data-testid="filter-chip"]'));
     // After clicking a lead status, substatus chips appear. We distinguish them
     // by looking for chips whose text contains "All sub-statuses" or known
     // substatus labels ("Hot", "Warm"). We return all chip labels once the
     // substatus row appears.
     return chipRows
-      .map((c) => (c.querySelector('.MuiChip-label') || c).textContent?.trim() || '')
+      .map((c) => c.textContent?.trim() || '')
       .filter(Boolean);
   });
 }
@@ -256,7 +256,7 @@ async function getSubstatusChipLabels(page) {
  */
 async function waitForStageTab(page, key, timeoutMs = 12000) {
   return pollPage(page, (k) => {
-    const btn = document.querySelector(`button.MuiToggleButton-root[value="${k}"]`);
+    const btn = document.querySelector(`[data-testid="stage-filter-tab-${k}"]`);
     return btn ? 'ok' : null;
   }, key, timeoutMs);
 }
@@ -266,7 +266,7 @@ async function waitForStageTab(page, key, timeoutMs = 12000) {
  */
 async function waitForChip(page, labelText, timeoutMs = 10000) {
   return pollPage(page, (lbl) => {
-    const chips = Array.from(document.querySelectorAll('.MuiChip-label'));
+    const chips = Array.from(document.querySelectorAll('[data-testid="filter-chip"]'));
     return chips.some((c) => (c.textContent || '').trim() === lbl) ? 'ok' : null;
   }, labelText, timeoutMs);
 }
@@ -276,7 +276,7 @@ async function waitForChip(page, labelText, timeoutMs = 10000) {
  */
 async function waitForChipAbsent(page, labelText, timeoutMs = 10000) {
   return pollPage(page, (lbl) => {
-    const chips = Array.from(document.querySelectorAll('.MuiChip-label'));
+    const chips = Array.from(document.querySelectorAll('[data-testid="filter-chip"]'));
     return chips.every((c) => (c.textContent || '').trim() !== lbl) ? 'ok' : null;
   }, labelText, timeoutMs);
 }
@@ -448,7 +448,7 @@ async function main() {
     // Wait for the lead-status chip row to appear (store.loaded = true).
     // The "All statuses" chip is always the first chip in the row.
     const chipsLoaded = await pollPage(page, () => {
-      const chips = Array.from(document.querySelectorAll('.MuiChip-label'));
+      const chips = Array.from(document.querySelectorAll('[data-testid="filter-chip"]'));
       return chips.some((c) => (c.textContent || '').trim() === 'All statuses') ? 'ok' : null;
     }, null, 15000);
 
@@ -490,7 +490,7 @@ async function main() {
 
       // Click the Sales tab.
       const clicked = await page.evaluate(() => {
-        const btn = document.querySelector('button.MuiToggleButton-root[value="sales"]');
+        const btn = document.querySelector('[data-testid="stage-filter-tab-sales"]');
         if (!btn) return false;
         btn.click();
         return true;
@@ -539,7 +539,7 @@ async function main() {
         .catch(() => null);
       // Also check it's not present without a count suffix.
       const newChipAbsent = await page.evaluate(() => {
-        const chips = Array.from(document.querySelectorAll('.MuiChip-label'));
+        const chips = Array.from(document.querySelectorAll('[data-testid="filter-chip"]'));
         return chips.every((c) => {
           const t = (c.textContent || '').trim();
           return t !== 'New (0)' && t !== 'New';
@@ -550,7 +550,7 @@ async function main() {
 
       // "Dormant" should NOT appear as a chip (count 0).
       const dormantChipAbsent = await page.evaluate(() => {
-        const chips = Array.from(document.querySelectorAll('.MuiChip-label'));
+        const chips = Array.from(document.querySelectorAll('[data-testid="filter-chip"]'));
         return chips.every((c) => {
           const t = (c.textContent || '').trim();
           return t !== 'Dormant (0)' && t !== 'Dormant';
@@ -569,10 +569,9 @@ async function main() {
 
       // Click the "Open Deal (5)" chip to select the OPEN_DEAL lead status.
       const chipClicked = await page.evaluate(() => {
-        const chips = Array.from(document.querySelectorAll('.MuiChip-root'));
+        const chips = Array.from(document.querySelectorAll('[data-testid="filter-chip"]'));
         const target = chips.find((c) => {
-          const lbl = c.querySelector('.MuiChip-label');
-          return lbl && (lbl.textContent || '').trim() === 'Open Deal (5)';
+          return (c.textContent || '').trim() === 'Open Deal (5)';
         });
         if (!target) return false;
         target.click();
@@ -616,7 +615,7 @@ async function main() {
 
       // "Warm" should NOT appear (count 0 is filtered out).
       const warmAbsent = await page.evaluate(() => {
-        const chips = Array.from(document.querySelectorAll('.MuiChip-label'));
+        const chips = Array.from(document.querySelectorAll('[data-testid="filter-chip"]'));
         return chips.every((c) => {
           const t = (c.textContent || '').trim();
           return t !== 'Warm (0)' && t !== 'Warm';

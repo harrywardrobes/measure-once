@@ -805,7 +805,7 @@ export function ConflictResolverModal({
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth data-testid="conflict-resolver-dialog">
-      <DialogTitle>Fix conflicting handlers</DialogTitle>
+      <DialogTitle data-testid="conflict-resolver-title">Fix conflicting handlers</DialogTitle>
       <DialogContent dividers>
         <Typography variant="body2" sx={{ mb: 2 }}>
           The slot {slotDesc} has <strong>{conflicting.length} handlers</strong> bound to it.

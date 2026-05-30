@@ -143,18 +143,6 @@ async function clickChangePasswordBtn(page) {
     // Prefer data-testid if present.
     const btn = document.querySelector('[data-testid="change-password-btn"]');
     if (btn) { btn.click(); return 'testid-dom'; }
-    // Fallback: scan cards for a "Password" overline.
-    const cards = Array.from(document.querySelectorAll('.MuiCard-root'));
-    for (const card of cards) {
-      const overlines = card.querySelectorAll('[class*="MuiTypography-overline"]');
-      const hasPasswordOverline = Array.from(overlines).some(
-        el => /^password$/i.test((el.textContent || '').trim()),
-      );
-      if (hasPasswordOverline) {
-        const b = card.querySelector('button');
-        if (b) { b.click(); return 'fallback-card'; }
-      }
-    }
     // Fallback: #profile-view button with matching text.
     const textBtn = Array.from(document.querySelectorAll('#profile-view button'))
       .find(b => b.textContent.trim() === 'Change password');
@@ -470,11 +458,7 @@ async function main() {
         } else {
           // UI.1 — profile card rendered; dialog hidden
           const ui1 = await profilePage.evaluate(() => {
-            const cards = Array.from(document.querySelectorAll('.MuiCard-root'));
-            const hasPasswordCard = cards.some(card => {
-              const overlines = card.querySelectorAll('[class*="MuiTypography-overline"]');
-              return Array.from(overlines).some(el => /password/i.test(el.textContent || ''));
-            });
+            const hasPasswordCard = !!document.querySelector('[data-testid="change-password-btn"]');
             const dialog = document.querySelector('[role="dialog"]');
             const dialogHidden = !dialog || window.getComputedStyle(dialog).display === 'none';
             return { hasPasswordCard, dialogHidden };
@@ -748,11 +732,8 @@ async function main() {
             });
 
             const errorSnap = await pollPage(profilePage, () => {
-              const errorEls  = document.querySelectorAll('p.Mui-error');
-              const realErrors = Array.from(errorEls).filter(
-                el => (el.textContent || '').trim().length > 0,
-              );
-              return realErrors.length >= 3 ? { errorCount: realErrors.length } : null;
+              const invalidInputs = document.querySelectorAll('[aria-invalid="true"]');
+              return invalidInputs.length >= 3 ? { errorCount: invalidInputs.length } : null;
             }, null, 8000);
 
             record(UI_LABELS[4],

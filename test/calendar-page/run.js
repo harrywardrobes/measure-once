@@ -492,7 +492,7 @@ async function main() {
         await memberPage.evaluate(() => {
           const btns = Array.from(document.querySelectorAll('[data-testid="cal-tasks"] button'));
           const sub = btns.find(b => (b.textContent || '').trim() === 'Add task'
-            && b.classList.contains('MuiButton-contained'));
+            && b.getAttribute('data-testid') === 'cal-task-submit-btn');
           if (sub) sub.click();
         });
         const newTaskId = await pollPage(memberPage, (t) => {
@@ -553,7 +553,7 @@ async function main() {
         const notesMarker = `e2e-cal-notes-${runId}`;
         await setReactInputValue(
           memberPage,
-          '.MuiDialog-paper textarea:not([aria-hidden="true"])',
+          '[data-testid="cal-visit-dialog"] textarea:not([aria-hidden="true"])',
           notesMarker,
         );
         // Click Save.
@@ -595,7 +595,7 @@ async function main() {
           const editedNotes = `${notesMarker}-edited`;
           await setReactInputValue(
             memberPage,
-            '.MuiDialog-paper textarea:not([aria-hidden="true"])',
+            '[data-testid="cal-visit-dialog"] textarea:not([aria-hidden="true"])',
             editedNotes,
           );
           await memberPage.evaluate(() => {
@@ -629,7 +629,7 @@ async function main() {
             document.querySelector('[data-testid="cal-visit-modal"]') ? 'ok' : null,
             null, 4000);
           await memberPage.evaluate(() => {
-            const btn = Array.from(document.querySelectorAll('.MuiDialog-paper button'))
+            const btn = Array.from(document.querySelectorAll('[data-testid="cal-visit-dialog"] button'))
               .find(b => (b.textContent || '').trim() === 'Delete');
             if (btn) btn.click();
           });

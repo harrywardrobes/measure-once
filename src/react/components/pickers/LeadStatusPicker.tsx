@@ -219,6 +219,7 @@ export function LeadStatusPicker({
       onClose={onClose}
       anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+      data-testid="lead-status-picker"
       slotProps={{
         paper: {
           id: 'card-picker-popup',

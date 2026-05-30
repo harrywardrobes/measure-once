@@ -353,7 +353,7 @@ async function main() {
     const drawerOpened = await pollPage(page, () => {
       const drawer = document.querySelector('[data-testid="invoice-detail-drawer"]');
       if (!drawer) return null;
-      const paper = drawer.querySelector('.MuiDrawer-paper');
+      const paper = document.querySelector('[data-testid="invoice-drawer-paper"]');
       if (!paper) return null;
       // MUI Drawer: when open the paper's computed transform is matrix(1,0,0,1,0,0)
       // (no translation). When closed it is translateX(100%).

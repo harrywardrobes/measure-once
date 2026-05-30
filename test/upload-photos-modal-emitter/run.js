@@ -539,7 +539,7 @@ async function main() {
     const initialChipVisible = await pollPage(page, () => {
       const section = document.getElementById('customer-info-submissions-section');
       if (!section) return null;
-      const chips = Array.from(section.querySelectorAll('[class*="MuiChip-label"]'));
+      const chips = Array.from(section.querySelectorAll('[data-testid="status-chip"]'));
       return chips.some(c => (c.textContent || '').trim() === 'Awaiting submission') ? 'ok' : null;
     }, 15000).catch(() => null);
 
@@ -548,7 +548,7 @@ async function main() {
       sectionFound: !!document.getElementById('customer-info-submissions-section'),
       awaitingChips: Array.from(
         (document.getElementById('customer-info-submissions-section') || document)
-          .querySelectorAll('[class*="MuiChip-label"]'),
+          .querySelectorAll('[data-testid="status-chip"]'),
       ).filter(c => (c.textContent || '').trim() === 'Awaiting submission').length,
     }));
 
@@ -685,7 +685,7 @@ async function main() {
     const twoCardsVisible = await pollPage(page, () => {
       const section = document.getElementById('customer-info-submissions-section');
       if (!section) return null;
-      const chips = Array.from(section.querySelectorAll('[class*="MuiChip-label"]'));
+      const chips = Array.from(section.querySelectorAll('[data-testid="status-chip"]'));
       const awaitingCount = chips.filter(c => (c.textContent || '').trim() === 'Awaiting submission').length;
       return awaitingCount >= 2 ? 'ok' : null;
     }, 8000).catch(() => null);
@@ -693,7 +693,7 @@ async function main() {
     const updatedState = await page.evaluate(() => ({
       awaitingChips: Array.from(
         (document.getElementById('customer-info-submissions-section') || document)
-          .querySelectorAll('[class*="MuiChip-label"]'),
+          .querySelectorAll('[data-testid="status-chip"]'),
       ).filter(c => (c.textContent || '').trim() === 'Awaiting submission').length,
     }));
 

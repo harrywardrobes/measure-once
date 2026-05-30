@@ -129,7 +129,7 @@ async function openProjectsPage(browser, cookie, cacheStatus) {
   // #room-stale-banner is now appended to document.body by workflow-core.js,
   // so we no longer look for it inside #projects-view.
   await page.waitForSelector(
-    '#projects-view .MuiSelect-root, #room-stale-banner',
+    '#projects-view [data-testid="sort-select"], #projects-view #lead-status-filter, #room-stale-banner',
     { timeout: 12000 },
   ).catch(() => {});
 

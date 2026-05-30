@@ -171,7 +171,7 @@ export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanel
       anchor="right"
       open={node !== null}
       onClose={onClose}
-      slotProps={{ paper: { sx: { width: { xs: '100%', sm: 400 }, display: 'flex', flexDirection: 'column' } } }}
+      slotProps={{ paper: { sx: { width: { xs: '100%', sm: 400 }, display: 'flex', flexDirection: 'column' }, ref: (el: HTMLElement | null) => { if (el) el.setAttribute('data-testid', 'workflow-map-detail-drawer'); } } }}
     >
       {/* Header */}
       <Box

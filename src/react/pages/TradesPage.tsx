@@ -464,7 +464,7 @@ function ContactChip({ contact }: { contact: TradeContact }) {
 
 function TradeCardSkeleton() {
   return (
-    <Card variant="outlined" sx={{ mb: 1 }}>
+    <Card data-testid="loading-skeleton" variant="outlined" sx={{ mb: 1 }}>
       <CardContent sx={{ pb: '12px !important' }}>
         <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
           <Box sx={{ flex: '0 0 26%', minWidth: 0 }}>
@@ -517,6 +517,7 @@ function TradeCard({
 
   return (
     <Card
+      data-testid="trade-card"
       variant="outlined"
       sx={{
         mb: 1,

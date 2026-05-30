@@ -426,7 +426,7 @@ function IdeaCard({
 
   return (
     <>
-      <Card variant="outlined" sx={{ mb: 1.5 }}>
+      <Card data-testid="idea-card" variant="outlined" sx={{ mb: 1.5 }}>
         <CardContent sx={{ pb: '12px !important' }}>
           <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
             <Avatar

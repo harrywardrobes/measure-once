@@ -304,7 +304,7 @@ async function main() {
         const drawerOpenOnLoad = await page.evaluate(() => {
           const drawer = document.querySelector('[data-testid="invoice-detail-drawer"]');
           if (!drawer) return false;
-          const paper = drawer.querySelector('.MuiDrawer-paper');
+          const paper = drawer.querySelector('[data-testid="invoice-drawer-paper"]');
           if (!paper) return false;
           const style = window.getComputedStyle(paper);
           const transform = style.transform || style.webkitTransform || '';

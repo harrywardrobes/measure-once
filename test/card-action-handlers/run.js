@@ -1890,11 +1890,11 @@ async function main() {
     const muiDialogState = await pollPage(
       conflictAdminTab,
       () => {
-        const root = document.querySelector('.MuiDialog-root');
+        const root = document.querySelector('[data-testid="conflict-resolver-dialog"]');
         if (!root) return null;
         // DialogTitle renders as an element with role="heading" or an <h2>
         // inside the dialog; either way its text must include the expected string.
-        const titleEl = root.querySelector('.MuiDialogTitle-root');
+        const titleEl = root.querySelector('[data-testid="conflict-resolver-title"]');
         const titleText = titleEl ? (titleEl.textContent || '').trim() : '';
         return {
           hasMuiRoot: true,
@@ -3232,7 +3232,7 @@ async function main() {
       clearWarnTab,
       () => {
         for (const d of document.querySelectorAll('[role=dialog]')) {
-          const title = d.querySelector('[class*="MuiDialogTitle"]');
+          const title = d.querySelector('[data-testid="bound-handler-warning-title"]');
           if (title && title.textContent.includes('Handler still bound to this label')) return true;
         }
         return null;
@@ -3260,7 +3260,7 @@ async function main() {
       clearWarnTab,
       () => {
         for (const d of document.querySelectorAll('[role=dialog]')) {
-          const title = d.querySelector('[class*="MuiDialogTitle"]');
+          const title = d.querySelector('[data-testid="bound-handler-warning-title"]');
           if (title && title.textContent.includes('Handler still bound to this label')) return null;
         }
         return true;
@@ -3291,7 +3291,7 @@ async function main() {
       clearWarnTab,
       () => {
         for (const d of document.querySelectorAll('[role=dialog]')) {
-          const title = d.querySelector('[class*="MuiDialogTitle"]');
+          const title = d.querySelector('[data-testid="bound-handler-warning-title"]');
           if (title && title.textContent.includes('Handler still bound to this label')) return true;
         }
         return null;
@@ -3737,7 +3737,7 @@ async function main() {
         const alertVisible = await staleTab.evaluate(() => {
           const dialog = document.querySelector('[data-testid="handler-editor-modal"]');
           if (!dialog) return 'no-dialog';
-          const alerts = dialog.querySelectorAll('.MuiAlert-root');
+          const alerts = dialog.querySelectorAll('[role="alert"]');
           for (const a of alerts) {
             if (a.textContent.includes('no longer exists')) return 'visible';
           }
@@ -3774,7 +3774,7 @@ async function main() {
         // The stale Select is the only FormControl in Mui-error state.
         const interErrSelHandle = await clickMuiSelect(
           staleTab,
-          '[data-testid="handler-editor-modal"] .MuiInputBase-root.Mui-error .MuiSelect-select',
+          '[data-testid="intermediate-ls-select-trigger"]',
         );
         let interSelectClicked;
         if (interErrSelHandle) {
@@ -3921,7 +3921,7 @@ async function main() {
           const subAlertText = await subTab.evaluate(() => {
             const dialog = document.querySelector('[data-testid="handler-editor-modal"]');
             if (!dialog) return null;
-            const alert = dialog.querySelector('.MuiAlert-root');
+            const alert = dialog.querySelector('[role="alert"]');
             return alert ? alert.textContent : null;
           });
           record(
@@ -3953,7 +3953,7 @@ async function main() {
           // P.sub.4 — Select a valid submittedLeadStatus; Save/Add must enable.
           const subErrSelHandle = await clickMuiSelect(
             subTab,
-            '[data-testid="handler-editor-modal"] .MuiInputBase-root.Mui-error .MuiSelect-select',
+            '[data-testid="submitted-ls-select-trigger"]',
           );
           let subSelectClicked;
           if (subErrSelHandle) {
@@ -4277,7 +4277,7 @@ async function main() {
       const boundOpacity = await rTab.evaluate((id) => {
         const row = document.querySelector(`[data-sub-id="${id}"]`);
         if (!row) return 'row-absent';
-        const selectRoot = row.querySelector('.MuiInputBase-root');
+        const selectRoot = row.querySelector('[data-testid="handler-type-select-root"]');
         if (!selectRoot) return 'select-absent';
         return getComputedStyle(selectRoot).opacity;
       }, String(rBoundSubId));
@@ -4293,7 +4293,7 @@ async function main() {
       const freeOpacity = await rTab.evaluate((id) => {
         const row = document.querySelector(`[data-sub-id="${id}"]`);
         if (!row) return 'row-absent';
-        const selectRoot = row.querySelector('.MuiInputBase-root');
+        const selectRoot = row.querySelector('[data-testid="handler-type-select-root"]');
         if (!selectRoot) return 'select-absent';
         return getComputedStyle(selectRoot).opacity;
       }, String(rFreeSubId));

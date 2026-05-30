@@ -25,7 +25,7 @@ export function PageLoadingSkeleton({ forceVisible }: { forceVisible?: boolean }
   if (!visible) return null;
 
   return (
-    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+    <Box data-testid="loading-skeleton" sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <MuiSkeleton variant="text" width="45%" height={24} />
       <MuiSkeleton variant="text" width="80%" />
       <MuiSkeleton variant="text" width="65%" />
@@ -48,7 +48,7 @@ export function CustomersPageSkeleton({ forceVisible }: { forceVisible?: boolean
   if (!visible) return null;
 
   return (
-    <Box sx={{ maxWidth: 720, mx: 'auto', px: 2, pt: 2 }}>
+    <Box data-testid="loading-skeleton" sx={{ maxWidth: 720, mx: 'auto', px: 2, pt: 2 }}>
       {/* Stage filter tabs */}
       <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
         {[70, 50, 90, 80, 100, 80].map((w, i) => (
@@ -143,7 +143,7 @@ export function CalendarPageSkeleton({ forceVisible }: { forceVisible?: boolean 
   );
 
   return (
-    <Box sx={{ maxWidth: 960, mx: 'auto', px: 2, pt: 2 }}>
+    <Box data-testid="loading-skeleton" sx={{ maxWidth: 960, mx: 'auto', px: 2, pt: 2 }}>
       {/* Toolbar */}
       <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: 'center' }}>
         <MuiSkeleton variant="circular" width={32} height={32} />
@@ -213,7 +213,7 @@ export function ProfilePageSkeleton({ forceVisible }: { forceVisible?: boolean }
   if (!visible) return null;
 
   return (
-    <Box sx={{ maxWidth: 720, mx: 'auto', px: 2, py: 2 }}>
+    <Box data-testid="loading-skeleton" sx={{ maxWidth: 720, mx: 'auto', px: 2, py: 2 }}>
       {/* Back button */}
       <MuiSkeleton variant="rounded" width={72} height={28} sx={{ mb: 2 }} />
 
@@ -268,7 +268,7 @@ export function AdminTeamPageSkeleton({ forceVisible }: { forceVisible?: boolean
   if (!visible) return null;
 
   return (
-    <Stack spacing={3}>
+    <Stack data-testid="loading-skeleton" spacing={3}>
       {/* Team table card */}
       <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
         {/* Heading row */}
@@ -340,7 +340,7 @@ export function AdminPermissionsPageSkeleton({ forceVisible }: { forceVisible?: 
   if (!visible) return null;
 
   return (
-    <Stack spacing={3}>
+    <Stack data-testid="loading-skeleton" spacing={3}>
       {/* Manage job roles card */}
       <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
         <MuiSkeleton variant="text" width={160} height={28} sx={{ mb: 0.5 }} />
@@ -416,7 +416,7 @@ export function AdminRequestsPageSkeleton({ forceVisible }: { forceVisible?: boo
   if (!visible) return null;
 
   return (
-    <Stack spacing={3}>
+    <Stack data-testid="loading-skeleton" spacing={3}>
       {/* Access requests card */}
       <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
         <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: 'center' }}>
@@ -476,7 +476,7 @@ export function AdminAuditLogPageSkeleton({ forceVisible }: { forceVisible?: boo
   if (!visible) return null;
 
   return (
-    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+    <Box data-testid="loading-skeleton" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
       {/* Heading row */}
       <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: 'center' }}>
         <MuiSkeleton variant="text" width={90} height={28} />
@@ -519,7 +519,7 @@ export function AdminSettingsPageSkeleton({ forceVisible }: { forceVisible?: boo
   if (!visible) return null;
 
   return (
-    <Stack spacing={2}>
+    <Stack data-testid="loading-skeleton" spacing={2}>
       <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
         {/* Integrations heading */}
         <MuiSkeleton variant="text" width={120} height={28} sx={{ mb: 0.5 }} />
@@ -630,7 +630,7 @@ export function CardActionsPageSkeleton({ forceVisible }: { forceVisible?: boole
   if (!visible) return null;
 
   return (
-    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+    <Box data-testid="loading-skeleton" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
       {/* Heading row + Save button */}
       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
         <Box>
@@ -677,7 +677,7 @@ export function ActionHandlersPageSkeleton({ forceVisible }: { forceVisible?: bo
   if (!visible) return null;
 
   return (
-    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+    <Box data-testid="loading-skeleton" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
       {/* Heading */}
       <MuiSkeleton variant="text" width={150} height={28} sx={{ mb: 0.5 }} />
       <MuiSkeleton variant="text" width="75%" height={16} />
@@ -723,7 +723,7 @@ export function LoginPageSkeleton({ forceVisible }: { forceVisible?: boolean } =
   if (!visible) return null;
 
   return (
-    <Box sx={{ minHeight: forceVisible ? 'unset' : '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3, bgcolor: BRAND_COLORS.pageBackground }}>
+    <Box data-testid="loading-skeleton" sx={{ minHeight: forceVisible ? 'unset' : '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3, bgcolor: BRAND_COLORS.pageBackground }}>
       <Box
         sx={{
           width: '100%',
@@ -812,6 +812,7 @@ export function ProjectsPageSkeleton({ forceVisible }: { forceVisible?: boolean 
 
   return (
     <Box
+      data-testid="loading-skeleton"
       sx={forceVisible ? {
         position: 'relative',
         height: 320,
@@ -928,7 +929,7 @@ export function HomePageSkeleton({ forceVisible }: { forceVisible?: boolean } = 
   );
 
   return (
-    <Box sx={{ maxWidth: 640, mx: 'auto', px: 2, pt: 2 }}>
+    <Box data-testid="loading-skeleton" sx={{ maxWidth: 640, mx: 'auto', px: 2, pt: 2 }}>
       {/* Date header */}
       <Box sx={{ mb: 3 }}>
         <MuiSkeleton variant="text" width="40%" height={52} />

@@ -205,8 +205,7 @@ async function openCustomersPage(browser, adminCookie) {
   const mounted = await pollUntil(
     page,
     () => {
-      const el = document.querySelector('.MuiBox-root') ||
-                 document.querySelector('#lead-status-filter');
+      const el = document.querySelector('#lead-status-filter');
       return el ? 'ok' : null;
     },
     20000,

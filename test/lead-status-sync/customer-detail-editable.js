@@ -136,13 +136,13 @@ async function probeEditableRole(page, role, lsKey, record) {
     if (pill) {
       await pill.click();
       // Poll until the MUI Popover portal mounts at body level.
-      await page.waitForSelector('[class*="MuiPopover-root"]', { timeout: 6000 }).catch(() => {});
+      await page.waitForSelector('[data-testid="lead-status-picker"]', { timeout: 6000 }).catch(() => {});
     }
 
     const pickerResult = await page.evaluate(() => {
       // The React LeadStatusPicker renders as a MUI Popover portal.
       // Check for a Popover root or the "Clear status" button inside it.
-      const popover = document.querySelector('[class*="MuiPopover-root"]');
+      const popover = document.querySelector('[data-testid="lead-status-picker"]');
       const clearBtn = Array.from(document.querySelectorAll('button')).find(
         b => b.textContent.includes('Clear status'),
       );
@@ -160,7 +160,7 @@ async function probeEditableRole(page, role, lsKey, record) {
     await page.keyboard.press('Escape');
     // Poll until the MUI Popover has closed before the next probe.
     await waitFor(page, () =>
-      !document.querySelector('[class*="MuiPopover-root"]'), {}, 3000);
+      !document.querySelector('[data-testid="lead-status-picker"]'), {}, 3000);
   }
 }
 

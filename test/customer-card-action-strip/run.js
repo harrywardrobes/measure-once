@@ -298,7 +298,7 @@ async function openCustomers(browser, jar, opts) {
   await pollPage(page, () => !!document.getElementById('customers-results'), null, 20000);
 
   // Wait until at least one MuiCard is rendered (contacts loaded).
-  await pollPage(page, () => !!document.querySelector('#customers-results .MuiCard-root'), null, 15000);
+  await pollPage(page, () => !!document.querySelector('#customers-results [data-testid="customer-card"]'), null, 15000);
 
   page.__logs = pageLogs;
   return page;
@@ -520,7 +520,7 @@ async function main() {
     // Wait for the React hook to fetch handlers and re-render.
     // The strip is rendered as role="button" inside the card.
     await pollPage(pageAB, () => {
-      const cards = Array.from(document.querySelectorAll('#customers-results .MuiCard-root'));
+      const cards = Array.from(document.querySelectorAll('#customers-results [data-testid="customer-card"]'));
       return cards.length >= 2 ? 'ok' : null;
     }, null, 12000);
 
@@ -535,7 +535,7 @@ async function main() {
 
     // Snapshot the DOM once settled.
     const abState = await pageAB.evaluate((contactAId, contactBId) => {
-      const cards = Array.from(document.querySelectorAll('#customers-results .MuiCard-root'));
+      const cards = Array.from(document.querySelectorAll('#customers-results [data-testid="customer-card"]'));
 
       function cardStrip(nameFragment) {
         const card = cards.find(c => (c.textContent || '').includes(nameFragment));
@@ -622,7 +622,7 @@ async function main() {
 
     // Wait for the card to appear first so contacts are settled in the
     // React state before we trigger the draftRefreshTick.
-    await pollPage(pageC, () => !!document.querySelector('#customers-results .MuiCard-root'), null, 15000);
+    await pollPage(pageC, () => !!document.querySelector('#customers-results [data-testid="customer-card"]'), null, 15000);
 
     // Trigger draftRefreshTick via BroadcastChannel from a SEPARATE page in
     // the same browser context.  BC spec says messages are NOT delivered to
@@ -642,13 +642,13 @@ async function main() {
     // increment causes the draftVisitIds effect to re-run → fetches
     // in-progress → draftVisitId=77 → hasDraft=true → label renders).
     const continueSeen = await pollPage(pageC, () => {
-      const cards = Array.from(document.querySelectorAll('#customers-results .MuiCard-root'));
+      const cards = Array.from(document.querySelectorAll('#customers-results [data-testid="customer-card"]'));
       return cards.some(c => (c.textContent || '').includes('Continue designing')) ? 'ok' : null;
     }, null, 10000).catch(() => null);
 
     // Debug: capture strip state and intercepted-URL list for diagnostics.
     const cDebug = await pageC.evaluate((cId) => {
-      const cards = Array.from(document.querySelectorAll('#customers-results .MuiCard-root'));
+      const cards = Array.from(document.querySelectorAll('#customers-results [data-testid="customer-card"]'));
       const card = cards.find(c => (c.textContent || '').includes('Charlie PrivTest'));
       const strip = card ? card.querySelector('[role="button"]') : null;
       return {

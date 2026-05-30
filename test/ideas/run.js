@@ -484,7 +484,7 @@ async function main() {
       await pollPage(adminPage, (body2) => {
         const mount = document.getElementById('ideas-page-mount');
         if (!mount) return null;
-        const cards = Array.from(mount.querySelectorAll('.MuiCard-root'));
+        const cards = Array.from(mount.querySelectorAll('[data-testid="idea-card"]'));
         return cards.some(c => c.textContent.includes(body2)) ? 'ok' : null;
       }, idea2Body, 10000);
 
@@ -492,12 +492,13 @@ async function main() {
       const chipClicked = await adminPage.evaluate((body2) => {
         const mount = document.getElementById('ideas-page-mount');
         if (!mount) return false;
-        const cards = Array.from(mount.querySelectorAll('.MuiCard-root'));
+        const cards = Array.from(mount.querySelectorAll('[data-testid="idea-card"]'));
         for (const card of cards) {
           if (card.textContent.includes(body2)) {
             // The comment chip has aria-expanded; the vote chip does not.
-            const chip = card.querySelector('.MuiChip-root[aria-expanded]') ||
-                         card.querySelector('.MuiChip-root');
+            const chip = card.querySelector('[aria-expanded]') ||
+                         card.querySelector('[data-testid="idea-comment-chip"]') ||
+                         card.querySelector('[role="button"]');
             if (chip) { chip.click(); return true; }
           }
         }
@@ -535,7 +536,7 @@ async function main() {
       // Type into the reply input.
       const replyTyped = await adminPage.evaluate((body2, text) => {
         const mount = document.getElementById('ideas-page-mount');
-        const cards = Array.from(mount ? mount.querySelectorAll('.MuiCard-root') : []);
+        const cards = Array.from(mount ? mount.querySelectorAll('[data-testid="idea-card"]') : []);
         for (const card of cards) {
           if (card.textContent.includes(body2)) {
             const input = card.querySelector('input[placeholder="Add a comment\u2026"]');
@@ -554,7 +555,7 @@ async function main() {
         // Submit the reply form.
         await adminPage.evaluate((body2) => {
           const mount = document.getElementById('ideas-page-mount');
-          const cards = Array.from(mount ? mount.querySelectorAll('.MuiCard-root') : []);
+          const cards = Array.from(mount ? mount.querySelectorAll('[data-testid="idea-card"]') : []);
           for (const card of cards) {
             if (card.textContent.includes(body2)) {
               const form = card.querySelector('form');

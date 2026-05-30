@@ -173,11 +173,7 @@ async function waitForGoogleCardLoaded(page) {
   return pollPage(page, () => {
     const pv = document.getElementById('profile-view');
     if (!pv) return null;
-    const chips = Array.from(pv.querySelectorAll('.MuiChip-root'));
-    const gcChip = chips.find(c => {
-      const t = (c.textContent || '').trim();
-      return t === 'Connected' || t === 'Not connected';
-    });
+    const gcChip = pv.querySelector('[data-testid="gc-status-chip"]');
     return gcChip ? gcChip.textContent.trim() : null;
   }, 15000);
 }
@@ -188,21 +184,13 @@ async function getGoogleCardState(page) {
     const pv = document.getElementById('profile-view');
     if (!pv) return { found: false };
 
-    // Locate the Google Calendar card by its overline heading.
-    const cards = Array.from(pv.querySelectorAll('.MuiCard-root'));
-    let gcCard = null;
-    for (const card of cards) {
-      const overlines = Array.from(card.querySelectorAll('[class*="MuiTypography-overline"]'));
-      if (overlines.some(el => /google calendar/i.test((el.textContent || '').trim()))) {
-        gcCard = card;
-        break;
-      }
-    }
+    // Locate the Google Calendar card by its data-testid.
+    const gcCard = pv.querySelector('[data-testid="gc-card"]');
     if (!gcCard) return { found: false };
 
     const cardText = gcCard.textContent || '';
-    const chips    = Array.from(gcCard.querySelectorAll('.MuiChip-root'));
-    const chipText = chips.map(c => (c.textContent || '').trim());
+    const statusChip = gcCard.querySelector('[data-testid="gc-status-chip"]');
+    const chipText = statusChip ? [(statusChip.textContent || '').trim()] : [];
 
     const btns     = Array.from(gcCard.querySelectorAll('button'));
     const btnText  = btns.map(b => (b.textContent || '').trim());
@@ -452,9 +440,8 @@ async function main() {
     const chipAfter = await pollPage(pageB, () => {
       const pv = document.getElementById('profile-view');
       if (!pv) return null;
-      const chips = Array.from(pv.querySelectorAll('.MuiChip-root'));
-      const chip  = chips.find(c => (c.textContent || '').trim() === 'Not connected');
-      return chip ? 'found' : null;
+      const chip = pv.querySelector('[data-testid="gc-status-chip"]');
+      return chip && (chip.textContent || '').trim() === 'Not connected' ? 'found' : null;
     }, 8000);
 
     // Check how many times the intercepted logout endpoint was called.

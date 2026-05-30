@@ -232,12 +232,12 @@ async function checkSkeletonCards(page) {
     }
 
     const missing = cards
-      .filter(card => card.querySelector('.MuiSkeleton-root') === null)
+      .filter(card => card.querySelector('[data-testid="loading-skeleton"]') === null)
       .map(card => card.getAttribute('data-component-showcase') || '(unnamed)');
 
     if (missing.length > 0) {
       return (
-        `${missing.length} ComponentShowcase card(s) contain no .MuiSkeleton-root element: ` +
+        `${missing.length} ComponentShowcase card(s) contain no [data-testid="loading-skeleton"] element: ` +
         missing.join(', ') + '. ' +
         'The skeleton component may have failed to render or was replaced with non-MUI markup.'
       );

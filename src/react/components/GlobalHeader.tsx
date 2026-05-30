@@ -251,6 +251,7 @@ export function GlobalHeader() {
 
   return (
     <AppBar
+      data-testid="global-header"
       position="fixed"
       elevation={0}
       sx={{

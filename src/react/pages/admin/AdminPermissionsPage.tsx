@@ -267,7 +267,7 @@ export function AdminPermissionsPage() {
                           </>
                         )}
                         <Tooltip title="Edit navigation layout">
-                          <IconButton size="small" onClick={() => setNavEditTarget(r.name)}>
+                          <IconButton data-testid="role-tune-btn" size="small" onClick={() => setNavEditTarget(r.name)}>
                             <TuneIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
@@ -301,7 +301,7 @@ export function AdminPermissionsPage() {
                     ) : null;
                   })}
                   <Tooltip title="Edit default navigation layout">
-                    <IconButton size="small" onClick={() => setNavEditTarget('__default__')}>
+                    <IconButton data-testid="role-tune-btn" size="small" onClick={() => setNavEditTarget('__default__')}>
                       <TuneIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>

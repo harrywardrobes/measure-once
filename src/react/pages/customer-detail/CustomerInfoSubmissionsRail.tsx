@@ -293,9 +293,9 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const statusChip = isPending ? (
-    <Chip icon={<HourglassBottomIcon />} label="Awaiting submission" size="small" color="default" variant="outlined" />
+    <Chip icon={<HourglassBottomIcon />} label="Awaiting submission" size="small" color="default" variant="outlined" data-testid="status-chip" />
   ) : (
-    <Chip icon={<CheckCircleIcon />} label="Submitted" size="small" color="success" variant="outlined" />
+    <Chip icon={<CheckCircleIcon />} label="Submitted" size="small" color="success" variant="outlined" data-testid="status-chip" />
   );
 
   const address = [sub.address_line1, sub.city, sub.postcode].filter(Boolean).join(', ');
@@ -433,7 +433,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
       )}
 
       {/* Expanded detail */}
-      <Collapse in={open}>
+      <Collapse in={open} data-testid="submission-card-collapse">
         <Divider />
         <Box data-testid="submission-card-body" sx={{ px: 2, py: 2 }}>
           {isPending ? (
@@ -666,7 +666,7 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
           </Typography>
         )}
         {!loading && !error && (
-          <Stack spacing={1.5}>
+          <Stack spacing={1.5} data-testid="submission-cards-stack">
             {sortedSubmissions.map((sub, index) => (
               <SubmissionCard
                 key={sub.id}

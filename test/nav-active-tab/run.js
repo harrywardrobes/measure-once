@@ -118,9 +118,9 @@ function readBarTabState(page, key) {
     const moreEl = nav ? nav.querySelector('#bnav-more') : null;
     return {
       exists: !!el,
-      selected: el ? el.classList.contains('Mui-selected') : false,
+      selected: el ? el.getAttribute('data-selected') === 'true' : false,
       moreSelected: !!document.querySelector('[data-more-selected]'),
-      moreHasMuiSelected: moreEl ? moreEl.classList.contains('Mui-selected') : false,
+      moreHasMuiSelected: moreEl ? moreEl.getAttribute('data-selected') === 'true' : false,
     };
   }, key);
 }
@@ -134,7 +134,7 @@ async function openDrawer(page, timeoutMs = 6000) {
     if (btn) btn.click();
   });
   const ok = await poll(page, () => {
-    const paper = document.querySelector('.MuiDrawer-paper');
+    const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
     if (!paper) return null;
     const rect = paper.getBoundingClientRect();
     return rect.top < window.innerHeight && rect.height > 0 ? 'ok' : null;
@@ -153,7 +153,7 @@ function readDrawerTabSelected(page, key) {
     const el = document.querySelector(`#bnav-${k}`);
     return {
       exists: !!el,
-      selected: el ? el.classList.contains('Mui-selected') : false,
+      selected: el ? el.getAttribute('data-selected') === 'true' : false,
     };
   }, key);
 }
@@ -168,7 +168,7 @@ function readMoreActiveState(page) {
     const moreEl = nav ? nav.querySelector('#bnav-more') : null;
     return {
       moreSelected: !!document.querySelector('[data-more-selected]'),
-      moreHasMuiSelected: moreEl ? moreEl.classList.contains('Mui-selected') : false,
+      moreHasMuiSelected: moreEl ? moreEl.getAttribute('data-selected') === 'true' : false,
     };
   });
 }
@@ -203,7 +203,7 @@ async function waitForBarTabSelected(page, key, wantSelected, timeoutMs = 5000) 
     const nav = document.querySelector('nav.bottom-nav#main-content');
     const el  = nav ? nav.querySelector(`#bnav-${args.key}`) : null;
     if (!el) return null;
-    const has = el.classList.contains('Mui-selected');
+    const has = el.getAttribute('data-selected') === 'true';
     return has === args.want ? 'ok' : null;
   }, { key, want: wantSelected }, timeoutMs);
   return result === 'ok';

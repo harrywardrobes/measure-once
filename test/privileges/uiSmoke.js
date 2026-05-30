@@ -154,12 +154,12 @@ async function runUiSmoke({ users, runId, clients }) {
         // #app-header-mount by /react/main.js. Wait briefly for the React
         // bundle to mount before inspecting.
         await page.waitForFunction(
-          () => !!document.querySelector('#app-header-mount header.MuiAppBar-root'),
+          () => !!document.querySelector('#app-header-mount [data-testid="global-header"]'),
           { timeout: 5000 },
         ).catch(() => {});
         const chromeInfo = await page.evaluate(() => {
           const mount = document.querySelector('#app-header-mount');
-          const muiHeader = mount?.querySelector('header.MuiAppBar-root');
+          const muiHeader = mount?.querySelector('[data-testid="global-header"]');
           // Per-page title now lives in #page-heading-title (chrome.js) on
           // normal-flow pages, or in the page's own <h1 class="page-title">
           // on opt-out pages like /admin.

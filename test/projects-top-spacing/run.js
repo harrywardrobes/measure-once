@@ -238,7 +238,7 @@ async function main() {
 
     // Wait for the React island to mount and stage-filter tabs to appear.
     const tabsReady = await pollPage(page, () => {
-      const tabs = document.querySelectorAll('.MuiTab-root');
+      const tabs = document.querySelectorAll('[data-testid^="stage-filter-tab-"]');
       return tabs.length > 0 ? 'ok' : null;
     }, 20000);
 
@@ -253,7 +253,7 @@ async function main() {
     // ── Measure layout ───────────────────────────────────────────────────────
     const layout = await page.evaluate(() => {
       const header = document.querySelector('#app-header-mount');
-      const firstTab = document.querySelector('.MuiTab-root');
+      const firstTab = document.querySelector('[data-testid^="stage-filter-tab-"]');
       const h1 = document.querySelector('h1');
 
       if (!header || !firstTab) return null;

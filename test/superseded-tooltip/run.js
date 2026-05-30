@@ -574,7 +574,7 @@ async function main() {
     // Find the card that contains the Superseded chip and check that none of
     // the three action button test-ids are present inside it.
     const absentButtons = await page.evaluate(() => {
-      const labels = Array.from(document.querySelectorAll('[class*="MuiChip-label"]'));
+      const labels = Array.from(document.querySelectorAll('[data-testid="status-chip"]'));
       const supersededLabel = labels.find(c => (c.textContent || '').trim() === 'Superseded');
       if (!supersededLabel) return { cardFound: false, copyPresent: false, openPresent: false, resendPresent: false };
 
@@ -623,7 +623,7 @@ async function main() {
 
       // Find the first card that does NOT contain the Superseded chip.
       const activeCard = allCards.find(card => {
-        const labels = Array.from(card.querySelectorAll('[class*="MuiChip-label"]'));
+        const labels = Array.from(card.querySelectorAll('[data-testid="status-chip"]'));
         return !labels.some(l => (l.textContent || '').trim() === 'Superseded');
       });
 

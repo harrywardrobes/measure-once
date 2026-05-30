@@ -369,7 +369,7 @@ async function main() {
       const section = document.querySelector('[data-testid="active-projects-section"]');
       if (!section) return -1;
       // Count clickable cards (CardActionArea renders as a button) inside section.
-      return section.querySelectorAll('button.MuiCardActionArea-root').length;
+      return section.querySelectorAll('[data-testid="home-card-action"]').length;
     });
     record(
       UI_LABELS[2],

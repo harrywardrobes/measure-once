@@ -53,6 +53,7 @@ export function StageTabGroup({ value, onChange, tabs, stageColors }: StageTabGr
         return (
           <ToggleButton
             key={t.key}
+            data-testid={`stage-filter-tab-${t.key}`}
             value={t.key}
             sx={
               selected

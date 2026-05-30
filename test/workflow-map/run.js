@@ -480,7 +480,7 @@ async function main() {
 
         // (D) Wait for the Drawer to open; check label and key.
         const drawerLabel = await pollPage(pageC, () => {
-          const drawer = document.querySelector('.MuiDrawer-paper');
+          const drawer = document.querySelector('[data-testid="workflow-map-detail-drawer"]');
           if (!drawer) return null;
           const h6 = drawer.querySelector('h6');
           return h6 ? h6.textContent : null;
@@ -494,7 +494,7 @@ async function main() {
         );
 
         const drawerKey = await pageC.evaluate(() => {
-          const drawer = document.querySelector('.MuiDrawer-paper');
+          const drawer = document.querySelector('[data-testid="workflow-map-detail-drawer"]');
           if (!drawer) return null;
           const codes = drawer.querySelectorAll('code');
           for (const c of codes) {
@@ -511,17 +511,17 @@ async function main() {
 
         // (E) Click the close button and confirm the Drawer disappears.
         await pageC.evaluate(() => {
-          const drawer = document.querySelector('.MuiDrawer-paper');
+          const drawer = document.querySelector('[data-testid="workflow-map-detail-drawer"]');
           if (!drawer) return;
           const btns = drawer.querySelectorAll('button');
           if (btns.length) btns[btns.length - 1].click();
         });
 
         const drawerClosed = await pollPage(pageC, () => {
-          const drawer = document.querySelector('.MuiDrawer-paper');
+          const drawer = document.querySelector('[data-testid="workflow-map-detail-drawer"]');
           return drawer ? null : 'closed';
         }, 5000);
-        record(PROBE_LABELS[11], 'drawer closed (no .MuiDrawer-paper)', drawerClosed ? 'closed' : 'still open', drawerClosed === 'closed');
+        record(PROBE_LABELS[11], 'drawer closed (no [data-testid="workflow-map-detail-drawer"])', drawerClosed ? 'closed' : 'still open', drawerClosed === 'closed');
 
         await pageC.__ctx.close().catch(() => {});
       }
