@@ -22,7 +22,7 @@ import LabelIcon from '@mui/icons-material/Label';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { STAGE_COLORS, NEUTRAL_COLORS, STATUS_COLORS } from '../theme';
+import { STAGE_COLORS, STATUS_COLORS } from '../theme';
 import {
   type WorkflowMapNodeData,
   type WMHandler,
@@ -106,7 +106,7 @@ function HandlerBlock({ handler, index, total }: { handler: WMHandler; index: nu
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700, fontSize: '0.65rem' }}>
           Handler type
         </Typography>
-        <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.78rem', background: NEUTRAL_COLORS[100], px: 0.75, py: 0.25, borderRadius: 1 }}>
+        <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.78rem', background: 'var(--neutral-100)', px: 0.75, py: 0.25, borderRadius: 1 }}>
           {handler.type}
         </Box>
         {!HANDLER_TYPE_LABELS[handler.type] && (
@@ -214,7 +214,7 @@ export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanel
               <DetailRow
                 label="Key"
                 value={
-                  <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.82rem', background: NEUTRAL_COLORS[100], px: 0.75, py: 0.25, borderRadius: 1 }}>
+                  <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.82rem', background: 'var(--neutral-100)', px: 0.75, py: 0.25, borderRadius: 1 }}>
                     {node.key}
                   </Box>
                 }
@@ -236,7 +236,7 @@ export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanel
                 <DetailRow
                   label="Parent lead status"
                   value={
-                    <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.82rem', background: NEUTRAL_COLORS[100], px: 0.75, py: 0.25, borderRadius: 1 }}>
+                    <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.82rem', background: 'var(--neutral-100)', px: 0.75, py: 0.25, borderRadius: 1 }}>
                       {node.statusKey}
                     </Box>
                   }
@@ -268,8 +268,8 @@ export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanel
                     px: 1.5,
                     py: 1.25,
                     borderRadius: '8px',
-                    bgcolor: NEUTRAL_COLORS[50],
-                    border: `1px solid ${NEUTRAL_COLORS[200]}`,
+                    bgcolor: 'var(--neutral-50)',
+                    border: '1px solid var(--neutral-200)',
                   }}
                 >
                   <LockOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', mt: '1px', flexShrink: 0 }} />

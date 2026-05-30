@@ -18,7 +18,7 @@ import SyncIcon from '@mui/icons-material/Sync';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
-import { NEUTRAL_COLORS, STATUS_COLORS } from '../../theme';
+import { STATUS_COLORS } from '../../theme';
 
 const STAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: '—' },
@@ -64,11 +64,11 @@ function notifyLsChanged() {
 const TH: React.CSSProperties = {
   padding: '6px 8px',
   textAlign: 'left',
-  borderBottom: `1px solid ${NEUTRAL_COLORS[200]}`,
-  background: NEUTRAL_COLORS[50],
+  borderBottom: '1px solid var(--neutral-200)',
+  background: 'var(--neutral-50)',
   fontSize: '0.75rem',
   fontWeight: 600,
-  color: NEUTRAL_COLORS[500],
+  color: 'var(--neutral-500)',
   whiteSpace: 'nowrap',
 };
 const TD: React.CSSProperties = {
@@ -79,13 +79,13 @@ const TD: React.CSSProperties = {
 
 function NullStatusRow({ status }: { status: LeadStatus }) {
   return (
-    <tr style={{ background: NEUTRAL_COLORS[50] }} data-ls-key={status.key} data-ls-no-delete="1">
+    <tr style={{ background: 'var(--neutral-50)' }} data-ls-key={status.key} data-ls-no-delete="1">
       <td style={{ ...TD, textAlign: 'center' }}>
         <button className="btn btn-ghost" disabled style={{ fontSize: '.75rem', padding: '0 4px', opacity: 0.35 }}>↑</button>
         <button className="btn btn-ghost" disabled style={{ fontSize: '.75rem', padding: '0 4px', opacity: 0.35 }}>↓</button>
       </td>
-      <td style={{ ...TD, color: NEUTRAL_COLORS[400] }}>—</td>
-      <td style={{ ...TD, fontFamily: 'monospace', color: NEUTRAL_COLORS[400], fontSize: '0.75rem' }}>— none —</td>
+      <td style={{ ...TD, color: 'var(--neutral-400)' }}>—</td>
+      <td style={{ ...TD, fontFamily: 'monospace', color: 'var(--neutral-400)', fontSize: '0.75rem' }}>— none —</td>
       <td style={TD}>
         <input type="text" className="field ls-shorthand-input" maxLength={4}
           defaultValue={status.shorthand || ''} data-key={status.key}
@@ -101,7 +101,7 @@ function NullStatusRow({ status }: { status: LeadStatus }) {
           style={{ width: '100%', minWidth: 140 }}
         />
       </td>
-      <td style={{ ...TD, textAlign: 'center', color: NEUTRAL_COLORS[400] }}>—</td>
+      <td style={{ ...TD, textAlign: 'center', color: 'var(--neutral-400)' }}>—</td>
     </tr>
   );
 }
@@ -113,7 +113,7 @@ function StatusRow({ status, index, total, onMove }: {
   onMove: (key: string, dir: 'up' | 'down') => void;
 }) {
   return (
-    <tr style={{ background: index % 2 ? NEUTRAL_COLORS[50] : 'white' }} data-ls-key={status.key}>
+    <tr style={{ background: index % 2 ? 'var(--neutral-50)' : 'white' }} data-ls-key={status.key}>
       <td style={{ ...TD, textAlign: 'center', whiteSpace: 'nowrap' }}>
         <button className="btn btn-ghost" title="Move up" disabled={index === 0}
           onClick={() => onMove(status.key, 'up')} style={{ fontSize: '.75rem', padding: '0 4px' }}>↑</button>
@@ -517,7 +517,7 @@ export function SettingsPage() {
   }, [saveAll, moveStatus, addStatus, fetchStatuses, fetchHubStatus]);
 
   const badge = (() => {
-    if (!hubStatus) return { text: 'Checking…', bg: NEUTRAL_COLORS[100], color: NEUTRAL_COLORS[500] };
+    if (!hubStatus) return { text: 'Checking…', bg: 'var(--neutral-100)', color: 'var(--neutral-500)' };
     if (hubStatus.connected) return { text: 'Connected', bg: STATUS_COLORS.success.bg, color: STATUS_COLORS.success.text };
     if (hubStatus.code === 'HUBSPOT_RATE_LIMIT') {
       const secs = hubStatus.cooldownSecondsRemaining;

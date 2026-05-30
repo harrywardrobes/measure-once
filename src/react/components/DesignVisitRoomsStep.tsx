@@ -12,7 +12,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { FileUploadField, UploadStatus } from './FileUploadField';
-import { BRAND_COLORS, NEUTRAL_COLORS, STATUS_COLORS } from '../theme';
+import { BRAND_COLORS, STATUS_COLORS } from '../theme';
 
 export interface RoomImage {
   storageKey: string;
@@ -332,10 +332,10 @@ export function DesignVisitRoomsStep({
                 disabled={idx === 0}
                 onClick={() => moveRoom(clientId, -1)}
                 sx={{
-                  border: `1.5px solid ${NEUTRAL_COLORS[300]}`,
+                  border: '1.5px solid var(--neutral-300)',
                   borderRadius: '7px',
                   p: '3px',
-                  color: NEUTRAL_COLORS[500],
+                  color: 'var(--neutral-500)',
                   '&:disabled': { opacity: 0.35 },
                 }}
               >
@@ -347,17 +347,17 @@ export function DesignVisitRoomsStep({
                 disabled={idx === rooms.length - 1}
                 onClick={() => moveRoom(clientId, 1)}
                 sx={{
-                  border: `1.5px solid ${NEUTRAL_COLORS[300]}`,
+                  border: '1.5px solid var(--neutral-300)',
                   borderRadius: '7px',
                   p: '3px',
-                  color: NEUTRAL_COLORS[500],
+                  color: 'var(--neutral-500)',
                   '&:disabled': { opacity: 0.35 },
                 }}
               >
                 <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />
               </IconButton>
               <Typography
-                sx={{ fontWeight: 700, fontSize: '.9rem', color: NEUTRAL_COLORS[700], flex: 1 }}
+                sx={{ fontWeight: 700, fontSize: '.9rem', color: 'var(--neutral-700)', flex: 1 }}
               >
                 Room {idx + 1}
               </Typography>
@@ -366,13 +366,13 @@ export function DesignVisitRoomsStep({
                   size="small"
                   onClick={() => removeRoom(clientId)}
                   sx={{
-                    border: `1.5px solid ${NEUTRAL_COLORS[300]}`,
+                    border: '1.5px solid var(--neutral-300)',
                     borderRadius: '7px',
                     px: '10px',
                     py: '4px',
                     bgcolor: 'background.paper',
                     fontSize: '.8rem',
-                    color: NEUTRAL_COLORS[700],
+                    color: 'var(--neutral-700)',
                     textTransform: 'none',
                     minWidth: 0,
                     '&:hover': {
@@ -571,7 +571,7 @@ export function DesignVisitRoomsStep({
                         width: 18,
                         height: 18,
                         p: 0,
-                        background: NEUTRAL_COLORS[700],
+                        background: 'var(--neutral-700)',
                         color: 'common.white',
                         borderRadius: '50%',
                         '&:hover': {
@@ -594,12 +594,12 @@ export function DesignVisitRoomsStep({
         fullWidth
         onClick={addRoom}
         sx={{
-          border: `2px dashed ${NEUTRAL_COLORS[300]}`,
+          border: '2px dashed var(--neutral-300)',
           borderRadius: '10px',
           py: '10px',
           background: 'transparent',
           fontSize: '.88rem',
-          color: NEUTRAL_COLORS[500],
+          color: 'var(--neutral-500)',
           textTransform: 'none',
           mt: '4px',
           '&:hover': {

@@ -1,5 +1,4 @@
 import React from 'react';
-import { NEUTRAL_COLORS } from '../theme';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
@@ -24,14 +23,14 @@ function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) 
         justifyContent: 'space-between',
         fontSize: '.88rem',
         py: '5px',
-        borderBottom: `1px solid ${NEUTRAL_COLORS[100]}`,
+        borderBottom: '1px solid var(--neutral-100)',
         '&:last-child': { borderBottom: 'none' },
       }}
     >
-      <Typography component="span" sx={{ fontWeight: 600, color: NEUTRAL_COLORS[500], fontSize: 'inherit' }}>
+      <Typography component="span" sx={{ fontWeight: 600, color: 'var(--neutral-500)', fontSize: 'inherit' }}>
         {label}
       </Typography>
-      <Typography component="span" sx={{ color: NEUTRAL_COLORS[800], fontSize: 'inherit', textAlign: 'right', ml: 2 }}>
+      <Typography component="span" sx={{ color: 'var(--neutral-800)', fontSize: 'inherit', textAlign: 'right', ml: 2 }}>
         {value}
       </Typography>
     </Box>
@@ -47,7 +46,7 @@ function ReviewSection({ title, children }: { title: string; children: React.Rea
           fontWeight: 700,
           textTransform: 'uppercase',
           letterSpacing: '.06em',
-          color: NEUTRAL_COLORS[400],
+          color: 'var(--neutral-400)',
           mb: '8px',
         }}
       >
@@ -105,26 +104,26 @@ export function DesignVisitStep3({
               justifyContent: 'space-between',
               fontSize: '.88rem',
               py: '5px',
-              borderBottom: `1px solid ${NEUTRAL_COLORS[100]}`,
+              borderBottom: '1px solid var(--neutral-100)',
             }}
           >
             <Box>
               <Typography
                 component="span"
-                sx={{ fontWeight: 700, fontSize: 'inherit', color: NEUTRAL_COLORS[800] }}
+                sx={{ fontWeight: 700, fontSize: 'inherit', color: 'var(--neutral-800)' }}
               >
                 {r.roomName}
               </Typography>{' '}
               <Typography
                 component="span"
-                sx={{ fontWeight: 400, color: NEUTRAL_COLORS[400], fontSize: 'inherit' }}
+                sx={{ fontWeight: 400, color: 'var(--neutral-400)', fontSize: 'inherit' }}
               >
                 ({r.dsName}, {r.unitCount} unit{r.unitCount !== 1 ? 's' : ''})
               </Typography>
             </Box>
             <Typography
               component="span"
-              sx={{ fontSize: 'inherit', color: NEUTRAL_COLORS[800], ml: 2 }}
+              sx={{ fontSize: 'inherit', color: 'var(--neutral-800)', ml: 2 }}
             >
               £{(r.tot / 100).toFixed(2)}
             </Typography>
@@ -136,7 +135,7 @@ export function DesignVisitStep3({
             fontWeight: 700,
             textAlign: 'right',
             pt: '10px',
-            color: NEUTRAL_COLORS[800],
+            color: 'var(--neutral-800)',
           }}
         >
           Estimate total: £{(grandTotal / 100).toFixed(2)}
@@ -161,8 +160,8 @@ export function DesignVisitStep3({
                       px: '7px',
                       py: '1px',
                       borderRadius: '999px',
-                      background: NEUTRAL_COLORS[200],
-                      color: NEUTRAL_COLORS[700],
+                      background: 'var(--neutral-200)',
+                      color: 'var(--neutral-700)',
                       fontSize: '.7rem',
                       fontWeight: 700,
                     }}

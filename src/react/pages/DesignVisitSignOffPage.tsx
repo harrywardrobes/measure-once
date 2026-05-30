@@ -19,7 +19,7 @@ import {
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
-import { BRAND_COLORS, NEUTRAL_COLORS, STATUS_COLORS } from '../theme';
+import { BRAND_COLORS, STATUS_COLORS } from '../theme';
 import type { GalleryEmbedded } from '../types/gallery';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -328,7 +328,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
   return (
     <Box
       sx={{
-        bgcolor: NEUTRAL_COLORS[50],
+        bgcolor: 'var(--neutral-50)',
         minHeight: '100vh',
         fontFamily: 'inherit',
         color: BRAND_COLORS.ink1,
@@ -563,7 +563,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
                               borderRadius: '8px',
                               border: '1px solid',
                               borderColor: 'divider',
-                              bgcolor: NEUTRAL_COLORS[100],
+                              bgcolor: 'var(--neutral-100)',
                               cursor: 'zoom-in',
                               display: 'block',
                             }}
@@ -656,8 +656,8 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
                       fontSize: '1rem',
                       fontWeight: 600,
                       color: BRAND_COLORS.ink2,
-                      borderColor: NEUTRAL_COLORS[300],
-                      '&:hover': { bgcolor: NEUTRAL_COLORS[50], borderColor: NEUTRAL_COLORS[300] },
+                      borderColor: 'var(--neutral-300)',
+                      '&:hover': { bgcolor: 'var(--neutral-50)', borderColor: 'var(--neutral-300)' },
                     }}
                   >
                     Request changes

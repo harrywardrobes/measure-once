@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { BRAND_COLORS, NEUTRAL_COLORS, STATUS_COLORS } from '../theme';
+import { BRAND_COLORS, STATUS_COLORS } from '../theme';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -170,7 +170,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
             flex: 1,
             height: '4px',
             borderRadius: '2px',
-            background: i + 1 <= current ? BRAND_COLORS.orchid : NEUTRAL_COLORS[200],
+            background: i + 1 <= current ? BRAND_COLORS.orchid : 'var(--neutral-200)',
             transition: 'background .2s',
           }}
         />
@@ -531,14 +531,14 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           px: '24px',
           pt: '18px',
           pb: '14px',
-          borderBottom: `1px solid ${NEUTRAL_COLORS[200]}`,
+          borderBottom: '1px solid var(--neutral-200)',
           flexShrink: 0,
         }}
       >
-        <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: NEUTRAL_COLORS[800] }}>
+        <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--neutral-800)' }}>
           {title}
         </Typography>
-        <IconButton onClick={handleClose} size="small" aria-label="Close" sx={{ color: NEUTRAL_COLORS[400] }}>
+        <IconButton onClick={handleClose} size="small" aria-label="Close" sx={{ color: 'var(--neutral-400)' }}>
           <CloseIcon />
         </IconButton>
       </Box>
@@ -561,7 +561,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         ) : (
           <>
             <StepIndicator current={step} total={3} />
-            <Typography sx={{ fontSize: '.82rem', color: NEUTRAL_COLORS[500], mb: '16px' }}>
+            <Typography sx={{ fontSize: '.82rem', color: 'var(--neutral-500)', mb: '16px' }}>
               {stepLabel}
             </Typography>
 
@@ -611,7 +611,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             justifyContent: 'flex-end',
             px: '24px',
             py: '14px',
-            borderTop: `1px solid ${NEUTRAL_COLORS[200]}`,
+            borderTop: '1px solid var(--neutral-200)',
             flexShrink: 0,
             bgcolor: 'background.paper',
             flexDirection: 'column',
@@ -632,11 +632,11 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                 onClick={() => { setSubmitError(''); setStep(s => s - 1); }}
                 disabled={submitting}
                 sx={{
-                  borderColor: NEUTRAL_COLORS[300],
-                  color: NEUTRAL_COLORS[700],
+                  borderColor: 'var(--neutral-300)',
+                  color: 'var(--neutral-700)',
                   fontWeight: 600,
                   textTransform: 'none',
-                  '&:hover': { borderColor: NEUTRAL_COLORS[400], background: NEUTRAL_COLORS[50] },
+                  '&:hover': { borderColor: 'var(--neutral-400)', background: 'var(--neutral-50)' },
                 }}
               >
                 ← Back
@@ -712,7 +712,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           {editMode ? 'Discard your changes?' : 'Discard your draft?'}
         </DialogTitle>
         <DialogContent>
-          <Typography sx={{ fontSize: '.9rem', color: NEUTRAL_COLORS[700] }}>
+          <Typography sx={{ fontSize: '.9rem', color: 'var(--neutral-700)' }}>
             {editMode
               ? 'You have unsaved changes. If you close now your edits will be lost.'
               : 'You have unsaved room data. If you close now your draft will be lost.'}
@@ -723,11 +723,11 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             onClick={() => setShowDiscardDialog(false)}
             variant="outlined"
             sx={{
-              borderColor: NEUTRAL_COLORS[300],
-              color: NEUTRAL_COLORS[700],
+              borderColor: 'var(--neutral-300)',
+              color: 'var(--neutral-700)',
               fontWeight: 600,
               textTransform: 'none',
-              '&:hover': { borderColor: NEUTRAL_COLORS[400], background: NEUTRAL_COLORS[50] },
+              '&:hover': { borderColor: 'var(--neutral-400)', background: 'var(--neutral-50)' },
             }}
           >
             Keep editing

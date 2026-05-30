@@ -19,7 +19,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import { BRAND_COLORS, NEUTRAL_COLORS, STATUS_COLORS } from '../theme';
+import { BRAND_COLORS, STATUS_COLORS } from '../theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -454,7 +454,7 @@ export function CustomerInfoPage() {
   return (
     <Box
       sx={{
-        bgcolor: NEUTRAL_COLORS[50],
+        bgcolor: 'var(--neutral-50)',
         minHeight: '100vh',
         fontFamily: 'inherit',
         color: BRAND_COLORS.ink1,

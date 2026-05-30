@@ -12,7 +12,6 @@ import { DesignVisitsList } from './customer-detail/DesignVisitsList';
 import { CustomerInfoSubmissionsRail } from './customer-detail/CustomerInfoSubmissionsRail';
 import { GoogleEmailSection } from './customer-detail/GoogleEmailSection';
 import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSection';
-import { NEUTRAL_COLORS } from '../theme';
 import {
   Contact, Room, HubSpotTask, LeadStatus, LeadSubstatus,
   DesignVisit, Visit, GoogleEmail, WhatsAppMessage,
@@ -583,7 +582,7 @@ export function CustomerDetailPage() {
           <p className="text-sm text-red-500">{error}</p>
           <button
             onClick={() => void bootstrap()}
-            style={{ marginTop: '0.5rem', padding: '0.35rem 0.9rem', border: `1px solid ${NEUTRAL_COLORS[500]}`, borderRadius: '0.375rem', background: NEUTRAL_COLORS[50], cursor: 'pointer', fontSize: '0.875rem', color: NEUTRAL_COLORS[700] }}
+            style={{ marginTop: '0.5rem', padding: '0.35rem 0.9rem', border: '1px solid var(--neutral-500)', borderRadius: '0.375rem', background: 'var(--neutral-50)', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--neutral-700)' }}
           >
             Retry
           </button>

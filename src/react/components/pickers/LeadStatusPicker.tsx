@@ -5,7 +5,7 @@ import {
   Popover,
   Typography,
 } from '@mui/material';
-import { BRAND_COLORS, NEUTRAL_COLORS } from '../../theme';
+import { BRAND_COLORS } from '../../theme';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
