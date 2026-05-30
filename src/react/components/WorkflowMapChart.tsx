@@ -485,7 +485,7 @@ function HandlerBadgeSummary({
 // ── Custom nodes ──────────────────────────────────────────────────────────────
 
 const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<WorkflowMapNodeData>>) {
-  const sc = STAGE_COLORS[data.stageKey] || { bg: '#475569', light: '#f1f5f9', text: '#1e293b' };
+  const sc = STAGE_COLORS[data.stageKey] || { bg: NEUTRAL_COLORS[600], light: NEUTRAL_COLORS[100], text: NEUTRAL_COLORS[800] };
   const isReadOnly = !!data.isReadOnly;
   const theme = useTheme();
   const white = theme.palette.common.white;
@@ -534,7 +534,7 @@ const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<Wor
 });
 
 const StatusNode = memo(function StatusNode({ data, selected }: NodeProps<Node<WorkflowMapNodeData>>) {
-  const sc = STAGE_COLORS[data.stageKey] || { bg: '#475569', light: '#f1f5f9', text: '#1e293b' };
+  const sc = STAGE_COLORS[data.stageKey] || { bg: NEUTRAL_COLORS[600], light: NEUTRAL_COLORS[100], text: NEUTRAL_COLORS[800] };
   const isReadOnly = !!data.isReadOnly;
   return (
     <Box
@@ -577,7 +577,7 @@ const StatusNode = memo(function StatusNode({ data, selected }: NodeProps<Node<W
 });
 
 const SubstatusNode = memo(function SubstatusNode({ data, selected }: NodeProps<Node<WorkflowMapNodeData>>) {
-  const sc = STAGE_COLORS[data.stageKey] || { bg: '#475569', light: '#f1f5f9', text: '#1e293b' };
+  const sc = STAGE_COLORS[data.stageKey] || { bg: NEUTRAL_COLORS[600], light: NEUTRAL_COLORS[100], text: NEUTRAL_COLORS[800] };
   return (
     <Box
       sx={{
