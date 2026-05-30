@@ -19,6 +19,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SendIcon from '@mui/icons-material/Send';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -60,35 +61,43 @@ function roomLabel(count: string | null): string {
   return '3+ rooms';
 }
 
-// ── Copy link button ──────────────────────────────────────────────────────────
+/** Returns true when two ISO-date strings refer to the same instant (within 2 s). */
+function datesMatch(a: string, b: string): boolean {
+  try {
+    return Math.abs(new Date(a).getTime() - new Date(b).getTime()) < 2000;
+  } catch { return true; }
+}
 
-function CopyLinkButton({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+// ── Copy link button (controlled) ─────────────────────────────────────────────
 
-  function handleCopy() {
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(() => setCopied(false), 1500);
-    }).catch(() => {
-      // Clipboard write failed — silent
-    });
-  }
-
-  useEffect(() => () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); }, []);
-
+function CopyLinkButton({
+  onClick,
+  copied,
+  isChecking,
+}: {
+  onClick: () => void;
+  copied: boolean;
+  isChecking: boolean;
+}) {
   return (
     <Tooltip title={copied ? 'Copied!' : 'Copy link'} placement="top" arrow>
-      <IconButton
-        size="small"
-        onClick={handleCopy}
-        aria-label="Copy customer link"
-        color={copied ? 'success' : 'default'}
-        data-testid="copy-link-btn"
-      >
-        {copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
-      </IconButton>
+      <span>
+        <IconButton
+          size="small"
+          onClick={onClick}
+          aria-label="Copy customer link"
+          color={copied ? 'success' : 'default'}
+          disabled={isChecking}
+          data-testid="copy-link-btn"
+        >
+          {isChecking
+            ? <CircularProgress size={14} color="inherit" />
+            : copied
+              ? <CheckIcon fontSize="small" />
+              : <ContentCopyIcon fontSize="small" />
+          }
+        </IconButton>
+      </span>
     </Tooltip>
   );
 }
@@ -172,6 +181,8 @@ function ResendButton({
 
 // ── Submission card ───────────────────────────────────────────────────────────
 
+type ConflictTarget = 'copy' | 'open';
+
 function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
   sub: Submission;
   contactId: string;
@@ -182,6 +193,103 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
   const isPending = !sub.submitted_at;
   const isExpired = isPending && new Date(sub.expires_at) < new Date();
   const isActive  = isPending && !isExpired;
+
+  // ── Copy / open link with conflict-check ───────────────────────────────────
+  const [isChecking, setIsChecking]           = useState(false);
+  const [conflictTarget, setConflictTarget]   = useState<ConflictTarget | null>(null);
+  const [copied, setCopied]                   = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => { if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current); },
+    []
+  );
+
+  function performCopy() {
+    if (!sub.form_link) return;
+    navigator.clipboard.writeText(sub.form_link).then(() => {
+      setCopied(true);
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {
+      // Clipboard write failed — silent
+    });
+  }
+
+  function performAction(target: ConflictTarget) {
+    if (target === 'copy') performCopy();
+    else {
+      // 'open' path called from a synchronous click handler (handleProceedAnyway),
+      // so window.open runs within the user-activation window — no popup block.
+      if (sub.form_link) window.open(sub.form_link, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  async function checkThenAct(target: ConflictTarget) {
+    if (!sub.form_link) return;
+
+    // For the 'open' path, grab a window handle synchronously right now so the
+    // browser sees a user-gesture–initiated popup. We then either navigate it
+    // to the real URL (no conflict) or close it (conflict detected) once the
+    // async check completes.
+    let pendingWindow: Window | null = null;
+    if (target === 'open') {
+      pendingWindow = window.open('', '_blank', 'noopener,noreferrer');
+    }
+
+    setIsChecking(true);
+    setConflictTarget(null);
+    try {
+      const r = await fetch(
+        `/api/customer-info/by-contact/${encodeURIComponent(contactId)}/link-status`
+      );
+      const status: { hasActiveLink: boolean; expiresAt?: string } =
+        r.ok ? await r.json() : { hasActiveLink: false };
+
+      // A conflict exists when the DB's newest active link has a DIFFERENT
+      // expiry than this card — meaning a newer row has since been created.
+      const hasConflict =
+        status.hasActiveLink &&
+        status.expiresAt != null &&
+        !datesMatch(status.expiresAt, sub.expires_at);
+
+      if (hasConflict) {
+        // Close the provisional window — the user must acknowledge first.
+        pendingWindow?.close();
+        setConflictTarget(target);
+      } else {
+        if (pendingWindow) {
+          pendingWindow.location.href = sub.form_link;
+        } else if (target === 'open') {
+          // window.open returned null (popup blocked) — try once more now that
+          // we know there's no conflict, so the user gets a clear attempt.
+          window.open(sub.form_link, '_blank', 'noopener,noreferrer');
+        } else {
+          performCopy();
+        }
+      }
+    } catch {
+      // On network / parse error, fail open so staff are never blocked.
+      if (pendingWindow) {
+        pendingWindow.location.href = sub.form_link;
+      } else if (target === 'open') {
+        window.open(sub.form_link, '_blank', 'noopener,noreferrer');
+      } else {
+        performCopy();
+      }
+    } finally {
+      setIsChecking(false);
+    }
+  }
+
+  function handleProceedAnyway() {
+    if (!conflictTarget) return;
+    const target = conflictTarget;
+    setConflictTarget(null);
+    performAction(target);
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   const statusChip = isPending ? (
     <Chip icon={<HourglassBottomIcon />} label="Awaiting submission" size="small" color="default" variant="outlined" />
@@ -251,19 +359,23 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
           <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, alignItems: 'center' }}>
             {sub.form_link && (
               <>
-                <CopyLinkButton url={sub.form_link} />
+                <CopyLinkButton
+                  onClick={() => checkThenAct('copy')}
+                  copied={copied}
+                  isChecking={isChecking && !conflictTarget}
+                />
                 <Tooltip title="Open link in new tab" placement="top" arrow>
-                  <IconButton
-                    size="small"
-                    component="a"
-                    href={sub.form_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Open customer link in new tab"
-                    data-testid="open-link-btn"
-                  >
-                    <OpenInNewIcon fontSize="small" />
-                  </IconButton>
+                  <span>
+                    <IconButton
+                      size="small"
+                      onClick={() => checkThenAct('open')}
+                      aria-label="Open customer link in new tab"
+                      disabled={isChecking && !conflictTarget}
+                      data-testid="open-link-btn"
+                    >
+                      <OpenInNewIcon fontSize="small" />
+                    </IconButton>
+                  </span>
                 </Tooltip>
               </>
             )}
@@ -271,6 +383,38 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
           </Stack>
         ) : null}
       </Box>
+
+      {/* Conflict warning */}
+      {conflictTarget && (
+        <Box sx={{ px: 2, pb: 1.5 }}>
+          <Alert
+            severity="warning"
+            icon={<WarningAmberIcon fontSize="inherit" />}
+            action={
+              <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', flexShrink: 0 }}>
+                <Button
+                  size="small"
+                  color="warning"
+                  onClick={handleProceedAnyway}
+                  data-testid="conflict-proceed-btn"
+                >
+                  {conflictTarget === 'copy' ? 'Copy anyway' : 'Open anyway'}
+                </Button>
+                <Button
+                  size="small"
+                  onClick={() => setConflictTarget(null)}
+                  data-testid="conflict-cancel-btn"
+                >
+                  Cancel
+                </Button>
+              </Stack>
+            }
+          >
+            A newer link has already been sent for this contact. This link may
+            have been replaced — the customer might not be able to use it.
+          </Alert>
+        </Box>
+      )}
 
       {/* Expanded detail */}
       <Collapse in={open}>
