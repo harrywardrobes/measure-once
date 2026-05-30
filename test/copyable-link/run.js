@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip3 } = require('../helpers/report');
 // test/copyable-link/run.js
 //
 // Regression guard for the generate-on-open copyable-link flow added in
@@ -65,6 +66,7 @@ function record(id, ok, detail) {
   findings.push({ id, ok, detail });
   console.log(`  [${ok ? 'PASS' : 'FAIL'}] ${id} — ${detail}`);
 }
+const skip = makeSkip3(findings);
 
 // ── Fake data ─────────────────────────────────────────────────────────────────
 
@@ -355,7 +357,8 @@ async function writeReport(runId) {
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   const esc    = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const passed = findings.filter(f => f.ok).length;
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   const lines = [
     '# Copyable-Link Flow — Integration Test',
     '',
@@ -373,7 +376,7 @@ async function writeReport(runId) {
     '| Result | Probe | Detail |',
     '|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`,
     ),
     '',
     '## Coverage',
@@ -435,7 +438,7 @@ async function main() {
   ];
 
   if (!puppeteer) {
-    for (const l of ALL_PROBE_LABELS) record(l, false, 'puppeteer not installed — skipped');
+    for (const l of ALL_PROBE_LABELS) skip(l, 'puppeteer not installed — skipped');
     await writeReport(runId);
     process.exit(1);
     return;
@@ -493,7 +496,7 @@ async function main() {
 
     if (!browser) {
       const msg = (browserLaunchErr?.message || String(browserLaunchErr)).slice(0, 200);
-      for (const l of ALL_PROBE_LABELS) record(l, false, `browser launch failed: ${msg}`);
+      for (const l of ALL_PROBE_LABELS) skip(l, `browser launch failed: ${msg}`);
       await writeReport(runId);
       await teardown();
       process.exit(1);

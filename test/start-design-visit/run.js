@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 // test/start-design-visit/run.js
 //
 // End-to-end live test for the start_design_visit card-action handler.
@@ -184,6 +185,7 @@ async function main() {
       if (detail) console.log(`     detail   : ${detail}`);
     }
   }
+  const skip = makeSkip(findings);
   // Locate the system Chromium via the shared helper (auto-discovers Nix paths).
   const { findChromium: findSystemChromium } = require('../shared/find-chromium');
 
@@ -1448,7 +1450,7 @@ async function main() {
 
   if (!puppeteer) {
     for (const label of E_BC_PROBE_NAMES) {
-      record(label, 'puppeteer installed', 'puppeteer not installed', false);
+      skip(label, 'puppeteer installed', 'puppeteer not installed');
     }
   } else {
     let eBcBrowser = null;
@@ -1464,7 +1466,7 @@ async function main() {
     if (eBcLaunchErr || !eBcBrowser) {
       const msg = (eBcLaunchErr?.message || String(eBcLaunchErr)).slice(0, 120);
       for (const label of E_BC_PROBE_NAMES) {
-        record(label, 'browser launched and admin.html UI tested', `browser launch failed: ${msg}`, false);
+        skip(label, 'browser launched and admin.html UI tested', `browser launch failed: ${msg}`);
       }
     } else {
       try {
@@ -1657,7 +1659,7 @@ async function main() {
 
   if (!puppeteer) {
     for (const label of F_PROBE_LABELS) {
-      record(label, 'puppeteer installed', 'puppeteer not installed', false);
+      skip(label, 'puppeteer installed', 'puppeteer not installed');
     }
   } else {
     let browser = null;
@@ -1682,7 +1684,7 @@ async function main() {
     if (browserLaunchErr || !browser) {
       const msg = (browserLaunchErr?.message || String(browserLaunchErr)).slice(0, 200);
       for (const label of F_PROBE_LABELS) {
-        record(label, 'browser launched and wizard tested', `browser launch failed: ${msg}`, false);
+        skip(label, 'browser launched and wizard tested', `browser launch failed: ${msg}`);
       }
     } else {
       try {
@@ -2050,8 +2052,8 @@ async function main() {
 
   // ── Summary & report ───────────────────────────────────────────────────────
   const pass = findings.filter(f => f.ok === true).length;
-  const fail = findings.filter(f => f.ok === false).length;
-  const skipped = findings.filter(f => f.ok === null).length;
+  const fail = findings.filter(f => f.ok === false && !f.skipped).length;
+  const skipped = findings.filter(f => f.ok === null || f.skipped).length;
   const skipSuffix = skipped > 0 ? `, ${skipped} skipped` : '';
   console.log(`\n  Results: ${pass} passed, ${fail} failed${skipSuffix}`);
 
@@ -2073,16 +2075,16 @@ async function writeReport(runId, findings) {
     '',
     '## Summary',
     '',
-    `- Passed: ${findings.filter(f => f.ok === true).length} / ${findings.filter(f => f.ok !== null).length} required`,
-    `- Failed: ${findings.filter(f => f.ok === false).length} / ${findings.filter(f => f.ok !== null).length} required`,
-    `- Skipped: ${findings.filter(f => f.ok === null).length} (browser-dependent; non-fatal)`,
+    `- Passed: ${findings.filter(f => f.ok === true).length} / ${findings.filter(f => f.ok !== null && !f.skipped).length} required`,
+    `- Failed: ${findings.filter(f => f.ok === false && !f.skipped).length} / ${findings.filter(f => f.ok !== null && !f.skipped).length} required`,
+    `- Skipped: ${findings.filter(f => f.ok === null || f.skipped).length} (browser-dependent; non-fatal)`,
     '',
     '## Results',
     '',
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok === true ? 'PASS' : f.ok === null ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok === true ? 'PASS' : (f.ok === null || f.skipped) ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## Coverage',

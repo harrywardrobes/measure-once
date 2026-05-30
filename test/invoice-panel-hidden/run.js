@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
   'Home: page loads (HTTP 200)',
@@ -112,14 +113,15 @@ async function writeReport(findings) {
     '## Summary',
     '',
     `- Passed: ${findings.filter(f => f.ok).length} / ${findings.length}`,
-    `- Failed: ${findings.filter(f => !f.ok).length} / ${findings.length}`,
+    `- Skipped: ${findings.filter(f => f.skipped).length} / ${findings.length}`,
+    `- Failed: ${findings.filter(f => !f.ok && !f.skipped).length} / ${findings.length}`,
     '',
     '## Results',
     '',
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## What is tested',
@@ -157,6 +159,7 @@ async function main() {
       if (detail) console.log(`     detail   : ${detail}`);
     }
   }
+  const skip = makeSkip(findings);
 
   // ── DB safety check ────────────────────────────────────────────────────────
   const dbUrl = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL;
@@ -181,7 +184,7 @@ async function main() {
 
   if (!puppeteer) {
     for (const l of PROBE_LABELS) {
-      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+      skip(l, 'puppeteer installed', 'puppeteer not installed');
     }
     await writeReport(findings);
     process.exit(1);
@@ -241,7 +244,7 @@ async function main() {
     });
   } catch (e) {
     for (const l of PROBE_LABELS) {
-      record(l, 'browser launched', `browser launch failed: ${e.message}`, false);
+      skip(l, 'browser launched', `browser launch failed: ${e.message}`);
     }
     await writeReport(findings);
     await cleanupAndExit(1);
@@ -326,7 +329,8 @@ async function main() {
   }
 
   const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
+  const fail = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   console.log(`\n  Results: ${pass} passed, ${fail} failed`);
   await writeReport(findings);
   await cleanupAndExit(fail > 0 ? 1 : 0);

@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 // test/change-password/run.js
 //
 // End-to-end test for the Change Password dialog on /profile (task #852).
@@ -291,6 +292,7 @@ async function main() {
       if (detail) console.log(`     detail   : ${detail}`);
     }
   }
+  const skip = makeSkip(findings);
   // Soft (informational) probe — logged as a warning, never counted as failure.
   function recordSoft(name, expected, observed, ok, detail = '') {
     findings.push({ name, expected, observed, ok, soft: true, detail });
@@ -414,7 +416,7 @@ async function main() {
   const IGNORE_RE = /(favicon\.ico|\/storybook\/|\.map\b|Failed to load resource|\[StrengthMeter\]|\[checkPasswordPolicy\]|Cannot read properties of null \(reading 'length'\))/;
 
   if (!puppeteer) {
-    for (const l of UI_LABELS) record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    for (const l of UI_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
   } else {
     const { findChromium } = require('../shared/find-chromium');
     let browser = null;
@@ -438,7 +440,7 @@ async function main() {
 
     if (!browser) {
       const msg = (launchErr?.message || String(launchErr)).slice(0, 200);
-      for (const l of UI_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
+      for (const l of UI_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     } else {
       const pageErrors = [];
       try {
@@ -882,11 +884,12 @@ async function main() {
     }
   }
 
-  const hard = findings.filter(f => !f.soft);
+  const hard = findings.filter(f => !f.soft && !f.skipped);
   const pass = hard.filter(f => f.ok).length;
   const fail = hard.filter(f => !f.ok).length;
+  const skip = findings.filter(f => f.skipped).length;
   const warn = findings.filter(f => f.soft && !f.ok).length;
-  console.log(`\n  Results: ${pass} passed, ${fail} failed${warn ? `, ${warn} warning(s)` : ''}`);
+  console.log(`\n  Results: ${pass} passed, ${fail} failed${skip ? `, ${skip} skipped` : ''}${warn ? `, ${warn} warning(s)` : ''}`);
 
   await writeReport(runId, findings);
   await cleanupAndExit(fail > 0 ? 1 : 0);
@@ -905,8 +908,9 @@ async function writeReport(runId, findings) {
     '',
     '## Summary',
     '',
-    `- Passed: ${findings.filter(f => !f.soft && f.ok).length} / ${findings.filter(f => !f.soft).length} (hard probes)`,
-    `- Failed: ${findings.filter(f => !f.soft && !f.ok).length} / ${findings.filter(f => !f.soft).length} (hard probes)`,
+    `- Passed: ${findings.filter(f => !f.soft && !f.skipped && f.ok).length} / ${findings.filter(f => !f.soft && !f.skipped).length} (hard probes)`,
+    `- Failed: ${findings.filter(f => !f.soft && !f.skipped && !f.ok).length} / ${findings.filter(f => !f.soft && !f.skipped).length} (hard probes)`,
+    `- Skipped: ${findings.filter(f => f.skipped).length} / ${findings.length}`,
     `- Warnings: ${findings.filter(f => f.soft && !f.ok).length} (soft/informational)`,
     '',
     '## Results',
@@ -914,7 +918,7 @@ async function writeReport(runId, findings) {
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f => {
-      const label = f.ok ? 'PASS' : (f.soft ? 'WARN' : 'FAIL');
+      const label = f.ok ? 'PASS' : (f.skipped ? 'SKIP' : f.soft ? 'WARN' : 'FAIL');
       return `| ${label} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`;
     }),
     '',

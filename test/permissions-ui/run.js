@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
   '[ICON-DELETE] "Remove role" button renders MUI Delete (trash-can) icon SVG',
@@ -98,7 +99,8 @@ function writeReport(runId, findings) {
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, 'permissions-ui.md');
   const passed  = findings.filter(f => f.ok).length;
-  const failed  = findings.filter(f => !f.ok).length;
+  const failed  = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   const esc = (s) => String(s).replace(/\|/g, '\\|');
   const lines = [
     `# permissions-ui  run=${runId}`,
@@ -108,7 +110,7 @@ function writeReport(runId, findings) {
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## Coverage',
@@ -182,6 +184,7 @@ async function main() {
       console.log(`     observed : ${observed}`);
     }
   }
+  const skip = makeSkip(findings);
 
   // Track the seeded test role name so we can clean it up.
   const TEST_ROLE_NAME = `privtest-perm-role-${runId}`;
@@ -236,7 +239,7 @@ async function main() {
   // ── Puppeteer not installed guard ─────────────────────────────────────────
   if (!puppeteer) {
     for (const l of PROBE_LABELS) {
-      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+      skip(l, 'puppeteer installed', 'puppeteer not installed');
     }
     writeReport(runId, findings);
     await cleanupAndExit(1);
@@ -256,7 +259,7 @@ async function main() {
     });
   } catch (e) {
     for (const l of PROBE_LABELS) {
-      record(l, 'browser launched', `browser launch failed: ${e.message}`, false);
+      skip(l, 'browser launched', `browser launch failed: ${e.message}`);
     }
     writeReport(runId, findings);
     await cleanupAndExit(1);
@@ -407,7 +410,7 @@ async function main() {
   // ── Report ─────────────────────────────────────────────────────────────────
   writeReport(runId, findings);
 
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
   console.log(`\n  ${findings.filter(f => f.ok).length} passed, ${failed} failed`);
   await cleanupAndExit(failed > 0 ? 1 : 0);
 }

@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 
 const UI_PROBE_LABELS = [
   '[UI-ROLE-NAV] Bar contains role-specific keys (home, trades, invoices)',
@@ -212,6 +213,7 @@ async function main() {
       console.log(`     observed : ${observed}`);
     }
   }
+  const skip = makeSkip(findings);
 
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
@@ -770,7 +772,7 @@ async function main() {
   if (!puppeteer) {
     console.warn('\n  [UI] puppeteer not installed — skipping UI probes');
     for (const l of UI_PROBE_LABELS) {
-      record(l, 'puppeteer installed', 'puppeteer not installed (skipped)', false);
+      skip(l, 'puppeteer installed', 'puppeteer not installed (skipped)');
     }
   } else {
 
@@ -841,7 +843,8 @@ async function main() {
   // ── Report ────────────────────────────────────────────────────────────────
 
   const passed = findings.filter(f => f.ok).length;
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   console.log(`\n  Passed: ${passed}  Failed: ${failed}`);
 
   const outDir = path.resolve(__dirname, '../../test-results');

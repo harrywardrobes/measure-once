@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 
 const DEF_UI_PROBE_LABELS = [
   '[DEF-UI] Bar contains custom default keys (home, projects, invoices)',
@@ -163,6 +164,7 @@ async function main() {
     console.log(`${icon} ${name}`);
     if (!ok) console.log(`      expected: ${expected}\n      observed: ${observed}`);
   }
+  const skip = makeSkip(findings);
 
   let adminClient = null;
   let memberClient = null;
@@ -234,7 +236,7 @@ async function main() {
     if (!puppeteer) {
       console.warn('\n  [UI] puppeteer not installed — skipping UI probes');
       for (const l of DEF_UI_PROBE_LABELS) {
-        record(l, 'puppeteer installed', 'puppeteer not installed (skipped)', false);
+        skip(l, 'puppeteer installed', 'puppeteer not installed (skipped)');
       }
     } else {
       const executablePath = findChromium();
@@ -328,7 +330,8 @@ async function main() {
   } finally {
     // ── Report ──────────────────────────────────────────────────────────────
     const passed = findings.filter(f => f.ok).length;
-    const failed = findings.filter(f => !f.ok).length;
+    const failed = findings.filter(f => !f.ok && !f.skipped).length;
+    const skipped = findings.filter(f => f.skipped).length;
     console.log(`\n  Passed: ${passed}  Failed: ${failed}`);
 
     const outDir = path.resolve(__dirname, '../../test-results');

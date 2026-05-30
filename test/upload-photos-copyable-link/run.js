@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip3 } = require('../helpers/report');
 // test/upload-photos-copyable-link/run.js
 //
 // Regression guard for the "Copy & close" button in UploadPhotosModal.
@@ -51,6 +52,7 @@ function record(id, ok, detail) {
   findings.push({ id, ok, detail });
   console.log(`  [${ok ? 'PASS' : 'FAIL'}] ${id} — ${detail}`);
 }
+const skip = makeSkip3(findings);
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -223,7 +225,8 @@ async function writeReport(runId) {
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   const esc    = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const passed = findings.filter(f => f.ok).length;
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   const lines = [
     '# Upload Photos — Copy & Close Button Regression Test',
     '',
@@ -241,7 +244,7 @@ async function writeReport(runId) {
     '| Result | Probe | Detail |',
     '|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`,
     ),
     '',
     '## Coverage',
@@ -299,7 +302,7 @@ async function main() {
   ];
 
   if (!puppeteer) {
-    for (const l of PROBE_LABELS) record(l, false, 'puppeteer not installed — skipped');
+    for (const l of PROBE_LABELS) skip(l, 'puppeteer not installed — skipped');
     await writeReport(runId);
     process.exit(1);
     return;
@@ -443,7 +446,7 @@ async function main() {
     }
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;
-    const failed = findings.filter(f => !f.ok).length;
+    const failed = findings.filter(f => !f.ok && !f.skipped).length;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
 
   } catch (e) {

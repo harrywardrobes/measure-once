@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip3 } = require('../helpers/report');
 
 const PROBE_LABELS = [
   '(F1) hidden → stale response deferred until visibilitychange → visible',
@@ -47,6 +48,7 @@ function record(id, ok, detail) {
   findings.push({ id, ok, detail });
   console.log(`  [${ok ? 'PASS' : 'FAIL'}] ${id} — ${detail}`);
 }
+const skip = makeSkip3(findings);
 
 // ── Puppeteer helpers ─────────────────────────────────────────────────────────
 
@@ -127,7 +129,7 @@ async function main() {
 
   if (!puppeteer) {
     for (const l of PROBE_LABELS) {
-      record(l, false, 'puppeteer not installed — all probes skipped');
+      skip(l, 'puppeteer not installed — all probes skipped');
     }
     await writeReport(runId);
     process.exit(findings.every(f => f.ok) ? 0 : 1);
@@ -325,7 +327,8 @@ async function main() {
 
     await page.close();
 
-    const failed = findings.filter(f => !f.ok).length;
+    const failed = findings.filter(f => !f.ok && !f.skipped).length;
+    const skipped = findings.filter(f => f.skipped).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
 
@@ -345,7 +348,7 @@ async function writeReport(runId) {
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   const esc    = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const passed = findings.filter(f => f.ok).length;
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
   const lines = [
     '# Open-Leads Stale-Badge Visibility — Integration Test',
     '',
@@ -363,7 +366,7 @@ async function writeReport(runId) {
     '| Result | Probe | Detail |',
     '|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`,
     ),
     '',
     '## Coverage',

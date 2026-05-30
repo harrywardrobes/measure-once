@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 // test/new-customer-counts-retry/run.js
 //
 // Focused integration test for the retry logic inside the `onCreated` callback
@@ -357,6 +358,7 @@ async function main() {
       console.log(`     observed : ${observed}`);
     }
   }
+  const skip = makeSkip(findings);
 
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
@@ -395,8 +397,9 @@ async function main() {
   ];
 
   if (!puppeteer) {
-    for (const l of UI_LABELS) record(l, 'puppeteer installed', 'puppeteer not installed', false);
-    const fail = findings.filter(f => !f.ok).length;
+    for (const l of UI_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
+    const fail = findings.filter(f => !f.ok && !f.skipped).length;
+    const skipped = findings.filter(f => f.skipped).length;
     await writeReport(runId, findings);
     await cleanupAndExit(fail > 0 ? 1 : 0);
     return;
@@ -419,8 +422,8 @@ async function main() {
 
   if (!browser) {
     const msg = (launchErr?.message || String(launchErr)).slice(0, 200);
-    for (const l of UI_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
-    const fail = findings.filter(f => !f.ok).length;
+    for (const l of UI_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
+    const fail = findings.filter(f => !f.ok && !f.skipped).length;
     await writeReport(runId, findings);
     await cleanupAndExit(fail > 0 ? 1 : 0);
     return;
@@ -697,7 +700,7 @@ async function main() {
   }
 
   const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
+  const fail = findings.filter(f => !f.ok && !f.skipped).length;
   console.log(`\n  Results: ${pass} passed, ${fail} failed`);
 
   await writeReport(runId, findings);
@@ -717,14 +720,15 @@ async function writeReport(runId, findings) {
     '## Summary',
     '',
     `- Passed: ${findings.filter(f => f.ok).length} / ${findings.length}`,
-    `- Failed: ${findings.filter(f => !f.ok).length} / ${findings.length}`,
+    `- Skipped: ${findings.filter(f => f.skipped).length} / ${findings.length}`,
+    `- Failed: ${findings.filter(f => !f.ok && !f.skipped).length} / ${findings.length}`,
     '',
     '## Results',
     '',
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## Coverage',

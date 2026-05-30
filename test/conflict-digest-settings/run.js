@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
   '[CD-1] SMTP not configured — "Send now" disabled, SMTP-missing Alert shown',
@@ -140,7 +141,8 @@ function writeReport(runId, findings) {
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const passed = findings.filter(f => f.ok).length;
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   const lines = [
     '# Conflict Digest Settings — Integration Test',
     '',
@@ -151,6 +153,7 @@ function writeReport(runId, findings) {
     '## Summary',
     '',
     `- Passed: ${passed} / ${findings.length}`,
+    `- Skipped: ${skipped} / ${findings.length}`,
     `- Failed: ${failed} / ${findings.length}`,
     '',
     '## Results',
@@ -158,7 +161,7 @@ function writeReport(runId, findings) {
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## Coverage',
@@ -242,6 +245,7 @@ async function main() {
       console.log(`     observed : ${observed}`);
     }
   }
+  const skip = makeSkip(findings);
 
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
@@ -284,7 +288,7 @@ async function main() {
 
   if (!puppeteer) {
     for (const l of UI_LABELS) {
-      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+      skip(l, 'puppeteer installed', 'puppeteer not installed');
     }
     await cleanupAndExit(1);
     return;
@@ -312,7 +316,7 @@ async function main() {
 
   if (!browser) {
     const msg = (browserLaunchErr?.message || String(browserLaunchErr)).slice(0, 200);
-    for (const l of UI_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
+    for (const l of UI_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     await cleanupAndExit(1);
     return;
   }
@@ -565,7 +569,7 @@ async function main() {
     console.error(logBuf.join('').slice(-2000));
   } finally {
     try { await browser.close(); } catch {}
-    const failed = findings.filter(f => !f.ok).length;
+    const failed = findings.filter(f => !f.ok && !f.skipped).length;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
     await cleanupAndExit(failed === 0 ? 0 : 1);
   }

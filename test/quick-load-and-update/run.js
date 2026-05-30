@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip3 } = require('../helpers/report');
 
 const PROBE_LABELS = [
   '(A) in-memory path: GET is called to fetch existing notes',
@@ -71,13 +72,15 @@ function record(id, ok, detail) {
   findings.push({ id, ok, detail });
   console.log(`  [${ok ? 'PASS' : 'FAIL'}] ${id}${detail ? ' — ' + detail : ''}`);
 }
+const skip = makeSkip3(findings);
 
 function writeReport() {
   const dir = path.dirname(REPORT_PATH);
   fs.mkdirSync(dir, { recursive: true });
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
+  const fail = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   const lines = [
     '# quickLoadAndUpdate — Persistence Test',
     '',
@@ -93,7 +96,7 @@ function writeReport() {
     '',
     '| Result | Probe | Detail |',
     '|---|---|---|',
-    ...findings.map(f => `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`),
+    ...findings.map(f => `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`),
     '',
     '## Coverage',
     '',
@@ -159,7 +162,7 @@ async function main() {
 
   if (!puppeteer) {
     for (const l of PROBE_LABELS) {
-      record(l, false, 'puppeteer not installed');
+      skip(l, 'puppeteer not installed');
     }
     writeReport();
     process.exit(1);
@@ -176,7 +179,7 @@ async function main() {
     });
   } catch (e) {
     for (const l of PROBE_LABELS) {
-      record(l, false, `browser launch failed: ${e.message}`);
+      skip(l, `browser launch failed: ${e.message}`);
     }
     writeReport();
     process.exit(1);
@@ -313,7 +316,7 @@ async function main() {
   }
 
   const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
+  const fail = findings.filter(f => !f.ok && !f.skipped).length;
   console.log(`\n  Results: ${pass} passed, ${fail} failed`);
   writeReport();
   process.exit(fail > 0 ? 1 : 0);

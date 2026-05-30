@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 // test/turnstile-signout/run.js
 //
 // End-to-end test for the Turnstile widget reappearing after sign-out via the
@@ -260,6 +261,7 @@ async function main() {
       if (detail) console.log(`     detail   : ${detail}`);
     }
   }
+  const skip = makeSkip(findings);
 
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
@@ -333,7 +335,7 @@ async function main() {
   const IGNORE_RE = /favicon\.ico|\/storybook\/|\.map\b|Failed to load resource/;
 
   if (!puppeteer) {
-    for (const l of UI_LABELS) record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    for (const l of UI_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
   } else {
     const { findChromium } = require('../shared/find-chromium');
     let browser = null;
@@ -354,7 +356,7 @@ async function main() {
 
     if (!browser) {
       const msg = (launchErr?.message || String(launchErr)).slice(0, 200);
-      for (const l of UI_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
+      for (const l of UI_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     } else {
       try {
         // ── API.2: verify _cpRun['sign-out'] on the home page ─────────────────
@@ -499,7 +501,7 @@ async function main() {
     }
   }
 
-  const failures = findings.filter(f => !f.ok && !f.soft);
+  const failures = findings.filter(f => !f.ok && !f.soft && !f.skipped);
   console.log(`\n  ${findings.length} probe(s) — ${failures.length} failure(s)`);
   await cleanupAndExit(failures.length > 0 ? 1 : 0);
 }
@@ -508,19 +510,20 @@ function writeReport(findings, runId) {
   const dir = path.resolve(__dirname, '..', '..', 'test-results');
   fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, 'turnstile-signout.md');
-  const failures = findings.filter(f => !f.ok && !f.soft);
+  const failures = findings.filter(f => !f.ok && !f.soft && !f.skipped);
+  const skippedCount = findings.filter(f => f.skipped).length;
   const lines = [
     '# turnstile-signout test report',
     '',
     `run: ${runId}  date: ${new Date().toISOString()}`,
     '',
-    `**${findings.length} probe(s) — ${failures.length} failure(s)**`,
+    `**${findings.length} probe(s) — ${failures.length} failure(s)${skippedCount ? `, ${skippedCount} skipped` : ''}**`,
     '',
     '| Result | Probe | Expected | Observed |',
     '|--------|-------|----------|----------|',
   ];
   for (const f of findings) {
-    const icon   = f.ok ? '✓' : (f.soft ? '⚠' : '✗');
+    const icon   = f.ok ? '✓' : (f.skipped ? '↷' : f.soft ? '⚠' : '✗');
     const detail = f.detail ? ` _(${f.detail})_` : '';
     lines.push(`| ${icon} | ${f.name}${detail} | ${f.expected} | ${f.observed} |`);
   }

@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 // test/visit-edit-cancel/run.js
 //
 // End-to-end test for the edit and cancel actions on delivery/installation
@@ -341,6 +342,7 @@ async function main() {
       console.log(`       observed : ${observed}`);
     }
   }
+  const skip = makeSkip(findings);
 
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
@@ -505,7 +507,7 @@ async function main() {
   ];
 
   if (!puppeteer) {
-    for (const l of UI_LABELS) record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    for (const l of UI_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
   } else {
     const { findChromium } = require('../shared/find-chromium');
     let browser = null;
@@ -524,7 +526,7 @@ async function main() {
 
     if (!browser) {
       const msg = (browserLaunchErr?.message || String(browserLaunchErr)).slice(0, 200);
-      for (const l of UI_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
+      for (const l of UI_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     } else {
       try {
 
@@ -751,7 +753,8 @@ async function main() {
 
   // ── Summary & report ──────────────────────────────────────────────────────
   const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
+  const fail = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   console.log(`\n  Results: ${pass} passed, ${fail} failed`);
 
   await writeReport(runId, findings);

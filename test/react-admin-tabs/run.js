@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
   '#tab-search mount point exists in admin.html',
@@ -161,6 +162,7 @@ async function main() {
       if (detail) console.log(`     detail   : ${detail}`);
     }
   }
+  const skip = makeSkip(findings);
 
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
@@ -205,7 +207,7 @@ async function main() {
 
   if (!puppeteer) {
     for (const l of PROBE_LABELS) {
-      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+      skip(l, 'puppeteer installed', 'puppeteer not installed');
     }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
@@ -225,7 +227,7 @@ async function main() {
     });
   } catch (e) {
     for (const l of PROBE_LABELS) {
-      record(l, 'browser launched', `browser launch failed: ${e.message}`, false);
+      skip(l, 'browser launched', `browser launch failed: ${e.message}`);
     }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
@@ -410,7 +412,8 @@ async function main() {
   }
 
   const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
+  const fail = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   console.log(`\n  Results: ${pass} passed, ${fail} failed`);
 
   await writeReport(runId, findings);
@@ -431,14 +434,15 @@ async function writeReport(runId, findings) {
     '## Summary',
     '',
     `- Passed: ${findings.filter(f => f.ok).length} / ${findings.length}`,
-    `- Failed: ${findings.filter(f => !f.ok).length} / ${findings.length}`,
+    `- Skipped: ${findings.filter(f => f.skipped).length} / ${findings.length}`,
+    `- Failed: ${findings.filter(f => !f.ok && !f.skipped).length} / ${findings.length}`,
     '',
     '## Results',
     '',
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## Coverage',

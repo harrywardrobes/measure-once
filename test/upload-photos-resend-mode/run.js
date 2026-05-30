@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 // test/upload-photos-resend-mode/run.js
 //
 // Regression guard for the resend-mode detection in UploadPhotosModal.tsx.
@@ -70,12 +71,14 @@ function record(name, expected, observed, ok, detail = '') {
     if (detail) console.log(`     detail   : ${detail}`);
   }
 }
+const skip = makeSkip(findings);
 
 function writeReport(runId) {
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const passed = findings.filter(f => f.ok).length;
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   const lines = [
     '# Upload Photos Modal — Resend Mode Detection Test',
     '',
@@ -86,6 +89,7 @@ function writeReport(runId) {
     '## Summary',
     '',
     `- Passed: ${passed} / ${findings.length}`,
+    `- Skipped: ${skipped} / ${findings.length}`,
     `- Failed: ${failed} / ${findings.length}`,
     '',
     '## Results',
@@ -93,7 +97,7 @@ function writeReport(runId) {
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## Coverage',
@@ -412,7 +416,7 @@ async function main() {
   ];
 
   if (!puppeteer) {
-    for (const l of PROBE_LABELS) record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    for (const l of PROBE_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
     await cleanupAndExit(1);
     return;
   }
@@ -434,7 +438,7 @@ async function main() {
 
   if (!browser) {
     const msg = (browserLaunchErr?.message || String(browserLaunchErr)).slice(0, 200);
-    for (const l of PROBE_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
+    for (const l of PROBE_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     await cleanupAndExit(1);
     return;
   }
@@ -549,7 +553,7 @@ async function main() {
     try { await browser.close(); } catch {}
   }
 
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
   await cleanupAndExit(failed > 0 ? 1 : 0);
 }
 

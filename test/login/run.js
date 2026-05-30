@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
   '[UI-1] /login → React LoginPage rendered; #login-email and #login-password visible',
@@ -108,6 +109,7 @@ async function main() {
       if (detail) console.log(`     detail   : ${detail}`);
     }
   }
+  const skip = makeSkip(findings);
 
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
@@ -146,7 +148,7 @@ async function main() {
   const IGNORE_RE = /(favicon\.ico|\/storybook\/|\.map\b|Failed to load resource|turnstile|challenges\.cloudflare)/i;
 
   if (!puppeteer) {
-    for (const l of UI_LABELS) record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    for (const l of UI_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
   } else {
     const { findChromium } = require('../shared/find-chromium');
     let browser = null;
@@ -170,7 +172,7 @@ async function main() {
 
     if (!browser) {
       const msg = (launchErr?.message || String(launchErr)).slice(0, 200);
-      for (const l of UI_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
+      for (const l of UI_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     } else {
       try {
         const ctx = await (browser.createBrowserContext
@@ -300,19 +302,20 @@ async function main() {
 
   // ── write report ──────────────────────────────────────────────────────────
   const passed = findings.filter(f => f.ok).length;
-  const failed = findings.filter(f => !f.ok && !f.soft).length;
+  const skipped = findings.filter(f => f.skipped).length;
+  const failed = findings.filter(f => !f.ok && !f.soft && !f.skipped).length;
 
   const lines = [
     '# login autofill E2E',
     '',
     `run: ${runId}`,
-    `pass: ${passed}  fail: ${failed}`,
+    `pass: ${passed}  skip: ${skipped}  fail: ${failed}`,
     '',
     '| probe | result |',
     '|---|---|',
   ];
   for (const f of findings) {
-    const icon = f.ok ? '✓' : (f.soft ? '⚠' : '✗');
+    const icon = f.ok ? '✓' : (f.skipped ? '↷' : f.soft ? '⚠' : '✗');
     lines.push(`| ${f.name} | ${icon} \`${f.observed}\` |`);
   }
   lines.push('');
@@ -322,7 +325,7 @@ async function main() {
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(outFile, lines.join('\n'));
   console.log(`\n  Report → ${outFile}`);
-  console.log(`  pass=${passed}  fail=${failed}\n`);
+  console.log(`  pass=${passed}  skip=${skipped}  fail=${failed}\n`);
 
   await cleanupAndExit(failed > 0 ? 1 : 0);
 }

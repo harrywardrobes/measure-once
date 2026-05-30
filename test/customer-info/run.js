@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip3 } = require('../helpers/report');
 // test/customer-info/run.js
 //
 // Regression coverage for the upload_photos_and_info card action handler.
@@ -49,6 +50,7 @@ function record(id, ok, detail) {
   const tag = ok ? 'PASS' : 'FAIL';
   console.log(`  [${tag}] ${id} — ${detail}`);
 }
+const skip = makeSkip3(findings);
 
 // ── Mock HubSpot server ────────────────────────────────────────────────────────
 function startMockHubSpot(contactId, contactProps) {
@@ -703,7 +705,7 @@ async function main() {
     ];
     if (!puppeteer) {
       for (const l of CI_UI_PROBE_LABELS) {
-        record(l, false, 'skipped — puppeteer not installed');
+        skip(l, 'skipped — puppeteer not installed');
       }
     } else {
       const { findChromium } = require('../shared/find-chromium');
@@ -718,7 +720,7 @@ async function main() {
         });
       } catch (e) {
         for (const l of CI_UI_PROBE_LABELS) {
-          record(l, false, `skipped — browser launch failed: ${e.message}`);
+          skip(l, `skipped — browser launch failed: ${e.message}`);
         }
         uiBrowser = null;
       }
@@ -886,7 +888,7 @@ async function main() {
       '',
       '| ID | Result | Detail |',
       '|----|--------|--------|',
-      ...findings.map(f => `| ${f.id} | ${f.ok ? 'PASS' : 'FAIL'} | ${String(f.detail).replace(/\|/g, '\\|')} |`),
+      ...findings.map(f => `| ${f.id} | ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${String(f.detail).replace(/\|/g, '\\|')} |`),
     ];
     try {
       fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });

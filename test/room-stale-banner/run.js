@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
   '[STALE] banner appears when X-Cache-Status: stale',
@@ -151,6 +152,7 @@ async function main() {
       if (detail) console.log(`     detail   : ${detail}`);
     }
   }
+  const skip = makeSkip(findings);
 
   // ── DB safety check ───────────────────────────────────────────────────────
   const dbUrl = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL;
@@ -168,7 +170,7 @@ async function main() {
 
   if (!puppeteer) {
     for (const l of PROBE_LABELS) {
-      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+      skip(l, 'puppeteer installed', 'puppeteer not installed');
     }
     writeReport(findings);
     process.exit(1);
@@ -316,7 +318,8 @@ async function main() {
   }
 
   const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
+  const fail = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   console.log(`\n  Results: ${pass} passed, ${fail} failed`);
   writeReport(findings);
   process.exit(fail > 0 || exitCode ? 1 : 0);
@@ -337,7 +340,8 @@ function writeReport(findings) {
       '## Summary',
       '',
       `- Passed: ${pass} / ${findings.length}`,
-      `- Failed: ${findings.filter(f => !f.ok).length} / ${findings.length}`,
+      `- Skipped: ${skipped} / ${findings.length}`,
+      `- Failed: ${findings.filter(f => !f.ok && !f.skipped).length} / ${findings.length}`,
       '',
       '## What is tested',
       '',
@@ -357,7 +361,7 @@ function writeReport(findings) {
       '| Result | Probe | Expected | Observed |',
       '|--------|-------|----------|----------|',
       ...findings.map(f =>
-        `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+        `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
       ),
       '',
       '## Relevant files',

@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
   'seed schedule_installation_slot handler',
@@ -142,13 +143,15 @@ function record(name, expected, observed, ok, detail = '') {
     if (detail) console.log(`     detail   : ${detail}`);
   }
 }
+const skip = makeSkip(findings);
 
 function writeReport(runId) {
   const passed = findings.filter(f => f.ok).length;
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const rows = findings
-    .map(f => `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`)
+    .map(f => `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`)
     .join('\n');
   const md = [
     `# scheduling-past-time-guard test report`,
@@ -158,6 +161,7 @@ function writeReport(runId) {
     `## Summary`,
     ``,
     `- Passed: ${passed} / ${findings.length}`,
+    `- Skipped: ${skipped} / ${findings.length}`,
     `- Failed: ${failed} / ${findings.length}`,
     ``,
     `## Results`,
@@ -277,7 +281,7 @@ async function main() {
 
   if (!puppeteer) {
     for (const l of PROBE_LABELS) {
-      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+      skip(l, 'puppeteer installed', 'puppeteer not installed');
     }
     writeReport('no-puppeteer');
     process.exit(1);
@@ -1038,7 +1042,7 @@ async function main() {
     await browser.close().catch(() => {});
   }
 
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
   await cleanupAndExit(failed > 0 ? 1 : 0);
 }
 

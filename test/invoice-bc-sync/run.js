@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
   '[BC-A] InvoicesSection on CustomerDetailPage re-fetches after save without full reload',
@@ -72,6 +73,7 @@ function record(name, expected, observed, ok, detail = '') {
     if (detail) console.log(`     detail   : ${detail}`);
   }
 }
+const skip = makeSkip(findings);
 
 function parseCookieKV(jar) {
   if (!jar) return null;
@@ -519,7 +521,8 @@ async function writeReport(runId) {
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const passed = findings.filter(f => f.ok).length;
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   const lines = [
     '# Invoice BroadcastChannel sync — Integration Test',
     '',
@@ -530,6 +533,7 @@ async function writeReport(runId) {
     '## Summary',
     '',
     `- Passed: ${passed} / ${findings.length}`,
+    `- Skipped: ${skipped} / ${findings.length}`,
     `- Failed: ${failed} / ${findings.length}`,
     '',
     '## Results',
@@ -537,7 +541,7 @@ async function writeReport(runId) {
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`
     ),
     '',
     '## Coverage',
@@ -637,7 +641,7 @@ async function main() {
   ];
 
   if (!puppeteer) {
-    for (const l of UI_LABELS) record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    for (const l of UI_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
     await cleanupAndExit(1);
     return;
   }
@@ -663,7 +667,7 @@ async function main() {
 
   if (!browser) {
     for (const l of UI_LABELS) {
-      record(l, 'browser launches', `error: ${browserLaunchErr?.message}`, false);
+      skip(l, 'browser launches', `error: ${browserLaunchErr?.message}`);
     }
     await cleanupAndExit(1);
     return;
@@ -901,7 +905,7 @@ async function main() {
   }
 
   const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
+  const fail = findings.filter(f => !f.ok && !f.skipped).length;
   console.log(`\n  Results: ${pass} passed, ${fail} failed`);
   await cleanupAndExit(fail > 0 ? 1 : 0);
 }

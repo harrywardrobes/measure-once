@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip3 } = require('../helpers/report');
 
 const PROBE_LABELS = [
   '[A] All view — pagination appears and page-2 click sends ?page=2 with differing results',
@@ -269,7 +270,8 @@ async function writeReport(runId, findings) {
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const passed = findings.filter(f => f.ok).length;
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   const lines = [
     '# Customers Pagination — Integration Test',
     '',
@@ -286,7 +288,7 @@ async function writeReport(runId, findings) {
     '',
     '| Result | Probe | Detail |',
     '|---|---|---|',
-    ...findings.map(f => `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`),
+    ...findings.map(f => `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`),
     '',
     '## Coverage',
     '',
@@ -364,6 +366,7 @@ async function main() {
     findings.push({ id, ok, detail });
     console.log(`  [${ok ? 'PASS' : 'FAIL'}] ${id} — ${detail}`);
   }
+  const skip = makeSkip3(findings);
 
   const cleanupAndExit = async (code) => {
     try { if (!exited) child.kill('SIGTERM'); } catch {}
@@ -404,7 +407,7 @@ async function main() {
   ];
 
   if (!puppeteer) {
-    for (const l of UI_LABELS) record(l, false, 'puppeteer not installed');
+    for (const l of UI_LABELS) skip(l, 'puppeteer not installed');
     await writeReport(runId, findings);
     await cleanupAndExit(findings.filter(f => !f.ok).length > 0 ? 1 : 0);
     return;
@@ -422,7 +425,7 @@ async function main() {
   }
 
   if (!browser) {
-    for (const l of UI_LABELS) record(l, false, 'browser launch failed');
+    for (const l of UI_LABELS) skip(l, 'browser launch failed');
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;
@@ -696,7 +699,7 @@ async function main() {
     console.error('--- server log (last 3000 chars) ---');
     console.error(logBuf.join('').slice(-3000));
   } finally {
-    const failed = findings.filter(f => !f.ok).length;
+    const failed = findings.filter(f => !f.ok && !f.skipped).length;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
     if (failed > 0) {
       console.log('\n  --- server log (last 2000 chars) ---');

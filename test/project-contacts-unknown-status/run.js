@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip3 } = require('../helpers/report');
 // test/project-contacts-unknown-status/run.js
 //
 // Regression guard for the "orphan-check" logic added in task #1653.
@@ -51,6 +52,7 @@ function record(id, ok, detail) {
   findings.push({ id, ok, detail });
   console.log(`  [${ok ? 'PASS' : 'FAIL'}] ${id} — ${detail}`);
 }
+const skip = makeSkip3(findings);
 
 // ── Synthetic test data ───────────────────────────────────────────────────────
 
@@ -321,7 +323,7 @@ async function main() {
 
     if (!puppeteer) {
       for (const l of PC_D_PROBE_LABELS) {
-        record(l, false, 'puppeteer not installed — UI probes skipped');
+        skip(l, 'puppeteer not installed — UI probes skipped');
       }
     } else {
       const { findChromium } = require('../shared/find-chromium');
@@ -395,7 +397,8 @@ async function main() {
       await page.close();
     }
 
-    const failed = findings.filter(f => !f.ok).length;
+    const failed = findings.filter(f => !f.ok && !f.skipped).length;
+    const skipped = findings.filter(f => f.skipped).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
 
@@ -415,7 +418,7 @@ async function writeReport(runId) {
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   const esc    = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const passed = findings.filter(f => f.ok).length;
-  const failed = findings.filter(f => !f.ok).length;
+  const failed = findings.filter(f => !f.ok && !f.skipped).length;
   const lines = [
     '# Project-Contacts Unknown-Status — Integration Test',
     '',
@@ -433,7 +436,7 @@ async function writeReport(runId) {
     '| Result | Probe | Detail |',
     '|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`,
     ),
     '',
     '## Coverage',

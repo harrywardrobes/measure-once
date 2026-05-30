@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
   '(D) conflict-fix flow end-to-end — conflict banner, Fix button, resolver modal',
@@ -444,6 +445,7 @@ async function main() {
       if (detail) console.log(`     detail   : ${detail}`);
     }
   }
+  const skip = makeSkip(findings);
 
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
@@ -1095,7 +1097,7 @@ async function main() {
   // ── puppeteer required ─────────────────────────────────────────────────────
   if (!puppeteer) {
     for (const l of PROBE_LABELS) {
-      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+      skip(l, 'puppeteer installed', 'puppeteer not installed');
     }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
@@ -1116,7 +1118,7 @@ async function main() {
     });
   } catch (e) {
     for (const l of PROBE_LABELS) {
-      record(l, 'browser launched', `browser launch failed: ${e.message}`, false);
+      skip(l, 'browser launched', `browser launch failed: ${e.message}`);
     }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
@@ -3412,7 +3414,7 @@ async function main() {
           createRes.status === 201 && Number.isInteger(delWarnHandlerId),
         );
       } else {
-        record('(O.setup) POST handler bound to sub-status via substatus_id', 'status=201', 'SKIPPED — seed failed', false);
+        skip('(O.setup) POST handler bound to sub-status via substatus_id', 'status=201', 'SKIPPED — seed failed');
       }
 
       if (delWarnHandlerId && boundSubId && freeSubId) {
@@ -3592,7 +3594,7 @@ async function main() {
         await adminClient.delete(`/api/admin/card-action-handlers/${delWarnHandlerId}`);
       } else {
         ['O.1', 'O.2', 'O.3', 'O.4', 'O.5', 'O.6'].forEach((p) => {
-          record(`(${p}) sub-status delete bound-handler warning`, 'n/a', 'SKIPPED — seed failed', false);
+          skip(`(${p}) sub-status delete bound-handler warning`, 'n/a', 'SKIPPED — seed failed');
         });
       }
     }
@@ -3820,9 +3822,9 @@ async function main() {
           saveEnabled === 'enabled',
         );
       } else {
-        record('(P.2) warning Alert in HandlerEditorModal', 'n/a', 'SKIPPED — dialog did not open', false);
-        record('(P.3) Save/Add button disabled', 'n/a', 'SKIPPED — dialog did not open', false);
-        record('(P.4) Save/Add enabled after fix', 'n/a', 'SKIPPED — dialog did not open', false);
+        skip('(P.2) warning Alert in HandlerEditorModal', 'n/a', 'SKIPPED — dialog did not open');
+        skip('(P.3) Save/Add button disabled', 'n/a', 'SKIPPED — dialog did not open');
+        skip('(P.4) Save/Add enabled after fix', 'n/a', 'SKIPPED — dialog did not open');
       }
 
       await staleTab.close();
@@ -3996,9 +3998,9 @@ async function main() {
             subSaveEnabled === 'enabled',
           );
         } else {
-          record('(P.sub.2 (alert))', 'n/a', 'SKIPPED — dialog did not open', false);
-          record('(P.sub.3) Save/Add disabled', 'n/a', 'SKIPPED — dialog did not open', false);
-          record('(P.sub.4) Save/Add enabled after fix', 'n/a', 'SKIPPED — dialog did not open', false);
+          skip('(P.sub.2 (alert))', 'n/a', 'SKIPPED — dialog did not open');
+          skip('(P.sub.3) Save/Add disabled', 'n/a', 'SKIPPED — dialog did not open');
+          skip('(P.sub.4) Save/Add enabled after fix', 'n/a', 'SKIPPED — dialog did not open');
         }
 
         await subTab.close();
@@ -4007,7 +4009,7 @@ async function main() {
         [
           'P.sub.1', 'P.sub.2 (dialog)', 'P.sub.2 (alert)', 'P.sub.3', 'P.sub.4',
         ].forEach(p => {
-          record(`(${p}) stale submittedLeadStatus`, 'n/a', 'SKIPPED — P.sub handler seed failed', false);
+          skip(`(${p}) stale submittedLeadStatus`, 'n/a', 'SKIPPED — P.sub handler seed failed');
         });
       }
     } else {
@@ -4015,7 +4017,7 @@ async function main() {
         'P.1', 'P.2 (chip)', 'P.2 (dialog)', 'P.2 (alert)', 'P.3', 'P.4',
         'P.sub.setup', 'P.sub.1', 'P.sub.2 (dialog)', 'P.sub.2 (alert)', 'P.sub.3', 'P.sub.4',
       ].forEach(p => {
-        record(`(${p}) stale lead-status warning`, 'n/a', 'SKIPPED — handler seed failed', false);
+        skip(`(${p}) stale lead-status warning`, 'n/a', 'SKIPPED — handler seed failed');
       });
     }
     // Clean up the slot's lead_status_config row.
@@ -4229,7 +4231,7 @@ async function main() {
         rCreateRes.status === 201 && Number.isInteger(rHandlerId),
       );
     } else {
-      record('(R.setup) POST handler bound to sub-status via substatus_id', 'status=201', 'SKIPPED — seed failed', false);
+      skip('(R.setup) POST handler bound to sub-status via substatus_id', 'status=201', 'SKIPPED — seed failed');
     }
 
     if (rHandlerId && rBoundSubId && rFreeSubId && browser) {
@@ -4308,11 +4310,11 @@ async function main() {
       // Clean up: delete the handler (FK cascade removes the binding).
       await adminClient.delete(`/api/admin/card-action-handlers/${rHandlerId}`);
     } else if (!browser) {
-      record('(R.1) Select opacity 0.5 for bound substatus', 'n/a', 'SKIPPED — Puppeteer not available', false);
-      record('(R.2) Select opacity 1 for unbound substatus', 'n/a', 'SKIPPED — Puppeteer not available', false);
+      skip('(R.1) Select opacity 0.5 for bound substatus', 'n/a', 'SKIPPED — Puppeteer not available');
+      skip('(R.2) Select opacity 1 for unbound substatus', 'n/a', 'SKIPPED — Puppeteer not available');
     } else {
-      record('(R.1) Select opacity 0.5 for bound substatus', 'n/a', 'SKIPPED — seed failed', false);
-      record('(R.2) Select opacity 1 for unbound substatus', 'n/a', 'SKIPPED — seed failed', false);
+      skip('(R.1) Select opacity 0.5 for bound substatus', 'n/a', 'SKIPPED — seed failed');
+      skip('(R.2) Select opacity 1 for unbound substatus', 'n/a', 'SKIPPED — seed failed');
     }
   }
 
@@ -4429,9 +4431,9 @@ async function main() {
     }
 
     if (!qBootOk) {
-      record('(Q.1) ensureSubstatusHandlerBindings inserts binding on boot', '1 binding row', 'SKIPPED — server restart failed', false);
-      record('(Q.2) Pre-existing binding not overwritten on restart', 'same handler_id', 'SKIPPED — server restart failed', false);
-      record('(Q.3) SUBSTATUS_HANDLER_MAP key resolves to mapped handler type on boot', 'handler type=review_customer_photos', 'SKIPPED — server restart failed', false);
+      skip('(Q.1) ensureSubstatusHandlerBindings inserts binding on boot', '1 binding row', 'SKIPPED — server restart failed');
+      skip('(Q.2) Pre-existing binding not overwritten on restart', 'same handler_id', 'SKIPPED — server restart failed');
+      skip('(Q.3) SUBSTATUS_HANDLER_MAP key resolves to mapped handler type on boot', 'handler type=review_customer_photos', 'SKIPPED — server restart failed');
       try { qChild.kill('SIGTERM'); } catch {}
     } else {
       // Poll for the Q.1 auto-binding: ensureSubstatusHandlerBindings runs async
@@ -4584,8 +4586,8 @@ async function main() {
     }
 
     if (!rBootOk) {
-      record('(R.1) default_handler_type column drives handler type on boot', 'handler type=start_design_visit', 'SKIPPED — server restart failed', false);
-      record('(R.2) SUBSTATUS_HANDLER_MAP wins when default_handler_type is empty', 'handler type=review_customer_photos', 'SKIPPED — server restart failed', false);
+      skip('(R.1) default_handler_type column drives handler type on boot', 'handler type=start_design_visit', 'SKIPPED — server restart failed');
+      skip('(R.2) SUBSTATUS_HANDLER_MAP wins when default_handler_type is empty', 'handler type=review_customer_photos', 'SKIPPED — server restart failed');
       try { if (!rChildExited) rChild.kill('SIGTERM'); } catch {}
     } else {
       // Poll for R.1: default_handler_type = 'start_design_visit' must produce
@@ -4646,7 +4648,8 @@ async function main() {
 
   // ── summary & report ──────────────────────────────────────────────────────
   const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
+  const fail = findings.filter(f => !f.ok && !f.skipped).length;
+  const skipped = findings.filter(f => f.skipped).length;
   console.log(`\n  Results: ${pass} passed, ${fail} failed`);
 
   await writeReport(runId, findings);
@@ -4668,14 +4671,15 @@ async function writeReport(runId, findings) {
     '## Summary',
     '',
     `- Passed: ${findings.filter(f => f.ok).length} / ${findings.length}`,
-    `- Failed: ${findings.filter(f => !f.ok).length} / ${findings.length}`,
+    `- Skipped: ${findings.filter(f => f.skipped).length} / ${findings.length}`,
+    `- Failed: ${findings.filter(f => !f.ok && !f.skipped).length} / ${findings.length}`,
     '',
     '## Results',
     '',
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## Coverage',

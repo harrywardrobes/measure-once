@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip3 } = require('../helpers/report');
 // test/lead-status-counts-rate-limit/run.js
 //
 // Focused integration test for the rate-limit / coalescing behaviour of
@@ -53,6 +54,7 @@ function record(id, ok, detail) {
   findings.push({ id, ok, detail });
   console.log(`  [${ok ? 'PASS' : 'FAIL'}] ${id} — ${detail}`);
 }
+const skip = makeSkip3(findings);
 
 // ── Mock HubSpot server ──────────────────────────────────────────────────────
 function startMockHubspot() {
@@ -318,7 +320,7 @@ async function main() {
       'D0 /projects reachable',
     ];
     if (!puppeteer) {
-      for (const l of D_PROBE_LABELS) record(l, false, 'puppeteer not installed — browser probes skipped');
+      for (const l of D_PROBE_LABELS) skip(l, 'puppeteer not installed — browser probes skipped');
     } else {
       const { findChromium } = require('../shared/find-chromium');
       const executablePath = findChromium() || undefined;
@@ -394,7 +396,7 @@ async function main() {
       'E3 notice absent after re-render with error cleared',
     ];
     if (!puppeteer) {
-      for (const l of E_PROBE_LABELS) record(l, false, 'puppeteer not installed — browser probes skipped');
+      for (const l of E_PROBE_LABELS) skip(l, 'puppeteer not installed — browser probes skipped');
     } else {
       const { findChromium } = require('../shared/find-chromium');
       const executablePath = findChromium() || undefined;
@@ -521,7 +523,8 @@ async function main() {
       }
     }
 
-    const failed = findings.filter(f => !f.ok).length;
+    const failed = findings.filter(f => !f.ok && !f.skipped).length;
+    const skipped = findings.filter(f => f.skipped).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
   } catch (e) {
@@ -547,13 +550,14 @@ async function writeReport(runId) {
     '## Summary',
     '',
     `- Passed: ${findings.filter(f => f.ok).length} / ${findings.length}`,
-    `- Failed: ${findings.filter(f => !f.ok).length} / ${findings.length}`,
+    `- Skipped: ${findings.filter(f => f.skipped).length} / ${findings.length}`,
+    `- Failed: ${findings.filter(f => !f.ok && !f.skipped).length} / ${findings.length}`,
     '',
     '## Results',
     '',
     '| Result | Probe | Detail |',
     '|---|---|---|',
-    ...findings.map(f => `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`),
+    ...findings.map(f => `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.id)} | ${esc(f.detail)} |`),
     '',
     '## Coverage',
     '',
