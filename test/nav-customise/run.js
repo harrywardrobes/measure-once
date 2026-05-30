@@ -434,7 +434,7 @@ async function clickSaveButton(page) {
   await page.evaluate(() => {
     const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
     if (!dialog) return;
-    const save = Array.from(dialog.querySelectorAll('.MuiDialogActions-root button'))
+    const save = Array.from(dialog.querySelectorAll('button'))
       .find(b => b.textContent.trim() === 'Save');
     if (save) save.click();
   });
@@ -450,7 +450,7 @@ async function clickCancelButton(page) {
   await page.evaluate(() => {
     const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
     if (!dialog) return;
-    const cancel = Array.from(dialog.querySelectorAll('.MuiDialogActions-root button'))
+    const cancel = Array.from(dialog.querySelectorAll('button'))
       .find(b => b.textContent.trim() === 'Cancel');
     if (cancel) cancel.click();
   });
@@ -823,7 +823,7 @@ async function main() {
         const saveEnabled = await page.evaluate(() => {
           const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
           if (!dialog) return null;
-          const save = Array.from(dialog.querySelectorAll('.MuiDialogActions-root button'))
+          const save = Array.from(dialog.querySelectorAll('button'))
             .find(b => b.textContent.trim() === 'Save');
           return save ? !save.disabled : null;
         });
