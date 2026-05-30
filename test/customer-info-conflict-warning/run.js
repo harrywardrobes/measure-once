@@ -566,6 +566,7 @@ async function main() {
     '(B3-open) clicking "Cancel" dismisses Alert without extra open call',
     '(A-open-blocked) no conflict Alert when popup is blocked',
     '(A-open-blocked) fallback window.open called with form_link URL',
+    '(B) conflict Alert text correct',
   ];
 
   if (!puppeteer) {
@@ -667,6 +668,30 @@ async function main() {
     );
 
     if (conflictBtn) {
+      // ── Probe B-text: conflict Alert contains expected message ────────────
+      const alertText = await pageB.evaluate(() => {
+        const el = document.querySelector('[data-testid="conflict-proceed-btn"]');
+        if (!el) return '';
+        // Walk up to the MUI Alert root (role="alert" or the nearest ancestor
+        // that contains the warning text).
+        let node = el.parentElement;
+        while (node && node.getAttribute('role') !== 'alert') {
+          node = node.parentElement;
+        }
+        return node ? node.textContent || '' : '';
+      });
+
+      const expectedFragment = 'A newer link has already been sent for this contact';
+      const alertTextOk = alertText.includes(expectedFragment);
+      record(
+        PROBE_LABELS[12],
+        'conflict Alert contains expected message text',
+        alertTextOk
+          ? `Alert text correct (found "${expectedFragment}")`
+          : `Alert text wrong — got: "${alertText.slice(0, 120)}"`,
+        alertTextOk,
+      );
+
       // ── Probe B2: "Copy anyway" dismisses Alert ──────────────────────────
       console.log('\n  [B2] Copy-anyway probe');
       await pageB.click('[data-testid="conflict-proceed-btn"]');
@@ -684,6 +709,7 @@ async function main() {
       );
     } else {
       record(PROBE_LABELS[3], 'probe B must pass first', 'skipped — probe B failed', false);
+      record(PROBE_LABELS[12], 'probe B must pass first', 'skipped — probe B failed', false);
     }
 
     await pageB.__ctx.close().catch(() => {});
