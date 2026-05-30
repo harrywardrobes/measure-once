@@ -146,10 +146,10 @@ app.use(express.json({ limit: '25mb' }));
 // Clean URLs for each page (no .html extension). Must precede express.static so the
 // extensionless paths win over any default static-index handling.
 // /trades, /admin, /projects, /invoices are protected — handled below after auth middleware is set up
-app.get('/',          (_req, res) => res.render('index',     { title: 'Home · Measure Once' }));
-app.get('/customers', (_req, res) => res.render('customers', { title: 'Customers · Measure Once' }));
-app.get('/calendar',  (_req, res) => res.render('calendar',  { title: 'Calendar · Measure Once' }));
-app.get('/profile',   (_req, res) => res.render('profile',   { title: 'Profile · Measure Once' }));
+app.get('/',          (_req, res) => res.render('index',     { title: 'Home · Measure Once',      description: 'Your Measure Once project dashboard — track jobs, customers, and design visits in one place.' }));
+app.get('/customers', (_req, res) => res.render('customers', { title: 'Customers · Measure Once',  description: 'Browse and manage your customer accounts, contact details, and project history.' }));
+app.get('/calendar',  (_req, res) => res.render('calendar',  { title: 'Calendar · Measure Once',   description: 'View and schedule upcoming design visits, installations, and team appointments.' }));
+app.get('/profile',   (_req, res) => res.render('profile',   { title: 'Profile · Measure Once',    description: 'Update your personal details, preferences, and account settings.' }));
 
 // Dynamic customer detail page
 app.get('/customers/:id', (req, res) => {
@@ -167,11 +167,11 @@ app.get('/invoices.html', (req, res) => res.redirect(301, '/invoices'));
 
 // Public design-visit sign-off page (no auth required — token-gated)
 app.get('/design-visit/sign-off', (_req, res) =>
-  res.render('design-visit-signoff', { title: 'Design Visit Sign-Off · Measure Once' }));
+  res.render('design-visit-signoff', { title: 'Design Visit Sign-Off · Measure Once', description: 'Review and sign off on your design visit details with Harry Wardrobes.' }));
 
 // Public customer-info form page (no auth required — token-gated)
 app.get('/customer-info/:token', (_req, res) =>
-  res.render('customer-info', { title: 'Tell us about your home · Measure Once' }));
+  res.render('customer-info', { title: 'Tell us about your home · Measure Once', description: 'Share details about your home so we can tailor your wardrobe design to fit perfectly.' }));
 
 // Public auth pages (no Replit/OIDC anymore — email + password handled in-app).
 app.get('/login', (_req, res) => res.render('login', { title: 'Sign in · Measure Once' }));
@@ -3143,10 +3143,10 @@ app.get('/access-restricted', isAuthenticated, (_req, res) => {
 });
 
 app.get('/projects', isAuthenticated, (_req, res) => {
-  res.render('projects', { title: 'Projects · Measure Once' });
+  res.render('projects', { title: 'Projects · Measure Once', description: 'Track active and completed wardrobe projects from design through to installation.' });
 });
 app.get('/invoices', isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
-  res.render('invoices', { title: 'Invoices · Measure Once' });
+  res.render('invoices', { title: 'Invoices · Measure Once', description: 'Review, manage, and send customer invoices for completed wardrobe projects.' });
 });
 
 app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
@@ -3853,7 +3853,7 @@ app.get('/api/calendar/upcoming', async (req, res) => {
 });
 
 // ── Ideas & Feedback ──────────────────────────────────────────────────────────
-app.get('/ideas', isAuthenticated, (_req, res) => res.render('ideas', { title: 'Ideas · Measure Once' }));
+app.get('/ideas', isAuthenticated, (_req, res) => res.render('ideas', { title: 'Ideas · Measure Once', description: 'Submit and explore ideas, feature requests, and feedback for your Measure Once workspace.' }));
 
 async function ensureIdeasTables() {
   await pool.query(`
