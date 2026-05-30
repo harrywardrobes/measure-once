@@ -24,7 +24,7 @@
  *  - For rich objects, extend `GalleryEmbedded` rather than declaring an
  *    independent interface with no shared ancestry.
  *  - Export the extended type from the component file so that
- *    `DesignSystemPage` can import it without a circular dependency.
+ *    pages can import it without a circular dependency.
  *
  * See also: `src/react/README.md` § "Gallery embedding convention".
  */

@@ -27,11 +27,6 @@ small even though the icon set is large.
 3. Prefer the **filled** variant unless a specific page calls for a
    different look — consistency beats variety.
 
-The Design System page (`#tab-designsystem` in the admin panel) has an
-**Icons** tab with a curated sample grouped by purpose (Actions,
-Navigation, Status, Content), each card showing the import name and a
-"Show imports" snippet for copy-paste.
-
 ## Conventions
 
 - **No new inline `<svg>` blocks in React code.** If you're tempted to

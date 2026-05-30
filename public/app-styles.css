@@ -860,23 +860,6 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .js-modal-scrim--below { z-index: calc(var(--z-tooltip) - 1); }
 
-/* ── Design System admin tab ────────────────────────────────────────────────
-   Read-only documentation panel rendered by the React island at
-   src/react/pages/DesignSystemPage.tsx (built to /react/main.js).
-─────────────────────────────────────────────────────────────────────────────── */
-
-
-.ds-swatch {
-  border: 1px solid var(--stone); border-radius: var(--radius-lg);
-  overflow: hidden; background: var(--paper);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.ds-swatch-chip { height: 56px; }
-.ds-swatch-meta { padding: 8px 10px; font-size: .72rem; line-height: 1.4; }
-.ds-swatch-name { font-weight: 700; color: var(--ink-1); }
-.ds-swatch-value { color: var(--ink-3); }
-
-
 /* Shared empty-state block (used by renderEmptyState helper) */
 .ui-empty {
   border: 1px dashed var(--stone-deep);

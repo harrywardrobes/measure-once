@@ -86,7 +86,7 @@ Two patterns exist:
 
 **Always use `embedded` (not `preview`, `inGallery`, etc.) for this
 purpose.** Rich preview types must extend `GalleryEmbedded` and be
-exported from the component file so `DesignSystemPage` can import them
+exported from the component file so pages can import them
 without a circular dependency. Stories in `src/react/stories/Pages.stories.tsx`
 pass it consistently for all page components.
 

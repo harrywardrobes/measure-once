@@ -8,9 +8,6 @@ const PROBE_LABELS = [
   '#tab-team mount point exists in admin.html',
   'React island flags #tab-team as mounted (data-ds-rendered="1")',
   '#tab-team renders AdminTeamPage content (non-empty, no island-error fallback)',
-  '#tab-designsystem mount point exists in admin.html',
-  'React island flags #tab-designsystem as mounted (data-ds-rendered="1")',
-  '#tab-designsystem renders DesignSystemPage sections (.ds-section)',
   'no uncaught page errors while React island mounts',
 ];
 
@@ -19,10 +16,10 @@ const PROBE_LABELS = [
 // End-to-end smoke test for the React island mounted into the admin panel
 // (`src/react/main.tsx`). Confirms that the bundle built into
 // `public/react/main.js` actually renders the Search (#tab-search) and
-// Design System (#tab-designsystem) panels with their expected React-owned
-// markup. A broken Vite build, a missed `MOUNTS` entry, or a regression on
-// the self-mount path would surface here instead of waiting for an admin to
-// click the tab in production.
+// Team (#tab-team) panels with their expected React-owned markup. A broken
+// Vite build, a missed `MOUNTS` entry, or a regression on the self-mount
+// path would surface here instead of waiting for an admin to click the tab
+// in production.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:react-admin-tabs
@@ -361,44 +358,6 @@ async function main() {
       teamBodyAppeared && teamPanelNonEmpty,
     );
 
-    // ── Design System tab ────────────────────────────────────────────────
-    await page.evaluate(() => {
-      if (typeof window.switchTab === 'function') window.switchTab('designsystem');
-    });
-
-    const dsPanelExists = await page.evaluate(() =>
-      !!document.getElementById('tab-designsystem'),
-    );
-    record(
-      '#tab-designsystem mount point exists in admin.html',
-      'element with id="tab-designsystem" present',
-      `present=${dsPanelExists}`,
-      dsPanelExists,
-    );
-
-    const dsMounted = await page.evaluate(() => {
-      const el = document.getElementById('tab-designsystem');
-      return !!el && el.dataset.dsRendered === '1';
-    });
-    record(
-      'React island flags #tab-designsystem as mounted (data-ds-rendered="1")',
-      'data-ds-rendered="1" on #tab-designsystem',
-      `flagged=${dsMounted}`,
-      dsMounted,
-    );
-
-    const dsSectionAppeared = await waitForSelectorInPanel(page, 'tab-designsystem', '.ds-section', 6000);
-    const dsSectionCount = await page.evaluate(() => {
-      const el = document.getElementById('tab-designsystem');
-      return el ? el.querySelectorAll('.ds-section').length : 0;
-    });
-    record(
-      '#tab-designsystem renders DesignSystemPage sections (.ds-section)',
-      'at least one .ds-section inside #tab-designsystem',
-      `appeared=${dsSectionAppeared} sectionCount=${dsSectionCount}`,
-      dsSectionAppeared && dsSectionCount > 0,
-    );
-
     record(
       'no uncaught page errors while React island mounts',
       '0 pageerror / console.error events',
@@ -455,9 +414,6 @@ async function writeReport(runId, findings) {
     '  exists, is flagged as mounted, and renders the `<AdminTeamPage/>`',
     '  table (`#team-body`) with non-empty text and no `[data-island-error]`',
     '  fallback. A render-time throw (e.g. missing import) would surface here.',
-    '- **(Design System tab)** Asserts `#tab-designsystem` exists, is',
-    '  flagged the same way, and contains at least one `.ds-section`',
-    '  rendered by `<DesignSystemPage/>`.',
     '- **(runtime errors)** Asserts the React mount produced no `pageerror`',
     '  or `console.error` events.',
     '',

@@ -165,7 +165,6 @@
         <button class="tab-btn"        data-tab="designvisit"   onclick="switchTab('designvisit')">Design visit</button>
         <button class="tab-btn"        data-tab="search"        onclick="switchTab('search')">Search</button>
         <button class="tab-btn"        data-tab="workshop"    onclick="switchTab('workshop')">Workshop</button>
-        <button class="tab-btn"        data-tab="designsystem" onclick="switchTab('designsystem')">Design system</button>
         <button class="tab-btn"        data-tab="devenv"      onclick="switchTab('devenv')" id="tab-btn-devenv" hidden>Dev environment</button>
       </div>
 
@@ -197,11 +196,6 @@
       <div class="tab-panel" id="tab-cardactions"></div>
       <div class="tab-panel" id="tab-actionhandlers"></div>
       <div class="tab-panel" id="tab-designvisit"></div>
-
-      <!-- DESIGN SYSTEM — React island (src/react/pages/admin/DesignSystemPage.tsx).
-           Hosts the in-app skeleton gallery used by the design-system-skeletons
-           end-to-end test. -->
-      <div class="tab-panel" id="tab-designsystem"></div>
 
       <!-- SEARCH SETTINGS — React island (src/react/pages/SearchSettingsPage.tsx). -->
       <div class="tab-panel" id="tab-search"></div>
@@ -241,7 +235,7 @@
     // waiting on its MutationObserver fallback. See src/react/main.tsx.
     try { window.__reactIslandMount && window.__reactIslandMount(); } catch (_) {}
 
-    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'workshop', 'designsystem', 'devenv'];
+    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'workshop', 'devenv'];
     let savedTab;
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) switchTab(savedTab);
