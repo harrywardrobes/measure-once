@@ -23,9 +23,10 @@ const { makeSkip } = require('../helpers/report');
 //   (G4/G5) A separate submitted card with corrected_email and corrected_mobile
 //       set: after clicking Review, both correction strings appear in the
 //       expanded body with a non-zero bounding height.
-//   (G6) A separate submitted card with room_notes set: after clicking Review,
-//       the notes string appears in the expanded body with a non-zero bounding
-//       height.
+//   (G6a/G6b) A separate submitted card with room_notes set: after clicking
+//       Review, (G6a) the "Notes" section heading is visible with a non-zero
+//       bounding height, and (G6b) the exact room_notes string appears in the
+//       expanded body with a non-zero bounding height.
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-info-rail
@@ -148,8 +149,8 @@ const ROW_SUBMITTED_WITH_CORRECTIONS = {
   form_link: null,
 };
 
-// Row 6: submitted with room_notes set — used by probe G6 to verify the Notes
-// section renders the full text in the expanded card body.
+// Row 6: submitted with room_notes set — used by probes G6a/G6b to verify the
+// Notes heading and full text render in the expanded card body.
 const ROW_SUBMITTED_WITH_NOTES = {
   id: 6,
   created_at: new Date(NOW - 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -508,9 +509,11 @@ function writeReport(runId) {
     '  "Email: corrected@example.com" is visible with a non-zero bounding height,',
     '  and **(G5)** the text "Mobile: 07700900123" is visible with a non-zero',
     '  bounding height inside the expanded Corrections section.',
-    '- **(G6) Notes section renders room_notes text**: an isolated page load with a',
-    '  submitted fixture row that has `room_notes` set to a multi-word string.',
-    '  After clicking Review on `[data-testid="submission-card-6"]`, the exact',
+    '- **(G6a/G6b) Notes section renders heading and room_notes text**: an isolated',
+    '  page load with a submitted fixture row that has `room_notes` set to a',
+    '  multi-word string. After clicking Review on',
+    '  `[data-testid="submission-card-6"]`, **(G6a)** the "Notes" section heading',
+    '  is visible with a non-zero bounding height, and **(G6b)** the exact',
     '  `room_notes` string "Master bedroom has sloped ceiling on north wall" is',
     '  visible with a non-zero bounding height inside the expanded card body.',
     '',
@@ -602,7 +605,8 @@ async function main() {
     '(G) "2 rooms" text rendered in expanded card body',
     '(G4) corrected_email "corrected@example.com" visible with non-zero height in expanded card body',
     '(G5) corrected_mobile "07700900123" visible with non-zero height in expanded card body',
-    '(G6) room_notes "Master bedroom has sloped ceiling on north wall" visible with non-zero height in expanded card body',
+    '(G6a) "Notes" section heading visible with non-zero height in expanded card body',
+    '(G6b) room_notes "Master bedroom has sloped ceiling on north wall" visible with non-zero height in expanded card body',
   ];
 
   if (!puppeteer) {
@@ -1055,8 +1059,8 @@ async function main() {
 
     await pageG45.__ctx.close().catch(() => {});
 
-    // ── Probe G6: room_notes text in card body ─────────────────────────────
-    console.log('\n  [G6] room_notes text visible in expanded card body');
+    // ── Probes G6a/G6b: "Notes" heading + room_notes text in card body ────
+    console.log('\n  [G6a/G6b] Notes heading and room_notes text visible in expanded card body');
 
     const pageG6 = await openDetailPage(
       browser, adminClient.cookie, [ROW_SUBMITTED_WITH_NOTES],
@@ -1064,45 +1068,96 @@ async function main() {
 
     const reviewBtnG6 = await pageG6.$('[data-testid="review-btn"]');
 
-    let g6BodyOpen = false;
+    // Two-phase check for [data-testid="submission-card-body"] inside
+    // submission-card-6, matching the pattern used by G4/G5:
+    //   Phase 1 — confirm the element exists in the DOM (3 s timeout).
+    //             A timeout here means the testid was removed from the
+    //             component, not a timing/animation issue.
+    //   Phase 2 — wait for the element to have height > 0 (10 s timeout).
+    //             A timeout here is the usual animation/render delay.
+    let g6BodyPresent = null;
+    let g6BodyOpen = null;
     if (reviewBtnG6) {
       await reviewBtnG6.click();
-      g6BodyOpen = await pollPage(pageG6, () => {
+      g6BodyPresent = await pollPage(pageG6, () => {
         const card = document.querySelector('[data-testid="submission-card-6"]');
         if (!card) return null;
-        return card.querySelector('[class*="MuiCollapse-entered"]') ? 'ok' : null;
-      }, 5000).then(() => true).catch(() => false);
+        return card.querySelector('[data-testid="submission-card-body"]') ? 'found' : null;
+      }, 3000).catch(() => null);
+
+      if (g6BodyPresent) {
+        g6BodyOpen = await pollPage(pageG6, () => {
+          const card = document.querySelector('[data-testid="submission-card-6"]');
+          if (!card) return null;
+          const body = card.querySelector('[data-testid="submission-card-body"]');
+          if (!body) return null;
+          return body.getBoundingClientRect().height > 0 ? 'ok' : null;
+        }, 10000).catch(() => null);
+      }
     }
 
+    let notesHeadingVisible = false;
     let roomNotesVisible = false;
     if (g6BodyOpen) {
       const g6State = await pageG6.evaluate(() => {
         const card = document.querySelector('[data-testid="submission-card-6"]');
-        if (!card) return { found: false, height: 0 };
-        const target = 'Master bedroom has sloped ceiling on north wall';
+        if (!card) return { headingFound: false, headingHeight: 0, notesFound: false, notesHeight: 0 };
+
+        const notesTarget = 'Master bedroom has sloped ceiling on north wall';
+        let headingFound = false;
+        let headingHeight = 0;
+        let notesFound = false;
+        let notesHeight = 0;
+
         const allEls = Array.from(card.querySelectorAll('*'));
         for (const el of allEls) {
-          if ((el.textContent || '').trim() === target) {
+          const text = (el.textContent || '').trim();
+          if (!headingFound && text === 'Notes') {
             const rect = el.getBoundingClientRect();
-            return { found: true, height: rect.height };
+            headingHeight = rect.height;
+            headingFound = true;
           }
+          if (!notesFound && text === notesTarget) {
+            const rect = el.getBoundingClientRect();
+            notesHeight = rect.height;
+            notesFound = true;
+          }
+          if (headingFound && notesFound) break;
         }
-        return { found: false, height: 0 };
+
+        return { headingFound, headingHeight, notesFound, notesHeight };
       });
 
-      roomNotesVisible = g6State.found && g6State.height > 0;
+      notesHeadingVisible = g6State.headingFound && g6State.headingHeight > 0;
+      roomNotesVisible    = g6State.notesFound   && g6State.notesHeight   > 0;
     }
 
     record(
       PROBE_LABELS[16],
+      '"Notes" section heading visible with non-zero height after Review',
+      notesHeadingVisible
+        ? '"Notes" heading found with non-zero height (correct)'
+        : g6BodyOpen
+          ? 'card body open but "Notes" heading not found or zero height'
+          : g6BodyPresent
+            ? '[data-testid="submission-card-body"] did not become visible within 10 s'
+            : !reviewBtnG6
+              ? 'review-btn not found'
+              : '[data-testid="submission-card-body"] not found in DOM — testid may have been removed',
+      notesHeadingVisible,
+    );
+    record(
+      PROBE_LABELS[17],
       'room_notes text visible with non-zero height after Review',
       roomNotesVisible
         ? 'room_notes text found with non-zero height (correct)'
         : g6BodyOpen
           ? 'card body open but room_notes text not found or zero height'
-          : reviewBtnG6
-            ? 'review-btn found but card body did not open'
-            : 'review-btn not found',
+          : g6BodyPresent
+            ? '[data-testid="submission-card-body"] did not become visible within 10 s'
+            : !reviewBtnG6
+              ? 'review-btn not found'
+              : '[data-testid="submission-card-body"] not found in DOM — testid may have been removed',
       roomNotesVisible,
     );
 
