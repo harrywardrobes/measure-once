@@ -37,6 +37,8 @@
 //       H1 — future expiresAt (e.g. 30 days out): body contains "expires".
 //       H2 — past expiresAt (e.g. 7 days ago): body contains "expires"
 //       (maps to the diffDays ≤ 0 branch → "expires today").
+//       H3 — invalid expiresAt string (e.g. "not-a-date"): body contains
+//       "expiry date unavailable" (isNaN branch of formatExpiry).
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-card-action-strip
@@ -434,6 +436,7 @@ async function main() {
     '(G) UploadPhotosModal confirming: confirm button reads "Generate new link"',
     '(H1) UploadPhotosModal confirming + future expiresAt: body contains expiry text',
     '(H2) UploadPhotosModal confirming + past expiresAt: body contains expiry text',
+    '(H3) UploadPhotosModal confirming + invalid expiresAt: body contains "expiry date unavailable"',
   ];
 
   if (!puppeteer) {
@@ -1111,6 +1114,18 @@ async function main() {
         ? `bodyHasExpires=${h2State.bodyHasExpires}`
         : 'cah-confirm-generate button not found (confirming phase not reached)',
       h2State.buttonFound && h2State.bodyHasExpires,
+    );
+
+    // H3 — invalid expiresAt string (isNaN branch → formatExpiry returns "expiry date unavailable")
+    console.log('  [H3] invalid expiresAt: "not-a-date"');
+    const h3State = await runExpirySubcase('H3', 'not-a-date');
+    record(
+      UI_PROBE_LABELS[12],
+      'modal body contains "expiry date unavailable"',
+      h3State.buttonFound
+        ? `bodyText="${h3State.bodyText.slice(0, 120)}"`
+        : 'cah-confirm-generate button not found (confirming phase not reached)',
+      h3State.buttonFound && h3State.bodyText.includes('expiry date unavailable'),
     );
 
   } catch (e) {
