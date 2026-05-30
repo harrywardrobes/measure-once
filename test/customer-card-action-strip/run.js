@@ -423,7 +423,12 @@ async function main() {
   const memberClient = await login(users.member.email, users.member.password);
 
   // ── Puppeteer ─────────────────────────────────────────────────────────────
-  const UI_PROBE_LABELS = [
+  // PROBE_LABELS is the source of truth for probe IDs in this suite.
+  // `npm run test:suite-probe-counts` (scripts/check-suite-probe-counts.mjs)
+  // enforces that every ID listed here is also mentioned in the
+  // docs/TEST_SUITES.md row for test:customer-card-action-strip.
+  // Keep both files in sync when adding new probes.
+  const PROBE_LABELS = [
     '(A) card with matching handler shows action strip',
     '(A) action strip contains correct label',
     '(B) card with no handler shows no action strip',
@@ -440,7 +445,7 @@ async function main() {
   ];
 
   if (!puppeteer) {
-    for (const l of UI_PROBE_LABELS) record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    for (const l of PROBE_LABELS) record(l, 'puppeteer installed', 'puppeteer not installed', false);
     await cleanupAndExit(1);
     return;
   }
@@ -462,7 +467,7 @@ async function main() {
 
   if (!browser) {
     const msg = (browserLaunchErr?.message || String(browserLaunchErr)).slice(0, 200);
-    for (const l of UI_PROBE_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
+    for (const l of PROBE_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
     await cleanupAndExit(1);
     return;
   }
@@ -554,7 +559,7 @@ async function main() {
 
     // (A) strip present
     record(
-      UI_PROBE_LABELS[0],
+      PROBE_LABELS[0],
       'action strip (role=button) present inside Alpha card',
       abState.alphaStripText !== null
         ? `strip found, text="${abState.alphaStripText}"`
@@ -565,7 +570,7 @@ async function main() {
     // (A) strip label
     const alphaLabel = abState.alphaStripText || '';
     record(
-      UI_PROBE_LABELS[1],
+      PROBE_LABELS[1],
       `strip text contains "${EXPECTED_STRIP_LABEL}"`,
       `strip text="${alphaLabel}"`,
       alphaLabel.includes(EXPECTED_STRIP_LABEL),
@@ -573,7 +578,7 @@ async function main() {
 
     // (B) no strip for unbound card
     record(
-      UI_PROBE_LABELS[2],
+      PROBE_LABELS[2],
       'no action strip inside Bravo card',
       abState.bravoStripText !== null
         ? `strip found unexpectedly, text="${abState.bravoStripText}"`
@@ -664,7 +669,7 @@ async function main() {
     const cStripText = cDebug.stripText;
 
     record(
-      UI_PROBE_LABELS[3],
+      PROBE_LABELS[3],
       'action strip contains "Continue designing"',
       cStripText !== null ? `strip text="${cStripText}"` : 'no strip found',
       typeof cStripText === 'string' && cStripText.includes('Continue designing'),
@@ -709,7 +714,7 @@ async function main() {
     const urlUnchanged = urlAfter === urlBefore || urlAfter.endsWith('/customers');
 
     record(
-      UI_PROBE_LABELS[4],
+      PROBE_LABELS[4],
       'URL remains /customers after strip click (CardActionArea NOT triggered)',
       navigated
         ? `navigation fired → url=${urlAfter}`
@@ -818,7 +823,7 @@ async function main() {
     }
 
     record(
-      UI_PROBE_LABELS[5],
+      PROBE_LABELS[5],
       'InvoiceDetailDrawer present and open after badge click',
       eState.drawerFound
         ? `drawer found, open=${eState.drawerOpen}`
@@ -902,7 +907,7 @@ async function main() {
     }
 
     record(
-      UI_PROBE_LABELS[6],
+      PROBE_LABELS[6],
       'button text is "Generate anyway"',
       fState.buttonFound
         ? `button text="${fState.buttonText}"`
@@ -911,7 +916,7 @@ async function main() {
     );
 
     record(
-      UI_PROBE_LABELS[7],
+      PROBE_LABELS[7],
       'button text does NOT contain "Send anyway"',
       fState.buttonFound
         ? `button text="${fState.buttonText}"`
@@ -995,7 +1000,7 @@ async function main() {
     }
 
     record(
-      UI_PROBE_LABELS[8],
+      PROBE_LABELS[8],
       'warning body contains "already has an active link"',
       gState.buttonFound
         ? `warningHasActiveLink=${gState.warningHasActiveLink}`
@@ -1004,7 +1009,7 @@ async function main() {
     );
 
     record(
-      UI_PROBE_LABELS[9],
+      PROBE_LABELS[9],
       'button text is "Generate new link"',
       gState.buttonFound
         ? `button text="${gState.buttonText}"`
@@ -1096,7 +1101,7 @@ async function main() {
     console.log('  [H1] future expiresAt:', futureExpiresAt);
     const h1State = await runExpirySubcase('H1', futureExpiresAt);
     record(
-      UI_PROBE_LABELS[10],
+      PROBE_LABELS[10],
       'modal body contains "expires"',
       h1State.buttonFound
         ? `bodyHasExpires=${h1State.bodyHasExpires}`
@@ -1108,7 +1113,7 @@ async function main() {
     console.log('  [H2] past expiresAt:', pastExpiresAt);
     const h2State = await runExpirySubcase('H2', pastExpiresAt);
     record(
-      UI_PROBE_LABELS[11],
+      PROBE_LABELS[11],
       'modal body contains "expires"',
       h2State.buttonFound
         ? `bodyHasExpires=${h2State.bodyHasExpires}`
@@ -1120,7 +1125,7 @@ async function main() {
     console.log('  [H3] invalid expiresAt: "not-a-date"');
     const h3State = await runExpirySubcase('H3', 'not-a-date');
     record(
-      UI_PROBE_LABELS[12],
+      PROBE_LABELS[12],
       'modal body contains "expiry date unavailable"',
       h3State.buttonFound
         ? `bodyText="${h3State.bodyText.slice(0, 120)}"`
