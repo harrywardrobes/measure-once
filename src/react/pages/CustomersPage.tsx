@@ -1317,6 +1317,7 @@ export function CustomersPage(): React.ReactElement {
           )}
           <FormControl
             size="small"
+            data-testid="lead-status-form-control"
             sx={{ width: '100%', visibility: store.loaded ? 'visible' : 'hidden' }}
           >
             <Select

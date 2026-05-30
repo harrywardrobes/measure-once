@@ -140,7 +140,7 @@ function readBarState(page) {
  */
 function readDrawerOpen(page) {
   return page.evaluate(() => {
-    const paper = document.querySelector('.MuiDrawer-paper');
+    const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
     if (!paper) return false;
     const rect = paper.getBoundingClientRect();
     return rect.top < window.innerHeight && rect.height > 0;
@@ -153,7 +153,7 @@ function readDrawerOpen(page) {
  */
 function readDrawerItemIds(page) {
   return page.evaluate(() => {
-    const paper = document.querySelector('.MuiDrawer-paper');
+    const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
     if (!paper) return [];
     return Array.from(paper.querySelectorAll('[id^="bnav-"]'))
       .map(el => el.id.replace('bnav-', ''));
@@ -170,7 +170,7 @@ async function clickMoreAndWaitForDrawer(page, timeoutMs = 6000) {
     if (btn) btn.click();
   });
   const ok = await poll(page, () => {
-    const paper = document.querySelector('.MuiDrawer-paper');
+    const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
     if (!paper) return null;
     const rect = paper.getBoundingClientRect();
     return rect.top < window.innerHeight && rect.height > 0 ? 'ok' : null;
@@ -188,7 +188,7 @@ async function closeDrawerViaBackdrop(page) {
   });
   // Wait for drawer to slide away
   await poll(page, () => {
-    const paper = document.querySelector('.MuiDrawer-paper');
+    const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
     if (!paper) return 'ok';
     const rect = paper.getBoundingClientRect();
     return rect.top >= window.innerHeight ? 'ok' : null;
@@ -600,7 +600,7 @@ async function main() {
       const [navResponse] = await Promise.all([
         page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }),
         page.evaluate(() => {
-          const btn = document.querySelector('.MuiDrawer-paper #bnav-ideas');
+          const btn = document.querySelector('[data-testid="bottom-nav-drawer-paper"] #bnav-ideas');
           if (btn) btn.click();
         }),
       ]);
@@ -665,7 +665,7 @@ async function main() {
       // Read the first overflow item from the drawer so the probe is resilient
       // to nav-customisation preferences changing which tabs are in overflow.
       const firstDrawerItem = await page.evaluate(() => {
-        const paper = document.querySelector('.MuiDrawer-paper');
+        const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
         if (!paper) return null;
         const anchor = paper.querySelector('[id^="bnav-"]');
         if (!anchor) return null;
@@ -685,7 +685,7 @@ async function main() {
         const [/* navResponse */] = await Promise.all([
           page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }),
           page.evaluate((itemId) => {
-            const btn = document.querySelector(`.MuiDrawer-paper #${itemId}`);
+            const btn = document.querySelector(`[data-testid="bottom-nav-drawer-paper"] #${itemId}`);
             if (btn) btn.click();
           }, firstDrawerItem.id),
         ]);

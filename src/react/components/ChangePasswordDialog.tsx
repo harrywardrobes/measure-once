@@ -115,7 +115,7 @@ export function ChangePasswordCard({ profile }: { profile: Profile }) {
         </CardContent>
       </Card>
 
-      <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+      <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth data-testid="change-password-dialog">
         <DialogTitle>Change password</DialogTitle>
         <Box component="form" onSubmit={onSubmit} autoComplete="off">
           <DialogContent sx={{ pt: 1 }}>

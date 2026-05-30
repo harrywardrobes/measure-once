@@ -3458,10 +3458,9 @@ async function main() {
         const dialogShown = await pollPage(
           delWarnTab,
           () => {
-            const dlg = document.querySelector('.MuiDialog-root');
+            const dlg = document.querySelector('[data-testid="substatus-delete-dialog"]');
             if (!dlg) return null;
-            const title = dlg.querySelector('.MuiDialogTitle-root');
-            return title && title.textContent.includes('Handler still bound to this sub-status')
+            return dlg.textContent.includes('Handler still bound to this sub-status')
               ? 'shown' : null;
           },
           null,
@@ -3469,22 +3468,22 @@ async function main() {
         );
         record(
           '(O.1) "Handler still bound to this sub-status" dialog appears on delete click',
-          '"shown" — MuiDialog-root visible with correct title',
+          '"shown" — substatus-delete-dialog visible with correct title',
           `result=${dialogShown}`,
           dialogShown === 'shown',
         );
 
         // ── O.2 — Cancel: dialog closes, row still in DOM ────────────────────
         await delWarnTab.evaluate(() => {
-          const btns = Array.from(document.querySelectorAll('.MuiDialogActions-root button'));
-          const cancel = btns.find(b => b.textContent.trim() === 'Cancel');
+          const dlg = document.querySelector('[data-testid="substatus-delete-dialog"]');
+          const cancel = dlg && Array.from(dlg.querySelectorAll('button')).find(b => b.textContent.trim() === 'Cancel');
           if (cancel) cancel.click();
         });
 
         // Wait for the dialog to close.
         await pollPage(
           delWarnTab,
-          () => !document.querySelector('.MuiDialog-root') ? 'closed' : null,
+          () => !document.querySelector('[data-testid="substatus-delete-dialog"]') ? 'closed' : null,
           null,
           6000,
         );
@@ -3510,15 +3509,15 @@ async function main() {
         // Wait for the dialog to reappear.
         await pollPage(
           delWarnTab,
-          () => !!document.querySelector('.MuiDialog-root') ? 'open' : null,
+          () => !!document.querySelector('[data-testid="substatus-delete-dialog"]') ? 'open' : null,
           null,
           6000,
         );
 
         // Click "Delete anyway".
         await delWarnTab.evaluate(() => {
-          const btns = Array.from(document.querySelectorAll('.MuiDialogActions-root button'));
-          const del = btns.find(b => b.textContent.trim() === 'Delete anyway');
+          const dlg = document.querySelector('[data-testid="substatus-delete-dialog"]');
+          const del = dlg && Array.from(dlg.querySelectorAll('button')).find(b => b.textContent.trim() === 'Delete anyway');
           if (del) del.click();
         });
 
@@ -3566,11 +3565,11 @@ async function main() {
         await new Promise(r => setTimeout(r, 600));
 
         const noDialogForFree = await delWarnTab.evaluate(
-          () => !document.querySelector('.MuiDialog-root'),
+          () => !document.querySelector('[data-testid="substatus-delete-dialog"]'),
         );
         record(
           '(O.5) Deleting unbound sub-status shows no confirmation dialog',
-          'true — no MuiDialog-root visible after click',
+          'true — no substatus-delete-dialog visible after click',
           `noDialog=${noDialogForFree}`,
           noDialogForFree === true,
         );
@@ -3719,16 +3718,16 @@ async function main() {
         changeClicked === 'clicked',
       );
 
-      // Wait for the MUI dialog to appear.
+      // Wait for the HandlerEditorModal dialog to appear.
       const dialogOpened = await pollPage(
         staleTab,
-        () => document.querySelector('.MuiDialog-root') ? 'open' : null,
+        () => document.querySelector('[data-testid="handler-editor-modal"]') ? 'open' : null,
         null,
         6000,
       );
       record(
         '(P.2) HandlerEditorModal dialog opens after clicking Change',
-        '"open" — .MuiDialog-root present in DOM',
+        '"open" — handler-editor-modal testid present in DOM',
         `result=${dialogOpened}`,
         dialogOpened === 'open',
       );
@@ -3736,7 +3735,7 @@ async function main() {
       if (dialogOpened === 'open') {
         // P.2 — warning Alert visible inside the dialog.
         const alertVisible = await staleTab.evaluate(() => {
-          const dialog = document.querySelector('.MuiDialog-root');
+          const dialog = document.querySelector('[data-testid="handler-editor-modal"]');
           if (!dialog) return 'no-dialog';
           const alerts = dialog.querySelectorAll('.MuiAlert-root');
           for (const a of alerts) {
@@ -3746,14 +3745,14 @@ async function main() {
         });
         record(
           '(P.2) warning Alert "…no longer exists…" visible inside HandlerEditorModal',
-          '"visible" — .MuiAlert-root with text containing "no longer exists" found in dialog',
+          '"visible" — Alert with text containing "no longer exists" found in dialog',
           `result=${alertVisible}`,
           alertVisible === 'visible',
         );
 
         // P.3 — Save/Add button is disabled while stale reference is unresolved.
         const saveDisabled = await staleTab.evaluate(() => {
-          const dialog = document.querySelector('.MuiDialog-root');
+          const dialog = document.querySelector('[data-testid="handler-editor-modal"]');
           if (!dialog) return 'no-dialog';
           const btns = dialog.querySelectorAll('button');
           for (const btn of btns) {
@@ -3775,14 +3774,14 @@ async function main() {
         // The stale Select is the only FormControl in Mui-error state.
         const interErrSelHandle = await clickMuiSelect(
           staleTab,
-          '.MuiDialog-root .MuiInputBase-root.Mui-error .MuiSelect-select',
+          '[data-testid="handler-editor-modal"] .MuiInputBase-root.Mui-error .MuiSelect-select',
         );
         let interSelectClicked;
         if (interErrSelHandle) {
           interSelectClicked = 'clicked';
         } else {
           interSelectClicked = await staleTab.evaluate(() => {
-            return document.querySelector('.MuiDialog-root') ? 'no-error-select' : 'no-dialog';
+            return document.querySelector('[data-testid="handler-editor-modal"]') ? 'no-error-select' : 'no-dialog';
           });
         }
         await new Promise(r => setTimeout(r, 500));
@@ -3805,7 +3804,7 @@ async function main() {
         });
         await new Promise(r => setTimeout(r, 400));
         const saveEnabled = await staleTab.evaluate(() => {
-          const dialog = document.querySelector('.MuiDialog-root');
+          const dialog = document.querySelector('[data-testid="handler-editor-modal"]');
           if (!dialog) return 'no-dialog';
           const btns = dialog.querySelectorAll('button');
           for (const btn of btns) {
@@ -3909,18 +3908,18 @@ async function main() {
         await new Promise(r => setTimeout(r, 800));
 
         const subDialogOpen = await subTab.evaluate(
-          () => !!document.querySelector('.MuiDialog-root'),
+          () => !!document.querySelector('[data-testid="handler-editor-modal"]'),
         );
         record(
           '(P.sub.2 (dialog)) HandlerEditorModal opens for stale submittedLeadStatus handler',
-          'true — .MuiDialog-root present after clicking Change',
+          'true — handler-editor-modal testid present after clicking Change',
           `clicked=${subChangeClicked} dialog=${subDialogOpen}`,
           subDialogOpen,
         );
 
         if (subDialogOpen) {
           const subAlertText = await subTab.evaluate(() => {
-            const dialog = document.querySelector('.MuiDialog-root');
+            const dialog = document.querySelector('[data-testid="handler-editor-modal"]');
             if (!dialog) return null;
             const alert = dialog.querySelector('.MuiAlert-root');
             return alert ? alert.textContent : null;
@@ -3933,7 +3932,7 @@ async function main() {
           );
 
           const subSaveDisabled = await subTab.evaluate(() => {
-            const dialog = document.querySelector('.MuiDialog-root');
+            const dialog = document.querySelector('[data-testid="handler-editor-modal"]');
             if (!dialog) return 'no-dialog';
             const btns = dialog.querySelectorAll('button');
             for (const btn of btns) {
@@ -3954,14 +3953,14 @@ async function main() {
           // P.sub.4 — Select a valid submittedLeadStatus; Save/Add must enable.
           const subErrSelHandle = await clickMuiSelect(
             subTab,
-            '.MuiDialog-root .MuiInputBase-root.Mui-error .MuiSelect-select',
+            '[data-testid="handler-editor-modal"] .MuiInputBase-root.Mui-error .MuiSelect-select',
           );
           let subSelectClicked;
           if (subErrSelHandle) {
             subSelectClicked = 'clicked';
           } else {
             subSelectClicked = await subTab.evaluate(() => {
-              return document.querySelector('.MuiDialog-root') ? 'no-error-select' : 'no-dialog';
+              return document.querySelector('[data-testid="handler-editor-modal"]') ? 'no-error-select' : 'no-dialog';
             });
           }
           await new Promise(r => setTimeout(r, 500));
@@ -3981,7 +3980,7 @@ async function main() {
           });
           await new Promise(r => setTimeout(r, 400));
           const subSaveEnabled = await subTab.evaluate(() => {
-            const dialog = document.querySelector('.MuiDialog-root');
+            const dialog = document.querySelector('[data-testid="handler-editor-modal"]');
             if (!dialog) return 'no-dialog';
             const btns = dialog.querySelectorAll('button');
             for (const btn of btns) {
@@ -4875,7 +4874,7 @@ async function writeReport(runId, findings) {
     '  A fresh admin tab switches to the Card Actions panel.  Six assertions run:',
     '  - **O.setup** POST creates the handler with a substatus_id binding (201).',
     '  - **O.1** Clicking `.adm-ca-sub-delete` on the bound row opens a',
-    '    `MuiDialog-root` whose `DialogTitle` reads "Handler still bound to this',
+    '    `[data-testid="substatus-delete-dialog"]` whose text includes "Handler still bound to this',
     '    sub-status" — the confirmation dialog from `deleteCardActionSubstatus`.',
     '  - **O.2** Clicking "Cancel" closes the dialog; the',
     '    `[data-sub-id]` row is still present in the DOM (delete was aborted).',
@@ -4883,7 +4882,7 @@ async function writeReport(runId, findings) {
     '    from the DOM.',
     '  - **O.4** The `lead_substatuses` DB row count for the deleted id is 0.',
     '  - **O.5** Clicking `.adm-ca-sub-delete` on the unbound sub-status opens',
-    '    no `MuiDialog-root` — the row is deleted silently.',
+    '    no `[data-testid="substatus-delete-dialog"]` — the row is deleted silently.',
     '  - **O.6** The unbound `[data-sub-id]` row is gone from the DOM.',
     '  Guards the `deleteCardActionSubstatus` callback in `CardActionsPage.tsx`',
     '  against regressions that skip the `confirmDeleteSub` dialog or fail to',

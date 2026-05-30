@@ -526,7 +526,7 @@ function HandlerEditorModal({
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth sx={{ '& .MuiDialog-paper': { maxHeight: '90vh' } }}>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth sx={{ '& .MuiDialog-paper': { maxHeight: '90vh' } }} data-testid="handler-editor-modal">
         <DialogTitle sx={{ pb: 0.5 }}>
           {existing ? 'Change action' : 'Add action'}
           <Typography
@@ -803,7 +803,7 @@ export function ConflictResolverModal({
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth data-testid="conflict-resolver-dialog">
       <DialogTitle>Fix conflicting handlers</DialogTitle>
       <DialogContent dividers>
         <Typography variant="body2" sx={{ mb: 2 }}>

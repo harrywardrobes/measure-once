@@ -668,7 +668,7 @@ async function main() {
     const selectHidden = await skelTab.evaluate(() => {
       const sel = document.getElementById('lead-status-filter');
       if (!sel) return false;
-      const fc = sel.closest('.MuiFormControl-root');
+      const fc = sel.closest('[data-testid="lead-status-form-control"]');
       if (!fc) return false;
       return window.getComputedStyle(fc).visibility === 'hidden';
     });
@@ -703,7 +703,7 @@ async function main() {
     const selectVisible = await skelTab.evaluate(() => {
       const sel = document.getElementById('lead-status-filter');
       if (!sel) return false;
-      const fc = sel.closest('.MuiFormControl-root');
+      const fc = sel.closest('[data-testid="lead-status-form-control"]');
       if (!fc) return false;
       return window.getComputedStyle(fc).visibility === 'visible';
     });
@@ -784,7 +784,7 @@ async function main() {
       () => {
         const sel = document.getElementById('lead-status-filter');
         if (!sel) return false;
-        const fc = sel.closest('.MuiFormControl-root');
+        const fc = sel.closest('[data-testid="lead-status-form-control"]');
         if (!fc) return false;
         return window.getComputedStyle(fc).visibility === 'visible';
       },
@@ -1934,7 +1934,7 @@ async function main() {
       () => {
         const sel = document.getElementById('lead-status-filter');
         if (!sel) return false;
-        const fc = sel.closest('.MuiFormControl-root');
+        const fc = sel.closest('[data-testid="lead-status-form-control"]');
         if (!fc) return false;
         return window.getComputedStyle(fc).visibility === 'visible';
       },
@@ -2078,7 +2078,7 @@ async function main() {
       () => {
         const sel = document.getElementById('lead-status-filter');
         if (!sel) return false;
-        const fc = sel.closest('.MuiFormControl-root');
+        const fc = sel.closest('[data-testid="lead-status-form-control"]');
         if (!fc) return false;
         return window.getComputedStyle(fc).visibility === 'visible';
       },

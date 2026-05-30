@@ -163,18 +163,14 @@ async function clickChangePasswordBtn(page) {
 }
 
 // Returns a snapshot of the dialog state for open/content checks.
-// MUI v9: the Modal-root/Dialog-container controls visibility, not role="dialog".
+// Uses data-testid="change-password-dialog" (on the Dialog root) to detect
+// visibility, avoiding brittle MUI internal class selectors.
 async function getDialogState(page) {
   return page.evaluate(() => {
-    const backdrop  = document.querySelector('.MuiBackdrop-root');
-    const modalRoot = document.querySelector('.MuiModal-root');
-    const container = document.querySelector('.MuiDialog-container');
+    const dialogEl  = document.querySelector('[data-testid="change-password-dialog"]');
     const allBtns   = Array.from(document.querySelectorAll('button'));
     const cancelBtn = allBtns.find(b => /^cancel$/i.test((b.textContent || '').trim()));
-    const isModalVisible =
-      (backdrop  && window.getComputedStyle(backdrop).display  !== 'none') ||
-      (modalRoot && window.getComputedStyle(modalRoot).display !== 'none') ||
-      (container && window.getComputedStyle(container).display !== 'none');
+    const isModalVisible = dialogEl && window.getComputedStyle(dialogEl).display !== 'none';
     const cancelVisible = cancelBtn && window.getComputedStyle(cancelBtn).display !== 'none';
     const visible = isModalVisible || !!cancelVisible;
     if (!visible) return { visible: false };
@@ -188,15 +184,11 @@ async function getDialogState(page) {
 
 // isDialogOpen helper used in pollPage callbacks.
 function isDialogOpenJS() {
-  const backdrop  = document.querySelector('.MuiBackdrop-root');
-  const modalRoot = document.querySelector('.MuiModal-root');
-  const container = document.querySelector('.MuiDialog-container');
+  const dialogEl  = document.querySelector('[data-testid="change-password-dialog"]');
   const allBtns   = Array.from(document.querySelectorAll('button'));
   const cancelBtn = allBtns.find(b => /^cancel$/i.test((b.textContent || '').trim()));
   const open = (
-    (backdrop  && window.getComputedStyle(backdrop).display  !== 'none') ||
-    (modalRoot && window.getComputedStyle(modalRoot).display !== 'none') ||
-    (container && window.getComputedStyle(container).display !== 'none') ||
+    (dialogEl  && window.getComputedStyle(dialogEl).display  !== 'none') ||
     (cancelBtn && window.getComputedStyle(cancelBtn).display !== 'none')
   );
   return open;
@@ -529,15 +521,11 @@ async function main() {
             record(UI_LABELS[6], 'button clicked first', 'button not found', false);
           } else {
             const dialogVisible = await pollPage(profilePage, () => {
-              const backdrop  = document.querySelector('.MuiBackdrop-root');
-              const modalRoot = document.querySelector('.MuiModal-root');
-              const container = document.querySelector('.MuiDialog-container');
+              const dialogEl  = document.querySelector('[data-testid="change-password-dialog"]');
               const cancelBtn = Array.from(document.querySelectorAll('button'))
                 .find(b => /^cancel$/i.test((b.textContent || '').trim()));
               const open = (
-                (backdrop  && window.getComputedStyle(backdrop).display  !== 'none') ||
-                (modalRoot && window.getComputedStyle(modalRoot).display !== 'none') ||
-                (container && window.getComputedStyle(container).display !== 'none') ||
+                (dialogEl  && window.getComputedStyle(dialogEl).display  !== 'none') ||
                 (cancelBtn && window.getComputedStyle(cancelBtn).display !== 'none')
               );
               return open ? 'visible' : null;
@@ -719,15 +707,11 @@ async function main() {
               await profilePage.keyboard.press('Escape');
               await waitUntil(async () => {
                 return profilePage.evaluate(() => {
-                  const backdrop  = document.querySelector('.MuiBackdrop-root');
-                  const modalRoot = document.querySelector('.MuiModal-root');
-                  const container = document.querySelector('.MuiDialog-container');
+                  const dialogEl  = document.querySelector('[data-testid="change-password-dialog"]');
                   const cancelBtn = Array.from(document.querySelectorAll('button'))
                     .find(b => /^cancel$/i.test((b.textContent || '').trim()));
                   const open = (
-                    (backdrop  && window.getComputedStyle(backdrop).display  !== 'none') ||
-                    (modalRoot && window.getComputedStyle(modalRoot).display !== 'none') ||
-                    (container && window.getComputedStyle(container).display !== 'none') ||
+                    (dialogEl  && window.getComputedStyle(dialogEl).display  !== 'none') ||
                     (cancelBtn && window.getComputedStyle(cancelBtn).display !== 'none')
                   );
                   return !open;
@@ -737,15 +721,11 @@ async function main() {
               await clickChangePasswordBtn(profilePage);
               // Wait for re-open.
               await pollPage(profilePage, () => {
-                const backdrop  = document.querySelector('.MuiBackdrop-root');
-                const modalRoot = document.querySelector('.MuiModal-root');
-                const container = document.querySelector('.MuiDialog-container');
+                const dialogEl  = document.querySelector('[data-testid="change-password-dialog"]');
                 const cancelBtn = Array.from(document.querySelectorAll('button'))
                   .find(b => /^cancel$/i.test((b.textContent || '').trim()));
                 const open = (
-                  (backdrop  && window.getComputedStyle(backdrop).display  !== 'none') ||
-                  (modalRoot && window.getComputedStyle(modalRoot).display !== 'none') ||
-                  (container && window.getComputedStyle(container).display !== 'none') ||
+                  (dialogEl  && window.getComputedStyle(dialogEl).display  !== 'none') ||
                   (cancelBtn && window.getComputedStyle(cancelBtn).display !== 'none')
                 );
                 return open ? 'visible' : null;
@@ -754,7 +734,7 @@ async function main() {
             }
 
             await profilePage.evaluate(() => {
-              const form = document.querySelector('.MuiDialog-paper form')
+              const form = document.querySelector('[data-testid="change-password-dialog"] form')
                 || document.querySelector('[role="dialog"] form')
                 || Array.from(document.querySelectorAll('form')).find(
                   f => f.querySelector('input[type="password"]'),
@@ -787,15 +767,11 @@ async function main() {
             });
 
             const dialogHiddenAfterCancel = await pollPage(profilePage, () => {
-              const backdrop  = document.querySelector('.MuiBackdrop-root');
-              const modalRoot = document.querySelector('.MuiModal-root');
-              const container = document.querySelector('.MuiDialog-container');
+              const dialogEl  = document.querySelector('[data-testid="change-password-dialog"]');
               const cancelBtn = Array.from(document.querySelectorAll('button'))
                 .find(b => /^cancel$/i.test((b.textContent || '').trim()));
               const open = (
-                (backdrop  && window.getComputedStyle(backdrop).display  !== 'none') ||
-                (modalRoot && window.getComputedStyle(modalRoot).display !== 'none') ||
-                (container && window.getComputedStyle(container).display !== 'none') ||
+                (dialogEl  && window.getComputedStyle(dialogEl).display  !== 'none') ||
                 (cancelBtn && window.getComputedStyle(cancelBtn).display !== 'none')
               );
               return open ? null : 'hidden';
@@ -831,15 +807,11 @@ async function main() {
             // Open dialog
             await clickChangePasswordBtn(successPage);
             await pollPage(successPage, () => {
-              const backdrop  = document.querySelector('.MuiBackdrop-root');
-              const modalRoot = document.querySelector('.MuiModal-root');
-              const container = document.querySelector('.MuiDialog-container');
+              const dialogEl  = document.querySelector('[data-testid="change-password-dialog"]');
               const cancelBtn = Array.from(document.querySelectorAll('button'))
                 .find(b => /^cancel$/i.test((b.textContent || '').trim()));
               const open = (
-                (backdrop  && window.getComputedStyle(backdrop).display  !== 'none') ||
-                (modalRoot && window.getComputedStyle(modalRoot).display !== 'none') ||
-                (container && window.getComputedStyle(container).display !== 'none') ||
+                (dialogEl  && window.getComputedStyle(dialogEl).display  !== 'none') ||
                 (cancelBtn && window.getComputedStyle(cancelBtn).display !== 'none')
               );
               return open ? 'visible' : null;
@@ -870,15 +842,11 @@ async function main() {
 
             // Success: dialog closes AND a success Alert with "Password updated" appears.
             const successSnap = await pollPage(successPage, () => {
-              const backdrop  = document.querySelector('.MuiBackdrop-root');
-              const modalRoot = document.querySelector('.MuiModal-root');
-              const container = document.querySelector('.MuiDialog-container');
+              const dialogEl  = document.querySelector('[data-testid="change-password-dialog"]');
               const cancelBtn = Array.from(document.querySelectorAll('button'))
                 .find(b => /^cancel$/i.test((b.textContent || '').trim()));
               const dialogOpen = (
-                (backdrop  && window.getComputedStyle(backdrop).display  !== 'none') ||
-                (modalRoot && window.getComputedStyle(modalRoot).display !== 'none') ||
-                (container && window.getComputedStyle(container).display !== 'none') ||
+                (dialogEl  && window.getComputedStyle(dialogEl).display  !== 'none') ||
                 (cancelBtn && window.getComputedStyle(cancelBtn).display !== 'none')
               );
               const alerts = Array.from(document.querySelectorAll('[role="alert"]'));

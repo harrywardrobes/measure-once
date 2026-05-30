@@ -350,6 +350,7 @@ export function BottomNav() {
             pb: 'env(safe-area-inset-bottom)',
           },
         }}
+        slotProps={{ paper: { 'data-testid': 'bottom-nav-drawer-paper' } }}
       >
         <Box
           sx={{

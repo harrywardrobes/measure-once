@@ -899,6 +899,7 @@ export function CardActionsPage() {
           onClose={() => { deleteSubConfirm.resolve(false); setDeleteSubConfirm(null); }}
           maxWidth="sm"
           fullWidth
+          data-testid="substatus-delete-dialog"
         >
           <DialogTitle>Handler still bound to this sub-status</DialogTitle>
           <DialogContent>

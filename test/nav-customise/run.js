@@ -343,7 +343,7 @@ async function clickMoreAndWaitForDrawer(page, timeoutMs = 6000) {
     if (btn) btn.click();
   });
   const ok = await poll(page, () => {
-    const paper = document.querySelector('.MuiDrawer-paper');
+    const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
     if (!paper) return null;
     const rect = paper.getBoundingClientRect();
     return rect.top < window.innerHeight && rect.height > 0 ? 'ok' : null;
@@ -357,12 +357,12 @@ async function clickMoreAndWaitForDrawer(page, timeoutMs = 6000) {
  */
 async function clickCustomiseButton(page) {
   await page.evaluate(() => {
-    const items = Array.from(document.querySelectorAll('.MuiDrawer-paper .MuiListItemButton-root'));
+    const items = Array.from(document.querySelectorAll('[data-testid="bottom-nav-drawer-paper"] .MuiListItemButton-root'));
     const btn = items.find(el => el.textContent.includes('Customise navigation'));
     if (btn) btn.click();
   });
   const ok = await poll(page, () => {
-    const dialog = document.querySelector('.MuiDialog-paper');
+    const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
     return dialog ? 'ok' : null;
   }, null, 5000);
   return ok === 'ok';
@@ -374,7 +374,7 @@ async function clickCustomiseButton(page) {
  */
 function getDialogCheckboxState(page) {
   return page.evaluate(() => {
-    const dialog = document.querySelector('.MuiDialog-paper');
+    const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
     if (!dialog) return null;
     return Array.from(dialog.querySelectorAll('.MuiFormControlLabel-root')).map(lbl => {
       const cb   = lbl.querySelector('input[type="checkbox"]');
@@ -407,7 +407,7 @@ async function selectNavItems(page, desiredLabels) {
     if (toUncheck.length === 0 && toCheck.length === 0) break;
     for (const item of toUncheck) {
       await page.evaluate((label) => {
-        const dialog = document.querySelector('.MuiDialog-paper');
+        const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
         const lblEl = Array.from(dialog.querySelectorAll('.MuiFormControlLabel-root'))
           .find(l => l.querySelector('.MuiFormControlLabel-label')?.textContent.trim() === label);
         if (lblEl) lblEl.querySelector('input[type="checkbox"]')?.click();
@@ -416,7 +416,7 @@ async function selectNavItems(page, desiredLabels) {
     }
     for (const item of toCheck) {
       await page.evaluate((label) => {
-        const dialog = document.querySelector('.MuiDialog-paper');
+        const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
         const lblEl = Array.from(dialog.querySelectorAll('.MuiFormControlLabel-root'))
           .find(l => l.querySelector('.MuiFormControlLabel-label')?.textContent.trim() === label);
         const cb = lblEl?.querySelector('input[type="checkbox"]');
@@ -432,14 +432,14 @@ async function selectNavItems(page, desiredLabels) {
  */
 async function clickSaveButton(page) {
   await page.evaluate(() => {
-    const dialog = document.querySelector('.MuiDialog-paper');
+    const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
     if (!dialog) return;
     const save = Array.from(dialog.querySelectorAll('.MuiDialogActions-root button'))
       .find(b => b.textContent.trim() === 'Save');
     if (save) save.click();
   });
   await poll(page, () => {
-    return document.querySelector('.MuiDialog-paper') ? null : 'closed';
+    return document.querySelector('[data-testid="nav-customise-dialog"]') ? null : 'closed';
   }, null, 5000);
 }
 
@@ -448,14 +448,14 @@ async function clickSaveButton(page) {
  */
 async function clickCancelButton(page) {
   await page.evaluate(() => {
-    const dialog = document.querySelector('.MuiDialog-paper');
+    const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
     if (!dialog) return;
     const cancel = Array.from(dialog.querySelectorAll('.MuiDialogActions-root button'))
       .find(b => b.textContent.trim() === 'Cancel');
     if (cancel) cancel.click();
   });
   await poll(page, () => {
-    return document.querySelector('.MuiDialog-paper') ? null : 'closed';
+    return document.querySelector('[data-testid="nav-customise-dialog"]') ? null : 'closed';
   }, null, 5000);
 }
 
@@ -729,7 +729,7 @@ async function main() {
       await clickMoreAndWaitForDrawer(page);
 
       const hasCustomise = await page.evaluate(() => {
-        const items = Array.from(document.querySelectorAll('.MuiDrawer-paper .MuiListItemButton-root'));
+        const items = Array.from(document.querySelectorAll('[data-testid="bottom-nav-drawer-paper"] .MuiListItemButton-root'));
         return items.some(el => el.textContent.includes('Customise navigation'));
       });
       record(
@@ -749,7 +749,7 @@ async function main() {
       await clickMoreAndWaitForDrawer(page);
 
       const hasCustomise = await page.evaluate(() => {
-        const items = Array.from(document.querySelectorAll('.MuiDrawer-paper .MuiListItemButton-root'));
+        const items = Array.from(document.querySelectorAll('[data-testid="bottom-nav-drawer-paper"] .MuiListItemButton-root'));
         return items.some(el => el.textContent.includes('Customise navigation'));
       });
       record(
@@ -821,7 +821,7 @@ async function main() {
 
         // Save button should be enabled when exactly 3 are checked
         const saveEnabled = await page.evaluate(() => {
-          const dialog = document.querySelector('.MuiDialog-paper');
+          const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
           if (!dialog) return null;
           const save = Array.from(dialog.querySelectorAll('.MuiDialogActions-root button'))
             .find(b => b.textContent.trim() === 'Save');
@@ -909,7 +909,7 @@ async function main() {
       // Previously-primary tabs should appear in the More drawer
       await clickMoreAndWaitForDrawer(page);
       const drawerIds = await page.evaluate(() => {
-        const paper = document.querySelector('.MuiDrawer-paper');
+        const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
         if (!paper) return [];
         return Array.from(paper.querySelectorAll('[id^="bnav-"]')).map(el => el.id.replace('bnav-', ''));
       });
