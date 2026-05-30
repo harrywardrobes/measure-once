@@ -311,7 +311,7 @@ async function runPool(suites, label) {
 }
 
 /**
- * Phase 3: build Storybook sequentially, then run the two Storybook test
+ * Phase 3: build Storybook sequentially, then run the three Storybook test
  * suites in parallel, passing STORYBOOK_OUT_DIR so they reuse the artifact
  * produced by the build step rather than triggering a second build.
  * Returns all results (build failure included as a synthetic failed result
@@ -327,7 +327,7 @@ async function runStorybookPhase() {
   log(`Phase 3: build:storybook passed  (${fmtMs(buildResult.durationMs)})`);
 
   const sbEnv = { STORYBOOK_OUT_DIR: 'public/storybook' };
-  const STORYBOOK_SUITES = ['test:storybook-output-clean', 'test:storybook-smoke'];
+  const STORYBOOK_SUITES = ['test:storybook-output-clean', 'test:storybook-smoke', 'test:admin-grouped-tabs-bar-stories'];
   log(`Phase 3 (storybook): starting ${STORYBOOK_SUITES.length} suite(s) in parallel`);
   for (const s of STORYBOOK_SUITES) log(`  → ${s}`);
   return Promise.all(STORYBOOK_SUITES.map((s) => runScript(s, sbEnv)));

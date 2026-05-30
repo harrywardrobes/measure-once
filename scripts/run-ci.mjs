@@ -160,8 +160,9 @@ const STEPS = [
   'test:active-link-warning-ordering:ci',
   'test:upload-photos-modal-labels:ci',
   'build:storybook',
-  { script: 'test:storybook-output-clean', env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
-  { script: 'test:storybook-smoke',        env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
+  { script: 'test:storybook-output-clean',          env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
+  { script: 'test:storybook-smoke',                 env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
+  { script: 'test:admin-grouped-tabs-bar-stories',  env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
 ];
 
 /**
