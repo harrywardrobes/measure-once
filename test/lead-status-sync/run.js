@@ -47,6 +47,27 @@ require('dotenv').config();
 
 const { pollUntil } = require('../helpers/poll');
 
+// ── probe labels ──────────────────────────────────────────────────────────────
+// Consumed by scripts/check-suite-probe-counts.mjs to guard against docs drift.
+const PROBE_LABELS = [
+  '[A] BroadcastChannel filter sync',
+  '[B] visibilitychange filter sync',
+  '[C] count-suffix format',
+  '[D] lead-status skeleton load/clear',
+  '[E] sub-status skeleton load/clear',
+  '[F] sub-status chip rename — BC path',
+  '[G] sub-status chip rename — visibilitychange path',
+  '[H] SSE broadcast — PATCH path',
+  '[I] SSE broadcast — POST (create) path',
+  '[J] SSE broadcast — DELETE path',
+  '[K] customer-card chip rename — BC path',
+  '[L] customer-card chip rename — visibilitychange path',
+  '[M] race guard — BC during in-flight lead-status fetch',
+  '[N] race guard — visibilitychange during in-flight lead-status fetch',
+  '[O] race guard — visibilitychange during in-flight sub-status fetch',
+  '[P] race guard — BC during in-flight sub-status fetch',
+];
+
 // ── test fixtures ─────────────────────────────────────────────────────────────
 // A fixed key with the privtest- naming convention so cleanup is easy.
 const LS_KEY      = 'PRIVTEST_LS_SYNC';

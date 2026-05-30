@@ -54,7 +54,6 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const NO_PROBE_LABELS_ALLOWLIST = new Map([
   // Predates the PROBE_LABELS convention; probes encoded as // (X) comments.
   ['test:substatus-hubspot-label-format', 'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:lead-status-sync',               'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
   ['test:lead-status-sync-customer-detail','Probes encoded as inline comments; predates PROBE_LABELS convention.'],
   ['test:card-action-handlers',           'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
   ['test:workflow-map',                   'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
