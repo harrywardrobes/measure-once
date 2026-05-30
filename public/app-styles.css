@@ -1052,7 +1052,27 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 
 .admin-page .page { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
 .admin-page .page-title { font-size: 1.25rem; font-weight: 700; margin: 0 0 2px; }
-.admin-page .page-sub   { color: var(--ink-3); font-size: .88rem; margin: 0 0 22px; }
+.admin-page .page-sub   { color: var(--ink-3); font-size: .88rem; margin: 0 0 16px; }
+
+/* Two-level grouped tab navigation (AdminGroupedTabsBar) */
+.admin-grouped-tabs { margin-bottom: 20px; }
+.admin-grouped-tabs .admin-grouped-tabs__groups .ui-tabbar-btn {
+  font-size: .875rem;
+  padding: 9px 16px;
+}
+.admin-grouped-tabs .admin-grouped-tabs__subtabs {
+  margin-top: 0;
+  border-top: none;
+}
+.admin-grouped-tabs .admin-grouped-tabs__subtabs .ui-tabbar-btn {
+  font-size: .78rem;
+  padding: 7px 12px;
+  color: var(--ink-4);
+}
+.admin-grouped-tabs .admin-grouped-tabs__subtabs .ui-tabbar-btn.is-active {
+  color: var(--plum);
+  border-bottom-color: var(--plum);
+}
 
 /* Table (bare element selectors — kept scoped to avoid bleeding globally) */
 .admin-page table { width: 100%; border-collapse: collapse; font-size: .875rem; }

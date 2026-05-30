@@ -30,7 +30,7 @@ import {
 import { GlobalHeader } from './components/GlobalHeader';
 import { PageHeadingPanel } from './components/PageHeadingPanel';
 import { BottomNav } from './components/BottomNav';
-import { AdminTabsBar } from './components/AdminTabsBar';
+import { AdminGroupedTabsBar } from './components/AdminGroupedTabsBar';
 import { BottomActionBar } from './components/BottomActionBar';
 import { AppBootstrapProvider } from './contexts/AppBootstrapContext';
 import { PUBLIC_ISLAND_IDS } from './lib/publicIslands';
@@ -174,7 +174,7 @@ const MOUNTS: Array<{
   { id: 'home-view',            render: () => <HomePage />,     fallback: <HomePageSkeleton /> },
   { id: 'tab-calendar',         render: () => <CalendarPage />, fallback: <CalendarPageSkeleton /> },
   { id: 'profile-view',         render: () => <ProfilePage />,  fallback: <ProfilePageSkeleton /> },
-  { id: 'admin-mui-tabs-mount', render: () => <AdminTabsBar /> },
+  { id: 'admin-grouped-tabs-mount', render: () => <AdminGroupedTabsBar /> },
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },
   { id: 'tab-workshop',         render: () => <WorkshopSettingsPage /> },
   { id: 'tab-customers',        render: () => <CustomersPage />, fallback: <CustomersPageSkeleton /> },
