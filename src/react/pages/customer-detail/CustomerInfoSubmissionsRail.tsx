@@ -435,7 +435,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
       {/* Expanded detail */}
       <Collapse in={open}>
         <Divider />
-        <Box sx={{ px: 2, py: 2 }}>
+        <Box data-testid="submission-card-body" sx={{ px: 2, py: 2 }}>
           {isPending ? (
             <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
               Waiting for the customer to complete the form.

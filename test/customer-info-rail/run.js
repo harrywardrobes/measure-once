@@ -789,19 +789,21 @@ async function main() {
     if (reviewBtn) {
       await reviewBtn.click();
 
-      // After clicking, the MUI Collapse inside the submitted card transitions
-      // from the hidden state to the "entered" state (MuiCollapse-entered class
-      // is applied once the open animation completes).
+      // After clicking, the card body (data-testid="submission-card-body") becomes
+      // visible once the Collapse animation completes. We check for a positive
+      // offsetHeight rather than an internal MUI CSS class so the probe stays
+      // stable across MUI version upgrades.
       cardBodyOpen = await pollPage(page, () => {
         const card = document.querySelector('[data-testid="submission-card-3"]');
         if (!card) return null;
-        return card.querySelector('[class*="MuiCollapse-entered"]') ? 'ok' : null;
+        const body = card.querySelector('[data-testid="submission-card-body"]');
+        return body && body.getBoundingClientRect().height > 0 ? 'ok' : null;
       }, 5000).then(() => true).catch(() => false);
     }
 
     record(
       PROBE_LABELS[11],
-      'MuiCollapse-entered class present inside submission-card-3 after click',
+      'submission-card-body visible (height > 0) inside submission-card-3 after click',
       cardBodyOpen
         ? 'card body entered state (correct)'
         : reviewBtn
