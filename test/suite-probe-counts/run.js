@@ -249,8 +249,12 @@ const STALE_EXTRAS_PHRASE = 'Unnecessary suppressions';
 // by a dedicated PROBE_LABELS entry (redundant suppressions).
 const REDUNDANT_EXTRAS_PHRASE = 'Redundant suppressions';
 
-// Phrase emitted in the summary line when one or more suites are allowlisted.
-const ALLOWLISTED_PHRASE = 'allowlisted';
+// Exact count phrase emitted in the summary line when one or more suites are
+// allowlisted.  The sixth scenario allowlists exactly 1 suite, so we assert
+// the literal "1 allowlisted" rather than just "allowlisted" — this catches
+// count regressions (e.g. "0 allowlisted" or "2 allowlisted") that the
+// broader substring check would miss.
+const ALLOWLISTED_PHRASE = '1 allowlisted';
 
 const results = [];
 
