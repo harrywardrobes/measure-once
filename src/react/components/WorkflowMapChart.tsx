@@ -29,7 +29,7 @@ import Tooltip from '@mui/material/Tooltip';
 import { useTheme } from '@mui/material/styles';
 import BoltIcon from '@mui/icons-material/Bolt';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import { STAGE_COLORS, NEUTRAL_COLORS, STATUS_COLORS } from '../theme';
+import { STAGE_COLORS, STATUS_COLORS } from '../theme';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -302,7 +302,7 @@ export function buildFlowGraph(
           target: statusNodeId,
           type: 'smoothstep',
           animated: false,
-          style: { stroke: sc.bg || NEUTRAL_COLORS[400], strokeWidth: 1.5 },
+          style: { stroke: sc.bg || 'var(--neutral-400)', strokeWidth: 1.5 },
         });
 
         let subY = currentY;
@@ -337,7 +337,7 @@ export function buildFlowGraph(
             target: subNodeId,
             type: 'smoothstep',
             animated: false,
-            style: { stroke: sc.light || NEUTRAL_COLORS[200], strokeWidth: 1.5, strokeDasharray: '4 3' },
+            style: { stroke: sc.light || 'var(--neutral-200)', strokeWidth: 1.5, strokeDasharray: '4 3' },
           });
 
           subY += SUB_H + V_GAP;
@@ -546,8 +546,8 @@ const StatusNode = memo(function StatusNode({ data, selected }: NodeProps<Node<W
         gap: 1,
         px: 1.5,
         borderRadius: '6px',
-        border: isReadOnly ? `1.5px solid ${NEUTRAL_COLORS[200]}` : `1.5px solid ${sc.light}`,
-        background: isReadOnly ? NEUTRAL_COLORS[50] : 'background.paper',
+        border: isReadOnly ? '1.5px solid var(--neutral-200)' : `1.5px solid ${sc.light}`,
+        background: isReadOnly ? 'var(--neutral-50)' : 'background.paper',
         boxShadow: selected
           ? `0 0 0 2px ${sc.bg}`
           : '0 1px 3px rgba(0,0,0,.08)',
@@ -677,7 +677,7 @@ export function WorkflowMapChart({
       zoomOnScroll={false}
       zoomOnPinch
     >
-      <Background variant={BackgroundVariant.Dots} gap={16} size={1} color={NEUTRAL_COLORS[200]} />
+      <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="var(--neutral-200)" />
     </ReactFlow>
   );
 }

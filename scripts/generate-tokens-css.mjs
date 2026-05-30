@@ -91,6 +91,16 @@ function parseStatusColors(ts) {
   return statuses;
 }
 
+function parseNeutralColors(ts) {
+  const blockMatch = ts.match(/export\s+const\s+NEUTRAL_COLORS\s*=\s*\{([^}]+)\}/s);
+  if (!blockMatch) throw new Error('NEUTRAL_COLORS not found in theme.ts');
+  const colors = {};
+  const re = /(\d+)\s*:\s*'(#[0-9a-fA-F]{3,8})'/g;
+  let m;
+  while ((m = re.exec(blockMatch[1])) !== null) colors[m[1]] = m[2];
+  return colors;
+}
+
 function parseRadius(ts) {
   const blockMatch = ts.match(/export\s+const\s+RADIUS\s*=\s*\{([^}]+)\}/s);
   if (!blockMatch) throw new Error('RADIUS not found in theme.ts');
@@ -128,12 +138,13 @@ function parseTypography(ts) {
 
 // ── Parse theme.ts ───────────────────────────────────────────────────────────
 
-const ts           = readFileSync(THEME_PATH, 'utf8');
-const brandColors  = parseBrandColors(ts);
-const stageColors  = parseStageColors(ts);
-const statusColors = parseStatusColors(ts);
-const radius       = parseRadius(ts);
-const typography   = parseTypography(ts);
+const ts            = readFileSync(THEME_PATH, 'utf8');
+const brandColors   = parseBrandColors(ts);
+const stageColors   = parseStageColors(ts);
+const statusColors  = parseStatusColors(ts);
+const neutralColors = parseNeutralColors(ts);
+const radius        = parseRadius(ts);
+const typography    = parseTypography(ts);
 
 // ── Emit helpers ─────────────────────────────────────────────────────────────
 
@@ -141,6 +152,12 @@ function col(name, value, width = 18) {
   const pad = ' '.repeat(Math.max(1, width - name.length));
   return `  --${name}:${pad}${value};`;
 }
+
+// ── Build neutral-colour section ─────────────────────────────────────────────
+
+const neutralLines = Object.entries(neutralColors).map(([key, value]) =>
+  col(`neutral-${key}`, value, 18)
+);
 
 // ── Build brand-colour section ───────────────────────────────────────────────
 
@@ -235,6 +252,9 @@ ${radiusLines.join('\n')}
   --z-modal:    9000;
   --z-toast:    9500;
   --z-tooltip:  9999;
+
+  /* ── Neutral colour scale ────────────────────────────────────────────────── */
+${neutralLines.join('\n')}
 
   /* ── Neutral / semantic surface tokens ───────────────────────────────────── */
   --surface-card:     #ffffff;
