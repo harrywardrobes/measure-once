@@ -166,12 +166,30 @@ app.get('/projects.html', (req, res) => res.redirect(301, '/projects'));
 app.get('/invoices.html', (req, res) => res.redirect(301, '/invoices'));
 
 // Public design-visit sign-off page (no auth required — token-gated)
-app.get('/design-visit/sign-off', (_req, res) =>
-  res.render('design-visit-signoff', { title: 'Design Visit Sign-Off · Measure Once', description: 'Review and sign off on your design visit details with Harry Wardrobes.' }));
+app.get('/design-visit/sign-off', (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.render('design-visit-signoff', {
+    title: 'Design Visit Sign-Off · Measure Once',
+    description: 'Review and sign off on your design visit details with Harry Wardrobes.',
+    ogTitle: 'Design Visit Sign-Off · Harry Wardrobes',
+    ogDescription: 'Review and sign off on your design visit details with Harry Wardrobes.',
+    ogUrl: `${baseUrl}/design-visit/sign-off`,
+    ogImage: `${baseUrl}/harry-wardrobes-logo.png`,
+  });
+});
 
 // Public customer-info form page (no auth required — token-gated)
-app.get('/customer-info/:token', (_req, res) =>
-  res.render('customer-info', { title: 'Tell us about your home · Measure Once', description: 'Share details about your home so we can tailor your wardrobe design to fit perfectly.' }));
+app.get('/customer-info/:token', (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.render('customer-info', {
+    title: 'Tell us about your home · Measure Once',
+    description: 'Share details about your home so we can tailor your wardrobe design to fit perfectly.',
+    ogTitle: 'Tell us about your home · Harry Wardrobes',
+    ogDescription: 'Share details about your home so we can tailor your wardrobe design to fit perfectly.',
+    ogUrl: `${baseUrl}/customer-info/${req.params.token}`,
+    ogImage: `${baseUrl}/harry-wardrobes-logo.png`,
+  });
+});
 
 // Public auth pages (no Replit/OIDC anymore — email + password handled in-app).
 app.get('/login', (_req, res) => res.render('login', { title: 'Sign in · Measure Once' }));
