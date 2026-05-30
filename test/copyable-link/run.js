@@ -336,10 +336,10 @@ async function openUploadModal(page, contactId, contactName, contactEmail) {
 
       const got = await page.evaluate(() => {
         // MUI Dialog uses position:fixed so offsetParent is null even when
-        // visible.  Check for the MuiDialog-container child to confirm it is
-        // actually rendered (not just present in the DOM with aria-hidden).
+        // visible.  Check aria-hidden to confirm it is actually open (not just
+        // present in the DOM but hidden).
         const d = document.querySelector('[data-testid="upload-photos-dialog"]');
-        return (d && d.querySelector('.MuiDialog-container')) ? 'ok' : null;
+        return (d && d.getAttribute('aria-hidden') !== 'true') ? 'ok' : null;
       }).catch(() => null);
       if (got) return 'ok';
 
