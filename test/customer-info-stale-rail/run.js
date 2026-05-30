@@ -11,8 +11,8 @@ const { makeSkip } = require('../helpers/report');
 // signal/listener connection.
 //
 // Probes:
-//   (A) Initial load: rail renders with the first submission record (initial
-//       fetch happened and data is displayed).
+//   (A1) Initial load: initial fetch happened (fetchCount = 1).
+//   (A2) Rail renders the first submission record on mount.
 //   (B) Dispatching `customer-info-link-generated` on `window` (with the
 //       matching contactId) triggers a second GET to
 //       /api/customer-info/by-contact/:id.
@@ -407,8 +407,9 @@ function writeReport(runId) {
     '',
     '## Coverage',
     '',
-    '- **(A) Initial fetch + render**: The rail calls `/api/customer-info/by-contact/:id`',
-    '  on mount and displays the initial active-pending submission card.',
+    '- **(A1) Initial fetch (fetchCount = 1)**: The rail calls `/api/customer-info/by-contact/:id`',
+    '  on mount (fetchCount becomes 1).',
+    '- **(A2) Initial render**: The rail displays the initial active-pending submission card.',
     '- **(B) Re-fetch on event**: Dispatching `customer-info-link-generated` on `window`',
     '  (with the matching contactId) causes the rail to call the API a second time.',
     '  This guards the `window.addEventListener` wiring added in task #2010.',
@@ -502,8 +503,8 @@ async function main() {
 
   // ── Puppeteer ─────────────────────────────────────────────────────────────
   const PROBE_LABELS = [
-    '(A) initial fetch happened (fetchCount = 1)',
-    '(A) rail renders initial submission card',
+    '(A1) initial fetch happened (fetchCount = 1)',
+    '(A2) rail renders initial submission card',
     '(B) dispatching customer-info-link-generated triggers a second fetch',
     '(C) rail re-renders with updated data (second card visible)',
     '(D) foreign contactId dispatch does not trigger extra fetch',
@@ -568,9 +569,9 @@ async function main() {
 
     if (!initialChipVisible) {
       const intercepted = await page.evaluate(() => window.__cisrIntercepted || []);
-      console.log(`  [A] chip not visible. fetchCount=${initialState.fetchCount} intercepted=${JSON.stringify(intercepted)}`);
+      console.log(`  [A1/A2] chip not visible. fetchCount=${initialState.fetchCount} intercepted=${JSON.stringify(intercepted)}`);
       const errLogs = (page.__logs || []).filter(l => l.includes('error') || l.includes('Error'));
-      if (errLogs.length) console.log(`  [A] page errors:\n    ${errLogs.join('\n    ')}`);
+      if (errLogs.length) console.log(`  [A1/A2] page errors:\n    ${errLogs.join('\n    ')}`);
     }
 
     record(
