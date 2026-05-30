@@ -62,6 +62,8 @@
     "test:customer-info-rail:ci": "node scripts/with-test-db.js test/customer-info-rail/run.js",
     "test:customer-info-conflict-warning": "node test/customer-info-conflict-warning/run.js",
     "test:customer-info-conflict-warning:ci": "node scripts/with-test-db.js test/customer-info-conflict-warning/run.js",
+    "test:customer-info-stale-rail": "node test/customer-info-stale-rail/run.js",
+    "test:customer-info-stale-rail:ci": "node scripts/with-test-db.js test/customer-info-stale-rail/run.js",
     "test:upload-photos-copyable-link": "node test/upload-photos-copyable-link/run.js",
     "test:upload-photos-copyable-link:ci": "node scripts/with-test-db.js test/upload-photos-copyable-link/run.js",
     "test:active-link-expires": "node test/active-link-expires/run.js",
