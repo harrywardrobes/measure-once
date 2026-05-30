@@ -59,11 +59,15 @@ function startMockHubSpot(contactId, contactProps) {
     req.on('end', () => {
       const body = raw ? (() => { try { return JSON.parse(raw); } catch { return {}; } })() : {};
 
-      // GET contact
-      if (req.method === 'GET' && req.url.startsWith(`/crm/v3/objects/contacts/${contactId}`)) {
+      // GET contact — match any numeric contact ID so resend probes with a
+      // fresh contactId don't hit the catch-all 404.
+      const anyContactGet = req.method === 'GET'
+        && /^\/crm\/v3\/objects\/contacts\/\d+/.test(req.url);
+      if (anyContactGet) {
+        const idM = req.url.match(/\/contacts\/(\d+)/);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({
-          id: contactId,
+          id: idM ? idM[1] : contactId,
           properties: contactProps,
         }));
       }
@@ -146,6 +150,25 @@ async function insertSubmittedRow(pool, contactId) {
   return rawToken;
 }
 
+/**
+ * Insert an active (non-expired, non-submitted) row with form_link = NULL.
+ * Simulates a pre-migration row where the raw token was never stored and the
+ * Copy/Open URLs cannot be reconstructed without a staff resend.
+ */
+async function insertActiveNullFormLinkRow(pool, contactId) {
+  const rawToken  = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const expiresAt = new Date(Date.now() + 86_400_000); // 24 h from now
+  await pool.query(
+    `INSERT INTO customer_info_submissions
+       (contact_id, contact_name, contact_email, token_hash, expires_at,
+        masked_email, masked_phone, form_link)
+     VALUES ($1, 'Pre-migration User', 'premig@test.local', $2, $3,
+             'p***@***.local', '07***5678', NULL)`,
+    [contactId, tokenHash, expiresAt.toISOString()]
+  );
+}
+
 async function cleanup(pool, contactId) {
   try {
     await pool.query(`DELETE FROM customer_info_submissions WHERE contact_id = $1`, [contactId]);
@@ -203,7 +226,10 @@ async function main() {
 
   const runId    = Math.random().toString(36).slice(2, 8);
   // contactId must be all-digit (the route validates /^\d+$/)
-  const contactId = String(900000000 + Math.floor(Math.random() * 99999999));
+  const contactId  = String(900000000 + Math.floor(Math.random() * 99999999));
+  // Separate contactId for CI-UI-C: a contact with only a pre-migration row
+  // (form_link = NULL) so Copy/Open buttons are absent until after a resend.
+  const contactIdC = String(700000000 + Math.floor(Math.random() * 99999999));
 
   console.log(`\n  customer-info  run=${runId}`);
   console.log(`  Using ${hasTestDb ? 'DATABASE_URL_TEST (isolated)' : 'shared DATABASE_URL (PRIVTEST_ALLOW_SHARED_DB=1)'}`);
@@ -243,6 +269,7 @@ async function main() {
   await cleanupTestData(pool);
   await resetRateLimitStore(pool);
   await cleanup(pool, contactId);
+  await cleanup(pool, contactIdC);
 
   const { child } = spawnServer({
     nodeOptions: `--require ${stubPath}`,
@@ -768,6 +795,67 @@ async function main() {
         }
         record('CI-UI-B.viewer-no-resend-btn', viewerUiOk, viewerUiDetail);
 
+        // ── CI-UI-C: form_link=NULL → Resend → Copy/Open appear (no reload) ─
+        // Seed an active row with form_link = NULL for a fresh contact so the
+        // rail shows the Resend button but NOT the Copy/Open buttons on first
+        // load.  After clicking Resend the onResendSuccess callback triggers a
+        // fresh GET .../by-contact/:contactId; the new row returned by the
+        // server carries form_link, so Copy/Open buttons must appear without a
+        // full page reload.
+        let ciUiCOk = false;
+        let ciUiCDetail = '';
+        try {
+          await insertActiveNullFormLinkRow(pool, contactIdC);
+
+          const cCtx = await (uiBrowser.createBrowserContext
+            ? uiBrowser.createBrowserContext()
+            : uiBrowser.createIncognitoBrowserContext());
+          const cPage = await cCtx.newPage();
+          await cPage.setCacheEnabled(false);
+          await injectSession(cPage, adminClient.cookie, BASE);
+          await cPage.goto(`${BASE}/customers/${contactIdC}`, {
+            waitUntil: 'domcontentloaded', timeout: 25000,
+          });
+
+          // Wait for the Resend button — confirms the null-form_link row loaded
+          // and that the admin privilege gate passed.
+          const resendVisibleC = await pollUntil(cPage, () =>
+            !!document.querySelector('[data-testid="resend-link-btn"]'),
+          12000, 200);
+
+          if (!resendVisibleC) {
+            ciUiCDetail = '[data-testid="resend-link-btn"] not found before clicking';
+          } else {
+            // Confirm Copy/Open buttons are absent before resend (form_link = NULL)
+            const copyBeforeResend = await cPage.evaluate(() =>
+              !!document.querySelector('[data-testid="copy-link-btn"]')
+            );
+
+            // Click the Resend button — triggers POST .../resend which creates a
+            // new DB row with form_link populated, then calls onSuccess() →
+            // loadSubmissions() → GET .../by-contact/:contactId.
+            await cPage.click('[data-testid="resend-link-btn"]');
+
+            // Poll until the Copy link button appears (new row with form_link)
+            const copyFound = await pollUntil(cPage, () =>
+              !!document.querySelector('[data-testid="copy-link-btn"]'),
+            15000, 300);
+            const openFound = await cPage.evaluate(() =>
+              !!document.querySelector('[data-testid="open-link-btn"]')
+            );
+
+            ciUiCOk = !copyBeforeResend && !!copyFound && openFound;
+            ciUiCDetail = ciUiCOk
+              ? 'Copy/Open buttons appeared after resend without a full page reload'
+              : `copyBeforeResend=${copyBeforeResend} copyAfterResend=${!!copyFound} openAfterResend=${openFound}`;
+          }
+          await cPage.close();
+          await cCtx.close().catch(() => {});
+        } catch (e) {
+          ciUiCDetail = `error: ${e.message}`;
+        }
+        record('CI-UI-C.copy-open-after-resend', ciUiCOk, ciUiCDetail);
+
         await uiBrowser.close().catch(() => {});
       }
     }
@@ -781,6 +869,7 @@ async function main() {
     try { await cleanup(pool, contactId); } catch {}
     try { await cleanup(pool, `${contactId}-exp`); } catch {}
     try { await cleanup(pool, `${contactId}-sub`); } catch {}
+    try { await cleanup(pool, contactIdC); } catch {}
     try { await cleanupTestData(pool); } catch {}
     try { child.kill('SIGTERM'); } catch {}
     try { mockHs.server.close(); } catch {}
