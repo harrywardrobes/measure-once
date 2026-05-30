@@ -1705,6 +1705,122 @@ async function main() {
     await raceAdminTab.close();
     await raceTab.close();
 
+    // ── (N) blank-filter race guard — visibilitychange fires before initial fetch ─
+    // Mirrors probe [M] but exercises the visibilitychange (onVisibility) path
+    // rather than the BroadcastChannel path.  The onVisibility handler in
+    // useLeadStatusSync also contains the `if (!store.loaded) return` guard;
+    // without it, a hidden→visible transition while the initial
+    // /api/lead-statuses fetch is still in-flight would invoke
+    // populateLeadStatusFilter() against an empty store.statuses array,
+    // producing a blank dropdown.
+    //
+    // Probe steps:
+    //   1. Open a fresh Customers tab with request interception on /api/lead-statuses.
+    //   2. Navigate to /customers — React mounts and starts the initial fetch.
+    //   3. Puppeteer catches the in-flight request and holds it.
+    //   4. Synthesise hidden→visible visibilitychange in the page context
+    //      (same pattern as sections B/G/L) while store.loaded is still false.
+    //   5. Wait a tick so the handler fires (and the guard triggers early-return).
+    //   6. Release the held request — mount effect completes, store.loaded = true.
+    //   7. Assert the dropdown shows LABEL_SSE (not blank / missing the option).
+    console.log('\n  [N] blank-filter race guard — visibilitychange fires before initial fetch completes');
+
+    const nRaceTab = await browser.newPage();
+    await nRaceTab.setCacheEnabled(false);
+    await injectSession(nRaceTab, adminClient.cookie);
+
+    // Promise that resolves when Puppeteer catches the /api/lead-statuses request.
+    let resolveNRaceReq;
+    const nRaceReqCaught = new Promise(res => { resolveNRaceReq = res; });
+    let pendingNRaceReq = null;
+
+    await nRaceTab.setRequestInterception(true);
+    nRaceTab.on('request', req => {
+      const url = req.url();
+      // Match /api/lead-statuses exactly — not /api/admin/lead-statuses or counts.
+      if (/\/api\/lead-statuses(\?|$)/.test(url) && !pendingNRaceReq) {
+        pendingNRaceReq = req;
+        resolveNRaceReq(req);
+        // Do NOT call req.continue() — we are holding the request in-flight.
+      } else {
+        req.continue();
+      }
+    });
+
+    await nRaceTab.goto(`${BASE}/customers`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+
+    // Wait until the in-flight request is intercepted (up to 5 s).
+    const nRaceReqIntercepted = await Promise.race([
+      nRaceReqCaught.then(() => true),
+      new Promise(res => setTimeout(() => res(false), 5000)),
+    ]);
+    record(
+      '[N] /api/lead-statuses request intercepted in-flight before visibilitychange fires',
+      'request intercepted within 5 s',
+      `intercepted=${nRaceReqIntercepted}`,
+      nRaceReqIntercepted,
+    );
+
+    // Synthesise hidden → visible visibilitychange in the page context while
+    // store.loaded is still false (mirrors sections B/G/L).
+    await nRaceTab.evaluate(() => {
+      const proto   = Document.prototype;
+      const ownDesc = Object.getOwnPropertyDescriptor(proto, 'visibilityState')
+                   || Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+      // Step 1: hidden — handler returns early (visibilityState !== 'visible').
+      Object.defineProperty(document, 'visibilityState',
+        { get: () => 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      // Step 2: visible — handler fires but hits the `if (!store.loaded) return` guard.
+      if (ownDesc) {
+        Object.defineProperty(document, 'visibilityState', ownDesc);
+      } else {
+        Object.defineProperty(document, 'visibilityState',
+          { get: () => 'visible', configurable: true });
+      }
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    // Give the handler one tick to fire (and hit the guard) before releasing.
+    await new Promise(r => setTimeout(r, 300));
+
+    // Release the held /api/lead-statuses request so the mount effect finishes.
+    if (pendingNRaceReq) {
+      try { pendingNRaceReq.continue(); } catch {}
+    }
+
+    // After the request resolves, store.loaded = true and the dropdown should
+    // show LABEL_SSE (the current DB label for LS_KEY after section H's rename).
+    // A blank dropdown means populateLeadStatusFilter() was called prematurely.
+    const nRaceFilterOk = await waitForFilterLabel(nRaceTab, LABEL_SSE, 8000);
+    record(
+      '[N] filter dropdown shows LABEL_SSE after visibilitychange-during-fetch race (no blank)',
+      `option starting with "${LABEL_SSE}" appears within 8 s`,
+      `found=${nRaceFilterOk}`,
+      nRaceFilterOk,
+    );
+
+    // Also assert the dropdown is not blank (has at least one meaningful option
+    // beyond "All statuses").
+    const nRaceHasOptions = await nRaceTab.evaluate(() => {
+      const sel = document.getElementById('lead-status-filter');
+      if (!sel) return false;
+      return sel.options.length > 1;
+    });
+    record(
+      '[N] filter dropdown is not blank after visibilitychange-during-fetch race',
+      'select has > 1 options',
+      `optionCount=${nRaceHasOptions}`,
+      nRaceHasOptions,
+    );
+
+    await nRaceTab.close();
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -1869,6 +1985,18 @@ async function writeReport(runId, findings) {
     '  early-return guard in `useLeadStatusSync` (`CustomersPage.tsx`): without it,',
     '  the premature BC call would invoke `populateLeadStatusFilter()` against an',
     '  empty `store.statuses` array, producing a blank select.',
+    '- **(N) blank-filter race guard — visibilitychange fires before initial fetch',
+    '  completes**: mirrors probe [M] but exercises the `onVisibility` handler',
+    '  rather than the BroadcastChannel handler. Opens a fresh Customers tab with',
+    '  Puppeteer request interception, holds `GET /api/lead-statuses` in-flight',
+    '  so `store.loaded` stays `false`, then synthesises a hidden→visible',
+    '  `visibilitychange` event sequence directly in the page context (same',
+    '  pattern as sections B/G/L). Releases the intercept and asserts the',
+    '  dropdown shows the expected label and has more than one option.',
+    '  Exercises the same `if (!store.loaded) return` guard in the `onVisibility`',
+    '  path of `useLeadStatusSync` (`CustomersPage.tsx`): without it, the',
+    '  premature visibility event would invoke `populateLeadStatusFilter()` against',
+    '  an empty `store.statuses` array, producing a blank select.',
     '',
     '## Notes',
     '',
