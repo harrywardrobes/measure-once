@@ -66,6 +66,7 @@ const STEPS = [
   'test:customer-info-resend:ci',
   'test:customer-info-generate-link-reuse:ci',
   'test:customer-info-rail:ci',
+  'test:customer-info-conflict-warning:ci',
   'test:masked-email-backfill:ci',
   'test:photo-storage-errors:ci',
   'test:photo-approval-notification:ci',
