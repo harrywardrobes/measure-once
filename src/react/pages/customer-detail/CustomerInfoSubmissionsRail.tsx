@@ -359,7 +359,13 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
         ) : isActive ? (
           isSuperseded ? (
             <Box sx={{ flexShrink: 0 }}>
-              <Chip label="Superseded" size="small" variant="outlined" />
+              <Tooltip
+                title="A newer link has been generated — this one is no longer active"
+                placement="top"
+                arrow
+              >
+                <Chip label="Superseded" size="small" variant="outlined" />
+              </Tooltip>
             </Box>
           ) : (
             <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, alignItems: 'center' }}>
