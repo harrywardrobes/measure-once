@@ -260,8 +260,10 @@ async function sendReviewEmail(toEmail, subject, textBody) {
 // GET /api/card-actions/review-customer-photos/:contactId
 // Returns the most recent submitted-but-not-yet-reviewed submission for a contact,
 // with HMAC-signed photo URLs.
+// Requires member+ — response includes signed photo URLs and corrected contact details.
 router.get('/api/card-actions/review-customer-photos/:contactId',
   isAuthenticated,
+  requirePrivilege('member'),
   async (req, res) => {
     const cid = String(req.params.contactId || '').trim();
     if (!cid || !/^\d+$/.test(cid)) {

@@ -575,7 +575,7 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
   const { isViewer }                  = usePrivilege();
 
   const loadSubmissions = useCallback(() => {
-    if (!contactId) return;
+    if (!contactId || isViewer) return;
     setLoading(true);
     setError('');
     fetch(`/api/customer-info/by-contact/${encodeURIComponent(contactId)}`, { cache: 'no-store' })
@@ -586,7 +586,7 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
       })
       .catch(e => setError((e as Error).message))
       .finally(() => setLoading(false));
-  }, [contactId]);
+  }, [contactId, isViewer]);
 
   useEffect(() => {
     loadSubmissions();

@@ -1157,9 +1157,11 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
   }
 );
 
-// Authenticated: list all submissions for a contact (dashboard viewer)
+// Authenticated (member+): list all submissions for a contact
+// Viewers are intentionally excluded — the response includes form_link,
+// signed photo URLs, and corrected contact details that a viewer must not see.
 // GET /api/customer-info/by-contact/:contactId
-router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, async (req, res) => {
+router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const cid = String(req.params.contactId || '').trim();
   if (!cid || !/^\d+$/.test(cid)) {
     return res.status(400).json({ error: 'Invalid contactId.' });
