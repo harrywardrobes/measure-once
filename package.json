@@ -58,6 +58,8 @@
     "test:info-card-review-resend:ci": "node scripts/with-test-db.js test/info-card-review-resend/run.js",
     "test:customer-info-generate-link-reuse": "node test/customer-info-generate-link-reuse/run.js",
     "test:customer-info-generate-link-reuse:ci": "node scripts/with-test-db.js test/customer-info-generate-link-reuse/run.js",
+    "test:customer-info-rail": "node test/customer-info-rail/run.js",
+    "test:customer-info-rail:ci": "node scripts/with-test-db.js test/customer-info-rail/run.js",
     "test:upload-photos-copyable-link": "node test/upload-photos-copyable-link/run.js",
     "test:upload-photos-copyable-link:ci": "node scripts/with-test-db.js test/upload-photos-copyable-link/run.js",
     "test:active-link-expires": "node test/active-link-expires/run.js",

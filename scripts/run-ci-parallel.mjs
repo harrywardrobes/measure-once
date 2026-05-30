@@ -88,6 +88,7 @@ const DB_SUITES = [
   'test:customer-info-email-attachments:ci',
   'test:customer-info-resend:ci',
   'test:customer-info-generate-link-reuse:ci',
+  'test:customer-info-rail:ci',
   'test:masked-email-backfill:ci',
   'test:photo-storage-errors:ci',
   'test:lead-status-sync-customer-detail:ci',
