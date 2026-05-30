@@ -80,28 +80,6 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 // ---------------------------------------------------------------------------
 
 const ALLOWLIST = new Map([
-  ['test/admin-grouped-tabs-bar-stories/run.js',  'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/bottom-nav/run.js',                      'pre-convention: bare puppeteer.launch (no try/catch)'],
-  ['test/bottom-nav-default/run.js',              'pre-convention: bare launch + no launch-failure loop'],
-  ['test/conflict-digest-settings/run.js',        'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/customers-pagination/run.js',            'pre-convention: empty catch, no launch-failure loop'],
-  ['test/info-card-review-resend/run.js',         'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/invoice-bc-sync/run.js',                 'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/lead-status-counts-rate-limit/run.js',   'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/lead-status-sync/customer-detail.js',    'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/login/run.js',                           'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/nav-active-tab/run.js',                  'pre-convention: bare puppeteer.launch (no try/catch)'],
-  ['test/nav-customise/run.js',                   'pre-convention: bare launch + no launch-failure loop'],
-  ['test/nav-role-config/run.js',                 'pre-convention: bare launch + no launch-failure loop'],
-  ['test/profile-google-calendar/run.js',         'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/project-contacts-dev-mode/run.js',       'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/project-contacts-unknown-status/run.js', 'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/projects-top-spacing/run.js',            'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/room-stale-banner/run.js',               'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/scheduling-past-time-guard/run.js',      'pre-convention: bare launch + no launch-failure loop'],
-  ['test/skipped-photo-warning/run.js',           'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/tabbar-stories/run.js',                  'pre-convention: no launch-failure PROBE_LABELS loop'],
-  ['test/workflow-map/run.js',                    'pre-convention: no launch-failure PROBE_LABELS loop'],
 ]);
 
 // ---------------------------------------------------------------------------

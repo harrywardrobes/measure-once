@@ -334,7 +334,7 @@ async function main() {
         });
         record('D0 headless chromium launches', true, 'browser started');
       } catch (e) {
-        record('D0 headless chromium launches', false, `error: ${e.message}`);
+        for (const l of D_PROBE_LABELS) record(l, false, `browser launch failed: ${e.message}`);
       }
 
       if (browser) {
@@ -410,7 +410,7 @@ async function main() {
         });
         record('E0 headless chromium launches', true, 'browser started');
       } catch (e) {
-        record('E0 headless chromium launches', false, `error: ${e.message}`);
+        for (const l of E_PROBE_LABELS) record(l, false, `browser launch failed: ${e.message}`);
       }
 
       if (browserE) {

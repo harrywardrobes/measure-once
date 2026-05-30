@@ -286,12 +286,19 @@ async function main() {
   const memberClient = await login(users.member.email, users.member.password);
 
   const executablePath = findChromium();
-  const browser = await puppeteer.launch({
-    headless: true,
-    executablePath,
-    defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2 },
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-  });
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      executablePath,
+      defaultViewport: { width: 390, height: 844, deviceScaleFactor: 2 },
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    });
+  } catch (launchErr) {
+    console.error(`  Could not launch browser: ${launchErr.message}`);
+    await cleanupAndExit(1);
+    return;
+  }
 
   try {
 

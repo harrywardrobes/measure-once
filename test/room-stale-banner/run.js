@@ -196,12 +196,18 @@ async function main() {
     const adminClient = await login(admin.email, admin.password);
 
     const executablePath = findChromium();
-    browser = await puppeteer.launch({
-      headless: true,
-      executablePath,
-      defaultViewport: { width: 1280, height: 800 },
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
+    try {
+      browser = await puppeteer.launch({
+        headless: true,
+        executablePath,
+        defaultViewport: { width: 1280, height: 800 },
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      });
+    } catch (launchErr) {
+      const msg = (launchErr?.message || String(launchErr)).slice(0, 200);
+      for (const l of PROBE_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
+      throw launchErr;
+    }
 
     // ── [STALE] banner visible when X-Cache-Status: stale ────────────────────
     console.log('  [STALE] X-Cache-Status: stale → banner appears');

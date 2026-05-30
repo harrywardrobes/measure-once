@@ -311,7 +311,9 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
+    const msg = (e?.message || String(e)).slice(0, 200);
+    record('headless chromium launches', 'browser.launch() succeeds', `error: ${msg}`, false);
+    for (const l of PROBE_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;

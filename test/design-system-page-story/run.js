@@ -335,6 +335,7 @@ async function main() {
     server.close();
     const msg = `Could not launch browser: ${e.message}`;
     process.stderr.write(`  ❌ ${msg}\n`);
+    for (const l of PROBE_LABELS) record(l, false, msg);
     writeReport(findings, msg);
     process.exit(1);
   }

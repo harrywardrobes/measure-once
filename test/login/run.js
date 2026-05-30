@@ -172,6 +172,7 @@ async function main() {
 
     if (!browser) {
       const msg = (launchErr?.message || String(launchErr)).slice(0, 200);
+      for (const l of PROBE_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
       for (const l of UI_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     } else {
       try {

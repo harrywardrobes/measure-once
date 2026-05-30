@@ -388,12 +388,18 @@ async function main() {
     const { findChromium } = require('../shared/find-chromium');
     const executablePath   = findChromium() || undefined;
 
-    browser = await puppeteer.launch({
-      headless:        true,
-      executablePath,
-      defaultViewport: { width: 1280, height: 900 },
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
+    try {
+      browser = await puppeteer.launch({
+        headless:        true,
+        executablePath,
+        defaultViewport: { width: 1280, height: 900 },
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      });
+    } catch (launchErr) {
+      const msg = (launchErr?.message || String(launchErr)).slice(0, 200);
+      for (const l of PROBE_LABELS) record(l, false, `browser launch failed: ${msg}`);
+      throw launchErr;
+    }
 
     // ── [RR-A] + [RR-C] Submitted submission ─────────────────────────────────
 

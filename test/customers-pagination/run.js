@@ -425,6 +425,7 @@ async function main() {
   }
 
   if (!browser) {
+    for (const l of PROBE_LABELS) skip(l, 'browser launch failed');
     for (const l of UI_LABELS) skip(l, 'browser launch failed');
     await writeReport(runId, findings);
     await cleanupAndExit(1);
