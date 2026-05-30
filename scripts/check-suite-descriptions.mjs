@@ -2,10 +2,16 @@
 /**
  * scripts/check-suite-descriptions.mjs
  *
- * Static lint: every `test:*` entry present in scripts/run-ci.mjs must also
- * have a matching row in docs/TEST_SUITES.md.  Fails with a clear error message
- * when any suite is undocumented so drift is caught automatically on every CI
- * pass.
+ * Bidirectional static lint between scripts/run-ci.mjs and
+ * docs/TEST_SUITES.md:
+ *
+ *   Forward check  — every test:* entry in run-ci.mjs STEPS must have a
+ *                    matching row in the "Suite reference" table.
+ *   Reverse check  — every row in that table must appear in run-ci.mjs STEPS
+ *                    (or be listed in STANDALONE_SUITES below).
+ *
+ * Fails with a clear error message for every violation found so drift is
+ * caught automatically on every CI pass.
  *
  * Run via:  npm run test:suite-descriptions
  *
@@ -19,6 +25,23 @@ import { fileURLToPath } from 'url';
 import { join } from 'path';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
+
+/**
+ * Suites intentionally excluded from the automated CI pipeline.
+ * These appear in docs/TEST_SUITES.md but are NOT run by run-ci.mjs.
+ *
+ * Every entry here must have a brief reason comment.  To add a new entry:
+ *   1. Add the suite name and a reason comment below.
+ *   2. Make sure the TEST_SUITES.md row notes that it is standalone-only.
+ */
+const STANDALONE_SUITES = new Set([
+  // Post-build gzip-size check; requires a pre-built bundle and a cached
+  // history artefact — not wired into the standard CI pipeline.
+  'test:bundle-sizes',
+  // Static guard for picker-cluster function duplication; kept standalone
+  // by design — see the "Standalone only" note in TEST_SUITES.md.
+  'test:workflow-js-no-dups',
+]);
 
 /**
  * Extract every test script base-name from run-ci.mjs STEPS.
@@ -59,26 +82,57 @@ const docsFile   = join(ROOT, 'docs', 'TEST_SUITES.md');
 const stepSuites       = extractStepsFromRunner(runnerFile);
 const documentedSuites = extractDocumentedSuites(docsFile);
 
+// Forward check: every CI step must have a docs row.
 const missing = [...stepSuites].filter((s) => !documentedSuites.has(s)).sort();
 
-if (missing.length === 0) {
+// Reverse check: every docs row must appear in CI (or be explicitly standalone).
+const stale = [...documentedSuites]
+  .filter((s) => !stepSuites.has(s) && !STANDALONE_SUITES.has(s))
+  .sort();
+
+if (missing.length === 0 && stale.length === 0) {
   console.log(
-    `✅  suite-descriptions: all ${stepSuites.size} test suites in` +
-    ` run-ci.mjs have a matching row in docs/TEST_SUITES.md`,
+    `✅  suite-descriptions: all ${stepSuites.size} CI test suites have a` +
+    ` matching row in docs/TEST_SUITES.md, and all ${documentedSuites.size}` +
+    ` documented suites are either in run-ci.mjs or listed as standalone`,
   );
   process.exit(0);
 }
 
-console.error(
-  `❌  suite-descriptions: ${missing.length} test ` +
-  `${missing.length === 1 ? 'suite' : 'suites'} present in ` +
-  `scripts/run-ci.mjs but missing from docs/TEST_SUITES.md:\n`,
-);
-for (const s of missing) {
-  console.error(`   - ${s}`);
+let failed = false;
+
+if (missing.length > 0) {
+  failed = true;
+  console.error(
+    `❌  suite-descriptions: ${missing.length} test ` +
+    `${missing.length === 1 ? 'suite' : 'suites'} present in ` +
+    `scripts/run-ci.mjs but missing from docs/TEST_SUITES.md:\n`,
+  );
+  for (const s of missing) {
+    console.error(`   - ${s}`);
+  }
+  console.error(
+    '\nAdd a row for each missing suite to the "Suite reference" table in' +
+    ' docs/TEST_SUITES.md.\n',
+  );
 }
-console.error(
-  '\nAdd a row for each missing suite to the "Suite reference" table in' +
-  ' docs/TEST_SUITES.md.\n',
-);
-process.exit(1);
+
+if (stale.length > 0) {
+  failed = true;
+  console.error(
+    `❌  suite-descriptions: ${stale.length} test ` +
+    `${stale.length === 1 ? 'suite' : 'suites'} documented in` +
+    ` docs/TEST_SUITES.md but absent from scripts/run-ci.mjs STEPS:\n`,
+  );
+  for (const s of stale) {
+    console.error(`   - ${s}`);
+  }
+  console.error(
+    '\nFor each stale row, do one of the following:\n' +
+    '  • Add the suite to run-ci.mjs STEPS so it runs in CI, or\n' +
+    '  • Add it to the STANDALONE_SUITES allowlist in' +
+    ' scripts/check-suite-descriptions.mjs with a reason comment.\n',
+  );
+}
+
+if (failed) process.exit(1);
