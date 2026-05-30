@@ -27,11 +27,12 @@ const ALL_TABS: LegacyTab[] = [
   { id: 'search',         label: 'Search',              hidden: false },
   { id: 'workshop',       label: 'Workshop',            hidden: false },
   { id: 'settings',       label: 'Settings',            hidden: false },
+  { id: 'designsystem',   label: 'Design System',       hidden: false },
   { id: 'devenv',         label: 'Dev Environment',     hidden: false },
 ];
 
 const TABS_DEV_HIDDEN: LegacyTab[] = ALL_TABS.map((t) =>
-  t.id === 'devenv' ? { ...t, hidden: true } : t,
+  t.id === 'devenv' || t.id === 'designsystem' ? { ...t, hidden: true } : t,
 );
 
 const TABS_WITH_BADGES: LegacyTab[] = ALL_TABS.map((t) => {
@@ -108,7 +109,7 @@ export const WithBadges: Story = {
 };
 
 export const DeveloperGroupHidden: Story = {
-  name: 'Developer group hidden (devenv tab hidden)',
+  name: 'Developer group hidden (designsystem + devenv tabs hidden)',
   render: () => (
     <Interactive
       tabs={TABS_DEV_HIDDEN}

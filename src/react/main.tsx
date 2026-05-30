@@ -60,6 +60,7 @@ const CardActionsPage    = React.lazy(() => import('./pages/admin/CardActionsPag
 const ActionHandlersPage = React.lazy(() => import('./pages/admin/ActionHandlersPage').then(m => ({ default: m.ActionHandlersPage })));
 const DesignVisitPage    = React.lazy(() => import('./pages/admin/DesignVisitPage').then(m => ({ default: m.DesignVisitPage })));
 const DevEnvironmentPage = React.lazy(() => import('./pages/admin/DevEnvironmentPage').then(m => ({ default: m.DevEnvironmentPage })));
+const DesignSystemPage   = React.lazy(() => import('./pages/admin/DesignSystemPage').then(m => ({ default: m.DesignSystemPage })));
 const AdminTeamPage      = React.lazy(() => import('./pages/admin/AdminTeamPage').then(m => ({ default: m.AdminTeamPage })));
 const AdminPermissionsPage = React.lazy(() => import('./pages/admin/AdminPermissionsPage').then(m => ({ default: m.AdminPermissionsPage })));
 const AdminRequestsPage  = React.lazy(() => import('./pages/admin/AdminRequestsPage').then(m => ({ default: m.AdminRequestsPage })));
@@ -186,6 +187,7 @@ const MOUNTS: Array<{
   { id: 'tab-cardactions',      render: () => <CardActionsPage />,     fallback: <CardActionsPageSkeleton /> },
   { id: 'tab-actionhandlers',   render: () => <ActionHandlersPage />,  fallback: <ActionHandlersPageSkeleton /> },
   { id: 'tab-designvisit',      render: () => <DesignVisitPage /> },
+  { id: 'tab-designsystem',    render: () => <DesignSystemPage /> },
   { id: 'tab-devenv',           render: () => <DevEnvironmentPage /> },
   { id: 'ideas-page-mount',       render: () => <IdeasPage /> },
   { id: 'customer-detail-root',   render: () => <CustomerDetailPage />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },
