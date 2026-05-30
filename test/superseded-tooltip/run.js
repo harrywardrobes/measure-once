@@ -525,20 +525,9 @@ async function main() {
       const supersededLabel = labels.find(c => (c.textContent || '').trim() === 'Superseded');
       if (!supersededLabel) return { cardFound: false, copyPresent: false, openPresent: false, resendPresent: false };
 
-      // Walk up to the submission card root — the card wraps both the chip and
-      // any action buttons, so we go up until we reach the section or a
-      // reasonable ancestor that would contain all buttons for this row.
-      let card = supersededLabel.closest('[class*="MuiChip-root"]');
-      // Walk up further to the card-level box (ancestor that holds the whole row).
-      // We stop at the submissions section boundary to avoid false negatives from
-      // buttons on *other* cards leaking through.
-      const section = document.getElementById('customer-info-submissions-section');
-      let el = card;
-      // Keep ascending until the parent is the section or we run out of parents.
-      while (el && el.parentElement && el.parentElement !== section && !el.parentElement.classList.contains('customer-info-submissions-section')) {
-        el = el.parentElement;
-      }
-      const cardRoot = el;
+      // Walk up to the submission card root using the stable data-testid anchor.
+      const cardRoot = supersededLabel.closest('[data-testid^="submission-card"]');
+      if (!cardRoot) return { cardFound: false, copyPresent: false, openPresent: false, resendPresent: false };
 
       return {
         cardFound: true,

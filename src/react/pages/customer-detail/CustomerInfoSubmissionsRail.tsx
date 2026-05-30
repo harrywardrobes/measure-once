@@ -302,6 +302,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
 
   return (
     <Box
+      data-testid={`submission-card-${sub.id}`}
       sx={{
         border: '1px solid',
         borderColor: 'divider',
