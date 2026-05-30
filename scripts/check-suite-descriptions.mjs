@@ -97,6 +97,9 @@ function extractDocumentedSuiteRows(filePath) {
  *   • a `//` comment on the same line as the suite-name string, or
  *   • a `//` comment on the line immediately above the suite-name string.
  *
+ * In both cases the comment must contain at least one non-whitespace character
+ * after the `//` — a blank or whitespace-only comment does not satisfy the rule.
+ *
  * Returns an array of suite names that are missing a reason comment.
  */
 function findStandaloneEntriesWithoutComment(filePath) {
@@ -120,9 +123,9 @@ function findStandaloneEntriesWithoutComment(filePath) {
       const m = line.match(/'(test:[^']+)'/);
       if (m) {
         const afterEntry = line.slice(line.indexOf(m[0]) + m[0].length);
-        const hasInlineComment = /\/\//.test(afterEntry);
+        const hasInlineComment = /\/\/\s*\S/.test(afterEntry);
         const prevLine = i > 0 ? lines[i - 1].trim() : '';
-        const hasPrevComment = prevLine.startsWith('//');
+        const hasPrevComment = prevLine.startsWith('//') && /\/\/\s*\S/.test(prevLine);
 
         if (!hasInlineComment && !hasPrevComment) {
           missing.push(m[1]);
@@ -260,7 +263,7 @@ if (missingReasonComment.length > 0) {
     `❌  suite-descriptions: ${missingReasonComment.length} STANDALONE_SUITES ` +
     `${missingReasonComment.length === 1 ? 'entry' : 'entries'} in ` +
     `scripts/check-suite-descriptions.mjs ` +
-    `${missingReasonComment.length === 1 ? 'is' : 'are'} missing a reason comment:\n`,
+    `${missingReasonComment.length === 1 ? 'is' : 'are'} missing a reason comment (must contain explanatory text):\n`,
   );
   for (const s of missingReasonComment) {
     console.error(`   - ${s}`);
