@@ -69,7 +69,7 @@ function ComponentShowcase({
           bgcolor: 'action.hover',
         }}
       >
-        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: (theme) => theme.typography.monoFontFamily }}>
           {label}
         </Typography>
       </Box>

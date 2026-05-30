@@ -61,7 +61,7 @@ function IconGrid({ title, icons }: { title: string; icons: IconEntry[] }) {
             sx={{ p: 1.5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, minWidth: 80 }}
           >
             <Icon fontSize="medium" />
-            <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 10, textAlign: 'center' }}>
+            <Typography variant="caption" sx={{ fontFamily: (theme) => theme.typography.monoFontFamily, fontSize: 10, textAlign: 'center' }}>
               {name}
             </Typography>
           </Paper>
@@ -131,15 +131,15 @@ export const AllGroups: Story = {
         <Stack direction="row" spacing={3} sx={{ alignItems: 'center' }}>
           <Box sx={{ textAlign: 'center' }}>
             <SearchIcon fontSize="small" />
-            <Typography variant="caption" sx={{ display: 'block', fontFamily: 'monospace' }}>small</Typography>
+            <Typography variant="caption" sx={{ display: 'block', fontFamily: (theme) => theme.typography.monoFontFamily }}>small</Typography>
           </Box>
           <Box sx={{ textAlign: 'center' }}>
             <SearchIcon fontSize="medium" />
-            <Typography variant="caption" sx={{ display: 'block', fontFamily: 'monospace' }}>medium</Typography>
+            <Typography variant="caption" sx={{ display: 'block', fontFamily: (theme) => theme.typography.monoFontFamily }}>medium</Typography>
           </Box>
           <Box sx={{ textAlign: 'center' }}>
             <SearchIcon fontSize="large" />
-            <Typography variant="caption" sx={{ display: 'block', fontFamily: 'monospace' }}>large</Typography>
+            <Typography variant="caption" sx={{ display: 'block', fontFamily: (theme) => theme.typography.monoFontFamily }}>large</Typography>
           </Box>
         </Stack>
       </Box>
@@ -150,7 +150,7 @@ export const AllGroups: Story = {
           {(['primary', 'secondary', 'action', 'error', 'warning', 'success', 'info', 'disabled'] as const).map((color) => (
             <Box key={color} sx={{ textAlign: 'center' }}>
               <SearchIcon color={color} />
-              <Typography variant="caption" sx={{ display: 'block', fontFamily: 'monospace', fontSize: 10 }}>{color}</Typography>
+              <Typography variant="caption" sx={{ display: 'block', fontFamily: (theme) => theme.typography.monoFontFamily, fontSize: 10 }}>{color}</Typography>
             </Box>
           ))}
         </Stack>

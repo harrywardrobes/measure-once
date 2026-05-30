@@ -69,7 +69,7 @@ function CopyLinkField({ url }: { url: string }) {
       slotProps={{
         input: {
           readOnly: true,
-          sx: { fontSize: '0.8rem', fontFamily: 'monospace' },
+          sx: { fontSize: '0.8rem', fontFamily: (theme) => theme.typography.monoFontFamily },
           endAdornment: (
             <InputAdornment position="end">
               <Tooltip

@@ -38,13 +38,13 @@ function Swatch({ name, hex, themePath, cssVar }: { name: string; hex: string; t
       <Box sx={{ height: 64, bgcolor: hex, borderBottom: '1px solid', borderColor: 'divider' }} />
       <Box sx={{ p: 1.25 }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{name}</Typography>
-        <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', display: 'block' }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: (theme) => theme.typography.monoFontFamily, display: 'block' }}>
           {hex.toUpperCase()}
         </Typography>
-        <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: 'monospace', display: 'block', fontSize: 10 }}>
+        <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: (theme) => theme.typography.monoFontFamily, display: 'block', fontSize: 10 }}>
           {themePath}
         </Typography>
-        <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: 'monospace', display: 'block', fontSize: 10 }}>
+        <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: (theme) => theme.typography.monoFontFamily, display: 'block', fontSize: 10 }}>
           var({cssVar})
         </Typography>
       </Box>
@@ -88,7 +88,7 @@ export const StageColours: Story = {
           <Paper key={key} variant="outlined" sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
             <Box sx={{ minWidth: 140 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 700, textTransform: 'capitalize' }}>{key}</Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: (theme) => theme.typography.monoFontFamily }}>
                 palette.stage.{key}
               </Typography>
             </Box>
@@ -97,10 +97,10 @@ export const StageColours: Story = {
               <Box key={slot} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                 <Box sx={{ width: 22, height: 22, bgcolor: c[slot], border: '1px solid', borderColor: 'divider', borderRadius: 0.5 }} />
                 <Box>
-                  <Typography variant="caption" sx={{ fontFamily: 'monospace', display: 'block' }}>
+                  <Typography variant="caption" sx={{ fontFamily: (theme) => theme.typography.monoFontFamily, display: 'block' }}>
                     .{slot} · {c[slot].toUpperCase()}
                   </Typography>
-                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.disabled', display: 'block', fontSize: 10 }}>
+                  <Typography variant="caption" sx={{ fontFamily: (theme) => theme.typography.monoFontFamily, color: 'text.disabled', display: 'block', fontSize: 10 }}>
                     var(--stage-{key}-{slot})
                   </Typography>
                 </Box>
@@ -135,8 +135,8 @@ export const TypographyScale: Story = {
             return (
               <Box key={v} sx={{ py: 1.25, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'baseline', gap: 2, flexWrap: 'wrap', '&:last-child': { borderBottom: 'none' } }}>
                 <Box sx={{ minWidth: 120, flexShrink: 0 }}>
-                  <Typography variant="subtitle2" sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{v}</Typography>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
+                  <Typography variant="subtitle2" sx={{ fontFamily: (theme) => theme.typography.monoFontFamily, fontWeight: 700 }}>{v}</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: (theme) => theme.typography.monoFontFamily }}>
                     {spec.fontSize} · w{spec.fontWeight}
                   </Typography>
                 </Box>
@@ -168,10 +168,10 @@ export const SpacingScale: Story = {
             return (
               <Box key={n} sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 0.75 }}>
                 <Box sx={{ minWidth: 130, flexShrink: 0 }}>
-                  <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>theme.spacing({n})</Typography>
+                  <Typography variant="caption" sx={{ fontFamily: (theme) => theme.typography.monoFontFamily }}>theme.spacing({n})</Typography>
                 </Box>
                 <Box sx={{ width: px, height: 14, bgcolor: 'primary.main', borderRadius: 0.5, minWidth: 2 }} />
-                <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
+                <Typography variant="caption" sx={{ fontFamily: (theme) => theme.typography.monoFontFamily, color: 'text.secondary' }}>
                   {px}px
                 </Typography>
               </Box>
@@ -205,10 +205,10 @@ export const RadiiTokens: Story = {
                 }}
               />
               <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{key}</Typography>
-              <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
+              <Typography variant="caption" sx={{ fontFamily: (theme) => theme.typography.monoFontFamily, color: 'text.secondary' }}>
                 {px === 999 ? '999px (pill)' : `${px}px`}
               </Typography>
-              <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.disabled', display: 'block', fontSize: 10 }}>
+              <Typography variant="caption" sx={{ fontFamily: (theme) => theme.typography.monoFontFamily, color: 'text.disabled', display: 'block', fontSize: 10 }}>
                 var(--radius-{key})
               </Typography>
             </Paper>

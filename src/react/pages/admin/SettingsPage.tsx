@@ -85,14 +85,14 @@ function NullStatusRow({ status }: { status: LeadStatus }) {
         <button className="btn btn-ghost" disabled style={{ fontSize: '.75rem', padding: '0 4px', opacity: 0.35 }}>↓</button>
       </td>
       <td style={{ ...TD, color: 'var(--neutral-400)' }}>—</td>
-      <td style={{ ...TD, fontFamily: 'monospace', color: 'var(--neutral-400)', fontSize: '0.75rem' }}>— none —</td>
+      <td style={{ ...TD, fontFamily: 'var(--font-mono)', color: 'var(--neutral-400)', fontSize: '0.75rem' }}>— none —</td>
       <td style={TD}>
         <input type="text" className="field ls-shorthand-input" maxLength={4}
           defaultValue={status.shorthand || ''} data-key={status.key}
           title="4-character shorthand"
           onInput={(e) => { const t = e.currentTarget; t.value = t.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); }}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          style={{ width: 56, textAlign: 'center', fontFamily: 'monospace' }}
+          style={{ width: 56, textAlign: 'center', fontFamily: 'var(--font-mono)' }}
         />
       </td>
       <td style={TD}>
@@ -126,14 +126,14 @@ function StatusRow({ status, index, total, onMove }: {
           {STAGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </td>
-      <td style={{ ...TD, fontFamily: 'monospace', fontSize: '0.75rem' }}>{status.key}</td>
+      <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{status.key}</td>
       <td style={TD}>
         <input type="text" className="field ls-shorthand-input" maxLength={4}
           defaultValue={status.shorthand || ''} data-key={status.key}
           title="4-character shorthand"
           onInput={(e) => { const t = e.currentTarget; t.value = t.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); }}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          style={{ width: 56, textAlign: 'center', fontFamily: 'monospace' }}
+          style={{ width: 56, textAlign: 'center', fontFamily: 'var(--font-mono)' }}
         />
       </td>
       <td style={TD}>
@@ -743,7 +743,7 @@ export function SettingsPage() {
                     {webhookStatus.subscriptions.map(s => (
                       <Box key={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <CheckCircleOutlinedIcon sx={{ fontSize: 14, color: s.active ? 'success.main' : 'warning.main', flexShrink: 0 }} />
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                        <Typography variant="body2" sx={{ fontFamily: (theme) => theme.typography.monoFontFamily, fontSize: '0.8rem' }}>
                           {s.propertyName}
                           {!s.active && <Box component="span" sx={{ ml: 1, color: 'warning.main' }}>(paused)</Box>}
                         </Typography>

@@ -150,7 +150,7 @@ function StatusSection({ label, statuses }: {
 }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
+      <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: (theme) => theme.typography.monoFontFamily }}>
         {label}
       </Typography>
       <PlumStrip>
@@ -185,7 +185,7 @@ export const ServiceStatusBadgePalette: Story = {
               sx={{
                 width: 140,
                 flexShrink: 0,
-                fontFamily: 'monospace',
+                fontFamily: (theme) => theme.typography.monoFontFamily,
                 color: 'text.secondary',
               }}
             >
@@ -209,7 +209,7 @@ export const ServiceStatusBadgePalette: Story = {
         <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {SERVICES.map((svc) => (
             <Box key={svc} sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
+              <Typography variant="caption" sx={{ fontFamily: (theme) => theme.typography.monoFontFamily, color: 'text.secondary' }}>
                 {SERVICE_LABELS[svc]}
               </Typography>
               <PlumStrip>
@@ -222,7 +222,7 @@ export const ServiceStatusBadgePalette: Story = {
                   <Typography
                     key={st}
                     variant="caption"
-                    sx={{ fontSize: 9, color: 'text.disabled', width: 28, textAlign: 'center', fontFamily: 'monospace' }}
+                    sx={{ fontSize: 9, color: 'text.disabled', width: 28, textAlign: 'center', fontFamily: (theme) => theme.typography.monoFontFamily }}
                   >
                     {st.slice(0, 4)}
                   </Typography>

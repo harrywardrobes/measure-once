@@ -42,7 +42,7 @@ export const AllStates: Story = {
             <DesignVisitStatusPill status={key} />
             <Typography
               variant="caption"
-              sx={{ color: 'text.disabled', fontFamily: 'monospace', fontSize: 10 }}
+              sx={{ color: 'text.disabled', fontFamily: (theme) => theme.typography.monoFontFamily, fontSize: 10 }}
             >
               {key}
             </Typography>

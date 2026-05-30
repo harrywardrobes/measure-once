@@ -665,7 +665,7 @@ function HandlerEditorModal({
                   rows={4}
                   value={jsonCfg}
                   onChange={e => setJsonCfg(e.target.value)}
-                  slotProps={{ htmlInput: { style: { fontFamily: 'monospace', fontSize: '0.75rem' } } }}
+                  slotProps={{ htmlInput: { style: { fontFamily: 'var(--font-mono)', fontSize: '0.75rem' } } }}
                 />
                 {jsonStaleLsRefs.map(ref => (
                   <Alert key={ref.field} severity="warning" sx={{ mt: 0.75 }}>
