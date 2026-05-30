@@ -173,6 +173,7 @@ const DB_SUITES = [
   'test:workflow-map:ci',
   'test:upload-photos-resend-mode:ci',
   'test:active-link-expires:ci',
+  'test:active-link-warning-ordering:ci',
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

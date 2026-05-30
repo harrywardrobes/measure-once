@@ -148,6 +148,7 @@ const STEPS = [
   'test:upload-photos-resend-mode:ci',
   'test:projects-top-spacing:ci',
   'test:active-link-expires:ci',
+  'test:active-link-warning-ordering:ci',
   'build:storybook',
   { script: 'test:storybook-output-clean', env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
   { script: 'test:storybook-smoke',        env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
