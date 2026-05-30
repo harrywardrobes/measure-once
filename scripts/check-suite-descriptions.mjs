@@ -25,6 +25,7 @@ import { fileURLToPath } from 'url';
 import { join } from 'path';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const SELF = fileURLToPath(import.meta.url);
 
 /**
  * Suites intentionally excluded from the automated CI pipeline.
@@ -90,6 +91,49 @@ function extractDocumentedSuiteRows(filePath) {
   return rows;
 }
 
+/**
+ * Read this script's own source and find any STANDALONE_SUITES entries that
+ * lack a reason comment.  A reason comment is either:
+ *   • a `//` comment on the same line as the suite-name string, or
+ *   • a `//` comment on the line immediately above the suite-name string.
+ *
+ * Returns an array of suite names that are missing a reason comment.
+ */
+function findStandaloneEntriesWithoutComment(filePath) {
+  const lines = readFileSync(filePath, 'utf8').split('\n');
+  const missing = [];
+  let inSet = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (/STANDALONE_SUITES\s*=\s*new Set\(/.test(line)) {
+      inSet = true;
+      continue;
+    }
+    if (inSet && /^\s*\]\)/.test(line)) {
+      inSet = false;
+      continue;
+    }
+
+    if (inSet) {
+      const m = line.match(/'(test:[^']+)'/);
+      if (m) {
+        const afterEntry = line.slice(line.indexOf(m[0]) + m[0].length);
+        const hasInlineComment = /\/\//.test(afterEntry);
+        const prevLine = i > 0 ? lines[i - 1].trim() : '';
+        const hasPrevComment = prevLine.startsWith('//');
+
+        if (!hasInlineComment && !hasPrevComment) {
+          missing.push(m[1]);
+        }
+      }
+    }
+  }
+
+  return missing;
+}
+
 const runnerFile = join(ROOT, 'scripts', 'run-ci.mjs');
 const docsFile   = join(ROOT, 'docs', 'TEST_SUITES.md');
 
@@ -119,11 +163,16 @@ const missingStandaloneNote = [...STANDALONE_SUITES]
   })
   .sort();
 
+// Reason-comment check: every STANDALONE_SUITES entry must have a // comment
+// on the same line or the line immediately above it in this script's source.
+const missingReasonComment = findStandaloneEntriesWithoutComment(SELF).sort();
+
 if (
   missing.length === 0 &&
   stale.length === 0 &&
   deadAllowlist.length === 0 &&
-  missingStandaloneNote.length === 0
+  missingStandaloneNote.length === 0 &&
+  missingReasonComment.length === 0
 ) {
   console.log(
     `✅  suite-descriptions: all ${stepSuites.size} CI test suites have a` +
@@ -202,6 +251,23 @@ if (missingStandaloneNote.length > 0) {
   console.error(
     '\nAdd a "Standalone only" note to each suite\'s row in the' +
     ' "Suite reference" table in docs/TEST_SUITES.md.\n',
+  );
+}
+
+if (missingReasonComment.length > 0) {
+  failed = true;
+  console.error(
+    `❌  suite-descriptions: ${missingReasonComment.length} STANDALONE_SUITES ` +
+    `${missingReasonComment.length === 1 ? 'entry' : 'entries'} in ` +
+    `scripts/check-suite-descriptions.mjs ` +
+    `${missingReasonComment.length === 1 ? 'is' : 'are'} missing a reason comment:\n`,
+  );
+  for (const s of missingReasonComment) {
+    console.error(`   - ${s}`);
+  }
+  console.error(
+    '\nAdd a // comment on the same line or the line immediately above each' +
+    ' entry explaining why it is excluded from the CI pipeline.\n',
   );
 }
 
