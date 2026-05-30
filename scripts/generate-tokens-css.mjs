@@ -136,6 +136,11 @@ function parseTypography(ts) {
   return result;
 }
 
+function parseMonoFontFamily(ts) {
+  const m = ts.match(/export\s+const\s+MONO_FONT_FAMILY\s*=\s*"([^"]+)"/);
+  return m ? m[1] : "'Source Code Pro', ui-monospace, Consolas, monospace";
+}
+
 // ── Parse theme.ts ───────────────────────────────────────────────────────────
 
 const ts            = readFileSync(THEME_PATH, 'utf8');
@@ -145,6 +150,7 @@ const statusColors  = parseStatusColors(ts);
 const neutralColors = parseNeutralColors(ts);
 const radius        = parseRadius(ts);
 const typography    = parseTypography(ts);
+const monoFontFamily = parseMonoFontFamily(ts);
 
 // ── Emit helpers ─────────────────────────────────────────────────────────────
 
@@ -308,6 +314,9 @@ ${stageLines.join('\n')}
 
   /* ── Typography scale ────────────────────────────────────────────────────── */
 ${typoLines.join('\n')}
+
+  /* ── Monospace font ──────────────────────────────────────────────────────── */
+  --font-mono:        ${monoFontFamily};
 
   /* ── Spacing unit ────────────────────────────────────────────────────────── */
   --spacing-unit: 8;

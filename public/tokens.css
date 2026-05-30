@@ -241,6 +241,9 @@
   --typo-overline-font-weight:   700;
   --typo-overline-line-height:   2.66;
 
+  /* ── Monospace font ──────────────────────────────────────────────────────── */
+  --font-mono:        'Source Code Pro', ui-monospace, Consolas, monospace;
+
   /* ── Spacing unit ────────────────────────────────────────────────────────── */
   --spacing-unit: 8;
 }

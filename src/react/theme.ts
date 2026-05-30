@@ -142,9 +142,16 @@ declare module '@mui/material/styles' {
   interface ThemeOptions {
     radius?: typeof RADIUS;
   }
+  interface TypographyVariants {
+    monoFontFamily: string;
+  }
+  interface TypographyVariantsOptions {
+    monoFontFamily?: string;
+  }
 }
 
 const FONT_FAMILY = "'Open Sans', system-ui, -apple-system, Segoe UI, sans-serif";
+export const MONO_FONT_FAMILY = "'Source Code Pro', ui-monospace, Consolas, monospace";
 
 export const theme: Theme = createTheme({
   palette: {
@@ -163,6 +170,7 @@ export const theme: Theme = createTheme({
   radius: RADIUS,
   typography: {
     fontFamily: FONT_FAMILY,
+    monoFontFamily: MONO_FONT_FAMILY,
     h1:       { fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: '2rem',     lineHeight: 1.2 },
     h2:       { fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: '1.5rem',   lineHeight: 1.25 },
     h3:       { fontFamily: FONT_FAMILY, fontWeight: 700, fontSize: '1.25rem',  lineHeight: 1.3 },
