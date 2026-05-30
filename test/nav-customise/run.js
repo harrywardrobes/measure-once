@@ -253,13 +253,12 @@ function readDialogState(page) {
     const resetBtn = buttons.find(b => b.textContent.trim() === 'Reset to defaults');
     const resetDisabled = resetBtn ? resetBtn.disabled : null;
 
-    const labels = Array.from(dialog.querySelectorAll('.MuiFormControlLabel-root'));
+    const labels = Array.from(dialog.querySelectorAll('[data-testid^="nav-customise-item-"]'));
     const checkedKeys = [];
     for (const lbl of labels) {
       const input = lbl.querySelector('input[type="checkbox"]');
-      const span  = lbl.querySelector('.MuiFormControlLabel-label');
-      if (input && input.checked && span) {
-        checkedKeys.push(span.textContent.trim());
+      if (input && input.checked && lbl.dataset.navLabel) {
+        checkedKeys.push(lbl.dataset.navLabel);
       }
     }
 
@@ -357,8 +356,7 @@ async function clickMoreAndWaitForDrawer(page, timeoutMs = 6000) {
  */
 async function clickCustomiseButton(page) {
   await page.evaluate(() => {
-    const items = Array.from(document.querySelectorAll('[data-testid="bottom-nav-drawer-paper"] .MuiListItemButton-root'));
-    const btn = items.find(el => el.textContent.includes('Customise navigation'));
+    const btn = document.querySelector('[data-testid="bottom-nav-drawer-paper"] [data-testid="nav-customise-button"]');
     if (btn) btn.click();
   });
   const ok = await poll(page, () => {
@@ -376,11 +374,10 @@ function getDialogCheckboxState(page) {
   return page.evaluate(() => {
     const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
     if (!dialog) return null;
-    return Array.from(dialog.querySelectorAll('.MuiFormControlLabel-root')).map(lbl => {
-      const cb   = lbl.querySelector('input[type="checkbox"]');
-      const text = lbl.querySelector('.MuiFormControlLabel-label');
+    return Array.from(dialog.querySelectorAll('[data-testid^="nav-customise-item-"]')).map(lbl => {
+      const cb = lbl.querySelector('input[type="checkbox"]');
       return {
-        label:    text ? text.textContent.trim() : '',
+        label:    lbl.dataset.navLabel || '',
         checked:  cb ? cb.checked  : false,
         disabled: cb ? cb.disabled : false,
       };
@@ -408,8 +405,8 @@ async function selectNavItems(page, desiredLabels) {
     for (const item of toUncheck) {
       await page.evaluate((label) => {
         const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
-        const lblEl = Array.from(dialog.querySelectorAll('.MuiFormControlLabel-root'))
-          .find(l => l.querySelector('.MuiFormControlLabel-label')?.textContent.trim() === label);
+        const lblEl = Array.from(dialog.querySelectorAll('[data-testid^="nav-customise-item-"]'))
+          .find(el => el.dataset.navLabel === label);
         if (lblEl) lblEl.querySelector('input[type="checkbox"]')?.click();
       }, item.label);
       await new Promise(r => setTimeout(r, 80));
@@ -417,8 +414,8 @@ async function selectNavItems(page, desiredLabels) {
     for (const item of toCheck) {
       await page.evaluate((label) => {
         const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
-        const lblEl = Array.from(dialog.querySelectorAll('.MuiFormControlLabel-root'))
-          .find(l => l.querySelector('.MuiFormControlLabel-label')?.textContent.trim() === label);
+        const lblEl = Array.from(dialog.querySelectorAll('[data-testid^="nav-customise-item-"]'))
+          .find(el => el.dataset.navLabel === label);
         const cb = lblEl?.querySelector('input[type="checkbox"]');
         if (cb && !cb.disabled) cb.click();
       }, item.label);
@@ -729,8 +726,7 @@ async function main() {
       await clickMoreAndWaitForDrawer(page);
 
       const hasCustomise = await page.evaluate(() => {
-        const items = Array.from(document.querySelectorAll('[data-testid="bottom-nav-drawer-paper"] .MuiListItemButton-root'));
-        return items.some(el => el.textContent.includes('Customise navigation'));
+        return !!document.querySelector('[data-testid="bottom-nav-drawer-paper"] [data-testid="nav-customise-button"]');
       });
       record(
         '[CUST-OPEN] Manager sees "Customise navigation" in More drawer',
@@ -749,8 +745,7 @@ async function main() {
       await clickMoreAndWaitForDrawer(page);
 
       const hasCustomise = await page.evaluate(() => {
-        const items = Array.from(document.querySelectorAll('[data-testid="bottom-nav-drawer-paper"] .MuiListItemButton-root'));
-        return items.some(el => el.textContent.includes('Customise navigation'));
+        return !!document.querySelector('[data-testid="bottom-nav-drawer-paper"] [data-testid="nav-customise-button"]');
       });
       record(
         '[CUST-OPEN] Member does NOT see "Customise navigation" in More drawer',
@@ -1422,8 +1417,8 @@ async function main() {
               const dialog = Array.from(document.querySelectorAll('[role="dialog"]'))
                 .find(d => d.textContent.includes('Customise navigation'));
               if (!dialog) return false;
-              const alerts = Array.from(dialog.querySelectorAll('.MuiAlert-root'));
-              return alerts.some(a => a.textContent.includes('inherits the default layout'));
+              const banner = dialog.querySelector('[data-testid="nav-customise-inherit-banner"]');
+              return !!(banner && banner.textContent.includes('inherits the default layout'));
             });
           }
 
@@ -1456,8 +1451,8 @@ async function main() {
               const dialog = Array.from(document.querySelectorAll('[role="dialog"]'))
                 .find(d => d.textContent.includes('Customise navigation'));
               if (!dialog) return false;
-              const alerts = Array.from(dialog.querySelectorAll('.MuiAlert-root'));
-              return alerts.some(a => a.textContent.includes('inherits the default layout'));
+              const banner = dialog.querySelector('[data-testid="nav-customise-inherit-banner"]');
+              return !!(banner && banner.textContent.includes('inherits the default layout'));
             });
             bannerAbsent = !bannerVisible;
           }

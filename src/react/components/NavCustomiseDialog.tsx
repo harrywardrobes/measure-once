@@ -92,7 +92,7 @@ export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys,
           drawer.
         </Typography>
         {isCustomized === false && (
-          <Alert severity="info" sx={{ mb: 2 }}>
+          <Alert severity="info" sx={{ mb: 2 }} data-testid="nav-customise-inherit-banner">
             This role currently inherits the default layout. Saving will create a custom layout for
             this role.
           </Alert>
@@ -103,6 +103,8 @@ export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys,
             return (
               <FormControlLabel
                 key={n.key}
+                data-testid={`nav-customise-item-${n.key}`}
+                data-nav-label={n.label}
                 control={
                   <Checkbox
                     checked={checked}

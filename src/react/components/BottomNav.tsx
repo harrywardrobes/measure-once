@@ -428,6 +428,7 @@ export function BottomNav() {
             <>
               <Divider sx={{ mx: 2, my: 0.5 }} />
               <ListItemButton
+                data-testid="nav-customise-button"
                 onClick={() => { setDrawerOpen(false); setCustomiseOpen(true); }}
                 sx={{ py: 1.5, px: 2.5 }}
               >
