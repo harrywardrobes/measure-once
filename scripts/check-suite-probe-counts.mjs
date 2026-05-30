@@ -37,6 +37,11 @@
  *   message naming the suite and suppressed IDs as a reminder that the preferred
  *   fix is to give each probe a distinct label so no suppression is needed.
  *
+ *   Each ID listed in PROBE_LABELS_DOC_EXTRAS must NOT already have a dedicated
+ *   entry in PROBE_LABELS.  If the same ID appears in both arrays the script
+ *   fails CI with a "redundant PROBE_LABELS_DOC_EXTRAS entry" error, because the
+ *   suppression is unnecessary and signals a stale or copy-paste mistake.
+ *
  * Run via:  npm run test:suite-probe-counts
  *
  * ---------------------------------------------------------------------------
@@ -62,7 +67,9 @@
  *      **(A-open/B-open/B2-open)**.
  *
  *   3. Keep PROBE_LABELS and the docs row in sync in both directions — this
- *      script fails CI for any mismatch.
+ *      script fails CI for any mismatch.  If you use PROBE_LABELS_DOC_EXTRAS
+ *      to suppress a reverse-check ID, that ID must not also appear in
+ *      PROBE_LABELS; duplicate entries across both arrays are a CI error.
  *
  * Suites with no named probes should omit PROBE_LABELS entirely; rows with no
  * bold callouts are silently skipped.
