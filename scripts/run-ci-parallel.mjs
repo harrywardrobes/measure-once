@@ -75,6 +75,7 @@ const STATIC_SUITES = [
   'test:ci-doc-sync',
   'test:suite-descriptions',
   'test:suite-probe-counts',
+  'test:suite-probe-counts-advisory',
   'test:story-count-sync',
 ];
 
