@@ -19,18 +19,23 @@
 //       (a second submission card now appears in the section).
 //   (D) Dispatching the event with a DIFFERENT contactId does NOT trigger an
 //       extra fetch for this contact's rail (filter guard).
+//   (E) After the re-render the submitted card body (ROW_SUBMITTED, id=3)
+//       opens and shows the correct address text — catching regressions where
+//       the body renders empty even though data was present in the response.
 //
 // Strategy:
 //   - Spawn a real Express server and log in as an admin.
 //   - Stub all customer-detail API calls via evaluateOnNewDocument fetch
 //     interception so no HubSpot token or real contact data is required.
 //   - The customer-info stub uses an in-page mutable counter: fetch #1 returns
-//     one active card; fetch #2 returns two cards (simulating the rail
-//     refreshing after a new link was generated).
+//     one active card; fetch #2 returns three cards (two pending + one
+//     submitted with address data, simulating a resubmission refresh).
 //   - After the rail renders the initial data (probe A), dispatch the event via
 //     page.evaluate and poll for the updated data (probes B + C).
 //   - Run a second dispatch with a foreign contactId and confirm the fetch
 //     counter does not advance further (probe D).
+//   - Click the Review button on the submitted card and assert the address text
+//     is visible in the expanded body (probe E).
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-info-stale-rail
@@ -129,6 +134,30 @@ const ROW_GENERATED = {
   form_link: 'https://example.com/form/new-link',
 };
 
+// Third row included in the second-fetch payload: a submitted card with address
+// and room data populated.  Probe E opens this card's body and asserts the
+// address text is rendered, catching regressions where the body renders empty
+// after a re-fetch/re-render cycle.
+const ROW_SUBMITTED = {
+  id:           3,
+  created_at:   new Date(NOW - 5 * 24 * 60 * 60 * 1000).toISOString(),
+  submitted_at: new Date(NOW - 2 * 24 * 60 * 60 * 1000).toISOString(),
+  expires_at:   FUTURE,
+  contact_name:     'Stale RailTest',
+  contact_email:    'stale-rail@privtest.invalid',
+  corrected_email:  null,
+  corrected_mobile: null,
+  address_line1: '42 Resubmit Lane',
+  city:          'Testville',
+  postcode:      'TV1 2AB',
+  room_count:    2,
+  room_notes:    'Two rooms updated',
+  photo_keys:    [],
+  photoUrls:     [],
+  email_skipped_count: 0,
+  form_link: 'https://example.com/form/submitted-link',
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const REPORT_PATH = path.join(
@@ -174,20 +203,23 @@ async function pollPage(page, fn, timeoutMs = 12000, intervalMs = 150) {
  *
  * window.__cisrFetchCount tracks how many times the customer-info endpoint
  * has been fetched so probes can assert re-fetch behaviour without relying on
- * timing.  The first call returns ROW_INITIAL alone; every subsequent call
- * returns [ROW_GENERATED, ROW_INITIAL] (newest card first, as the real
- * endpoint does).
+ * timing.  The first call returns [ROW_INITIAL] alone; every subsequent call
+ * returns [ROW_GENERATED, ROW_INITIAL, ROW_SUBMITTED] — newest pending cards
+ * first, then the submitted card with address/room data (as the real endpoint
+ * sorts active-then-submitted).  ROW_SUBMITTED is the anchor for probe E.
  */
 function buildInterceptScript(contactId) {
   const contactJson   = JSON.stringify(CONTACT_STUB);
   const rowInitial    = JSON.stringify(ROW_INITIAL);
   const rowGenerated  = JSON.stringify(ROW_GENERATED);
+  const rowSubmitted  = JSON.stringify(ROW_SUBMITTED);
 
   return `
 (function () {
   var CONTACT_ID    = ${JSON.stringify(contactId)};
   var ROW_INITIAL   = ${rowInitial};
   var ROW_GENERATED = ${rowGenerated};
+  var ROW_SUBMITTED = ${rowSubmitted};
   var CONTACT_STUB  = ${contactJson};
 
   var orig = window.fetch;
@@ -212,11 +244,13 @@ function buildInterceptScript(contactId) {
     // Customer-info submissions — the rail's own endpoint.
     // Tracks how many times it has been called so probe B can verify a
     // second fetch is triggered by the CustomEvent.
+    // The second fetch also includes ROW_SUBMITTED (a completed card with
+    // address data) so probe E can open its body and verify content renders.
     if (pathname === '/api/customer-info/by-contact/' + CONTACT_ID) {
       window.__cisrFetchCount += 1;
       var rows = window.__cisrFetchCount === 1
         ? [ROW_INITIAL]
-        : [ROW_GENERATED, ROW_INITIAL];
+        : [ROW_GENERATED, ROW_INITIAL, ROW_SUBMITTED];
       return json(rows);
     }
 
@@ -373,6 +407,12 @@ function writeReport(runId) {
     '- **(D) Foreign contactId ignored**: Dispatching the event with a different',
     '  contactId does not trigger an additional fetch for this contact\'s rail,',
     '  confirming the `detail.contactId === contactId` guard is in place.',
+    '- **(E) Submitted card body renders address after re-render**: The second fetch',
+    '  also returns ROW_SUBMITTED (`id=3`) — a completed card with address and room',
+    '  data. After the re-render the "Review" button is clicked to open the card body',
+    '  and the address text ("42 Resubmit Lane") is asserted to be visible. This',
+    '  catches regressions where the card body renders empty despite data being',
+    '  present in the fetch response.',
     '',
     'All API calls are stubbed via evaluateOnNewDocument fetch interception.',
     'No HubSpot token or real contact data is required.',
@@ -451,6 +491,7 @@ async function main() {
     '(B) dispatching customer-info-link-generated triggers a second fetch',
     '(C) rail re-renders with updated data (second card visible)',
     '(D) foreign contactId dispatch does not trigger extra fetch',
+    '(E) submitted card body shows updated address after re-render',
   ];
 
   if (!puppeteer) {
@@ -573,8 +614,10 @@ async function main() {
     );
 
     // ── Probe C: rail re-renders with updated data ─────────────────────────
-    // The second fetch returns [ROW_GENERATED, ROW_INITIAL] — two active cards.
-    // Poll until 2 "Awaiting submission" chips are in the rail.
+    // The second fetch returns [ROW_GENERATED, ROW_INITIAL, ROW_SUBMITTED] —
+    // two active-pending cards + one submitted card.  Poll until 2 "Awaiting
+    // submission" chips appear (the pending cards); ROW_SUBMITTED is submitted
+    // so it carries a different chip and is the target of probe E, not here.
     const twoCardsVisible = await pollPage(page, () => {
       const section = document.getElementById('customer-info-submissions-section');
       if (!section) return null;
@@ -622,6 +665,86 @@ async function main() {
       `fetchCount unchanged (= ${fetchCountBeforeD}) after foreign-contactId event`,
       `fetchCount = ${fetchCountAfterD}`,
       fetchCountAfterD === fetchCountBeforeD,
+    );
+
+    // ── Probe E: submitted card body shows updated address after re-render ─
+    // After the re-fetch the rail includes ROW_SUBMITTED (id=3) — a completed
+    // card with address_line1="42 Resubmit Lane", city="Testville".  We click
+    // the "Review" button (data-testid="review-btn") inside
+    // [data-testid="submission-card-3"] to expand the body, then poll for the
+    // address text.  A regression would show an empty body even though the
+    // data was present in the fetch response.
+    console.log('\n  [E] Opening submitted card body and checking address text');
+
+    const submittedCardSelector = '[data-testid="submission-card-3"]';
+
+    // Wait for the submitted card to appear in the DOM (it was part of the
+    // second-fetch response so it should already be rendered after probe C).
+    const submittedCardFound = await pollPage(page, () => {
+      return document.querySelector('[data-testid="submission-card-3"]') ? 'ok' : null;
+    }, 6000).catch(() => null);
+
+    if (submittedCardFound) {
+      // Click the Review button to open the card body.
+      await page.click(`${submittedCardSelector} [data-testid="review-btn"]`).catch(() => {
+        // Fallback: click the card header itself (the clickable summary area).
+        return page.click(submittedCardSelector);
+      });
+    }
+
+    // Poll for the address text within the card body, requiring the matching
+    // text node to be *visually expanded* (height > 0).  MUI Collapse keeps
+    // children in the DOM even when closed (height: 0; overflow: hidden), so
+    // a plain textContent check could pass even if the body never opened.
+    // We use TreeWalker to find the deepest text node that contains the address
+    // string, then check its parent element's bounding box height as a proxy
+    // for "rendered and visible in the expanded body".
+    const addressVisible = await pollPage(page, () => {
+      const card = document.querySelector('[data-testid="submission-card-3"]');
+      if (!card) return null;
+      const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
+      let node;
+      while ((node = walker.nextNode())) {
+        if ((node.nodeValue || '').includes('42 Resubmit Lane')) {
+          const el = node.parentElement;
+          if (el && el.getBoundingClientRect().height > 0) return 'ok';
+        }
+      }
+      return null;
+    }, 8000).catch(() => null);
+
+    const probeEState = await page.evaluate(() => {
+      const card = document.querySelector('[data-testid="submission-card-3"]');
+      if (!card) return { cardFound: false, cardText: '', bodyHeight: 0 };
+      // Measure the height of the MUI Collapse wrapper (first child of the card
+      // accordion detail area) as a signal of whether the body is expanded.
+      const collapseRoot = card.querySelector('[class*="MuiCollapse-root"]');
+      const bodyHeight = collapseRoot ? collapseRoot.getBoundingClientRect().height : -1;
+      return {
+        cardFound:  true,
+        cardText:   (card.textContent || '').slice(0, 300),
+        bodyHeight,
+      };
+    });
+
+    if (!addressVisible) {
+      console.log(
+        `  [E] address not visibly expanded. cardFound=${probeEState.cardFound}`
+        + ` bodyHeight=${probeEState.bodyHeight}`
+        + ` cardText="${probeEState.cardText}"`,
+      );
+    }
+
+    record(
+      PROBE_LABELS[5],
+      'address "42 Resubmit Lane" visible in expanded submission-card-3 body',
+      probeEState.cardFound
+        ? (addressVisible
+          ? 'address text found in expanded body'
+          : `bodyHeight=${probeEState.bodyHeight} text="${probeEState.cardText}"`)
+        : 'submission-card-3 not found in DOM',
+      !!addressVisible,
+      submittedCardFound ? '' : 'submission-card-3 did not appear after re-fetch',
     );
 
     await page.__ctx.close().catch(() => {});
