@@ -14,6 +14,8 @@
 //   (C) Clicking Copy briefly shows the check icon (ContentCopy → Check swap).
 //   (D) Submitted card shows Review button only (no Copy/Open).
 //   (E) Active-pending card with form_link: null shows neither Copy nor Open.
+//   (F) Skipped-email count badge: present with correct count when non-zero;
+//       absent when email_skipped_count is 0.
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-info-rail
@@ -136,6 +138,50 @@ const ROW_ACTIVE_NO_LINK = {
 };
 
 const ALL_ROWS = [ROW_EXPIRED, ROW_ACTIVE_WITH_LINK, ROW_SUBMITTED, ROW_ACTIVE_NO_LINK];
+
+// Row 5: active-pending with photoUrls and a non-zero email_skipped_count —
+// used exclusively by probe F to verify the skipped-email Alert badge.
+const ROW_SKIP_NONZERO = {
+  id: 10,
+  created_at: new Date(NOW - 2 * 24 * 60 * 60 * 1000).toISOString(),
+  submitted_at: null,
+  expires_at: FUTURE,
+  contact_name: 'Rail Test',
+  contact_email: 'rail@privtest.invalid',
+  corrected_email: null,
+  corrected_mobile: null,
+  address_line1: null,
+  city: null,
+  postcode: null,
+  room_count: null,
+  room_notes: null,
+  photo_keys: ['key1.jpg'],
+  photoUrls: ['https://example.com/photo1.jpg'],
+  email_skipped_count: 3,
+  form_link: null,
+};
+
+// Row 6: same as ROW_SKIP_NONZERO but email_skipped_count is 0 — the Alert
+// badge must be absent even though photoUrls is non-empty.
+const ROW_SKIP_ZERO = {
+  id: 11,
+  created_at: new Date(NOW - 2 * 24 * 60 * 60 * 1000).toISOString(),
+  submitted_at: null,
+  expires_at: FUTURE,
+  contact_name: 'Rail Test',
+  contact_email: 'rail@privtest.invalid',
+  corrected_email: null,
+  corrected_mobile: null,
+  address_line1: null,
+  city: null,
+  postcode: null,
+  room_count: null,
+  room_notes: null,
+  photo_keys: ['key1.jpg'],
+  photoUrls: ['https://example.com/photo1.jpg'],
+  email_skipped_count: 0,
+  form_link: null,
+};
 
 // Minimal contact object returned by the stub.
 const CONTACT_STUB = {
@@ -296,7 +342,7 @@ function buildInterceptScript(contactId, rows) {
  * Open the customer-detail page with fetch stubs active. Returns the Puppeteer
  * page once the rail section has loaded (or timed out).
  */
-async function openDetailPage(browser, jar) {
+async function openDetailPage(browser, jar, rows = ALL_ROWS) {
   const ctx = await (browser.createBrowserContext
     ? browser.createBrowserContext()
     : browser.createIncognitoBrowserContext());
@@ -308,7 +354,7 @@ async function openDetailPage(browser, jar) {
   page.on('console', m => pageLogs.push(`[${m.type()}] ${m.text()}`));
   page.on('pageerror', e => pageLogs.push(`[pageerror] ${e.message}`));
 
-  await page.evaluateOnNewDocument(buildInterceptScript(CONTACT_ID, ALL_ROWS));
+  await page.evaluateOnNewDocument(buildInterceptScript(CONTACT_ID, rows));
 
   // Harden clipboard before any JS runs — navigator.clipboard is non-writable in
   // some Chromium contexts, so use Object.defineProperty instead of assignment.
@@ -386,6 +432,11 @@ function writeReport(runId) {
     '  a "Review" button but no copy-link or open-link button.',
     '- **(E) Active card with null form_link shows neither Copy nor Open**: an',
     '  active-pending row whose `form_link` is null renders no copy or open button.',
+    '- **(F) Skipped-email count badge**: two sub-probes using isolated page loads.',
+    '  **(F1)** A card with `email_skipped_count: 3` and non-empty `photoUrls` must',
+    '  render `[data-testid="skipped-photo-link"]` inside an Alert whose text contains',
+    '  the count ("3"). **(F2)** A card with `email_skipped_count: 0` (same `photoUrls`)',
+    '  must not render the Alert or the link element at all.',
     '',
     'All API calls are stubbed via evaluateOnNewDocument fetch interception.',
     'No HubSpot token or real contact data is required.',
@@ -468,6 +519,8 @@ async function main() {
     '(D) submitted card has no copy-link-btn',
     '(E) active card with null form_link shows no copy-link-btn',
     '(E) active card with null form_link shows no open-link-btn',
+    '(F1) email_skipped_count=3: skipped-email Alert renders with count in text',
+    '(F2) email_skipped_count=0: skipped-email Alert is absent',
   ];
 
   if (!puppeteer) {
@@ -714,6 +767,60 @@ async function main() {
     );
 
     await page.__ctx.close().catch(() => {});
+
+    // ── Probe F: skipped-email count badge ────────────────────────────────
+    console.log('\n  [F] Skipped-email count badge');
+
+    // F1: email_skipped_count=3 with photoUrls → Alert badge renders and text
+    //     contains the count ("3 photos were too large…").
+    console.log('  [F1] non-zero count → badge present');
+    const pageF1 = await openDetailPage(browser, adminClient.cookie, [ROW_SKIP_NONZERO]);
+
+    const f1State = await pageF1.evaluate(() => {
+      const section = document.getElementById('customer-info-submissions-section');
+      if (!section) return { sectionFound: false, linkFound: false, alertText: null };
+      const link = section.querySelector('[data-testid="skipped-photo-link"]');
+      if (!link) return { sectionFound: true, linkFound: false, alertText: null };
+      const alert = link.closest('[role="alert"]') || link.parentElement;
+      const alertText = (alert?.textContent || '').trim();
+      return { sectionFound: true, linkFound: true, alertText };
+    });
+
+    const badgeHasCount = f1State.linkFound && (f1State.alertText || '').includes('3');
+    record(
+      PROBE_LABELS[9],
+      'skipped-photo-link present; Alert text contains "3"',
+      f1State.sectionFound
+        ? (f1State.linkFound
+            ? `link found; alertText="${f1State.alertText}"`
+            : 'link absent')
+        : 'section not found',
+      badgeHasCount,
+    );
+
+    await pageF1.__ctx.close().catch(() => {});
+
+    // F2: email_skipped_count=0 with photoUrls → Alert badge is absent.
+    console.log('  [F2] zero count → badge absent');
+    const pageF2 = await openDetailPage(browser, adminClient.cookie, [ROW_SKIP_ZERO]);
+
+    const f2State = await pageF2.evaluate(() => {
+      const section = document.getElementById('customer-info-submissions-section');
+      if (!section) return { sectionFound: false, linkFound: null };
+      const link = section.querySelector('[data-testid="skipped-photo-link"]');
+      return { sectionFound: true, linkFound: !!link };
+    });
+
+    record(
+      PROBE_LABELS[10],
+      'skipped-photo-link absent when email_skipped_count=0',
+      f2State.sectionFound
+        ? (f2State.linkFound ? 'link present (wrong)' : 'link absent (correct)')
+        : 'section not found',
+      f2State.sectionFound && !f2State.linkFound,
+    );
+
+    await pageF2.__ctx.close().catch(() => {});
 
   } catch (e) {
     console.error('Test error:', e);
