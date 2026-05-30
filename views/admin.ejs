@@ -1,22 +1,17 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Admin · Measure Once</title>
-  <link rel="stylesheet" href="/tokens.css">
-  <link rel="stylesheet" href="/app-styles.css">
-  <style>
-    /*/* Admin-only layout has moved to public/app-styles.css under the
-       "Admin page" section. Every rule there is scoped under .admin-page
-       (the <body> class below), so admin keeps its plum buttons / stone
-       borders / custom tabs without colliding with shared rules used by
-       other pages. The two former magic z-index values (toast=1000,
-       modal-overlay=400) now consume --z-toast and --z-modal from the
-       ladder defined on :root. Add new admin-only styles there, not here. */
-  </style>
-</head>
+<%- include('_head') %>
 <body class="admin-page">
+
+<style>
+  /*/* Admin-only layout has moved to public/app-styles.css under the
+     "Admin page" section. Every rule there is scoped under .admin-page
+     (the <body> class below), so admin keeps its plum buttons / stone
+     borders / custom tabs without colliding with shared rules used by
+     other pages. The two former magic z-index values (toast=1000,
+     modal-overlay=400) now consume --z-toast and --z-modal from the
+     ladder defined on :root. Add new admin-only styles there, not here. */
+</style>
 
 <a href="#main-content" class="skip-link">Skip to content</a>
 <div id="toast-live" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"></div><!-- inline-style-ok: sr-only live region -->
@@ -40,9 +35,6 @@
 </div>
 
 <div id="toast" class="toast"></div>
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
 
 <div id="app-bottom-bar-mount"></div>
 <div id="command-palette-mount"></div>

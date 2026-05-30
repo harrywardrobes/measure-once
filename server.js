@@ -22,6 +22,8 @@ const { router: designVisitsRouter, ensureDesignVisitTables } = require('./desig
 const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings } = require('./photo-reviews');
 const app = express();
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
 
@@ -143,21 +145,15 @@ app.use(express.json({ limit: '25mb' }));
 
 // Clean URLs for each page (no .html extension). Must precede express.static so the
 // extensionless paths win over any default static-index handling.
-const PAGE_ROUTES = {
-  '/':          'index.html',
-  '/customers': 'customers.html',
-  '/calendar':  'calendar.html',
-  '/profile':   'profile.html',
-};
-
 // /trades, /admin, /projects, /invoices are protected — handled below after auth middleware is set up
-for (const [route, file] of Object.entries(PAGE_ROUTES)) {
-  app.get(route, (_req, res) => res.sendFile(path.join(__dirname, 'public', file)));
-}
+app.get('/',          (_req, res) => res.render('index',     { title: 'Home · Measure Once' }));
+app.get('/customers', (_req, res) => res.render('customers', { title: 'Customers · Measure Once' }));
+app.get('/calendar',  (_req, res) => res.render('calendar',  { title: 'Calendar · Measure Once' }));
+app.get('/profile',   (_req, res) => res.render('profile',   { title: 'Profile · Measure Once' }));
 
 // Dynamic customer detail page
 app.get('/customers/:id', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'customer-detail.html'));
+  res.render('customer-detail', { title: 'Customer · Measure Once' });
 });
 
 // Canonicalise the admin URL: /admin.html → /admin so the protected route
@@ -171,16 +167,16 @@ app.get('/invoices.html', (req, res) => res.redirect(301, '/invoices'));
 
 // Public design-visit sign-off page (no auth required — token-gated)
 app.get('/design-visit/sign-off', (_req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'design-visit-signoff.html')));
+  res.render('design-visit-signoff', { title: 'Design Visit Sign-Off · Measure Once' }));
 
 // Public customer-info form page (no auth required — token-gated)
 app.get('/customer-info/:token', (_req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'customer-info.html')));
+  res.render('customer-info', { title: 'Tell us about your home · Measure Once' }));
 
 // Public auth pages (no Replit/OIDC anymore — email + password handled in-app).
-app.get('/login', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
-app.get('/set-password', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'set-password.html')));
-app.get('/onboarding', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'onboarding.html')));
+app.get('/login', (_req, res) => res.render('login', { title: 'Sign in · Measure Once' }));
+app.get('/set-password', (_req, res) => res.render('set-password', { title: 'Set password · Measure Once' }));
+app.get('/onboarding', (_req, res) => res.render('onboarding', { title: 'Complete your profile · Measure Once' }));
 
 // Hashed React chunks and assets are content-addressed (Vite appends a hash
 // to every filename), so they can be cached indefinitely by the browser.
@@ -3127,7 +3123,7 @@ app.get('/admin', async (req, res) => {
   <a href="/profile">Back to your profile</a>
 </div></body></html>`);
   }
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+  res.render('admin', { title: 'Admin · Measure Once' });
 });
 
 app.get('/trades', isAuthenticated, (_req, res) => {
@@ -3143,14 +3139,14 @@ function requireManagerOrAdminPage(req, res, next) {
 }
 
 app.get('/access-restricted', isAuthenticated, (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'access-restricted.html'));
+  res.render('access-restricted', { title: 'Access Restricted · Measure Once' });
 });
 
 app.get('/projects', isAuthenticated, (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'projects.html'));
+  res.render('projects', { title: 'Projects · Measure Once' });
 });
 app.get('/invoices', isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'invoices.html'));
+  res.render('invoices', { title: 'Invoices · Measure Once' });
 });
 
 app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
@@ -3857,7 +3853,7 @@ app.get('/api/calendar/upcoming', async (req, res) => {
 });
 
 // ── Ideas & Feedback ──────────────────────────────────────────────────────────
-app.get('/ideas', isAuthenticated, (_req, res) => res.sendFile(path.join(__dirname, 'public', 'ideas.html')));
+app.get('/ideas', isAuthenticated, (_req, res) => res.render('ideas', { title: 'Ideas · Measure Once' }));
 
 async function ensureIdeasTables() {
   await pool.query(`
@@ -6581,7 +6577,7 @@ async function cleanupStaleHubSpotCredentialRows() {
 
   // 404 catch-all must be registered AFTER setupAuth so auth routes are matched first.
   app.use((req, res) => {
-    res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+    res.status(404).render('404', { title: 'Page Not Found · Measure Once' });
   });
 
   // Warn when the React bundle is older than any source file it was built from.

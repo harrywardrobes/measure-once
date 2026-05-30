@@ -1,26 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#200842">
-  <meta name="color-scheme" content="light">
-  <title>Customers · Measure Once</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/tokens.css">
-  <link rel="stylesheet" href="/app-styles.css">
-</head>
+<%- include('_head') %>
 <body>
-  <!--
-    Minimal HTML shell for the Customers page. All page UI (filters, search,
-    list, pagination, lead-status sync) is rendered into #tab-customers by
-    the React island (src/react/pages/CustomersPage.tsx, registered in
-    src/react/main.tsx).
-  -->
+
   <a href="#main-content" class="skip-link">Skip to content</a>
   <div id="toast-live" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"></div><!-- inline-style-ok: sr-only live region -->
   <div id="app-header-mount"></div>
@@ -35,20 +17,19 @@
       </svg>
     </button>
   </div>
-  <div id="page-heading-mount"></div>
   <div id="access-gate-mount"></div>
 
-  <main id="tab-customers"></main>
+  <div id="tab-detail" class="app-body">
+    <main class="workflow-panel workflow-panel-detail" id="workflow-panel">
+      <div id="customer-detail-root"></div>
+    </main>
+  </div>
 
   <div id="app-bottom-nav-mount"></div>
   <div id="app-bottom-bar-mount"></div>
   <div id="command-palette-mount"></div>
 
-  <!--
-    bootstrap() is NOT called — the React island fetches its own data and
-    auth is handled by AppBootstrapProvider in the React tree. QB invoice
-    data is managed by useQBInvoices / qbInvoicesStore inside the React island.
-  -->
   <script type="module" src="/react/main.js"></script>
+
 </body>
 </html>

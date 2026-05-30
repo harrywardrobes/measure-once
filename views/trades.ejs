@@ -1,23 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#200842">
-  <meta name="color-scheme" content="light">
-  <title>Home · Measure Once</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Anton&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/tokens.css">
-  <link rel="stylesheet" href="/app-styles.css">
-</head>
+<%- include('_head') %>
 <body>
 
   <a href="#main-content" class="skip-link">Skip to content</a>
-  <div id="toast-live" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"></div><!-- inline-style-ok: sr-only live region, matches chrome.js original -->
+  <div id="toast-live" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;"></div><!-- inline-style-ok: sr-only live region -->
   <div id="app-header-mount"></div>
   <div id="viewer-banner" class="viewer-banner" style="display:none;" role="status"><!-- inline-style-ok: hidden by default, toggled by showViewerBanner() -->
     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true" style="flex-shrink:0;"><!-- inline-style-ok: icon sizing in flex context -->
@@ -33,9 +20,7 @@
   <div id="page-heading-mount"></div>
   <div id="access-gate-mount"></div>
 
-  <div id="tab-home" class="home-tab">
-    <div id="home-view"></div>
-  </div>
+  <div id="trades-view"></div>
 
   <div id="app-bottom-nav-mount"></div>
   <div id="app-bottom-bar-mount"></div>

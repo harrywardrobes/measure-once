@@ -281,6 +281,7 @@
     "connect-pg-simple": "^10.0.0",
     "dayjs": "^1.11.21",
     "dotenv": "^16.3.1",
+    "ejs": "^6.0.1",
     "express": "^4.22.2",
     "express-rate-limit": "^8.5.2",
     "express-session": "^1.19.0",
