@@ -405,7 +405,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
             variant="contained"
             color="warning"
             onClick={() => generateLink(ctx.contactId)}
-            data-testid="cah-confirm-resend"
+            data-testid="cah-confirm-generate"
           >
             Generate new link
           </Button>
