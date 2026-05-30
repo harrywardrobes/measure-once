@@ -22,6 +22,9 @@
 //   (E) After the re-render the submitted card body (ROW_SUBMITTED, id=3)
 //       opens and shows the correct address text — catching regressions where
 //       the body renders empty even though data was present in the response.
+//   (F) The same expanded card body shows corrected_email and corrected_mobile
+//       — catching regressions where the corrections section renders blank even
+//       though corrected contact details were present in the fetch response.
 //
 // Strategy:
 //   - Spawn a real Express server and log in as an admin.
@@ -36,6 +39,8 @@
 //     counter does not advance further (probe D).
 //   - Click the Review button on the submitted card and assert the address text
 //     is visible in the expanded body (probe E).
+//   - With the body still expanded, assert that corrected_email and
+//     corrected_mobile text are visible in the corrections section (probe F).
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-info-stale-rail
@@ -134,10 +139,12 @@ const ROW_GENERATED = {
   form_link: 'https://example.com/form/new-link',
 };
 
-// Third row included in the second-fetch payload: a submitted card with address
-// and room data populated.  Probe E opens this card's body and asserts the
-// address text is rendered, catching regressions where the body renders empty
-// after a re-fetch/re-render cycle.
+// Third row included in the second-fetch payload: a submitted card with address,
+// room data, AND corrected contact details populated.  Probe E opens this card's
+// body and asserts the address text is rendered.  Probe F (added here) asserts
+// that corrected_email and corrected_mobile also appear in the expanded body,
+// catching regressions where the corrections section renders blank even though
+// data was present in the fetch response.
 const ROW_SUBMITTED = {
   id:           3,
   created_at:   new Date(NOW - 5 * 24 * 60 * 60 * 1000).toISOString(),
@@ -145,8 +152,8 @@ const ROW_SUBMITTED = {
   expires_at:   FUTURE,
   contact_name:     'Stale RailTest',
   contact_email:    'stale-rail@privtest.invalid',
-  corrected_email:  null,
-  corrected_mobile: null,
+  corrected_email:  'corrected@example.com',
+  corrected_mobile: '07700900123',
   address_line1: '42 Resubmit Lane',
   city:          'Testville',
   postcode:      'TV1 2AB',
@@ -408,11 +415,16 @@ function writeReport(runId) {
     '  contactId does not trigger an additional fetch for this contact\'s rail,',
     '  confirming the `detail.contactId === contactId` guard is in place.',
     '- **(E) Submitted card body renders address after re-render**: The second fetch',
-    '  also returns ROW_SUBMITTED (`id=3`) — a completed card with address and room',
-    '  data. After the re-render the "Review" button is clicked to open the card body',
-    '  and the address text ("42 Resubmit Lane") is asserted to be visible. This',
-    '  catches regressions where the card body renders empty despite data being',
-    '  present in the fetch response.',
+    '  also returns ROW_SUBMITTED (`id=3`) — a completed card with address, room data,',
+    '  and corrected contact details. After the re-render the "Review" button is clicked',
+    '  to open the card body and the address text ("42 Resubmit Lane") is asserted to',
+    '  be visible. This catches regressions where the card body renders empty despite',
+    '  data being present in the fetch response.',
+    '- **(F) Corrected contact details visible in expanded card body**: With the card body',
+    '  already expanded from probe E, both `corrected_email` ("corrected@example.com")',
+    '  and `corrected_mobile` ("07700900123") are asserted to be visible. This catches',
+    '  regressions where the corrections section renders blank even though corrected',
+    '  contact details were present in the fetch response.',
     '',
     'All API calls are stubbed via evaluateOnNewDocument fetch interception.',
     'No HubSpot token or real contact data is required.',
@@ -492,6 +504,7 @@ async function main() {
     '(C) rail re-renders with updated data (second card visible)',
     '(D) foreign contactId dispatch does not trigger extra fetch',
     '(E) submitted card body shows updated address after re-render',
+    '(F) submitted card body shows corrected email and mobile',
   ];
 
   if (!puppeteer) {
@@ -744,6 +757,69 @@ async function main() {
           : `bodyHeight=${probeEState.bodyHeight} text="${probeEState.cardText}"`)
         : 'submission-card-3 not found in DOM',
       !!addressVisible,
+      submittedCardFound ? '' : 'submission-card-3 did not appear after re-fetch',
+    );
+
+    // ── Probe F: corrected email and mobile appear in the card body ────────
+    // ROW_SUBMITTED now carries corrected_email="corrected@example.com" and
+    // corrected_mobile="07700900123".  The card body is already expanded from
+    // probe E, so we can poll immediately for those text values.  A regression
+    // would show an empty corrections section even though the values were
+    // present in the fetch response.
+    console.log('\n  [F] Checking corrected email and mobile in expanded card body');
+
+    const correctedEmailVisible = await pollPage(page, () => {
+      const card = document.querySelector('[data-testid="submission-card-3"]');
+      if (!card) return null;
+      const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
+      let node;
+      while ((node = walker.nextNode())) {
+        if ((node.nodeValue || '').includes('corrected@example.com')) {
+          const el = node.parentElement;
+          if (el && el.getBoundingClientRect().height > 0) return 'ok';
+        }
+      }
+      return null;
+    }, 6000).catch(() => null);
+
+    const correctedMobileVisible = await pollPage(page, () => {
+      const card = document.querySelector('[data-testid="submission-card-3"]');
+      if (!card) return null;
+      const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
+      let node;
+      while ((node = walker.nextNode())) {
+        if ((node.nodeValue || '').includes('07700900123')) {
+          const el = node.parentElement;
+          if (el && el.getBoundingClientRect().height > 0) return 'ok';
+        }
+      }
+      return null;
+    }, 6000).catch(() => null);
+
+    const probeFState = await page.evaluate(() => {
+      const card = document.querySelector('[data-testid="submission-card-3"]');
+      if (!card) return { cardFound: false, cardText: '' };
+      return { cardFound: true, cardText: (card.textContent || '').slice(0, 500) };
+    });
+
+    if (!correctedEmailVisible || !correctedMobileVisible) {
+      console.log(
+        `  [F] corrections not visibly expanded.`
+        + ` emailOk=${!!correctedEmailVisible} mobileOk=${!!correctedMobileVisible}`
+        + ` cardText="${probeFState.cardText}"`,
+      );
+    }
+
+    const bothCorrectionsVisible = !!correctedEmailVisible && !!correctedMobileVisible;
+    record(
+      PROBE_LABELS[6],
+      'corrected email "corrected@example.com" and mobile "07700900123" visible in expanded card body',
+      probeFState.cardFound
+        ? (bothCorrectionsVisible
+          ? 'both corrections visible in expanded body'
+          : `emailOk=${!!correctedEmailVisible} mobileOk=${!!correctedMobileVisible} text="${probeFState.cardText}"`)
+        : 'submission-card-3 not found in DOM',
+      bothCorrectionsVisible,
       submittedCardFound ? '' : 'submission-card-3 did not appear after re-fetch',
     );
 
