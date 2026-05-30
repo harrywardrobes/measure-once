@@ -330,7 +330,7 @@ async function runStorybookPhase() {
   log(`Phase 3: build:storybook passed  (${fmtMs(buildResult.durationMs)})`);
 
   const sbEnv = { STORYBOOK_OUT_DIR: 'public/storybook' };
-  const STORYBOOK_SUITES = ['test:storybook-output-clean', 'test:storybook-smoke', 'test:admin-grouped-tabs-bar-stories', 'test:tabbar-stories'];
+  const STORYBOOK_SUITES = ['test:storybook-output-clean', 'test:storybook-smoke', 'test:admin-grouped-tabs-bar-stories', 'test:tabbar-stories', 'test:design-system-page-story'];
   log(`Phase 3 (storybook): starting ${STORYBOOK_SUITES.length} suite(s) in parallel`);
   for (const s of STORYBOOK_SUITES) log(`  → ${s}`);
   return Promise.all(STORYBOOK_SUITES.map((s) => runScript(s, sbEnv)));
