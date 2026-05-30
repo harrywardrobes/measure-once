@@ -1,4 +1,12 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(A) first send — creates exactly 1 active row',
+  '(B) second send — still 1 active row (stale expired)',
+  '(C) stale row — original row\'s expires_at is in the past',
+  '(D) row count — exactly 2 total rows for the contact',
+];
+
 // test/active-link-expires/run.js
 //
 // Regression guard for the "expire stale links on send" logic added in

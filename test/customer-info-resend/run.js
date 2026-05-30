@@ -1,4 +1,14 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(A) expired token → 410 with status:expired and maskedEmail',
+  '(B) successful resend — new row + resend log entry',
+  '(C) per-token rate limit — 4th attempt returns 429',
+  '(D) submitted token → 400',
+  '(E) non-existent token → 404',
+  '(F) fresh token is valid',
+];
+
 // test/customer-info-resend/run.js
 //
 // Integration test for the POST /api/customer-info/:token/resend-expired

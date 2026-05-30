@@ -1,4 +1,10 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(F1) hidden → stale response deferred until visibilitychange → visible',
+  '(F2) hidden → fresh response arrives while hidden — badge persists until visible',
+];
+
 // test/open-leads-stale-visibility/run.js
 //
 // Verifies that the open-leads stale badge respects tab visibility

@@ -1,4 +1,17 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(D) conflict-fix flow end-to-end — conflict banner, Fix button, resolver modal',
+  '(E) POST handler with action_name="send_quote" returns 201',
+  '(F) editor modal opens via openHandlerEditor() with #cah-action-name input',
+  '(H) POST handler with intermediateLeadStatus returns 201',
+  '(I) Group for no-label/no-handler lead status is hidden',
+  '(J) [data-testid="no-label-warning"] chip visible for bound-but-unlabelled slot',
+  '(M) Blank-action_label sub-status produces no .adm-handlers-slot-label row',
+  '(Q) ensureSubstatusHandlerBindings auto-binds on boot',
+  '(R) default_handler_type column drives the bound handler type',
+];
+
 // test/card-action-handlers/run.js
 //
 // End-to-end live test for the card-action-handlers feature.  Mirrors the

@@ -1,4 +1,12 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '[A] dev mode OFF → all contacts returned (including hw_test_user=true)',
+  '[B] dev mode ON → hw_test_user=true contacts excluded',
+  '[C] dev mode OFF again → all contacts visible once more',
+  '[D] UI smoke — projects board renders after dev-mode toggle',
+];
+
 // test/project-contacts-dev-mode/run.js
 //
 // Regression guard for the dev-mode filtering added to /api/project-contacts

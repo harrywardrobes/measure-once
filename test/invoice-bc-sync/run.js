@@ -1,4 +1,10 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '[BC-A] InvoicesSection on CustomerDetailPage re-fetches after save without full reload',
+  '[BC-B] StandaloneInvoicesPage on /invoices re-fetches without reload',
+];
+
 // test/invoice-bc-sync/run.js
 //
 // Puppeteer probe for task #1760: when an admin saves an invoice in

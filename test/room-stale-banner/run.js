@@ -1,4 +1,11 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '[STALE] banner appears when X-Cache-Status: stale',
+  '[FRESH] banner absent when X-Cache-Status: fresh',
+  '[DISMISS] banner disappears after clicking dismiss (×)',
+];
+
 // test/room-stale-banner/run.js
 //
 // Verifies that the room-assignments stale-data banner:

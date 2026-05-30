@@ -1,4 +1,18 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '[CD-1] SMTP not configured — "Send now" disabled, SMTP-missing Alert shown',
+  '[CD-1a] "Conflict digest" heading visible in Settings panel',
+  '[CD-1b] "Last sent:" text visible in conflict digest card',
+  '[CD-1c] "Send now" button is present and disabled (SMTP unconfigured)',
+  '[CD-1d] SMTP-missing Alert is shown',
+  '[CD-2] SMTP configured — button enabled, "Last sent" reads "Never"',
+  '[CD-2a] "Send now" button is enabled (SMTP configured)',
+  '[CD-2b] no SMTP-missing Alert when SMTP is configured',
+  '[CD-2c] "Last sent" value reads "Never" when lastSentAt is null',
+  '[CD-3] clicking "Send now" updates the "Last sent" span to the formatted timestamp',
+];
+
 // test/conflict-digest-settings/run.js
 //
 // Integration test for the Conflict digest panel in Admin Settings.

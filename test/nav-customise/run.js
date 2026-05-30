@@ -1,4 +1,21 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '[API] GET/PATCH /api/users/me/prefs status codes and auth gating',
+  '[CUST-OPEN] "Customise navigation" item visible for managers, absent for members',
+  '[CUST-SAVE] selecting 3 tabs and saving updates the bar immediately',
+  '[CUST-PERS] custom selection persists across a page reload',
+  '[CUST-FALL] bar reverts to role defaults when nav_primary_keys is null',
+  '[CUST-CANCEL] clicking Cancel discards unsaved changes',
+  '[DEF-OPEN] admin opens __default__ row dialog — pre-selects seeded keys',
+  '[DEF-SAVE] saving from __default__ row PATCHes /api/admin/nav-role-config/__default__',
+  '[RST-DISABLED] Reset button disabled when selection already matches role defaults',
+  '[RST-RESET] clicking Reset pre-selects the correct default keys',
+  '[RST-SAVE] saving after Reset calls PATCH with correct defaults',
+  '[INHERIT-BANNER-ON] dialog for role with is_customized=false shows "inherits the default layout" Alert',
+  '[INHERIT-BANNER-OFF] after saving a custom layout, Alert is absent',
+];
+
 // test/nav-customise/run.js
 //
 // End-to-end test for the nav tab customisation dialog.

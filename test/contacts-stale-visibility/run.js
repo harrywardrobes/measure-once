@@ -1,4 +1,10 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(F1) stale banner deferred while tab hidden; appears after visibilitychange → visible',
+  '(F2) pending clear deferred while tab hidden; banner disappears after visible',
+];
+
 // test/contacts-stale-visibility/run.js
 //
 // Puppeteer integration test confirming that the stale-data banner in

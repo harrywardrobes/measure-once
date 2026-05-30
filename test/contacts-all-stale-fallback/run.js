@@ -1,4 +1,12 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(A) HubSpot 503 → contacts served stale',
+  '(B) network drop → still served stale',
+  '(C) stale cap exceeded → 502',
+  '(D) recovery — fresh data fetched after HubSpot comes back',
+];
+
 // test/contacts-all-stale-fallback/run.js
 //
 // Focused integration test verifying that GET /api/contacts-all stays usable

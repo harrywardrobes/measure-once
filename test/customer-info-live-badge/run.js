@@ -1,4 +1,11 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(CI-LB-1) "Photos received" badge absent on initial page load',
+  '(CI-LB-2) POST /api/customer-info/:token returns 200 ok:true',
+  '(CI-LB-3) SSE push triggers re-fetch and badge appears without page reload',
+];
+
 // test/customer-info-live-badge/run.js
 //
 // Regression guard for the SSE → re-fetch → "Photos received" badge flow

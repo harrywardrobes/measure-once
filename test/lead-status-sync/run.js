@@ -1,4 +1,19 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '[F] sub-status chip sync via BroadcastChannel after admin rename',
+  '[G] sub-status chip sync via visibilitychange after admin rename',
+  '[H] SSE relay — admin renames lead-status; filter dropdown updates on listener tab',
+  '[I] SSE relay — admin creates lead-status; filter dropdown gains new entry',
+  '[J] SSE relay — admin deletes lead-status; filter dropdown loses the entry',
+  '[K] customer-card substatus chip sync via BroadcastChannel',
+  '[L] customer-card substatus chip sync via visibilitychange',
+  '(M) BroadcastChannel fires during in-flight lead-status fetch — race guard',
+  '(N) visibilitychange fires during in-flight lead-status fetch — race guard',
+  '(O) visibilitychange fires while /api/lead-substatuses is in-flight — sub-status race guard',
+  '(P) BroadcastChannel fires while /api/lead-substatuses is in-flight — symmetric race guard',
+];
+
 // test/lead-status-sync/run.js
 //
 // End-to-end live test: lead status label rename → filter-dropdown sync.

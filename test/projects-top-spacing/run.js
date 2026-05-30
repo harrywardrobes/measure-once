@@ -1,4 +1,10 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '[PTS-A] at least 16 px of vertical space between header bottom and first stage-filter tab',
+  '[PTS-B] h1 heading with text "Projects" visible above the stage-filter tabs',
+];
+
 // test/projects-top-spacing/run.js
 //
 // Regression test for the Projects page top-spacing fix (task #1879).

@@ -1,4 +1,12 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(A) masked_email IS NULL → updated to new format',
+  '(B) old-format masked_email → updated to new format',
+  '(C) already-correct masked_email → unchanged',
+  '(D) submitted row → not touched by backfill',
+];
+
 // test/masked-email-backfill/run.js
 //
 // Integration test for the backfillMaskedEmails() function in customer-info.js

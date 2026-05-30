@@ -1,4 +1,11 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '[GC-A] disconnected state: "Not connected" chip visible, connect button visible',
+  '[GC-B] connected state: "Connected" chip visible, disconnect button visible',
+  '[GC-C] clicking Disconnect calls POST /auth/logout-google and transitions to disconnected',
+];
+
 // test/profile-google-calendar/run.js
 //
 // End-to-end test for the GoogleCalendarCard on /profile (task #1171).

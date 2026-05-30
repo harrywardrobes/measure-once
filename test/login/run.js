@@ -1,4 +1,10 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '[UI-1] /login → React LoginPage rendered; #login-email and #login-password visible',
+  '[UI-autofill] native autofill on both inputs → zero console errors',
+];
+
 // test/login/run.js
 //
 // Autofill-crash guard for the /login page (React LoginPage island).

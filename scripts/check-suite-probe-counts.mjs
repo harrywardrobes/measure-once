@@ -52,31 +52,7 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 // ---------------------------------------------------------------------------
 
 const NO_PROBE_LABELS_ALLOWLIST = new Map([
-  // Predates the PROBE_LABELS convention; probes encoded as // (X) comments.
-  ['test:substatus-hubspot-label-format', 'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:lead-status-sync-customer-detail','Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:card-action-handlers',           'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:workflow-map',                   'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:masked-email-backfill',          'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:customer-info-generate-link-reuse','Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:active-link-expires',            'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:customer-info-resend',           'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:projects-top-spacing',           'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:open-leads-stale-visibility',    'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:conflict-digest-settings',       'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:room-stale-banner-visibility',   'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:contacts-all-stale-fallback',    'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:contacts-stale-visibility',      'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:login',                          'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:invoice-bc-sync',               'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:nav-customise-reset',            'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:room-stale-banner',              'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:permissions-ui',                 'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:profile-google-calendar',        'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:customer-info-live-badge',       'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:visits-past-time',               'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:customers-pagination',           'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
-  ['test:project-contacts-dev-mode',      'Probes encoded as inline comments; predates PROBE_LABELS convention.'],
+  // All legacy suites have been migrated to PROBE_LABELS.
 ]);
 
 // ---------------------------------------------------------------------------

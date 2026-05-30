@@ -1,4 +1,12 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(A) no uncaught JS exception fires in the page (pageerror event)',
+  '(B) no Storybook error-boundary overlay visible in the DOM',
+  '(C) #storybook-root is non-empty after render timeout',
+  '(D) no React error-boundary console rethrow',
+];
+
 // test/admin-grouped-tabs-bar-stories/run.js
 //
 // Lightweight CI story-render probe for the AdminGroupedTabsBar Storybook

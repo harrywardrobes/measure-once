@@ -1,4 +1,16 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(S0) startup sync PATCH issued on boot',
+  '(S1) normal rows carry arrow-prefixed label "{ls_label} → {sub_label}"',
+  '(S2) __NULL__ sentinel rows emit just the sub-status label, no null prefix',
+  '(S3) same sub-status name under two lead statuses produces distinct labels',
+  '(S4) value field format: KEY__SUBKEY for normal rows, plain substatus_key for __NULL__',
+  '(S5) POST /api/admin/lead-substatuses triggers fresh sync with correct arrow-prefixed label',
+  '(S6) PATCH /api/admin/lead-substatuses/:id (relabel) triggers fresh sync with updated label',
+  '(S7) DELETE /api/admin/lead-substatuses/:id triggers fresh sync without the deleted option',
+];
+
 // test/substatus-hubspot-label-format/run.js
 //
 // Focused integration test verifying the label format emitted by

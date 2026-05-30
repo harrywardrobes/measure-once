@@ -1,4 +1,13 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '[ICON-DELETE] "Remove role" button renders MUI Delete (trash-can) icon SVG',
+  '[ICON-NOT-CLOSE] no Close icon in "Remove role" buttons',
+  '[ICON-TUNE] Tune icon is distinct from both Delete and Close',
+  '[PERMISSIONS-TAB] Permissions tab activates and job roles list renders',
+  '[RUNTIME] no JS errors during Permissions tab load',
+];
+
 // test/permissions-ui/run.js
 //
 // End-to-end test for the Permissions page (Admin > Permissions tab).
@@ -10,7 +19,7 @@
 //                  where a copy-paste error caused CloseIcon to be rendered.
 //   [ICON-NOT-CLOSE]  Negative assertion: none of the "Remove role" buttons
 //                     contain the Close icon path.
-//   [ICON-TUNE]    The "Edit navigation layout" (Tune) icon button in the
+//   [ICON-TUNE]    The "Edit navigation layout" tune icon button in the
 //                  same row contains a different SVG path from both Delete
 //                  and Close, confirming it is not accidentally mis-typed.
 //
@@ -112,7 +121,7 @@ function writeReport(runId, findings) {
     '- **(ICON-NOT-CLOSE)** Negative check: none of the Delete-button paths',
     '  equal the MUI Close icon path.',
     '- **(ICON-TUNE)** Reads the SVG path from every `[title="Edit navigation',
-    '  layout"]` (Tune) button and confirms it is neither the Delete nor the',
+    '  layout"] (Tune) button and confirms it is neither the Delete nor the',
     '  Close path, guarding against mis-typed icon imports in the row.',
     '',
   ];

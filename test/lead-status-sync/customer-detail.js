@@ -1,4 +1,10 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(H) pill primary text updates in place after sub-status rename via BroadcastChannel',
+  '(I) pill primary text updates in place after sub-status rename via visibilitychange',
+];
+
 // test/lead-status-sync/customer-detail.js
 //
 // End-to-end live test: customer-detail lead-status tracker stays in sync with

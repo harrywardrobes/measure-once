@@ -1,4 +1,11 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '[A] All view — pagination appears and page-2 click sends ?page=2 with differing results',
+  '[C] "Showing X–Y of Z" count label visible on page 1',
+  '[D] filter change (sort/search/lead-status) resets from page 2 to page 1',
+];
+
 // test/customers-pagination/run.js
 //
 // Verifies that the Customers page pagination works correctly.

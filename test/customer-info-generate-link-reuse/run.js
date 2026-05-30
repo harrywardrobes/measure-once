@@ -1,4 +1,12 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(A) first generate-link call inserts exactly one active row',
+  '(B) second call updates the row in place (resend path)',
+  '(C) token rotation — second call issues a fresh raw token',
+  '(D) duplicate cleanup — single call expires all but one active row',
+];
+
 // test/customer-info-generate-link-reuse/run.js
 //
 // Integration test verifying that the generate-link endpoint reuses the

@@ -1,4 +1,19 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(A) startAt > 5 min in the past → 422 with code:START_IN_PAST',
+  '(B) startAt just inside grace window → 200',
+  '(C) startAt in the future → 200',
+  '(D1) startAt 4 min past (inside 5-min grace) → 200',
+  '(D2) startAt 6 min past (outside 5-min grace) → 422',
+  '(E) type:delivery — past startAt → 422; future → 200',
+  '(E1) type:delivery startAt 10 min past → 422 START_IN_PAST',
+  '(E2) type:delivery startAt 30 min future → 200',
+  '(F) type:installation — past startAt → 422; future → 200',
+  '(F1) type:installation startAt 10 min past → 422 START_IN_PAST',
+  '(F2) type:installation startAt 30 min future → 200',
+];
+
 // test/visits-past-time/run.js
 //
 // Focused integration test for the past-time guard on POST /api/visits.

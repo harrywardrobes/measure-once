@@ -1,4 +1,13 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(A) map starts expanded when localStorage has no saved state',
+  '(B) clicking header collapses it and persists; reload keeps state; re-click restores',
+  '(C) clicking a stage node opens the Drawer',
+  '(D) Drawer shows the correct label and key for the clicked node',
+  '(E) close button dismisses the Drawer',
+];
+
 // test/workflow-map/run.js
 //
 // End-to-end Puppeteer test for the Workflow Map section on the Card Actions

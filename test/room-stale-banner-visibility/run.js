@@ -1,4 +1,10 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(F1) stale response deferred until visibilitychange → visible',
+  '(F2) pending clear deferred until visibility restores',
+];
+
 // test/room-stale-banner-visibility/run.js
 //
 // Verifies that the room-assignments stale-data banner respects tab visibility
