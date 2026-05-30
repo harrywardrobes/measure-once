@@ -140,6 +140,9 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
         if (controller.signal.aborted) return;
         setGeneratedLink(data);
         setPhase('ready');
+        window.dispatchEvent(
+          new CustomEvent('customer-info-link-generated', { detail: { contactId } })
+        );
       })
       .catch(e => {
         if ((e as Error).name === 'AbortError') return;

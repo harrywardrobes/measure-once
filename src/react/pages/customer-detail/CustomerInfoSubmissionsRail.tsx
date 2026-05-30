@@ -183,11 +183,12 @@ function ResendButton({
 
 type ConflictTarget = 'copy' | 'open';
 
-function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
+function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSuperseded }: {
   sub: Submission;
   contactId: string;
   canResend: boolean;
   onResendSuccess: () => void;
+  isSuperseded?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const isPending = !sub.submitted_at;
@@ -356,31 +357,37 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
             </Button>
           </Box>
         ) : isActive ? (
-          <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, alignItems: 'center' }}>
-            {sub.form_link && (
-              <>
-                <CopyLinkButton
-                  onClick={() => checkThenAct('copy')}
-                  copied={copied}
-                  isChecking={isChecking && !conflictTarget}
-                />
-                <Tooltip title="Open link in new tab" placement="top" arrow>
-                  <span>
-                    <IconButton
-                      size="small"
-                      onClick={() => checkThenAct('open')}
-                      aria-label="Open customer link in new tab"
-                      disabled={isChecking && !conflictTarget}
-                      data-testid="open-link-btn"
-                    >
-                      <OpenInNewIcon fontSize="small" />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-              </>
-            )}
-            {canResend && <ResendButton contactId={contactId} onSuccess={onResendSuccess} />}
-          </Stack>
+          isSuperseded ? (
+            <Box sx={{ flexShrink: 0 }}>
+              <Chip label="Superseded" size="small" variant="outlined" />
+            </Box>
+          ) : (
+            <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, alignItems: 'center' }}>
+              {sub.form_link && (
+                <>
+                  <CopyLinkButton
+                    onClick={() => checkThenAct('copy')}
+                    copied={copied}
+                    isChecking={isChecking && !conflictTarget}
+                  />
+                  <Tooltip title="Open link in new tab" placement="top" arrow>
+                    <span>
+                      <IconButton
+                        size="small"
+                        onClick={() => checkThenAct('open')}
+                        aria-label="Open customer link in new tab"
+                        disabled={isChecking && !conflictTarget}
+                        data-testid="open-link-btn"
+                      >
+                        <OpenInNewIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </>
+              )}
+              {canResend && <ResendButton contactId={contactId} onSuccess={onResendSuccess} />}
+            </Stack>
+          )
         ) : null}
       </Box>
 
@@ -576,12 +583,33 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
     loadSubmissions();
   }, [loadSubmissions]);
 
+  useEffect(() => {
+    function handleLinkGenerated(e: Event) {
+      const detail = (e as CustomEvent<{ contactId: string }>).detail;
+      if (detail?.contactId === contactId) {
+        loadSubmissions();
+      }
+    }
+    window.addEventListener('customer-info-link-generated', handleLinkGenerated);
+    return () => window.removeEventListener('customer-info-link-generated', handleLinkGenerated);
+  }, [contactId, loadSubmissions]);
+
   // Filter out expired-pending cards — staff only need to see active and submitted entries
   const visibleSubmissions = submissions.filter(sub => {
     const isPending = !sub.submitted_at;
     const isExpired = isPending && new Date(sub.expires_at) < new Date();
     return !(isPending && isExpired);
   });
+
+  // Separate active cards from the rest, sort active by expires_at descending so
+  // the newest is first, then recombine. Only the first active card gets Copy/Open
+  // buttons; earlier (older) ones are marked superseded.
+  const activeCards = visibleSubmissions
+    .filter(sub => !sub.submitted_at && new Date(sub.expires_at) >= new Date())
+    .sort((a, b) => new Date(b.expires_at).getTime() - new Date(a.expires_at).getTime());
+  const activeIds = new Set(activeCards.map(s => s.id));
+  const otherCards = visibleSubmissions.filter(s => !activeIds.has(s.id));
+  const sortedSubmissions = [...activeCards, ...otherCards];
 
   if (!loading && !error && visibleSubmissions.length === 0) return null;
 
@@ -630,13 +658,14 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
         )}
         {!loading && !error && (
           <Stack spacing={1.5}>
-            {visibleSubmissions.map(sub => (
+            {sortedSubmissions.map((sub, index) => (
               <SubmissionCard
                 key={sub.id}
                 sub={sub}
                 contactId={contactId}
                 canResend={!isViewer}
                 onResendSuccess={loadSubmissions}
+                isSuperseded={activeIds.has(sub.id) && index > 0}
               />
             ))}
           </Stack>
