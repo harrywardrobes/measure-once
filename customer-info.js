@@ -164,6 +164,31 @@ async function ensureCustomerInfoSubmissionsTable() {
     ALTER TABLE customer_info_submissions
     ADD COLUMN IF NOT EXISTS form_link TEXT
   `);
+
+  // One-time cleanup: for any contact that has more than one active pending
+  // row, expire all but the newest one (highest created_at).  This repairs
+  // duplicate rows that were inserted before the self-serve resend path was
+  // fixed to expire existing active links before inserting a new one.
+  const dedupResult = await pool.query(`
+    UPDATE customer_info_submissions
+    SET expires_at = NOW()
+    WHERE id IN (
+      SELECT id FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY contact_id
+                 ORDER BY created_at DESC
+               ) AS rn
+        FROM customer_info_submissions
+        WHERE expires_at > NOW()
+          AND submitted_at IS NULL
+      ) ranked
+      WHERE rn > 1
+    )
+  `);
+  if (dedupResult.rowCount > 0) {
+    console.log(`[customer-info] Migration: expired ${dedupResult.rowCount} duplicate active pending link(s)`);
+  }
 }
 
 async function ensureResendLogTable() {
@@ -936,11 +961,23 @@ router.post('/api/customer-info/:token/resend-expired', express.json({ limit: '4
     return res.status(429).json({ error: 'Too many requests — please try again later.' });
   }
 
-  // 5. Generate fresh token + insert new submission row (old row untouched).
+  // 5. Generate fresh token + insert new submission row.
+  //    First, expire all currently active pending rows for this contact so only
+  //    one active link exists at a time (the new one we are about to insert).
   const freshRaw   = crypto.randomBytes(32).toString('hex');
   const freshHash  = crypto.createHash('sha256').update(freshRaw).digest('hex');
   const freshExpiry = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
-  const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(freshRaw)}`;
+  const formLink   = `${appBaseUrl()}/customer-info/${encodeURIComponent(freshRaw)}`;
+
+  const expireResult = await pool.query(
+    `UPDATE customer_info_submissions
+     SET expires_at = NOW()
+     WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL`,
+    [row.contact_id]
+  );
+  if (expireResult.rowCount > 0) {
+    console.log(`[customer-info] Self-serve resend: expired ${expireResult.rowCount} active link(s) for contact ${row.contact_id} before inserting new one`);
+  }
 
   await pool.query(
     `INSERT INTO customer_info_submissions
