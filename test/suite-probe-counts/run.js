@@ -5,8 +5,10 @@
 // emits the PROBE_LABELS_DOC_EXTRAS advisory when a test file declares that
 // constant, stays silent (no advisory) when the constant is absent, emits the
 // missing-PROBE_LABELS warning when a test file has doc probe callouts but
-// omits the PROBE_LABELS array entirely, AND fails (exit 1) when
-// PROBE_LABELS_DOC_EXTRAS contains an ID that is not present in the docs row.
+// omits the PROBE_LABELS array entirely, fails (exit 1) when
+// PROBE_LABELS_DOC_EXTRAS contains an ID that is not present in the docs row,
+// AND suppresses the missing-array warning when the suite is listed in
+// NO_PROBE_LABELS_ALLOWLIST.
 //
 // Strategy: for each scenario, build a minimal synthetic fixture in a temp
 // directory that has its own docs/TEST_SUITES.md, package.json, and a test
@@ -104,7 +106,7 @@ const PROBE_LABELS_DOC_EXTRAS = ['STALE'];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function buildFixture(docsSrc, synthSrc) {
+function buildFixture(docsSrc, synthSrc, { allowlistSuites = [] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'suite-probe-counts-'));
 
   fs.mkdirSync(path.join(dir, 'docs'));
@@ -116,7 +118,20 @@ function buildFixture(docsSrc, synthSrc) {
   fs.writeFileSync(path.join(dir, 'test', 'synth', 'run.js'), synthSrc, 'utf8');
 
   fs.mkdirSync(path.join(dir, 'scripts'));
-  fs.copyFileSync(SCRIPT_SRC, path.join(dir, 'scripts', 'check-suite-probe-counts.mjs'));
+  const scriptDest = path.join(dir, 'scripts', 'check-suite-probe-counts.mjs');
+  fs.copyFileSync(SCRIPT_SRC, scriptDest);
+
+  if (allowlistSuites.length > 0) {
+    const entries = allowlistSuites
+      .map((s) => `  ['${s}', 'synthetic fixture for meta-test — no PROBE_LABELS by design'],`)
+      .join('\n');
+    let scriptSrc = fs.readFileSync(scriptDest, 'utf8');
+    scriptSrc = scriptSrc.replace(
+      /const NO_PROBE_LABELS_ALLOWLIST = new Map\(\[[\s\S]*?\]\);/,
+      `const NO_PROBE_LABELS_ALLOWLIST = new Map([\n${entries}\n]);`,
+    );
+    fs.writeFileSync(scriptDest, scriptSrc, 'utf8');
+  }
 
   return dir;
 }
@@ -176,6 +191,16 @@ const scenarios = [
     expectIds:              ['STALE'],
     expectStaleExtrasFail:  true,
   },
+  {
+    name:              'missing-PROBE_LABELS warning suppressed when suite is in NO_PROBE_LABELS_ALLOWLIST',
+    docsSrc:           DOCS_WITHOUT_ALIAS,
+    synthSrc:          SYNTH_NO_PROBE_LABELS,
+    allowlistSuites:   ['test:synth'],
+    expectAdvisory:    false,
+    expectMissingWarn: false,
+    expectExit0:       true,
+    expectIds:         [],
+  },
 ];
 
 // ── run ───────────────────────────────────────────────────────────────────────
@@ -190,7 +215,7 @@ const STALE_EXTRAS_PHRASE = 'Unnecessary suppressions';
 const results = [];
 
 for (const sc of scenarios) {
-  const dir = buildFixture(sc.docsSrc, sc.synthSrc);
+  const dir = buildFixture(sc.docsSrc, sc.synthSrc, { allowlistSuites: sc.allowlistSuites || [] });
   let result;
   try {
     result = runScript(dir);
@@ -230,8 +255,9 @@ const lines = [
   'Meta-test: verifies that `check-suite-probe-counts.mjs` emits the',
   '`PROBE_LABELS_DOC_EXTRAS` advisory exactly when the constant is present,',
   'stays silent otherwise, emits the missing-PROBE_LABELS warning when a',
-  'test file omits PROBE_LABELS entirely while its docs row has probe callouts,',
-  'and fails when PROBE_LABELS_DOC_EXTRAS contains an ID absent from the docs row.',
+  'test file omits PROBE_LABELS entirely, fails when PROBE_LABELS_DOC_EXTRAS',
+  'contains an ID absent from the docs row, and suppresses the missing-array',
+  'warning when the suite is in NO_PROBE_LABELS_ALLOWLIST.',
   '',
   `Ran ${results.length} scenario${results.length === 1 ? '' : 's'}.`,
   '',
