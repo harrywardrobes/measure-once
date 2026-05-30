@@ -12,6 +12,7 @@ import {
   setTeamCount, setConflictBadge, PRIVILEGE_LEVELS, PRIVILEGE_LABEL,
 } from './adminApi';
 import { phoneKey, phoneFieldLabel } from './adminPhoneHelpers';
+import { usePageTitle } from '../../hooks/usePageTitle';
 type ProfileConflict = { admin: string; user: string };
 
 type User = {
@@ -125,6 +126,7 @@ const EMPTY_INVITE = {
 };
 
 export function AdminTeamPage() {
+  usePageTitle('Team · Measure Once');
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
   const [allowed, setAllowed] = useState<Allowed[]>([]);

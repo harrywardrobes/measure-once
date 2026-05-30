@@ -32,6 +32,7 @@ import SendIcon from '@mui/icons-material/Send';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -732,6 +733,7 @@ function NewIdeaDialog({
 // ── IdeasPage ──────────────────────────────────────────────────────────────────
 
 export function IdeasPage() {
+  usePageTitle('Ideas · Measure Once');
   const { isAdmin } = usePrivilege();
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [loading, setLoading] = useState(true);

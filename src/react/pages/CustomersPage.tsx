@@ -44,6 +44,7 @@ import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { STAGE_COLORS, STATUS_COLORS } from '../theme';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 type LeadStatus = {
   key: string;
@@ -751,6 +752,7 @@ function CustomerCard({
 }
 
 export function CustomersPage(): React.ReactElement {
+  usePageTitle('Customers · Measure Once');
   const initial = React.useMemo(() => readUrlState(), []);
   const [leadStatus, setLeadStatus] = React.useState<string>(initial.leadStatus);
   const [substatus, setSubstatus] = React.useState<string>(initial.substatus);

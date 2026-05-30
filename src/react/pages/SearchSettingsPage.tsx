@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { STATUS_COLORS } from '../theme';
 import { SearchActionList, type SearchAction } from '../components/SearchActionList';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 /**
  * <SearchSettingsPage/> — React port of the legacy `loadSearchSettings()` /
@@ -54,6 +55,7 @@ async function api<T = unknown>(method: string, path: string, body?: unknown): P
 }
 
 export function SearchSettingsPage() {
+  usePageTitle('Search · Measure Once');
   const [loading, setLoading]     = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [placeholder, setPlaceholder] = useState('');

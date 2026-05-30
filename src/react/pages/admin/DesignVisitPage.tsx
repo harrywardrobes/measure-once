@@ -15,6 +15,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import { FileUploadField, UploadStatus } from '../../components/FileUploadField';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -496,6 +497,7 @@ function TermsDisplay({ terms }: { terms: DvTerms[] }) {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function DesignVisitPage() {
+  usePageTitle('Design Visit · Measure Once');
   useConnectionCheck();
   const { notifyApiError } = useConnectionToast();
   const [handles,    setHandles]    = useState<DvHandle[]>([]);

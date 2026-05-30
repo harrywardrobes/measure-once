@@ -12,6 +12,7 @@ import { STATUS_COLORS } from '../../theme';
 import { GET, POST, PATCH, PUT, DELETE } from '../../utils/api';
 import type { WorkflowMapNodeData, WMAllStage } from '../../components/WorkflowMapChart';
 import { WorkflowMapDetailPanel } from '../../components/WorkflowMapDetailPanel';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 const WorkflowMapChart = lazy(() =>
   import('../../components/WorkflowMapChart').then(m => ({ default: m.WorkflowMapChart })),
@@ -194,6 +195,7 @@ function HandlerBadges({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function CardActionsPage() {
+  usePageTitle('Card Actions · Measure Once');
   const showToast = useToast();
   const [labels,      setLabels]      = useState<CALabel[]>([]);
   const [statuses,    setStatuses]    = useState<LeadStatus[]>([]);

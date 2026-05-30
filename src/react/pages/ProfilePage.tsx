@@ -24,6 +24,7 @@ import LinkOffIcon from '@mui/icons-material/LinkOff';
 import { ChangePasswordCard } from '../components/ChangePasswordDialog';
 import { Pill } from '../components/Pill';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 type Profile = {
   id: string;
@@ -72,6 +73,7 @@ async function jpost<T>(path: string, body: unknown): Promise<T> {
 }
 
 export function ProfilePage(): React.ReactElement {
+  usePageTitle('Profile · Measure Once');
   // The React island mounts before core.js bootstrap() finishes. Seed from
   // getAppUser() (reads the global header user object), listen for the
   // `mo:user` event that bootstrap fires, AND as a last-resort fall back to

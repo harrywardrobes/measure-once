@@ -50,6 +50,7 @@ import type {
   ProjectPlatformUser,
   ProjectWorkflowDef,
 } from '../hooks/useProjectsData';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -857,6 +858,7 @@ function EmptyState({ message }: { message: string }) {
 // ── ProjectsPage ───────────────────────────────────────────────────────────────
 
 export function ProjectsPage() {
+  usePageTitle('Projects · Measure Once');
   const { isAdmin, isManager } = usePrivilege();
   const { devMode } = useDevMode({ enabled: isAdmin });
   const canAssign = isManager || isAdmin;

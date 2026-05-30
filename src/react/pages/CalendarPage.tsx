@@ -39,6 +39,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import { usePageTitle } from '../hooks/usePageTitle';
 import AppleIcon from '@mui/icons-material/Apple';
 import MailOutlineIcon from '@mui/icons-material/MailOutlined';
 import CheckIcon from '@mui/icons-material/Check';
@@ -152,6 +153,7 @@ const SYNC_PROVIDERS = [
 // ── Calendar Page ────────────────────────────────────────────────────────────
 
 export function CalendarPage(): React.ReactElement {
+  usePageTitle('Calendar · Measure Once');
   useConnectionCheck();
   const { notifyApiError } = useConnectionToast();
   const { isViewer, isAdmin } = usePrivilege();

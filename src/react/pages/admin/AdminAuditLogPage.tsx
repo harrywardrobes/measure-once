@@ -4,6 +4,7 @@ import {
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { api, toast, fmtDate, onAdminChange } from './adminApi';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 type AuditEntry = {
   source?: string;        // 'trade' or undefined
@@ -38,6 +39,7 @@ const ACTION_LABELS: Record<string, string> = {
 const PAGE_SIZE = 25;
 
 export function AdminAuditLogPage() {
+  usePageTitle('Audit Log · Measure Once');
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);

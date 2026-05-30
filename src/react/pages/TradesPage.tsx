@@ -45,6 +45,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import SearchIcon from '@mui/icons-material/Search';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -1289,6 +1290,7 @@ function DeleteConfirmDialog({
 // ── TradesPage ─────────────────────────────────────────────────────────────────
 
 export function TradesPage() {
+  usePageTitle('Trades · Measure Once');
   const { isAdmin, isManager } = usePrivilege();
   const isPriv = isAdmin || isManager;
 

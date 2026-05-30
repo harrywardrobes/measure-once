@@ -40,6 +40,7 @@ import type {
   StartDesignVisitConfigValue,
   VisitType,
 } from './HandlerConfigBlocks';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -969,6 +970,7 @@ interface EditorOpenState { slot: ActionSlot; existing: Handler | null; }
 interface ConflictResolverOpenState { stageKey: string | null; statusKey: string | null; substatusId: number | null; }
 
 export function ActionHandlersPage() {
+  usePageTitle('Action Handlers · Measure Once');
   const toast = useToast();
   const [handlers,              setHandlers]              = useState<Handler[]>([]);
   const [labels,                setLabels]                = useState<CALabel[]>([]);

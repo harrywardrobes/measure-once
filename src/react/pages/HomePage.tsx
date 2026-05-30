@@ -19,6 +19,7 @@ import { broadcastConnect } from '../lib/qbInvoicesStore';
 import type { InvoiceSummary } from '../components/InvoiceDetailDrawer';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
 type _Icons = typeof RefreshIcon | typeof WarningAmberIcon;
@@ -576,6 +577,7 @@ function ProjectsSection({
 }
 
 export function HomePage(): React.ReactElement {
+  usePageTitle('Home · Measure Once');
   const now = new Date();
   const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const { isAdmin } = usePrivilege();

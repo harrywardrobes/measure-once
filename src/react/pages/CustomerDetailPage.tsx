@@ -18,6 +18,7 @@ import {
   contactName,
 } from './customer-detail/types';
 import { useQBInvoices } from '../hooks/useQBInvoices';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,7 @@ export function CustomerDetailPage() {
   const contactId = getContactId();
 
   const [contact,      setContact]      = useState<Contact | null>(null);
+  usePageTitle(contact ? `${contactName(contact)} · Measure Once` : 'Customer · Measure Once');
   const [rooms,        setRooms]        = useState<Room[]>([]);
   const [notes,        setNotes]        = useState('');
   const [tasks,        setTasks]        = useState<HubSpotTask[]>([]);
@@ -138,8 +140,6 @@ export function CustomerDetailPage() {
     st.selectedContact   = c;
     st.selectedContactId = contactId;
     g.state = st;
-    // Update title
-    document.title = `${contactName(c)} · Measure Once`;
     // Recent customers
     try {
       const KEY  = 'cp_recent_customers';

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { WorkshopSettingsList, type WorkshopSetting } from '../components/WorkshopSettingsList';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 /**
  * <WorkshopSettingsPage/> — React port of the legacy `loadWorkshopSettings()`
@@ -40,6 +41,7 @@ function showToast(msg: string, isError = false): void {
 }
 
 export function WorkshopSettingsPage() {
+  usePageTitle('Workshop · Measure Once');
   const [loading, setLoading]     = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [rows, setRows]           = useState<WorkshopSetting[]>([]);

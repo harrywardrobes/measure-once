@@ -19,6 +19,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
 import { STATUS_COLORS } from '../../theme';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 const STAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: '—' },
@@ -183,6 +184,7 @@ interface PageFilterConfigEntry {
 type PageFilterConfig = Record<string, PageFilterConfigEntry>;
 
 export function SettingsPage() {
+  usePageTitle('Integrations · Measure Once');
   const [statuses, setStatuses] = useState<LeadStatus[]>([]);
   const [storybookBuilt, setStorybookBuilt] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);

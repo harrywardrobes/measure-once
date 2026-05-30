@@ -14,6 +14,7 @@ import {
 } from './adminApi';
 import { NAV } from '../../components/BottomNav';
 import { NavCustomiseDialog } from '../../components/NavCustomiseDialog';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
 type _Icons = typeof CheckIcon | typeof CloseIcon | typeof DeleteIcon | typeof InfoOutlinedIcon | typeof TuneIcon;
@@ -26,6 +27,7 @@ type NavRoleConfig = { role_name: string; primary_keys: string[]; is_customized:
 type NavConfigEntry = { primary_keys: string[]; is_customized: boolean };
 
 export function AdminPermissionsPage() {
+  usePageTitle('Permissions · Measure Once');
   const [loading, setLoading] = useState(true);
   const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
   const [caps, setCaps] = useState<Capabilities>({ levels: [...PRIVILEGE_LEVELS], features: [] });

@@ -3,6 +3,7 @@ import { Alert, Box, Button, Card, CardContent, Chip, CircularProgress, FormCont
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import LinkIcon from '@mui/icons-material/Link';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 /**
  * Admin → Dev environment tab (#tab-devenv).
@@ -126,6 +127,7 @@ const DEV_ONLY_FEATURES: Array<{
 ];
 
 export function DevEnvironmentPage() {
+  usePageTitle('Developer · Measure Once');
   const [storybookAvailable, setStorybookAvailable] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 

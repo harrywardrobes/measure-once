@@ -27,6 +27,7 @@ import {
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { reset as resetQBStore, broadcastDisconnect } from '../lib/qbInvoicesStore';
 import { PROVIDER_COLORS, STATUS_COLORS } from '../theme';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 type _Icons = typeof RefreshIcon | typeof SearchIcon | typeof WarningAmberIcon;
 
@@ -87,6 +88,7 @@ function SkeletonRows() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function StandaloneInvoicesPage() {
+  usePageTitle('Invoices · Measure Once');
   useConnectionCheck();
   const { isAdmin } = usePrivilege();
 

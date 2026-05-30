@@ -13,6 +13,7 @@ import {
   describePhoneDuplicate,
   type PhoneDuplicateMatch,
 } from './adminPhoneHelpers';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 type Req = { id: number; name: string; email: string; status: string; created_at?: string };
 type User = {
@@ -52,6 +53,7 @@ function safeUrl(url?: string): string {
 }
 
 export function AdminRequestsPage() {
+  usePageTitle('Access Requests · Measure Once');
   const [loading, setLoading] = useState(true);
   const [reqs, setReqs] = useState<Req[]>([]);
   const [photos, setPhotos] = useState<PhotoReq[]>([]);
