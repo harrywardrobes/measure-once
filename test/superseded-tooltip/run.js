@@ -140,7 +140,7 @@ const REPORT_PATH = path.join(
 const findings = [];
 
 function record(name, expected, observed, ok, detail = '') {
-  findings.push({ name, expected, observed, ok, detail });
+  findings.push({ name, expected, observed, ok, skipped: false, detail });
   const mark = ok ? '  ✓' : '  ✗';
   console.log(`${mark}  ${name}`);
   if (!ok) {
@@ -148,6 +148,12 @@ function record(name, expected, observed, ok, detail = '') {
     console.log(`     observed : ${observed}`);
     if (detail) console.log(`     detail   : ${detail}`);
   }
+}
+
+function skip(name, expected, reason) {
+  findings.push({ name, expected, observed: reason, ok: false, skipped: true, detail: '' });
+  console.log(`  –  ${name}`);
+  console.log(`     skipped  : ${reason}`);
 }
 
 function parseCookieKV(jar) {
@@ -309,8 +315,9 @@ async function openDetailPage(browser, jar) {
 function writeReport(runId) {
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
-  const passed = findings.filter(f => f.ok).length;
-  const failed = findings.filter(f => !f.ok).length;
+  const passed  = findings.filter(f => f.ok).length;
+  const skipped = findings.filter(f => f.skipped).length;
+  const failed  = findings.filter(f => !f.ok && !f.skipped).length;
   const lines = [
     '# Superseded Tooltip — Integration Test',
     '',
@@ -320,15 +327,16 @@ function writeReport(runId) {
     '',
     '## Summary',
     '',
-    `- Passed: ${passed} / ${findings.length}`,
-    `- Failed: ${failed} / ${findings.length}`,
+    `- Passed:  ${passed}  / ${findings.length}`,
+    `- Failed:  ${failed}  / ${findings.length}`,
+    `- Skipped: ${skipped} / ${findings.length}`,
     '',
     '## Results',
     '',
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## Coverage',
@@ -546,6 +554,20 @@ async function main() {
       steOk,
     );
 
+    // ── Probe ST-C / ST-D: skip when ST-E failed ──────────────────────────────
+    // When the card-count guard fails the DOM is fundamentally broken; running
+    // the per-card probes would only produce misleading "card not found" errors.
+    if (!steOk) {
+      const skipReason = `ST-E card-count check failed (expected ${EXPECTED_CARD_COUNT}, found ${renderedCardCount}) — per-card probes not applicable`;
+      console.log('\n  [ST-C]');
+      skip(PROBE_LABELS[3], 'no copy-link-btn, open-link-btn, or resend-link-btn on the superseded card', skipReason);
+      console.log('\n  [ST-D]');
+      skip(PROBE_LABELS[4], 'at least one of copy-link-btn, open-link-btn, or resend-link-btn on the active card', skipReason);
+
+      await page.__ctx.close().catch(() => {});
+      return;
+    }
+
     // ── Probe ST-C: Superseded card has no Copy, Open, or Resend buttons ──────
     console.log('\n  [ST-C] Checking superseded card has no Copy/Open/Resend buttons');
 
@@ -646,7 +668,7 @@ async function main() {
     console.error(logBuf.join('').slice(-2000));
   } finally {
     try { await browser.close(); } catch {}
-    const failed = findings.filter(f => !f.ok).length;
+    const failed = findings.filter(f => !f.ok && !f.skipped).length;
     await cleanupAndExit(failed > 0 ? 1 : 0);
   }
 }
