@@ -68,6 +68,8 @@
     "test:active-link-expires:ci": "node scripts/with-test-db.js test/active-link-expires/run.js",
     "test:active-link-warning-ordering": "node test/active-link-warning-ordering/run.js",
     "test:active-link-warning-ordering:ci": "node scripts/with-test-db.js test/active-link-warning-ordering/run.js",
+    "test:upload-photos-modal-labels": "node test/upload-photos-modal-labels/run.js",
+    "test:upload-photos-modal-labels:ci": "node scripts/with-test-db.js test/upload-photos-modal-labels/run.js",
     "test:photo-storage-errors": "node test/photo-storage-errors/run.js",
     "test:photo-storage-errors:ci": "node scripts/with-test-db.js test/photo-storage-errors/run.js",
     "test:photo-approval-notification": "node test/photo-approval-notification/run.js",
