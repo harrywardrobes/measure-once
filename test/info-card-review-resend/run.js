@@ -457,21 +457,33 @@ async function main() {
           }
         });
 
-        // Poll for [data-testid="submission-card-body"] becoming visible
-        // (getBoundingClientRect().height > 0).  This is the stable testid
-        // on the Collapse body rendered by SubmissionCard when open=true.
-        const collapseOpen = await pollPage(pageA, () => {
-          const body = document.querySelector('[data-testid="submission-card-body"]');
-          if (!body) return null;
-          return body.getBoundingClientRect().height > 0 ? 'ok' : null;
-        }, 10000);
+        // Two-phase check for [data-testid="submission-card-body"]:
+        //   Phase 1 — confirm the element exists in the DOM (3 s timeout).
+        //             A timeout here means the testid was removed from the
+        //             component, not a timing/animation issue.
+        //   Phase 2 — wait for the element to have height > 0 (10 s timeout).
+        //             A timeout here is the usual animation/render delay.
+        const bodyPresent = await pollPage(pageA, () =>
+          document.querySelector('[data-testid="submission-card-body"]') ? 'found' : null,
+        3000);
+
+        let collapseOpen = null;
+        if (bodyPresent) {
+          collapseOpen = await pollPage(pageA, () => {
+            const body = document.querySelector('[data-testid="submission-card-body"]');
+            if (!body) return null;
+            return body.getBoundingClientRect().height > 0 ? 'ok' : null;
+          }, 10000);
+        }
 
         record(
           PROBE_LABELS[4],
           !!collapseOpen,
           collapseOpen
             ? '[data-testid="submission-card-body"] visible (height > 0) after clicking Review'
-            : '[data-testid="submission-card-body"] did not become visible within 10 s',
+            : !bodyPresent
+              ? '[data-testid="submission-card-body"] not found in DOM — testid may have been removed'
+              : '[data-testid="submission-card-body"] did not become visible within 10 s',
         );
       } else {
         record(PROBE_LABELS[4], false, 'skipped — Review button was not found in probe A');
