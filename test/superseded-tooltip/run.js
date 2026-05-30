@@ -14,6 +14,9 @@
 //   [ST-B] Hovering the chip makes the tooltip text visible:
 //          "A newer link has been generated — this one is no longer active"
 //
+//   [ST-C] The superseded card has no Copy, Open, or Resend action buttons
+//          (copy-link-btn, open-link-btn, resend-link-btn are all absent).
+//
 // Strategy: boots a disposable test server with the privileges harness.
 // All customer-detail API calls are stubbed via evaluateOnNewDocument fetch
 // interception — no HubSpot token or real contact data required.
@@ -327,6 +330,9 @@ function writeReport(runId) {
     '  action buttons.',
     '- **(ST-B) Tooltip text on hover**: hovering the Superseded chip reveals a',
     `  MUI Tooltip whose text is "${TOOLTIP_TEXT}".`,
+    '- **(ST-C) No action buttons on superseded card**: the superseded card has no',
+    '  `copy-link-btn`, `open-link-btn`, or `resend-link-btn` elements, confirming',
+    '  that a future refactor cannot accidentally re-introduce those buttons.',
     '',
     'All API calls are stubbed via evaluateOnNewDocument fetch interception.',
     'No HubSpot token or real contact data is required.',
@@ -402,6 +408,7 @@ async function main() {
   const PROBE_LABELS = [
     '(ST-A) Superseded chip is present in the rail',
     '(ST-B) Hovering Superseded chip reveals tooltip text',
+    '(ST-C) Superseded card has no Copy, Open, or Resend buttons',
   ];
 
   if (!puppeteer) {
@@ -506,6 +513,64 @@ async function main() {
           ? 'chip found but tooltip text did not appear'
           : 'chip not found — cannot hover',
       tooltipSeen,
+    );
+
+    // ── Probe ST-C: Superseded card has no Copy, Open, or Resend buttons ──────
+    console.log('\n  [ST-C] Checking superseded card has no Copy/Open/Resend buttons');
+
+    // Find the card that contains the Superseded chip and check that none of
+    // the three action button test-ids are present inside it.
+    const absentButtons = await page.evaluate(() => {
+      const labels = Array.from(document.querySelectorAll('[class*="MuiChip-label"]'));
+      const supersededLabel = labels.find(c => (c.textContent || '').trim() === 'Superseded');
+      if (!supersededLabel) return { cardFound: false, copyPresent: false, openPresent: false, resendPresent: false };
+
+      // Walk up to the submission card root — the card wraps both the chip and
+      // any action buttons, so we go up until we reach the section or a
+      // reasonable ancestor that would contain all buttons for this row.
+      let card = supersededLabel.closest('[class*="MuiChip-root"]');
+      // Walk up further to the card-level box (ancestor that holds the whole row).
+      // We stop at the submissions section boundary to avoid false negatives from
+      // buttons on *other* cards leaking through.
+      const section = document.getElementById('customer-info-submissions-section');
+      let el = card;
+      // Keep ascending until the parent is the section or we run out of parents.
+      while (el && el.parentElement && el.parentElement !== section && !el.parentElement.classList.contains('customer-info-submissions-section')) {
+        el = el.parentElement;
+      }
+      const cardRoot = el;
+
+      return {
+        cardFound: true,
+        copyPresent:   !!cardRoot.querySelector('[data-testid="copy-link-btn"]'),
+        openPresent:   !!cardRoot.querySelector('[data-testid="open-link-btn"]'),
+        resendPresent: !!cardRoot.querySelector('[data-testid="resend-link-btn"]'),
+      };
+    });
+
+    const stcOk = absentButtons.cardFound
+      && !absentButtons.copyPresent
+      && !absentButtons.openPresent
+      && !absentButtons.resendPresent;
+
+    let stcObserved;
+    if (!absentButtons.cardFound) {
+      stcObserved = 'superseded card not found in DOM';
+    } else {
+      const present = [];
+      if (absentButtons.copyPresent)   present.push('copy-link-btn');
+      if (absentButtons.openPresent)   present.push('open-link-btn');
+      if (absentButtons.resendPresent) present.push('resend-link-btn');
+      stcObserved = present.length === 0
+        ? 'no Copy/Open/Resend buttons present on superseded card (correct)'
+        : `unexpected buttons found: ${present.join(', ')}`;
+    }
+
+    record(
+      PROBE_LABELS[2],
+      'no copy-link-btn, open-link-btn, or resend-link-btn on the superseded card',
+      stcObserved,
+      stcOk,
     );
 
     await page.__ctx.close().catch(() => {});
