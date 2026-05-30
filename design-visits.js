@@ -473,6 +473,45 @@ function penceToGbp(pence) {
 }
 
 // ── Side-effect chain: submit visit ──────────────────────────────────────────
+
+/**
+ * Orchestrate all side effects that occur when a design visit is submitted
+ * (or resubmitted after a revision request).
+ *
+ * Steps performed in order — steps 2–5 are non-fatal and log warnings on
+ * failure rather than aborting the submission:
+ *
+ * 1. **Database update** (fatal) — sets `status = 'submitted'`, rotates the
+ *    public sign-off token (archiving any prior token hash into
+ *    `superseded_signoff_token_hashes`), and records the new expiry.
+ * 2. **HubSpot lead status** (non-fatal) — if `handlerConfig.submittedLeadStatus`
+ *    is set and the submitter is a manager or admin, updates the contact's
+ *    `hs_lead_status` property in HubSpot.
+ * 3. **HubSpot note** (non-fatal) — creates a CRM note summarising the visit
+ *    (designer, handle, furniture range, visit date, room breakdown) and
+ *    associates it with the contact.
+ * 4. **QuickBooks estimate** (non-fatal) — creates a new QB estimate from the
+ *    visit's room pricing, or sparse-updates the existing estimate if one is
+ *    already on file and still editable. If the prior estimate cannot be
+ *    updated the old id is appended to `qb_estimate_history` and a new one
+ *    is created.
+ * 5. **Sign-off email** (non-fatal) — sends the customer a sign-off link
+ *    email containing the newly issued token.
+ *
+ * This function is idempotent across resubmissions: calling it on an already-
+ * submitted visit replaces the sign-off token and re-runs the side-effect
+ * chain without duplicating the QB estimate where avoidable.
+ *
+ * @param {string | number} visitId - Primary key of the design visit to submit.
+ * @param {object} handlerConfig - Caller-supplied configuration object.
+ *   @param {string} [handlerConfig.submittedLeadStatus] - HubSpot lead status
+ *     value to apply on submission. Only honoured for manager/admin submitters.
+ * @param {object} submitterUser - The authenticated user performing the
+ *   submission (typically `req.user`). Used to check pipeline-edit privilege
+ *   and to populate the HubSpot note's designer field.
+ * @returns {Promise<void>}
+ * @throws {Error} If the visit cannot be found in the database.
+ */
 async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
   const visit = await loadVisitWithRooms(visitId);
   if (!visit) throw new Error('Visit not found');

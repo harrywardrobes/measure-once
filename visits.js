@@ -39,6 +39,34 @@ async function ensureVisitsTable() {
   `);
 }
 
+/**
+ * Convert a raw PostgreSQL row from the `visits` table into the camelCase
+ * visit object shape expected by API responses and the frontend.
+ *
+ * Date columns (`start_at`, `end_at`, `created_at`, `updated_at`) are
+ * serialised to ISO-8601 strings. Nullable columns (`assignee_id`,
+ * `assignee_role`) are normalised to `null` rather than `undefined`.
+ *
+ * @param {object} r - Raw row returned by a `pg` query on the `visits` table.
+ * @returns {{
+ *   id: string,
+ *   createdBy: string,
+ *   customerId: string | null,
+ *   customerName: string | null,
+ *   type: string,
+ *   title: string | null,
+ *   startAt: string,
+ *   endAt: string,
+ *   isWorkshop: boolean,
+ *   notes: string | null,
+ *   location: string | null,
+ *   assigneeId: string | null,
+ *   assigneeRole: string | null,
+ *   googleEventId: string | null,
+ *   createdAt: string,
+ *   updatedAt: string
+ * }}
+ */
 function mapDatabaseRowToVisit(r) {
   return {
     id:             r.id,

@@ -17,11 +17,27 @@ const zxcvbn = require('zxcvbn');
 
 // ── Cloudflare Turnstile (captcha) ───────────────────────────────────────────
 // Verifies the user-supplied token against Cloudflare's siteverify endpoint.
-// In production (NODE_ENV=production) the key is required — if it is absent
-// the function fails closed so public auth endpoints cannot be reached without
-// captcha. In development/test mode the check is a no-op when the key is
-// absent, allowing local operation without Turnstile credentials.
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+
+/**
+ * Verify a Cloudflare Turnstile CAPTCHA token against the siteverify API.
+ *
+ * In production (`NODE_ENV=production`) the `TURNSTILE_SECRET_KEY` environment
+ * variable is required — if it is absent the function fails closed so public
+ * auth endpoints cannot be reached without a valid CAPTCHA response.
+ * In development/test mode the check is a no-op when the key is absent,
+ * allowing local operation without Turnstile credentials.
+ * If Cloudflare is unreachable the function also fails closed so that a
+ * network outage cannot be leveraged to bypass the CAPTCHA requirement.
+ *
+ * @param {string | undefined} token - The Cloudflare Turnstile response token
+ *   submitted by the client (the `cf-turnstile-response` form field value).
+ * @param {string | undefined} ip - Optional client IP address forwarded to
+ *   Cloudflare as the `remoteip` binding hint.
+ * @returns {Promise<{ok: boolean, skipped?: boolean, reason?: string}>}
+ *   `ok: true` on success (or when skipped in dev/test mode).
+ *   `ok: false` with a `reason` string on any failure.
+ */
 async function verifyCaptchaToken(token, ip) {
   if (!process.env.TURNSTILE_SECRET_KEY) {
     if (process.env.NODE_ENV === 'production') {

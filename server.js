@@ -714,10 +714,19 @@ async function getSharedContactsCache() {
   return { contacts: [], stale: true, unavailable: true, _err: outcome.err };
 }
 
-// Invalidate the shared contacts cache so the next request triggers a fresh
-// HubSpot scan. Call this from every mutation route that changes contact data.
-// `_allContactsLastGood` is intentionally preserved so a failed refetch can
-// still serve the prior snapshot instead of returning a 502.
+/**
+ * Invalidate the in-memory HubSpot contact list cache.
+ *
+ * Sets `_allContactsCache` to `null` so the next request that needs the
+ * contact list triggers a fresh HubSpot scan. `_allContactsLastGood` is
+ * intentionally left intact so that a failed refetch can still serve the
+ * prior snapshot instead of returning a 502.
+ *
+ * Call this from every mutation route that creates, updates, or deletes
+ * contact data so the UI reflects the change on the next poll.
+ *
+ * @returns {void}
+ */
 function clearContactCache() {
   _allContactsCache = null;
 }
