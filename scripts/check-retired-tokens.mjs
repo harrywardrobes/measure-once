@@ -24,9 +24,6 @@
  *   Excluded from both surfaces:
  *     public/react/**      — compiled React island (auto-generated, gitignored)
  *     public/storybook/**  — compiled Storybook output (auto-generated, gitignored)
- *     public/tokens.css    — generated token definition sheet (DO NOT EDIT header);
- *                            it defines tokens, not consumes them.  Changes here
- *                            flow from src/react/theme.ts — fix the source there.
  *
  * ── Suppression ───────────────────────────────────────────────────────────────
  *
@@ -85,12 +82,7 @@ const EXCLUDED_DIRS = [
   resolve(PUBLIC_DIR, 'storybook'),
 ];
 
-const EXCLUDED_FILES = new Set([
-  resolve(PUBLIC_DIR, 'tokens.css'),
-]);
-
 function isExcluded(absPath) {
-  if (EXCLUDED_FILES.has(absPath)) return true;
   return EXCLUDED_DIRS.some(d => absPath.startsWith(d + sep) || absPath === d);
 }
 

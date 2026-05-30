@@ -283,10 +283,10 @@ ${statusColorLines.join('\n')}
    *  a token name is shared (e.g. --status-success-bg/-text/-border).
    *  --status-danger-*  semantic error alias; no STATUS_COLORS key named 'danger'
    *  --status-success   standalone accent colour; no plain STATUS_COLORS 'success' colour
-   *  --status-warn-*    shorthand alias; STATUS_COLORS uses 'warning' (--status-warning-*)
    *  NOTE: --status-chunk-error-border is intentionally absent here; it is
-   *  fully covered by auto-derivation from STATUS_COLORS.chunkError.border.   */
-  --status-danger:        #dc2626;
+   *  fully covered by auto-derivation from STATUS_COLORS.chunkError.border.
+   *  Retired (removed): --status-danger (standalone), --status-warn-bg,
+   *  --status-warn-border, --status-warn-text — use --status-warning-* instead. */
   --status-danger-text:   #991b1b;
   --status-danger-bg:     #fef2f2;
   --status-danger-border: #fecaca;
@@ -294,9 +294,6 @@ ${statusColorLines.join('\n')}
   --status-success-text:  #14532d;
   --status-success-bg:    #f0fdf4;
   --status-success-border:#bbf7d0;
-  --status-warn-bg:       #fef9c3;
-  --status-warn-border:   #fde047;
-  --status-warn-text:     #713f12;
   /* ── Brand action accents ────────────────────────────────────────────────── */
   --brand-accent:       #3d0f7a;
   --brand-accent-hover: #5a1fad;
