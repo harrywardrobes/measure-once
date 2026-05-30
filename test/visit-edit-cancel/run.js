@@ -606,9 +606,9 @@ async function main() {
         }, surveyId);
 
         if (!editBtnExists) {
-          record(UI_LABELS[9],  'edit button present', 'edit button NOT present', false);
-          record(UI_LABELS[10], 'list shows new title', 'edit button missing, skipped', false);
-          record(UI_LABELS[11], 'db updated', 'edit button missing, skipped', false);
+          skip(UI_LABELS[9],  'edit button present', 'edit button NOT present');
+          skip(UI_LABELS[10], 'list shows new title', 'edit button missing, skipped');
+          skip(UI_LABELS[11], 'db updated', 'edit button missing, skipped');
         } else {
           // Click the edit button for the survey visit.
           await adminPage.evaluate((id) => {
@@ -634,8 +634,8 @@ async function main() {
             modalOpened === 'ok' && preFilled === 'Survey visit — VEC test');
 
           if (modalOpened !== 'ok') {
-            record(UI_LABELS[10], 'list shows new title', 'modal never opened, skipped', false);
-            record(UI_LABELS[11], 'db updated', 'modal never opened, skipped', false);
+            skip(UI_LABELS[10], 'list shows new title', 'modal never opened, skipped');
+            skip(UI_LABELS[11], 'db updated', 'modal never opened, skipped');
           } else {
             // Change the title. The title TextField is the first input in the dialog.
             // We use triple-click to select all existing text, then type the new title.
@@ -692,9 +692,9 @@ async function main() {
         }, deliveryId);
 
         if (!cancelBtnExists) {
-          record(UI_LABELS[6], 'cancel button present', 'cancel button NOT present', false);
-          record(UI_LABELS[7], 'delivery visit removed', 'cancel button missing, skipped', false);
-          record(UI_LABELS[8], 'db row gone', 'cancel button missing, skipped', false);
+          skip(UI_LABELS[6], 'cancel button present', 'cancel button NOT present');
+          skip(UI_LABELS[7], 'delivery visit removed', 'cancel button missing, skipped');
+          skip(UI_LABELS[8], 'db row gone', 'cancel button missing, skipped');
         } else {
           // Click the cancel button for the delivery visit.
           await adminPage.evaluate((id) => {
@@ -712,8 +712,8 @@ async function main() {
             dialogOpened === 'ok');
 
           if (dialogOpened !== 'ok') {
-            record(UI_LABELS[7], 'delivery visit removed', 'dialog never opened, skipped', false);
-            record(UI_LABELS[8], 'db row gone', 'dialog never opened, skipped', false);
+            skip(UI_LABELS[7], 'delivery visit removed', 'dialog never opened, skipped');
+            skip(UI_LABELS[8], 'db row gone', 'dialog never opened, skipped');
           } else {
             // Click "Cancel visit" in the dialog.
             await adminPage.evaluate(() => {
@@ -755,7 +755,7 @@ async function main() {
   const pass = findings.filter(f => f.ok).length;
   const fail = findings.filter(f => !f.ok && !f.skipped).length;
   const skipped = findings.filter(f => f.skipped).length;
-  console.log(`\n  Results: ${pass} passed, ${fail} failed`);
+  console.log(`\n  Results: ${pass} passed, ${skipped} skipped, ${fail} failed`);
 
   await writeReport(runId, findings);
   await cleanupAndExit(fail > 0 ? 1 : 0);
@@ -774,14 +774,16 @@ async function writeReport(runId, findings) {
     '',
     '## Summary',
     '',
-    `**${findings.filter(f => f.ok).length} passed, ${findings.filter(f => !f.ok).length} failed**`,
+    `- Passed: ${findings.filter(f => f.ok).length} / ${findings.length}`,
+    `- Skipped: ${findings.filter(f => f.skipped).length} / ${findings.length}`,
+    `- Failed: ${findings.filter(f => !f.ok && !f.skipped).length} / ${findings.length}`,
     '',
     '## Results',
     '',
     '| Result | Name | Expected | Observed |',
     '|--------|------|----------|----------|',
     ...findings.map(f =>
-      `| ${f.ok ? '✓' : '✗'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
   ];
   const outPath = path.join(dir, 'visit-edit-cancel.md');

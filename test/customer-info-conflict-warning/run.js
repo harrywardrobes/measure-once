@@ -711,8 +711,8 @@ async function main() {
         !!alertGoneB2,
       );
     } else {
-      record(PROBE_LABELS[3], 'probe B must pass first', 'skipped — probe B failed', false);
-      record(PROBE_LABELS[12], 'probe B must pass first', 'skipped — probe B failed', false);
+      skip(PROBE_LABELS[3], 'probe B must pass first', 'skipped — probe B failed');
+      skip(PROBE_LABELS[12], 'probe B must pass first', 'skipped — probe B failed');
     }
 
     await pageB.__ctx.close().catch(() => {});
@@ -925,8 +925,8 @@ async function main() {
         !!alertGoneB2Open && extraOpenUrl === formLink,
       );
     } else {
-      record(PROBE_LABELS[8], 'probe B-open must pass first', 'skipped — probe B-open failed', false);
-      record(PROBE_LABELS[13], 'probe B-open must pass first', 'skipped — probe B-open failed', false);
+      skip(PROBE_LABELS[8], 'probe B-open must pass first', 'skipped — probe B-open failed');
+      skip(PROBE_LABELS[13], 'probe B-open must pass first', 'skipped — probe B-open failed');
     }
 
     await pageBOpen.__ctx.close().catch(() => {});

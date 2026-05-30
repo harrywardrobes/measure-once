@@ -1,7 +1,7 @@
 'use strict';
 const { makeSkip } = require('../helpers/report');
 
-const PROBE_LABELS = [
+const UI_PROBE_LABELS = [
   '[F] sub-status chip sync via BroadcastChannel after admin rename',
   '[G] sub-status chip sync via visibilitychange after admin rename',
   '[H] SSE relay — admin renames lead-status; filter dropdown updates on listener tab',
@@ -355,7 +355,7 @@ async function main() {
 
   // ── require puppeteer ──────────────────────────────────────────────────────
   if (!puppeteer) {
-    for (const l of PROBE_LABELS) {
+    for (const l of UI_PROBE_LABELS) {
       skip(l, 'puppeteer installed', 'puppeteer not installed');
     }
     await writeReport(runId, findings);
@@ -380,7 +380,7 @@ async function main() {
     });
   } catch (e) {
     const msg = (e.message || String(e)).slice(0, 200);
-    for (const l of PROBE_LABELS) {
+    for (const l of UI_PROBE_LABELS) {
       skip(l, 'browser launched', `browser launch failed: ${msg}`);
     }
     await writeReport(runId, findings);
@@ -1372,7 +1372,7 @@ async function main() {
       const recorded = new Set(findings.map(f => f.name));
       for (const name of pending) {
         if (!recorded.has(name)) {
-          record(name, 'browser did not crash', `browser crash: ${e.name}`, false);
+          skip(name, 'browser did not crash', `browser crash: ${e.name}`);
         }
       }
     }

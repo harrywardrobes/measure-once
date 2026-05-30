@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 // test/nav-active-tab/run.js
 //
 // Regression guard for the matchPath prefix-route logic in BottomNav.tsx.
@@ -249,7 +250,7 @@ async function main() {
 
   const findings = [];
   function record(name, expected, observed, ok) {
-    findings.push({ name, expected, observed, ok });
+    findings.push({ name, expected, observed, ok, skipped: false });
     const mark = ok ? '  ✓' : '  ✗';
     console.log(`${mark}  ${name}`);
     if (!ok) {
@@ -257,6 +258,7 @@ async function main() {
       console.log(`     observed : ${observed}`);
     }
   }
+  const skip = makeSkip(findings);
 
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
@@ -354,8 +356,8 @@ async function main() {
           drawerState.selected,
         );
       } else {
-        record('[CUST-LIST] #bnav-customers exists in open drawer',          'exists',       'skipped (drawer did not open)', false);
-        record('[CUST-LIST] #bnav-customers has Mui-selected in open drawer','Mui-selected', 'skipped (drawer did not open)', false);
+        skip('[CUST-LIST] #bnav-customers exists in open drawer',          'exists',       'drawer did not open');
+        skip('[CUST-LIST] #bnav-customers has Mui-selected in open drawer','Mui-selected', 'drawer did not open');
       }
 
       await page.close().catch(() => {});
@@ -410,8 +412,8 @@ async function main() {
           drawerState.selected,
         );
       } else {
-        record('[CUST-DETAIL] #bnav-customers exists in open drawer on /customers/:id',         'exists',       'skipped (drawer did not open)', false);
-        record('[CUST-DETAIL] #bnav-customers has Mui-selected in drawer on /customers/:id','Mui-selected', 'skipped (drawer did not open)', false);
+        skip('[CUST-DETAIL] #bnav-customers exists in open drawer on /customers/:id',         'exists',       'drawer did not open');
+        skip('[CUST-DETAIL] #bnav-customers has Mui-selected in drawer on /customers/:id','Mui-selected', 'drawer did not open');
       }
 
       await page.close().catch(() => {});
@@ -541,9 +543,10 @@ async function main() {
   }
 
   // ── Report ──────────────────────────────────────────────────────────────────
-  const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
-  console.log(`\n  Results: ${pass} passed, ${fail} failed`);
+  const pass    = findings.filter(f => f.ok).length;
+  const skipped = findings.filter(f => f.skipped).length;
+  const fail    = findings.filter(f => !f.ok && !f.skipped).length;
+  console.log(`\n  Results: ${pass} passed, ${skipped} skipped, ${fail} failed`);
 
   await writeReport(findings, runId);
   await cleanupAndExit(fail > 0 ? 1 : 0);
@@ -553,8 +556,9 @@ async function writeReport(findings, runId) {
   const dir = path.resolve(__dirname, '..', '..', 'test-results');
   fs.mkdirSync(dir, { recursive: true });
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
-  const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
+  const pass    = findings.filter(f => f.ok).length;
+  const skipped = findings.filter(f => f.skipped).length;
+  const fail    = findings.filter(f => !f.ok && !f.skipped).length;
   const lines = [
     '# nav-active-tab — Customers / Trades sub-route highlight regression guard',
     '',
@@ -565,6 +569,7 @@ async function writeReport(findings, runId) {
     '## Summary',
     '',
     `- Passed: ${pass} / ${findings.length}`,
+    `- Skipped: ${skipped} / ${findings.length}`,
     `- Failed: ${fail} / ${findings.length}`,
     '',
     '## Results',
@@ -572,7 +577,7 @@ async function writeReport(findings, runId) {
     '| Result | Probe | Expected | Observed |',
     '|--------|-------|----------|----------|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : '**FAIL**'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : '**FAIL**'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## Coverage',

@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
   '[API] GET/PATCH /api/users/me/prefs status codes and auth gating',
@@ -562,7 +563,7 @@ async function main() {
 
   const findings = [];
   function record(name, expected, observed, ok) {
-    findings.push({ name, expected, observed, ok });
+    findings.push({ name, expected, observed, ok, skipped: false });
     const mark = ok ? '  ✓' : '  ✗';
     console.log(`${mark}  ${name}`);
     if (!ok) {
@@ -570,6 +571,7 @@ async function main() {
       console.log(`     observed : ${observed}`);
     }
   }
+  const skip = makeSkip(findings);
 
   // RST probe constants
   const TEST_ROLE      = `privtest-nav-${runId}`;
@@ -864,7 +866,7 @@ async function main() {
         }
       } else {
         // Skip downstream checks so the report is still complete
-        for (const skip of [
+        for (const lbl of [
           '[CUST-SAVE] Dialog initially shows exactly 3 checkboxes checked',
           '[CUST-SAVE] After selection, Home + Survey + Calendar are the 3 checked items',
           '[CUST-SAVE] Save button is enabled when exactly 3 tabs selected',
@@ -872,7 +874,7 @@ async function main() {
           '[CUST-SAVE] "customers" no longer in bar after customisation',
           '[CUST-SAVE] "sales" no longer in bar after customisation',
         ]) {
-          record(skip, 'dialog opened', 'dialog did not open (skipped)', false);
+          skip(lbl, 'dialog opened', 'dialog did not open');
         }
       }
 
@@ -1029,12 +1031,12 @@ async function main() {
           !!(barAfterCancel && !barAfterCancel.includes('survey')),
         );
       } else {
-        for (const skip of [
+        for (const lbl of [
           '[CUST-CANCEL] Dialog selection changed to Home, Survey, Calendar before cancel',
           '[CUST-CANCEL] Bar unchanged after Cancel (still home, customers, sales)',
           '[CUST-CANCEL] survey absent from bar after Cancel',
         ]) {
-          record(skip, 'dialog opened', 'dialog did not open (skipped)', false);
+          skip(lbl, 'dialog opened', 'dialog did not open');
         }
       }
 
@@ -1271,12 +1273,12 @@ async function main() {
           if (cancelBtn) cancelBtn.click();
         });
       } else {
-        for (const skip of [
+        for (const lbl of [
           '[DEF-OPEN] Dialog is open (dialogOpen=true)',
           '[DEF-OPEN] Dialog pre-checks exactly the seeded __default__ keys (Home, Survey, Calendar)',
           '[DEF-OPEN] Exactly 3 keys are pre-checked',
         ]) {
-          record(skip, 'dialog opened', 'dialog did not open (skipped)', false);
+          skip(lbl, 'dialog opened', 'dialog did not open');
         }
       }
 
@@ -1367,11 +1369,11 @@ async function main() {
           );
         }
       } else {
-        for (const skip of [
+        for (const lbl of [
           '[DEF-SAVE] PATCH /api/admin/nav-role-config/__default__ was called on save',
           '[DEF-SAVE] PATCH body primary_keys matches new selection (home, sales, calendar)',
         ]) {
-          record(skip, 'dialog opened', 'dialog did not open (skipped)', false);
+          skip(lbl, 'dialog opened', 'dialog did not open');
         }
       }
 
@@ -1488,9 +1490,10 @@ async function main() {
   }
 
   // ── Report ─────────────────────────────────────────────────────────────────
-  const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
-  console.log(`\n  Results: ${pass} passed, ${fail} failed`);
+  const pass    = findings.filter(f => f.ok).length;
+  const skipped = findings.filter(f => f.skipped).length;
+  const fail    = findings.filter(f => !f.ok && !f.skipped).length;
+  console.log(`\n  Results: ${pass} passed, ${skipped} skipped, ${fail} failed`);
 
   await writeReport(findings, runId);
   await cleanupAndExit(fail > 0 ? 1 : 0);
@@ -1500,8 +1503,9 @@ async function writeReport(findings, runId) {
   const dir = path.resolve(__dirname, '..', '..', 'test-results');
   fs.mkdirSync(dir, { recursive: true });
   const esc  = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
-  const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
+  const pass    = findings.filter(f => f.ok).length;
+  const skipped = findings.filter(f => f.skipped).length;
+  const fail    = findings.filter(f => !f.ok && !f.skipped).length;
   const lines = [
     '# nav-customise — E2E',
     '',
@@ -1512,6 +1516,7 @@ async function writeReport(findings, runId) {
     '## Summary',
     '',
     `- Passed: ${pass} / ${findings.length}`,
+    `- Skipped: ${skipped} / ${findings.length}`,
     `- Failed: ${fail} / ${findings.length}`,
     '',
     '## Results',
@@ -1519,7 +1524,7 @@ async function writeReport(findings, runId) {
     '| Result | Probe | Expected | Observed |',
     '|--------|-------|----------|----------|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : '**FAIL**'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : '**FAIL**'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## Coverage',

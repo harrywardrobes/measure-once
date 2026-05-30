@@ -709,9 +709,10 @@ async function main() {
 
   } catch (e) {
     console.error('Probe error:', e);
+    record('suite runtime error', 'no exception', e.message, false);
     for (const l of PROBE_LABELS) {
       if (!findings.find(f => f.name === l)) {
-        record(l, 'no error', `threw: ${e.message}`, false);
+        skip(l, 'no error', `threw: ${e.message}`);
       }
     }
   } finally {

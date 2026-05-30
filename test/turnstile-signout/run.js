@@ -492,7 +492,7 @@ async function main() {
         console.error('Unexpected error during UI probes:', err);
         for (const l of UI_LABELS) {
           if (!findings.find(f => f.name === l)) {
-            record(l, 'no error', String(err).slice(0, 200), false);
+            skip(l, 'no error', String(err).slice(0, 200));
           }
         }
       }

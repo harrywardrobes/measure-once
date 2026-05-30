@@ -251,7 +251,7 @@ async function main() {
     if (!tabsReady) {
       console.error('Timed out waiting for .MuiTab-root to appear');
       console.error('Page logs:', pageLogs.slice(-10).join('\n'));
-      for (const l of UI_LABELS) record(l, 'tabs rendered', 'timed out', false);
+      for (const l of UI_LABELS) skip(l, 'tabs rendered', 'timed out');
       await ctx.close().catch(() => {});
       await cleanupAndExit(1);
       return;
@@ -285,7 +285,7 @@ async function main() {
     });
 
     if (!layout) {
-      for (const l of UI_LABELS) record(l, 'layout measured', '#app-header-mount or .MuiTab-root missing', false);
+      for (const l of UI_LABELS) skip(l, 'layout measured', '#app-header-mount or .MuiTab-root missing');
       await ctx.close().catch(() => {});
       await cleanupAndExit(1);
       return;

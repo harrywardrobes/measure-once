@@ -544,9 +544,10 @@ async function main() {
 
   } catch (e) {
     console.error('Probe error:', e.message || e);
+    record('suite runtime error', 'no exception', String(e.message || e), false);
     for (const l of PROBE_LABELS) {
       if (!findings.find(f => f.name === l)) {
-        record(l, 'probe completed', `error: ${e.message || e}`, false);
+        skip(l, 'probe completed', `error: ${e.message || e}`);
       }
     }
   } finally {

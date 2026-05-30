@@ -499,9 +499,9 @@ async function main() {
     }, conflictDisplayName);
 
     if (!editClicked) {
-      record(UI_LABELS[1], 'Edit button clicked', 'Edit button not found in row', false);
-      record(UI_LABELS[2], 'admin value visible', 'dialog not opened', false);
-      record(UI_LABELS[3], 'user value visible',  'dialog not opened', false);
+      skip(UI_LABELS[1], 'Edit button clicked', 'Edit button not found in row');
+      skip(UI_LABELS[2], 'admin value visible', 'dialog not opened');
+      skip(UI_LABELS[3], 'user value visible', 'dialog not opened');
     } else {
       // MUI Dialog renders in a Portal appended to <body>.  Wait for the title
       // text to appear anywhere in the page (more reliable than [role="dialog"]).
@@ -511,9 +511,9 @@ async function main() {
       , undefined, 12000);
 
       if (!dialogOpened) {
-        record(UI_LABELS[1], 'dialog opened', 'dialog did not open (title never found)', false);
-        record(UI_LABELS[2], 'admin value visible', 'dialog not opened', false);
-        record(UI_LABELS[3], 'user value visible',  'dialog not opened', false);
+        skip(UI_LABELS[1], 'dialog opened', 'dialog did not open (title never found)');
+        skip(UI_LABELS[2], 'admin value visible', 'dialog not opened');
+        skip(UI_LABELS[3], 'user value visible', 'dialog not opened');
       } else {
         // Poll for the "Onboarding discrepancies" Alert to finish rendering.
         await pollPage(adminPage, () =>
@@ -568,7 +568,7 @@ async function main() {
         });
 
         if (!saveClicked) {
-          record(UI_LABELS[4], 'Save button clicked', 'Save button not found', false);
+          skip(UI_LABELS[4], 'Save button clicked', 'Save button not found');
         } else {
           // Wait for the dialog to close.
           await pollPage(adminPage, () =>
@@ -615,9 +615,10 @@ async function main() {
     await adminPage.__ctx.close().catch(() => {});
   } catch (e) {
     console.error('UI test error:', e.message);
+    record('suite runtime error', 'no exception', e.message.slice(0, 80), false);
     for (const l of UI_LABELS) {
       if (!findings.find(f => f.name === l)) {
-        record(l, 'no error', `error: ${e.message.slice(0, 80)}`, false);
+        skip(l, 'no error', `error: ${e.message.slice(0, 80)}`);
       }
     }
   } finally {

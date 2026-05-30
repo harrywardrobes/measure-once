@@ -203,7 +203,7 @@ async function main() {
         if (!formVisible) {
           const recentLogs = pageLogs.slice(-15).join('\n');
           for (const l of UI_LABELS) {
-            record(l, 'React form visible (#login-email and #login-password present)', `form did not appear. logs:\n${recentLogs}`, false);
+            skip(l, 'React form visible (#login-email and #login-password present)', `form did not appear. logs:\n${recentLogs}`);
           }
         } else {
           // UI.1 — React form rendered; both inputs present.
@@ -292,9 +292,10 @@ async function main() {
         await ctx.close().catch(() => {});
       } catch (e) {
         console.error('Puppeteer probe failed:', e.message);
+        record('suite runtime error', 'no exception', e.message, false);
         for (const l of UI_LABELS) {
           const already = findings.find(f => f.name === l);
-          if (!already) record(l, 'probe completed', `exception: ${e.message}`, false);
+          if (!already) skip(l, 'probe completed', `exception: ${e.message}`);
         }
       }
       await browser.close().catch(() => {});

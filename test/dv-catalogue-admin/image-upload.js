@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 // test/dv-catalogue-admin/image-upload.js
 //
 // End-to-end live test for the Design Visit Handle image-upload flow.
@@ -126,7 +127,7 @@ async function main() {
 
   const findings = [];
   function record(name, expected, observed, ok, detail = '') {
-    findings.push({ name, expected, observed, ok, detail });
+    findings.push({ name, expected, observed, ok, skipped: false, detail });
     const mark = ok ? '  ✓' : '  ✗';
     console.log(`${mark}  ${name}`);
     if (!ok) {
@@ -135,6 +136,7 @@ async function main() {
       if (detail) console.log(`     detail   : ${detail}`);
     }
   }
+  const skip = makeSkip(findings);
 
   // Write fixture PNGs to a temp dir we clean up at exit.
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `${RUN_PREFIX}-`));
@@ -197,7 +199,7 @@ async function main() {
   );
 
   if (!puppeteer) {
-    record('puppeteer is installed', 'puppeteer required', 'module not found', false);
+    skip('puppeteer is installed', 'puppeteer required', 'module not found');
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;
@@ -215,7 +217,7 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
+    skip('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`);
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;
@@ -470,9 +472,10 @@ async function main() {
     await browser.close().catch(() => {});
   }
 
-  const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
-  console.log(`\n  Results: ${pass} passed, ${fail} failed`);
+  const pass    = findings.filter(f => f.ok).length;
+  const skipped = findings.filter(f => f.skipped).length;
+  const fail    = findings.filter(f => !f.ok && !f.skipped).length;
+  console.log(`\n  Results: ${pass} passed, ${skipped} skipped, ${fail} failed`);
 
   await writeReport(runId, findings);
   await cleanupAndExit(fail > 0 ? 1 : 0);
@@ -492,14 +495,15 @@ async function writeReport(runId, findings) {
     '## Summary',
     '',
     `- Passed: ${findings.filter(f => f.ok).length} / ${findings.length}`,
-    `- Failed: ${findings.filter(f => !f.ok).length} / ${findings.length}`,
+    `- Skipped: ${findings.filter(f => f.skipped).length} / ${findings.length}`,
+    `- Failed: ${findings.filter(f => !f.ok && !f.skipped).length} / ${findings.length}`,
     '',
     '## Results',
     '',
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## Coverage',

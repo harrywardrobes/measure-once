@@ -1,4 +1,5 @@
 'use strict';
+const { makeSkip } = require('../helpers/report');
 // test/admin-tab-skeletons/permissions-requests-auditlog.js
 //
 // End-to-end test that confirms the Suspense fallback skeletons for the
@@ -189,7 +190,7 @@ async function main() {
 
   const findings = [];
   function record(name, expected, observed, ok, detail = '') {
-    findings.push({ name, expected, observed, ok, detail });
+    findings.push({ name, expected, observed, ok, skipped: false, detail });
     const mark = ok ? '  ✓' : '  ✗';
     console.log(`${mark}  ${name}`);
     if (!ok) {
@@ -198,6 +199,7 @@ async function main() {
       if (detail) console.log(`     detail   : ${detail}`);
     }
   }
+  const skip = makeSkip(findings);
 
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
@@ -250,7 +252,7 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
+    skip('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`);
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;
@@ -453,9 +455,10 @@ async function main() {
     await browser.close().catch(() => {});
   }
 
-  const pass = findings.filter(f => f.ok).length;
-  const fail = findings.filter(f => !f.ok).length;
-  console.log(`\n  Results: ${pass} passed, ${fail} failed`);
+  const pass    = findings.filter(f => f.ok).length;
+  const skipped = findings.filter(f => f.skipped).length;
+  const fail    = findings.filter(f => !f.ok && !f.skipped).length;
+  console.log(`\n  Results: ${pass} passed, ${skipped} skipped, ${fail} failed`);
 
   await writeReport(runId, findings);
   await cleanupAndExit(fail > 0 ? 1 : 0);
@@ -475,14 +478,15 @@ async function writeReport(runId, findings) {
     '## Summary',
     '',
     `- Passed: ${findings.filter(f => f.ok).length} / ${findings.length}`,
-    `- Failed: ${findings.filter(f => !f.ok).length} / ${findings.length}`,
+    `- Skipped: ${findings.filter(f => f.skipped).length} / ${findings.length}`,
+    `- Failed: ${findings.filter(f => !f.ok && !f.skipped).length} / ${findings.length}`,
     '',
     '## Results',
     '',
     '| Result | Probe | Expected | Observed |',
     '|---|---|---|---|',
     ...findings.map(f =>
-      `| ${f.ok ? 'PASS' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
+      `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`,
     ),
     '',
     '## Coverage',

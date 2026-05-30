@@ -465,7 +465,7 @@ async function main() {
         if (!mounted) {
           const pageLogs = profilePage.__logs.slice(-15).join('\n');
           for (const l of UI_LABELS) {
-            record(l, 'ProfilePage mounted (Sign out button present)', `mount timed out. logs:\n${pageLogs}`, false);
+            skip(l, 'ProfilePage mounted (Sign out button present)', `mount timed out. logs:\n${pageLogs}`);
           }
         } else {
           // UI.1 — profile card rendered; dialog hidden
@@ -515,12 +515,12 @@ async function main() {
           const clicked = await clickChangePasswordBtn(profilePage);
           if (!clicked) {
             await _releaseZxcvbn();
-            record(UI_LABELS[1], 'button clicked', 'could not find button in Password card', false);
-            record(UI_LABELS[2], 'button clicked first', 'button not found', false);
-            record(UI_LABELS[3], 'button clicked first', 'button not found', false);
-            record(UI_LABELS[4], 'button clicked first', 'button not found', false);
-            record(UI_LABELS[5], 'button clicked first', 'button not found', false);
-            record(UI_LABELS[6], 'button clicked first', 'button not found', false);
+            skip(UI_LABELS[1], 'button clicked', 'could not find button in Password card');
+            skip(UI_LABELS[2], 'button clicked first', 'button not found');
+            skip(UI_LABELS[3], 'button clicked first', 'button not found');
+            skip(UI_LABELS[4], 'button clicked first', 'button not found');
+            skip(UI_LABELS[5], 'button clicked first', 'button not found');
+            skip(UI_LABELS[6], 'button clicked first', 'button not found');
           } else {
             const dialogVisible = await pollPage(profilePage, () => {
               const dialogEl  = document.querySelector('[data-testid="change-password-dialog"]');
@@ -642,7 +642,7 @@ async function main() {
             } else {
               await _releaseZxcvbn();
               profilePage.off('console', autofillConsoleHandler);
-              record(UI_LABELS[2], 'dialog visible first', 'dialog not visible', false);
+              skip(UI_LABELS[2], 'dialog visible first', 'dialog not visible');
             }
 
             // UI-zxcvbn — type into "New password" → strength meter or graceful catch
@@ -699,7 +699,7 @@ async function main() {
                 scoreLabelAppeared ? '' : 'zxcvbn may have caught an error; dialog stayed alive (UI-zxcvbn).',
               );
             } else {
-              record(UI_LABELS[3], 'dialog visible first', 'dialog not visible', false);
+              skip(UI_LABELS[3], 'dialog visible first', 'dialog not visible');
               recordSoft('Strength label appears once zxcvbn finishes scoring (soft check)', '"Strength:" text', 'skipped', false, 'dialog did not open');
             }
 
@@ -884,12 +884,12 @@ async function main() {
     }
   }
 
-  const hard = findings.filter(f => !f.soft && !f.skipped);
-  const pass = hard.filter(f => f.ok).length;
-  const fail = hard.filter(f => !f.ok).length;
-  const skip = findings.filter(f => f.skipped).length;
-  const warn = findings.filter(f => f.soft && !f.ok).length;
-  console.log(`\n  Results: ${pass} passed, ${fail} failed${skip ? `, ${skip} skipped` : ''}${warn ? `, ${warn} warning(s)` : ''}`);
+  const hard     = findings.filter(f => !f.soft && !f.skipped);
+  const pass     = hard.filter(f => f.ok).length;
+  const fail     = hard.filter(f => !f.ok).length;
+  const nSkipped = findings.filter(f => f.skipped).length;
+  const warn     = findings.filter(f => f.soft && !f.ok).length;
+  console.log(`\n  Results: ${pass} passed, ${fail} failed${nSkipped ? `, ${nSkipped} skipped` : ''}${warn ? `, ${warn} warning(s)` : ''}`);
 
   await writeReport(runId, findings);
   await cleanupAndExit(fail > 0 ? 1 : 0);

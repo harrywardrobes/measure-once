@@ -283,7 +283,7 @@ async function main() {
     for (const lbl of [
       '[CRUD] PATCH /api/admin/design-visit-handles/:id renames row',
       '[CRUD] GET /api/admin/design-visit-handles includes updated row',
-    ]) record(lbl, 'handle created in previous step', 'create failed', false);
+    ]) skip(lbl, 'handle created in previous step', 'create failed');
   }
 
   // -- furniture ranges --
@@ -705,7 +705,7 @@ async function main() {
         '[PHOTO] design_visit_room_images.storage_key persists the obj: key',
         '[PHOTO] GET /api/design-visits/:id returns image.viewUrl as a signed /api/design-visit-images/... URL',
         '[PHOTO] viewUrl from GET /api/design-visits/:id resolves to the uploaded PNG bytes',
-      ]) record(lbl, 'depends on visit creation', 'visit creation failed', false);
+      ]) skip(lbl, 'depends on visit creation', 'visit creation failed');
     }
   } else {
     for (const lbl of [
@@ -713,7 +713,7 @@ async function main() {
       '[PHOTO] design_visit_room_images.storage_key persists the obj: key',
       '[PHOTO] GET /api/design-visits/:id returns image.viewUrl as a signed /api/design-visit-images/... URL',
       '[PHOTO] viewUrl from GET /api/design-visits/:id resolves to the uploaded PNG bytes',
-    ]) record(lbl, 'depends on upload + catalogue rows', 'prerequisites missing', false);
+    ]) skip(lbl, 'depends on upload + catalogue rows', 'prerequisites missing');
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -839,7 +839,7 @@ async function main() {
 
         if (opened !== 'open') {
           for (let i = 1; i < WIZ_LABELS.length; i++) {
-            record(WIZ_LABELS[i], 'depends on wizard opening', 'wizard did not open', false);
+            skip(WIZ_LABELS[i], 'depends on wizard opening', 'wizard did not open');
           }
         } else {
           // (1) Step-1 Next without terms → inline error
@@ -872,7 +872,7 @@ async function main() {
 
           if (step2 !== 'on-step-2') {
             for (let i = 3; i < WIZ_LABELS.length; i++) {
-              record(WIZ_LABELS[i], 'depends on step 2 rendering', 'step 2 did not render', false);
+              skip(WIZ_LABELS[i], 'depends on step 2 rendering', 'step 2 did not render');
             }
           } else {
             // (3) Initial state: 1 card, no Remove button

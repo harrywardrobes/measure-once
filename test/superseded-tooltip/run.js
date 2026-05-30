@@ -430,7 +430,7 @@ async function main() {
   ];
 
   if (!puppeteer) {
-    for (const l of PROBE_LABELS) record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    for (const l of PROBE_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
     await cleanupAndExit(1);
     return;
   }
@@ -453,7 +453,7 @@ async function main() {
 
   if (!browser) {
     const msg = (browserLaunchErr?.message || String(browserLaunchErr)).slice(0, 200);
-    for (const l of PROBE_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
+    for (const l of PROBE_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     await cleanupAndExit(1);
     return;
   }

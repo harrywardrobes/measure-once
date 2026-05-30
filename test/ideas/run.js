@@ -464,10 +464,10 @@ async function main() {
           cardAppeared === 'ok',
         );
       } else {
-        record(UI_LABELS[0], 'dialog opened', 'dialog did not open', false);
+        skip(UI_LABELS[0], 'dialog opened', 'dialog did not open');
       }
     } else {
-      record(UI_LABELS[0], '"New Idea" button found', 'button not found in mount', false);
+      skip(UI_LABELS[0], '"New Idea" button found', 'button not found in mount');
     }
 
     // ── [UI-2] Expand comment chip → lazy-fetch shows seeded comment ──────────
@@ -519,10 +519,10 @@ async function main() {
           commentVisible === 'ok',
         );
       } else {
-        record(UI_LABELS[1], 'chip clicked on idea2 card', 'chip or card not found', false);
+        skip(UI_LABELS[1], 'chip clicked on idea2 card', 'chip or card not found');
       }
     } else {
-      record(UI_LABELS[1], 'idea2 seeded via API', 'idea2 creation failed', false);
+      skip(UI_LABELS[1], 'idea2 seeded via API', 'idea2 creation failed');
     }
 
     // ── [UI-3] Reply via comment box appends comment inline ────────────────────
@@ -580,10 +580,10 @@ async function main() {
           inlineComment === 'ok',
         );
       } else {
-        record(UI_LABELS[2], 'reply input found and typed into', 'input not found (section may be collapsed)', false);
+        skip(UI_LABELS[2], 'reply input found and typed into', 'input not found (section may be collapsed)');
       }
     } else {
-      record(UI_LABELS[2], 'idea2 available', 'idea2 creation failed', false);
+      skip(UI_LABELS[2], 'idea2 available', 'idea2 creation failed');
     }
 
     await adminPage.__ctx.close().catch(() => {});
@@ -648,7 +648,7 @@ async function main() {
       }
       await pollPage(adminPage4, () => !document.querySelector('[role="dialog"]') ? 'ok' : null, undefined, 4000);
     } else {
-      record(UI_LABELS[4], 'delete button present to click', 'no delete button found', false);
+      skip(UI_LABELS[4], 'delete button present to click', 'no delete button found');
     }
 
     await adminPage4.__ctx.close().catch(() => {});

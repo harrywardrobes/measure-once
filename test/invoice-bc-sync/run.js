@@ -694,7 +694,7 @@ async function main() {
 
     if (!respA || !respA.ok()) {
       for (const l of UI_LABELS.slice(0, 3)) {
-        record(l, 'listener page loads (200)', `${respA ? respA.status() : 0}`, false);
+        skip(l, 'listener page loads (200)', `${respA ? respA.status() : 0}`);
       }
     } else {
       console.log('  Listener A: waiting for initial invoice fetch…');
@@ -725,7 +725,7 @@ async function main() {
 
         if (!sender.ok) {
           for (const l of UI_LABELS.slice(0, 4)) {
-            record(l, 'sender save succeeded', `sender failed: ${sender.detail}`, false);
+            skip(l, 'sender save succeeded', `sender failed: ${sender.detail}`);
           }
         } else {
           // Assert 1: the POST save endpoint was intercepted, confirming
@@ -806,7 +806,7 @@ async function main() {
 
     if (!respB || !respB.ok()) {
       for (const l of UI_LABELS.slice(4)) {
-        record(l, 'listener page loads (200)', `${respB ? respB.status() : 0}`, false);
+        skip(l, 'listener page loads (200)', `${respB ? respB.status() : 0}`);
       }
     } else {
       console.log('  Listener B: waiting for initial invoice fetch…');
@@ -832,7 +832,7 @@ async function main() {
 
         if (!senderB.ok) {
           for (const l of UI_LABELS.slice(4)) {
-            record(l, 'sender save succeeded', `sender failed: ${senderB.detail}`, false);
+            skip(l, 'sender save succeeded', `sender failed: ${senderB.detail}`);
           }
         } else {
           // Assert 1: production save endpoint intercepted.

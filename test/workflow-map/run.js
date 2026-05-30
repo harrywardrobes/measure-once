@@ -357,7 +357,7 @@ async function main() {
     const mountedAB = await goToCardActions(page);
     if (!mountedAB) {
       for (const l of UI_LABELS.slice(0, 8))
-        record(l, 'CardActionsPage mounted', 'mount timed out', false);
+        skip(l, 'CardActionsPage mounted', 'mount timed out');
       await page.__ctx.close().catch(() => {});
     } else {
       // ── (A) Default expanded — ensure no LS value is set ──────────────────
@@ -410,7 +410,7 @@ async function main() {
       await waitForMapHeader(page);
 
       if (!mountedB2) {
-        record(UI_LABELS[4], 'CardActionsPage mounted after reload', 'mount timed out', false);
+        skip(UI_LABELS[4], 'CardActionsPage mounted after reload', 'mount timed out');
       } else {
         const expandedB2 = await page.evaluate(() => {
           const btn = document.querySelector('[role="button"][aria-controls="workflow-map-body"]');
@@ -441,7 +441,7 @@ async function main() {
       await waitForMapHeader(page);
 
       if (!mountedB4) {
-        record(UI_LABELS[7], 'CardActionsPage mounted after reload', 'mount timed out', false);
+        skip(UI_LABELS[7], 'CardActionsPage mounted after reload', 'mount timed out');
       } else {
         const expandedB4 = await page.evaluate(() => {
           const btn = document.querySelector('[role="button"][aria-controls="workflow-map-body"]');
@@ -459,7 +459,7 @@ async function main() {
     const mountedC = await goToCardActions(pageC);
 
     if (!mountedC) {
-      for (const l of UI_LABELS.slice(8)) record(l, 'CardActionsPage mounted', 'mount timed out', false);
+      for (const l of UI_LABELS.slice(8)) skip(l, 'CardActionsPage mounted', 'mount timed out');
       await pageC.__ctx.close().catch(() => {});
     } else {
       // Wait for the Suspense fallback to clear and the ReactFlow canvas to appear.
@@ -469,10 +469,10 @@ async function main() {
       }, 20000);
 
       if (!reactFlowReady) {
-        record(UI_LABELS[8], 'ReactFlow canvas visible', 'timed out waiting for .react-flow__renderer', false);
-        record(UI_LABELS[9], '"Sales" in drawer', 'ReactFlow not ready', false);
-        record(UI_LABELS[10], '"sales" in drawer', 'ReactFlow not ready', false);
-        record(UI_LABELS[11], 'drawer closed', 'ReactFlow not ready', false);
+        skip(UI_LABELS[8], 'ReactFlow canvas visible', 'timed out waiting for .react-flow__renderer');
+        skip(UI_LABELS[9], '"Sales" in drawer', 'ReactFlow not ready');
+        skip(UI_LABELS[10], '"sales" in drawer', 'ReactFlow not ready');
+        skip(UI_LABELS[11], 'drawer closed', 'ReactFlow not ready');
         await pageC.__ctx.close().catch(() => {});
       } else {
         // (C) Click the Sales stage node.

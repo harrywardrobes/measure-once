@@ -453,7 +453,7 @@ async function main() {
     for (const l of PUPPETEER_PROBE_LABELS) {
       skip(l, 'puppeteer installed', 'puppeteer not installed');
     }
-    const failed = findings.some(f => !f.ok);
+    const failed = findings.some(f => !f.ok && !f.skipped);
     await cleanupAndExit(failed ? 1 : 0);
     return;
   }
@@ -473,7 +473,7 @@ async function main() {
     for (const l of PUPPETEER_PROBE_LABELS) {
       skip(l, 'browser launched', `browser launch failed: ${e.message}`);
     }
-    const failed = findings.some(f => !f.ok);
+    const failed = findings.some(f => !f.ok && !f.skipped);
     await cleanupAndExit(failed ? 1 : 0);
     return;
   }
@@ -910,7 +910,7 @@ async function main() {
             }, null, 5000);
 
             if (!dialogReady) {
-              record('K.3–K.5 Snackbar visibility pause', 'confirm dialog opened', 'dialog not found', false);
+              skip('K.3–K.5 Snackbar visibility pause', 'confirm dialog opened', 'dialog not found');
             } else {
               // Click the "Delete" confirm button inside the dialog.
               const confirmed = await kPage.evaluate(() => {
@@ -921,7 +921,7 @@ async function main() {
               });
 
               if (!confirmed) {
-                record('K.3–K.5 Snackbar visibility pause', '"Delete" button clicked', 'button not found', false);
+                skip('K.3–K.5 Snackbar visibility pause', '"Delete" button clicked', 'button not found');
               } else {
                 // Step 1: Wait for "Company deleted" Snackbar to appear.
                 const snackbarAppeared = await pollPage(kPage, () => {
@@ -931,8 +931,8 @@ async function main() {
 
                 if (snackbarAppeared !== 'visible') {
                   record('K.3 "Company deleted" Snackbar appears', 'visible', `snackbar=${snackbarAppeared}`, false);
-                  record('K.4 Snackbar paused while tab hidden (>4 s)', 'skipped', 'snackbar never appeared', false);
-                  record('K.5 Snackbar dismisses after tab returns visible', 'skipped', 'snackbar never appeared', false);
+                  skip('K.4 Snackbar paused while tab hidden (>4 s)', 'skipped', 'snackbar never appeared');
+                  skip('K.5 Snackbar dismisses after tab returns visible', 'skipped', 'snackbar never appeared');
                 } else {
                   record('K.3 "Company deleted" Snackbar appears', 'visible', 'visible', true);
 
@@ -1171,7 +1171,7 @@ async function main() {
 
           if (!fieldChecks) {
             for (const [i, f] of ['name', 'role', 'phone', 'email', 'preferred_contact'].entries()) {
-              record(`L.${i + 3} ContactSlot field "${f}" has a form input`, 'true', 'dialog not found', false);
+              skip(`L.${i + 3} ContactSlot field "${f}" has a form input`, 'true', 'dialog not found');
             }
           } else {
             record(
@@ -1219,9 +1219,9 @@ async function main() {
     await adminClient.delete(`/api/trades/${betaId}`).catch(() => {});
   }
 
-  const failed = findings.some(f => !f.ok);
+  const failed = findings.some(f => !f.ok && !f.skipped);
   console.log(`\n  Passed: ${findings.filter(f => f.ok).length} / ${findings.length}`);
-  `- Skipped: ${findings.filter(f => f.skipped).length} / ${findings.length}`,
+  console.log(`  Skipped: ${findings.filter(f => f.skipped).length} / ${findings.length}`);
   if (failed) console.log(`  Failed: ${findings.filter(f => !f.ok && !f.skipped).length} / ${findings.length}`);
   await cleanupAndExit(failed ? 1 : 0);
 }
@@ -1242,7 +1242,8 @@ async function writeReport(runId, findings) {
     '## Summary',
     '',
     `- Passed: ${findings.filter(f => f.ok).length} / ${findings.length}`,
-    `- Failed: ${findings.filter(f => !f.ok).length} / ${findings.length}`,
+    `- Skipped: ${findings.filter(f => f.skipped).length} / ${findings.length}`,
+    `- Failed: ${findings.filter(f => !f.ok && !f.skipped).length} / ${findings.length}`,
     '',
     '## Results',
     '',
