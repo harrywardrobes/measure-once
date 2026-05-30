@@ -940,14 +940,15 @@ router.post('/api/customer-info/:token/resend-expired', express.json({ limit: '4
   const freshRaw   = crypto.randomBytes(32).toString('hex');
   const freshHash  = crypto.createHash('sha256').update(freshRaw).digest('hex');
   const freshExpiry = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(freshRaw)}`;
 
   await pool.query(
     `INSERT INTO customer_info_submissions
        (contact_id, contact_name, contact_email, token_hash, expires_at,
-        masked_email, masked_phone)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        masked_email, masked_phone, form_link)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [row.contact_id, row.contact_name, row.contact_email, freshHash,
-     freshExpiry.toISOString(), row.masked_email, row.masked_phone]
+     freshExpiry.toISOString(), row.masked_email, row.masked_phone, formLink]
   );
 
   // 6. Log the resend (stores token_hash only — never the raw token).
@@ -957,7 +958,6 @@ router.post('/api/customer-info/:token/resend-expired', express.json({ limit: '4
   );
 
   // 7. Send invitation email.
-  const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(freshRaw)}`;
   await sendCustomerInviteEmail(row.contact_email, row.masked_email || maskEmail(row.contact_email || ''), formLink);
 
   console.log(`[customer-info] Self-serve resend issued for contact ${row.contact_id}`);

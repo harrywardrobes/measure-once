@@ -283,6 +283,18 @@ async function main() {
     record('B.resend-log', logCntB === 1,
       `customer_info_resend_log entries for token=${logCntB} (expected 1)`);
 
+    // B.form-link: the new submission row must have form_link populated
+    const freshRowB = await pool.query(
+      `SELECT form_link FROM customer_info_submissions
+       WHERE contact_id = $1 AND token_hash != $2
+       ORDER BY created_at DESC LIMIT 1`,
+      [contactId, crypto.createHash('sha256').update(expTokenB).digest('hex')]
+    );
+    const formLinkB = freshRowB.rows[0]?.form_link;
+    record('B.form-link',
+      typeof formLinkB === 'string' && formLinkB.includes('/customer-info/'),
+      `form_link="${formLinkB}"`);
+
     // ── Probe F: New link validity — extracted from invitation email ───────────
     // Run F immediately after B so the mail file only contains B's email.
     console.log('\n  --- Probe F: new link validity ---');
