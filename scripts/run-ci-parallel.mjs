@@ -76,6 +76,7 @@ const STATIC_SUITES = [
   'test:suite-descriptions',
   'test:suite-probe-counts',
   'test:suite-probe-counts-advisory',
+  'test:browser-launch-pattern',
   'test:story-count-sync',
 ];
 
