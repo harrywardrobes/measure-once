@@ -90,7 +90,12 @@ const stale = [...documentedSuites]
   .filter((s) => !stepSuites.has(s) && !STANDALONE_SUITES.has(s))
   .sort();
 
-if (missing.length === 0 && stale.length === 0) {
+// Allowlist staleness check: every STANDALONE_SUITES entry must have a docs row.
+const deadAllowlist = [...STANDALONE_SUITES]
+  .filter((s) => !documentedSuites.has(s))
+  .sort();
+
+if (missing.length === 0 && stale.length === 0 && deadAllowlist.length === 0) {
   console.log(
     `✅  suite-descriptions: all ${stepSuites.size} CI test suites have a` +
     ` matching row in docs/TEST_SUITES.md, and all ${documentedSuites.size}` +
@@ -132,6 +137,24 @@ if (stale.length > 0) {
     '  • Add the suite to run-ci.mjs STEPS so it runs in CI, or\n' +
     '  • Add it to the STANDALONE_SUITES allowlist in' +
     ' scripts/check-suite-descriptions.mjs with a reason comment.\n',
+  );
+}
+
+if (deadAllowlist.length > 0) {
+  failed = true;
+  console.error(
+    `❌  suite-descriptions: ${deadAllowlist.length} STANDALONE_SUITES ` +
+    `${deadAllowlist.length === 1 ? 'entry' : 'entries'} in ` +
+    `scripts/check-suite-descriptions.mjs no longer ` +
+    `${deadAllowlist.length === 1 ? 'has' : 'have'} a matching row in` +
+    ` docs/TEST_SUITES.md:\n`,
+  );
+  for (const s of deadAllowlist) {
+    console.error(`   - ${s}`);
+  }
+  console.error(
+    '\nRemove each stale entry from the STANDALONE_SUITES set in' +
+    ' scripts/check-suite-descriptions.mjs.\n',
   );
 }
 
