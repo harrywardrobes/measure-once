@@ -76,11 +76,26 @@ function extractDocumentedSuites(filePath) {
   return found;
 }
 
+/**
+ * Return a Map from suite name to the full table-row text for every documented
+ * suite in TEST_SUITES.md.  Used by the standalone-note check.
+ */
+function extractDocumentedSuiteRows(filePath) {
+  const src = readFileSync(filePath, 'utf8');
+  const rows = new Map();
+  for (const line of src.split('\n')) {
+    const m = line.match(/^\|\s*`(test:[^`]+)`\s*\|/);
+    if (m) rows.set(m[1], line);
+  }
+  return rows;
+}
+
 const runnerFile = join(ROOT, 'scripts', 'run-ci.mjs');
 const docsFile   = join(ROOT, 'docs', 'TEST_SUITES.md');
 
 const stepSuites       = extractStepsFromRunner(runnerFile);
 const documentedSuites = extractDocumentedSuites(docsFile);
+const documentedRows   = extractDocumentedSuiteRows(docsFile);
 
 // Forward check: every CI step must have a docs row.
 const missing = [...stepSuites].filter((s) => !documentedSuites.has(s)).sort();
@@ -95,7 +110,21 @@ const deadAllowlist = [...STANDALONE_SUITES]
   .filter((s) => !documentedSuites.has(s))
   .sort();
 
-if (missing.length === 0 && stale.length === 0 && deadAllowlist.length === 0) {
+// Standalone-note check: every STANDALONE_SUITES entry whose docs row exists
+// must contain the word "Standalone" (case-insensitive) somewhere in that row.
+const missingStandaloneNote = [...STANDALONE_SUITES]
+  .filter((s) => {
+    const row = documentedRows.get(s);
+    return row !== undefined && !/standalone/i.test(row);
+  })
+  .sort();
+
+if (
+  missing.length === 0 &&
+  stale.length === 0 &&
+  deadAllowlist.length === 0 &&
+  missingStandaloneNote.length === 0
+) {
   console.log(
     `✅  suite-descriptions: all ${stepSuites.size} CI test suites have a` +
     ` matching row in docs/TEST_SUITES.md, and all ${documentedSuites.size}` +
@@ -155,6 +184,24 @@ if (deadAllowlist.length > 0) {
   console.error(
     '\nRemove each stale entry from the STANDALONE_SUITES set in' +
     ' scripts/check-suite-descriptions.mjs.\n',
+  );
+}
+
+if (missingStandaloneNote.length > 0) {
+  failed = true;
+  console.error(
+    `❌  suite-descriptions: ${missingStandaloneNote.length} STANDALONE_SUITES ` +
+    `${missingStandaloneNote.length === 1 ? 'entry' : 'entries'} in ` +
+    `scripts/check-suite-descriptions.mjs ` +
+    `${missingStandaloneNote.length === 1 ? 'is' : 'are'} missing the ` +
+    `"Standalone" note in its docs/TEST_SUITES.md row:\n`,
+  );
+  for (const s of missingStandaloneNote) {
+    console.error(`   - ${s}`);
+  }
+  console.error(
+    '\nAdd a "Standalone only" note to each suite\'s row in the' +
+    ' "Suite reference" table in docs/TEST_SUITES.md.\n',
   );
 }
 
