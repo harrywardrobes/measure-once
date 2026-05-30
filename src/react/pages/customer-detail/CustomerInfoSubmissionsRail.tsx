@@ -404,6 +404,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
           <Alert
             severity="warning"
             icon={<WarningAmberIcon fontSize="inherit" />}
+            data-testid="conflict-alert"
             action={
               <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', flexShrink: 0 }}>
                 <Button

@@ -676,15 +676,8 @@ async function main() {
     if (conflictBtn) {
       // ── Probe B-text: conflict Alert contains expected message ────────────
       const alertText = await pageB.evaluate(() => {
-        const el = document.querySelector('[data-testid="conflict-proceed-btn"]');
-        if (!el) return '';
-        // Walk up to the MUI Alert root (role="alert" or the nearest ancestor
-        // that contains the warning text).
-        let node = el.parentElement;
-        while (node && node.getAttribute('role') !== 'alert') {
-          node = node.parentElement;
-        }
-        return node ? node.textContent || '' : '';
+        const el = document.querySelector('[data-testid="conflict-alert"]');
+        return el ? el.textContent || '' : '';
       });
 
       const expectedFragment = 'A newer link has already been sent for this contact';
@@ -739,15 +732,8 @@ async function main() {
     if (conflictForCancel) {
       // ── Probe B3-text: conflict Alert contains expected message ───────────
       const alertTextB3 = await pageB3.evaluate(() => {
-        const el = document.querySelector('[data-testid="conflict-proceed-btn"]');
-        if (!el) return '';
-        // Walk up to the MUI Alert root (role="alert" or the nearest ancestor
-        // that contains the warning text).
-        let node = el.parentElement;
-        while (node && node.getAttribute('role') !== 'alert') {
-          node = node.parentElement;
-        }
-        return node ? node.textContent || '' : '';
+        const el = document.querySelector('[data-testid="conflict-alert"]');
+        return el ? el.textContent || '' : '';
       });
 
       const expectedFragmentB3 = 'A newer link has already been sent for this contact';
@@ -892,15 +878,8 @@ async function main() {
     if (conflictBtnBOpen) {
       // ── Probe B-open-text: conflict Alert contains expected message ───────
       const alertTextBOpen = await pageBOpen.evaluate(() => {
-        const el = document.querySelector('[data-testid="conflict-proceed-btn"]');
-        if (!el) return '';
-        // Walk up to the MUI Alert root (role="alert" or the nearest ancestor
-        // that contains the warning text).
-        let node = el.parentElement;
-        while (node && node.getAttribute('role') !== 'alert') {
-          node = node.parentElement;
-        }
-        return node ? node.textContent || '' : '';
+        const el = document.querySelector('[data-testid="conflict-alert"]');
+        return el ? el.textContent || '' : '';
       });
 
       const expectedFragmentBOpen = 'A newer link has already been sent for this contact';
@@ -972,15 +951,8 @@ async function main() {
     if (conflictForCancelOpen) {
       // ── Probe B3-open-text: conflict Alert contains expected message ───────
       const alertTextB3Open = await pageB3Open.evaluate(() => {
-        const el = document.querySelector('[data-testid="conflict-proceed-btn"]');
-        if (!el) return '';
-        // Walk up to the MUI Alert root (role="alert" or the nearest ancestor
-        // that contains the warning text).
-        let node = el.parentElement;
-        while (node && node.getAttribute('role') !== 'alert') {
-          node = node.parentElement;
-        }
-        return node ? node.textContent || '' : '';
+        const el = document.querySelector('[data-testid="conflict-alert"]');
+        return el ? el.textContent || '' : '';
       });
 
       const expectedFragmentB3Open = 'A newer link has already been sent for this contact';
