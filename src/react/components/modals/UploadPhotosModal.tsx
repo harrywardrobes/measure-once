@@ -403,7 +403,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
     if (phase === 'confirming') {
       return (
         <>
-          <Button onClick={handleClose}>Cancel</Button>
+          <Button onClick={handleClose} data-testid="cah-cancel-confirming">Cancel</Button>
           <Button
             variant="contained"
             color="warning"

@@ -247,6 +247,12 @@ function writeReport(runId) {
     '- **(C) confirm-triggers**: Clicking [data-testid="cah-confirm-resend"]',
     '  ("Send new link anyway") results in exactly one POST to generate-link,',
     '  confirming the call only fires after explicit staff confirmation.',
+    '- **(D) cancel-no-call / cancel-closes**: Opens a fresh page, opens the',
+    '  modal, waits for the confirming phase, then clicks',
+    '  [data-testid="cah-cancel-confirming"] ("Cancel"). generate-link must NOT',
+    '  be called (count remains 0) and the dialog must no longer be visible.',
+    '  Regression guard for the cancel/dismiss path — a bug here would silently',
+    '  expire the active link even when the staff member chose to keep it.',
     '',
     '## Relevant files',
     '',
@@ -289,6 +295,8 @@ async function main() {
     '(A) warning-visible — MUI Alert with warning role present',
     '(B) no-premature-call — generate-link not called before confirmation',
     '(C) confirm-triggers — generate-link called exactly once after clicking confirm',
+    '(D) cancel-no-call — generate-link not called after clicking Cancel',
+    '(D) cancel-closes — dialog is no longer visible after clicking Cancel',
   ];
 
   if (!puppeteer) {
@@ -469,6 +477,101 @@ async function main() {
       }
 
       await page.__ctx.close().catch(() => {});
+
+      // ── (D) Cancel does not call generate-link ─────────────────────────────
+
+      console.log('\n  [D] Opening fresh page for cancel probe…');
+
+      const cancelCounter = { count: 0 };
+      const pageD = await openCustomerDetail(browser, BASE, contactId, cancelCounter);
+
+      const bridgeReadyD = await pollPage(pageD, () =>
+        typeof window.openCardActionModal === 'function' ? 'ok' : null,
+      20000);
+
+      if (!bridgeReadyD) {
+        const err = pageD.__logs.slice(0, 3).join('; ');
+        const msg = 'window.openCardActionModal not available within 20 s'
+          + (err ? ` | page errors: ${err}` : '');
+        record(PROBE_LABELS[4], false, msg);
+        record(PROBE_LABELS[5], false, msg);
+      } else {
+        await pageD.evaluate((cid) => {
+          window.openCardActionModal(
+            { id: 1, type: 'upload_photos_and_info', config: {}, bindings: [] },
+            {
+              contactId:    cid,
+              contactName:  'ActiveLink WarningTest',
+              contactEmail: 'alw-test@privtest.local',
+            },
+          );
+        }, contactId);
+
+        // Wait for the confirming phase (dialog title "Active link exists").
+        const titleFoundD = await pollPage(pageD, () => {
+          const titles = [...document.querySelectorAll('.MuiDialogTitle-root')];
+          return titles.some(el => el.textContent.trim() === 'Active link exists')
+            ? 'found'
+            : null;
+        }, 15000);
+
+        if (!titleFoundD) {
+          const msg = 'Dialog title "Active link exists" not found within 15 s — cannot run cancel probe';
+          record(PROBE_LABELS[4], false, msg);
+          record(PROBE_LABELS[5], false, msg);
+        } else {
+          const cancelBtn = await pageD.evaluate(() => {
+            const btn = document.querySelector('[data-testid="cah-cancel-confirming"]');
+            return btn ? 'found' : null;
+          });
+
+          if (!cancelBtn) {
+            const msg = '[data-testid="cah-cancel-confirming"] not found — cannot proceed';
+            record(PROBE_LABELS[4], false, msg);
+            record(PROBE_LABELS[5], false, msg);
+          } else {
+            await pageD.evaluate(() => {
+              document.querySelector('[data-testid="cah-cancel-confirming"]').click();
+            });
+
+            // Brief settle delay so any in-flight POST (the bug) has time to fire.
+            await new Promise(r => setTimeout(r, 1500));
+
+            // (D.1) generate-link must not have been called.
+            record(
+              PROBE_LABELS[4],
+              cancelCounter.count === 0,
+              cancelCounter.count === 0
+                ? 'generate-link not called after clicking Cancel (count=0)'
+                : `generate-link was called ${cancelCounter.count} time(s) after Cancel — active link was expired`,
+            );
+
+            // (D.2) The dialog must no longer be visible.
+            const dialogGone = await pageD.evaluate(() => {
+              const dialogs = [...document.querySelectorAll('.MuiDialog-root')];
+              return dialogs.every(d => {
+                const style = window.getComputedStyle(d);
+                return style.display === 'none'
+                  || style.visibility === 'hidden'
+                  || d.getAttribute('aria-hidden') === 'true'
+                  || !d.querySelector('.MuiDialogTitle-root');
+              })
+                ? 'gone'
+                : null;
+            });
+
+            record(
+              PROBE_LABELS[5],
+              !!dialogGone,
+              dialogGone
+                ? 'Dialog is no longer visible after Cancel'
+                : 'Dialog is still visible after Cancel — cancel affordance may be broken',
+            );
+          }
+        }
+      }
+
+      await pageD.__ctx.close().catch(() => {});
     }
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;
