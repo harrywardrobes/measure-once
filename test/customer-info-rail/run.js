@@ -23,6 +23,9 @@ const { makeSkip } = require('../helpers/report');
 //   (G4/G5) A separate submitted card with corrected_email and corrected_mobile
 //       set: after clicking Review, both correction strings appear in the
 //       expanded body with a non-zero bounding height.
+//   (G6) A separate submitted card with room_notes set: after clicking Review,
+//       the notes string appears in the expanded body with a non-zero bounding
+//       height.
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-info-rail
@@ -139,6 +142,28 @@ const ROW_SUBMITTED_WITH_CORRECTIONS = {
   postcode: 'FX2 2FX',
   room_count: '1',
   room_notes: null,
+  photo_keys: [],
+  photoUrls: [],
+  email_skipped_count: 0,
+  form_link: null,
+};
+
+// Row 6: submitted with room_notes set — used by probe G6 to verify the Notes
+// section renders the full text in the expanded card body.
+const ROW_SUBMITTED_WITH_NOTES = {
+  id: 6,
+  created_at: new Date(NOW - 7 * 24 * 60 * 60 * 1000).toISOString(),
+  submitted_at: new Date(NOW - 6 * 24 * 60 * 60 * 1000).toISOString(),
+  expires_at: FUTURE,
+  contact_name: 'Rail Test',
+  contact_email: 'rail@privtest.invalid',
+  corrected_email: null,
+  corrected_mobile: null,
+  address_line1: '6 Notes Avenue',
+  city: 'Notestown',
+  postcode: 'NT3 3NT',
+  room_count: '3',
+  room_notes: 'Master bedroom has sloped ceiling on north wall',
   photo_keys: [],
   photoUrls: [],
   email_skipped_count: 0,
@@ -483,6 +508,11 @@ function writeReport(runId) {
     '  "Email: corrected@example.com" is visible with a non-zero bounding height,',
     '  and **(G5)** the text "Mobile: 07700900123" is visible with a non-zero',
     '  bounding height inside the expanded Corrections section.',
+    '- **(G6) Notes section renders room_notes text**: an isolated page load with a',
+    '  submitted fixture row that has `room_notes` set to a multi-word string.',
+    '  After clicking Review on `[data-testid="submission-card-6"]`, the exact',
+    '  `room_notes` string "Master bedroom has sloped ceiling on north wall" is',
+    '  visible with a non-zero bounding height inside the expanded card body.',
     '',
     'All API calls are stubbed via evaluateOnNewDocument fetch interception.',
     'No HubSpot token or real contact data is required.',
@@ -572,6 +602,7 @@ async function main() {
     '(G) "2 rooms" text rendered in expanded card body',
     '(G4) corrected_email "corrected@example.com" visible with non-zero height in expanded card body',
     '(G5) corrected_mobile "07700900123" visible with non-zero height in expanded card body',
+    '(G6) room_notes "Master bedroom has sloped ceiling on north wall" visible with non-zero height in expanded card body',
   ];
 
   if (!puppeteer) {
@@ -1002,6 +1033,59 @@ async function main() {
     );
 
     await pageG45.__ctx.close().catch(() => {});
+
+    // ── Probe G6: room_notes text in card body ─────────────────────────────
+    console.log('\n  [G6] room_notes text visible in expanded card body');
+
+    const pageG6 = await openDetailPage(
+      browser, adminClient.cookie, [ROW_SUBMITTED_WITH_NOTES],
+    );
+
+    const reviewBtnG6 = await pageG6.$('[data-testid="review-btn"]');
+
+    let g6BodyOpen = false;
+    if (reviewBtnG6) {
+      await reviewBtnG6.click();
+      g6BodyOpen = await pollPage(pageG6, () => {
+        const card = document.querySelector('[data-testid="submission-card-6"]');
+        if (!card) return null;
+        return card.querySelector('[class*="MuiCollapse-entered"]') ? 'ok' : null;
+      }, 5000).then(() => true).catch(() => false);
+    }
+
+    let roomNotesVisible = false;
+    if (g6BodyOpen) {
+      const g6State = await pageG6.evaluate(() => {
+        const card = document.querySelector('[data-testid="submission-card-6"]');
+        if (!card) return { found: false, height: 0 };
+        const target = 'Master bedroom has sloped ceiling on north wall';
+        const allEls = Array.from(card.querySelectorAll('*'));
+        for (const el of allEls) {
+          if ((el.textContent || '').trim() === target) {
+            const rect = el.getBoundingClientRect();
+            return { found: true, height: rect.height };
+          }
+        }
+        return { found: false, height: 0 };
+      });
+
+      roomNotesVisible = g6State.found && g6State.height > 0;
+    }
+
+    record(
+      PROBE_LABELS[16],
+      'room_notes text visible with non-zero height after Review',
+      roomNotesVisible
+        ? 'room_notes text found with non-zero height (correct)'
+        : g6BodyOpen
+          ? 'card body open but room_notes text not found or zero height'
+          : reviewBtnG6
+            ? 'review-btn found but card body did not open'
+            : 'review-btn not found',
+      roomNotesVisible,
+    );
+
+    await pageG6.__ctx.close().catch(() => {});
 
     // ── Probe F: skipped-email count badge ────────────────────────────────
     console.log('\n  [F] Skipped-email count badge');
