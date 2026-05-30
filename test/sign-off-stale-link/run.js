@@ -3,13 +3,13 @@
 //
 // End-to-end live test for the "superseded" sign-off path (task #715/#726).
 //
-// A design-visit sign-off link must keep working in a useful way after the
-// designer has re-opened the visit (PUT /api/design-visits/:id) or re-run
+// A design-visit sign-off link must stop working (without leaking data) after
+// the designer has re-opened the visit (PUT /api/design-visits/:id) or re-run
 // the submit pipeline (POST /api/design-visits/:id/submit, which also fires
 // from /:id/revision → /:id/submit). The page must:
-//   - GET /api/design-visits/sign-off/:token returns 200 with
-//     status='superseded' + a visit summary (the page shows the
-//     "Changes in progress" banner and hides the action card).
+//   - GET /api/design-visits/sign-off/:token returns 410 with
+//     status='superseded' and NO visit data (old links must not act as
+//     long-lived bearer tokens for current customer PII and room photos).
 //   - POST /api/design-visits/sign-off/:token returns 409 with
 //     status='superseded' for both action='approve' and action='revision'.
 //   - Genuinely unknown tokens still return 404.
@@ -17,12 +17,12 @@
 // Covered paths:
 //   (PUT-A) Designer re-opens via PUT /api/design-visits/:id  — old token
 //           moves into superseded_signoff_token_hashes; new token minted.
-//   (PUT-B) PUT-superseded GET → 200 status=superseded.
+//   (PUT-B) PUT-superseded GET → 410 status=superseded, no visit data.
 //   (PUT-C) PUT-superseded POST {approve} → 409 status=superseded.
 //   (PUT-D) PUT-superseded POST {revision} → 409 status=superseded.
 //   (RES-A) Designer requests-revision via POST /:id/revision then re-runs
 //           POST /:id/submit — old token must end up superseded.
-//   (RES-B) RES-superseded GET → 200 status=superseded.
+//   (RES-B) RES-superseded GET → 410 status=superseded, no visit data.
 //   (RES-C) RES-superseded POST {approve} → 409 status=superseded.
 //   (RES-D) RES-superseded POST {revision} → 409 status=superseded.
 //   (UNK-A) Genuinely unknown token GET → 404.
@@ -287,16 +287,15 @@ async function main() {
     `superseded=${JSON.stringify(putRow.superseded_signoff_token_hashes)} new=${putRow.signoff_token_hash}`,
     putWasSuperseded && putRow.signoff_token_hash !== putOldHash);
 
-  // GET with the old token → 200, status='superseded'.
+  // GET with the old token → 410, status='superseded' (no visit data exposed).
   {
     const r = await anonClient.get(`/api/design-visits/sign-off/${putRawToken}`);
-    record('[PUT-B] GET /sign-off/:oldToken returns 200 status="superseded" + visit summary',
-      'status=200, body.status="superseded", body.id matches, rooms is an array',
-      `status=${r.status} bodyStatus=${r.json?.status} id=${r.json?.id} rooms=${Array.isArray(r.json?.rooms) ? r.json.rooms.length : 'N/A'}`,
-      r.status === 200
+    record('[PUT-B] GET /sign-off/:oldToken returns 410 status="superseded" (no visit data)',
+      'status=410, body.status="superseded", body.id absent',
+      `status=${r.status} bodyStatus=${r.json?.status} id=${r.json?.id ?? '(none)'}`,
+      r.status === 410
         && r.json?.status === 'superseded'
-        && r.json?.id === putVisit.id
-        && Array.isArray(r.json?.rooms));
+        && r.json?.id === undefined);
   }
 
   // POST {approve} with the old token → 409, status='superseded'.
@@ -387,13 +386,12 @@ async function main() {
 
   {
     const r = await anonClient.get(`/api/design-visits/sign-off/${resRawToken}`);
-    record('[RES-B] GET /sign-off/:oldToken returns 200 status="superseded" + visit summary',
-      'status=200, body.status="superseded", body.id matches',
-      `status=${r.status} bodyStatus=${r.json?.status} id=${r.json?.id}`,
-      r.status === 200
+    record('[RES-B] GET /sign-off/:oldToken returns 410 status="superseded" (no visit data)',
+      'status=410, body.status="superseded", body.id absent',
+      `status=${r.status} bodyStatus=${r.json?.status} id=${r.json?.id ?? '(none)'}`,
+      r.status === 410
         && r.json?.status === 'superseded'
-        && r.json?.id === resVisit.id
-        && Array.isArray(r.json?.rooms));
+        && r.json?.id === undefined);
   }
 
   {
@@ -500,8 +498,10 @@ function writeReport(findings) {
     lines.push('re-opens a submitted design visit (PUT /api/design-visits/:id)');
     lines.push('or re-runs the submit pipeline (POST /:id/revision +');
     lines.push('POST /:id/submit), the old customer-facing sign-off link must');
-    lines.push('still load (200, status="superseded") and any sign-off attempts');
-    lines.push('via that stale link must be rejected with 409 status="superseded".');
+    lines.push('return 410 status="superseded" with NO visit data (stale links');
+    lines.push('must not expose current customer PII and room photos), and any');
+    lines.push('sign-off attempts via that stale link must be rejected with');
+    lines.push('409 status="superseded".');
     lines.push('Genuinely unknown tokens continue to return 404.');
     lines.push('');
     const pass = findings.filter(f => f.ok).length;

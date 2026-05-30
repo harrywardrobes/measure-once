@@ -48,7 +48,7 @@ interface SignOffData {
   status?: string;
 }
 
-type PageState = 'loading' | 'expired' | 'error' | 'success' | 'main';
+type PageState = 'loading' | 'expired' | 'superseded' | 'error' | 'success' | 'main';
 type SuccessKind = 'approved' | 'revision';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -160,8 +160,7 @@ function SupersededBanner() {
       <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Changes in progress</Typography>
       <Typography variant="body2">
         Your designer is currently making changes to this visit.
-        A new link will be sent when it's ready for your approval.
-        The summary below shows the version you previously received.
+        A new link will be sent when it&apos;s ready for your approval.
       </Typography>
     </Alert>
   );
@@ -243,6 +242,10 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
           setPageState('expired');
           return;
         }
+        if (err._410 && err._status === 'superseded') {
+          setPageState('superseded');
+          return;
+        }
         if (err._410) {
           setErrorTitle(
             err.message.includes('expired') ? 'Link expired' : 'Already signed off',
@@ -305,8 +308,6 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
       setSubmittingRevision(false);
     }
   }
-
-  const isSuperseded = data?.status === 'superseded';
 
   const grandTotal = (data?.rooms ?? []).reduce((sum, r) => sum + (r.totalPence || 0), 0);
 
@@ -372,6 +373,13 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
           />
         )}
 
+        {/* Superseded — designer has re-opened or resubmitted the visit */}
+        {pageState === 'superseded' && (
+          <Box sx={{ py: 4 }}>
+            <SupersededBanner />
+          </Box>
+        )}
+
         {/* Success */}
         {pageState === 'success' && (
           <StateBlock
@@ -388,8 +396,6 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
         {/* Main content */}
         {pageState === 'main' && data && (
           <>
-            {isSuperseded && <SupersededBanner />}
-
             <Typography variant="h2" sx={{ mb: 0.75 }}>
               Your Design Visit Summary
             </Typography>
@@ -617,109 +623,107 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
               </SectionCard>
             )}
 
-            {/* Action card — hidden when superseded */}
-            {!isSuperseded && (
-              <SectionCard title="Your decision">
-                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1.75 }}>
-                  Please review the summary above and let us know if everything looks correct.
-                </Typography>
+            {/* Action card */}
+            <SectionCard title="Your decision">
+              <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1.75 }}>
+                Please review the summary above and let us know if everything looks correct.
+              </Typography>
 
-                <Stack spacing={1.25}>
+              <Stack spacing={1.25}>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  size="large"
+                  disabled={approving}
+                  onClick={handleApprove}
+                  sx={{
+                    bgcolor: BRAND_COLORS.orchid,
+                    '&:hover': { bgcolor: BRAND_COLORS.orchidDeep },
+                    '&:disabled': { opacity: 0.55 },
+                    borderRadius: '10px',
+                    py: '14px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {approving ? 'Signing off…' : 'Looks great — sign off'}
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  size="large"
+                  disabled={approving || submittingRevision}
+                  onClick={() => setRevisionOpen(v => !v)}
+                  sx={{
+                    borderRadius: '10px',
+                    py: '14px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    color: BRAND_COLORS.ink2,
+                    borderColor: 'var(--neutral-300)',
+                    '&:hover': { bgcolor: 'var(--neutral-50)', borderColor: 'var(--neutral-300)' },
+                  }}
+                >
+                  Request changes
+                </Button>
+              </Stack>
+
+              {approveErr && (
+                <Typography variant="caption" color="error" sx={{ display: 'block', mt: 1 }}>
+                  {approveErr}
+                </Typography>
+              )}
+
+              <Collapse in={revisionOpen}>
+                <Box sx={{ mt: 1.5 }}>
+                  <Typography
+                    component="label"
+                    variant="caption"
+                    sx={{ fontWeight: 600, color: BRAND_COLORS.ink2, display: 'block', mb: 0.75 }}
+                  >
+                    Please describe the changes you'd like:
+                  </Typography>
+                  <TextField
+                    multiline
+                    minRows={4}
+                    fullWidth
+                    placeholder="E.g. I'd prefer the kitchen in grey rather than white…"
+                    slotProps={{ htmlInput: { maxLength: 2000 } }}
+                    value={revisionNote}
+                    onChange={e => setRevisionNote(e.target.value)}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: '8px',
+                        fontSize: '0.92rem',
+                      },
+                    }}
+                  />
+                  {revisionErr && (
+                    <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.75 }}>
+                      {revisionErr}
+                    </Typography>
+                  )}
                   <Button
                     variant="contained"
-                    fullWidth
-                    size="large"
-                    disabled={approving}
-                    onClick={handleApprove}
+                    disabled={submittingRevision}
+                    onClick={handleSubmitRevision}
                     sx={{
-                      bgcolor: BRAND_COLORS.orchid,
-                      '&:hover': { bgcolor: BRAND_COLORS.orchidDeep },
-                      '&:disabled': { opacity: 0.55 },
-                      borderRadius: '10px',
-                      py: '14px',
-                      fontSize: '1rem',
+                      mt: 1,
+                      bgcolor: BRAND_COLORS.ink2,
+                      '&:hover': { bgcolor: BRAND_COLORS.ink1 },
+                      borderRadius: '8px',
+                      py: '10px',
+                      px: '20px',
+                      fontSize: '0.9rem',
                       fontWeight: 600,
                     }}
                   >
-                    {approving ? 'Signing off…' : 'Looks great — sign off'}
+                    {submittingRevision ? 'Sending…' : 'Send request'}
                   </Button>
-
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    size="large"
-                    disabled={approving || submittingRevision}
-                    onClick={() => setRevisionOpen(v => !v)}
-                    sx={{
-                      borderRadius: '10px',
-                      py: '14px',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      color: BRAND_COLORS.ink2,
-                      borderColor: 'var(--neutral-300)',
-                      '&:hover': { bgcolor: 'var(--neutral-50)', borderColor: 'var(--neutral-300)' },
-                    }}
-                  >
-                    Request changes
-                  </Button>
-                </Stack>
-
-                {approveErr && (
-                  <Typography variant="caption" color="error" sx={{ display: 'block', mt: 1 }}>
-                    {approveErr}
-                  </Typography>
-                )}
-
-                <Collapse in={revisionOpen}>
-                  <Box sx={{ mt: 1.5 }}>
-                    <Typography
-                      component="label"
-                      variant="caption"
-                      sx={{ fontWeight: 600, color: BRAND_COLORS.ink2, display: 'block', mb: 0.75 }}
-                    >
-                      Please describe the changes you'd like:
-                    </Typography>
-                    <TextField
-                      multiline
-                      minRows={4}
-                      fullWidth
-                      placeholder="E.g. I'd prefer the kitchen in grey rather than white…"
-                      slotProps={{ htmlInput: { maxLength: 2000 } }}
-                      value={revisionNote}
-                      onChange={e => setRevisionNote(e.target.value)}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: '8px',
-                          fontSize: '0.92rem',
-                        },
-                      }}
-                    />
-                    {revisionErr && (
-                      <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.75 }}>
-                        {revisionErr}
-                      </Typography>
-                    )}
-                    <Button
-                      variant="contained"
-                      disabled={submittingRevision}
-                      onClick={handleSubmitRevision}
-                      sx={{
-                        mt: 1,
-                        bgcolor: BRAND_COLORS.ink2,
-                        '&:hover': { bgcolor: BRAND_COLORS.ink1 },
-                        borderRadius: '8px',
-                        py: '10px',
-                        px: '20px',
-                        fontSize: '0.9rem',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {submittingRevision ? 'Sending…' : 'Send request'}
-                    </Button>
-                  </Box>
-                </Collapse>
-              </SectionCard>
-            )}
+                </Box>
+              </Collapse>
+            </SectionCard>
           </>
         )}
       </Box>

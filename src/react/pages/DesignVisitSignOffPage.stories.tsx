@@ -185,12 +185,11 @@ export const MainWithPhotos: Story = {
 };
 
 export const MainSuperseded: Story = {
-  name: 'Main — superseded (changes in progress)',
+  name: 'Superseded — changes in progress',
   render: () => (
     <DesignVisitSignOffPage
       embedded={{
-        state: 'main',
-        data: { ...SAMPLE_DATA, status: 'superseded' },
+        state: 'superseded',
       }}
     />
   ),
@@ -198,9 +197,9 @@ export const MainSuperseded: Story = {
     docs: {
       description: {
         story:
-          'When the designer reopens a visit that the customer has already received, ' +
-          'the sign-off banner is replaced by a "Changes in progress" warning and the ' +
-          'action buttons are hidden.',
+          'When the designer reopens a visit after the customer already received a sign-off ' +
+          'link, the stale link returns a 410 with status="superseded". The page shows a ' +
+          '"Changes in progress" notice and exposes no visit data.',
       },
     },
   },

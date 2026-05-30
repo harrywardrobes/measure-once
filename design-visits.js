@@ -1878,7 +1878,7 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
   if (!rawToken || rawToken.length > 200) return res.status(404).json({ error: 'Not found' });
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   try {
-    let vr = await pool.query(`
+    const vr = await pool.query(`
       SELECT dv.id, dv.contact_name, dv.contact_email, dv.status,
              dv.signoff_expires_at, dv.visit_date, dv.location, dv.notes,
              dv.terms_accepted, dvh.name AS handle_name, dvfr.name AS furniture_range_name
@@ -1886,39 +1886,37 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
       LEFT JOIN design_visit_handles          dvh  ON dvh.id  = dv.handle_id
       LEFT JOIN design_visit_furniture_ranges dvfr ON dvfr.id = dv.furniture_range_id
       WHERE dv.signoff_token_hash = $1`, [tokenHash]);
-    let superseded = false;
     if (!vr.rows.length) {
-      // No active token matched — check whether this is a stale-but-recognised
-      // link whose visit has since been re-opened by the designer. In that case
-      // we render the page with a "changes in progress" notice instead of 404.
-      const sup = await pool.query(`
-        SELECT dv.id, dv.contact_name, dv.contact_email, dv.status,
-               dv.signoff_expires_at, dv.visit_date, dv.location, dv.notes,
-               dv.terms_accepted, dvh.name AS handle_name, dvfr.name AS furniture_range_name
-        FROM design_visits dv
-        LEFT JOIN design_visit_handles          dvh  ON dvh.id  = dv.handle_id
-        LEFT JOIN design_visit_furniture_ranges dvfr ON dvfr.id = dv.furniture_range_id
-        WHERE $1 = ANY(dv.superseded_signoff_token_hashes)
-        LIMIT 1`, [tokenHash]);
-      if (!sup.rows.length) return res.status(404).json({ error: 'Not found' });
-      vr = sup;
-      superseded = true;
-    }
-    const visit = vr.rows[0];
-    if (!superseded) {
-      // Always 404 for any token state that is not the expected sign-off window
-      // (submitted + not expired). Avoids oracle leakage on consumed tokens.
-      if (visit.status !== 'submitted') return res.status(404).json({ error: 'Not found' });
-      // Expired-but-recognised: surface a friendly "this link has expired"
-      // state instead of a generic 404 so customers clicking an old email
-      // know to ask for a fresh link.
-      if (visit.signoff_expires_at && new Date() > new Date(visit.signoff_expires_at)) {
+      // No active token matched — check whether this is a superseded link.
+      // Do NOT expose any visit data for superseded tokens: the old email link
+      // must not become a long-lived bearer token for current visit contents.
+      // Return a 410 with a clear message so the page can show a friendly
+      // "changes in progress" state without leaking any customer PII.
+      const sup = await pool.query(
+        `SELECT 1 FROM design_visits WHERE $1 = ANY(superseded_signoff_token_hashes) LIMIT 1`,
+        [tokenHash],
+      );
+      if (sup.rows.length) {
         return res.status(410).json({
-          status: 'expired',
-          error: 'This sign-off link has expired. Please contact us to receive a fresh link.',
-          expiresAt: visit.signoff_expires_at,
+          status: 'superseded',
+          error: 'Your designer is currently making changes to this visit. A new link will be sent when it\'s ready for your approval.',
         });
       }
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const visit = vr.rows[0];
+    // Always 404 for any token state that is not the expected sign-off window
+    // (submitted + not expired). Avoids oracle leakage on consumed tokens.
+    if (visit.status !== 'submitted') return res.status(404).json({ error: 'Not found' });
+    // Expired-but-recognised: surface a friendly "this link has expired"
+    // state instead of a generic 404 so customers clicking an old email
+    // know to ask for a fresh link.
+    if (visit.signoff_expires_at && new Date() > new Date(visit.signoff_expires_at)) {
+      return res.status(410).json({
+        status: 'expired',
+        error: 'This sign-off link has expired. Please contact us to receive a fresh link.',
+        expiresAt: visit.signoff_expires_at,
+      });
     }
     // Load rooms
     const rooms = await pool.query(`
@@ -1985,11 +1983,7 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
     res.json({
       id:                 visit.id,
       contactName:        visit.contact_name,
-      // When the token is stale (designer re-opened the visit) we expose the
-      // synthetic 'superseded' status so the page can show a "changes in
-      // progress" notice and hide the sign-off form, instead of leaking the
-      // current backend status (draft / revision_requested / etc.).
-      status:             superseded ? 'superseded' : visit.status,
+      status:             visit.status,
       visitDate:          visit.visit_date,
       location:           visit.location,
       notes:              visit.notes,
@@ -2026,11 +2020,17 @@ router.post('/api/design-visits/sign-off/:token', async (req, res) => {
     return res.status(400).json({ error: 'action must be "approve" or "revision"' });
   }
   const note = req.body?.note ? String(req.body.note).slice(0, 2000) : null;
+  const client = await pool.connect();
   try {
-    const vr = await pool.query(`
-      SELECT id, status, signoff_expires_at, contact_name
-      FROM design_visits WHERE signoff_token_hash = $1`, [tokenHash]);
+    await client.query('BEGIN');
+    // Lock the row while we inspect + consume the token. Any concurrent request
+    // carrying the same token will block here until we COMMIT or ROLLBACK, then
+    // will see the token already cleared and fall through to the 404/409 paths.
+    const vr = await client.query(`
+      SELECT id, status, signoff_expires_at, contact_name, signoff_token_hash
+      FROM design_visits WHERE signoff_token_hash = $1 FOR UPDATE`, [tokenHash]);
     if (!vr.rows.length) {
+      await client.query('ROLLBACK');
       // No active token — check whether this is a stale link the designer has
       // since superseded. Reject with a clear 409 so a customer who submits via
       // a cached form sees a meaningful message instead of a generic error.
@@ -2048,8 +2048,12 @@ router.post('/api/design-visits/sign-off/:token', async (req, res) => {
     }
     const visit = vr.rows[0];
     // Token is only actionable while the visit is in submitted state + not expired.
-    if (visit.status !== 'submitted') return res.status(404).json({ error: 'Not found' });
+    if (visit.status !== 'submitted') {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Not found' });
+    }
     if (visit.signoff_expires_at && new Date() > new Date(visit.signoff_expires_at)) {
+      await client.query('ROLLBACK');
       // Match the GET handler: a recognised-but-expired token gets a friendly
       // 410 payload so the page can show a "link expired" state with a contact
       // prompt instead of a generic error.
@@ -2059,29 +2063,15 @@ router.post('/api/design-visits/sign-off/:token', async (req, res) => {
       });
     }
     if (action === 'approve') {
-      await pool.query(`
+      await client.query(`
         UPDATE design_visits SET status='signed_off', signed_off_at=NOW(),
           signoff_token_hash=NULL, updated_at=NOW()
         WHERE id=$1`, [visit.id]);
-      // Notify team
-      try {
-        const transport = createMailTransport();
-        const admins = adminEmails();
-        if (transport && admins.length) {
-          await transport.sendMail({
-            from: buildFromHeader(), replyTo: buildReplyTo(),
-            to: admins.join(', '),
-            subject: `Design visit signed off — ${visit.contact_name || visit.id}`,
-            text: `${visit.contact_name || 'The customer'} has approved and signed off their design visit (#${visit.id}).`,
-          });
-        }
-      } catch {}
-      res.json({ success: true, status: 'signed_off' });
     } else {
       // Invalidate the token on revision too — prevents replay. Track the old
       // hash so a second click on the link surfaces the "designer is making
       // changes" notice rather than a generic 404.
-      await pool.query(`
+      await client.query(`
         UPDATE design_visits SET
           status='revision_requested',
           revision_note=$1,
@@ -2091,11 +2081,21 @@ router.post('/api/design-visits/sign-off/:token', async (req, res) => {
           signoff_token_hash=NULL,
           updated_at=NOW()
         WHERE id=$2`, [note, visit.id]);
-      // Notify team
-      try {
-        const transport = createMailTransport();
-        const admins = adminEmails();
-        if (transport && admins.length) {
+    }
+    await client.query('COMMIT');
+    // Notify team (non-fatal, outside transaction)
+    try {
+      const transport = createMailTransport();
+      const admins = adminEmails();
+      if (transport && admins.length) {
+        if (action === 'approve') {
+          await transport.sendMail({
+            from: buildFromHeader(), replyTo: buildReplyTo(),
+            to: admins.join(', '),
+            subject: `Design visit signed off — ${visit.contact_name || visit.id}`,
+            text: `${visit.contact_name || 'The customer'} has approved and signed off their design visit (#${visit.id}).`,
+          });
+        } else {
           await transport.sendMail({
             from: buildFromHeader(), replyTo: buildReplyTo(),
             to: admins.join(', '),
@@ -2103,12 +2103,15 @@ router.post('/api/design-visits/sign-off/:token', async (req, res) => {
             text: `${visit.contact_name || 'The customer'} has requested changes to design visit #${visit.id}.\n\nNote: ${note || '(none)'}`,
           });
         }
-      } catch {}
-      res.json({ success: true, status: 'revision_requested' });
-    }
+      }
+    } catch {}
+    res.json({ success: true, status: action === 'approve' ? 'signed_off' : 'revision_requested' });
   } catch (e) {
+    try { await client.query('ROLLBACK'); } catch {}
     console.error('[design-visits] POST sign-off error:', e.message);
     res.status(500).json({ error: 'Could not process sign-off.' });
+  } finally {
+    client.release();
   }
 });
 
