@@ -31,6 +31,12 @@
 //       returns { hasActiveLink: true }, the modal reaches the confirming
 //       phase, the warning body contains "already has an active link", and
 //       data-testid="cah-proceed-anyway" reads "Generate anyway".
+//   (H) UploadPhotosModal confirming phase + expiresAt: when the link-status
+//       endpoint returns { hasActiveLink: true, expiresAt: <ISO> }, the modal
+//       body includes an expiry sentence rendered by formatExpiry.
+//       H1 — future expiresAt (e.g. 30 days out): body contains "expires".
+//       H2 — past expiresAt (e.g. 7 days ago): body contains "expires"
+//       (maps to the diffDays ≤ 0 branch → "expires today").
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-card-action-strip
@@ -137,9 +143,12 @@ async function pollPage(page, fn, arg, timeoutMs = 12000, intervalMs = 150) {
  *   qbConnected      – boolean; when true, stubs QB status as connected + returns qbInvoices
  *   qbInvoices       – array of invoice summary objects returned by /api/quickbooks/invoices
  *   qbInvoiceDetails – map of id → detail object for /api/quickbooks/invoice/:id stubs
- *   linkStatusError     – when true, stub the link-status endpoint to return 500
- *   linkStatusHasActive – when true, stub the link-status endpoint to return
- *                         { hasActiveLink: true } (200); used by probe G
+ *   linkStatusError      – when true, stub the link-status endpoint to return 500
+ *   linkStatusHasActive  – when true, stub the link-status endpoint to return
+ *                          { hasActiveLink: true } (200); used by probe G
+ *   linkStatusExpiresAt  – ISO timestamp string; when provided alongside
+ *                          linkStatusHasActive, included as `expiresAt` in the
+ *                          stub response body; used by probe H
  */
 function buildFetchInterceptScript(opts) {
   const {
@@ -151,6 +160,7 @@ function buildFetchInterceptScript(opts) {
     qbInvoiceDetails = {},
     linkStatusError = false,
     linkStatusHasActive = false,
+    linkStatusExpiresAt = null,
   } = opts;
 
   // Build a minimal stub for every endpoint the page fetches on load.
@@ -169,10 +179,11 @@ function buildFetchInterceptScript(opts) {
     '/api/quickbooks/invoices':       JSON.stringify({ invoices: qbInvoices }),
   };
 
-  const inProgressJson         = JSON.stringify(inProgress || []);
-  const qbInvoiceDetailsJson   = JSON.stringify(qbInvoiceDetails);
-  const linkStatusErrorFlag    = linkStatusError    ? 'true' : 'false';
+  const inProgressJson          = JSON.stringify(inProgress || []);
+  const qbInvoiceDetailsJson    = JSON.stringify(qbInvoiceDetails);
+  const linkStatusErrorFlag     = linkStatusError    ? 'true' : 'false';
   const linkStatusHasActiveFlag = linkStatusHasActive ? 'true' : 'false';
+  const linkStatusExpiresAtJson = linkStatusExpiresAt ? JSON.stringify(linkStatusExpiresAt) : 'null';
 
   return `
 (function() {
@@ -181,6 +192,7 @@ function buildFetchInterceptScript(opts) {
   var QB_INV_DETAILS = ${qbInvoiceDetailsJson};
   var LINK_STATUS_ERROR = ${linkStatusErrorFlag};
   var LINK_STATUS_HAS_ACTIVE = ${linkStatusHasActiveFlag};
+  var LINK_STATUS_EXPIRES_AT = ${linkStatusExpiresAtJson};
 
   var originalFetch = window.fetch;
 
@@ -232,10 +244,12 @@ function buildFetchInterceptScript(opts) {
       }));
     }
 
-    // link-status — return { hasActiveLink: true } when LINK_STATUS_HAS_ACTIVE is true.
+    // link-status — return { hasActiveLink: true[, expiresAt] } when LINK_STATUS_HAS_ACTIVE is true.
     if (LINK_STATUS_HAS_ACTIVE && pathname.match(/^\\/api\\/customer-info\\/by-contact\\/.+\\/link-status$/)) {
       window.__ccasIntercepted.push('link-status-has-active:' + pathname);
-      return Promise.resolve(new Response(JSON.stringify({ hasActiveLink: true }), {
+      var linkStatusBody = { hasActiveLink: true };
+      if (LINK_STATUS_EXPIRES_AT) linkStatusBody.expiresAt = LINK_STATUS_EXPIRES_AT;
+      return Promise.resolve(new Response(JSON.stringify(linkStatusBody), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       }));
     }
@@ -418,6 +432,8 @@ async function main() {
     '(F) UploadPhotosModal check-error: proceed button does NOT read "Send anyway"',
     '(G) UploadPhotosModal confirming: warning body contains "already has an active link"',
     '(G) UploadPhotosModal confirming: confirm button reads "Generate new link"',
+    '(H1) UploadPhotosModal confirming + future expiresAt: body contains expiry text',
+    '(H2) UploadPhotosModal confirming + past expiresAt: body contains expiry text',
   ];
 
   if (!puppeteer) {
@@ -994,6 +1010,108 @@ async function main() {
     );
 
     await pageG.__ctx.close().catch(() => {});
+
+    // ── Probe H: UploadPhotosModal confirming phase + expiresAt expiry note ──
+    console.log('\n  [H] UploadPhotosModal confirming-phase expiry note (formatExpiry guard)');
+
+    // Compute timestamps outside the browser so the test is deterministic.
+    const futureExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days from now
+    const pastExpiresAt   = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000).toISOString(); // 7 days ago
+
+    const handlerForH = {
+      id: 1007,
+      type: 'upload_photos_and_info',
+      config: { action_name: 'upload_photos' },
+      bindings: [{ stage_key: 'sales', status_key: CONTACT_F_STATUS }],
+    };
+
+    const contactH = {
+      id: CONTACT_F_ID,
+      properties: {
+        firstname: 'Hotel',
+        lastname: 'PrivTest',
+        email: 'hotel@privtest.invalid',
+        hs_lead_status: CONTACT_F_STATUS,
+      },
+    };
+
+    async function runExpirySubcase(label, expiresAt) {
+      const pageH = await openCustomers(browser, memberClient.cookie, {
+        contacts:             [contactH],
+        handlers:             [handlerForH],
+        inProgress:           [],
+        linkStatusHasActive:  true,
+        linkStatusExpiresAt:  expiresAt,
+      });
+
+      const hStripVisible = await pollPage(pageH, () => {
+        const strip = document.querySelector('#customers-results [role="button"]');
+        return strip ? 'ok' : null;
+      }, null, 12000).catch(() => null);
+
+      if (!hStripVisible) {
+        const intercepted = await pageH.evaluate(() => window.__ccasIntercepted || []);
+        console.log(`  [${label}] debug: strip not visible. intercepted=${JSON.stringify(intercepted)}`);
+      }
+
+      await pageH.evaluate(() => {
+        const strip = document.querySelector('#customers-results [role="button"]');
+        if (strip) strip.click();
+      });
+
+      const hConfirmVisible = await pollPage(pageH, () => {
+        const btn = document.querySelector('[data-testid="cah-confirm-generate"]');
+        return btn ? 'ok' : null;
+      }, null, 12000).catch(() => null);
+
+      const hState = await pageH.evaluate(() => {
+        const btn      = document.querySelector('[data-testid="cah-confirm-generate"]');
+        const modalBody = document.querySelector('[role="dialog"]');
+        const bodyText  = modalBody ? (modalBody.textContent || '') : '';
+        return {
+          buttonFound:     !!btn,
+          bodyHasExpires:  bodyText.includes('expires'),
+          bodyText:        bodyText.slice(0, 300),
+          intercepted:     window.__ccasIntercepted || [],
+        };
+      });
+
+      if (!hState.buttonFound || !hConfirmVisible) {
+        const hLogs = (pageH.__logs || []).filter(l =>
+          l.includes('link-status') || l.includes('confirming') || l.includes('error') || l.includes('Error'),
+        );
+        console.log(`  [${label}] debug: buttonFound=${hState.buttonFound} bodyHasExpires=${hState.bodyHasExpires}`);
+        console.log(`  [${label}] intercepted=${JSON.stringify(hState.intercepted)}`);
+        if (hLogs.length) console.log(`  [${label}] page logs:\n    ${hLogs.join('\n    ')}`);
+      }
+
+      await pageH.__ctx.close().catch(() => {});
+      return hState;
+    }
+
+    // H1 — future expiresAt
+    console.log('  [H1] future expiresAt:', futureExpiresAt);
+    const h1State = await runExpirySubcase('H1', futureExpiresAt);
+    record(
+      UI_PROBE_LABELS[10],
+      'modal body contains "expires"',
+      h1State.buttonFound
+        ? `bodyHasExpires=${h1State.bodyHasExpires}`
+        : 'cah-confirm-generate button not found (confirming phase not reached)',
+      h1State.buttonFound && h1State.bodyHasExpires,
+    );
+
+    // H2 — past expiresAt (diffDays ≤ 0 → formatExpiry returns "expires today")
+    console.log('  [H2] past expiresAt:', pastExpiresAt);
+    const h2State = await runExpirySubcase('H2', pastExpiresAt);
+    record(
+      UI_PROBE_LABELS[11],
+      'modal body contains "expires"',
+      h2State.buttonFound
+        ? `bodyHasExpires=${h2State.bodyHasExpires}`
+        : 'cah-confirm-generate button not found (confirming phase not reached)',
+      h2State.buttonFound && h2State.bodyHasExpires,
+    );
 
   } catch (e) {
     console.error('Test error:', e);
