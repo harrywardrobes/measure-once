@@ -77,7 +77,7 @@ export class IslandErrorBoundary extends React.Component<Props, State> {
         style={{
           margin: '12px 0',
           padding: '12px 16px',
-          border: `1px solid ${chunkError ? '#fed7aa' : '#fecaca'}`, // hex-color-ok: status border colours awaiting CSS variable tokens
+          border: `1px solid var(${chunkError ? '--status-chunk-error-border' : '--status-errorLight-border'})`,
           background: chunkError ? STATUS_COLORS.chunkError.bg : STATUS_COLORS.errorLight.bg,
           color: chunkError ? STATUS_COLORS.chunkError.text : STATUS_COLORS.error.text,
           borderRadius: 6,

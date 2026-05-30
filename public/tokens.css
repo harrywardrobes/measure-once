@@ -95,10 +95,11 @@
   --status-danger-text:   #991b1b;
   --status-danger-bg:     #fef2f2;
   --status-danger-border: #fecaca;
+  --status-chunk-error-border: #fed7aa;
   --status-success:       #16a34a;
   --status-success-text:  #14532d;
   --status-success-bg:    #f0fdf4;
-  --status-success-border:#86efac;
+  --status-success-border:#bbf7d0;
   --status-warn-bg:       #fef9c3;
   --status-warn-border:   #fde047;
   --status-warn-text:     #713f12;
@@ -118,10 +119,13 @@
   --status-error-border:     #fca5a5;
   --status-errorLight-bg:    #fef2f2;
   --status-errorLight-text:  #991b1b;
+  --status-errorLight-border: #fecaca;
   --status-chunkError-bg:    #fff7ed;
   --status-chunkError-text:  #9a3412;
+  --status-chunkError-border: #fed7aa;
   --status-success-bg:       #dcfce7;
   --status-success-text:     #166534;
+  --status-success-border:   #bbf7d0;
   --status-successLight-bg:  #f0fdf4;
   --status-successLight-text: #166534;
   --status-successDeep-bg:   #d1fae5;

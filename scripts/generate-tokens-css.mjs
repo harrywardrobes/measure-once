@@ -272,10 +272,11 @@ ${neutralLines.join('\n')}
   --status-danger-text:   #991b1b;
   --status-danger-bg:     #fef2f2;
   --status-danger-border: #fecaca;
+  --status-chunk-error-border: #fed7aa;
   --status-success:       #16a34a;
   --status-success-text:  #14532d;
   --status-success-bg:    #f0fdf4;
-  --status-success-border:#86efac;
+  --status-success-border:#bbf7d0;
   --status-warn-bg:       #fef9c3;
   --status-warn-border:   #fde047;
   --status-warn-text:     #713f12;

@@ -43,7 +43,7 @@ export function PhotosReceivedBadge({ leadStatus, hwSubstatus }: PhotosReceivedB
         borderRadius: '999px',
         background: STATUS_COLORS.success.bg,
         color: STATUS_COLORS.success.text,
-        border: '1px solid #bbf7d0', // hex-color-ok: success border awaiting CSS variable token
+        border: '1px solid var(--status-success-border)',
         letterSpacing: '0.02em',
         whiteSpace: 'nowrap',
         flexShrink: 0,
