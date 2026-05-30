@@ -65,7 +65,17 @@ export function CustomerDetailPage() {
   const contactId = getContactId();
 
   const [contact,      setContact]      = useState<Contact | null>(null);
-  usePageTitle(contact ? `${contactName(contact)} · Measure Once` : 'Customer · Measure Once');
+  const [cachedName] = useState<string | null>(() => {
+    try {
+      const list = JSON.parse(localStorage.getItem('cp_recent_customers') || '[]') as Array<{ id: string; name: string }>;
+      return list.find(r => r.id === contactId)?.name ?? null;
+    } catch { return null; }
+  });
+  usePageTitle(
+    contact    ? `${contactName(contact)} · Measure Once`
+    : cachedName ? `${cachedName} · Measure Once`
+    : 'Customer · Measure Once'
+  );
   const [rooms,        setRooms]        = useState<Room[]>([]);
   const [notes,        setNotes]        = useState('');
   const [tasks,        setTasks]        = useState<HubSpotTask[]>([]);
