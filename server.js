@@ -166,13 +166,32 @@ app.get('/projects.html', (req, res) => res.redirect(301, '/projects'));
 app.get('/invoices.html', (req, res) => res.redirect(301, '/invoices'));
 
 // Public design-visit sign-off page (no auth required — token-gated)
-app.get('/design-visit/sign-off', (req, res) => {
+app.get('/design-visit/sign-off', async (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
+  let ogTitle = 'Design Visit Sign-Off · Harry Wardrobes';
+  let ogDescription = 'Review and sign off on your design visit details with Harry Wardrobes.';
+  const rawToken = String(req.query.token || '').trim();
+  if (rawToken && rawToken.length <= 200) {
+    try {
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const { rows } = await pool.query(
+        `SELECT contact_name FROM design_visits WHERE signoff_token_hash = $1 LIMIT 1`,
+        [tokenHash]
+      );
+      if (rows.length && rows[0].contact_name) {
+        const name = rows[0].contact_name;
+        ogTitle = `Design Visit Sign-Off for ${name} · Harry Wardrobes`;
+        ogDescription = `${name} has been sent a design visit sign-off request. Review and sign off on the details with Harry Wardrobes.`;
+      }
+    } catch (_) {
+      // Fall back to generic strings if lookup fails
+    }
+  }
   res.render('design-visit-signoff', {
     title: 'Design Visit Sign-Off · Measure Once',
     description: 'Review and sign off on your design visit details with Harry Wardrobes.',
-    ogTitle: 'Design Visit Sign-Off · Harry Wardrobes',
-    ogDescription: 'Review and sign off on your design visit details with Harry Wardrobes.',
+    ogTitle,
+    ogDescription,
     ogUrl: `${baseUrl}/design-visit/sign-off`,
     ogImage: `${baseUrl}/harry-wardrobes-logo.png`,
   });
