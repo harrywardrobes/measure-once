@@ -1821,6 +1821,155 @@ async function main() {
 
     await nRaceTab.close();
 
+    // ── (O) sub-status race guard — visibilitychange fires before /api/lead-substatuses resolves ─
+    // Parallel probe to [N] but for the sub-status loading path.  Exercises the
+    // case where a hidden→visible visibilitychange fires while the initial
+    // /api/lead-substatuses fetch is still in-flight (store.subsLoaded = false)
+    // but /api/lead-statuses has already resolved (store.loaded = true — so the
+    // `if (!store.loaded) return` guard in refresh() does NOT short-circuit).
+    // The onVisibility handler therefore calls refresh(), which invokes
+    // loadLeadSubstatuses() concurrently with the still-in-flight mount fetch.
+    // After both settle, the sub-status chip must show the expected label (not
+    // blank / missing).
+    //
+    // Probe steps:
+    //   1. Open a fresh Customers tab with JS-level fetch interception on the
+    //      exact path /api/lead-substatuses (same evaluateOnNewDocument pattern
+    //      as section E).  Query-string requests (e.g. ?_t=<ts> from
+    //      WorkflowDataContext) pass through immediately so only the mount-effect
+    //      call is held.
+    //   2. Navigate to /customers?leadStatus=LS_KEY so React initialises
+    //      leadStatus from the URL — sub-status chips render once subsLoaded
+    //      becomes true.
+    //   3. Wait until the intercepted fetch is held (store.subsLoaded stays false)
+    //      and /api/lead-statuses has resolved (lead-status FormControl becomes
+    //      visibility:visible → store.loaded = true).
+    //   4. Synthesise hidden→visible visibilitychange — onVisibility fires, calls
+    //      refresh(), which triggers a concurrent loadLeadSubstatuses() call while
+    //      the first is still blocked.
+    //   5. Wait a tick so the handler fires before releasing.
+    //   6. Release the held fetch — both calls settle, store.subsLoaded = true.
+    //   7. Assert the sub-status chip shows SS_LABEL_CARD_VIS (no blank / missing chip).
+    console.log('\n  [O] sub-status race guard — visibilitychange fires before /api/lead-substatuses resolves');
+
+    const oRaceTab = await browser.newPage();
+    await oRaceTab.setCacheEnabled(false);
+    await injectSession(oRaceTab, adminClient.cookie);
+
+    // JS-level fetch intercept injected before any page scripts run.
+    // Only requests to the exact path /api/lead-substatuses (no query string)
+    // are held; all others (including /api/lead-statuses) pass through normally.
+    await oRaceTab.evaluateOnNewDocument(() => {
+      const orig = window.fetch.bind(window);
+      let release;
+      window.__oSubsFetchBlocked = 0;
+      window.__oSubsBlock = new Promise(r => { release = r; });
+      window.__oSubsRelease = release;
+      window.fetch = function (url, opts) {
+        if (typeof url === 'string' && /\/api\/lead-substatuses$/.test(url)) {
+          window.__oSubsFetchBlocked++;
+          return window.__oSubsBlock.then(() => orig(url, opts));
+        }
+        return orig(url, opts);
+      };
+    });
+
+    await oRaceTab.goto(`${BASE}/customers?leadStatus=${encodeURIComponent(LS_KEY)}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+
+    // Wait until at least one exact-path /api/lead-substatuses fetch has been
+    // intercepted by the wrapper (up to 5 s).
+    const oSubsIntercepted = !!(await pollUntil(
+      oRaceTab,
+      () => (window.__oSubsFetchBlocked > 0 ? true : null),
+      5000,
+      100,
+    ));
+    record(
+      '[O] /api/lead-substatuses request intercepted in-flight before visibilitychange fires',
+      'request intercepted within 5 s',
+      `intercepted=${oSubsIntercepted}`,
+      oSubsIntercepted,
+    );
+
+    // Wait for /api/lead-statuses to resolve so store.loaded = true.
+    // The observable signal is the lead-status FormControl becoming
+    // visibility:visible (matches the assertion used in sections D and E).
+    const oLeadStatusVisible = await oRaceTab.waitForFunction(
+      () => {
+        const sel = document.getElementById('lead-status-filter');
+        if (!sel) return false;
+        const fc = sel.closest('.MuiFormControl-root');
+        if (!fc) return false;
+        return window.getComputedStyle(fc).visibility === 'visible';
+      },
+      { timeout: 8000 },
+    ).then(() => true).catch(() => false);
+    record(
+      '[O] lead-status FormControl visible (store.loaded = true) while /api/lead-substatuses is held',
+      'FormControl visibility === visible within 8 s',
+      `visible=${oLeadStatusVisible}`,
+      oLeadStatusVisible,
+    );
+
+    // Synthesise hidden → visible visibilitychange while store.subsLoaded is
+    // still false (same pattern as sections B/G/L/N).  Because store.loaded is
+    // now true the onVisibility handler does NOT short-circuit on the
+    // `if (!store.loaded) return` guard; it calls refresh(), which invokes
+    // loadLeadSubstatuses() concurrently with the still-blocked mount fetch.
+    await oRaceTab.evaluate(() => {
+      const proto   = Document.prototype;
+      const ownDesc = Object.getOwnPropertyDescriptor(proto, 'visibilityState')
+                   || Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+      // Step 1: hidden — handler returns early (visibilityState !== 'visible').
+      Object.defineProperty(document, 'visibilityState',
+        { get: () => 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      // Step 2: visible — handler fires and calls refresh() → loadLeadSubstatuses().
+      if (ownDesc) {
+        Object.defineProperty(document, 'visibilityState', ownDesc);
+      } else {
+        Object.defineProperty(document, 'visibilityState',
+          { get: () => 'visible', configurable: true });
+      }
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    // Give the handler a tick to fire before releasing the blocked fetch.
+    await new Promise(r => setTimeout(r, 300));
+
+    // Release all held /api/lead-substatuses fetches so both the mount-effect
+    // call and the visibilitychange-triggered concurrent call can settle.
+    await oRaceTab.evaluate(() => {
+      if (typeof window.__oSubsRelease === 'function') window.__oSubsRelease();
+    });
+
+    // After both fetches resolve, store.subsLoaded = true and the sub-status
+    // chip must show SS_LABEL_CARD_VIS (the current DB label after section L's
+    // rename).  A missing or blank chip indicates a race between the two
+    // concurrent loadLeadSubstatuses() calls corrupted the store or the
+    // component failed to re-render after the concurrent settle.
+    const oChipOk = await oRaceTab.waitForFunction(
+      (label) => {
+        const chips = document.querySelectorAll('.MuiChip-label');
+        return Array.from(chips).some(c => c.textContent.includes(label));
+      },
+      { timeout: 7000 },
+      SS_LABEL_CARD_VIS,
+    ).then(() => true).catch(() => false);
+    record(
+      '[O] sub-status chip shows SS_LABEL_CARD_VIS after visibilitychange-during-subsload race',
+      `MuiChip with label "${SS_LABEL_CARD_VIS}" appears within 7 s`,
+      `found=${oChipOk}`,
+      oChipOk,
+    );
+
+    await oRaceTab.close();
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -1997,6 +2146,21 @@ async function writeReport(runId, findings) {
     '  path of `useLeadStatusSync` (`CustomersPage.tsx`): without it, the',
     '  premature visibility event would invoke `populateLeadStatusFilter()` against',
     '  an empty `store.statuses` array, producing a blank select.',
+    '- **(O) sub-status race guard — visibilitychange fires before /api/lead-substatuses',
+    '  resolves**: parallel probe to [N] but for the sub-status loading path.',
+    '  Uses the same JS-level `evaluateOnNewDocument` fetch-intercept pattern as',
+    '  section [E] to hold every exact-path `/api/lead-substatuses` request',
+    '  in-flight while `/api/lead-statuses` resolves normally (`store.loaded =',
+    '  true`). Navigates to `/customers?leadStatus=LS_KEY` so React pre-selects',
+    '  the lead status from the URL. Once the intercept is confirmed and the',
+    '  lead-status FormControl is `visibility:visible`, synthesises a hidden→visible',
+    '  `visibilitychange` sequence. The `onVisibility` handler fires (the',
+    '  `!store.loaded` guard does not short-circuit) and calls `refresh()`, which',
+    '  invokes `loadLeadSubstatuses()` concurrently with the still-blocked mount',
+    '  fetch. After a tick, releases the held fetch so both calls settle. Asserts',
+    '  the sub-status chip shows `SS_LABEL_CARD_VIS` (the current DB label).',
+    '  Exercises the `onVisibility` → `refresh()` → `loadLeadSubstatuses()` path',
+    '  in `useLeadStatusSync` (`CustomersPage.tsx`) under a concurrent-fetch race.',
     '',
     '## Notes',
     '',
