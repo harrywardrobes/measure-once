@@ -66,6 +66,8 @@
     "test:customer-info-stale-rail:ci": "node scripts/with-test-db.js test/customer-info-stale-rail/run.js",
     "test:upload-photos-copyable-link": "node test/upload-photos-copyable-link/run.js",
     "test:upload-photos-copyable-link:ci": "node scripts/with-test-db.js test/upload-photos-copyable-link/run.js",
+    "test:upload-photos-modal-emitter": "node test/upload-photos-modal-emitter/run.js",
+    "test:upload-photos-modal-emitter:ci": "node scripts/with-test-db.js test/upload-photos-modal-emitter/run.js",
     "test:active-link-expires": "node test/active-link-expires/run.js",
     "test:active-link-expires:ci": "node scripts/with-test-db.js test/active-link-expires/run.js",
     "test:active-link-warning-ordering": "node test/active-link-warning-ordering/run.js",

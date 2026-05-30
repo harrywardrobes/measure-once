@@ -153,6 +153,7 @@ const DB_SUITES = [
   'test:active-projects-hubspot-outage:ci',
   'test:info-card-review-resend:ci',
   'test:upload-photos-copyable-link:ci',
+  'test:upload-photos-modal-emitter:ci',
   'test:calendar-empty-state:ci',
   'test:skipped-photo-warning:ci',
   'test:skipped-photo-dashboard-link:ci',

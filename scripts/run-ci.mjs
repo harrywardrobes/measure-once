@@ -129,6 +129,7 @@ const STEPS = [
   'test:skipped-photo-dashboard-link:ci',
   'test:info-card-review-resend:ci',
   'test:upload-photos-copyable-link:ci',
+  'test:upload-photos-modal-emitter:ci',
   'test:active-projects-hubspot-outage:ci',
   'test:turnstile-signout:ci',
   'test:nav-customise-reset:ci',
