@@ -64,6 +64,7 @@ const STATIC_SUITES = [
   'test:inline-styles',
   'test:story-hex-colors',
   'test:component-hex-colors',
+  'test:var-hex-fallbacks',
   'test:keyboard-shortcuts',
   'test:handler-config-blocks',
   'test:status-key-fields',

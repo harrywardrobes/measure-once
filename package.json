@@ -225,6 +225,7 @@
     "test:inline-styles": "node scripts/check-inline-styles.mjs",
     "test:story-hex-colors": "node scripts/check-story-hex-colors.mjs",
     "test:component-hex-colors": "node scripts/check-component-hex-colors.mjs",
+    "test:var-hex-fallbacks": "node scripts/check-var-hex-fallbacks.mjs",
     "test:privilege-reads": "node scripts/check-privilege-reads.mjs",
     "test:workflow-js-no-dups": "node scripts/check-workflow-js-duplicates.mjs",
     "test:no-config-handler-types": "node scripts/check-no-config-handler-types.mjs",
