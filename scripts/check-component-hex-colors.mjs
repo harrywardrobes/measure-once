@@ -24,18 +24,34 @@
  * files shared between production components and Storybook stories only need
  * one suppression style.
  *
+ * For multi-line sx prop objects where the value is on a separate line,
+ * place the suppression comment on the hex-value line:
+ *
+ *   sx={{
+ *     background:
+ *       '#abc', // hex-color-ok: intentional brand colour
+ *   }}
+ *
  * Algorithm
  * ---------
- * 1. Recursively find every *.ts / *.tsx file under src/react/ that is NOT a
- *    stories file, NOT a .d.ts declaration, and NOT theme.ts.
- * 2. For each file, scan line by line.
- * 3. Flag any line that contains both:
- *    a. A hex colour token: #[0-9a-fA-F]{3,6} (not immediately followed by
- *       more hex digits).
- *    b. A style prop name: bgcolor, background, color, borderColor, or fill.
- * 4. Skip lines that carry a `// hex-color-ok:` or `// story-hex-ok:`
- *    suppression comment.
- * 5. Report all violations and exit 1 if any were found.
+ * Two passes over each file:
+ *
+ * Pass 1 — same-line scan (line by line):
+ *   Flag any line that contains both a style prop name and a hex colour on
+ *   the same line.
+ *
+ * Pass 2 — multi-line scan (full source):
+ *   Flag MUI sx/style assignments where the style prop key and the hex value
+ *   appear on consecutive lines, e.g.:
+ *
+ *     color:
+ *       '#ff0000'   // ← caught by Pass 2, missed by Pass 1
+ *
+ *   The regex matches a style prop followed by ":" and a newline, then checks
+ *   whether the very next line contains a hex colour token.  Suppression
+ *   comments must be placed on the hex-value line.
+ *
+ * Both passes skip lines/occurrences that carry a suppression marker.
  *
  * Exit codes:
  *   0 — no violations found
@@ -107,6 +123,19 @@ const STYLE_PROP_RE = /\b(?:bgcolor|background|borderColor|fill|color)\b/;
  */
 const SUPPRESSION_RE = /(?:\/\/|\/\*)\s*(?:hex-color-ok|story-hex-ok)\s*:/;
 
+/**
+ * Multi-line pattern: a style prop key on one line followed by a newline,
+ * with the hex value appearing on the very next line.
+ *
+ * Captures the entire next line as group 1 so we can:
+ *   a. test it for a hex colour token, and
+ *   b. check for a suppression comment on that same line.
+ *
+ * The [^:\n]* between the prop name and ":" allows for optional whitespace or
+ * TypeScript type annotations before the colon.
+ */
+const MULTILINE_PROP_RE = /\b(?:bgcolor|background|borderColor|fill|color)\b[^:\n]*:\s*\r?\n([^\n]*)/g;
+
 const componentFiles = findComponentFiles(SRC_DIR);
 
 /** @type {Array<{file: string, line: number, text: string}>} */
@@ -117,6 +146,7 @@ for (const componentFile of componentFiles) {
   const src = readFileSync(componentFile, 'utf8');
   const lines = src.split('\n');
 
+  // Pass 1: same-line scan
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
 
@@ -125,6 +155,30 @@ for (const componentFile of componentFiles) {
     if (SUPPRESSION_RE.test(raw)) continue;
 
     violations.push({ file: relPath, line: i + 1, text: raw.trimStart() });
+  }
+
+  // Pass 2: multi-line scan — catches sx prop objects where the key and hex
+  // value are on separate lines (e.g. `color:\n  '#ff0000'`).
+  MULTILINE_PROP_RE.lastIndex = 0;
+  let match;
+  while ((match = MULTILINE_PROP_RE.exec(src)) !== null) {
+    const hexLine = match[1];
+    if (!HEX_RE.test(hexLine)) continue;
+    if (SUPPRESSION_RE.test(hexLine)) continue;
+
+    // Determine the 1-indexed line number of the hex-value line.
+    // The hex line starts immediately after the newline that ends match[0]
+    // minus match[1] in length — i.e. at offset (match.index + match[0].length
+    // - match[1].length).
+    const hexLineStart = match.index + match[0].length - match[1].length;
+    const lineNum = src.slice(0, hexLineStart).split('\n').length;
+
+    // Avoid duplicating a violation already emitted by Pass 1 (can only
+    // happen if a line somehow satisfies both passes, which shouldn't occur
+    // in practice, but guard anyway).
+    if (!violations.some(v => v.file === relPath && v.line === lineNum)) {
+      violations.push({ file: relPath, line: lineNum, text: hexLine.trimStart() });
+    }
   }
 }
 
@@ -149,7 +203,8 @@ process.stderr.write(
   '(e.g. "primary.main", "text.secondary"), CSS custom properties (e.g. var(--plum)),\n' +
   'or other design-system values.\n\n' +
   'If the hex value is genuinely necessary (third-party brand colour, SVG fill\n' +
-  'attribute, or a transitional value awaiting migration), suppress with:\n' +
+  'attribute, or a transitional value awaiting migration), suppress with a trailing\n' +
+  'comment on the hex-value line:\n' +
   '  // hex-color-ok: <reason>\n\n',
 );
 process.exit(1);
