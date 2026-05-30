@@ -53,6 +53,7 @@ const STEPS = [
   'test:ci-doc-sync',
   'test:suite-descriptions',
   'test:suite-probe-counts',
+  'test:story-count-sync',
   'test:privileges:ci',
   'test:lead-status-sync:ci',
   'test:lead-status-counts-rate-limit:ci',
