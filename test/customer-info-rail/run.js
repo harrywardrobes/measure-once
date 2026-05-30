@@ -19,6 +19,9 @@
 //   (G) Clicking the Review button on a submitted card opens the card body
 //       (MuiCollapse transitions to the "entered" state); the expanded body
 //       renders the correct address and room-count text.
+//   (G4/G5) A separate submitted card with corrected_email and corrected_mobile
+//       set: after clicking Review, both correction strings appear in the
+//       expanded body with a non-zero bounding height.
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-info-rail
@@ -112,6 +115,28 @@ const ROW_SUBMITTED = {
   city: 'Testville',
   postcode: 'TE1 1ST',
   room_count: '2',
+  room_notes: null,
+  photo_keys: [],
+  photoUrls: [],
+  email_skipped_count: 0,
+  form_link: null,
+};
+
+// Row 5: submitted with corrected_email and corrected_mobile set — used by
+// probes G4/G5 to verify the Corrections section renders both values.
+const ROW_SUBMITTED_WITH_CORRECTIONS = {
+  id: 5,
+  created_at: new Date(NOW - 6 * 24 * 60 * 60 * 1000).toISOString(),
+  submitted_at: new Date(NOW - 5 * 24 * 60 * 60 * 1000).toISOString(),
+  expires_at: FUTURE,
+  contact_name: 'Rail Test',
+  contact_email: 'rail@privtest.invalid',
+  corrected_email: 'corrected@example.com',
+  corrected_mobile: '07700900123',
+  address_line1: '5 Correction Road',
+  city: 'Fixtown',
+  postcode: 'FX2 2FX',
+  room_count: '1',
   room_notes: null,
   photo_keys: [],
   photoUrls: [],
@@ -447,6 +472,13 @@ function writeReport(runId) {
     '  enters; **(G2)** the address text "12 Test Street, Testville, TE1 1ST" is',
     '  visible with a non-zero bounding height; **(G3)** the room-count text',
     '  "2 rooms" is rendered in the expanded body.',
+    '- **(G4/G5) Corrections section renders corrected contact details**: an isolated',
+    '  page load with a submitted fixture row that has `corrected_email` and',
+    '  `corrected_mobile` set. After clicking Review on',
+    '  `[data-testid="submission-card-5"]`, **(G4)** the text',
+    '  "Email: corrected@example.com" is visible with a non-zero bounding height,',
+    '  and **(G5)** the text "Mobile: 07700900123" is visible with a non-zero',
+    '  bounding height inside the expanded Corrections section.',
     '',
     'All API calls are stubbed via evaluateOnNewDocument fetch interception.',
     'No HubSpot token or real contact data is required.',
@@ -534,6 +566,8 @@ async function main() {
     '(G) clicking Review button opens submitted card body',
     '(G) address "12 Test Street, Testville, TE1 1ST" visible in expanded card body',
     '(G) "2 rooms" text rendered in expanded card body',
+    '(G4) corrected_email "corrected@example.com" visible with non-zero height in expanded card body',
+    '(G5) corrected_mobile "07700900123" visible with non-zero height in expanded card body',
   ];
 
   if (!puppeteer) {
@@ -869,6 +903,88 @@ async function main() {
     );
 
     await page.__ctx.close().catch(() => {});
+
+    // ── Probes G4/G5: corrected_email + corrected_mobile in card body ──────
+    console.log('\n  [G4/G5] Corrections section renders corrected contact details');
+
+    const pageG45 = await openDetailPage(
+      browser, adminClient.cookie, [ROW_SUBMITTED_WITH_CORRECTIONS],
+    );
+
+    // Click the Review button to expand submission-card-5.
+    const reviewBtnG45 = await pageG45.$('[data-testid="review-btn"]');
+
+    let g45BodyOpen = false;
+    if (reviewBtnG45) {
+      await reviewBtnG45.click();
+      g45BodyOpen = await pollPage(pageG45, () => {
+        const card = document.querySelector('[data-testid="submission-card-5"]');
+        if (!card) return null;
+        return card.querySelector('[class*="MuiCollapse-entered"]') ? 'ok' : null;
+      }, 5000).then(() => true).catch(() => false);
+    }
+
+    let correctedEmailVisible = false;
+    let correctedMobileVisible = false;
+    if (g45BodyOpen) {
+      const g45State = await pageG45.evaluate(() => {
+        const card = document.querySelector('[data-testid="submission-card-5"]');
+        if (!card) return { emailFound: false, emailHeight: 0, mobileFound: false, mobileHeight: 0 };
+
+        let emailFound = false;
+        let emailHeight = 0;
+        let mobileFound = false;
+        let mobileHeight = 0;
+
+        const allEls = Array.from(card.querySelectorAll('*'));
+        for (const el of allEls) {
+          const text = (el.textContent || '').trim();
+          if (!emailFound && text === 'Email: corrected@example.com') {
+            const rect = el.getBoundingClientRect();
+            emailHeight = rect.height;
+            emailFound = true;
+          }
+          if (!mobileFound && text === 'Mobile: 07700900123') {
+            const rect = el.getBoundingClientRect();
+            mobileHeight = rect.height;
+            mobileFound = true;
+          }
+          if (emailFound && mobileFound) break;
+        }
+
+        return { emailFound, emailHeight, mobileFound, mobileHeight };
+      });
+
+      correctedEmailVisible  = g45State.emailFound  && g45State.emailHeight  > 0;
+      correctedMobileVisible = g45State.mobileFound && g45State.mobileHeight > 0;
+    }
+
+    record(
+      PROBE_LABELS[14],
+      'corrected_email "corrected@example.com" visible with non-zero height after Review',
+      correctedEmailVisible
+        ? 'corrected email found with non-zero height (correct)'
+        : g45BodyOpen
+          ? 'card body open but corrected_email text not found or zero height'
+          : reviewBtnG45
+            ? 'review-btn found but card body did not open'
+            : 'review-btn not found',
+      correctedEmailVisible,
+    );
+    record(
+      PROBE_LABELS[15],
+      'corrected_mobile "07700900123" visible with non-zero height after Review',
+      correctedMobileVisible
+        ? 'corrected mobile found with non-zero height (correct)'
+        : g45BodyOpen
+          ? 'card body open but corrected_mobile text not found or zero height'
+          : reviewBtnG45
+            ? 'review-btn found but card body did not open'
+            : 'review-btn not found',
+      correctedMobileVisible,
+    );
+
+    await pageG45.__ctx.close().catch(() => {});
 
     // ── Probe F: skipped-email count badge ────────────────────────────────
     console.log('\n  [F] Skipped-email count badge');
