@@ -1,4 +1,32 @@
 'use strict';
+
+const PROBE_LABELS = [
+  'TEAM: seeded allowed-list row renders in #tab-team',
+  'TEAM: duplicate-phone Alert appears with the existing record name',
+  'TEAM: "Add team member" button is disabled while phone duplicate stands',
+  'TEAM: alert exposes a "View approved entry" action button',
+  'TEAM: clicking the action highlights the existing approved-list row',
+  'TEAM: clearing the phone field removes the duplicate-phone Alert',
+  'TEAM: "Add team member" button is re-enabled after clearing the duplicate phone',
+  'TEAM: duplicate-email Alert appears when seeded email is typed',
+  'TEAM: "Add team member" button is disabled while email duplicate stands',
+  'TEAM: clearing the email field removes the duplicate-email Alert',
+  'TEAM: "Add team member" button is re-enabled after clearing the duplicate email',
+  'TRADES: /trades page loads at least the seeded companies',
+  'TRADES: openTradesModal() opens the modal with a contact slot',
+  'TRADES: #tf-cphone-notice-0 shows the duplicate warning naming the existing contact at company A',
+  'TRADES: #trades-submit-btn is disabled while the contact-phone duplicate stands',
+  'TRADES: #tf-cphone-notice-0 hides after duplicate contact-phone number is cleared',
+  'TRADES: #trades-submit-btn re-enables after duplicate contact-phone number is cleared',
+  'TRADES: clicking the notice link opens the existing record in Edit mode',
+  'TRADES ADD CO-PHONE: /trades page loads at least the seeded companies',
+  'TRADES ADD CO-PHONE: openTradesModal() opens the modal with #tf-company-phone',
+  'TRADES ADD CO-PHONE: #tf-company-phone-notice shows the duplicate warning naming Company A',
+  'TRADES ADD CO-PHONE: #trades-submit-btn is disabled while company-phone duplicate stands',
+  'TRADES ADD CO-PHONE: #tf-company-phone-notice hides after duplicate number is cleared',
+  'TRADES ADD CO-PHONE: #trades-submit-btn re-enables after duplicate company-phone is cleared',
+];
+
 // test/duplicate-phone-warnings/run.js
 //
 // End-to-end live test for the duplicate-phone inline warnings added in
@@ -413,7 +441,9 @@ async function main() {
 
   // ── Puppeteer ─────────────────────────────────────────────────────────────
   if (!puppeteer) {
-    record('puppeteer available', 'require("puppeteer") resolves', 'module not installed', false);
+    for (const l of PROBE_LABELS) {
+      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;
@@ -431,7 +461,9 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
+    for (const l of PROBE_LABELS) {
+      record(l, 'browser launched', `browser launch failed: ${e.message}`, false);
+    }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;

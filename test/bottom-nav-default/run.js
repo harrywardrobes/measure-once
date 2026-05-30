@@ -1,4 +1,11 @@
 'use strict';
+
+const DEF_UI_PROBE_LABELS = [
+  '[DEF-UI] Bar contains custom default keys (home, projects, invoices)',
+  '[DEF-UI] Default "customers" key is NOT in bar (overridden by custom default)',
+  '[DEF-UI-RESTORE] Bar falls back to member defaults (home, customers, calendar)',
+];
+
 // test/bottom-nav-default/run.js
 //
 // Regression guard for task #1892: the admin-configured __default__ nav layout
@@ -226,18 +233,9 @@ async function main() {
 
     if (!puppeteer) {
       console.warn('\n  [UI] puppeteer not installed — skipping UI probes');
-      record(
-        '[DEF-UI] BottomNav renders __default__ keys for no-role user',
-        'puppeteer available',
-        'puppeteer not installed (skipped)',
-        false,
-      );
-      record(
-        '[DEF-UI-RESTORE] BottomNav falls back to defaults when __default__ reset',
-        'puppeteer available',
-        'puppeteer not installed (skipped)',
-        false,
-      );
+      for (const l of DEF_UI_PROBE_LABELS) {
+        record(l, 'puppeteer installed', 'puppeteer not installed (skipped)', false);
+      }
     } else {
       const executablePath = findChromium();
       const browser = await puppeteer.launch({

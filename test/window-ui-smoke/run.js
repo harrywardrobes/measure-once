@@ -54,6 +54,16 @@ const ROUTES = [
   '/profile',
 ];
 
+const PROBE_LABELS = ROUTES.flatMap(route => {
+  const adminPage = route === '/admin' || route.startsWith('/admin/');
+  const labels = [
+    `${route} — #app-header-mount present`,
+    `${route} — GlobalHeader React island mounted`,
+  ];
+  if (!adminPage) labels.push(`${route} — nav.bottom-nav#main-content mounted`);
+  return labels;
+});
+
 function parseCookieKV(jar) {
   const idx = jar.indexOf('=');
   if (idx < 0) return null;
@@ -106,9 +116,9 @@ async function main() {
   }
 
   if (!puppeteer) {
-    record('puppeteer available', 'require("puppeteer") resolves',
-      'module not installed', false,
-      'Install puppeteer (npm i -D puppeteer) and rerun.');
+    for (const l of PROBE_LABELS) {
+      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    }
     await writeReport(findings);
     process.exit(1);
   }

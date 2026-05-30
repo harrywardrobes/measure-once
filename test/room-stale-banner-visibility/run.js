@@ -123,7 +123,9 @@ async function main() {
   console.log(`  Using ${hasTestDb ? 'DATABASE_URL_TEST (isolated)' : 'shared DATABASE_URL'}`);
 
   if (!puppeteer) {
-    record('puppeteer available', false, 'puppeteer not installed — all probes skipped');
+    for (const l of PROBE_LABELS) {
+      record(l, false, 'puppeteer not installed — all probes skipped');
+    }
     await writeReport(runId);
     process.exit(findings.every(f => f.ok) ? 0 : 1);
     return;

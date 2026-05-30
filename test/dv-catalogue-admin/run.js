@@ -1,4 +1,19 @@
 'use strict';
+
+const PROBE_LABELS = [
+  'admin page exposes switchTab + loadDvCatalogue',
+  'design-visit catalogue lists load (no "Loading…")',
+  '[handles] click + Add opens the modal',
+  '[handles] modal renders #dvie-name + #dvie-save',
+  '[furniture] click + Add opens the modal',
+  '[furniture] modal renders #dvie-name + #dvie-save',
+  '[door-styles] click + Add opens the modal',
+  '[door-styles] modal renders #dvie-name + #dvie-save',
+  '[H] style dropdown value persisted in DB and returned by API',
+  '[H/edit] seeded handle row available for edit probe',
+  '[H/del] seeded handle row available for delete probe',
+];
+
 // test/dv-catalogue-admin/run.js
 //
 // End-to-end live test for the Design Visit admin catalogue modals
@@ -236,7 +251,9 @@ async function main() {
   }
 
   if (!puppeteer) {
-    record('puppeteer is installed', 'puppeteer required', 'module not found', false);
+    for (const l of PROBE_LABELS) {
+      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;
@@ -254,7 +271,9 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
+    for (const l of PROBE_LABELS) {
+      record(l, 'browser launched', `browser launch failed: ${e.message}`, false);
+    }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;

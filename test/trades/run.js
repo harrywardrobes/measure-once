@@ -1,4 +1,38 @@
 'use strict';
+
+const PUPPETEER_PROBE_LABELS = [
+  'E.1 /trades page mounts (heading "Vendors & Trades" visible)',
+  'E.2 window._cpGetTradeContacts() is exported as a function',
+  'E.3 _cpGetTradeContacts() returns a non-empty array of companies',
+  'E.4 _cpGetTradeContacts() entries have company_name and contacts array',
+  'F.1 CO_ALPHA card visible before search',
+  'F.2 Search input found and "Alpha" typed',
+  'F.3 CO_ALPHA card remains visible after searching "Alpha"',
+  'F.4 CO_BETA card is hidden after searching "Alpha"',
+  'F.5 Searching by contact name "GammaContact" shows CO_GAMMA',
+  'F.6 Searching "GammaContact" hides CO_ALPHA (different contact)',
+  'G.1 Before filtering, both CO_ALPHA and CO_GAMMA are visible',
+  'G.2 "Carpentry / Roofing" filter chip found and clicked',
+  'G.3 After "Carpentry / Roofing" filter, CO_GAMMA visible + CO_ALPHA hidden',
+  'G.4 localStorage["tradesTypeFilter"] set after clicking category chip',
+  'G.5 Category filter restored from localStorage on page reload',
+  'H.1 Admin sees "Add Company" button on /trades',
+  'H.2 Manager sees "Submit for Approval" button on /trades',
+  'I.1 Viewer: /trades HTML is served (200) — auth-only server gate',
+  'I.2 Viewer: "Add Company"/"Submit for Approval" button absent (isPriv=false for viewer)',
+  'I.3 Viewer: React TradesPage shows error state (API returns 403)',
+  'J.1 CO_ALPHA with company_phone loaded in _cpGetTradeContacts',
+  'J.2 "Add Company" button (outside dialog) found and clicked',
+  'J.3 Add Company dialog opens (Company phone tel input visible)',
+  'K.1 Kappa company seeded for snackbar probe',
+  'K.2 Delete icon clicked for Kappa company',
+  'K.3 "Company deleted" Snackbar appears',
+  'K.4 Snackbar paused while tab hidden (>4 s)',
+  'K.5 Snackbar dismisses after tab returns visible',
+  'L.1 "Add Company" button found and clicked for ContactSlot field check',
+  'L.2 Add Company dialog opens (contact name input visible)',
+];
+
 // test/trades/run.js
 //
 // End-to-end test suite for the Trades page (React + MUI).
@@ -414,7 +448,9 @@ async function main() {
   // ── Puppeteer UI tests ─────────────────────────────────────────────────
 
   if (!puppeteer) {
-    record('puppeteer available', 'require("puppeteer") resolves', 'module not installed', false);
+    for (const l of PUPPETEER_PROBE_LABELS) {
+      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    }
     const failed = findings.some(f => !f.ok);
     await cleanupAndExit(failed ? 1 : 0);
     return;
@@ -432,7 +468,9 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
+    for (const l of PUPPETEER_PROBE_LABELS) {
+      record(l, 'browser launched', `browser launch failed: ${e.message}`, false);
+    }
     const failed = findings.some(f => !f.ok);
     await cleanupAndExit(failed ? 1 : 0);
     return;

@@ -313,8 +313,12 @@ async function main() {
     // the browser probe now only confirms the harness starts and the /projects
     // page is reachable.
     console.log('\n  [D] DOM notice (Puppeteer)');
+    const D_PROBE_LABELS = [
+      'D0 headless chromium launches',
+      'D0 /projects reachable',
+    ];
     if (!puppeteer) {
-      record('D0 puppeteer available', false, 'puppeteer not installed — browser probes skipped');
+      for (const l of D_PROBE_LABELS) record(l, false, 'puppeteer not installed — browser probes skipped');
     } else {
       const { findChromium } = require('../shared/find-chromium');
       const executablePath = findChromium() || undefined;
@@ -382,8 +386,15 @@ async function main() {
     // removes it and clears the flag, and that a subsequent re-render with the
     // flag cleared does NOT re-insert the notice.
     console.log('\n  [E] Pill-bar counts-error notice (Puppeteer)');
+    const E_PROBE_LABELS = [
+      'E0 headless chromium launches',
+      'E1 pill-bar notice appears when state.leadStatusCountsError is true',
+      'E2 notice removed after dismiss click',
+      'E2b state.leadStatusCountsError false after dismiss',
+      'E3 notice absent after re-render with error cleared',
+    ];
     if (!puppeteer) {
-      record('E0 puppeteer available', false, 'puppeteer not installed — browser probes skipped');
+      for (const l of E_PROBE_LABELS) record(l, false, 'puppeteer not installed — browser probes skipped');
     } else {
       const { findChromium } = require('../shared/find-chromium');
       const executablePath = findChromium() || undefined;

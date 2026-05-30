@@ -1,4 +1,11 @@
 'use strict';
+
+const UI_PROBE_LABELS = [
+  '[UI-ROLE-NAV] Bar contains role-specific keys (home, trades, invoices)',
+  '[UI-ROLE-NAV] Default manager key "sales" is NOT in bar (overridden by role config)',
+  '[UI-ROLE-NAV] Default manager key "projects" is NOT in bar (overridden by role config)',
+];
+
 // test/nav-role-config/run.js
 //
 // End-to-end test for the nav role configuration admin API (task #968).
@@ -762,12 +769,9 @@ async function main() {
 
   if (!puppeteer) {
     console.warn('\n  [UI] puppeteer not installed — skipping UI probes');
-    record(
-      '[UI-ROLE-NAV] BottomNav renders role-specific primary tabs',
-      'puppeteer available',
-      'puppeteer not installed (skipped)',
-      false,
-    );
+    for (const l of UI_PROBE_LABELS) {
+      record(l, 'puppeteer installed', 'puppeteer not installed (skipped)', false);
+    }
   } else {
 
     const executablePath = findChromium();

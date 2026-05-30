@@ -697,11 +697,14 @@ async function main() {
         : `status=${subPostRes.status} body=${JSON.stringify(subPostBody).slice(0, 200)}`);
 
     // ── CI-UI-A/B: Puppeteer — Resend button visible for admin, hidden for viewer
+    const CI_UI_PROBE_LABELS = [
+      'CI-UI-A.admin-sees-resend-btn',
+      'CI-UI-B.viewer-no-resend-btn',
+    ];
     if (!puppeteer) {
-      record('CI-UI-A.admin-sees-resend-btn', false,
-        'skipped — puppeteer not installed');
-      record('CI-UI-B.viewer-no-resend-btn', false,
-        'skipped — puppeteer not installed');
+      for (const l of CI_UI_PROBE_LABELS) {
+        record(l, false, 'skipped — puppeteer not installed');
+      }
     } else {
       const { findChromium } = require('../shared/find-chromium');
       const executablePath = findChromium() || undefined;
@@ -714,10 +717,9 @@ async function main() {
           args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
         });
       } catch (e) {
-        record('CI-UI-A.admin-sees-resend-btn', false,
-          `skipped — browser launch failed: ${e.message}`);
-        record('CI-UI-B.viewer-no-resend-btn', false,
-          `skipped — browser launch failed: ${e.message}`);
+        for (const l of CI_UI_PROBE_LABELS) {
+          record(l, false, `skipped — browser launch failed: ${e.message}`);
+        }
         uiBrowser = null;
       }
 

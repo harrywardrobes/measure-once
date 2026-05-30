@@ -125,6 +125,8 @@ const CASES = [
   },
 ];
 
+const PROBE_LABELS = CASES.map(c => c.name);
+
 // ── helpers ────────────────────────────────────────────────────────────────
 function findChromium() {
   const { findChromium: shared } = require('../shared/find-chromium');
@@ -148,13 +150,9 @@ async function main() {
   }
 
   if (!puppeteer) {
-    record(
-      'puppeteer available',
-      'require("puppeteer") resolves',
-      'module not installed',
-      false,
-      'Install puppeteer (npm i -D puppeteer) and rerun.',
-    );
+    for (const l of PROBE_LABELS) {
+      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    }
     await writeReport(findings);
     process.exit(1);
   }
@@ -169,12 +167,9 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    record(
-      'headless chromium launches',
-      'browser.launch() succeeds',
-      `error: ${e.message}`,
-      false,
-    );
+    for (const l of PROBE_LABELS) {
+      record(l, 'browser launched', `browser launch failed: ${e.message}`, false);
+    }
     await writeReport(findings);
     process.exit(1);
   }

@@ -1,4 +1,26 @@
 'use strict';
+
+const PROBE_LABELS = [
+  'DesignSystemPage mounts inside #tab-designsystem',
+  '"Skeletons" tab found and clicked in DesignSystemPage',
+  '.MuiSkeleton-root elements appear in #tab-designsystem after tab click',
+  'PageLoadingSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'CustomersPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'CalendarPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'HomePageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'ProfilePageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'AdminTeamPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'AdminPermissionsPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'AdminRequestsPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'AdminAuditLogPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'AdminSettingsPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'CardActionsPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'ActionHandlersPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'LoginPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'ProjectsPageSkeleton ComponentShowcase contains .MuiSkeleton-root elements',
+  'no uncaught page errors during design-system skeleton rendering',
+];
+
 // test/design-system-skeletons/run.js
 //
 // End-to-end test that confirms all fourteen page skeletons are rendered in the
@@ -195,13 +217,9 @@ async function main() {
   }
 
   if (!puppeteer) {
-    record(
-      'puppeteer available',
-      'require("puppeteer") resolves',
-      'module not installed',
-      false,
-      'Install puppeteer (npm i -D puppeteer) and rerun.',
-    );
+    for (const l of PROBE_LABELS) {
+      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;
@@ -219,7 +237,9 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
+    for (const l of PROBE_LABELS) {
+      record(l, 'browser launched', `browser launch failed: ${e.message}`, false);
+    }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;

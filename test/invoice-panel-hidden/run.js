@@ -1,4 +1,26 @@
 'use strict';
+
+const PROBE_LABELS = [
+  'Home: page loads (HTTP 200)',
+  'Home: #inv-panel (old static panel) absent from DOM',
+  'Home: InvoiceDetailDrawer not open on initial load',
+  'Trades: page loads (HTTP 200)',
+  'Trades: #inv-panel (old static panel) absent from DOM',
+  'Trades: InvoiceDetailDrawer not open on initial load',
+  'Projects: page loads (HTTP 200)',
+  'Projects: #inv-panel (old static panel) absent from DOM',
+  'Projects: InvoiceDetailDrawer not open on initial load',
+  'Survey: page loads (HTTP 200)',
+  'Survey: #inv-panel (old static panel) absent from DOM',
+  'Survey: InvoiceDetailDrawer not open on initial load',
+  'Invoices: page loads (HTTP 200)',
+  'Invoices: #inv-panel (old static panel) absent from DOM',
+  'Invoices: InvoiceDetailDrawer not open on initial load',
+  'Calendar: page loads (HTTP 200)',
+  'Calendar: #inv-panel (old static panel) absent from DOM',
+  'Calendar: InvoiceDetailDrawer not open on initial load',
+];
+
 // test/invoice-panel-hidden/run.js
 //
 // End-to-end regression test confirming that the legacy #inv-panel static
@@ -158,7 +180,9 @@ async function main() {
   }
 
   if (!puppeteer) {
-    record('puppeteer available', 'require("puppeteer") resolves', 'module not installed', false);
+    for (const l of PROBE_LABELS) {
+      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    }
     await writeReport(findings);
     process.exit(1);
     return;
@@ -216,7 +240,9 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
+    for (const l of PROBE_LABELS) {
+      record(l, 'browser launched', `browser launch failed: ${e.message}`, false);
+    }
     await writeReport(findings);
     await cleanupAndExit(1);
     return;

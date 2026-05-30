@@ -1,4 +1,18 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '#tab-search mount point exists in admin.html',
+  'React island flags #tab-search as mounted (data-ds-rendered="1")',
+  '#tab-search renders SearchSettingsPage rows (.ss-action-row)',
+  '#tab-team mount point exists in admin.html',
+  'React island flags #tab-team as mounted (data-ds-rendered="1")',
+  '#tab-team renders AdminTeamPage content (non-empty, no island-error fallback)',
+  '#tab-designsystem mount point exists in admin.html',
+  'React island flags #tab-designsystem as mounted (data-ds-rendered="1")',
+  '#tab-designsystem renders DesignSystemPage sections (.ds-section)',
+  'no uncaught page errors while React island mounts',
+];
+
 // test/react-admin-tabs/run.js
 //
 // End-to-end smoke test for the React island mounted into the admin panel
@@ -190,13 +204,9 @@ async function main() {
   const adminClient = await login(users.admin.email, PASSWORD);
 
   if (!puppeteer) {
-    record(
-      'puppeteer available',
-      'require("puppeteer") resolves',
-      'module not installed',
-      false,
-      'Install puppeteer (npm i -D puppeteer) and rerun.',
-    );
+    for (const l of PROBE_LABELS) {
+      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;
@@ -214,7 +224,9 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
+    for (const l of PROBE_LABELS) {
+      record(l, 'browser launched', `browser launch failed: ${e.message}`, false);
+    }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;

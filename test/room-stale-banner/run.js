@@ -167,9 +167,9 @@ async function main() {
   }
 
   if (!puppeteer) {
-    record('puppeteer available', 'require("puppeteer") resolves',
-      'module not installed', false,
-      'Install puppeteer (npm i -D puppeteer) and rerun.');
+    for (const l of PROBE_LABELS) {
+      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    }
     writeReport(findings);
     process.exit(1);
   }

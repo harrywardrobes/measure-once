@@ -1,4 +1,18 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '[skel] AdminPermissionsPage shows .MuiSkeleton-root while data is pending',
+  '[skel] AdminRequestsPage shows .MuiSkeleton-root while data is pending',
+  '[skel] AdminAuditLogPage shows .MuiSkeleton-root while data is pending',
+  '[content] AdminPermissionsPage skeleton replaced by real content',
+  '[content] AdminPermissionsPage renders #roles-list after load',
+  '[content] AdminRequestsPage skeleton replaced by real content',
+  '[content] AdminRequestsPage renders #requests-content after load',
+  '[content] AdminAuditLogPage skeleton replaced by real content',
+  '[content] AdminAuditLogPage renders #audit-feed after load',
+  'no uncaught page errors during skeleton → content transition',
+];
+
 // test/admin-tab-skeletons/run.js
 //
 // End-to-end test that confirms the Permissions, Requests, and Audit Log admin
@@ -224,13 +238,9 @@ async function main() {
   }
 
   if (!puppeteer) {
-    record(
-      'puppeteer available',
-      'require("puppeteer") resolves',
-      'module not installed',
-      false,
-      'Install puppeteer (npm i -D puppeteer) and rerun.',
-    );
+    for (const l of PROBE_LABELS) {
+      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;
@@ -248,7 +258,9 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
+    for (const l of PROBE_LABELS) {
+      record(l, 'browser launched', `browser launch failed: ${e.message}`, false);
+    }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;

@@ -1,4 +1,15 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(A) in-memory path: GET is called to fetch existing notes',
+  '(A) in-memory path: POST is called to persist to server',
+  '(A) in-memory path: POST body contains rooms array',
+  '(A) in-memory path: POST body preserves existing notes',
+  '(A) in-memory path: updater mutation reflected in POST body',
+  '(B) network path: GET is called to fetch localdata',
+  '(B) network path: POST is called to persist to server',
+];
+
 // test/quick-load-and-update/run.js
 //
 // Unit-style Puppeteer smoke test for quickLoadAndUpdate() in public/workflow.js.
@@ -147,7 +158,9 @@ async function main() {
   console.log('\n  quickLoadAndUpdate persistence test\n');
 
   if (!puppeteer) {
-    record('puppeteer available', false, 'Install puppeteer (npm i -D puppeteer) and rerun.');
+    for (const l of PROBE_LABELS) {
+      record(l, false, 'puppeteer not installed');
+    }
     writeReport();
     process.exit(1);
   }
@@ -162,7 +175,9 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    record('headless chromium launches', false, e.message);
+    for (const l of PROBE_LABELS) {
+      record(l, false, `browser launch failed: ${e.message}`);
+    }
     writeReport();
     process.exit(1);
   }

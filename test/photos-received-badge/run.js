@@ -1,4 +1,14 @@
 'use strict';
+
+const PROBE_LABELS = [
+  'PR-A1 projects board loads card',
+  'PR-A2 "Photos received" badge IS shown within #projects-view',
+  'PR-B1 projects board loads card',
+  'PR-B2 "Photos received" badge is NOT shown (no substatus)',
+  'PR-C1 projects board loads card',
+  'PR-C2 "Photos received" badge is NOT shown (wrong lead status)',
+];
+
 // test/photos-received-badge/run.js
 //
 // Regression guard for the PhotosReceivedBadge component extracted in task #1770.
@@ -192,7 +202,9 @@ async function main() {
   console.log(`  Using ${hasTestDb ? 'DATABASE_URL_TEST (isolated)' : 'shared DATABASE_URL (PRIVTEST_ALLOW_SHARED_DB=1)'}`);
 
   if (!puppeteer) {
-    record('puppeteer available', false, 'puppeteer not installed — all probes skipped');
+    for (const l of PROBE_LABELS) {
+      record(l, false, 'puppeteer not installed — all probes skipped');
+    }
     await writeReport(runId);
     process.exit(findings.every(f => f.ok) ? 0 : 1);
     return;

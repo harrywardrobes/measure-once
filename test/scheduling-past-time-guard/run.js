@@ -1,4 +1,26 @@
 'use strict';
+
+const PROBE_LABELS = [
+  'seed schedule_installation_slot handler',
+  'seed schedule_delivery_window handler',
+  'seed schedule_visit handler',
+  '[IS-PAST]    past-confirm dialog appears',
+  '[IS-BACK]    "Go back" dismisses dialog',
+  '[IS-PROCEED] "Schedule anyway" fires POST',
+  '[DW-PAST]    past-confirm dialog appears',
+  '[DW-BACK]    "Go back" dismisses dialog',
+  '[DW-PROCEED] "Schedule anyway" fires POST',
+  '[VCM-PAST]    past-confirm dialog appears',
+  '[VCM-BACK]    "Go back" dismisses dialog',
+  '[VCM-PROCEED] "Schedule anyway" fires POST',
+  '[WARN-IS] edit button appears for near-future IS visit',
+  '[WARN-IS] 15-minute warning Alert appears in InstallationSlotModal edit mode',
+  '[WARN-DW] edit button appears for near-future DW visit',
+  '[WARN-DW] 15-minute warning Alert appears in DeliveryWindowModal edit mode',
+  '[WARN-VCM] modal opens with DateTimePicker',
+  '[WARN-VCM] 15-minute warning Alert appears in VisitCalendarModal after DateTimePicker update',
+];
+
 // test/scheduling-past-time-guard/run.js
 //
 // Covers the past-time confirmation dialog and 15-minute start-time warning
@@ -254,13 +276,9 @@ async function main() {
   }
 
   if (!puppeteer) {
-    record(
-      'puppeteer available',
-      'require("puppeteer") resolves',
-      'module not installed',
-      false,
-      'Install puppeteer and rerun.',
-    );
+    for (const l of PROBE_LABELS) {
+      record(l, 'puppeteer installed', 'puppeteer not installed', false);
+    }
     writeReport('no-puppeteer');
     process.exit(1);
   }

@@ -313,9 +313,16 @@ async function main() {
 
     console.log('\n  [PC-D] Puppeteer: "Unknown status" badge on the Projects page');
 
+    const PC_D_PROBE_LABELS = [
+      'PC-D0 headless chromium launches',
+      'PC-D1 #projects-view renders content',
+      'PC-D2 "Unknown status" badge text appears in #projects-view',
+    ];
+
     if (!puppeteer) {
-      record('PC-D0 puppeteer available', false,
-        'puppeteer not installed — UI probes skipped');
+      for (const l of PC_D_PROBE_LABELS) {
+        record(l, false, 'puppeteer not installed — UI probes skipped');
+      }
     } else {
       const { findChromium } = require('../shared/find-chromium');
       const executablePath = findChromium() || undefined;

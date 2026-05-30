@@ -346,9 +346,19 @@ async function main() {
     // ── [D/E] UI banner probes (Puppeteer) ────────────────────────────────────
     console.log('\n  [D/E] Puppeteer: #dev-mode-banner on /projects');
 
+    const D_UI_PROBE_LABELS = [
+      'D.0 headless chromium launches',
+      'D.1 #projects-view renders',
+      'D.2 #dev-mode-banner is visible (dev mode ON + admin)',
+      'D.3 banner text mentions "Dev mode is ON"',
+      'E.1 #projects-view renders',
+      'E.2 #dev-mode-banner is absent (dev mode OFF)',
+    ];
+
     if (!puppeteer) {
-      record('D.0 puppeteer available', false,
-        'puppeteer not installed — UI probes skipped');
+      for (const l of D_UI_PROBE_LABELS) {
+        record(l, false, 'puppeteer not installed — UI probes skipped');
+      }
     } else {
       const { findChromium } = require('../shared/find-chromium');
       const executablePath   = findChromium() || undefined;
