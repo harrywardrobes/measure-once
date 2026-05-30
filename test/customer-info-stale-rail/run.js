@@ -710,26 +710,37 @@ async function main() {
       });
     }
 
-    // Poll for the address text within the card body, requiring the matching
-    // text node to be *visually expanded* (height > 0).  MUI Collapse keeps
-    // children in the DOM even when closed (height: 0; overflow: hidden), so
-    // a plain textContent check could pass even if the body never opened.
-    // We use TreeWalker to find the deepest text node that contains the address
-    // string, then check its parent element's bounding box height as a proxy
-    // for "rendered and visible in the expanded body".
-    const addressVisible = await pollPage(page, () => {
+    // Two-phase check for the card body content:
+    //   Phase 1 — confirm [data-testid="submission-card-body"] exists in the DOM (3 s).
+    //             A timeout here means the testid was removed from the component.
+    //   Phase 2 — wait for the address text node's parent to have height > 0 (8 s).
+    //             MUI Collapse keeps children in the DOM even when closed
+    //             (height: 0; overflow: hidden), so a plain textContent check could
+    //             pass even if the body never opened.  We use TreeWalker to find the
+    //             deepest text node that contains the address string, then check its
+    //             parent element's bounding box height as a proxy for "expanded".
+    const cardBodyPresent = await pollPage(page, () => {
       const card = document.querySelector('[data-testid="submission-card-3"]');
       if (!card) return null;
-      const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
-      let node;
-      while ((node = walker.nextNode())) {
-        if ((node.nodeValue || '').includes('42 Resubmit Lane')) {
-          const el = node.parentElement;
-          if (el && el.getBoundingClientRect().height > 0) return 'ok';
+      return card.querySelector('[data-testid="submission-card-body"]') ? 'ok' : null;
+    }, 3000).catch(() => null);
+
+    let addressVisible = null;
+    if (cardBodyPresent) {
+      addressVisible = await pollPage(page, () => {
+        const card = document.querySelector('[data-testid="submission-card-3"]');
+        if (!card) return null;
+        const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
+        let node;
+        while ((node = walker.nextNode())) {
+          if ((node.nodeValue || '').includes('42 Resubmit Lane')) {
+            const el = node.parentElement;
+            if (el && el.getBoundingClientRect().height > 0) return 'ok';
+          }
         }
-      }
-      return null;
-    }, 8000).catch(() => null);
+        return null;
+      }, 8000).catch(() => null);
+    }
 
     const probeEState = await page.evaluate(() => {
       const card = document.querySelector('[data-testid="submission-card-3"]');
@@ -756,11 +767,13 @@ async function main() {
     record(
       PROBE_LABELS[5],
       'address "42 Resubmit Lane" visible in expanded submission-card-3 body',
-      probeEState.cardFound
-        ? (addressVisible
-          ? 'address text found in expanded body'
-          : `bodyHeight=${probeEState.bodyHeight} text="${probeEState.cardText}"`)
-        : 'submission-card-3 not found in DOM',
+      addressVisible
+        ? 'address text found in expanded body'
+        : !cardBodyPresent
+          ? '[data-testid="submission-card-body"] not found in DOM — testid may have been removed'
+          : probeEState.cardFound
+            ? `[data-testid="submission-card-body"] did not become visible within 8 s (bodyHeight=${probeEState.bodyHeight})`
+            : 'submission-card-3 not found in DOM',
       !!addressVisible,
       submittedCardFound ? '' : 'submission-card-3 did not appear after re-fetch',
     );
@@ -771,35 +784,52 @@ async function main() {
     // probe E, so we can poll immediately for those text values.  A regression
     // would show an empty corrections section even though the values were
     // present in the fetch response.
+    //
+    // Two-phase check (same pattern as probe E):
+    //   Phase 1 — confirm [data-testid="submission-card-body"] is in the DOM (3 s).
+    //             A timeout here means the testid was removed from the component.
+    //   Phase 2 — wait for each correction text node's parent to have height > 0 (6 s).
+    //             A timeout here means the body opened but the corrections section
+    //             did not render any visible content within the polling window.
     console.log('\n  [F] Checking corrected email and mobile in expanded card body');
 
-    const correctedEmailVisible = await pollPage(page, () => {
+    const cardBodyPresentF = await pollPage(page, () => {
       const card = document.querySelector('[data-testid="submission-card-3"]');
       if (!card) return null;
-      const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
-      let node;
-      while ((node = walker.nextNode())) {
-        if ((node.nodeValue || '').includes('corrected@example.com')) {
-          const el = node.parentElement;
-          if (el && el.getBoundingClientRect().height > 0) return 'ok';
-        }
-      }
-      return null;
-    }, 6000).catch(() => null);
+      return card.querySelector('[data-testid="submission-card-body"]') ? 'ok' : null;
+    }, 3000).catch(() => null);
 
-    const correctedMobileVisible = await pollPage(page, () => {
-      const card = document.querySelector('[data-testid="submission-card-3"]');
-      if (!card) return null;
-      const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
-      let node;
-      while ((node = walker.nextNode())) {
-        if ((node.nodeValue || '').includes('07700900123')) {
-          const el = node.parentElement;
-          if (el && el.getBoundingClientRect().height > 0) return 'ok';
+    let correctedEmailVisible = null;
+    let correctedMobileVisible = null;
+    if (cardBodyPresentF) {
+      correctedEmailVisible = await pollPage(page, () => {
+        const card = document.querySelector('[data-testid="submission-card-3"]');
+        if (!card) return null;
+        const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
+        let node;
+        while ((node = walker.nextNode())) {
+          if ((node.nodeValue || '').includes('corrected@example.com')) {
+            const el = node.parentElement;
+            if (el && el.getBoundingClientRect().height > 0) return 'ok';
+          }
         }
-      }
-      return null;
-    }, 6000).catch(() => null);
+        return null;
+      }, 6000).catch(() => null);
+
+      correctedMobileVisible = await pollPage(page, () => {
+        const card = document.querySelector('[data-testid="submission-card-3"]');
+        if (!card) return null;
+        const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
+        let node;
+        while ((node = walker.nextNode())) {
+          if ((node.nodeValue || '').includes('07700900123')) {
+            const el = node.parentElement;
+            if (el && el.getBoundingClientRect().height > 0) return 'ok';
+          }
+        }
+        return null;
+      }, 6000).catch(() => null);
+    }
 
     const probeFState = await page.evaluate(() => {
       const card = document.querySelector('[data-testid="submission-card-3"]');
@@ -811,7 +841,7 @@ async function main() {
       console.log(
         `  [F] corrections not visibly expanded.`
         + ` emailOk=${!!correctedEmailVisible} mobileOk=${!!correctedMobileVisible}`
-        + ` cardText="${probeFState.cardText}"`,
+        + ` cardBodyPresentF=${!!cardBodyPresentF} cardText="${probeFState.cardText}"`,
       );
     }
 
@@ -819,11 +849,13 @@ async function main() {
     record(
       PROBE_LABELS[6],
       'corrected email "corrected@example.com" and mobile "07700900123" visible in expanded card body',
-      probeFState.cardFound
-        ? (bothCorrectionsVisible
-          ? 'both corrections visible in expanded body'
-          : `emailOk=${!!correctedEmailVisible} mobileOk=${!!correctedMobileVisible} text="${probeFState.cardText}"`)
-        : 'submission-card-3 not found in DOM',
+      bothCorrectionsVisible
+        ? 'both corrections visible in expanded body'
+        : !cardBodyPresentF
+          ? '[data-testid="submission-card-body"] not found in DOM — testid may have been removed'
+          : probeFState.cardFound
+            ? `emailOk=${!!correctedEmailVisible} mobileOk=${!!correctedMobileVisible} — did not become visible within 6 s`
+            : 'submission-card-3 not found in DOM',
       bothCorrectionsVisible,
       submittedCardFound ? '' : 'submission-card-3 did not appear after re-fetch',
     );

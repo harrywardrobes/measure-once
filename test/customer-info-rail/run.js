@@ -824,19 +824,30 @@ async function main() {
     const reviewBtn = await page.$('[data-testid="review-btn"]');
 
     let cardBodyOpen = false;
+    let bodyPresent  = false;
     if (reviewBtn) {
       await reviewBtn.click();
 
-      // After clicking, the card body (data-testid="submission-card-body") becomes
-      // visible once the Collapse animation completes. We check for a positive
-      // offsetHeight rather than an internal MUI CSS class so the probe stays
-      // stable across MUI version upgrades.
-      cardBodyOpen = await pollPage(page, () => {
+      // Two-phase check for [data-testid="submission-card-body"]:
+      //   Phase 1 — confirm the element exists in the DOM (3 s timeout).
+      //             A timeout here means the testid was removed from the
+      //             component, not a timing/animation issue.
+      //   Phase 2 — wait for the element to have height > 0 (5 s timeout).
+      //             A timeout here is the usual Collapse animation delay.
+      bodyPresent = await pollPage(page, () => {
         const card = document.querySelector('[data-testid="submission-card-3"]');
         if (!card) return null;
-        const body = card.querySelector('[data-testid="submission-card-body"]');
-        return body && body.getBoundingClientRect().height > 0 ? 'ok' : null;
-      }, 5000).then(() => true).catch(() => false);
+        return card.querySelector('[data-testid="submission-card-body"]') ? 'ok' : null;
+      }, 3000).then(() => true).catch(() => false);
+
+      if (bodyPresent) {
+        cardBodyOpen = await pollPage(page, () => {
+          const card = document.querySelector('[data-testid="submission-card-3"]');
+          if (!card) return null;
+          const body = card.querySelector('[data-testid="submission-card-body"]');
+          return body && body.getBoundingClientRect().height > 0 ? 'ok' : null;
+        }, 5000).then(() => true).catch(() => false);
+      }
     }
 
     record(
@@ -844,9 +855,11 @@ async function main() {
       'submission-card-body visible (height > 0) inside submission-card-3 after click',
       cardBodyOpen
         ? 'card body entered state (correct)'
-        : reviewBtn
-          ? 'review-btn found but card body did not open'
-          : 'review-btn not found',
+        : !reviewBtn
+          ? 'review-btn not found'
+          : !bodyPresent
+            ? '[data-testid="submission-card-body"] not found in DOM — testid may have been removed'
+            : '[data-testid="submission-card-body"] did not become visible within 5 s',
       cardBodyOpen,
     );
 
