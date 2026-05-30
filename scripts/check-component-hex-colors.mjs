@@ -115,7 +115,7 @@ const HEX_RE = /#[0-9a-fA-F]{3,6}(?![0-9a-fA-F])/;
  * "backgroundImage", for example — but all listed tokens are distinct
  * in practice.
  */
-const STYLE_PROP_RE = /\b(?:bgcolor|background|backgroundColor|borderColor|fill|color|stroke|outlineColor|textDecorationColor|caretColor|boxShadow)\b/;
+const STYLE_PROP_RE = /\b(?:bgcolor|background|backgroundColor|borderColor|borderBottomColor|fill|color|stroke|outlineColor|textDecorationColor|caretColor|boxShadow)\b/;
 
 /**
  * Suppression comments that exempt a line from this check.
@@ -136,7 +136,7 @@ const SUPPRESSION_RE = /(?:\/\/|\/\*)\s*(?:hex-color-ok|story-hex-ok)\s*:/;
  * The [^:\n]* between the prop name and ":" allows for optional whitespace or
  * TypeScript type annotations before the colon.
  */
-const MULTILINE_PROP_RE = /\b(?:bgcolor|background|backgroundColor|borderColor|fill|color|stroke|outlineColor|textDecorationColor|caretColor|boxShadow)\b[^:\n]*:\s*\r?\n([^\n]*)/g;
+const MULTILINE_PROP_RE = /\b(?:bgcolor|background|backgroundColor|borderColor|borderBottomColor|fill|color|stroke|outlineColor|textDecorationColor|caretColor|boxShadow)\b[^:\n]*:\s*\r?\n([^\n]*)/g;
 
 const componentFiles = findComponentFiles(SRC_DIR);
 

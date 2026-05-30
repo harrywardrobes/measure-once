@@ -318,7 +318,7 @@ export function DesignVisitRoomsStep({
           <Box
             key={clientId}
             sx={{
-              border: '1.5px solid #e5e7eb',
+              border: '1.5px solid var(--neutral-200)',
               borderRadius: '10px',
               p: '14px',
               mb: '12px',
@@ -556,7 +556,7 @@ export function DesignVisitRoomsStep({
                         height: 64,
                         objectFit: 'cover',
                         borderRadius: '6px',
-                        border: '1px solid #e5e7eb',
+                        border: '1px solid var(--neutral-200)',
                         display: 'block',
                       }}
                     />

@@ -471,16 +471,16 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
                   <TableBody>
                     {data.rooms!.map((room, idx) => (
                       <TableRow key={idx}>
-                        <TableCell sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: '#f3f4f6' }}>
+                        <TableCell sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: 'var(--neutral-100)' }}>
                           {room.roomName}
                         </TableCell>
-                        <TableCell sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: '#f3f4f6' }}>
+                        <TableCell sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: 'var(--neutral-100)' }}>
                           {room.doorStyleName || '—'}
                         </TableCell>
-                        <TableCell sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: '#f3f4f6' }}>
+                        <TableCell sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: 'var(--neutral-100)' }}>
                           {room.unitCount}
                         </TableCell>
-                        <TableCell align="right" sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: '#f3f4f6' }}>
+                        <TableCell align="right" sx={{ py: '10px', px: '10px', fontSize: '0.88rem', borderBottomColor: 'var(--neutral-100)' }}>
                           {fmt(room.totalPence || 0)}
                         </TableCell>
                       </TableRow>
