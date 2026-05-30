@@ -182,8 +182,9 @@ const radiusLines = Object.entries(radius).map(([key, value]) =>
 const statusColorLines = Object.entries(statusColors)
   .map(([key, colors]) => {
     const w = 24;
-    const lines = [col(`status-${key}-bg`, colors.bg, w), col(`status-${key}-text`, colors.text, w)];
-    if (colors.border) lines.push(col(`status-${key}-border`, colors.border, w));
+    const kebabKey = camelToKebab(key);
+    const lines = [col(`status-${kebabKey}-bg`, colors.bg, w), col(`status-${kebabKey}-text`, colors.text, w)];
+    if (colors.border) lines.push(col(`status-${kebabKey}-border`, colors.border, w));
     return lines.join('\n');
   });
 
@@ -283,7 +284,7 @@ ${statusColorLines.join('\n')}
    *  --status-danger-*  semantic error alias; no STATUS_COLORS key named 'danger'
    *  --status-success   standalone accent colour; no plain STATUS_COLORS 'success' colour
    *  --status-warn-*    shorthand alias; STATUS_COLORS uses 'warning' (--status-warning-*)
-   *  NOTE: --status-chunkError-border is intentionally absent here; it is
+   *  NOTE: --status-chunk-error-border is intentionally absent here; it is
    *  fully covered by auto-derivation from STATUS_COLORS.chunkError.border.   */
   --status-danger:        #dc2626;
   --status-danger-text:   #991b1b;

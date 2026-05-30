@@ -65,8 +65,8 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
   top: var(--header-h);
   left: 0; right: 0;
   z-index: var(--z-nav);
-  background: var(--status-warningSoft-bg);
-  border-bottom: 1px solid var(--status-warningActive-bg);
+  background: var(--status-warning-soft-bg);
+  border-bottom: 1px solid var(--status-warning-active-bg);
   color: var(--status-warning-text);
   padding: 7px 12px 7px 14px;
   display: flex;
@@ -329,7 +329,7 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
   white-space: nowrap;
 }
 .toast-error   { background: var(--status-error-bg); color: var(--status-error-text); border: 1px solid #fca5a5; } /* hex-color-ok: red-300 border; no exact token */
-.toast-success { background: var(--status-successDeep-bg); color: var(--status-successDeep-text); border: 1px solid #6ee7b7; } /* hex-color-ok: emerald-300 border; no exact token */
+.toast-success { background: var(--status-success-deep-bg); color: var(--status-success-deep-text); border: 1px solid #6ee7b7; } /* hex-color-ok: emerald-300 border; no exact token */
 @keyframes slideUp {
 
   from { transform: translateX(-50%) translateY(8px); opacity: 0; }
@@ -630,10 +630,10 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   align-items: center;
   gap: 8px;
   padding: 7px 16px;
-  background: var(--status-warningLight-bg);
-  border-top: 2px solid var(--status-warningDeep-bg);
+  background: var(--status-warning-light-bg);
+  border-top: 2px solid var(--status-warning-deep-bg);
   font-size: 0.8rem;
-  color: var(--status-warningDeep-text);
+  color: var(--status-warning-deep-text);
 }
 .room-stale-banner span {
   flex: 1;
@@ -648,7 +648,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   border-radius: 50%;
   border: none;
   background: transparent;
-  color: var(--status-warningDeep-text);
+  color: var(--status-warning-deep-text);
   cursor: pointer;
   opacity: 0.7;
   font-size: 1rem;
@@ -668,10 +668,10 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   align-items: center;
   gap: 8px;
   padding: 7px 16px;
-  background: var(--status-warningLight-bg);
-  border-top: 2px solid var(--status-warningDeep-bg);
+  background: var(--status-warning-light-bg);
+  border-top: 2px solid var(--status-warning-deep-bg);
   font-size: 0.8rem;
-  color: var(--status-warningDeep-text);
+  color: var(--status-warning-deep-text);
 }
 .ls-stale-hint span {
   flex: 1;
@@ -684,10 +684,10 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   align-items: center;
   gap: 8px;
   padding: 5px 10px;
-  background: var(--status-warningLight-bg);
-  border-left: 3px solid var(--status-warningDeep-bg);
+  background: var(--status-warning-light-bg);
+  border-left: 3px solid var(--status-warning-deep-bg);
   font-size: 0.78rem;
-  color: var(--status-warningDeep-text);
+  color: var(--status-warning-deep-text);
   flex-shrink: 0;
 }
 .ls-counts-error-notice span {
@@ -1320,7 +1320,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   display: flex; align-items: center; gap: 8px;
   padding: 5px 0; border-top: 1px dashed var(--border);
 }
-.admin-page .adm-ca-sub-row--new { background: var(--status-warningLight-bg); }
+.admin-page .adm-ca-sub-row--new { background: var(--status-warning-light-bg); }
 .admin-page .adm-ca-sub-arrows {
   flex: 0 0 auto; display: flex; flex-direction: column; line-height: 1;
 }
@@ -1409,8 +1409,8 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .admin-page .adm-info-blue {
   margin-top: 8px; padding: 7px 10px; border-radius: 6px;
-  background: var(--status-infoLight-bg); border: 1px solid #bfdbfe; /* hex-color-ok: blue-200 border; no exact token */
-  font-size: .75rem; color: var(--status-infoLight-text); line-height: 1.5;
+  background: var(--status-info-light-bg); border: 1px solid #bfdbfe; /* hex-color-ok: blue-200 border; no exact token */
+  font-size: .75rem; color: var(--status-info-light-text); line-height: 1.5;
 }
 .admin-page .adm-checkbox-row {
   display: flex; align-items: center; gap: 6px;
@@ -1419,13 +1419,13 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .admin-page .adm-conflict-box {
   margin-top: 12px; padding: 10px 12px;
   border: 1px solid var(--status-warning-border); border-radius: 8px;
-  background: var(--status-warningLight-bg);
+  background: var(--status-warning-light-bg);
 }
 .admin-page .adm-conflict-box-head {
   font-size: .8rem; font-weight: 600; color: var(--status-warning-text); margin-bottom: 6px;
 }
 .admin-page .adm-conflict-box-list {
-  font-size: .78rem; color: var(--status-warningDeep-text); margin-bottom: 10px; line-height: 1.6;
+  font-size: .78rem; color: var(--status-warning-deep-text); margin-bottom: 10px; line-height: 1.6;
 }
 .admin-page .adm-conflict-box-actions { display: flex; gap: 8px; }
 .admin-page .adm-btn-conflict { font-size: .78rem; padding: 4px 12px; }
@@ -1527,7 +1527,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 /* Card-action handlers — conflicts banner */
 .admin-page .adm-cab-wrap {
   border: 1px solid var(--status-warning-border); border-radius: 10px;
-  background: var(--status-warningLight-bg); padding: 12px 14px;
+  background: var(--status-warning-light-bg); padding: 12px 14px;
 }
 .admin-page .adm-cab-head { display: flex; align-items: flex-start; gap: 10px; }
 .admin-page .adm-cab-icon { font-size: 1.1rem; line-height: 1.2; }
@@ -1546,11 +1546,11 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .admin-page .adm-cab-list { list-style: none; margin: 8px 0 0; padding: 0; }
 .admin-page .adm-cab-item {
   display: flex; align-items: center; gap: 10px;
-  padding: 6px 0; border-top: 1px solid var(--status-warningActive-bg);
+  padding: 6px 0; border-top: 1px solid var(--status-warning-active-bg);
 }
 .admin-page .adm-cab-item:first-child { border-top: 0; }
 .admin-page .adm-cab-item-body {
-  flex: 1; min-width: 0; font-size: .8rem; color: var(--status-warningDeep-text); line-height: 1.45;
+  flex: 1; min-width: 0; font-size: .8rem; color: var(--status-warning-deep-text); line-height: 1.45;
 }
 .admin-page .adm-cab-fix-btn {
   flex: 0 0 auto; font-size: .78rem; padding: 4px 12px;
