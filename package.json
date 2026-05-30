@@ -121,6 +121,7 @@
     "test:hubspot-429-retry-contacts": "node test/hubspot-429-retry-contacts/run.js",
     "test:hubspot-429-retry-contacts:ci": "node scripts/with-test-db.js test/hubspot-429-retry-contacts/run.js",
     "test:icon-lint": "node test/icon-lint/run.js",
+    "test:suite-probe-counts-advisory": "node test/suite-probe-counts/run.js",
     "test:design-visit-hubspot-retry": "node test/design-visit-hubspot-retry/run.js",
     "test:design-visit-hubspot-retry:ci": "node scripts/with-test-db.js test/design-visit-hubspot-retry/run.js",
     "gc:design-visit-photos": "node scripts/gc-design-visit-photos.mjs",
