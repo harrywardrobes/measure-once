@@ -962,14 +962,31 @@ async function main() {
     // Click the Review button to expand submission-card-5.
     const reviewBtnG45 = await pageG45.$('[data-testid="review-btn"]');
 
-    let g45BodyOpen = false;
+    // Two-phase check for [data-testid="submission-card-body"] inside submission-card-5:
+    //   Phase 1 — confirm the element exists in the DOM (3 s timeout).
+    //             A timeout here means the testid was removed from the
+    //             component, not a timing/animation issue.
+    //   Phase 2 — wait for the element to have height > 0 (10 s timeout).
+    //             A timeout here is the usual animation/render delay.
+    let g45BodyPresent = null;
+    let g45BodyOpen = null;
     if (reviewBtnG45) {
       await reviewBtnG45.click();
-      g45BodyOpen = await pollPage(pageG45, () => {
+      g45BodyPresent = await pollPage(pageG45, () => {
         const card = document.querySelector('[data-testid="submission-card-5"]');
         if (!card) return null;
-        return card.querySelector('[class*="MuiCollapse-entered"]') ? 'ok' : null;
-      }, 5000).then(() => true).catch(() => false);
+        return card.querySelector('[data-testid="submission-card-body"]') ? 'found' : null;
+      }, 3000).catch(() => null);
+
+      if (g45BodyPresent) {
+        g45BodyOpen = await pollPage(pageG45, () => {
+          const card = document.querySelector('[data-testid="submission-card-5"]');
+          if (!card) return null;
+          const body = card.querySelector('[data-testid="submission-card-body"]');
+          if (!body) return null;
+          return body.getBoundingClientRect().height > 0 ? 'ok' : null;
+        }, 10000).catch(() => null);
+      }
     }
 
     let correctedEmailVisible = false;
@@ -1014,9 +1031,11 @@ async function main() {
         ? 'corrected email found with non-zero height (correct)'
         : g45BodyOpen
           ? 'card body open but corrected_email text not found or zero height'
-          : reviewBtnG45
-            ? 'review-btn found but card body did not open'
-            : 'review-btn not found',
+          : g45BodyPresent
+            ? '[data-testid="submission-card-body"] did not become visible within 10 s'
+            : !reviewBtnG45
+              ? 'review-btn not found'
+              : '[data-testid="submission-card-body"] not found in DOM — testid may have been removed',
       correctedEmailVisible,
     );
     record(
@@ -1026,9 +1045,11 @@ async function main() {
         ? 'corrected mobile found with non-zero height (correct)'
         : g45BodyOpen
           ? 'card body open but corrected_mobile text not found or zero height'
-          : reviewBtnG45
-            ? 'review-btn found but card body did not open'
-            : 'review-btn not found',
+          : g45BodyPresent
+            ? '[data-testid="submission-card-body"] did not become visible within 10 s'
+            : !reviewBtnG45
+              ? 'review-btn not found'
+              : '[data-testid="submission-card-body"] not found in DOM — testid may have been removed',
       correctedMobileVisible,
     );
 
