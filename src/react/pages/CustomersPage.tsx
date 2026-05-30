@@ -355,6 +355,13 @@ window.loadLeadSubstatuses = loadLeadSubstatuses;
 function useLeadStatusSync(onChange: () => void, stageRef: React.MutableRefObject<string>) {
   React.useEffect(() => {
     const refresh = () => {
+      // Skip BC/visibilitychange-triggered refreshes until the initial mount
+      // effect has completed its first fetch.  If store.loaded is still false,
+      // the dropdown has not yet received its initial data and calling
+      // populateLeadStatusFilter() would render an empty select.  The mount
+      // effect's own Promise.all will call onChange() when it finishes, so
+      // nothing is lost by deferring here.
+      if (!store.loaded) return;
       const stage = stageRef.current || undefined;
       // After all three loads settle, notify React to re-render the select
       // from the updated store state.  populateLeadStatusFilter() now delegates
