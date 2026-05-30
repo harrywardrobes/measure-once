@@ -295,6 +295,11 @@ async function main() {
     '[CC-B] Clicking Copy & close closes the modal',
   ];
 
+  // CC-A2 is documented in TEST_SUITES.md as a finer-grained alias for the
+  // second CC-A probe above ("button is enabled").  Both share the [CC-A]
+  // label in the implementation, so CC-A2 has no dedicated PROBE_LABELS entry.
+  const PROBE_LABELS_DOC_EXTRAS = ['CC-A2'];
+
   if (!puppeteer) {
     for (const l of PROBE_LABELS) record(l, false, 'puppeteer not installed — skipped');
     await writeReport(runId);

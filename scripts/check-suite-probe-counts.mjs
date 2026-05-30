@@ -8,11 +8,14 @@
  *   1. Locates the suite's test file via the package.json script definition.
  *   2. Finds the PROBE_LABELS array in that file.
  *   3. Extracts the set of probe IDs present in the implementation.
- *   4. Compares them against the probe IDs documented in TEST_SUITES.md.
+ *   4. Compares them against the probe IDs documented in TEST_SUITES.md
+ *      in BOTH directions:
+ *        a. Forward: probes in the test file missing from docs (impl ahead of docs).
+ *        b. Reverse: probes documented in TEST_SUITES.md missing from the test
+ *           file (docs ahead of impl — stale documentation).
  *
- * Fails CI with a clear message for every suite whose run.js contains a probe
- * label not yet mentioned in the docs — i.e. the documentation is lagging
- * behind the implementation.
+ * Fails CI with a clear message for every suite with a mismatch in either
+ * direction.
  *
  * Secondary scan (non-failing): detects suites whose docs row contains probe
  * callouts but whose test file does not declare a PROBE_LABELS array.  These
@@ -23,6 +26,13 @@
  * Suites are fully skipped when:
  *   - The docs row has no bold **(X)** probe callouts, OR
  *   - The test file cannot be located from package.json scripts.
+ *
+ * Per-suite suppression for the reverse check:
+ *   A test file may declare a PROBE_LABELS_DOC_EXTRAS constant — an array of
+ *   plain probe-ID strings (e.g. ['CC-A2']) — listing IDs that appear in docs
+ *   but intentionally have no dedicated entry in PROBE_LABELS (typically because
+ *   two distinct doc IDs map to a single implementation probe label).  These IDs
+ *   are excluded from the reverse-check failures.
  *
  * Run via:  npm run test:suite-probe-counts
  */
@@ -130,6 +140,22 @@ function extractRunJsProbeIds(src) {
   return ids.size > 0 ? ids : null;
 }
 
+/**
+ * Extract the set of probe IDs listed in PROBE_LABELS_DOC_EXTRAS.
+ * These are IDs that exist in docs but intentionally have no dedicated entry
+ * in PROBE_LABELS (e.g. 'CC-A2' when two doc IDs map to a single impl label).
+ * Returns an empty Set when the constant is absent.
+ */
+function extractDocExtrasProbeIds(src) {
+  const arrayMatch = src.match(/PROBE_LABELS_DOC_EXTRAS\s*=\s*\[([^\]]*)\]/s);
+  if (!arrayMatch) return new Set();
+  const ids = new Set();
+  for (const m of arrayMatch[1].matchAll(/['"`]([^'"`]+)['"`]/g)) {
+    ids.add(m[1].trim());
+  }
+  return ids;
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -148,11 +174,12 @@ for (const line of docsSrc.split('\n')) {
   if (m) suiteRows.set(m[1], m[2]);
 }
 
-const failures    = [];
-const noArrayWarn = [];  // suites with doc probes but no PROBE_LABELS, not in allowlist
-let   checked     = 0;
-let   skipped     = 0;
-let   allowlisted = 0;
+const forwardFailures = [];
+const reverseFailures = [];
+const noArrayWarn     = [];  // suites with doc probes but no PROBE_LABELS, not in allowlist
+let   checked         = 0;
+let   skipped         = 0;
+let   allowlisted     = 0;
 
 for (const [suiteName, rowText] of suiteRows) {
   const docIds = extractDocProbeIds(rowText);
@@ -189,16 +216,32 @@ for (const [suiteName, rowText] of suiteRows) {
     continue;
   }
 
+  // Forward check: probes in the test file not yet mentioned in docs.
   const undoc = [...runIds].filter((id) => !docIds.has(id)).sort();
   if (undoc.length > 0) {
-    failures.push({
-      suite: suiteName,
-      file:  filePath.replace(ROOT + '/', ''),
+    forwardFailures.push({
+      suite:  suiteName,
+      file:   filePath.replace(ROOT + '/', ''),
       undoc,
       docIds: [...docIds].sort(),
       runIds: [...runIds].sort(),
     });
   }
+
+  // Reverse check: probes documented in docs not found in the test file.
+  // PROBE_LABELS_DOC_EXTRAS in the test file suppresses known doc-only aliases.
+  const docExtras = extractDocExtrasProbeIds(src);
+  const stale = [...docIds].filter((id) => !runIds.has(id) && !docExtras.has(id)).sort();
+  if (stale.length > 0) {
+    reverseFailures.push({
+      suite:  suiteName,
+      file:   filePath.replace(ROOT + '/', ''),
+      stale,
+      docIds: [...docIds].sort(),
+      runIds: [...runIds].sort(),
+    });
+  }
+
   checked++;
 }
 
@@ -227,35 +270,62 @@ if (noArrayWarn.length > 0) {
 }
 
 // ---------------------------------------------------------------------------
-// Report failures (exit 1) for undocumented probes found in PROBE_LABELS
+// Report failures (exit 1) for probe mismatches in either direction
 // ---------------------------------------------------------------------------
 
-if (failures.length === 0) {
+const totalFailures = forwardFailures.length + reverseFailures.length;
+
+if (totalFailures === 0) {
   const parts = [`all ${checked} suites with documented probes are up-to-date`];
-  if (skipped > 0)     parts.push(`${skipped} skipped (no probe callouts in docs or file not found)`);
-  if (allowlisted > 0) parts.push(`${allowlisted} allowlisted (no PROBE_LABELS array — see NO_PROBE_LABELS_ALLOWLIST)`);
+  if (skipped > 0)          parts.push(`${skipped} skipped (no probe callouts in docs or file not found)`);
+  if (allowlisted > 0)      parts.push(`${allowlisted} allowlisted (no PROBE_LABELS array — see NO_PROBE_LABELS_ALLOWLIST)`);
   if (noArrayWarn.length > 0) parts.push(`${noArrayWarn.length} warned (no PROBE_LABELS array — not in allowlist)`);
   console.log(`✅  suite-probe-counts: ${parts.join('; ')}`);
   process.exit(0);
 }
 
-console.error(
-  `❌  suite-probe-counts: ${failures.length} suite` +
-  `${failures.length === 1 ? '' : 's'} ` +
-  `${failures.length === 1 ? 'has a probe' : 'have probes'} in the test` +
-  ` file not mentioned in docs/TEST_SUITES.md:\n`,
-);
+if (forwardFailures.length > 0) {
+  console.error(
+    `❌  suite-probe-counts: ${forwardFailures.length} suite` +
+    `${forwardFailures.length === 1 ? '' : 's'} ` +
+    `${forwardFailures.length === 1 ? 'has a probe' : 'have probes'} in the test` +
+    ` file not mentioned in docs/TEST_SUITES.md:\n`,
+  );
 
-for (const { suite, file, undoc, docIds, runIds } of failures) {
-  console.error(`  ${suite}  (${file})`);
-  console.error(`    Documented probes : ${docIds.join(', ')}`);
-  console.error(`    Probes in test    : ${runIds.join(', ')}`);
-  console.error(`    Missing from docs : ${undoc.join(', ')}\n`);
+  for (const { suite, file, undoc, docIds, runIds } of forwardFailures) {
+    console.error(`  ${suite}  (${file})`);
+    console.error(`    Documented probes : ${docIds.join(', ')}`);
+    console.error(`    Probes in test    : ${runIds.join(', ')}`);
+    console.error(`    Missing from docs : ${undoc.join(', ')}\n`);
+  }
+
+  console.error(
+    'Update the matching rows in docs/TEST_SUITES.md to include every probe\n' +
+    "label present in the suite's test file.\n",
+  );
 }
 
-console.error(
-  'Update the matching rows in docs/TEST_SUITES.md to include every probe\n' +
-  "label present in the suite's test file.\n",
-);
+if (reverseFailures.length > 0) {
+  console.error(
+    `❌  suite-probe-counts: ${reverseFailures.length} suite` +
+    `${reverseFailures.length === 1 ? '' : 's'} ` +
+    `${reverseFailures.length === 1 ? 'has a probe' : 'have probes'} documented in` +
+    ` docs/TEST_SUITES.md that no longer exist in the test file:\n`,
+  );
+
+  for (const { suite, file, stale, docIds, runIds } of reverseFailures) {
+    console.error(`  ${suite}  (${file})`);
+    console.error(`    Documented probes : ${docIds.join(', ')}`);
+    console.error(`    Probes in test    : ${runIds.join(', ')}`);
+    console.error(`    Stale in docs     : ${stale.join(', ')}\n`);
+  }
+
+  console.error(
+    'Either remove the stale probe IDs from the matching rows in\n' +
+    "docs/TEST_SUITES.md, or add them back to the suite's PROBE_LABELS array.\n" +
+    'If a doc ID is intentionally a finer-grained alias for an existing label,\n' +
+    "add it to a PROBE_LABELS_DOC_EXTRAS = ['<id>'] constant in the test file.\n",
+  );
+}
 
 process.exit(1);
