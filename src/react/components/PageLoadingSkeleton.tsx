@@ -723,7 +723,7 @@ export function LoginPageSkeleton({ forceVisible }: { forceVisible?: boolean } =
   if (!visible) return null;
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3, bgcolor: BRAND_COLORS.pageBackground }}>
+    <Box sx={{ minHeight: forceVisible ? 'unset' : '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3, bgcolor: BRAND_COLORS.pageBackground }}>
       <Box
         sx={{
           width: '100%',
@@ -812,7 +812,14 @@ export function ProjectsPageSkeleton({ forceVisible }: { forceVisible?: boolean 
 
   return (
     <Box
-      sx={{
+      sx={forceVisible ? {
+        position: 'relative',
+        height: 320,
+        display: 'flex',
+        flexDirection: 'column',
+        background: BRAND_COLORS.paper,
+        overflow: 'hidden',
+      } : {
         position: 'fixed',
         top: 'var(--header-h, 56px)',
         bottom: 'var(--nav-h, 56px)',
