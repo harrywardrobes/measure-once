@@ -243,6 +243,7 @@
     "test:css-hex-colors": "node scripts/check-css-hex-colors.mjs",
     "test:var-hex-fallbacks": "node scripts/check-var-hex-fallbacks.mjs",
     "test:privilege-reads": "node scripts/check-privilege-reads.mjs",
+    "test:retired-tokens": "node scripts/check-retired-tokens.mjs",
     "test:workflow-js-no-dups": "node scripts/check-workflow-js-duplicates.mjs",
     "test:no-config-handler-types": "node scripts/check-no-config-handler-types.mjs",
     "test:status-key-fields": "node scripts/check-status-key-fields.mjs",

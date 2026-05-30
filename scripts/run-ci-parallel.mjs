@@ -57,6 +57,7 @@ const STATIC_SUITES = [
   'test:typo-vars',
   'test:color-radius-vars',
   'test:privilege-reads',
+  'test:retired-tokens',
   'test:mount-ids',
   'test:public-island-bootstrap',
   'test:bottom-nav-lint',
