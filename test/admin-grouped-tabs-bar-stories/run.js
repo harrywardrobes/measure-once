@@ -45,6 +45,13 @@ const RENDER_TIMEOUT_MS = 10_000;
 const STORY_TITLE       = 'Admin/AdminGroupedTabsBar';
 const EXPECTED_COUNT    = 5;
 
+const PROBE_LABELS = [
+  '(A) Uncaught JS exception in the page (Puppeteer pageerror event)',
+  '(B) Storybook error-boundary overlay visible in the DOM',
+  '(C) #storybook-root is empty after render timeout (story did not render)',
+  '(D) React error-boundary console rethrow ("The above error …")',
+];
+
 mkdirSync(RESULTS_DIR, { recursive: true });
 
 // ── MIME map ──────────────────────────────────────────────────────────────────
