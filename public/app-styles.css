@@ -889,7 +889,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 /* Shared tab bar built by renderTabBar helper */
 .ui-tabbar {
   display: flex; gap: 4px; border-bottom: 2px solid var(--stone);
-  overflow-x: auto; overflow-y: hidden;
+  overflow-x: auto; overflow-y: clip; overflow-clip-margin: 2px;
 }
 .ui-tabbar-btn {
   background: none; border: none;
