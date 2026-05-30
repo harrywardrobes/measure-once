@@ -57,7 +57,7 @@
  * Wired into CI via: npm run test:mount-ids
  */
 
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync, readdirSync, existsSync } from 'fs';
 import { resolve, join, relative } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -418,6 +418,8 @@ function extractBootstrapCanonicalFiles(src) {
 /** @type {string[]} BOOTSTRAP_ONLY_IDS entries that are missing the annotation */
 const pass4MissingAnnotations = [];
 /** @type {Array<{id: string, canonicalFile: string}>} */
+const pass4FilesNotFound = [];
+/** @type {Array<{id: string, canonicalFile: string}>} */
 const pass4Failures = [];
 let pass4ParseError = false;
 
@@ -445,14 +447,12 @@ if (!pass3ParseError && bootstrapOnlyIds) {
     // Pass 4b: every annotated entry must be present in its declared file.
     for (const [id, relCanonical] of canonicalMap) {
       const canonicalAbs = join(ROOT, relCanonical);
-      let fileSrc;
-      try {
-        fileSrc = readFileSync(canonicalAbs, 'utf8');
-      } catch {
-        // File doesn't exist — report as a failure rather than silently skipping.
-        pass4Failures.push({ id, canonicalFile: relCanonical });
+      if (!existsSync(canonicalAbs)) {
+        // Annotation filename is a typo — file does not exist on disk.
+        pass4FilesNotFound.push({ id, canonicalFile: relCanonical });
         continue;
       }
+      const fileSrc = readFileSync(canonicalAbs, 'utf8');
       const idPresent =
         fileSrc.includes(`id="${id}"`) || fileSrc.includes(`id='${id}'`);
       if (!idPresent) {
@@ -462,7 +462,12 @@ if (!pass3ParseError && bootstrapOnlyIds) {
   }
 }
 
-if (!pass4ParseError && pass4MissingAnnotations.length === 0 && pass4Failures.length === 0) {
+if (
+  !pass4ParseError &&
+  pass4MissingAnnotations.length === 0 &&
+  pass4FilesNotFound.length === 0 &&
+  pass4Failures.length === 0
+) {
   console.log(
     '[check-mount-id-conflicts] Pass 4 OK — every BOOTSTRAP_ONLY_IDS entry ' +
     'has a canonical-file annotation and is present in that file.',
@@ -482,6 +487,24 @@ if (!pass4ParseError && pass4MissingAnnotations.length === 0 && pass4Failures.le
       '(Pass 4b) is silently skipped for that entry.\n\n' +
       'Fix: add a `// public/<filename>.html — <description>` comment to the\n' +
       'right of the id string in src/react/lib/publicIslands.ts, e.g.:\n' +
+      '  \'not-found-root\',  // public/404.html — 404 page, rendered after auth\n',
+    );
+  }
+
+  if (pass4FilesNotFound.length > 0) {
+    process.stderr.write('\n[check-mount-id-conflicts] Pass 4b ANNOTATION FILE NOT FOUND:\n\n');
+    for (const { id, canonicalFile } of pass4FilesNotFound) {
+      process.stderr.write(
+        `  id="${id}" — annotated file not found: ${canonicalFile}\n`,
+      );
+    }
+    process.stderr.write(
+      '\nThe `// public/…html` annotation on each BOOTSTRAP_ONLY_IDS entry must\n' +
+      'name a file that actually exists under public/.  The filename above does\n' +
+      'not exist on disk — it is likely a typo in the annotation comment.\n\n' +
+      'Fix: correct the `// public/<filename>.html` comment on the relevant\n' +
+      'BOOTSTRAP_ONLY_IDS line in src/react/lib/publicIslands.ts to match the\n' +
+      'real filename, e.g.:\n' +
       '  \'not-found-root\',  // public/404.html — 404 page, rendered after auth\n',
     );
   }
@@ -516,6 +539,7 @@ if (
   bootstrapIdsMissingFromHtml.length > 0 ||
   pass4ParseError ||
   pass4MissingAnnotations.length > 0 ||
+  pass4FilesNotFound.length > 0 ||
   pass4Failures.length > 0
 ) {
   process.exit(1);
