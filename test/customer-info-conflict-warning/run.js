@@ -133,18 +133,21 @@ function writeReport(runId) {
     '- **(B2) Copy anyway dismisses Alert**: Clicking data-testid="conflict-proceed-btn"',
     '  executes the copy and hides the Alert.',
     '- **(B3) Cancel dismisses without action**: Clicking data-testid="conflict-cancel-btn"',
-    '  hides the Alert without writing a new entry to the clipboard.',
+    '  hides the Alert without writing a new entry to the clipboard. Alert text is verified',
+    '  to contain "A newer link has already been sent for this contact" before clicking Cancel.',
     '',
     '### Open-link path',
     '- **(A-open) No conflict when link matches**: When link-status returns the same',
     '  expiresAt, clicking "Open link" opens a provisional blank window and navigates',
     '  it to form_link — no conflict Alert appears.',
     '- **(B-open) Conflict Alert appears**: When link-status returns a DIFFERENT expiresAt',
-    '  the provisional blank window is closed and the conflict Alert becomes visible.',
+    '  the provisional blank window is closed and the conflict Alert becomes visible. Alert text',
+    '  is verified to contain "A newer link has already been sent for this contact".',
     '- **(B2-open) Open anyway dismisses Alert**: Clicking data-testid="conflict-proceed-btn"',
     '  hides the Alert and calls window.open with the form_link URL.',
     '- **(B3-open) Cancel dismisses without action**: Clicking data-testid="conflict-cancel-btn"',
-    '  hides the Alert without making any additional window.open call.',
+    '  hides the Alert without making any additional window.open call. Alert text is verified',
+    '  to contain "A newer link has already been sent for this contact" before clicking Cancel.',
     '',
     '### Open-link path — popup-blocked fallback',
     '- **(A-open-blocked) No conflict Alert when popup is blocked**: When window.open returns null',
@@ -568,6 +571,8 @@ async function main() {
     '(A-open-blocked) fallback window.open called with form_link URL',
     '(B) conflict Alert text correct',
     '(B-open) conflict Alert text correct',
+    '(B3) conflict Alert text correct',
+    '(B3-open) conflict Alert text correct',
   ];
 
   if (!puppeteer) {
@@ -732,6 +737,30 @@ async function main() {
     }, 8000);
 
     if (conflictForCancel) {
+      // ── Probe B3-text: conflict Alert contains expected message ───────────
+      const alertTextB3 = await pageB3.evaluate(() => {
+        const el = document.querySelector('[data-testid="conflict-proceed-btn"]');
+        if (!el) return '';
+        // Walk up to the MUI Alert root (role="alert" or the nearest ancestor
+        // that contains the warning text).
+        let node = el.parentElement;
+        while (node && node.getAttribute('role') !== 'alert') {
+          node = node.parentElement;
+        }
+        return node ? node.textContent || '' : '';
+      });
+
+      const expectedFragmentB3 = 'A newer link has already been sent for this contact';
+      const alertTextB3Ok = alertTextB3.includes(expectedFragmentB3);
+      record(
+        PROBE_LABELS[14],
+        'conflict Alert contains expected message text',
+        alertTextB3Ok
+          ? `Alert text correct (found "${expectedFragmentB3}")`
+          : `Alert text wrong — got: "${alertTextB3.slice(0, 120)}"`,
+        alertTextB3Ok,
+      );
+
       const clipBeforeCancel = await pageB3.evaluate(() =>
         (window.__clipboardWrites || []).length,
       );
@@ -759,6 +788,12 @@ async function main() {
     } else {
       record(
         PROBE_LABELS[4],
+        'conflict Alert must appear first',
+        'skipped — conflict Alert did not appear for probe B3',
+        false,
+      );
+      record(
+        PROBE_LABELS[14],
         'conflict Alert must appear first',
         'skipped — conflict Alert did not appear for probe B3',
         false,
@@ -935,6 +970,30 @@ async function main() {
     }, 8000);
 
     if (conflictForCancelOpen) {
+      // ── Probe B3-open-text: conflict Alert contains expected message ───────
+      const alertTextB3Open = await pageB3Open.evaluate(() => {
+        const el = document.querySelector('[data-testid="conflict-proceed-btn"]');
+        if (!el) return '';
+        // Walk up to the MUI Alert root (role="alert" or the nearest ancestor
+        // that contains the warning text).
+        let node = el.parentElement;
+        while (node && node.getAttribute('role') !== 'alert') {
+          node = node.parentElement;
+        }
+        return node ? node.textContent || '' : '';
+      });
+
+      const expectedFragmentB3Open = 'A newer link has already been sent for this contact';
+      const alertTextB3OpenOk = alertTextB3Open.includes(expectedFragmentB3Open);
+      record(
+        PROBE_LABELS[15],
+        'conflict Alert contains expected message text',
+        alertTextB3OpenOk
+          ? `Alert text correct (found "${expectedFragmentB3Open}")`
+          : `Alert text wrong — got: "${alertTextB3Open.slice(0, 120)}"`,
+        alertTextB3OpenOk,
+      );
+
       const openCallsBeforeCancel = await pageB3Open.evaluate(() =>
         (window.__windowOpenCalls || []).length,
       );
@@ -962,6 +1021,12 @@ async function main() {
     } else {
       record(
         PROBE_LABELS[9],
+        'conflict Alert must appear first',
+        'skipped — conflict Alert did not appear for probe B3-open',
+        false,
+      );
+      record(
+        PROBE_LABELS[15],
         'conflict Alert must appear first',
         'skipped — conflict Alert did not appear for probe B3-open',
         false,
