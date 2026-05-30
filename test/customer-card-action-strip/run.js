@@ -27,6 +27,10 @@
 //       the button with data-testid="cah-proceed-anyway" reads "Generate
 //       anyway", not "Send anyway". Regression guard for accidental label
 //       revert on the proceed button.
+//   (G) UploadPhotosModal confirming phase: when the link-status endpoint
+//       returns { hasActiveLink: true }, the modal reaches the confirming
+//       phase, the warning body contains "already has an active link", and
+//       data-testid="cah-proceed-anyway" reads "Generate anyway".
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-card-action-strip
@@ -77,7 +81,7 @@ const CONTACT_E_ID    = 'privtest-ccas-contact-e';
 const CONTACT_E_EMAIL = 'echo@privtest.invalid';
 const INV_E_ID        = 'inv-privtest-e';
 
-// Contact with an upload_photos_and_info handler (probe F).
+// Contact with an upload_photos_and_info handler (probe F + G).
 const CONTACT_F_ID     = 'privtest-ccas-contact-f';
 const CONTACT_F_STATUS = 'privtest_ccas_upload';
 
@@ -133,7 +137,9 @@ async function pollPage(page, fn, arg, timeoutMs = 12000, intervalMs = 150) {
  *   qbConnected      – boolean; when true, stubs QB status as connected + returns qbInvoices
  *   qbInvoices       – array of invoice summary objects returned by /api/quickbooks/invoices
  *   qbInvoiceDetails – map of id → detail object for /api/quickbooks/invoice/:id stubs
- *   linkStatusError  – when true, stub the link-status endpoint to return 500
+ *   linkStatusError     – when true, stub the link-status endpoint to return 500
+ *   linkStatusHasActive – when true, stub the link-status endpoint to return
+ *                         { hasActiveLink: true } (200); used by probe G
  */
 function buildFetchInterceptScript(opts) {
   const {
@@ -144,6 +150,7 @@ function buildFetchInterceptScript(opts) {
     qbInvoices = [],
     qbInvoiceDetails = {},
     linkStatusError = false,
+    linkStatusHasActive = false,
   } = opts;
 
   // Build a minimal stub for every endpoint the page fetches on load.
@@ -162,9 +169,10 @@ function buildFetchInterceptScript(opts) {
     '/api/quickbooks/invoices':       JSON.stringify({ invoices: qbInvoices }),
   };
 
-  const inProgressJson       = JSON.stringify(inProgress || []);
-  const qbInvoiceDetailsJson = JSON.stringify(qbInvoiceDetails);
-  const linkStatusErrorFlag  = linkStatusError ? 'true' : 'false';
+  const inProgressJson         = JSON.stringify(inProgress || []);
+  const qbInvoiceDetailsJson   = JSON.stringify(qbInvoiceDetails);
+  const linkStatusErrorFlag    = linkStatusError    ? 'true' : 'false';
+  const linkStatusHasActiveFlag = linkStatusHasActive ? 'true' : 'false';
 
   return `
 (function() {
@@ -172,6 +180,7 @@ function buildFetchInterceptScript(opts) {
   var IN_PROGRESS = ${inProgressJson};
   var QB_INV_DETAILS = ${qbInvoiceDetailsJson};
   var LINK_STATUS_ERROR = ${linkStatusErrorFlag};
+  var LINK_STATUS_HAS_ACTIVE = ${linkStatusHasActiveFlag};
 
   var originalFetch = window.fetch;
 
@@ -220,6 +229,14 @@ function buildFetchInterceptScript(opts) {
       window.__ccasIntercepted.push('link-status-error:' + pathname);
       return Promise.resolve(new Response(JSON.stringify({ error: 'Stub: link-status unavailable' }), {
         status: 500, headers: { 'Content-Type': 'application/json' },
+      }));
+    }
+
+    // link-status — return { hasActiveLink: true } when LINK_STATUS_HAS_ACTIVE is true.
+    if (LINK_STATUS_HAS_ACTIVE && pathname.match(/^\\/api\\/customer-info\\/by-contact\\/.+\\/link-status$/)) {
+      window.__ccasIntercepted.push('link-status-has-active:' + pathname);
+      return Promise.resolve(new Response(JSON.stringify({ hasActiveLink: true }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
       }));
     }
 
@@ -399,6 +416,8 @@ async function main() {
     '(E) QB invoice badge click opens InvoiceDetailDrawer',
     '(F) UploadPhotosModal check-error: proceed button reads "Generate anyway"',
     '(F) UploadPhotosModal check-error: proceed button does NOT read "Send anyway"',
+    '(G) UploadPhotosModal confirming: warning body contains "already has an active link"',
+    '(G) UploadPhotosModal confirming: confirm button reads "Generate new link"',
   ];
 
   if (!puppeteer) {
@@ -882,6 +901,99 @@ async function main() {
     );
 
     await pageF.__ctx.close().catch(() => {});
+
+    // ── Probe G: UploadPhotosModal confirming phase copy + button label ──────
+    console.log('\n  [G] UploadPhotosModal confirming-phase warning + "Generate new link" button');
+
+    const handlerForG = {
+      id: 1006,
+      type: 'upload_photos_and_info',
+      config: { action_name: 'upload_photos' },
+      bindings: [{ stage_key: 'sales', status_key: CONTACT_F_STATUS }],
+    };
+
+    const contactG = {
+      id: CONTACT_F_ID,
+      properties: {
+        firstname: 'Foxtrot',
+        lastname: 'PrivTest',
+        email: 'foxtrot@privtest.invalid',
+        hs_lead_status: CONTACT_F_STATUS,
+      },
+    };
+
+    const pageG = await openCustomers(browser, memberClient.cookie, {
+      contacts:            [contactG],
+      handlers:            [handlerForG],
+      inProgress:          [],
+      linkStatusHasActive: true,
+    });
+
+    // Wait for the action strip to appear.
+    const gStripVisible = await pollPage(pageG, () => {
+      const strip = document.querySelector('#customers-results [role="button"]');
+      return strip ? 'ok' : null;
+    }, null, 12000).catch(() => null);
+
+    if (!gStripVisible) {
+      const intercepted = await pageG.evaluate(() => window.__ccasIntercepted || []);
+      console.log(`  [G] debug: strip not visible. intercepted=${JSON.stringify(intercepted)}`);
+    }
+
+    // Click the action strip to open the UploadPhotosModal.
+    await pageG.evaluate(() => {
+      const strip = document.querySelector('#customers-results [role="button"]');
+      if (strip) strip.click();
+    });
+
+    // Wait for the confirming phase, indicated by data-testid="cah-confirm-generate"
+    // being present (the warning CTA in the confirming phase).
+    const gConfirmVisible = await pollPage(pageG, () => {
+      const btn = document.querySelector('[data-testid="cah-confirm-generate"]');
+      return btn ? 'ok' : null;
+    }, null, 12000).catch(() => null);
+
+    const gState = await pageG.evaluate(() => {
+      const btn = document.querySelector('[data-testid="cah-confirm-generate"]');
+      // Grab the full text content of the modal body to check the warning copy.
+      const modalBody = document.querySelector('[role="dialog"]');
+      const bodyText  = modalBody ? (modalBody.textContent || '') : '';
+      return {
+        buttonFound:          !!btn,
+        buttonText:           btn ? (btn.textContent || '').trim() : null,
+        warningHasActiveLink: bodyText.includes('already has an active link'),
+        intercepted:          window.__ccasIntercepted || [],
+      };
+    });
+
+    if (!gState.buttonFound || !gConfirmVisible) {
+      const gLogs = (pageG.__logs || []).filter(l =>
+        l.includes('link-status') || l.includes('confirming') || l.includes('error') || l.includes('Error'),
+      );
+      console.log(`  [G] debug: buttonFound=${gState.buttonFound} buttonText="${gState.buttonText}" warningHasActiveLink=${gState.warningHasActiveLink}`);
+      console.log(`  [G] intercepted=${JSON.stringify(gState.intercepted)}`);
+      if (gLogs.length) console.log(`  [G] page logs:\n    ${gLogs.join('\n    ')}`);
+    }
+
+    record(
+      UI_PROBE_LABELS[8],
+      'warning body contains "already has an active link"',
+      gState.buttonFound
+        ? `warningHasActiveLink=${gState.warningHasActiveLink}`
+        : 'cah-confirm-generate button not found (confirming phase not reached)',
+      gState.buttonFound && gState.warningHasActiveLink,
+    );
+
+    record(
+      UI_PROBE_LABELS[9],
+      'button text is "Generate new link"',
+      gState.buttonFound
+        ? `button text="${gState.buttonText}"`
+        : 'cah-confirm-generate button not found in DOM',
+      gState.buttonFound && gState.buttonText === 'Generate new link',
+    );
+
+    await pageG.__ctx.close().catch(() => {});
 
   } catch (e) {
     console.error('Test error:', e);
