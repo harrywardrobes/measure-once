@@ -556,6 +556,34 @@ function checkIpResendLimit(ip) {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
+// Authenticated: check whether an active (non-expired, non-submitted) link
+// already exists for a contact — read-only, no side effects.
+// GET /api/customer-info/by-contact/:contactId/link-status
+router.get('/api/customer-info/by-contact/:contactId/link-status',
+  isAuthenticated,
+  requirePrivilege('member'),
+  async (req, res) => {
+    const cid = String(req.params.contactId || '').trim();
+    if (!cid || !/^\d+$/.test(cid)) {
+      return res.status(400).json({ error: 'Invalid contactId.' });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT expires_at FROM customer_info_submissions
+       WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [cid]
+    );
+
+    if (rows.length === 0) {
+      return res.json({ hasActiveLink: false });
+    }
+
+    return res.json({ hasActiveLink: true, expiresAt: rows[0].expires_at });
+  }
+);
+
 // Authenticated: generate a customer link without sending email
 // POST /api/customer-info/by-contact/:contactId/generate-link
 router.post('/api/customer-info/by-contact/:contactId/generate-link',

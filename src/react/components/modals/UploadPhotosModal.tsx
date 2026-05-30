@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -13,6 +14,7 @@ import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 
@@ -23,12 +25,25 @@ interface Props {
   onClose: () => void;
 }
 
+interface LinkStatus {
+  hasActiveLink: boolean;
+  expiresAt?: string;
+}
+
 interface GeneratedLink {
   formLink: string;
   token: string;
   expiresAt: string;
   isResend?: boolean;
 }
+
+type Phase =
+  | 'checking'
+  | 'check-error'
+  | 'confirming'
+  | 'generating'
+  | 'ready'
+  | 'sent';
 
 function CopyLinkField({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
@@ -93,32 +108,28 @@ function formatExpiry(expiresAt: string): string {
 }
 
 export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Props) {
-  const [generatingLink, setGeneratingLink] = useState(false);
+  const [phase, setPhase] = useState<Phase>('checking');
+  const [linkStatus, setLinkStatus] = useState<LinkStatus | null>(null);
   const [generatedLink, setGeneratedLink] = useState<GeneratedLink | null>(null);
+  const [checkError, setCheckError] = useState('');
   const [linkError, setLinkError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [sent, setSent] = useState(false);
   const [copyAndClosing, setCopyAndClosing] = useState(false);
 
-  // isResend comes from the generate-link response: true when an active
-  // (non-submitted, non-expired) submission already existed for this contact
-  // before the new link was created.
-  const isResend = generatedLink?.isResend ?? false;
+  // AbortController ref so we can cancel in-flight generate-link requests
+  // (e.g. if the user clicks Cancel while generation is running).
+  const generateAbortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-
+  function generateLink(contactId: string) {
     const controller = new AbortController();
+    generateAbortRef.current = controller;
 
-    setGeneratingLink(true);
-    setGeneratedLink(null);
+    setPhase('generating');
     setLinkError('');
-    setError('');
-    setSent(false);
 
     fetch(
-      `/api/customer-info/by-contact/${encodeURIComponent(ctx.contactId)}/generate-link`,
+      `/api/customer-info/by-contact/${encodeURIComponent(contactId)}/generate-link`,
       { method: 'POST', signal: controller.signal }
     )
       .then(r => {
@@ -126,20 +137,59 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
         return r.json() as Promise<GeneratedLink>;
       })
       .then(data => {
-        if (!controller.signal.aborted) setGeneratedLink(data);
+        if (controller.signal.aborted) return;
+        setGeneratedLink(data);
+        setPhase('ready');
       })
       .catch(e => {
         if ((e as Error).name === 'AbortError') return;
         setLinkError((e as Error).message || 'Could not generate link.');
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setGeneratingLink(false);
+        setPhase('ready');
       });
+  }
 
+  // Fetch link-status (read-only) then decide whether to warn or generate immediately.
+  const checkStatus = useCallback((contactId: string, signal: AbortSignal) => {
+    setPhase('checking');
+    setCheckError('');
+    setLinkError('');
+    setError('');
+    setLinkStatus(null);
+    setGeneratedLink(null);
+
+    fetch(
+      `/api/customer-info/by-contact/${encodeURIComponent(contactId)}/link-status`,
+      { signal }
+    )
+      .then(r => {
+        if (!r.ok) return r.json().then(d => { throw new Error(d.error || `HTTP ${r.status}`); });
+        return r.json() as Promise<LinkStatus>;
+      })
+      .then(status => {
+        if (signal.aborted) return;
+        setLinkStatus(status);
+        if (status.hasActiveLink) {
+          setPhase('confirming');
+        } else {
+          generateLink(contactId);
+        }
+      })
+      .catch(e => {
+        if ((e as Error).name === 'AbortError') return;
+        setCheckError((e as Error).message || 'Could not check link status.');
+        setPhase('check-error');
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    checkStatus(ctx.contactId, controller.signal);
     return () => {
       controller.abort();
+      generateAbortRef.current?.abort();
     };
-  }, [open, ctx.contactId]);
+  }, [open, ctx.contactId, checkStatus]);
 
   async function handleSend() {
     setError('');
@@ -155,7 +205,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || d.message || 'Failed to send');
-      setSent(true);
+      setPhase('sent');
       const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
       w.showToast?.('Email sent to customer', false);
     } catch (e) {
@@ -171,129 +221,238 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
       // Clipboard write failed — close anyway
     }).finally(() => {
       setCopyAndClosing(false);
-      setSent(false);
+      setPhase('checking');
       setError('');
       setGeneratedLink(null);
       setLinkError('');
+      setLinkStatus(null);
       onClose();
     });
     setCopyAndClosing(true);
   }, [generatedLink, onClose]);
 
   function handleClose() {
-    setSent(false);
+    generateAbortRef.current?.abort();
+    setPhase('checking');
     setError('');
     setGeneratedLink(null);
     setLinkError('');
+    setCheckError('');
+    setLinkStatus(null);
     setCopyAndClosing(false);
     onClose();
   }
 
-  const title = isResend ? 'Resend photo upload link' : 'Send photo upload link';
-  const sendLabel = isResend ? 'Resend email' : 'Send email';
+  // ── Title ────────────────────────────────────────────────────────────────────
+
+  const title =
+    phase === 'confirming'
+      ? 'Active link exists'
+      : generatedLink?.isResend
+        ? 'Resend photo upload link'
+        : 'Send photo upload link';
+
+  // ── Content ──────────────────────────────────────────────────────────────────
+
+  function renderContent() {
+    if (phase === 'checking') {
+      return (
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', py: 1 }}>
+          <CircularProgress size={18} />
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>Checking…</Typography>
+        </Stack>
+      );
+    }
+
+    if (phase === 'check-error') {
+      return (
+        <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+          <Typography variant="body2" color="error">
+            Could not check link status: {checkError}
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            You can retry, or proceed directly — the system will handle any existing
+            link automatically when the new one is generated.
+          </Typography>
+        </Stack>
+      );
+    }
+
+    if (phase === 'confirming') {
+      const expiryNote = linkStatus?.expiresAt
+        ? ` It ${formatExpiry(linkStatus.expiresAt)}.`
+        : '';
+      return (
+        <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+          <Alert severity="warning" icon={<WarningAmberIcon fontSize="inherit" />}>
+            <strong>{ctx.contactName || 'This contact'}</strong> already has an
+            active link.{expiryNote} Sending a new one will immediately expire
+            the existing link — the customer won't be able to use it any more.
+          </Alert>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            You can still proceed — this is just a heads-up. If the customer
+            hasn't submitted yet, they'll need to use the new link instead.
+          </Typography>
+        </Stack>
+      );
+    }
+
+    if (phase === 'generating') {
+      return (
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', py: 1 }}>
+          <CircularProgress size={18} />
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>Generating link…</Typography>
+        </Stack>
+      );
+    }
+
+    if (phase === 'sent') {
+      return (
+        <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            The email has been sent to{' '}
+            <strong>{ctx.contactEmail || ctx.contactName || 'the customer'}</strong>.
+            They'll receive a link to fill in their details and upload photos of their space.
+          </Typography>
+          {generatedLink && (
+            <Stack spacing={0.5}>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                Link (still copyable):
+              </Typography>
+              <CopyLinkField url={generatedLink.formLink} />
+            </Stack>
+          )}
+        </Stack>
+      );
+    }
+
+    // ready
+    return (
+      <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          This will send an email to{' '}
+          <strong>{ctx.contactName || 'the customer'}</strong>
+          {ctx.contactEmail ? <> ({ctx.contactEmail})</> : null}
+          {' '}with a secure link to a form where they can:
+        </Typography>
+        <Stack component="ul" spacing={0.5} sx={{ m: 0, pl: 2.5 }}>
+          {[
+            'Confirm or correct their contact details and address',
+            'Tell us how many rooms they need done',
+            'Upload photos of the spaces',
+            'Share measurements, style preferences, and notes',
+          ].map(item => (
+            <Typography key={item} component="li" variant="body2" sx={{ color: 'text.secondary' }}>
+              {item}
+            </Typography>
+          ))}
+        </Stack>
+
+        <Stack spacing={0.5}>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            Customer link — copy to share manually:
+          </Typography>
+          {linkError ? (
+            <Typography variant="caption" color="error">
+              Could not generate link: {linkError}
+            </Typography>
+          ) : generatedLink ? (
+            <CopyLinkField url={generatedLink.formLink} />
+          ) : null}
+        </Stack>
+
+        {error && (
+          <Typography variant="caption" color="error">{error}</Typography>
+        )}
+      </Stack>
+    );
+  }
+
+  // ── Actions ──────────────────────────────────────────────────────────────────
+
+  function renderActions() {
+    if (phase === 'checking') {
+      return <Button onClick={handleClose}>Cancel</Button>;
+    }
+
+    if (phase === 'check-error') {
+      return (
+        <>
+          <Button onClick={handleClose}>Cancel</Button>
+          <Button onClick={() => {
+            const controller = new AbortController();
+            checkStatus(ctx.contactId, controller.signal);
+          }}>
+            Retry
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => generateLink(ctx.contactId)}
+            data-testid="cah-proceed-anyway"
+          >
+            Send anyway
+          </Button>
+        </>
+      );
+    }
+
+    if (phase === 'confirming') {
+      return (
+        <>
+          <Button onClick={handleClose}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={() => generateLink(ctx.contactId)}
+            data-testid="cah-confirm-resend"
+          >
+            Send new link anyway
+          </Button>
+        </>
+      );
+    }
+
+    if (phase === 'generating') {
+      return <Button onClick={handleClose}>Cancel</Button>;
+    }
+
+    if (phase === 'sent') {
+      return <Button variant="contained" onClick={handleClose}>Done</Button>;
+    }
+
+    // ready
+    const sendLabel = generatedLink?.isResend ? 'Resend email' : 'Send email';
+    return (
+      <>
+        <Button onClick={handleClose} disabled={submitting || copyAndClosing}>Cancel</Button>
+        {generatedLink && !linkError && (
+          <Button
+            onClick={handleCopyAndClose}
+            disabled={submitting || copyAndClosing}
+            startIcon={copyAndClosing ? <CircularProgress size={16} color="inherit" /> : <ContentCopyIcon fontSize="small" />}
+            data-testid="cah-copy-close"
+          >
+            {copyAndClosing ? 'Copying…' : 'Copy & close'}
+          </Button>
+        )}
+        <Button
+          variant="contained"
+          onClick={handleSend}
+          disabled={submitting || !!linkError || copyAndClosing}
+          startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
+          data-testid="cah-primary"
+        >
+          {submitting ? 'Sending…' : sendLabel}
+        </Button>
+      </>
+    );
+  }
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
-      <DialogTitle>
-        {title}
-        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25, fontWeight: 'normal' }}>
-          {isResend
-            ? `A link was already sent — it ${formatExpiry(generatedLink!.expiresAt)}. Sending again will replace it.`
-            : 'Send via email or copy the link to share directly'}
-        </Typography>
-      </DialogTitle>
-      <DialogContent>
-        {sent ? (
-          <Stack spacing={1.5} sx={{ mt: 0.5 }}>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              The email has been sent to{' '}
-              <strong>{ctx.contactEmail || ctx.contactName || 'the customer'}</strong>.
-              They'll receive a link to fill in their details and upload photos of their space.
-            </Typography>
-            {generatedLink && (
-              <Stack spacing={0.5}>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  Link (still copyable):
-                </Typography>
-                <CopyLinkField url={generatedLink.formLink} />
-              </Stack>
-            )}
-          </Stack>
-        ) : (
-          <Stack spacing={1.5} sx={{ mt: 0.5 }}>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              This will send an email to{' '}
-              <strong>{ctx.contactName || 'the customer'}</strong>
-              {ctx.contactEmail ? <> ({ctx.contactEmail})</> : null}
-              {' '}with a secure link to a form where they can:
-            </Typography>
-            <Stack component="ul" spacing={0.5} sx={{ m: 0, pl: 2.5 }}>
-              {[
-                'Confirm or correct their contact details and address',
-                'Tell us how many rooms they need done',
-                'Upload photos of the spaces',
-                'Share measurements, style preferences, and notes',
-              ].map(item => (
-                <Typography key={item} component="li" variant="body2" sx={{ color: 'text.secondary' }}>
-                  {item}
-                </Typography>
-              ))}
-            </Stack>
-
-            <Stack spacing={0.5}>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Customer link — copy to share manually:
-              </Typography>
-              {generatingLink ? (
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', py: 0.5 }}>
-                  <CircularProgress size={16} />
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    Generating link…
-                  </Typography>
-                </Stack>
-              ) : linkError ? (
-                <Typography variant="caption" color="error">
-                  Could not generate link: {linkError}
-                </Typography>
-              ) : generatedLink ? (
-                <CopyLinkField url={generatedLink.formLink} />
-              ) : null}
-            </Stack>
-
-            {error && (
-              <Typography variant="caption" color="error">{error}</Typography>
-            )}
-          </Stack>
-        )}
-      </DialogContent>
-      <DialogActions>
-        {sent ? (
-          <Button variant="contained" onClick={handleClose}>Done</Button>
-        ) : (
-          <>
-            <Button onClick={handleClose} disabled={submitting || copyAndClosing}>Cancel</Button>
-            {generatedLink && !linkError && (
-              <Button
-                onClick={handleCopyAndClose}
-                disabled={submitting || copyAndClosing}
-                startIcon={copyAndClosing ? <CircularProgress size={16} color="inherit" /> : <ContentCopyIcon fontSize="small" />}
-                data-testid="cah-copy-close"
-              >
-                {copyAndClosing ? 'Copying…' : 'Copy & close'}
-              </Button>
-            )}
-            <Button
-              variant="contained"
-              onClick={handleSend}
-              disabled={submitting || generatingLink || !!linkError || copyAndClosing}
-              startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
-              data-testid="cah-primary"
-            >
-              {submitting ? 'Sending…' : sendLabel}
-            </Button>
-          </>
-        )}
-      </DialogActions>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>{renderContent()}</DialogContent>
+      <DialogActions>{renderActions()}</DialogActions>
     </Dialog>
   );
 }
