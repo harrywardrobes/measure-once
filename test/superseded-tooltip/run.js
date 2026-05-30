@@ -17,6 +17,10 @@
 //   [ST-C] The superseded card has no Copy, Open, or Resend action buttons
 //          (copy-link-btn, open-link-btn, resend-link-btn are all absent).
 //
+//   [ST-D] The active (non-superseded) card has at least one of Copy, Open,
+//          or Resend present — guards against regressions that strip buttons
+//          from all cards simultaneously.
+//
 // Strategy: boots a disposable test server with the privileges harness.
 // All customer-detail API calls are stubbed via evaluateOnNewDocument fetch
 // interception — no HubSpot token or real contact data required.
@@ -409,6 +413,7 @@ async function main() {
     '(ST-A) Superseded chip is present in the rail',
     '(ST-B) Hovering Superseded chip reveals tooltip text',
     '(ST-C) Superseded card has no Copy, Open, or Resend buttons',
+    '(ST-D) Active (non-superseded) card has at least one of Copy, Open, or Resend',
   ];
 
   if (!puppeteer) {
@@ -560,6 +565,51 @@ async function main() {
       'no copy-link-btn, open-link-btn, or resend-link-btn on the superseded card',
       stcObserved,
       stcOk,
+    );
+
+    // ── Probe ST-D: Active card has at least one Copy, Open, or Resend button ──
+    console.log('\n  [ST-D] Checking active (non-superseded) card has Copy/Open/Resend buttons');
+
+    const activeButtons = await page.evaluate(() => {
+      const allCards = Array.from(document.querySelectorAll('[data-testid^="submission-card"]'));
+
+      // Find the first card that does NOT contain the Superseded chip.
+      const activeCard = allCards.find(card => {
+        const labels = Array.from(card.querySelectorAll('[class*="MuiChip-label"]'));
+        return !labels.some(l => (l.textContent || '').trim() === 'Superseded');
+      });
+
+      if (!activeCard) return { cardFound: false, copyPresent: false, openPresent: false, resendPresent: false };
+
+      return {
+        cardFound: true,
+        copyPresent:   !!activeCard.querySelector('[data-testid="copy-link-btn"]'),
+        openPresent:   !!activeCard.querySelector('[data-testid="open-link-btn"]'),
+        resendPresent: !!activeCard.querySelector('[data-testid="resend-link-btn"]'),
+      };
+    });
+
+    const stdOk = activeButtons.cardFound
+      && (activeButtons.copyPresent || activeButtons.openPresent || activeButtons.resendPresent);
+
+    let stdObserved;
+    if (!activeButtons.cardFound) {
+      stdObserved = 'active (non-superseded) card not found in DOM';
+    } else {
+      const present = [];
+      if (activeButtons.copyPresent)   present.push('copy-link-btn');
+      if (activeButtons.openPresent)   present.push('open-link-btn');
+      if (activeButtons.resendPresent) present.push('resend-link-btn');
+      stdObserved = present.length > 0
+        ? `action buttons present on active card: ${present.join(', ')} (correct)`
+        : 'no Copy/Open/Resend buttons found on the active card';
+    }
+
+    record(
+      PROBE_LABELS[3],
+      'at least one of copy-link-btn, open-link-btn, or resend-link-btn on the active card',
+      stdObserved,
+      stdOk,
     );
 
     await page.__ctx.close().catch(() => {});
