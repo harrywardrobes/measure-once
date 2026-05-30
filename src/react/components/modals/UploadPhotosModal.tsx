@@ -286,8 +286,9 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
         <Stack spacing={1.5} sx={{ mt: 0.5 }}>
           <Alert severity="warning" icon={<WarningAmberIcon fontSize="inherit" />}>
             <strong>{ctx.contactName || 'This contact'}</strong> already has an
-            active link.{expiryNote} Sending a new one will immediately expire
-            the existing link — the customer won't be able to use it any more.
+            active link.{expiryNote} Generating a new link will immediately
+            expire the existing one — the customer won't be able to use it any
+            more, whether you email the new link or copy it manually.
           </Alert>
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             You can still proceed — this is just a heads-up. If the customer
@@ -406,7 +407,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
             onClick={() => generateLink(ctx.contactId)}
             data-testid="cah-confirm-resend"
           >
-            Send new link anyway
+            Generate new link
           </Button>
         </>
       );
