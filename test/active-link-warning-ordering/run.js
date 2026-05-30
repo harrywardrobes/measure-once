@@ -16,7 +16,7 @@
 //                          Alert with warning severity is present in the DOM.
 //   (B) no-premature-call — generate-link has NOT been called at that point
 //                           (i.e. the old active link has not been expired yet).
-//   (C) confirm-triggers  — clicking [data-testid="cah-confirm-resend"]
+//   (C) confirm-triggers  — clicking [data-testid="cah-confirm-generate"]
 //                           ("Send new link anyway") results in exactly one
 //                           POST to generate-link.
 //
@@ -244,7 +244,7 @@ function writeReport(runId) {
     '  POST generate-link has NOT been called. The existing active link has not',
     '  been expired. Regression guard for the pre-task-#1970 behaviour where the',
     '  modal called generate-link immediately on open.',
-    '- **(C) confirm-triggers**: Clicking [data-testid="cah-confirm-resend"]',
+    '- **(C) confirm-triggers**: Clicking [data-testid="cah-confirm-generate"]',
     '  ("Send new link anyway") results in exactly one POST to generate-link,',
     '  confirming the call only fires after explicit staff confirmation.',
     '- **(D) cancel-no-call / cancel-closes**: Opens a fresh page, opens the',
@@ -438,7 +438,7 @@ async function main() {
       console.log('\n  [C] Clicking "Send new link anyway"…');
 
       const confirmBtn = await page.evaluate(() => {
-        const btn = document.querySelector('[data-testid="cah-confirm-resend"]');
+        const btn = document.querySelector('[data-testid="cah-confirm-generate"]');
         return btn ? 'found' : null;
       });
 
@@ -446,14 +446,14 @@ async function main() {
         record(
           PROBE_LABELS[3],
           false,
-          '[data-testid="cah-confirm-resend"] not found — cannot proceed to probe C',
+          '[data-testid="cah-confirm-generate"] not found — cannot proceed to probe C',
         );
       } else {
         // Snapshot count immediately before click so the assertion is delta-based.
         const countBefore2 = generateLinkCounter.count;
 
         await page.evaluate(() => {
-          document.querySelector('[data-testid="cah-confirm-resend"]').click();
+          document.querySelector('[data-testid="cah-confirm-generate"]').click();
         });
 
         // Poll Node.js counter until it increments past the pre-click snapshot
