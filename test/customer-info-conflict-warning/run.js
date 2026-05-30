@@ -114,6 +114,7 @@ function writeReport(runId) {
     '',
     '## Coverage',
     '',
+    '### Copy-link path',
     '- **(A) No conflict when link matches**: When /api/customer-info/by-contact/:id/link-status',
     '  returns the same expiresAt as the active submission card, clicking "Copy link" writes',
     '  to the clipboard immediately and the conflict Alert does NOT appear.',
@@ -124,6 +125,17 @@ function writeReport(runId) {
     '  executes the copy and hides the Alert.',
     '- **(B3) Cancel dismisses without action**: Clicking data-testid="conflict-cancel-btn"',
     '  hides the Alert without writing a new entry to the clipboard.',
+    '',
+    '### Open-link path',
+    '- **(A-open) No conflict when link matches**: When link-status returns the same',
+    '  expiresAt, clicking "Open link" opens a provisional blank window and navigates',
+    '  it to form_link — no conflict Alert appears.',
+    '- **(B-open) Conflict Alert appears**: When link-status returns a DIFFERENT expiresAt',
+    '  the provisional blank window is closed and the conflict Alert becomes visible.',
+    '- **(B2-open) Open anyway dismisses Alert**: Clicking data-testid="conflict-proceed-btn"',
+    '  hides the Alert and calls window.open with the form_link URL.',
+    '- **(B3-open) Cancel dismisses without action**: Clicking data-testid="conflict-cancel-btn"',
+    '  hides the Alert without making any additional window.open call.',
     '',
     'Uses a real customer_info_submissions row inserted into the test DB so the',
     'rail renders an authentic active card with a known expires_at.  Only the',
@@ -341,9 +353,29 @@ async function openCustomerDetail(browser, cookie, contactId, linkStatusBody) {
       },
     });
     window.__windowOpenCalls = [];
+    window.__windowOpenResults = [];
     window.open = function(url, target, features) {
       window.__windowOpenCalls.push({ url, target, features });
-      return { location: { href: '' }, close() {} };
+      // Track location.href mutations and close() calls so open-link probes
+      // can verify the provisional-window lifecycle.
+      var _href = url || '';
+      var _closed = false;
+      var loc = {};
+      Object.defineProperty(loc, 'href', {
+        get: function() { return _href; },
+        set: function(v) { _href = v; },
+        enumerable: true,
+        configurable: true,
+      });
+      var win = {
+        location: loc,
+        get closed() { return _closed; },
+        close: function() { _closed = true; },
+        getHref: function() { return _href; },
+        isClosed: function() { return _closed; },
+      };
+      window.__windowOpenResults.push(win);
+      return win;
     };
   });
 
@@ -457,6 +489,11 @@ async function main() {
     '(B) conflict Alert appears when expiresAt differs',
     '(B2) clicking "Copy anyway" dismisses the Alert',
     '(B3) clicking "Cancel" dismisses the Alert without copying',
+    '(A-open) no conflict Alert when open-link expiresAt matches',
+    '(A-open) provisional window navigated to form_link URL',
+    '(B-open) conflict Alert appears and provisional window is closed',
+    '(B2-open) clicking "Open anyway" dismisses Alert and opens URL',
+    '(B3-open) clicking "Cancel" dismisses Alert without extra open call',
   ];
 
   if (!puppeteer) {
@@ -630,6 +667,184 @@ async function main() {
     }
 
     await pageB3.__ctx.close().catch(() => {});
+
+    // ── Probe A-open: no conflict (expiresAt matches), open link path ─────────
+    console.log('\n  [A-open] No-conflict open-link probe');
+    const pageAOpen = await openCustomerDetail(
+      browser,
+      memberClient.cookie,
+      CONTACT_ID,
+      { hasActiveLink: true, expiresAt: CARD_EXPIRES_AT },   // same → no conflict
+    );
+
+    // Wait for the open-link button to confirm it is rendered.
+    await pollPage(pageAOpen, () =>
+      document.querySelector('[data-testid="open-link-btn"]') ? 'ok' : null,
+      5000,
+    );
+
+    await pageAOpen.click('[data-testid="open-link-btn"]');
+
+    // Conflict Alert must NOT appear within 4 s.
+    const conflictAppearedAOpen = await pollPage(pageAOpen, () =>
+      document.querySelector('[data-testid="conflict-proceed-btn"]') ? 'yes' : null,
+      4000,
+    );
+
+    record(
+      PROBE_LABELS[5],
+      'conflict Alert absent',
+      conflictAppearedAOpen ? 'conflict Alert appeared unexpectedly' : 'no conflict Alert (correct)',
+      !conflictAppearedAOpen,
+    );
+
+    // Provisional window's location.href must have been navigated to formLink.
+    const openResultHrefAOpen = await pageAOpen.evaluate(() => {
+      const r = window.__windowOpenResults && window.__windowOpenResults[0];
+      return r ? r.getHref() : null;
+    });
+    const openCallsAOpen = await pageAOpen.evaluate(() =>
+      (window.__windowOpenCalls || []).map(c => c.url),
+    );
+
+    record(
+      PROBE_LABELS[6],
+      `provisional window navigated to "${formLink}"`,
+      openResultHrefAOpen != null
+        ? `location.href="${openResultHrefAOpen}" calls=[${openCallsAOpen.join(',')}]`
+        : `no result object (calls=[${openCallsAOpen.join(',')}])`,
+      openResultHrefAOpen === formLink,
+    );
+
+    await pageAOpen.__ctx.close().catch(() => {});
+
+    // ── Probe B-open: conflict (different expiresAt), open link path ──────────
+    console.log('\n  [B-open] Conflict open-link probe');
+    const pageBOpen = await openCustomerDetail(
+      browser,
+      memberClient.cookie,
+      CONTACT_ID,
+      { hasActiveLink: true, expiresAt: CONFLICT_EXPIRES_AT },  // different → conflict!
+    );
+
+    await pollPage(pageBOpen, () =>
+      document.querySelector('[data-testid="open-link-btn"]') ? 'ok' : null,
+      5000,
+    );
+
+    await pageBOpen.click('[data-testid="open-link-btn"]');
+
+    // Poll for the conflict Alert to appear.
+    const conflictBtnBOpen = await pollPage(pageBOpen, () => {
+      const el = document.querySelector('[data-testid="conflict-proceed-btn"]');
+      return el && el.offsetParent !== null ? 'ok' : null;
+    }, 8000);
+
+    // Also verify the provisional window was closed.
+    const provisionalClosedBOpen = await pageBOpen.evaluate(() => {
+      const r = window.__windowOpenResults && window.__windowOpenResults[0];
+      return r ? r.isClosed() : null;
+    });
+
+    record(
+      PROBE_LABELS[7],
+      'conflict-proceed-btn visible and provisional window closed',
+      conflictBtnBOpen
+        ? `conflict-proceed-btn visible, provisionalClosed=${provisionalClosedBOpen}`
+        : 'conflict-proceed-btn not found/hidden',
+      !!conflictBtnBOpen && provisionalClosedBOpen === true,
+    );
+
+    if (conflictBtnBOpen) {
+      // ── Probe B2-open: "Open anyway" dismisses Alert and calls window.open ──
+      console.log('\n  [B2-open] Open-anyway probe');
+      const openCallsBeforeB2Open = await pageBOpen.evaluate(() =>
+        (window.__windowOpenCalls || []).length,
+      );
+
+      await pageBOpen.click('[data-testid="conflict-proceed-btn"]');
+
+      const alertGoneB2Open = await pollPage(pageBOpen, () => {
+        const el = document.querySelector('[data-testid="conflict-proceed-btn"]');
+        return (!el || el.offsetParent === null) ? 'gone' : null;
+      }, 5000);
+
+      // performAction('open') calls window.open(formLink, ...) directly.
+      const openCallsAfterB2Open = await pageBOpen.evaluate(() =>
+        (window.__windowOpenCalls || []).map(c => c.url),
+      );
+      const extraOpenUrl = openCallsAfterB2Open[openCallsBeforeB2Open] || null;
+
+      record(
+        PROBE_LABELS[8],
+        `Alert dismissed and window.open("${formLink}") called`,
+        alertGoneB2Open
+          ? `dismissed=${!!alertGoneB2Open} extraOpenUrl="${extraOpenUrl}"`
+          : 'Alert still visible',
+        !!alertGoneB2Open && extraOpenUrl === formLink,
+      );
+    } else {
+      record(PROBE_LABELS[8], 'probe B-open must pass first', 'skipped — probe B-open failed', false);
+    }
+
+    await pageBOpen.__ctx.close().catch(() => {});
+
+    // ── Probe B3-open: "Cancel" dismisses Alert, no extra window.open ─────────
+    console.log('\n  [B3-open] Cancel open-link probe');
+    const pageB3Open = await openCustomerDetail(
+      browser,
+      memberClient.cookie,
+      CONTACT_ID,
+      { hasActiveLink: true, expiresAt: CONFLICT_EXPIRES_AT },
+    );
+
+    await pollPage(pageB3Open, () =>
+      document.querySelector('[data-testid="open-link-btn"]') ? 'ok' : null,
+      5000,
+    );
+
+    await pageB3Open.click('[data-testid="open-link-btn"]');
+
+    const conflictForCancelOpen = await pollPage(pageB3Open, () => {
+      const el = document.querySelector('[data-testid="conflict-proceed-btn"]');
+      return el && el.offsetParent !== null ? 'ok' : null;
+    }, 8000);
+
+    if (conflictForCancelOpen) {
+      const openCallsBeforeCancel = await pageB3Open.evaluate(() =>
+        (window.__windowOpenCalls || []).length,
+      );
+
+      await pageB3Open.click('[data-testid="conflict-cancel-btn"]');
+
+      const alertGoneB3Open = await pollPage(pageB3Open, () => {
+        const el = document.querySelector('[data-testid="conflict-proceed-btn"]');
+        return (!el || el.offsetParent === null) ? 'gone' : null;
+      }, 5000);
+
+      const openCallsAfterCancel = await pageB3Open.evaluate(() =>
+        (window.__windowOpenCalls || []).length,
+      );
+
+      const noExtraOpenCall = openCallsAfterCancel === openCallsBeforeCancel;
+      record(
+        PROBE_LABELS[9],
+        'Alert dismissed, no new window.open call',
+        alertGoneB3Open
+          ? `dismissed=${!!alertGoneB3Open} noExtraOpenCall=${noExtraOpenCall} (before=${openCallsBeforeCancel} after=${openCallsAfterCancel})`
+          : 'Alert was not dismissed',
+        !!alertGoneB3Open && noExtraOpenCall,
+      );
+    } else {
+      record(
+        PROBE_LABELS[9],
+        'conflict Alert must appear first',
+        'skipped — conflict Alert did not appear for probe B3-open',
+        false,
+      );
+    }
+
+    await pageB3Open.__ctx.close().catch(() => {});
 
   } catch (e) {
     console.error('\n  Test crashed:', e);
