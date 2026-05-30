@@ -70,6 +70,7 @@ const STEPS = [
   'test:customer-info-rail:ci',
   'test:customer-info-conflict-warning:ci',
   'test:customer-info-stale-rail:ci',
+  'test:customer-info-live-badge:ci',
   'test:superseded-tooltip:ci',
   'test:masked-email-backfill:ci',
   'test:photo-storage-errors:ci',

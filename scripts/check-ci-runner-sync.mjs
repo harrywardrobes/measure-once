@@ -3,9 +3,9 @@
  * scripts/check-ci-runner-sync.mjs
  *
  * Static lint: every `test:*:ci` entry present in scripts/run-ci.mjs must
- * also appear in scripts/run-ci-parallel.mjs.  Fails with a clear error
- * message when any entry is missing so drift between the two runners is
- * caught automatically on every CI pass.
+ * also appear in scripts/run-ci-parallel.mjs, and vice-versa.  Fails with a
+ * clear error message when any entry is missing so drift between the two
+ * runners is caught automatically on every CI pass.
  *
  * Run via:  npm run test:ci-runner-sync
  *
@@ -39,26 +39,49 @@ const parFile = join(ROOT, 'scripts', 'run-ci-parallel.mjs');
 const seqEntries = extractCiEntries(seqFile);
 const parEntries = extractCiEntries(parFile);
 
-const missing = [...seqEntries].filter((e) => !parEntries.has(e)).sort();
+const missingFromParallel = [...seqEntries].filter((e) => !parEntries.has(e)).sort();
+const missingFromSequential = [...parEntries].filter((e) => !seqEntries.has(e)).sort();
 
-if (missing.length === 0) {
+let failed = false;
+
+if (missingFromParallel.length > 0) {
+  failed = true;
+  console.error(
+    `❌  ci-runner-sync: ${missingFromParallel.length} test:*:ci ` +
+    `${missingFromParallel.length === 1 ? 'entry' : 'entries'} present in ` +
+    `scripts/run-ci.mjs but missing from scripts/run-ci-parallel.mjs:\n`,
+  );
+  for (const e of missingFromParallel) {
+    console.error(`   - ${e}`);
+  }
+  console.error(
+    '\nAdd the missing entries to the appropriate suite list ' +
+    '(STATIC_SUITES or DB_SUITES) in scripts/run-ci-parallel.mjs.\n',
+  );
+}
+
+if (missingFromSequential.length > 0) {
+  failed = true;
+  console.error(
+    `❌  ci-runner-sync: ${missingFromSequential.length} test:*:ci ` +
+    `${missingFromSequential.length === 1 ? 'entry' : 'entries'} present in ` +
+    `scripts/run-ci-parallel.mjs but missing from scripts/run-ci.mjs:\n`,
+  );
+  for (const e of missingFromSequential) {
+    console.error(`   - ${e}`);
+  }
+  console.error(
+    '\nAdd the missing entries to the appropriate position in ' +
+    'scripts/run-ci.mjs.\n',
+  );
+}
+
+if (!failed) {
   console.log(
-    `✅  ci-runner-sync: all ${seqEntries.size} test:*:ci entries in` +
-    ` run-ci.mjs are present in run-ci-parallel.mjs`,
+    `✅  ci-runner-sync: all ${seqEntries.size} test:*:ci entries are ` +
+    `present in both run-ci.mjs and run-ci-parallel.mjs`,
   );
   process.exit(0);
 }
 
-console.error(
-  `❌  ci-runner-sync: ${missing.length} test:*:ci ` +
-  `${missing.length === 1 ? 'entry' : 'entries'} present in ` +
-  `scripts/run-ci.mjs but missing from scripts/run-ci-parallel.mjs:\n`,
-);
-for (const e of missing) {
-  console.error(`   - ${e}`);
-}
-console.error(
-  '\nAdd the missing entries to the appropriate suite list ' +
-  '(STATIC_SUITES or DB_SUITES) in scripts/run-ci-parallel.mjs.\n',
-);
 process.exit(1);
