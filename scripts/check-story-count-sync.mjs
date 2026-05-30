@@ -93,25 +93,21 @@ function findStoriesFiles(dir) {
  * Find the .stories.tsx file whose `title:` field matches the given storyTitle.
  * Returns the absolute file path, or null if not found.
  *
- * Searches both the dedicated stories directory and the components directory
- * to support stories co-located with their component (e.g. TabBar.stories.tsx
- * lives alongside TabBar.tsx in src/react/components/).
+ * Searches the entire src/react/ tree so that stories co-located anywhere
+ * under that directory (e.g. src/react/components/TabBar.stories.tsx or a
+ * future src/react/features/Foo/Foo.stories.tsx) are found automatically
+ * without needing to add new hard-coded search paths.
  */
 function findStoriesFileByTitle(storyTitle) {
-  const searchDirs = [
-    join(ROOT, 'src', 'react', 'stories'),
-    join(ROOT, 'src', 'react', 'components'),
-  ];
+  const reactDir = join(ROOT, 'src', 'react');
+  if (!existsSync(reactDir)) return null;
 
-  for (const dir of searchDirs) {
-    if (!existsSync(dir)) continue;
-    const files = findStoriesFiles(dir);
-    for (const filePath of files) {
-      const src = readFileSync(filePath, 'utf8');
-      // Match:  title: 'Admin/AdminGroupedTabsBar'  or  title: "Admin/AdminGroupedTabsBar"
-      if (src.includes(`title: '${storyTitle}'`) || src.includes(`title: "${storyTitle}"`)) {
-        return filePath;
-      }
+  const files = findStoriesFiles(reactDir);
+  for (const filePath of files) {
+    const src = readFileSync(filePath, 'utf8');
+    // Match:  title: 'Admin/AdminGroupedTabsBar'  or  title: "Admin/AdminGroupedTabsBar"
+    if (src.includes(`title: '${storyTitle}'`) || src.includes(`title: "${storyTitle}"`)) {
+      return filePath;
     }
   }
   return null;
