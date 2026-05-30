@@ -90,19 +90,7 @@
   --shadow-modal:     0 20px 60px rgba(0,0,0,0.25);
   --overlay-scrim:    rgba(0,0,0,0.45);
 
-  /* ── Status colours ──────────────────────────────────────────────────────── */
-  --status-danger:        #dc2626;
-  --status-danger-text:   #991b1b;
-  --status-danger-bg:     #fef2f2;
-  --status-danger-border: #fecaca;
-  --status-chunk-error-border: #fed7aa;
-  --status-success:       #16a34a;
-  --status-success-text:  #14532d;
-  --status-success-bg:    #f0fdf4;
-  --status-success-border:#bbf7d0;
-  --status-warn-bg:       #fef9c3;
-  --status-warn-border:   #fde047;
-  --status-warn-text:     #713f12;
+  /* ── Status colours (auto-derived from STATUS_COLORS in theme.ts) ───────── */
   --status-warning-bg:       #fef3c7;
   --status-warning-text:     #92400e;
   --status-warning-border:   #fbbf24;
@@ -123,9 +111,6 @@
   --status-chunkError-bg:    #fff7ed;
   --status-chunkError-text:  #9a3412;
   --status-chunkError-border: #fed7aa;
-  --status-success-bg:       #dcfce7;
-  --status-success-text:     #166534;
-  --status-success-border:   #bbf7d0;
   --status-successLight-bg:  #f0fdf4;
   --status-successLight-text: #166534;
   --status-successDeep-bg:   #d1fae5;
@@ -136,6 +121,26 @@
   --status-infoLight-text:   #1e40af;
   --status-violet-bg:        #ede9fe;
   --status-violet-text:      #5b21b6;
+
+  /* ── Status colour aliases (explicit legacy tokens) ──────────────────────
+   *  Placed after the auto-derived block so these values take precedence when
+   *  a token name is shared (e.g. --status-success-bg/-text/-border).
+   *  --status-danger-*  semantic error alias; no STATUS_COLORS key named 'danger'
+   *  --status-success   standalone accent colour; no plain STATUS_COLORS 'success' colour
+   *  --status-warn-*    shorthand alias; STATUS_COLORS uses 'warning' (--status-warning-*)
+   *  NOTE: --status-chunk-error-border is intentionally absent here; it is
+   *  fully covered by auto-derivation from STATUS_COLORS.chunkError.border.   */
+  --status-danger:        #dc2626;
+  --status-danger-text:   #991b1b;
+  --status-danger-bg:     #fef2f2;
+  --status-danger-border: #fecaca;
+  --status-success:       #16a34a;
+  --status-success-text:  #14532d;
+  --status-success-bg:    #f0fdf4;
+  --status-success-border:#bbf7d0;
+  --status-warn-bg:       #fef9c3;
+  --status-warn-border:   #fde047;
+  --status-warn-text:     #713f12;
 
   /* ── Brand action accents ────────────────────────────────────────────────── */
   --brand-accent:       #3d0f7a;
