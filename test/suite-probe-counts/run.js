@@ -232,6 +232,7 @@ const scenarios = [
     expectIds:                 [],
     expectStaleExtrasFail:     false,
     expectRedundantExtrasFail: false,
+    expectAllowlistedPhrase:   true,
   },
 ];
 
@@ -247,6 +248,9 @@ const STALE_EXTRAS_PHRASE = 'Unnecessary suppressions';
 // Phrase emitted when PROBE_LABELS_DOC_EXTRAS contains IDs already covered
 // by a dedicated PROBE_LABELS entry (redundant suppressions).
 const REDUNDANT_EXTRAS_PHRASE = 'Redundant suppressions';
+
+// Phrase emitted in the summary line when one or more suites are allowlisted.
+const ALLOWLISTED_PHRASE = 'allowlisted';
 
 const results = [];
 
@@ -264,19 +268,21 @@ for (const sc of scenarios) {
   const hasMissingWarn         = combined.includes(MISSING_WARN_PHRASE);
   const hasStaleExtrasFail     = combined.includes(STALE_EXTRAS_PHRASE);
   const hasRedundantExtrasFail = combined.includes(REDUNDANT_EXTRAS_PHRASE);
+  const hasAllowlistedPhrase   = combined.includes(ALLOWLISTED_PHRASE);
   const exit0                  = result.status === 0;
 
-  const pass_advisory          = sc.expectAdvisory            ? hasAdvisory            : !hasAdvisory;
-  const pass_missing_warn      = sc.expectMissingWarn         ? hasMissingWarn         : !hasMissingWarn;
-  const pass_stale_extras      = sc.expectStaleExtrasFail     ? hasStaleExtrasFail     : !hasStaleExtrasFail;
-  const pass_redundant_extras  = sc.expectRedundantExtrasFail ? hasRedundantExtrasFail : !hasRedundantExtrasFail;
-  const pass_exit              = sc.expectExit0               ? exit0                  : !exit0;
-  const pass_ids               = sc.expectIds.every((id) => combined.includes(id));
+  const pass_advisory           = sc.expectAdvisory            ? hasAdvisory            : !hasAdvisory;
+  const pass_missing_warn       = sc.expectMissingWarn         ? hasMissingWarn         : !hasMissingWarn;
+  const pass_stale_extras       = sc.expectStaleExtrasFail     ? hasStaleExtrasFail     : !hasStaleExtrasFail;
+  const pass_redundant_extras   = sc.expectRedundantExtrasFail ? hasRedundantExtrasFail : !hasRedundantExtrasFail;
+  const pass_allowlisted_phrase = sc.expectAllowlistedPhrase   ? hasAllowlistedPhrase   : !hasAllowlistedPhrase;
+  const pass_exit               = sc.expectExit0               ? exit0                  : !exit0;
+  const pass_ids                = sc.expectIds.every((id) => combined.includes(id));
 
-  const pass = pass_advisory && pass_missing_warn && pass_stale_extras && pass_redundant_extras && pass_exit && pass_ids;
+  const pass = pass_advisory && pass_missing_warn && pass_stale_extras && pass_redundant_extras && pass_allowlisted_phrase && pass_exit && pass_ids;
   results.push({
     sc,
-    pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_exit, pass_ids,
+    pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_allowlisted_phrase, pass_exit, pass_ids,
     combined,
     status: result.status,
   });
@@ -300,13 +306,13 @@ const lines = [
   '',
   `Ran ${results.length} scenario${results.length === 1 ? '' : 's'}.`,
   '',
-  '| Scenario | advisory correct | missing-array warning correct | stale-extras failure correct | redundant-extras failure correct | exit correct | IDs found | result |',
-  '| --- | --- | --- | --- | --- | --- | --- | --- |',
+  '| Scenario | advisory correct | missing-array warning correct | stale-extras failure correct | redundant-extras failure correct | allowlisted phrase correct | exit correct | IDs found | result |',
+  '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
 ];
 
-for (const { sc, pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_exit, pass_ids } of results) {
+for (const { sc, pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_allowlisted_phrase, pass_exit, pass_ids } of results) {
   lines.push(
-    `| ${sc.name} | ${pass_advisory ? '✓' : '✗'} | ${pass_missing_warn ? '✓' : '✗'} | ${pass_stale_extras ? '✓' : '✗'} | ${pass_redundant_extras ? '✓' : '✗'} | ${pass_exit ? '✓' : '✗'} | ${pass_ids ? '✓' : '✗'} | ${pass ? 'PASS' : '**FAIL**'} |`,
+    `| ${sc.name} | ${pass_advisory ? '✓' : '✗'} | ${pass_missing_warn ? '✓' : '✗'} | ${pass_stale_extras ? '✓' : '✗'} | ${pass_redundant_extras ? '✓' : '✗'} | ${pass_allowlisted_phrase ? '✓' : '✗'} | ${pass_exit ? '✓' : '✗'} | ${pass_ids ? '✓' : '✗'} | ${pass ? 'PASS' : '**FAIL**'} |`,
   );
 }
 
@@ -316,7 +322,7 @@ if (failures.length === 0) {
   lines.push(`**All ${passed} scenario${passed === 1 ? '' : 's'} passed.**`);
 } else {
   lines.push(`**${failures.length} scenario${failures.length === 1 ? '' : 's'} failed:**`);
-  for (const { sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_exit, pass_ids, combined, status } of failures) {
+  for (const { sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_allowlisted_phrase, pass_exit, pass_ids, combined, status } of failures) {
     lines.push('');
     lines.push(`### ${sc.name}`);
     if (!pass_advisory) {
@@ -347,6 +353,13 @@ if (failures.length === 0) {
           : `- Expected no redundant-extras failure but "${REDUNDANT_EXTRAS_PHRASE}" appeared in output.`,
       );
     }
+    if (!pass_allowlisted_phrase) {
+      lines.push(
+        sc.expectAllowlistedPhrase
+          ? `- Expected allowlisted-count phrase ("${ALLOWLISTED_PHRASE}") in summary but it was absent from output.`
+          : `- Expected no allowlisted-count phrase but "${ALLOWLISTED_PHRASE}" appeared in output.`,
+      );
+    }
     if (!pass_exit) {
       lines.push(
         sc.expectExit0
@@ -374,7 +387,7 @@ if (failures.length === 0) {
   console.log(`[suite-probe-counts-advisory] All ${passed} scenario${passed === 1 ? '' : 's'} passed. ✓`);
 } else {
   console.error(`[suite-probe-counts-advisory] ${failures.length} scenario${failures.length === 1 ? '' : 's'} failed:`);
-  for (const { sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_exit, pass_ids, status } of failures) {
+  for (const { sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_allowlisted_phrase, pass_exit, pass_ids, status } of failures) {
     console.error(`  • ${sc.name}`);
     if (!pass_advisory) {
       console.error(
@@ -402,6 +415,13 @@ if (failures.length === 0) {
         sc.expectRedundantExtrasFail
           ? '    redundant-extras failure expected but not found in output'
           : '    redundant-extras failure unexpectedly present in output',
+      );
+    }
+    if (!pass_allowlisted_phrase) {
+      console.error(
+        sc.expectAllowlistedPhrase
+          ? '    allowlisted-count phrase expected in summary but not found in output'
+          : '    allowlisted-count phrase unexpectedly present in output',
       );
     }
     if (!pass_exit) {
