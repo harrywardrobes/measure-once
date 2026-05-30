@@ -1946,7 +1946,7 @@ async function main() {
           `.ca-default-input[data-stage="sales"][data-status="${statusKey}"]`,
         );
         if (!input) return null;
-        const row = input.parentElement;
+        const row = input.closest('[data-testid="ca-default-row"]');
         if (!row) return null;
         return row.querySelector('.ca-resolved-pill') ? 'visible' : null;
       },
@@ -1968,7 +1968,7 @@ async function main() {
         `.ca-default-input[data-stage="sales"][data-status="${statusKey}"]`,
       );
       if (!input) return 'input-missing';
-      const row = input.parentElement;
+      const row = input.closest('[data-testid="ca-default-row"]');
       if (!row) return 'row-missing';
       return row.querySelector('.ca-resolved-pill') ? 'still-present' : 'gone';
     }, LBL_KEY_CONFLICT);

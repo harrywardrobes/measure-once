@@ -200,24 +200,8 @@ async function clickTuneForRole(page, roleName) {
   await page.evaluate((name) => {
     const panel = document.getElementById('tab-permissions');
     if (!panel) return;
-    const rolesList = panel.querySelector('#roles-list');
-    if (!rolesList) return;
 
-    const allPs = Array.from(rolesList.querySelectorAll('p'));
-    let targetRow = null;
-    for (const p of allPs) {
-      if (p.textContent.trim() === name) {
-        let node = p.parentElement;
-        for (let i = 0; i < 6; i++) {
-          if (!node) break;
-          const btns = node.querySelectorAll('button');
-          if (btns.length >= 2) { targetRow = node; break; }
-          node = node.parentElement;
-        }
-        if (targetRow) break;
-      }
-    }
-
+    const targetRow = panel.querySelector(`[data-testid="role-row-${CSS.escape(name)}"]`);
     if (!targetRow) return;
 
     const buttons = Array.from(targetRow.querySelectorAll('button'));
@@ -490,21 +474,7 @@ async function clickTuneForDefault(page) {
     const panel = document.getElementById('tab-permissions');
     if (!panel) return;
 
-    const allPs = Array.from(panel.querySelectorAll('p'));
-    let targetRow = null;
-    for (const p of allPs) {
-      if (p.textContent.trim() === 'Default (all other roles)') {
-        let node = p.parentElement;
-        for (let i = 0; i < 8; i++) {
-          if (!node) break;
-          const btns = node.querySelectorAll('button');
-          if (btns.length >= 1) { targetRow = node; break; }
-          node = node.parentElement;
-        }
-        if (targetRow) break;
-      }
-    }
-
+    const targetRow = panel.querySelector('[data-testid="role-row-default"]');
     if (!targetRow) return;
     const btn = targetRow.querySelector('button');
     if (btn) btn.click();

@@ -218,7 +218,7 @@ export function AdminPermissionsPage() {
                     ? (roleEntry?.primary_keys ?? defaultNavKeys)
                     : defaultNavKeys;
                   return (
-                    <Stack key={r.name} direction="row" spacing={1.5}
+                    <Stack key={r.name} direction="row" spacing={1.5} data-testid={`role-row-${r.name}`}
                       sx={{ p: 1, border: 1, borderColor: 'divider', borderRadius: 1, flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
                       <Typography variant="body2" sx={{ flex: 1, fontWeight: 600, minWidth: 100 }}>{r.name}</Typography>
                       <FormControl size="small" sx={{ minWidth: 140 }}>
@@ -286,7 +286,7 @@ export function AdminPermissionsPage() {
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                 The row below is the fallback layout used for any user whose job role is not listed above (or who has no job role set). Roles showing "Inheriting default" inherit this layout automatically.
               </Typography>
-              <Stack direction="row" spacing={1.5}
+              <Stack direction="row" spacing={1.5} data-testid="role-row-default"
                 sx={{ p: 1, border: 1, borderColor: 'divider', borderRadius: 1, flexWrap: 'wrap', gap: 1, alignItems: 'center', bgcolor: 'action.hover' }}>
                 <Typography variant="body2" sx={{ flex: 1, fontWeight: 600, minWidth: 100, fontStyle: 'italic' }}>
                   Default (all other roles)

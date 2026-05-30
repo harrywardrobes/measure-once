@@ -501,7 +501,7 @@ function ProjectsSection({
 }) {
   if (loading) {
     return (
-      <Box sx={{ mb: 3 }}>
+      <Box data-testid="active-projects-section" sx={{ mb: 3 }}>
         <SectionHeader title="Active Projects" />
         <SkeletonCard titleW="44%" badgeW={52} />
         <SkeletonCard titleW="50%" badgeW={52} />
@@ -511,7 +511,7 @@ function ProjectsSection({
   }
   if (contactsError) {
     return (
-      <Box sx={{ mb: 3 }}>
+      <Box data-testid="active-projects-section" sx={{ mb: 3 }}>
         <SectionHeader title="Active Projects" />
         <Alert
           severity="warning"
@@ -535,7 +535,7 @@ function ProjectsSection({
     .slice(0, 6);
   if (active.length === 0) return null;
   return (
-    <Box sx={{ mb: 3 }}>
+    <Box data-testid="active-projects-section" sx={{ mb: 3 }}>
       <SectionHeader title="Active Projects" linkLabel="All customers" linkHref="/projects" />
       {active.map((c) => {
         const rooms = (roomsByContact[c.id] || []).filter(

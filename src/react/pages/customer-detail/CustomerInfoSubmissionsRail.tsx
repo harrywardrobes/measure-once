@@ -499,7 +499,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
                     Photos ({sub.photoUrls.length})
                   </Typography>
                   {sub.email_skipped_count > 0 && (
-                    <Alert severity="warning" sx={{ mb: 1, py: 0.5, fontSize: '0.75rem' }}>
+                    <Alert severity="warning" sx={{ mb: 1, py: 0.5, fontSize: '0.75rem' }} data-testid="skipped-photo-alert">
                       {sub.email_skipped_count} photo{sub.email_skipped_count === 1 ? ' was' : 's were'} too large to attach to the admin email —{' '}
                       {sub.email_skipped_count === 1 ? 'it is' : 'they are'}{' '}
                       <a

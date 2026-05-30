@@ -932,7 +932,7 @@ export function AdminTeamPage() {
               ec_phone: 'Emergency contact phone',
             };
             return (
-              <Alert severity="warning" icon={<DifferenceIcon />} sx={{ mb: 2 }}>
+              <Alert severity="warning" icon={<DifferenceIcon />} sx={{ mb: 2 }} data-testid="onboarding-conflicts-alert">
                 <AlertTitle>Onboarding discrepancies</AlertTitle>
                 <Typography variant="body2" sx={{ mb: 0.75 }}>
                   This member changed the following details during onboarding. Choose which value to keep for each field — your choice will update the form below.

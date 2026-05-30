@@ -781,7 +781,7 @@ async function main() {
       if (!section) return { sectionFound: false, linkFound: false, alertText: null };
       const link = section.querySelector('[data-testid="skipped-photo-link"]');
       if (!link) return { sectionFound: true, linkFound: false, alertText: null };
-      const alert = link.closest('[role="alert"]') || link.parentElement;
+      const alert = section.querySelector('[data-testid="skipped-photo-alert"]');
       const alertText = (alert?.textContent || '').trim();
       return { sectionFound: true, linkFound: true, alertText };
     });

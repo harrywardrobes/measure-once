@@ -704,7 +704,7 @@ export function CardActionsPage() {
                               : <span className="adm-text-faint-mono">{ls.key}</span>}
                           </div>
 
-                          <div className="adm-ca-default-row">
+                          <div className="adm-ca-default-row" data-testid="ca-default-row">
                             <div className="adm-ca-default-label">Action label</div>
                             <input type="text" className="field ca-default-input adm-ca-default-input"
                               maxLength={128}

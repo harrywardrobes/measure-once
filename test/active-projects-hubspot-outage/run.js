@@ -361,31 +361,9 @@ async function main() {
     // We count clickable HomeCards within the Active Projects section.
     // The error branch renders zero <CardActionArea> children.
     const cardCount = await page.evaluate(() => {
-      const el = document.querySelector('#home-view');
-      if (!el) return -1;
-      // Find the Active Projects section container.
-      // The SectionHeader renders a Typography with text "Active Projects".
-      // Its parent Box is the ProjectsSection wrapper — we look for it by
-      // traversing up from the heading node.
-      const allNodes = Array.from(el.querySelectorAll('*'));
-      const heading = allNodes.find(
-        n => n.children.length === 0 && (n.textContent || '').trim() === 'Active Projects',
-      );
-      if (!heading) return -1;
-      // Walk up to find the section Box (the element that contains both the
-      // heading and any cards). Stop at #home-view.
-      let section = heading.parentElement;
-      while (section && section !== el) {
-        // The section Box has mb:3 styling — it contains the SectionHeader stack.
-        // The heading is nested: Box > Stack > Stack > Typography.
-        // We want the outermost Box that directly wraps both header and content.
-        // A reliable heuristic: the element that contains both "Active Projects"
-        // and an Alert or a Card. Walk up until we reach an element whose
-        // direct children include the heading's ancestor AND sibling content.
-        if (section.children.length >= 2) break;
-        section = section.parentElement;
-      }
-      if (!section || section === el) return 0;
+      // Find the Active Projects section via its data-testid.
+      const section = document.querySelector('[data-testid="active-projects-section"]');
+      if (!section) return -1;
       // Count clickable cards (CardActionArea renders as a button) inside section.
       return section.querySelectorAll('button.MuiCardActionArea-root').length;
     });

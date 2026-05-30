@@ -1308,6 +1308,7 @@ export function CustomersPage(): React.ReactElement {
             inside the off-screen wrapper, and the FormControl toggles
             visibility:hidden↔visible as store.loaded changes. */}
         <Box
+          data-testid="lead-status-filter-wrap"
           sx={{ position: 'absolute', left: -9999, width: 200, overflow: 'hidden' }}
           aria-hidden="true"
         >

@@ -633,11 +633,10 @@ async function main() {
     await new Promise(r => setTimeout(r, 300));
 
     // ── assert skeleton is visible ──
-    // Look for .MuiSkeleton-root inside the Box that contains #lead-status-filter.
+    // Look for .MuiSkeleton-root inside the Box[data-testid="lead-status-filter-wrap"]
+    // that wraps the off-screen <select> and its loading skeleton.
     const skelVisible = await skelTab.evaluate(() => {
-      const sel = document.getElementById('lead-status-filter');
-      if (!sel) return false;
-      const box = sel.closest('.MuiFormControl-root')?.parentElement;
+      const box = document.querySelector('[data-testid="lead-status-filter-wrap"]');
       if (!box) return false;
       const skel = box.querySelector('.MuiSkeleton-root');
       if (!skel) return false;
@@ -674,8 +673,7 @@ async function main() {
     // ── assert skeleton disappears ──
     const skelGone = await skelTab.waitForFunction(
       () => {
-        const sel = document.getElementById('lead-status-filter');
-        const box = sel?.closest('.MuiFormControl-root')?.parentElement;
+        const box = document.querySelector('[data-testid="lead-status-filter-wrap"]');
         return !box || !box.querySelector('.MuiSkeleton-root');
       },
       { timeout: 5000 },

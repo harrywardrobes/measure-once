@@ -103,15 +103,10 @@ async function skeletonCountForComponent(page, componentName) {
     const heading = headings.find((h) => h.textContent.trim() === name);
     if (!heading) return -1;
 
-    // Walk up to the Paper wrapper (first <section> or element with
-    // role="presentation", or just the closest parent Paper).  The
-    // ComponentShowcase root is a Paper with variant="outlined"; in the DOM
-    // this is a <div class="MuiPaper-root …">.  We look for the closest
-    // ancestor that contains "MuiPaper-root".
-    let el = heading.parentElement;
-    while (el && !el.classList.contains('MuiPaper-root')) {
-      el = el.parentElement;
-    }
+    // Walk up to the Paper wrapper.  The ComponentShowcase root is a Paper
+    // with variant="outlined"; in the DOM this is a <div class="MuiPaper-root …">.
+    // Use closest() so this is resilient to intermediate wrapper elements.
+    const el = heading.closest('.MuiPaper-root');
     if (!el) return -1;
 
     return el.querySelectorAll('.MuiSkeleton-root').length;

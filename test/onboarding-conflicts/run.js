@@ -512,35 +512,14 @@ async function main() {
         record(UI_LABELS[3], 'user value visible',  'dialog not opened', false);
       } else {
         // Poll for the "Onboarding discrepancies" Alert to finish rendering.
-        await pollPage(adminPage, () => {
-          const all = Array.from(document.querySelectorAll('*'));
-          return all.some(el =>
-            el.children.length < 8
-            && el.textContent && el.textContent.includes('Onboarding discrepancies')
-          ) ? 'ok' : null;
-        }, undefined, 8000);
+        await pollPage(adminPage, () =>
+          !!document.querySelector('[data-testid="onboarding-conflicts-alert"]') ? 'ok' : null,
+        undefined, 8000);
 
-        // Search for "Onboarding discrepancies" anywhere in the body.
+        // Read the full text of the alert via its data-testid.
         const alertText = await adminPage.evaluate(() => {
-          // Walk all leaf-ish elements for the exact text, then climb up to get
-          // a reasonable amount of context (the MuiAlert-root ancestor).
-          const all = Array.from(document.querySelectorAll('*'));
-          const alertEl = all.find(el =>
-            el.children.length < 8
-            && el.textContent && el.textContent.includes('Onboarding discrepancies')
-          );
-          if (!alertEl) return '';
-          // Climb up to the MuiAlert root to capture the full alert text.
-          let node = alertEl;
-          while (node && node !== document.body) {
-            if (node.classList && Array.from(node.classList).some(c => c === 'MuiAlert-root')) {
-              return node.textContent || '';
-            }
-            node = node.parentElement;
-          }
-          // Fallback: return the closest div ancestor.
-          const div = alertEl.closest('div');
-          return div ? div.textContent : (alertEl.textContent || '');
+          const alert = document.querySelector('[data-testid="onboarding-conflicts-alert"]');
+          return alert ? (alert.textContent || '') : '';
         });
 
         record(
