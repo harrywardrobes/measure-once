@@ -109,6 +109,10 @@ const ROW_SUPERSEDED = {
 
 const ALL_ROWS = [ROW_NEWEST, ROW_SUPERSEDED];
 
+// Expected number of submission-card roots the component should render.
+// Equals the number of seeded rows — used in the ST-E guard probe.
+const EXPECTED_CARD_COUNT = ALL_ROWS.length; // 2
+
 const CONTACT_STUB = {
   id: CONTACT_ID,
   properties: {
@@ -412,6 +416,7 @@ async function main() {
   const PROBE_LABELS = [
     '(ST-A) Superseded chip is present in the rail',
     '(ST-B) Hovering Superseded chip reveals tooltip text',
+    '(ST-E) Exactly 2 submission-card roots are rendered',
     '(ST-C) Superseded card has no Copy, Open, or Resend buttons',
     '(ST-D) Active (non-superseded) card has at least one of Copy, Open, or Resend',
   ];
@@ -520,6 +525,27 @@ async function main() {
       tooltipSeen,
     );
 
+    // ── Probe ST-E: Exactly N submission-card roots exist ──────────────────────
+    // This guard runs before the per-card probes so that a rendering regression
+    // that hides ALL cards produces a clear "expected 2, found 0" message
+    // instead of a generic "active card not found in DOM" from ST-D.
+    console.log(`\n  [ST-E] Checking exactly ${EXPECTED_CARD_COUNT} submission-card roots are rendered`);
+
+    const renderedCardCount = await page.evaluate(() =>
+      document.querySelectorAll('[data-testid^="submission-card"]').length,
+    );
+
+    const steOk = renderedCardCount === EXPECTED_CARD_COUNT;
+
+    record(
+      PROBE_LABELS[2],
+      `exactly ${EXPECTED_CARD_COUNT} submission-card roots rendered`,
+      steOk
+        ? `${renderedCardCount} submission-card roots found (correct)`
+        : `expected ${EXPECTED_CARD_COUNT} submission cards, found ${renderedCardCount}`,
+      steOk,
+    );
+
     // ── Probe ST-C: Superseded card has no Copy, Open, or Resend buttons ──────
     console.log('\n  [ST-C] Checking superseded card has no Copy/Open/Resend buttons');
 
@@ -561,7 +587,7 @@ async function main() {
     }
 
     record(
-      PROBE_LABELS[2],
+      PROBE_LABELS[3],
       'no copy-link-btn, open-link-btn, or resend-link-btn on the superseded card',
       stcObserved,
       stcOk,
@@ -606,7 +632,7 @@ async function main() {
     }
 
     record(
-      PROBE_LABELS[3],
+      PROBE_LABELS[4],
       'at least one of copy-link-btn, open-link-btn, or resend-link-btn on the active card',
       stdObserved,
       stdOk,
