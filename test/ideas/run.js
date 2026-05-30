@@ -283,7 +283,7 @@ async function main() {
       Array.isArray(getComments.json) && getComments.json.length === 0,
     );
   } else {
-    record('[API-3] GET comments → skipped (no ideaId)', 'ideaId', 'missing', false);
+    skip('[API-3] GET comments → skipped (no ideaId)', 'ideaId', 'missing');
   }
 
   // ── [API-4] POST /api/ideas/:id/comments ────────────────────────────────────
@@ -305,8 +305,8 @@ async function main() {
       postComment.json?.body === commentBody,
     );
   } else {
-    record('[API-4] POST comment → skipped (no ideaId)', 'ideaId', 'missing', false);
-    record('[API-4] POST comment body text → skipped', 'ideaId', 'missing', false);
+    skip('[API-4] POST comment → skipped (no ideaId)', 'ideaId', 'missing');
+    skip('[API-4] POST comment body text → skipped', 'ideaId', 'missing');
   }
 
   // ── [API-5] DELETE /api/ideas/:id ────────────────────────────────────────────
@@ -329,8 +329,8 @@ async function main() {
       delFakeAdmin.status === 404,
     );
   } else {
-    record('[API-5] DELETE idea member 403 → skipped', 'ideaId', 'missing', false);
-    record('[API-5] DELETE idea admin 404 → skipped', 'ideaId', 'missing', false);
+    skip('[API-5] DELETE idea member 403 → skipped', 'ideaId', 'missing');
+    skip('[API-5] DELETE idea admin 404 → skipped', 'ideaId', 'missing');
   }
 
   // ── [API-6] DELETE /api/ideas/:id/comments/:commentId ───────────────────────
@@ -353,8 +353,8 @@ async function main() {
       delComAdmin.status === 200,
     );
   } else {
-    record('[API-6] DELETE comment member 403 → skipped', 'ideaId+commentId', 'missing', false);
-    record('[API-6] DELETE comment admin 200 → skipped', 'ideaId+commentId', 'missing', false);
+    skip('[API-6] DELETE comment member 403 → skipped', 'ideaId+commentId', 'missing');
+    skip('[API-6] DELETE comment admin 200 → skipped', 'ideaId+commentId', 'missing');
   }
 
   // ── UI Tests ─────────────────────────────────────────────────────────────────
