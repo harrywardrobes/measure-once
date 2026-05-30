@@ -60,6 +60,8 @@
     "test:customer-info-generate-link-reuse:ci": "node scripts/with-test-db.js test/customer-info-generate-link-reuse/run.js",
     "test:upload-photos-copyable-link": "node test/upload-photos-copyable-link/run.js",
     "test:upload-photos-copyable-link:ci": "node scripts/with-test-db.js test/upload-photos-copyable-link/run.js",
+    "test:active-link-expires": "node test/active-link-expires/run.js",
+    "test:active-link-expires:ci": "node scripts/with-test-db.js test/active-link-expires/run.js",
     "test:photo-storage-errors": "node test/photo-storage-errors/run.js",
     "test:photo-storage-errors:ci": "node scripts/with-test-db.js test/photo-storage-errors/run.js",
     "test:photo-approval-notification": "node test/photo-approval-notification/run.js",
