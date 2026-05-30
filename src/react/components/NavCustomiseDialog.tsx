@@ -83,7 +83,7 @@ export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys,
       onClose={onClose}
       fullWidth
       maxWidth="xs"
-      slotProps={{ paper: { sx: { borderRadius: 3 }, 'data-testid': 'nav-customise-dialog' } }}
+      slotProps={{ paper: { sx: { borderRadius: 3 }, ref: (el: HTMLElement | null) => { if (el) el.setAttribute('data-testid', 'nav-customise-dialog'); } } }}
     >
       <DialogTitle sx={{ pb: 0.5 }}>Customise navigation</DialogTitle>
       <DialogContent>

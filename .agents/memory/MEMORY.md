@@ -1,0 +1,2 @@
+- [MUI v6 slotProps data-testid](mui-v6-slotprops-data-testid.md) — data-testid cannot be a direct key in MUI v6 SlotProps; use a ref callback instead.
+- [MUI v6 Stack layout props](mui-v6-stack-props.md) — shorthand layout props (alignItems, flexWrap, direction) must go inside sx={} on Stack, not as direct props.
