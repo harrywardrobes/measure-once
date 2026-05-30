@@ -26,6 +26,7 @@ import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
+import { useTheme } from '@mui/material/styles';
 import BoltIcon from '@mui/icons-material/Bolt';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { STAGE_COLORS, NEUTRAL_COLORS, STATUS_COLORS } from '../theme';
@@ -301,7 +302,7 @@ export function buildFlowGraph(
           target: statusNodeId,
           type: 'smoothstep',
           animated: false,
-          style: { stroke: sc.bg || '#94a3b8', strokeWidth: 1.5 }, // hex-color-ok: fallback slate colour when stage token absent
+          style: { stroke: sc.bg || NEUTRAL_COLORS[400], strokeWidth: 1.5 },
         });
 
         let subY = currentY;
@@ -336,7 +337,7 @@ export function buildFlowGraph(
             target: subNodeId,
             type: 'smoothstep',
             animated: false,
-            style: { stroke: sc.light || '#e2e8f0', strokeWidth: 1.5, strokeDasharray: '4 3' }, // hex-color-ok: fallback slate colour when stage token absent
+            style: { stroke: sc.light || NEUTRAL_COLORS[200], strokeWidth: 1.5, strokeDasharray: '4 3' },
           });
 
           subY += SUB_H + V_GAP;
@@ -486,6 +487,8 @@ function HandlerBadgeSummary({
 const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<WorkflowMapNodeData>>) {
   const sc = STAGE_COLORS[data.stageKey] || { bg: '#475569', light: '#f1f5f9', text: '#1e293b' };
   const isReadOnly = !!data.isReadOnly;
+  const theme = useTheme();
+  const white = theme.palette.common.white;
   return (
     <Box
       sx={{
@@ -498,11 +501,11 @@ const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<Wor
         borderRadius: '8px',
         background: isReadOnly ? `linear-gradient(90deg, ${sc.bg}cc, ${sc.bg}99)` : sc.bg,
         color: 'common.white',
-        boxShadow: selected ? `0 0 0 2px #fff, 0 0 0 4px ${sc.bg}` : '0 1px 4px rgba(0,0,0,.18)', // hex-color-ok: #fff ring is intentional white in multi-layer shadow
+        boxShadow: selected ? `0 0 0 2px ${white}, 0 0 0 4px ${sc.bg}` : '0 1px 4px rgba(0,0,0,.18)',
         cursor: 'pointer',
         userSelect: 'none',
         transition: 'box-shadow .15s',
-        '&:hover': { boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${sc.bg}` }, // hex-color-ok: #fff ring is intentional white in multi-layer shadow
+        '&:hover': { boxShadow: `0 0 0 2px ${white}, 0 0 0 4px ${sc.bg}` },
         opacity: isReadOnly ? 0.85 : 1,
       }}
     >
