@@ -23,6 +23,10 @@
 //       invoice badge on the card opens the drawer
 //       (data-testid="invoice-detail-drawer" present + open). Regression guard
 //       for the accidental deletion of handleOpenInvoice (task #1920).
+//   (F) UploadPhotosModal check-error phase: when the link-status fetch fails,
+//       the button with data-testid="cah-proceed-anyway" reads "Generate
+//       anyway", not "Send anyway". Regression guard for accidental label
+//       revert on the proceed button.
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-card-action-strip
@@ -73,6 +77,10 @@ const CONTACT_E_ID    = 'privtest-ccas-contact-e';
 const CONTACT_E_EMAIL = 'echo@privtest.invalid';
 const INV_E_ID        = 'inv-privtest-e';
 
+// Contact with an upload_photos_and_info handler (probe F).
+const CONTACT_F_ID     = 'privtest-ccas-contact-f';
+const CONTACT_F_STATUS = 'privtest_ccas_upload';
+
 // The action_name on the handler for contact A (rendered as "Strip Action" in Title Case).
 const HANDLER_ACTION_NAME = 'strip_action';
 const EXPECTED_STRIP_LABEL = 'Strip Action';
@@ -119,12 +127,13 @@ async function pollPage(page, fn, arg, timeoutMs = 12000, intervalMs = 150) {
 /**
  * Build the fetch-interceptor script fragment that stubs all customers-page
  * API calls. `opts` controls variable parts:
- *   contacts     – array of contact objects for /api/contacts-all
- *   handlers     – array for /api/card-action-handlers
- *   inProgress   – array for /api/design-visits/in-progress
- *   qbConnected  – boolean; when true, stubs QB status as connected + returns qbInvoices
- *   qbInvoices   – array of invoice summary objects returned by /api/quickbooks/invoices
+ *   contacts         – array of contact objects for /api/contacts-all
+ *   handlers         – array for /api/card-action-handlers
+ *   inProgress       – array for /api/design-visits/in-progress
+ *   qbConnected      – boolean; when true, stubs QB status as connected + returns qbInvoices
+ *   qbInvoices       – array of invoice summary objects returned by /api/quickbooks/invoices
  *   qbInvoiceDetails – map of id → detail object for /api/quickbooks/invoice/:id stubs
+ *   linkStatusError  – when true, stub the link-status endpoint to return 500
  */
 function buildFetchInterceptScript(opts) {
   const {
@@ -134,6 +143,7 @@ function buildFetchInterceptScript(opts) {
     qbConnected = false,
     qbInvoices = [],
     qbInvoiceDetails = {},
+    linkStatusError = false,
   } = opts;
 
   // Build a minimal stub for every endpoint the page fetches on load.
@@ -152,14 +162,16 @@ function buildFetchInterceptScript(opts) {
     '/api/quickbooks/invoices':       JSON.stringify({ invoices: qbInvoices }),
   };
 
-  const inProgressJson      = JSON.stringify(inProgress || []);
+  const inProgressJson       = JSON.stringify(inProgress || []);
   const qbInvoiceDetailsJson = JSON.stringify(qbInvoiceDetails);
+  const linkStatusErrorFlag  = linkStatusError ? 'true' : 'false';
 
   return `
 (function() {
   var STUBS = ${JSON.stringify(stubs)};
   var IN_PROGRESS = ${inProgressJson};
   var QB_INV_DETAILS = ${qbInvoiceDetailsJson};
+  var LINK_STATUS_ERROR = ${linkStatusErrorFlag};
 
   var originalFetch = window.fetch;
 
@@ -200,6 +212,14 @@ function buildFetchInterceptScript(opts) {
       }
       return Promise.resolve(new Response(JSON.stringify({ error: 'Not found' }), {
         status: 404, headers: { 'Content-Type': 'application/json' },
+      }));
+    }
+
+    // link-status — return a 500 error when LINK_STATUS_ERROR is true.
+    if (LINK_STATUS_ERROR && pathname.match(/^\\/api\\/customer-info\\/by-contact\\/.+\\/link-status$/)) {
+      window.__ccasIntercepted.push('link-status-error:' + pathname);
+      return Promise.resolve(new Response(JSON.stringify({ error: 'Stub: link-status unavailable' }), {
+        status: 500, headers: { 'Content-Type': 'application/json' },
       }));
     }
 
@@ -293,6 +313,11 @@ function writeReport(runId) {
     '  by email, the card renders a red badge button; clicking it opens the',
     '  `InvoiceDetailDrawer` (`data-testid="invoice-detail-drawer"` present and not',
     '  aria-hidden). Regression guard for the accidental deletion of handleOpenInvoice.',
+    '- **(F) UploadPhotosModal "Generate anyway" button label**: clicking an',
+    '  `upload_photos_and_info` strip opens the modal; the link-status fetch is',
+    '  stubbed to return a 500 error so the modal enters check-error phase. Asserts',
+    '  the `[data-testid="cah-proceed-anyway"]` button reads "Generate anyway" and',
+    '  does NOT read "Send anyway". Regression guard against accidental label revert.',
     '',
     'All customers-page API calls are stubbed via evaluateOnNewDocument fetch',
     'interception so no HubSpot token or real contact data is required.',
@@ -372,6 +397,8 @@ async function main() {
     '(C) start_design_visit + in-progress draft shows "Continue designing" strip',
     '(D) clicking action strip does not navigate away from /customers',
     '(E) QB invoice badge click opens InvoiceDetailDrawer',
+    '(F) UploadPhotosModal check-error: proceed button reads "Generate anyway"',
+    '(F) UploadPhotosModal check-error: proceed button does NOT read "Send anyway"',
   ];
 
   if (!puppeteer) {
@@ -762,6 +789,99 @@ async function main() {
     );
 
     await pageE.__ctx.close().catch(() => {});
+
+    // ── Probe F: UploadPhotosModal "Generate anyway" button label ────────────
+    console.log('\n  [F] UploadPhotosModal check-error button label probe');
+
+    const handlerForF = {
+      id: 1005,
+      type: 'upload_photos_and_info',
+      config: { action_name: 'upload_photos' },
+      bindings: [{ stage_key: 'sales', status_key: CONTACT_F_STATUS }],
+    };
+
+    const contactF = {
+      id: CONTACT_F_ID,
+      properties: {
+        firstname: 'Foxtrot',
+        lastname: 'PrivTest',
+        email: 'foxtrot@privtest.invalid',
+        hs_lead_status: CONTACT_F_STATUS,
+      },
+    };
+
+    const pageF = await openCustomers(browser, memberClient.cookie, {
+      contacts:       [contactF],
+      handlers:       [handlerForF],
+      inProgress:     [],
+      linkStatusError: true,
+    });
+
+    // Wait for the action strip to appear.
+    const fStripVisible = await pollPage(pageF, () => {
+      const strip = document.querySelector('#customers-results [role="button"]');
+      return strip ? 'ok' : null;
+    }, null, 12000).catch(() => null);
+
+    if (!fStripVisible) {
+      const intercepted = await pageF.evaluate(() => window.__ccasIntercepted || []);
+      console.log(`  [F] debug: strip not visible. intercepted=${JSON.stringify(intercepted)}`);
+      const fLogs = (pageF.__logs || []).filter(l =>
+        l.includes('error') || l.includes('Error') || l.includes('handler'),
+      );
+      if (fLogs.length) console.log(`  [F] page logs:\n    ${fLogs.join('\n    ')}`);
+    }
+
+    // Click the action strip to open the UploadPhotosModal.
+    await pageF.evaluate(() => {
+      const strip = document.querySelector('#customers-results [role="button"]');
+      if (strip) strip.click();
+    });
+
+    // Wait for the modal to reach the check-error phase, indicated by the
+    // presence of the data-testid="cah-proceed-anyway" button.
+    const fProceedVisible = await pollPage(pageF, () => {
+      const btn = document.querySelector('[data-testid="cah-proceed-anyway"]');
+      return btn ? 'ok' : null;
+    }, null, 12000).catch(() => null);
+
+    const fState = await pageF.evaluate(() => {
+      const btn = document.querySelector('[data-testid="cah-proceed-anyway"]');
+      return {
+        buttonFound: !!btn,
+        buttonText:  btn ? (btn.textContent || '').trim() : null,
+        intercepted: window.__ccasIntercepted || [],
+      };
+    });
+
+    if (!fState.buttonFound || !fProceedVisible) {
+      const fLogs = (pageF.__logs || []).filter(l =>
+        l.includes('link-status') || l.includes('check-error') || l.includes('error') || l.includes('Error'),
+      );
+      console.log(`  [F] debug: buttonFound=${fState.buttonFound} buttonText="${fState.buttonText}"`);
+      console.log(`  [F] intercepted=${JSON.stringify(fState.intercepted)}`);
+      if (fLogs.length) console.log(`  [F] page logs:\n    ${fLogs.join('\n    ')}`);
+    }
+
+    record(
+      UI_PROBE_LABELS[6],
+      'button text is "Generate anyway"',
+      fState.buttonFound
+        ? `button text="${fState.buttonText}"`
+        : 'cah-proceed-anyway button not found in DOM',
+      fState.buttonFound && fState.buttonText === 'Generate anyway',
+    );
+
+    record(
+      UI_PROBE_LABELS[7],
+      'button text does NOT contain "Send anyway"',
+      fState.buttonFound
+        ? `button text="${fState.buttonText}"`
+        : 'cah-proceed-anyway button not found in DOM',
+      fState.buttonFound && !(fState.buttonText || '').includes('Send anyway'),
+    );
+
+    await pageF.__ctx.close().catch(() => {});
 
   } catch (e) {
     console.error('Test error:', e);
