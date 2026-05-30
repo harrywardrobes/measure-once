@@ -5,8 +5,9 @@
  * Scans every *.ts / *.tsx file under src/react/ — excluding *.stories.*,
  * *.d.ts, and theme.ts (which legitimately declares brand hex literals) — for
  * raw hex colour values (`#[0-9a-fA-F]{3,6}`) appearing in style-related
- * properties: bgcolor, background, backgroundColor, color, borderColor, fill,
- * stroke, outlineColor, textDecorationColor, caretColor, and boxShadow.
+ * properties: bgcolor, background, backgroundColor, color, borderColor,
+ * borderBottomColor, border (shorthand), fill, stroke, outlineColor,
+ * textDecorationColor, caretColor, and boxShadow.
  *
  * Hardcoded hex colours in component files should be replaced with semantic
  * theme tokens (STAGE_COLORS, STATUS_COLORS, MUI palette strings, CSS custom
@@ -114,8 +115,13 @@ const HEX_RE = /#[0-9a-fA-F]{3,6}(?![0-9a-fA-F])/;
  * Anchored with word boundaries so "background" doesn't match inside
  * "backgroundImage", for example — but all listed tokens are distinct
  * in practice.
+ *
+ * The `border` shorthand is handled as a separate alternative with a
+ * negative lookbehind `(?<![-\w])` and a negative lookahead `(?![\w-])`
+ * so that CSS custom-property names like `--status-danger-border` are not
+ * falsely matched (the hyphen before `border` would trigger the lookbehind).
  */
-const STYLE_PROP_RE = /\b(?:bgcolor|background|backgroundColor|borderColor|borderBottomColor|fill|color|stroke|outlineColor|textDecorationColor|caretColor|boxShadow)\b/;
+const STYLE_PROP_RE = /\b(?:bgcolor|background|backgroundColor|borderColor|borderBottomColor|fill|color|stroke|outlineColor|textDecorationColor|caretColor|boxShadow)\b|(?<![-\w])border(?![\w-])/;
 
 /**
  * Suppression comments that exempt a line from this check.
@@ -135,8 +141,11 @@ const SUPPRESSION_RE = /(?:\/\/|\/\*)\s*(?:hex-color-ok|story-hex-ok)\s*:/;
  *
  * The [^:\n]* between the prop name and ":" allows for optional whitespace or
  * TypeScript type annotations before the colon.
+ *
+ * The `border` shorthand alternative uses the same lookbehind/lookahead as
+ * STYLE_PROP_RE to avoid matching CSS custom-property names.
  */
-const MULTILINE_PROP_RE = /\b(?:bgcolor|background|backgroundColor|borderColor|borderBottomColor|fill|color|stroke|outlineColor|textDecorationColor|caretColor|boxShadow)\b[^:\n]*:\s*\r?\n([^\n]*)/g;
+const MULTILINE_PROP_RE = /(?:\b(?:bgcolor|background|backgroundColor|borderColor|borderBottomColor|fill|color|stroke|outlineColor|textDecorationColor|caretColor|boxShadow)\b|(?<![-\w])border(?![\w-]))[^:\n]*:\s*\r?\n([^\n]*)/g;
 
 const componentFiles = findComponentFiles(SRC_DIR);
 
