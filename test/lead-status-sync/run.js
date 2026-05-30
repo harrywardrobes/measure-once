@@ -1596,6 +1596,115 @@ async function main() {
       await chipCardVisTab.close();
     }
 
+    // ── (M) blank-filter race guard — BC before initial fetch completes ────────
+    // This probe exercises the early-return guard in useLeadStatusSync:
+    //
+    //   if (!store.loaded) return;
+    //
+    // Without that guard, a BroadcastChannel 'lead_statuses_changed' message
+    // received while the initial /api/lead-statuses fetch is still in-flight
+    // would call populateLeadStatusFilter() against an empty store.statuses
+    // array, producing a blank dropdown.  The guard defers the refresh to the
+    // mount effect's own Promise.all, which calls onChange() once it finishes.
+    //
+    // Probe steps:
+    //   1. Open a fresh Customers tab with request interception on /api/lead-statuses.
+    //   2. Navigate to /customers — React mounts and starts the initial fetch.
+    //   3. Puppeteer catches the in-flight request and holds it.
+    //   4. From a second same-origin tab, post a 'lead_statuses_changed' BC message.
+    //   5. Wait a tick so the BC handler fires (and the guard triggers early-return).
+    //   6. Release the held request — mount effect completes, store.loaded = true.
+    //   7. Assert the dropdown shows LABEL_SSE (not blank / missing the option).
+    console.log('\n  [M] blank-filter race guard — BC fires before initial fetch completes');
+
+    const raceTab = await browser.newPage();
+    await raceTab.setCacheEnabled(false);
+    await injectSession(raceTab, adminClient.cookie);
+
+    // Promise that resolves when Puppeteer catches the /api/lead-statuses request.
+    let resolveRaceReq;
+    const raceReqCaught = new Promise(res => { resolveRaceReq = res; });
+    let pendingRaceReq = null;
+
+    await raceTab.setRequestInterception(true);
+    raceTab.on('request', req => {
+      const url = req.url();
+      // Match /api/lead-statuses exactly — not /api/admin/lead-statuses or counts.
+      if (/\/api\/lead-statuses(\?|$)/.test(url) && !pendingRaceReq) {
+        pendingRaceReq = req;
+        resolveRaceReq(req);
+        // Do NOT call req.continue() — we are holding the request in-flight.
+      } else {
+        req.continue();
+      }
+    });
+
+    await raceTab.goto(`${BASE}/customers`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+
+    // Wait until the in-flight request is intercepted (up to 5 s).
+    const raceReqIntercepted = await Promise.race([
+      raceReqCaught.then(() => true),
+      new Promise(res => setTimeout(() => res(false), 5000)),
+    ]);
+    record(
+      '[M] /api/lead-statuses request intercepted in-flight before BC fires',
+      'request intercepted within 5 s',
+      `intercepted=${raceReqIntercepted}`,
+      raceReqIntercepted,
+    );
+
+    // Open a second same-origin tab and immediately post the BC message.
+    // BroadcastChannel is origin-scoped; we must navigate to the same origin
+    // before posting so the message reaches raceTab's listener.
+    const raceAdminTab = await browser.newPage();
+    await injectSession(raceAdminTab, adminClient.cookie);
+    await raceAdminTab.goto(`${BASE}/customers`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000,
+    });
+    await raceAdminTab.evaluate(() => {
+      new BroadcastChannel('lead_statuses_changed').postMessage('changed');
+    });
+
+    // Give the BC handler one tick to fire (and hit the guard) before releasing.
+    await new Promise(r => setTimeout(r, 300));
+
+    // Release the held /api/lead-statuses request so the mount effect finishes.
+    if (pendingRaceReq) {
+      try { pendingRaceReq.continue(); } catch {}
+    }
+
+    // After the request resolves, store.loaded = true and the dropdown should
+    // show LABEL_SSE (the current DB label for LS_KEY after section H's rename).
+    // A blank dropdown means populateLeadStatusFilter() was called prematurely.
+    const raceFilterOk = await waitForFilterLabel(raceTab, LABEL_SSE, 8000);
+    record(
+      '[M] filter dropdown shows LABEL_SSE after BC-during-fetch race (no blank)',
+      `option starting with "${LABEL_SSE}" appears within 8 s`,
+      `found=${raceFilterOk}`,
+      raceFilterOk,
+    );
+
+    // Also assert the dropdown is not blank (has at least one meaningful option
+    // beyond "All statuses").
+    const raceHasOptions = await raceTab.evaluate(() => {
+      const sel = document.getElementById('lead-status-filter');
+      if (!sel) return false;
+      return sel.options.length > 1;
+    });
+    record(
+      '[M] filter dropdown is not blank after BC-during-fetch race',
+      'select has > 1 options',
+      `optionCount=${raceHasOptions}`,
+      raceHasOptions,
+    );
+
+    await raceAdminTab.close();
+    await raceTab.close();
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -1750,6 +1859,16 @@ async function writeReport(runId, findings) {
     '  Exercises the `document.addEventListener("visibilitychange", onVisibility)`',
     '  → `loadLeadSubstatuses()` → `store.subsVersion++` → `substatusMap` recompute',
     '  path — the regression guard introduced in task #1923.',
+    '- **(M) blank-filter race guard — BC fires before initial fetch completes**:',
+    '  opens a fresh Customers tab with Puppeteer request interception enabled.',
+    '  Holds `GET /api/lead-statuses` in-flight so `store.loaded` stays `false`',
+    '  while React is mid-mount. Immediately posts a `lead_statuses_changed`',
+    '  BroadcastChannel message from a second same-origin tab, then releases the',
+    '  intercept. Asserts the dropdown shows the expected label and has more than',
+    '  one option (i.e. was not blanked). Exercises the `if (!store.loaded) return`',
+    '  early-return guard in `useLeadStatusSync` (`CustomersPage.tsx`): without it,',
+    '  the premature BC call would invoke `populateLeadStatusFilter()` against an',
+    '  empty `store.statuses` array, producing a blank select.',
     '',
     '## Notes',
     '',

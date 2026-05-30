@@ -205,37 +205,13 @@ has `qb_estimate_id`, the pipeline fetches that estimate and:
 See **[docs/TEST_SUITES.md](docs/TEST_SUITES.md)** for the full suite reference,
 harness notes, and the isolated temp-database wrapper documentation.
 
-**Quick facts:**
-- All suites accept `DATABASE_URL_TEST=<disposable>` or `PRIVTEST_ALLOW_SHARED_DB=1`.
-- Each suite writes a markdown report to `test-results/<name>.md` and exits
-  non-zero on failure.
-- `npm run test:ci` runs all suites. DB-dependent ones run via `:<suite>:ci`
-  variants that spin up an isolated temp database automatically.
-- The authoritative CI step list is in `scripts/run-ci.mjs`.
-
-
-## Required Secrets
-- `DATABASE_URL`, `SESSION_SECRET` — required.
-- `ADMIN_EMAILS` — comma-separated bootstrap admins.
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` — set-password
-  email. If missing, the link is logged to the server console.
-- `APP_URL` (or `REPLIT_DOMAINS`) — absolute link base in emails.
-- `HUBSPOT_TOKEN` — HubSpot private app token (otherwise HubSpot endpoints 503).
-- `GOOGLE_*` — Google OAuth (Gmail + Calendar).
-- `TURNSTILE_SECRET_KEY`, `TURNSTILE_SITE_KEY` — **required in production** for
-  Cloudflare Turnstile captcha on `/api/login`, `/api/forgot-password`,
-  `/api/request-access`. Absent in production → endpoints fail closed (503).
-  Dev mode is a no-op. A `[SECURITY]` warning is logged at startup if unset.
-- `BOOTSTRAP_ADMIN_PASSWORD` — **emergency-only** fallback for `ADMIN_EMAILS`
-  accounts with no password set and no pending force-reset token. Blocked
-  once an admin sets their own password, and during the window after a
-  `force-password-reset`. Use a strong random value. Every use is logged as
-  `[SECURITY] Bootstrap admin login used`. Omit until needed.
-- `DEBUG_HUBSPOT` — optional. When truthy, enables verbose server logs for
-  HubSpot rate-limit events, retry/backoff attempts in `hubspotSearchWithRetry`
-  (used by `/api/open-leads` and `/api/contacts-lead-status-counts`), and
-  stale-cache fallbacks in `/api/contacts-lead-status-counts`
-  (e.g. `serving stale counts`). Unset in production to keep logs quiet;
-  a `[DEBUG]` warning is printed at startup when this flag is on.
-
-`REPL_ID` and Replit OIDC are no longer used.
+## React island conventions
+- Material UI is the standard component framework; every mount is wrapped
+  in `AppThemeProvider`. See `src/react/README.md` and `src/react/ICONS.md`.
+- Mounts are declared in `src/react/main.tsx`. Brand tokens (palette, stage
+  colours, radii, typography) live in `src/react/theme.ts` — the canonical
+  source of design tokens. CSS custom-property tokens are generated into
+  `public/tokens.css` by `scripts/generate-tokens-css.mjs` and loaded by every
+  HTML page. All shared app styles live in `public/app-styles.css`.
+  (`public/style.css` has been retired and deleted.)
+- Icons: named imports from `@mui/icons-material`, no inline `<svg>` in React.
