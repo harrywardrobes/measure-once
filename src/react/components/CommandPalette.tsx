@@ -27,12 +27,16 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import PersonIcon from '@mui/icons-material/Person';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
+import TuneIcon from '@mui/icons-material/Tune';
+import ExtensionIcon from '@mui/icons-material/Extension';
+import CodeIcon from '@mui/icons-material/Code';
 
 declare global {
   interface Window {
     openCommandPalette?: () => void;
     closeCommandPalette?: () => void;
     _cpRun?: Record<string, () => void>;
+    adminSwitchGroup?: (groupId: string) => void;
   }
 }
 
@@ -56,6 +60,15 @@ const ALL_ACTIONS: Action[] = [
   { id: 'go-profile',      label: 'Your profile',           hint: 'Update your account details',            category: 'Account',  icon: <PersonIcon fontSize="small" />,          href: '/profile' },
   { id: 'filter-workshop', label: 'Customers · Workshop',   hint: 'Show only customers in Workshop',        category: 'Filter',   icon: <SettingsIcon fontSize="small" />,        href: '/customers?stage=workshop' },
   { id: 'sign-out',        label: 'Sign out',               hint: 'End your current session',               category: 'Account',  icon: <LogoutIcon fontSize="small" /> },
+];
+
+// Admin-only actions that jump directly to a tab group in the admin panel.
+// Shown only to admins; merged into the active action list inside the component.
+const ADMIN_GROUP_ACTIONS: Action[] = [
+  { id: 'go-admin-group-people',        label: 'Admin · People',        hint: 'Jump to the People group (Alt+1)',        category: 'Admin', icon: <GroupIcon fontSize="small" /> },
+  { id: 'go-admin-group-configuration', label: 'Admin · Configuration', hint: 'Jump to the Configuration group (Alt+2)', category: 'Admin', icon: <TuneIcon fontSize="small" /> },
+  { id: 'go-admin-group-integrations',  label: 'Admin · Integrations',  hint: 'Jump to the Integrations group (Alt+3)',  category: 'Admin', icon: <ExtensionIcon fontSize="small" /> },
+  { id: 'go-admin-group-developer',     label: 'Admin · Developer',     hint: 'Jump to the Developer group (Alt+4)',     category: 'Admin', icon: <CodeIcon fontSize="small" /> },
 ];
 
 function contactName(c: { properties?: { firstname?: string; lastname?: string } }): string {
@@ -174,6 +187,16 @@ export function CommandPalette() {
     window.openCommandPalette = doOpen;
     window.closeCommandPalette = doClose;
 
+    const adminGroupNav = (groupId: string) => {
+      doClose();
+      if (typeof window.adminSwitchGroup === 'function') {
+        window.adminSwitchGroup(groupId);
+      } else {
+        try { localStorage.setItem('adminActiveGroup', groupId); } catch (_) {}
+        location.href = '/admin';
+      }
+    };
+
     window._cpRun = {
       'new-customer': () => {
         doClose();
@@ -184,6 +207,10 @@ export function CommandPalette() {
           .then(() => { location.href = '/login?signed_out=1'; })
           .catch(() => { location.href = '/login?signed_out=1'; });
       },
+      'go-admin-group-people':        () => adminGroupNav('people'),
+      'go-admin-group-configuration': () => adminGroupNav('configuration'),
+      'go-admin-group-integrations':  () => adminGroupNav('integrations'),
+      'go-admin-group-developer':     () => adminGroupNav('developer'),
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -200,9 +227,10 @@ export function CommandPalette() {
   }, [doOpen, doClose, open]);
 
   const activeActions: Action[] = React.useMemo(() => {
-    if (!settings) return ALL_ACTIONS;
+    const base = isAdmin ? [...ALL_ACTIONS, ...ADMIN_GROUP_ACTIONS] : ALL_ACTIONS;
+    if (!settings) return base;
     const disabled = new Set(settings.disabled_actions || []);
-    let active = ALL_ACTIONS.filter(a => !disabled.has(a.id));
+    let active = base.filter(a => !disabled.has(a.id));
     const order = settings.action_order || [];
     if (order.length) {
       active = [...active].sort((a, b) => {
@@ -214,7 +242,7 @@ export function CommandPalette() {
       });
     }
     return active;
-  }, [settings]);
+  }, [settings, isAdmin]);
 
   const hintPlaceholder = settings?.hint_placeholder || 'Search customers, actions…';
 

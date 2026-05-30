@@ -246,6 +246,47 @@ export function AdminGroupedTabsBar() {
     }
   }, []);
 
+  // Expose a global so external callers (Command Palette, etc.) can
+  // programmatically switch to a group without touching React internals.
+  // The wrapper validates the string is a known GroupId before delegating.
+  useEffect(() => {
+    window.adminSwitchGroup = (groupId: string) => {
+      if (TAB_GROUPS.some((g) => g.id === groupId)) {
+        handleGroupSelect(groupId as GroupId);
+      }
+    };
+    return () => { delete window.adminSwitchGroup; };
+  }, [handleGroupSelect]);
+
+  // Alt+1…4 keyboard shortcuts — jump to the Nth visible group.
+  // Ignored when focus is inside an interactive input element.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      const n = parseInt(e.key, 10);
+      if (isNaN(n) || n < 1 || n > 4) return;
+      const active = document.activeElement;
+      if (
+        active &&
+        (active.tagName === 'INPUT' ||
+          active.tagName === 'TEXTAREA' ||
+          active.tagName === 'SELECT' ||
+          (active as HTMLElement).isContentEditable)
+      ) return;
+      // Build ordered list of visible groups (mirrors AdminGroupedTabsBarInner).
+      const tabMap = new Map(tabs.map((t) => [t.id, t]));
+      const visibleGroups = TAB_GROUPS.filter(
+        (g) => !g.tabIds.every((tid) => tabMap.get(tid)?.hidden !== false),
+      );
+      const target = visibleGroups[n - 1];
+      if (!target) return;
+      e.preventDefault();
+      handleGroupSelect(target.id);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [tabs, handleGroupSelect]);
+
   // Keep activeGroupId in sync whenever activeTabId changes.
   //
   // This covers two important cases that the explicit handlers don't catch:
