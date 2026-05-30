@@ -623,9 +623,9 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   gap: 8px;
   padding: 7px 16px;
   background: var(--status-warningLight-bg);
-  border-top: 2px solid #f59e0b; /* hex-color-ok: amber-400; no exact token (--stage-survey-bg is amber-600 #d97706) */
+  border-top: 2px solid var(--status-warningDeep-bg);
   font-size: 0.8rem;
-  color: #78350f; /* hex-color-ok: amber-900; no exact token */
+  color: var(--status-warningDeep-text);
 }
 .room-stale-banner span {
   flex: 1;
@@ -640,7 +640,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   border-radius: 50%;
   border: none;
   background: transparent;
-  color: #78350f; /* hex-color-ok: amber-900; no exact token */
+  color: var(--status-warningDeep-text);
   cursor: pointer;
   opacity: 0.7;
   font-size: 1rem;
@@ -661,9 +661,9 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   gap: 8px;
   padding: 7px 16px;
   background: var(--status-warningLight-bg);
-  border-top: 2px solid #f59e0b; /* hex-color-ok: amber-400; no exact token */
+  border-top: 2px solid var(--status-warningDeep-bg);
   font-size: 0.8rem;
-  color: #78350f; /* hex-color-ok: amber-900; no exact token */
+  color: var(--status-warningDeep-text);
 }
 .ls-stale-hint span {
   flex: 1;
@@ -677,9 +677,9 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
   gap: 8px;
   padding: 5px 10px;
   background: var(--status-warningLight-bg);
-  border-left: 3px solid #f59e0b; /* hex-color-ok: amber-400; no exact token */
+  border-left: 3px solid var(--status-warningDeep-bg);
   font-size: 0.78rem;
-  color: #78350f; /* hex-color-ok: amber-900; no exact token */
+  color: var(--status-warningDeep-text);
   flex-shrink: 0;
 }
 .ls-counts-error-notice span {
@@ -1389,14 +1389,14 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .admin-page .adm-conflict-box {
   margin-top: 12px; padding: 10px 12px;
-  border: 1px solid #fbbf24; /* hex-color-ok: amber-400; no exact token */ border-radius: 8px;
+  border: 1px solid var(--status-warning-border); border-radius: 8px;
   background: var(--status-warningLight-bg);
 }
 .admin-page .adm-conflict-box-head {
   font-size: .8rem; font-weight: 600; color: var(--status-warning-text); margin-bottom: 6px;
 }
 .admin-page .adm-conflict-box-list {
-  font-size: .78rem; color: #78350f; /* hex-color-ok: amber-900; no exact token */ margin-bottom: 10px; line-height: 1.6;
+  font-size: .78rem; color: var(--status-warningDeep-text); margin-bottom: 10px; line-height: 1.6;
 }
 .admin-page .adm-conflict-box-actions { display: flex; gap: 8px; }
 .admin-page .adm-btn-conflict { font-size: .78rem; padding: 4px 12px; }
@@ -1497,7 +1497,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 
 /* Card-action handlers — conflicts banner */
 .admin-page .adm-cab-wrap {
-  border: 1px solid #fbbf24; /* hex-color-ok: amber-400; no exact token */ border-radius: 10px;
+  border: 1px solid var(--status-warning-border); border-radius: 10px;
   background: var(--status-warningLight-bg); padding: 12px 14px;
 }
 .admin-page .adm-cab-head { display: flex; align-items: flex-start; gap: 10px; }
@@ -1521,7 +1521,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 }
 .admin-page .adm-cab-item:first-child { border-top: 0; }
 .admin-page .adm-cab-item-body {
-  flex: 1; min-width: 0; font-size: .8rem; color: #78350f; /* hex-color-ok: amber-900; no exact token */ line-height: 1.45;
+  flex: 1; min-width: 0; font-size: .8rem; color: var(--status-warningDeep-text); line-height: 1.45;
 }
 .admin-page .adm-cab-fix-btn {
   flex: 0 0 auto; font-size: .78rem; padding: 4px 12px;

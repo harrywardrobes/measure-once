@@ -81,11 +81,12 @@ function parseStatusColors(ts) {
   const entryRe = /(\w+)\s*:\s*\{([^}]+)\}/g;
   let entry;
   while ((entry = entryRe.exec(block)) !== null) {
-    const key   = entry[1];
-    const props = entry[2];
-    const bgM   = props.match(/bg\s*:\s*'(#[0-9a-fA-F]{3,8})'/);
-    const textM = props.match(/text\s*:\s*'(#[0-9a-fA-F]{3,8})'/);
-    if (bgM && textM) statuses[key] = { bg: bgM[1], text: textM[1] };
+    const key      = entry[1];
+    const props    = entry[2];
+    const bgM      = props.match(/bg\s*:\s*'(#[0-9a-fA-F]{3,8})'/);
+    const textM    = props.match(/text\s*:\s*'(#[0-9a-fA-F]{3,8})'/);
+    const borderM  = props.match(/border\s*:\s*'(#[0-9a-fA-F]{3,8})'/);
+    if (bgM && textM) statuses[key] = { bg: bgM[1], text: textM[1], ...(borderM ? { border: borderM[1] } : {}) };
   }
   return statuses;
 }
@@ -157,7 +158,9 @@ const radiusLines = Object.entries(radius).map(([key, value]) =>
 
 const statusColorLines = Object.entries(statusColors).map(([key, colors]) => {
   const w = 24;
-  return [col(`status-${key}-bg`, colors.bg, w), col(`status-${key}-text`, colors.text, w)].join('\n');
+  const lines = [col(`status-${key}-bg`, colors.bg, w), col(`status-${key}-text`, colors.text, w)];
+  if (colors.border) lines.push(col(`status-${key}-border`, colors.border, w));
+  return lines.join('\n');
 });
 
 // ── Build stage-colour section ───────────────────────────────────────────────

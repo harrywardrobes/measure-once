@@ -66,6 +66,7 @@ export const STATUS_COLORS: Record<string, { bg: string; text: string; border?: 
   warningLight: { bg: '#fffbeb', text: '#92400e' },
   warningSoft:  { bg: '#fefce8', text: '#92400e' },
   warningActive: { bg: '#fde68a', text: '#92400e' },
+  warningDeep:  { bg: '#f59e0b', text: '#78350f' },
   error:        { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' },
   errorLight:   { bg: '#fef2f2', text: '#991b1b' },
   chunkError:   { bg: '#fff7ed', text: '#9a3412' },

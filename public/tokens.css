@@ -92,14 +92,18 @@
   --status-warn-text:     #713f12;
   --status-warning-bg:       #fef3c7;
   --status-warning-text:     #92400e;
+  --status-warning-border:   #fbbf24;
   --status-warningLight-bg:  #fffbeb;
   --status-warningLight-text: #92400e;
   --status-warningSoft-bg:   #fefce8;
   --status-warningSoft-text: #92400e;
   --status-warningActive-bg: #fde68a;
   --status-warningActive-text: #92400e;
+  --status-warningDeep-bg:   #f59e0b;
+  --status-warningDeep-text: #78350f;
   --status-error-bg:         #fee2e2;
   --status-error-text:       #991b1b;
+  --status-error-border:     #fca5a5;
   --status-errorLight-bg:    #fef2f2;
   --status-errorLight-text:  #991b1b;
   --status-chunkError-bg:    #fff7ed;
