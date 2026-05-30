@@ -2,16 +2,15 @@
 const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
-  '[CD-1] SMTP not configured — "Send now" disabled, SMTP-missing Alert shown',
   '[CD-1a] "Conflict digest" heading visible in Settings panel',
   '[CD-1b] "Last sent:" text visible in conflict digest card',
   '[CD-1c] "Send now" button is present and disabled (SMTP unconfigured)',
   '[CD-1d] SMTP-missing Alert is shown',
-  '[CD-2] SMTP configured — button enabled, "Last sent" reads "Never"',
   '[CD-2a] "Send now" button is enabled (SMTP configured)',
-  '[CD-2b] no SMTP-missing Alert when SMTP is configured',
+  '[CD-2b] No SMTP-missing Alert when SMTP is configured',
   '[CD-2c] "Last sent" value reads "Never" when lastSentAt is null',
-  '[CD-3] clicking "Send now" updates the "Last sent" span to the formatted timestamp',
+  '[CD-3]  "Last sent" updates to formatted timestamp after Send now',
+  'no uncaught page errors across all scenarios',
 ];
 
 // test/conflict-digest-settings/run.js
@@ -274,20 +273,8 @@ async function main() {
     return;
   }
 
-  const UI_LABELS = [
-    '[CD-1a] "Conflict digest" heading visible in Settings panel',
-    '[CD-1b] "Last sent:" text visible in conflict digest card',
-    '[CD-1c] "Send now" button is present and disabled (SMTP unconfigured)',
-    '[CD-1d] SMTP-missing Alert is shown',
-    '[CD-2a] "Send now" button is enabled (SMTP configured)',
-    '[CD-2b] No SMTP-missing Alert when SMTP is configured',
-    '[CD-2c] "Last sent" value reads "Never" when lastSentAt is null',
-    '[CD-3]  "Last sent" updates to formatted timestamp after Send now',
-    'no uncaught page errors across all scenarios',
-  ];
-
   if (!puppeteer) {
-    for (const l of UI_LABELS) {
+    for (const l of PROBE_LABELS) {
       skip(l, 'puppeteer installed', 'puppeteer not installed');
     }
     await cleanupAndExit(1);
@@ -317,7 +304,6 @@ async function main() {
   if (!browser) {
     const msg = (browserLaunchErr?.message || String(browserLaunchErr)).slice(0, 200);
     for (const l of PROBE_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
-    for (const l of UI_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     await cleanupAndExit(1);
     return;
   }
@@ -365,7 +351,7 @@ async function main() {
       return headings.some(el => (el.textContent || '').includes('Conflict digest')) ? 'found' : null;
     }, 15000);
 
-    record(UI_LABELS[0],
+    record(PROBE_LABELS[0],
       '"Conflict digest" h6 heading present',
       headingFound ? 'found' : 'not found (timed out)',
       headingFound === 'found',
@@ -378,7 +364,7 @@ async function main() {
       return spans.some(el => (el.textContent || '').trim() === 'Last sent:') ? 'found' : null;
     }, 10000);
 
-    record(UI_LABELS[1],
+    record(PROBE_LABELS[1],
       '"Last sent:" span present',
       lastSentLabelFound ? 'found' : 'not found',
       lastSentLabelFound === 'found',
@@ -393,7 +379,7 @@ async function main() {
       return btn.disabled ? 'disabled' : 'enabled';
     }, 10000);
 
-    record(UI_LABELS[2],
+    record(PROBE_LABELS[2],
       '"Send now" button present and disabled',
       sendBtnDisabled || 'not found',
       sendBtnDisabled === 'disabled',
@@ -406,7 +392,7 @@ async function main() {
       return alerts.some(el => (el.textContent || '').includes('SMTP is not configured')) ? 'found' : null;
     }, 10000);
 
-    record(UI_LABELS[3],
+    record(PROBE_LABELS[3],
       'SMTP-missing Alert with role="alert" present',
       smtpAlertFound ? 'found' : 'not found',
       smtpAlertFound === 'found',
@@ -450,7 +436,7 @@ async function main() {
       return !btn.disabled ? 'enabled' : 'disabled';
     }, 12000);
 
-    record(UI_LABELS[4],
+    record(PROBE_LABELS[4],
       '"Send now" button present and enabled',
       sendBtnEnabled || 'not found',
       sendBtnEnabled === 'enabled',
@@ -463,7 +449,7 @@ async function main() {
       return !alerts.some(el => (el.textContent || '').includes('SMTP is not configured'));
     });
 
-    record(UI_LABELS[5],
+    record(PROBE_LABELS[5],
       'No SMTP-missing Alert',
       smtpAlertAbsent ? 'no alert' : 'alert found unexpectedly',
       smtpAlertAbsent,
@@ -476,7 +462,7 @@ async function main() {
       return spans.some(el => (el.textContent || '').trim() === 'Never') ? 'found' : null;
     }, 10000);
 
-    record(UI_LABELS[6],
+    record(PROBE_LABELS[6],
       '"Never" span present next to "Last sent:"',
       lastSentNever ? 'found' : 'not found',
       lastSentNever === 'found',
@@ -541,13 +527,13 @@ async function main() {
         return spans.some(el => (el.textContent || '').trim() === expected) ? expected : null;
       }, 12000);
 
-      record(UI_LABELS[7],
+      record(PROBE_LABELS[7],
         `"Last sent" span shows formatted timestamp of ${FAKE_LAST_SENT_AT}`,
         tsObserved ? `"${tsObserved}"` : 'not updated (still "Never" or timed out)',
         !!tsObserved,
       );
     } else {
-      record(UI_LABELS[7],
+      record(PROBE_LABELS[7],
         '"Send now" button ready to click',
         'button did not become enabled (timed out)',
         false,
@@ -558,7 +544,7 @@ async function main() {
 
     // ── Runtime errors ────────────────────────────────────────────────────────
     record(
-      UI_LABELS[8],
+      PROBE_LABELS[8],
       '0 pageerror / console.error events across all scenarios',
       `count=${pageErrors.length}${pageErrors.length ? ' first=' + JSON.stringify(pageErrors[0]).slice(0, 200) : ''}`,
       pageErrors.length === 0,

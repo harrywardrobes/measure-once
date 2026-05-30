@@ -2,11 +2,18 @@
 const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
-  '(A) map starts expanded when localStorage has no saved state',
-  '(B) clicking header collapses it and persists; reload keeps state; re-click restores',
-  '(C) clicking a stage node opens the Drawer',
-  '(D) Drawer shows the correct label and key for the clicked node',
-  '(E) close button dismisses the Drawer',
+  '(A) Map header has aria-expanded="true" with no localStorage value',
+  '(A) workflow-map-body collapse is visible with no localStorage value',
+  '(B.1) Clicking header sets aria-expanded="false" (map collapses)',
+  '(B.1) localStorage is set to "true" after collapsing',
+  '(B.2) page.reload() — map stays collapsed (localStorage="true" persisted)',
+  '(B.3) Clicking header again sets aria-expanded="true" (map expands)',
+  '(B.3) localStorage is updated to "false" after expanding',
+  '(B.4) page.reload() — map stays expanded (localStorage="false" persisted)',
+  '(C) Clicking a stage node opens the Drawer',
+  '(D) Drawer header shows the correct label ("Sales")',
+  '(D) Drawer body shows the correct key ("sales")',
+  '(E) Clicking the close button dismisses the Drawer',
 ];
 
 // test/workflow-map/run.js
@@ -302,23 +309,8 @@ async function main() {
   // ── Login as admin ──────────────────────────────────────────────────────────
   const adminClient = await login(users.admin.email, users.admin.password);
 
-  const UI_LABELS = [
-    '(A) Map header has aria-expanded="true" with no localStorage value',
-    '(A) workflow-map-body collapse is visible with no localStorage value',
-    '(B.1) Clicking header sets aria-expanded="false" (map collapses)',
-    '(B.1) localStorage is set to "true" after collapsing',
-    '(B.2) page.reload() — map stays collapsed (localStorage="true" persisted)',
-    '(B.3) Clicking header again sets aria-expanded="true" (map expands)',
-    '(B.3) localStorage is updated to "false" after expanding',
-    '(B.4) page.reload() — map stays expanded (localStorage="false" persisted)',
-    '(C) Clicking a stage node opens the Drawer',
-    '(D) Drawer header shows the correct label ("Sales")',
-    '(D) Drawer body shows the correct key ("sales")',
-    '(E) Clicking the close button dismisses the Drawer',
-  ];
-
   if (!puppeteer) {
-    for (const l of UI_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
+    for (const l of PROBE_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
     await cleanupAndExit(1);
     return;
   }
@@ -341,7 +333,6 @@ async function main() {
   if (!browser) {
     const msg = (browserLaunchErr?.message || String(browserLaunchErr)).slice(0, 200);
     for (const l of PROBE_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
-    for (const l of UI_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     await cleanupAndExit(1);
     return;
   }
@@ -356,9 +347,8 @@ async function main() {
     // Navigate to /admin.html and switch to cardactions tab.
     const mountedAB = await goToCardActions(page);
     if (!mountedAB) {
-      for (const l of UI_LABELS.slice(0, 8))
-        skip(l, 'CardActionsPage mounted', 'mount timed out');
-      await page.__ctx.close().catch(() => {});
+      for (const l of PROBE_LABELS.slice(0, 8))
+        record(l, 'CardActionsPage mounted', 'mount timed out', false);      await page.__ctx.close().catch(() => {});
     } else {
       // ── (A) Default expanded — ensure no LS value is set ──────────────────
       await page.evaluate((key) => {
@@ -375,7 +365,7 @@ async function main() {
         const btn = document.querySelector('[role="button"][aria-controls="workflow-map-body"]');
         return btn ? btn.getAttribute('aria-expanded') : null;
       });
-      record(UI_LABELS[0], 'aria-expanded="true"', String(expandedA), expandedA === 'true');
+      record(PROBE_LABELS[0], 'aria-expanded="true"', String(expandedA), expandedA === 'true');
 
       const bodyVisibleA = await page.evaluate(() => {
         const body = document.getElementById('workflow-map-body');
@@ -383,7 +373,7 @@ async function main() {
         const style = window.getComputedStyle(body);
         return style.display === 'none' || style.visibility === 'hidden' ? 'hidden' : 'visible';
       });
-      record(UI_LABELS[1], 'visible', bodyVisibleA, bodyVisibleA === 'visible');
+      record(PROBE_LABELS[1], 'visible', bodyVisibleA, bodyVisibleA === 'visible');
 
       // ── (B.1) Click to collapse ────────────────────────────────────────────
       await page.evaluate(() => {
@@ -395,12 +385,12 @@ async function main() {
         const btn = document.querySelector('[role="button"][aria-controls="workflow-map-body"]');
         return btn && btn.getAttribute('aria-expanded') === 'false' ? 'ok' : null;
       }, 5000);
-      record(UI_LABELS[2], 'aria-expanded="false"', collapsedB1 ? 'false' : 'still true', collapsedB1 === 'ok');
+      record(PROBE_LABELS[2], 'aria-expanded="false"', collapsedB1 ? 'false' : 'still true', collapsedB1 === 'ok');
 
       const lsB1 = await page.evaluate((key) => {
         try { return localStorage.getItem(key); } catch { return null; }
       }, MAP_COLLAPSED_KEY);
-      record(UI_LABELS[3], '"true"', String(lsB1), lsB1 === 'true');
+      record(PROBE_LABELS[3], '"true"', String(lsB1), lsB1 === 'true');
 
       // ── (B.2) Real page.reload() — stays collapsed ────────────────────────
       // The same incognito context keeps localStorage.  evaluateOnNewDocument
@@ -410,13 +400,12 @@ async function main() {
       await waitForMapHeader(page);
 
       if (!mountedB2) {
-        skip(UI_LABELS[4], 'CardActionsPage mounted after reload', 'mount timed out');
-      } else {
+        record(PROBE_LABELS[4], 'CardActionsPage mounted after reload', 'mount timed out', false);      } else {
         const expandedB2 = await page.evaluate(() => {
           const btn = document.querySelector('[role="button"][aria-controls="workflow-map-body"]');
           return btn ? btn.getAttribute('aria-expanded') : null;
         });
-        record(UI_LABELS[4], 'aria-expanded="false" (stayed collapsed)', String(expandedB2), expandedB2 === 'false');
+        record(PROBE_LABELS[4], 'aria-expanded="false" (stayed collapsed)', String(expandedB2), expandedB2 === 'false');
       }
 
       // ── (B.3) Click to expand ─────────────────────────────────────────────
@@ -429,25 +418,24 @@ async function main() {
         const btn = document.querySelector('[role="button"][aria-controls="workflow-map-body"]');
         return btn && btn.getAttribute('aria-expanded') === 'true' ? 'ok' : null;
       }, 5000);
-      record(UI_LABELS[5], 'aria-expanded="true"', expandedB3 ? 'true' : 'still false', expandedB3 === 'ok');
+      record(PROBE_LABELS[5], 'aria-expanded="true"', expandedB3 ? 'true' : 'still false', expandedB3 === 'ok');
 
       const lsB3 = await page.evaluate((key) => {
         try { return localStorage.getItem(key); } catch { return null; }
       }, MAP_COLLAPSED_KEY);
-      record(UI_LABELS[6], '"false"', String(lsB3), lsB3 === 'false');
+      record(PROBE_LABELS[6], '"false"', String(lsB3), lsB3 === 'false');
 
       // ── (B.4) Real page.reload() — stays expanded ─────────────────────────
       const mountedB4 = await reloadCardActions(page);
       await waitForMapHeader(page);
 
       if (!mountedB4) {
-        skip(UI_LABELS[7], 'CardActionsPage mounted after reload', 'mount timed out');
-      } else {
+        record(PROBE_LABELS[7], 'CardActionsPage mounted after reload', 'mount timed out', false);      } else {
         const expandedB4 = await page.evaluate(() => {
           const btn = document.querySelector('[role="button"][aria-controls="workflow-map-body"]');
           return btn ? btn.getAttribute('aria-expanded') : null;
         });
-        record(UI_LABELS[7], 'aria-expanded="true" (stayed expanded)', String(expandedB4), expandedB4 === 'true');
+        record(PROBE_LABELS[7], 'aria-expanded="true" (stayed expanded)', String(expandedB4), expandedB4 === 'true');
       }
 
       await page.__ctx.close().catch(() => {});
@@ -459,8 +447,7 @@ async function main() {
     const mountedC = await goToCardActions(pageC);
 
     if (!mountedC) {
-      for (const l of UI_LABELS.slice(8)) skip(l, 'CardActionsPage mounted', 'mount timed out');
-      await pageC.__ctx.close().catch(() => {});
+      for (const l of PROBE_LABELS.slice(8)) record(l, 'CardActionsPage mounted', 'mount timed out', false);      await pageC.__ctx.close().catch(() => {});
     } else {
       // Wait for the Suspense fallback to clear and the ReactFlow canvas to appear.
       const reactFlowReady = await pollPage(pageC, () => {
@@ -469,11 +456,10 @@ async function main() {
       }, 20000);
 
       if (!reactFlowReady) {
-        skip(UI_LABELS[8], 'ReactFlow canvas visible', 'timed out waiting for .react-flow__renderer');
-        skip(UI_LABELS[9], '"Sales" in drawer', 'ReactFlow not ready');
-        skip(UI_LABELS[10], '"sales" in drawer', 'ReactFlow not ready');
-        skip(UI_LABELS[11], 'drawer closed', 'ReactFlow not ready');
-        await pageC.__ctx.close().catch(() => {});
+        record(PROBE_LABELS[8], 'ReactFlow canvas visible', 'timed out waiting for .react-flow__renderer', false);
+        record(PROBE_LABELS[9], '"Sales" in drawer', 'ReactFlow not ready', false);
+        record(PROBE_LABELS[10], '"sales" in drawer', 'ReactFlow not ready', false);
+        record(PROBE_LABELS[11], 'drawer closed', 'ReactFlow not ready', false);        await pageC.__ctx.close().catch(() => {});
       } else {
         // (C) Click the Sales stage node.
         // ReactFlow renders stage nodes with class `react-flow__node-stage-node`.
@@ -490,7 +476,7 @@ async function main() {
           if (first) { first.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return true; }
           return false;
         });
-        record(UI_LABELS[8], 'Sales stage node clicked', nodeClicked ? 'clicked' : 'no stage node found', nodeClicked);
+        record(PROBE_LABELS[8], 'Sales stage node clicked', nodeClicked ? 'clicked' : 'no stage node found', nodeClicked);
 
         // (D) Wait for the Drawer to open; check label and key.
         const drawerLabel = await pollPage(pageC, () => {
@@ -501,7 +487,7 @@ async function main() {
         }, 8000);
 
         record(
-          UI_LABELS[9],
+          PROBE_LABELS[9],
           '"Sales"',
           drawerLabel ? `"${drawerLabel}"` : 'drawer not opened',
           drawerLabel === 'Sales',
@@ -517,7 +503,7 @@ async function main() {
           return null;
         });
         record(
-          UI_LABELS[10],
+          PROBE_LABELS[10],
           '"sales"',
           drawerKey ? `"${drawerKey}"` : 'not found in drawer',
           drawerKey === 'sales',
@@ -535,7 +521,7 @@ async function main() {
           const drawer = document.querySelector('.MuiDrawer-paper');
           return drawer ? null : 'closed';
         }, 5000);
-        record(UI_LABELS[11], 'drawer closed (no .MuiDrawer-paper)', drawerClosed ? 'closed' : 'still open', drawerClosed === 'closed');
+        record(PROBE_LABELS[11], 'drawer closed (no .MuiDrawer-paper)', drawerClosed ? 'closed' : 'still open', drawerClosed === 'closed');
 
         await pageC.__ctx.close().catch(() => {});
       }

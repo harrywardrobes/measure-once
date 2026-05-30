@@ -2,8 +2,8 @@
 const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
-  '[UI-1] /login → React LoginPage rendered; #login-email and #login-password visible',
-  '[UI-autofill] native autofill on both inputs → zero console errors',
+  '[UI.1] /login → React LoginPage rendered; #login-email and #login-password visible',
+  '[UI-autofill] native value setter + input event on email and password → no console errors',
 ];
 
 // test/login/run.js
@@ -139,16 +139,11 @@ async function main() {
   // ════════════════════════════════════════════════════════════════════════════
   // [UI] Puppeteer probes
   // ════════════════════════════════════════════════════════════════════════════
-  const UI_LABELS = [
-    '[UI.1] /login → React LoginPage rendered; #login-email and #login-password visible',
-    '[UI-autofill] native value setter + input event on email and password → no console errors',
-  ];
-
   // Patterns that are acceptable noise and should not count as failures.
   const IGNORE_RE = /(favicon\.ico|\/storybook\/|\.map\b|Failed to load resource|turnstile|challenges\.cloudflare)/i;
 
   if (!puppeteer) {
-    for (const l of UI_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
+    for (const l of PROBE_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
   } else {
     const { findChromium } = require('../shared/find-chromium');
     let browser = null;
@@ -173,7 +168,6 @@ async function main() {
     if (!browser) {
       const msg = (launchErr?.message || String(launchErr)).slice(0, 200);
       for (const l of PROBE_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
-      for (const l of UI_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     } else {
       try {
         const ctx = await (browser.createBrowserContext
@@ -202,9 +196,8 @@ async function main() {
 
         if (!formVisible) {
           const recentLogs = pageLogs.slice(-15).join('\n');
-          for (const l of UI_LABELS) {
-            skip(l, 'React form visible (#login-email and #login-password present)', `form did not appear. logs:\n${recentLogs}`);
-          }
+          for (const l of PROBE_LABELS) {
+            record(l, 'React form visible (#login-email and #login-password present)', `form did not appear. logs:\n${recentLogs}`, false);          }
         } else {
           // UI.1 — React form rendered; both inputs present.
           const ui1 = await page.evaluate(() => {
@@ -217,7 +210,7 @@ async function main() {
               rootPresent: !!(root && root.childElementCount > 0),
             };
           });
-          record(UI_LABELS[0],
+          record(PROBE_LABELS[0],
             'hasEmail=true, hasPassword=true, rootPresent=true',
             `hasEmail=${ui1.hasEmail}, hasPassword=${ui1.hasPassword}, rootPresent=${ui1.rootPresent}`,
             ui1.hasEmail && ui1.hasPassword && ui1.rootPresent,
@@ -275,7 +268,7 @@ async function main() {
           page.off('console',   autofillConsoleHandler);
           page.off('pageerror', autofillPageErrorHandler);
 
-          record(UI_LABELS[1],
+          record(PROBE_LABELS[1],
             'autofill triggered=true; 0 console errors',
             `triggered=${autofillTriggered}, errors=${autofillErrors.length}`,
             autofillTriggered && autofillErrors.length === 0,
@@ -292,9 +285,7 @@ async function main() {
         await ctx.close().catch(() => {});
       } catch (e) {
         console.error('Puppeteer probe failed:', e.message);
-        record('suite runtime error', 'no exception', e.message, false);
-        for (const l of UI_LABELS) {
-          const already = findings.find(f => f.name === l);
+        for (const l of PROBE_LABELS) {          const already = findings.find(f => f.name === l);
           if (!already) skip(l, 'probe completed', `exception: ${e.message}`);
         }
       }

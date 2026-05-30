@@ -2,8 +2,14 @@
 const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
-  '[BC-A] InvoicesSection on CustomerDetailPage re-fetches after save without full reload',
-  '[BC-B] StandaloneInvoicesPage on /invoices re-fetches without reload',
+  '[BC-A] POST /api/quickbooks/invoice/:id intercepted (production code reached)',
+  '[BC-A] listener tab received a mo_invoices message (BC event delivered)',
+  '[BC-A] InvoicesSection re-fetches invoices after mo_invoices message',
+  '[BC-A] re-fetch occurs without a full page reload',
+  '[BC-B] POST /api/quickbooks/invoice/:id intercepted (production code reached)',
+  '[BC-B] listener tab received a mo_invoices message (BC event delivered)',
+  '[BC-B] StandaloneInvoicesPage re-fetches invoices after mo_invoices message',
+  '[BC-B] re-fetch occurs without a full page reload',
 ];
 
 // test/invoice-bc-sync/run.js
@@ -629,19 +635,8 @@ async function main() {
 
   const adminClient = await login(users.admin.email, users.admin.password);
 
-  const UI_LABELS = [
-    '[BC-A] POST /api/quickbooks/invoice/:id intercepted (production code reached)',
-    '[BC-A] listener tab received a mo_invoices message (BC event delivered)',
-    '[BC-A] InvoicesSection re-fetches invoices after mo_invoices message',
-    '[BC-A] re-fetch occurs without a full page reload',
-    '[BC-B] POST /api/quickbooks/invoice/:id intercepted (production code reached)',
-    '[BC-B] listener tab received a mo_invoices message (BC event delivered)',
-    '[BC-B] StandaloneInvoicesPage re-fetches invoices after mo_invoices message',
-    '[BC-B] re-fetch occurs without a full page reload',
-  ];
-
   if (!puppeteer) {
-    for (const l of UI_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
+    for (const l of PROBE_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
     await cleanupAndExit(1);
     return;
   }
@@ -668,9 +663,6 @@ async function main() {
   if (!browser) {
     const msg = (browserLaunchErr?.message || String(browserLaunchErr)).slice(0, 200);
     for (const l of PROBE_LABELS) skip(l, 'browser launches', `browser launch failed: ${msg}`);
-    for (const l of UI_LABELS) {
-      skip(l, 'browser launches', `error: ${browserLaunchErr?.message}`);
-    }
     await cleanupAndExit(1);
     return;
   }
@@ -693,9 +685,8 @@ async function main() {
     const respA = await listenerPageA.goto(urlA, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     if (!respA || !respA.ok()) {
-      for (const l of UI_LABELS.slice(0, 3)) {
-        skip(l, 'listener page loads (200)', `${respA ? respA.status() : 0}`);
-      }
+      for (const l of PROBE_LABELS.slice(0, 3)) {
+        record(l, 'listener page loads (200)', `${respA ? respA.status() : 0}`, false);      }
     } else {
       console.log('  Listener A: waiting for initial invoice fetch…');
       const initialFetchA = await pollUntil(
@@ -706,7 +697,7 @@ async function main() {
 
       if (!initialFetchA) {
         const unstubbed = await listenerPageA.evaluate(() => window.__unstubbed || []).catch(() => []);
-        for (const l of UI_LABELS.slice(0, 3)) {
+        for (const l of PROBE_LABELS.slice(0, 3)) {
           record(l, 'fetch count >= 1 after initial load', 'never reached 1',
             false, `unstubbed=${JSON.stringify(unstubbed)}; logs: ${logsA.slice(-10).join(' | ')}`);
         }
@@ -724,9 +715,8 @@ async function main() {
         const sender = await runSenderSave(browser, adminClient.cookie);
 
         if (!sender.ok) {
-          for (const l of UI_LABELS.slice(0, 4)) {
-            skip(l, 'sender save succeeded', `sender failed: ${sender.detail}`);
-          }
+          for (const l of PROBE_LABELS.slice(0, 4)) {
+            record(l, 'sender save succeeded', `sender failed: ${sender.detail}`, false);          }
         } else {
           // Assert 1: the POST save endpoint was intercepted, confirming
           // handleSave() in InvoiceDetailDrawer ran (production code path).
@@ -805,9 +795,8 @@ async function main() {
     const respB = await listenerPageB.goto(urlB, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     if (!respB || !respB.ok()) {
-      for (const l of UI_LABELS.slice(4)) {
-        skip(l, 'listener page loads (200)', `${respB ? respB.status() : 0}`);
-      }
+      for (const l of PROBE_LABELS.slice(4)) {
+        record(l, 'listener page loads (200)', `${respB ? respB.status() : 0}`, false);      }
     } else {
       console.log('  Listener B: waiting for initial invoice fetch…');
       const initialFetchB = await pollUntil(
@@ -818,7 +807,7 @@ async function main() {
 
       if (!initialFetchB) {
         const unstubbed = await listenerPageB.evaluate(() => window.__unstubbed || []).catch(() => []);
-        for (const l of UI_LABELS.slice(4)) {
+        for (const l of PROBE_LABELS.slice(4)) {
           record(l, 'fetch count >= 1 after initial load', 'never reached 1',
             false, `unstubbed=${JSON.stringify(unstubbed)}; logs: ${logsB.slice(-10).join(' | ')}`);
         }
@@ -831,9 +820,8 @@ async function main() {
         const senderB = await runSenderSave(browser, adminClient.cookie);
 
         if (!senderB.ok) {
-          for (const l of UI_LABELS.slice(4)) {
-            skip(l, 'sender save succeeded', `sender failed: ${senderB.detail}`);
-          }
+          for (const l of PROBE_LABELS.slice(4)) {
+            record(l, 'sender save succeeded', `sender failed: ${senderB.detail}`, false);          }
         } else {
           // Assert 1: production save endpoint intercepted.
           record(

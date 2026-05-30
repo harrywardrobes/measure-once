@@ -2,9 +2,13 @@
 const { makeSkip3 } = require('../helpers/report');
 
 const PROBE_LABELS = [
-  '[A] All view — pagination appears and page-2 click sends ?page=2 with differing results',
-  '[C] "Showing X–Y of Z" count label visible on page 1',
-  '[D] filter change (sort/search/lead-status) resets from page 2 to page 1',
+  '[A.1] All view — pagination control appears with 30 contacts',
+  '[A.2] All view — page-2 click sends ?page=2 to /api/contacts-all',
+  '[A.3] All view — page-2 results differ from page-1 results',
+  '[C.1] All view — "Showing X–Y of Z" count visible on page 1',
+  '[D.1] Filter change (sort) resets from page 2 to page 1',
+  '[D.2] Filter change (search) resets from page 2 to page 1',
+  '[D.3] Filter change (lead-status select) resets from page 2 to page 1',
 ];
 
 // test/customers-pagination/run.js
@@ -396,18 +400,8 @@ async function main() {
   const memberClient = await login(users.member.email, PASSWORD);
 
   // ── Puppeteer guard ───────────────────────────────────────────────────────
-  const UI_LABELS = [
-    '[A.1] All view — pagination control appears with 30 contacts',
-    '[A.2] All view — page-2 click sends ?page=2 to /api/contacts-all',
-    '[A.3] All view — page-2 results differ from page-1 results',
-    '[C.1] All view — "Showing X–Y of Z" count visible on page 1',
-    '[D.1] Filter change (sort) resets from page 2 to page 1',
-    '[D.2] Filter change (search) resets from page 2 to page 1',
-    '[D.3] Filter change (lead-status select) resets from page 2 to page 1',
-  ];
-
   if (!puppeteer) {
-    for (const l of UI_LABELS) skip(l, 'puppeteer not installed');
+    for (const l of PROBE_LABELS) skip(l, 'puppeteer not installed');
     await writeReport(runId, findings);
     await cleanupAndExit(findings.filter(f => !f.ok).length > 0 ? 1 : 0);
     return;
@@ -426,7 +420,6 @@ async function main() {
 
   if (!browser) {
     for (const l of PROBE_LABELS) skip(l, 'browser launch failed');
-    for (const l of UI_LABELS) skip(l, 'browser launch failed');
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;
@@ -450,7 +443,7 @@ async function main() {
       if (!loaded) {
         const diag = await getDiagnostics(page).catch(() => ({}));
         console.log('  Diag A (no results):', JSON.stringify(diag));
-        for (const l of UI_LABELS.slice(0, 3)) record(l, false, 'page did not load results');
+        for (const l of PROBE_LABELS.slice(0, 3)) record(l, false, 'page did not load results');
         await closePage(page);
       } else {
         const diag = await getDiagnostics(page);
@@ -458,7 +451,7 @@ async function main() {
 
         // [A.1] Pagination control visible
         const pag = await waitForPagination(page, 8000);
-        record(UI_LABELS[0], pag === 'ok',
+        record(PROBE_LABELS[0], pag === 'ok',
           pag === 'ok' ? `pagination nav present (diag: ${JSON.stringify(diag)})` : `absent (diag: ${JSON.stringify(diag)})`);
 
         // Capture page-1 first contact name for comparison
@@ -478,8 +471,8 @@ async function main() {
         });
 
         if (!clicked) {
-          record(UI_LABELS[1], false, 'page-2 button not found in DOM');
-          record(UI_LABELS[2], false, 'skipped — page-2 button absent');
+          record(PROBE_LABELS[1], false, 'page-2 button not found in DOM');
+          record(PROBE_LABELS[2], false, 'skipped — page-2 button absent');
         } else {
           // Wait for the URL to reflect page=2 (writeUrlState fires after setPage(2))
           const urlUpdated = await waitForUrl(page, 'page=2');
@@ -491,7 +484,7 @@ async function main() {
 
           // [A.2] Check that a contacts-all request with page=2 was made
           const page2Calls = ctrl.calls.filter(u => u.includes('page=2'));
-          record(UI_LABELS[1],
+          record(PROBE_LABELS[1],
             page2Calls.length > 0 || urlUpdated === 'ok', // URL update confirms setPage(2) fired
             `page=2 in URL: ${urlUpdated === 'ok'}, contacts-all calls with page=2: ${page2Calls.length} (all: ${ctrl.calls.length})`);
 
@@ -501,7 +494,7 @@ async function main() {
             return first ? (first.textContent || '').slice(0, 50) : '';
           });
           const differ = page1Name !== '' && page2Name !== '' && page1Name !== page2Name;
-          record(UI_LABELS[2], differ,
+          record(PROBE_LABELS[2], differ,
             `p1="${page1Name.slice(0, 30)}" p2="${page2Name.slice(0, 30)}"`);
         }
 
@@ -535,7 +528,7 @@ async function main() {
       const txt = await getShowingText(page);
       const diag = await getDiagnostics(page);
       const ok = txt !== null && /\d+/.test(txt);
-      record(UI_LABELS[3], ok,
+      record(PROBE_LABELS[3], ok,
         ok ? `found: "${txt}"` : `not found (diag: ${JSON.stringify(diag)})`);
       await closePage(page);
     }
@@ -556,14 +549,14 @@ async function main() {
       const onPage2 = await page.evaluate(() => location.search.includes('page=2'));
       if (!onPage2) {
         // Page might have had fewer than 25 contacts — skip if no page 2 exists
-        record(UI_LABELS[4], true, 'skip — server reset page to 1 (only 1 page of results available); reset confirmed');
+        record(PROBE_LABELS[4], true, 'skip — server reset page to 1 (only 1 page of results available); reset confirmed');
       } else {
         // Wait for the sort MUI Select to be visible
         const sortReady = await pollPage(page, () =>
           document.getElementById('customers-sort-select') ? 'ok' : null, null, 8000);
 
         if (!sortReady) {
-          record(UI_LABELS[4], false, 'sort select not found');
+          record(PROBE_LABELS[4], false, 'sort select not found');
         } else {
           // Open the MUI Select dropdown
           await page.evaluate(() => {
@@ -584,13 +577,13 @@ async function main() {
           });
 
           if (!picked) {
-            record(UI_LABELS[4], false, 'could not find "Name A-Z" option in sort dropdown');
+            record(PROBE_LABELS[4], false, 'could not find "Name A-Z" option in sort dropdown');
           } else {
             // Sort change calls setPage(1) — wait for URL to drop page=2
             const reset = await waitForUrlGone(page, 'page=2');
             await waitForResults(page, 8000);
             const urlStr = await page.evaluate(() => location.search);
-            record(UI_LABELS[4], reset === 'ok',
+            record(PROBE_LABELS[4], reset === 'ok',
               `URL after sort change: "${urlStr}" — page=2 ${!reset ? 'still present (bad)' : 'gone (good)'}`);
           }
         }
@@ -609,17 +602,17 @@ async function main() {
 
       const onPage2 = await page.evaluate(() => location.search.includes('page=2'));
       if (!onPage2) {
-        record(UI_LABELS[5], true, 'skip — server reset page to 1 (only 1 page); reset confirmed');
+        record(PROBE_LABELS[5], true, 'skip — server reset page to 1 (only 1 page); reset confirmed');
       } else {
         const searchInput = await page.$('input[aria-label="Search customers"]');
         if (!searchInput) {
-          record(UI_LABELS[5], false, 'search input not found');
+          record(PROBE_LABELS[5], false, 'search input not found');
         } else {
           await searchInput.type('paginee1', { delay: 30 });
           // Debounce is 250 ms; wait for the URL to change (setPage(1) fires in debounce handler)
           const reset = await waitForUrlGone(page, 'page=2');
           const urlStr = await page.evaluate(() => location.search);
-          record(UI_LABELS[5], reset === 'ok',
+          record(PROBE_LABELS[5], reset === 'ok',
             `URL after search: "${urlStr}" — page=2 ${!reset ? 'still present (bad)' : 'gone (good)'}`);
         }
       }
@@ -640,7 +633,7 @@ async function main() {
 
       const onPage2 = await page.evaluate(() => location.search.includes('page=2'));
       if (!onPage2) {
-        record(UI_LABELS[6], true, 'skip — server reset page to 1 (only 1 page); reset confirmed');
+        record(PROBE_LABELS[6], true, 'skip — server reset page to 1 (only 1 page); reset confirmed');
       } else {
         // Wait for the React filter dropdown to render the seeded options
         // (the select starts with just "All statuses"; seeded rows push it > 2).
@@ -650,7 +643,7 @@ async function main() {
         }, null, 10000);
 
         if (!selectReady) {
-          record(UI_LABELS[6], false,
+          record(PROBE_LABELS[6], false,
             'lead-status select options did not appear (method="lead-status select option click")');
         } else {
           // Pick the first option with a non-empty, non-sentinel value and
@@ -679,12 +672,12 @@ async function main() {
           });
 
           if (!picked) {
-            record(UI_LABELS[6], false,
+            record(PROBE_LABELS[6], false,
               'no selectable lead-status option found (method="lead-status select option click")');
           } else {
             const reset = await waitForUrlGone(page, 'page=2');
             const urlStr = await page.evaluate(() => location.search);
-            record(UI_LABELS[6], reset === 'ok',
+            record(PROBE_LABELS[6], reset === 'ok',
               `method="lead-status select option click" picked="${picked}" URL: "${urlStr}" — page=2 ${!reset ? 'still present (bad)' : 'gone (good)'}`);
           }
         }

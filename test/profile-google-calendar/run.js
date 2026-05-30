@@ -2,9 +2,18 @@
 const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
-  '[GC-A] disconnected state: "Not connected" chip visible, connect button visible',
-  '[GC-B] connected state: "Connected" chip visible, disconnect button visible',
-  '[GC-C] clicking Disconnect calls POST /auth/logout-google and transitions to disconnected',
+  '[GC-A] GoogleCalendarCard found in #profile-view when disconnected',
+  '[GC-A] "Not connected" chip visible when connected=false',
+  '[GC-A] "Connect Google Calendar" button visible when connected=false',
+  '[GC-A] "Disconnect" button absent when connected=false',
+  '[GC-B] GoogleCalendarCard found in #profile-view when connected',
+  '[GC-B] "Connected" chip visible when connected=true',
+  '[GC-B] "Disconnect" button visible when connected=true',
+  '[GC-B] "Connect Google Calendar" button absent when connected=true',
+  '[GC-C] Clicking Disconnect calls POST /auth/logout-google',
+  '[GC-C] UI updates to "Not connected" chip after disconnect',
+  '[GC-C] "Connect Google Calendar" button appears after disconnect',
+  '[GC-C] "Disconnect" button disappears after disconnect',
 ];
 
 // test/profile-google-calendar/run.js
@@ -322,23 +331,8 @@ async function main() {
     return;
   }
 
-  const UI_LABELS = [
-    '[GC-A] GoogleCalendarCard found in #profile-view when disconnected',
-    '[GC-A] "Not connected" chip visible when connected=false',
-    '[GC-A] "Connect Google Calendar" button visible when connected=false',
-    '[GC-A] "Disconnect" button absent when connected=false',
-    '[GC-B] GoogleCalendarCard found in #profile-view when connected',
-    '[GC-B] "Connected" chip visible when connected=true',
-    '[GC-B] "Disconnect" button visible when connected=true',
-    '[GC-B] "Connect Google Calendar" button absent when connected=true',
-    '[GC-C] Clicking Disconnect calls POST /auth/logout-google',
-    '[GC-C] UI updates to "Not connected" chip after disconnect',
-    '[GC-C] "Connect Google Calendar" button appears after disconnect',
-    '[GC-C] "Disconnect" button disappears after disconnect',
-  ];
-
   if (!puppeteer) {
-    for (const l of UI_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
+    for (const l of PROBE_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
     await cleanupAndExit(1);
     return;
   }
@@ -361,7 +355,6 @@ async function main() {
   if (!browser) {
     const msg = (browserLaunchErr?.message || String(browserLaunchErr)).slice(0, 200);
     for (const l of PROBE_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
-    for (const l of UI_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     await cleanupAndExit(1);
     return;
   }
@@ -383,21 +376,21 @@ async function main() {
     const chipA = await waitForGoogleCardLoaded(pageA);
     const stateA = await getGoogleCardState(pageA);
 
-    record(UI_LABELS[0], 'card found', stateA.found ? 'found' : 'not found', stateA.found);
+    record(PROBE_LABELS[0], 'card found', stateA.found ? 'found' : 'not found', stateA.found);
     record(
-      UI_LABELS[1],
+      PROBE_LABELS[1],
       '"Not connected" chip present',
       stateA.hasNotConnectedChip ? 'found' : `chips=${JSON.stringify(stateA.chipText)}`,
       stateA.hasNotConnectedChip,
     );
     record(
-      UI_LABELS[2],
+      PROBE_LABELS[2],
       '"Connect Google Calendar" link/button present',
       stateA.hasConnectLink ? 'found' : `links=${JSON.stringify(stateA.linkText)} btns=${JSON.stringify(stateA.btnText)}`,
       stateA.hasConnectLink,
     );
     record(
-      UI_LABELS[3],
+      PROBE_LABELS[3],
       '"Disconnect" button absent',
       stateA.hasDisconnectBtn ? 'present (unexpected)' : 'absent',
       !stateA.hasDisconnectBtn,
@@ -417,21 +410,21 @@ async function main() {
     await waitForGoogleCardLoaded(pageB);
     const stateB = await getGoogleCardState(pageB);
 
-    record(UI_LABELS[4], 'card found', stateB.found ? 'found' : 'not found', stateB.found);
+    record(PROBE_LABELS[4], 'card found', stateB.found ? 'found' : 'not found', stateB.found);
     record(
-      UI_LABELS[5],
+      PROBE_LABELS[5],
       '"Connected" chip present',
       stateB.hasConnectedChip ? 'found' : `chips=${JSON.stringify(stateB.chipText)}`,
       stateB.hasConnectedChip,
     );
     record(
-      UI_LABELS[6],
+      PROBE_LABELS[6],
       '"Disconnect" button present',
       stateB.hasDisconnectBtn ? 'found' : `btns=${JSON.stringify(stateB.btnText)}`,
       stateB.hasDisconnectBtn,
     );
     record(
-      UI_LABELS[7],
+      PROBE_LABELS[7],
       '"Connect Google Calendar" button absent',
       stateB.hasConnectLink ? 'present (unexpected)' : 'absent',
       !stateB.hasConnectLink,
@@ -468,7 +461,7 @@ async function main() {
     const logoutCallCount = await pageB.evaluate(() => window.__gcLogoutCalled || 0);
 
     record(
-      UI_LABELS[8],
+      PROBE_LABELS[8],
       'POST /auth/logout-google called at least once',
       `called ${logoutCallCount} time(s)`,
       logoutCallCount >= 1,
@@ -477,19 +470,19 @@ async function main() {
     const stateC = await getGoogleCardState(pageB);
 
     record(
-      UI_LABELS[9],
+      PROBE_LABELS[9],
       '"Not connected" chip visible after disconnect',
       chipAfter ? 'found' : `chips=${JSON.stringify(stateC.chipText)}`,
       !!chipAfter,
     );
     record(
-      UI_LABELS[10],
+      PROBE_LABELS[10],
       '"Connect Google Calendar" link appears after disconnect',
       stateC.hasConnectLink ? 'found' : `links=${JSON.stringify(stateC.linkText)}`,
       stateC.hasConnectLink,
     );
     record(
-      UI_LABELS[11],
+      PROBE_LABELS[11],
       '"Disconnect" button disappears after disconnect',
       stateC.hasDisconnectBtn ? 'still present (unexpected)' : 'absent',
       !stateC.hasDisconnectBtn,

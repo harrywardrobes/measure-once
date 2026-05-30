@@ -2,8 +2,8 @@
 const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
-  '[PTS-A] at least 16 px of vertical space between header bottom and first stage-filter tab',
-  '[PTS-B] h1 heading with text "Projects" visible above the stage-filter tabs',
+  '[PTS-A] At least 16 px between bottom of #app-header-mount and top of first stage-filter tab',
+  '[PTS-B] "Projects" h1 heading is visible above the stage-filter tabs',
 ];
 
 // test/projects-top-spacing/run.js
@@ -193,13 +193,8 @@ async function main() {
   // ── Login ───────────────────────────────────────────────────────────────────
   const adminClient = await login(users.admin.email, users.admin.password);
 
-  const UI_LABELS = [
-    '[PTS-A] At least 16 px between bottom of #app-header-mount and top of first stage-filter tab',
-    '[PTS-B] "Projects" h1 heading is visible above the stage-filter tabs',
-  ];
-
   if (!puppeteer) {
-    for (const l of UI_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
+    for (const l of PROBE_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
     await cleanupAndExit(1);
     return;
   }
@@ -222,7 +217,6 @@ async function main() {
   if (!browser) {
     const msg = (browserLaunchErr?.message || String(browserLaunchErr)).slice(0, 200);
     for (const l of PROBE_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
-    for (const l of UI_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     await cleanupAndExit(1);
     return;
   }
@@ -251,8 +245,7 @@ async function main() {
     if (!tabsReady) {
       console.error('Timed out waiting for .MuiTab-root to appear');
       console.error('Page logs:', pageLogs.slice(-10).join('\n'));
-      for (const l of UI_LABELS) skip(l, 'tabs rendered', 'timed out');
-      await ctx.close().catch(() => {});
+      for (const l of PROBE_LABELS) record(l, 'tabs rendered', 'timed out', false);      await ctx.close().catch(() => {});
       await cleanupAndExit(1);
       return;
     }
@@ -285,8 +278,7 @@ async function main() {
     });
 
     if (!layout) {
-      for (const l of UI_LABELS) skip(l, 'layout measured', '#app-header-mount or .MuiTab-root missing');
-      await ctx.close().catch(() => {});
+      for (const l of PROBE_LABELS) record(l, 'layout measured', '#app-header-mount or .MuiTab-root missing', false);      await ctx.close().catch(() => {});
       await cleanupAndExit(1);
       return;
     }
@@ -297,7 +289,7 @@ async function main() {
     // [PTS-A] Gap check — at least 16 px (MUI pt:2)
     const MIN_GAP = 16;
     record(
-      UI_LABELS[0],
+      PROBE_LABELS[0],
       `gap >= ${MIN_GAP} px`,
       `gap = ${layout.gap.toFixed(1)} px`,
       layout.gap >= MIN_GAP,
@@ -311,7 +303,7 @@ async function main() {
       layout.h1Top < layout.tabTop;
 
     record(
-      UI_LABELS[1],
+      PROBE_LABELS[1],
       '"Projects" h1 visible and above first tab',
       layout.h1Text
         ? `h1="${layout.h1Text}" visible=${layout.h1Visible} h1Top=${layout.h1Top !== null ? layout.h1Top.toFixed(1) : 'n/a'} tabTop=${layout.tabTop.toFixed(1)}`
