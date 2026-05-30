@@ -105,6 +105,12 @@ and `**(CC-A2)**` but a single label covers both), list the doc-only alias in a
 const PROBE_LABELS_DOC_EXTRAS = ['CC-A2'];
 ```
 
+**Constraint:** every ID listed in `PROBE_LABELS_DOC_EXTRAS` must _not_ already
+have a dedicated entry in `PROBE_LABELS`.  If the same ID appears in both
+arrays the script fails CI with a **"redundant PROBE_LABELS_DOC_EXTRAS entry"**
+error, because the suppression is unnecessary and signals a stale or
+copy-paste mistake.
+
 The script emits a non-failing advisory whenever `PROBE_LABELS_DOC_EXTRAS` is
 used, as a reminder that the preferred fix is to give each probe a distinct
 label.
