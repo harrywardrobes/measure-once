@@ -134,7 +134,7 @@
    *  --status-danger-*  semantic error alias; no STATUS_COLORS key named 'danger'
    *  --status-success   standalone accent colour; no plain STATUS_COLORS 'success' colour
    *  --status-warn-*    shorthand alias; STATUS_COLORS uses 'warning' (--status-warning-*)
-   *  NOTE: --status-chunkError-border is intentionally absent here; it is
+   *  NOTE: --status-chunk-error-border is intentionally absent here; it is
    *  fully covered by auto-derivation from STATUS_COLORS.chunkError.border.   */
   --status-danger:        #dc2626;
   --status-danger-text:   #991b1b;
