@@ -235,6 +235,7 @@
     "test:connection-toast-dedup": "node scripts/test-connection-toast-dedup.mjs",
     "test:typo-vars": "node scripts/check-typo-vars.mjs",
     "test:color-radius-vars": "node scripts/check-color-radius-vars.mjs",
+    "test:tokens-css": "node scripts/check-tokens-css.mjs",
     "test:mount-ids": "node scripts/check-mount-id-conflicts.mjs",
     "test:public-island-bootstrap": "node scripts/check-public-island-bootstrap.mjs",
     "test:inline-styles": "node scripts/check-inline-styles.mjs",

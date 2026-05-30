@@ -56,6 +56,7 @@ const STATIC_SUITES = [
   'test:resolve-action-label',
   'test:typo-vars',
   'test:color-radius-vars',
+  'test:tokens-css',
   'test:privilege-reads',
   'test:retired-tokens',
   'test:mount-ids',
