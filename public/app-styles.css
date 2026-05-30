@@ -57,7 +57,7 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
   top: var(--header-h);
   left: 0; right: 0;
   z-index: var(--z-nav);
-  background: #fefce8; /* hex-color-ok: amber-50; nearest token is --status-warningLight-bg (#fffbeb) but this shade is intentionally lighter */
+  background: var(--status-warningSoft-bg);
   border-bottom: 1px solid var(--status-warningActive-bg);
   color: var(--status-warning-text);
   padding: 7px 12px 7px 14px;

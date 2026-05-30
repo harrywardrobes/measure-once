@@ -94,6 +94,8 @@
   --status-warning-text:     #92400e;
   --status-warningLight-bg:  #fffbeb;
   --status-warningLight-text: #92400e;
+  --status-warningSoft-bg:   #fefce8;
+  --status-warningSoft-text: #92400e;
   --status-warningActive-bg: #fde68a;
   --status-warningActive-text: #92400e;
   --status-error-bg:         #fee2e2;

@@ -64,6 +64,7 @@ export const STATUS_COLORS: Record<string, { bg: string; text: string; border?: 
   neutral:      { bg: NEUTRAL_COLORS[100],  text: NEUTRAL_COLORS[700] },
   warning:      { bg: '#fef3c7', text: '#92400e', border: '#fbbf24' },
   warningLight: { bg: '#fffbeb', text: '#92400e' },
+  warningSoft:  { bg: '#fefce8', text: '#92400e' },
   warningActive: { bg: '#fde68a', text: '#92400e' },
   error:        { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' },
   errorLight:   { bg: '#fef2f2', text: '#991b1b' },
