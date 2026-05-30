@@ -162,7 +162,7 @@ export interface WorkflowMapDetailPanelProps {
 }
 
 export function WorkflowMapDetailPanel({ node, onClose }: WorkflowMapDetailPanelProps) {
-  const sc = node ? (STAGE_COLORS[node.stageKey] || { bg: '#475569', light: '#f1f5f9', text: '#1e293b' }) : null;
+  const sc = node ? (STAGE_COLORS[node.stageKey] || STAGE_COLORS.customerservice) : null;
   const boundHandlers = (node?.boundHandlers ?? []) as WMHandler[];
   const hasConflict = boundHandlers.length > 1;
 

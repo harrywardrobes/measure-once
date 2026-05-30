@@ -242,7 +242,7 @@ export function buildFlowGraph(
 
   for (const stage of allStages) {
     const stageNodeId = `stage-${stage.key}`;
-    const sc = STAGE_COLORS[stage.key] || { bg: '#94a3b8', light: '#f1f5f9', text: '#475569' };
+    const sc = STAGE_COLORS[stage.key] || STAGE_COLORS.customerservice;
 
     if (stage.kind === 'card-action') {
       // ── Card-action stage (Sales / Design Visit / Survey) ────────────────
@@ -485,7 +485,7 @@ function HandlerBadgeSummary({
 // ── Custom nodes ──────────────────────────────────────────────────────────────
 
 const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<WorkflowMapNodeData>>) {
-  const sc = STAGE_COLORS[data.stageKey] || { bg: NEUTRAL_COLORS[600], light: NEUTRAL_COLORS[100], text: NEUTRAL_COLORS[800] };
+  const sc = STAGE_COLORS[data.stageKey] || STAGE_COLORS.customerservice;
   const isReadOnly = !!data.isReadOnly;
   const theme = useTheme();
   const white = theme.palette.common.white;
@@ -534,7 +534,7 @@ const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<Wor
 });
 
 const StatusNode = memo(function StatusNode({ data, selected }: NodeProps<Node<WorkflowMapNodeData>>) {
-  const sc = STAGE_COLORS[data.stageKey] || { bg: NEUTRAL_COLORS[600], light: NEUTRAL_COLORS[100], text: NEUTRAL_COLORS[800] };
+  const sc = STAGE_COLORS[data.stageKey] || STAGE_COLORS.customerservice;
   const isReadOnly = !!data.isReadOnly;
   return (
     <Box
@@ -546,7 +546,7 @@ const StatusNode = memo(function StatusNode({ data, selected }: NodeProps<Node<W
         gap: 1,
         px: 1.5,
         borderRadius: '6px',
-        border: isReadOnly ? '1.5px solid #e5e7eb' : `1.5px solid ${sc.light}`,
+        border: isReadOnly ? `1.5px solid ${NEUTRAL_COLORS[200]}` : `1.5px solid ${sc.light}`,
         background: isReadOnly ? NEUTRAL_COLORS[50] : 'background.paper',
         boxShadow: selected
           ? `0 0 0 2px ${sc.bg}`
@@ -577,7 +577,7 @@ const StatusNode = memo(function StatusNode({ data, selected }: NodeProps<Node<W
 });
 
 const SubstatusNode = memo(function SubstatusNode({ data, selected }: NodeProps<Node<WorkflowMapNodeData>>) {
-  const sc = STAGE_COLORS[data.stageKey] || { bg: NEUTRAL_COLORS[600], light: NEUTRAL_COLORS[100], text: NEUTRAL_COLORS[800] };
+  const sc = STAGE_COLORS[data.stageKey] || STAGE_COLORS.customerservice;
   return (
     <Box
       sx={{
