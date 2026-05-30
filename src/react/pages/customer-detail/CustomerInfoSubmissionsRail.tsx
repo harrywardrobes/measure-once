@@ -352,6 +352,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
               size="small"
               variant="outlined"
               onClick={() => setOpen(v => !v)}
+              data-testid="review-btn"
             >
               Review
             </Button>
