@@ -273,13 +273,19 @@ async function main() {
 
     // ── Launch Puppeteer ───────────────────────────────────────────────────
 
-    browser = await puppeteer.launch({
-      headless:        true,
-      executablePath,
-      defaultViewport: { width: 1280, height: 900 },
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
-    record('headless chromium launches', true, 'browser started');
+    try {
+      browser = await puppeteer.launch({
+        headless:        true,
+        executablePath,
+        defaultViewport: { width: 1280, height: 900 },
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      });
+    } catch (launchErr) {
+      const msg = (launchErr?.message || String(launchErr)).slice(0, 200);
+      for (const l of PROBE_LABELS) record(l, false, `browser launch failed: ${msg}`);
+      exitCode = 1;
+      return;
+    }
 
     const page = await browser.newPage();
     await page.setCacheEnabled(false);

@@ -247,12 +247,19 @@ async function main() {
     const adminClient = await login(users.admin.email, users.admin.password);
     const cookie = adminClient.cookie;
 
-    browser = await puppeteer.launch({
-      headless:        true,
-      executablePath,
-      defaultViewport: { width: 1280, height: 900 },
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
+    try {
+      browser = await puppeteer.launch({
+        headless:        true,
+        executablePath,
+        defaultViewport: { width: 1280, height: 900 },
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      });
+    } catch (launchErr) {
+      const msg = (launchErr?.message || String(launchErr)).slice(0, 200);
+      for (const l of PROBE_LABELS) record(l, false, `browser launch failed: ${msg}`);
+      exitCode = 1;
+      return;
+    }
     record('PR-0 headless chromium launches', true, 'browser started');
 
     // ── Synthetic contacts ─────────────────────────────────────────────────────
