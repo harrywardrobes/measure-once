@@ -542,9 +542,9 @@ async function main() {
 
       await restoreDateMock(isPage);
     } else {
-      record('[IS-PAST]    past-confirm dialog appears', 'dialog present', 'modal did not open — skipped', false);
-      record('[IS-BACK]    "Go back" dismisses dialog',  'dialog gone',    'skipped',                       false);
-      record('[IS-PROCEED] "Schedule anyway" fires POST', 'POST /api/visits', 'skipped',                   false);
+      skip('[IS-PAST]    past-confirm dialog appears', 'dialog present', 'modal did not open — skipped');
+      skip('[IS-BACK]    "Go back" dismisses dialog',  'dialog gone',    'skipped');
+      skip('[IS-PROCEED] "Schedule anyway" fires POST', 'POST /api/visits', 'skipped');
     }
 
     await isPage.close();
@@ -675,9 +675,9 @@ async function main() {
 
       await restoreDateMock(dwPage);
     } else {
-      record('[DW-PAST]    past-confirm dialog appears', 'dialog present', 'modal did not open — skipped', false);
-      record('[DW-BACK]    "Go back" dismisses dialog',  'dialog gone',    'skipped',                       false);
-      record('[DW-PROCEED] "Schedule anyway" fires POST', 'POST /api/visits', 'skipped',                   false);
+      skip('[DW-PAST]    past-confirm dialog appears', 'dialog present', 'modal did not open — skipped');
+      skip('[DW-BACK]    "Go back" dismisses dialog',  'dialog gone',    'skipped');
+      skip('[DW-PROCEED] "Schedule anyway" fires POST', 'POST /api/visits', 'skipped');
     }
 
     await dwPage.close();
@@ -808,9 +808,9 @@ async function main() {
 
       await restoreDateMock(vcmPage);
     } else {
-      record('[VCM-PAST]    past-confirm dialog appears', 'dialog present', 'modal did not open — skipped', false);
-      record('[VCM-BACK]    "Go back" dismisses dialog',  'dialog gone',    'skipped',                       false);
-      record('[VCM-PROCEED] "Schedule anyway" fires POST', 'POST /api/visits', 'skipped',                   false);
+      skip('[VCM-PAST]    past-confirm dialog appears', 'dialog present', 'modal did not open — skipped');
+      skip('[VCM-BACK]    "Go back" dismisses dialog',  'dialog gone',    'skipped');
+      skip('[VCM-PROCEED] "Schedule anyway" fires POST', 'POST /api/visits', 'skipped');
     }
 
     await vcmPage.close();
