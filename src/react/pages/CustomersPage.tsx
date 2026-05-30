@@ -307,34 +307,19 @@ async function loadLeadSubstatuses(): Promise<void> {
 }
 
 /**
- * Re-render the native `<select id="lead-status-filter">` element with
- * the current store contents in `Label (N)` format. The lead-status-sync
- * test asserts directly on this element's options.
+ * Trigger a React re-render of the CustomersPage island so the
+ * `<select id="lead-status-filter">` element (rendered by React from
+ * store.statuses) reflects the latest store state.
+ *
+ * Previously this function wrote to sel.innerHTML directly, but that
+ * detached React's fiber nodes from the DOM.  A subsequent React render
+ * would then call removeChild() on the now-detached nodes, throwing a
+ * DOMException caught by IslandErrorBoundary — which unmounted the island
+ * and made the select disappear (intermittent failure in section J of the
+ * lead-status-sync test suite).  Delegating entirely to React eliminates
+ * the desync.
  */
 function populateLeadStatusFilter(): void {
-  const sel = document.getElementById('lead-status-filter') as HTMLSelectElement | null;
-  if (!sel) {
-    notify();
-    return;
-  }
-  const counts = store.counts || {};
-  const nullCount = counts['__no_status__'] || 0;
-  const prev = sel.value;
-  const opts: string[] = [];
-  opts.push('<option value="">All statuses</option>');
-  const nullAttrs = nullCount === 0 ? ' disabled' : '';
-  opts.push(
-    `<option value="__no_status__"${nullAttrs}>${escapeHtml(store.nullLabel)} (${nullCount})</option>`,
-  );
-  for (const s of store.statuses.filter((o) => !o.excluded_from_sales)) {
-    const n = counts[s.key] || 0;
-    const attrs = n === 0 ? ' disabled' : '';
-    opts.push(
-      `<option value="${escapeHtml(s.key)}"${attrs}>${escapeHtml(s.label)} (${n})</option>`,
-    );
-  }
-  sel.innerHTML = opts.join('');
-  if (prev) sel.value = prev;
   notify();
 }
 
@@ -371,6 +356,10 @@ function useLeadStatusSync(onChange: () => void, stageRef: React.MutableRefObjec
   React.useEffect(() => {
     const refresh = () => {
       const stage = stageRef.current || undefined;
+      // After all three loads settle, notify React to re-render the select
+      // from the updated store state.  populateLeadStatusFilter() now delegates
+      // entirely to notify() — no innerHTML write — so there is no risk of
+      // detaching React fiber nodes and triggering a reconciliation error.
       Promise.all([loadLeadStatuses(), loadLeadStatusCounts(stage).catch(() => {}), loadLeadSubstatuses()])
         .then(() => {
           populateLeadStatusFilter();

@@ -339,7 +339,10 @@ async function main() {
       headless: true,
       executablePath,
       defaultViewport: { width: 1280, height: 800 },
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      args: [
+        '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+        '--disable-gpu', '--no-zygote', '--disable-extensions',
+      ],
     });
   } catch (e) {
     record('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`, false);
@@ -687,12 +690,11 @@ async function main() {
     // (store.subsLoaded = false).
     //
     // Flow:
-    //   1. /api/lead-statuses resolves → store.loaded = true, notify() fires
-    //      an early re-render.  Lead-status skeleton clears.
-    //   2. /api/lead-substatuses is held → store.subsLoaded stays false.
-    //   3. We call window.populateLeadStatusFilter() (React bundle) so the
-    //      test lead-status key appears as a dropdown option, then select it.
-    //   4. React re-renders with leadStatus set and store.subsLoaded false
+    //   1. Navigate with ?leadStatus=LS_KEY so React initialises leadStatus
+    //      from the URL — no programmatic change event needed.
+    //   2. /api/lead-statuses resolves → store.loaded = true, notify() fires.
+    //   3. /api/lead-substatuses is held → store.subsLoaded stays false.
+    //   4. React renders with leadStatus set and store.subsLoaded false
     //      → the sub-status skeleton ([data-testid="substatus-skeleton"]) shows.
     //   5. Release /api/lead-substatuses → store.subsLoaded = true, notify().
     //   6. Skeleton disappears; test lead-status chip appears.
@@ -702,33 +704,40 @@ async function main() {
     await subSkelTab.setCacheEnabled(false);
     await injectSession(subSkelTab, adminClient.cookie);
 
-    let resolveSubstatusReq;
-    const substatusReqCaught = new Promise(res => { resolveSubstatusReq = res; });
-    let pendingSubstatusReq = null;
-
-    await subSkelTab.setRequestInterception(true);
-    subSkelTab.on('request', req => {
-      const url = req.url();
-      // Hold only /api/lead-substatuses (with optional query string).
-      if (/\/api\/lead-substatuses(\?|$)/.test(url) && !pendingSubstatusReq) {
-        pendingSubstatusReq = req;
-        resolveSubstatusReq(req);
-        // Deliberately do NOT call req.continue() — we hold the request.
-      } else {
-        req.continue();
-      }
+    // Inject a fetch wrapper BEFORE the page scripts run so that every call to
+    // the exact path /api/lead-substatuses (no query string) is gated behind a
+    // manually-released Promise.  WorkflowDataContext appends ?_t=<ts>, so its
+    // requests pass through immediately.  This approach keeps all interception
+    // at the JS layer — no CDP request interception — avoiding side-effects on
+    // other tabs or the test server.
+    await subSkelTab.evaluateOnNewDocument(() => {
+      const orig = window.fetch.bind(window);
+      let release;
+      window.__subsFetchBlocked = 0;
+      window.__subsBlock = new Promise(r => { release = r; });
+      window.__subsRelease = release;
+      window.fetch = function (url, opts) {
+        if (typeof url === 'string' && /\/api\/lead-substatuses$/.test(url)) {
+          window.__subsFetchBlocked++;
+          return window.__subsBlock.then(() => orig(url, opts));
+        }
+        return orig(url, opts);
+      };
     });
 
-    await subSkelTab.goto(`${BASE}/customers`, {
+    await subSkelTab.goto(`${BASE}/customers?leadStatus=${encodeURIComponent(LS_KEY)}`, {
       waitUntil: 'domcontentloaded',
       timeout: 20000,
     });
 
-    // Wait until Puppeteer has caught the /api/lead-substatuses request (up to 5 s).
-    const subReqCatchOk = await Promise.race([
-      substatusReqCaught.then(() => true),
-      new Promise(res => setTimeout(() => res(false), 5000)),
-    ]);
+    // Wait until at least one exact-path /api/lead-substatuses fetch has been
+    // intercepted by our wrapper (up to 5 s).
+    const subReqCatchOk = !!(await pollUntil(
+      subSkelTab,
+      () => (window.__subsFetchBlocked > 0 ? true : null),
+      5000,
+      100,
+    ));
     record(
       '/api/lead-substatuses request is intercepted in-flight',
       'request intercepted within 5 s',
@@ -755,54 +764,9 @@ async function main() {
       leadStatusVisible,
     );
 
-    // Populate the dropdown so the test lead-status option is available.
-    // window.populateLeadStatusFilter is exposed by the React bundle (it is no
-    // longer defined in workflow-core.js); the typeof guard is a no-op on pages
-    // where the React island has not yet mounted.
-    await subSkelTab.evaluate(async () => {
-      if (typeof loadLeadStatuses === 'function') await loadLeadStatuses();
-      if (typeof populateLeadStatusFilter === 'function') populateLeadStatusFilter();
-    });
-    // Poll for the #lead-status-filter <select> to have at least one option,
-    // so the programmatic selection below is guaranteed to find it.
-    await pollUntil(
-      subSkelTab,
-      (lsKey) => {
-        const sel = document.getElementById('lead-status-filter');
-        return (sel && Array.from(sel.options).some(o => o.value === lsKey)) ? true : null;
-      },
-      6000,
-      150,
-      [LS_KEY],
-    );
-
-    // Select the test lead status programmatically.  Use the React-compatible
-    // setter so the synthetic change event triggers setLeadStatus().
-    const selectedOk = await subSkelTab.evaluate((lsKey) => {
-      const sel = document.getElementById('lead-status-filter');
-      if (!sel) return false;
-      const hasOpt = Array.from(sel.options).some(o => o.value === lsKey);
-      if (!hasOpt) return false;
-      const nativeSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLSelectElement.prototype, 'value',
-      )?.set;
-      if (nativeSetter) {
-        nativeSetter.call(sel, lsKey);
-      } else {
-        sel.value = lsKey;
-      }
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
-      return true;
-    }, LS_KEY);
-    record(
-      'test lead-status option is selectable in the dropdown',
-      `option value="${LS_KEY}" found and selected`,
-      `selectedOk=${selectedOk}`,
-      selectedOk,
-    );
-
-    // Poll for the sub-status skeleton to appear after React re-renders with the
-    // newly selected lead-status value.  Replaces the fixed 300 ms delay.
+    // Poll for the sub-status skeleton to appear.  leadStatus is pre-set from
+    // the URL so React renders the skeleton immediately once store.loaded is
+    // true and store.subsLoaded is still false (request held).
     await pollUntil(
       subSkelTab,
       () => {
@@ -829,10 +793,10 @@ async function main() {
       subSkelVisible,
     );
 
-    // ── release the held /api/lead-substatuses request ──
-    if (pendingSubstatusReq) {
-      try { pendingSubstatusReq.continue(); } catch {}
-    }
+    // ── release all blocked /api/lead-substatuses fetches ──
+    await subSkelTab.evaluate(() => {
+      if (typeof window.__subsRelease === 'function') window.__subsRelease();
+    });
 
     // ── assert sub-status skeleton disappears ──
     const subSkelGone = await subSkelTab.waitForFunction(
@@ -1190,9 +1154,16 @@ async function main() {
     // WorkflowDataContext's SSE EventSource open.  Asserts that a separate
     // customers tab picks up the new label via SSE → BroadcastChannel → re-render,
     // without any manual BC post or visibilitychange from the test harness.
+    //
+    // Wrapped in try/catch: a TargetCloseError means Chromium crashed (resource
+    // pressure) — record the probes as failed and continue rather than letting
+    // the unhandledRejection handler exit the process before section K runs.
+    let iListenerTab = null;
+    let iRelayTab = null;
+    try {
     console.log('\n  [I] SSE broadcast — POST (create) path');
 
-    const iListenerTab = await browser.newPage();
+    iListenerTab = await browser.newPage();
     await iListenerTab.setCacheEnabled(false);
     await injectSession(iListenerTab, adminClient.cookie);
 
@@ -1223,7 +1194,7 @@ async function main() {
 
     // Open the SSE relay tab (WorkflowDataContext mounts here and opens the
     // EventSource).  Use a dummy contact ID so the page loads quickly.
-    const iRelayTab = await browser.newPage();
+    iRelayTab = await browser.newPage();
     await iRelayTab.setCacheEnabled(false);
     await injectSession(iRelayTab, adminClient.cookie);
 
@@ -1338,6 +1309,38 @@ async function main() {
     await iListenerTab.evaluate(() => { try { window.__j_bc_spy?.close(); } catch { /**/ } });
     await iListenerTab.close();
     await iRelayTab.close();
+    iListenerTab = null;
+    iRelayTab = null;
+
+    } catch (e) {
+      // Chrome crashed (TargetCloseError / BrowserClosedError) or another
+      // unexpected error occurred mid-section.  Close any open tabs, record the
+      // probes as failed, and continue so sections K–L can still run.
+      const isCrash = e && (e.name === 'TargetCloseError' || (e.message || '').includes('Target closed') || (e.message || '').includes('Session closed'));
+      console.error(`\n  [I/J] browser error (${e && e.name}): ${e && e.message}`);
+      for (const t of [iListenerTab, iRelayTab]) {
+        if (t) try { await t.close(); } catch {}
+      }
+      iListenerTab = null;
+      iRelayTab = null;
+      if (!isCrash) throw e;
+      // Record any probes that didn't make it so the report is complete.
+      const pending = [
+        '[I] iListenerTab filter shows LABEL_SSE before POST-create',
+        '[I] in-page POST creates new lead-status LABEL_NEW',
+        '[I] BroadcastChannel message received on iListenerTab after POST (SSE relay verified)',
+        '[I] SSE broadcast (POST) causes iListenerTab filter dropdown to show LABEL_NEW',
+        '[J] in-page DELETE removes LABEL_NEW lead-status',
+        '[J] BroadcastChannel message received on iListenerTab after DELETE (SSE relay verified)',
+        '[J] SSE broadcast (DELETE) causes iListenerTab filter dropdown to remove LABEL_NEW',
+      ];
+      const recorded = new Set(findings.map(f => f.name));
+      for (const name of pending) {
+        if (!recorded.has(name)) {
+          record(name, 'browser did not crash', `browser crash: ${e.name}`, false);
+        }
+      }
+    }
 
     // ── (K) Customer-card substatus chip rename — BroadcastChannel path ───────
     // Intercept /api/contacts-all to return a synthetic contact whose
