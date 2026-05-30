@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePageTitle } from '../../hooks/usePageTitle';
 import { BRAND_COLORS } from '../../theme';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -49,6 +50,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export function OnboardingPage() {
+  usePageTitle('Welcome · Measure Once');
+
   const [form, setForm] = React.useState<FormData>(() => {
     const draft = loadDraft();
     return { ...EMPTY, ...draft };

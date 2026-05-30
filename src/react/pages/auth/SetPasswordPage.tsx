@@ -10,6 +10,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { StrengthMeter, StrengthMeterErrorBoundary, checkPasswordPolicy } from '../../utils/passwordStrength';
+import { usePageTitle } from '../../hooks/usePageTitle';
 import { BRAND_COLORS } from '../../theme';
 
 const LOGO_URL = '/harry-wardrobes-logo.png';
@@ -24,6 +25,8 @@ interface InvalidInfo {
 }
 
 export function SetPasswordPage() {
+  usePageTitle('Set Password · Measure Once');
+
   const [state, setState] = React.useState<PageState>('loading');
   const [invalid, setInvalid] = React.useState<InvalidInfo>({ msg: '', actionHref: '/login', actionLabel: 'Back to sign in' });
   const [email, setEmail] = React.useState('');

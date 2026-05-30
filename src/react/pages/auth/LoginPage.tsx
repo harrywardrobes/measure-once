@@ -9,6 +9,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import { LoginPageSkeleton } from '../../components/PageLoadingSkeleton';
+import { usePageTitle } from '../../hooks/usePageTitle';
 import { BRAND_COLORS } from '../../theme';
 
 type View = 'login' | 'forgot' | 'request';
@@ -146,6 +147,8 @@ function AuthAlert({ msg, severity, id }: { msg: string; severity: 'success' | '
 }
 
 function LoginPageInner() {
+  usePageTitle('Sign In · Measure Once');
+
   const [view, setView] = React.useState<View>(() => {
     const h = window.location.hash;
     if (h === '#forgot') return 'forgot';
