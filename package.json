@@ -247,7 +247,8 @@
     "test:storybook-smoke": "node scripts/storybook-smoke.mjs",
     "test:ci": "node scripts/run-ci.mjs",
     "test:ci:parallel": "node scripts/run-ci-parallel.mjs",
-    "test:ci-runner-sync": "node scripts/check-ci-runner-sync.mjs"
+    "test:ci-runner-sync": "node scripts/check-ci-runner-sync.mjs",
+    "test:suite-descriptions": "node scripts/check-suite-descriptions.mjs"
   },
   "dependencies": {
     "@acpr/rate-limit-postgresql": "^1.4.1",

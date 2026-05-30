@@ -72,6 +72,7 @@ const STATIC_SUITES = [
   'test:workflow-map-ordering',
   'test:mui-select-click',
   'test:ci-runner-sync',
+  'test:suite-descriptions',
 ];
 
 /**
