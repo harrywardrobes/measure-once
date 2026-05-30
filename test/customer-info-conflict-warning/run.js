@@ -16,6 +16,15 @@
 //        the conflict Alert appears (data-testid="conflict-proceed-btn" visible).
 //   (B2) Clicking "Copy anyway" dismisses the Alert.
 //   (B3) Clicking "Cancel" dismisses the Alert without copying.
+//   (A-open)         Same expiresAt, open-link button → provisional window
+//                    navigated to form_link, no conflict Alert.
+//   (B-open)         Different expiresAt, open-link → conflict Alert, provisional
+//                    window closed.
+//   (B2-open)        "Open anyway" dismisses Alert and calls window.open(formLink).
+//   (B3-open)        "Cancel" dismisses Alert without an extra window.open call.
+//   (A-open-blocked) window.open returns null on first call (popup blocked),
+//                    same expiresAt → no conflict Alert, fallback window.open
+//                    called with form_link URL.
 //
 // Strategy:
 //   - Spawn a real Express server and log in as a member.
@@ -136,6 +145,14 @@ function writeReport(runId) {
     '  hides the Alert and calls window.open with the form_link URL.',
     '- **(B3-open) Cancel dismisses without action**: Clicking data-testid="conflict-cancel-btn"',
     '  hides the Alert without making any additional window.open call.',
+    '',
+    '### Open-link path — popup-blocked fallback',
+    '- **(A-open-blocked) No conflict Alert when popup is blocked**: When window.open returns null',
+    '  on the first call (popup blocked) and link-status returns the same expiresAt, no conflict',
+    '  Alert appears — the fallback path in checkThenAct is taken instead.',
+    '- **(A-open-blocked) Fallback window.open called with form_link URL**: After the no-conflict',
+    '  check completes, a second window.open call is made with the form_link URL so the user',
+    '  still gets the link even though the provisional window was blocked.',
     '',
     'Uses a real customer_info_submissions row inserted into the test DB so the',
     'rail renders an authentic active card with a known expires_at.  Only the',
@@ -324,8 +341,12 @@ function makeRequestHandler(contactId, linkStatusBody) {
  * Open /customers/:contactId with request interception active.
  * Returns a Puppeteer page once the active submission card's copy button is
  * present and clickable.
+ *
+ * options.popupBlockFirstCall – when true, window.open returns null on the
+ *   first call to simulate a browser popup blocker, then behaves normally for
+ *   subsequent calls (covers the fallback branch in checkThenAct).
  */
-async function openCustomerDetail(browser, cookie, contactId, linkStatusBody) {
+async function openCustomerDetail(browser, cookie, contactId, linkStatusBody, options = {}) {
   const ctx = await (browser.createBrowserContext
     ? browser.createBrowserContext()
     : browser.createIncognitoBrowserContext());
@@ -339,45 +360,94 @@ async function openCustomerDetail(browser, cookie, contactId, linkStatusBody) {
 
   // Mock navigator.clipboard so writes succeed silently in headless Chromium.
   // Mock window.open so the "open link" path doesn't open real tabs.
-  await page.evaluateOnNewDocument(() => {
-    window.__clipboardWrites = [];
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      get() {
-        return {
-          writeText(text) {
-            window.__clipboardWrites.push(text);
-            return Promise.resolve();
-          },
-        };
-      },
-    });
-    window.__windowOpenCalls = [];
-    window.__windowOpenResults = [];
-    window.open = function(url, target, features) {
-      window.__windowOpenCalls.push({ url, target, features });
-      // Track location.href mutations and close() calls so open-link probes
-      // can verify the provisional-window lifecycle.
-      var _href = url || '';
-      var _closed = false;
-      var loc = {};
-      Object.defineProperty(loc, 'href', {
-        get: function() { return _href; },
-        set: function(v) { _href = v; },
-        enumerable: true,
+  if (options.popupBlockFirstCall) {
+    // First call returns null (popup blocked); subsequent calls return a real
+    // mock window object so the fallback window.open can be verified.
+    await page.evaluateOnNewDocument(() => {
+      window.__clipboardWrites = [];
+      Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
+        get() {
+          return {
+            writeText(text) {
+              window.__clipboardWrites.push(text);
+              return Promise.resolve();
+            },
+          };
+        },
       });
-      var win = {
-        location: loc,
-        get closed() { return _closed; },
-        close: function() { _closed = true; },
-        getHref: function() { return _href; },
-        isClosed: function() { return _closed; },
+      window.__windowOpenCalls = [];
+      window.__windowOpenResults = [];
+      var __openCallCount = 0;
+      window.open = function(url, target, features) {
+        window.__windowOpenCalls.push({ url, target, features });
+        __openCallCount++;
+        if (__openCallCount === 1) {
+          // Simulate popup blocked — return null, no result object.
+          window.__windowOpenResults.push(null);
+          return null;
+        }
+        var _href = url || '';
+        var _closed = false;
+        var loc = {};
+        Object.defineProperty(loc, 'href', {
+          get: function() { return _href; },
+          set: function(v) { _href = v; },
+          enumerable: true,
+          configurable: true,
+        });
+        var win = {
+          location: loc,
+          get closed() { return _closed; },
+          close: function() { _closed = true; },
+          getHref: function() { return _href; },
+          isClosed: function() { return _closed; },
+        };
+        window.__windowOpenResults.push(win);
+        return win;
       };
-      window.__windowOpenResults.push(win);
-      return win;
-    };
-  });
+    });
+  } else {
+    await page.evaluateOnNewDocument(() => {
+      window.__clipboardWrites = [];
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        get() {
+          return {
+            writeText(text) {
+              window.__clipboardWrites.push(text);
+              return Promise.resolve();
+            },
+          };
+        },
+      });
+      window.__windowOpenCalls = [];
+      window.__windowOpenResults = [];
+      window.open = function(url, target, features) {
+        window.__windowOpenCalls.push({ url, target, features });
+        // Track location.href mutations and close() calls so open-link probes
+        // can verify the provisional-window lifecycle.
+        var _href = url || '';
+        var _closed = false;
+        var loc = {};
+        Object.defineProperty(loc, 'href', {
+          get: function() { return _href; },
+          set: function(v) { _href = v; },
+          enumerable: true,
+          configurable: true,
+        });
+        var win = {
+          location: loc,
+          get closed() { return _closed; },
+          close: function() { _closed = true; },
+          getHref: function() { return _href; },
+          isClosed: function() { return _closed; },
+        };
+        window.__windowOpenResults.push(win);
+        return win;
+      };
+    });
+  }
 
   // Network-level interception — reliable across React bundle changes.
   await page.setRequestInterception(true);
@@ -494,6 +564,8 @@ async function main() {
     '(B-open) conflict Alert appears and provisional window is closed',
     '(B2-open) clicking "Open anyway" dismisses Alert and opens URL',
     '(B3-open) clicking "Cancel" dismisses Alert without extra open call',
+    '(A-open-blocked) no conflict Alert when popup is blocked',
+    '(A-open-blocked) fallback window.open called with form_link URL',
   ];
 
   if (!puppeteer) {
@@ -845,6 +917,66 @@ async function main() {
     }
 
     await pageB3Open.__ctx.close().catch(() => {});
+
+    // ── Probe A-open-blocked: popup blocked on first call, no conflict ─────────
+    console.log('\n  [A-open-blocked] Popup-blocked fallback probe');
+    const pageAOpenBlocked = await openCustomerDetail(
+      browser,
+      memberClient.cookie,
+      CONTACT_ID,
+      { hasActiveLink: true, expiresAt: CARD_EXPIRES_AT },   // same → no conflict
+      { popupBlockFirstCall: true },
+    );
+
+    await pollPage(pageAOpenBlocked, () =>
+      document.querySelector('[data-testid="open-link-btn"]') ? 'ok' : null,
+      5000,
+    );
+
+    await pageAOpenBlocked.click('[data-testid="open-link-btn"]');
+
+    // Conflict Alert must NOT appear within 4 s.
+    const conflictAppearedAOpenBlocked = await pollPage(pageAOpenBlocked, () =>
+      document.querySelector('[data-testid="conflict-proceed-btn"]') ? 'yes' : null,
+      4000,
+    );
+
+    record(
+      PROBE_LABELS[10],
+      'conflict Alert absent',
+      conflictAppearedAOpenBlocked
+        ? 'conflict Alert appeared unexpectedly'
+        : 'no conflict Alert (correct)',
+      !conflictAppearedAOpenBlocked,
+    );
+
+    // The component must have made two window.open calls total:
+    //   call[0] — the provisional blank window (returned null, popup blocked)
+    //   call[1] — the fallback call once no-conflict is confirmed
+    // We assert that call[1] URL equals formLink.
+    const openCallsAOpenBlocked = await pollPage(pageAOpenBlocked, () => {
+      const calls = window.__windowOpenCalls || [];
+      return calls.length >= 2 ? JSON.stringify(calls.map(c => c.url)) : null;
+    }, 6000);
+
+    let fallbackUrl = null;
+    if (openCallsAOpenBlocked) {
+      try {
+        const urls = JSON.parse(openCallsAOpenBlocked);
+        fallbackUrl = urls[1] || null;
+      } catch {}
+    }
+
+    record(
+      PROBE_LABELS[11],
+      `fallback window.open called with "${formLink}"`,
+      openCallsAOpenBlocked
+        ? `calls=${openCallsAOpenBlocked} fallbackUrl="${fallbackUrl}"`
+        : 'second window.open call never made',
+      fallbackUrl === formLink,
+    );
+
+    await pageAOpenBlocked.__ctx.close().catch(() => {});
 
   } catch (e) {
     console.error('\n  Test crashed:', e);
