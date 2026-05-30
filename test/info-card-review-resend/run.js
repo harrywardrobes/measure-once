@@ -14,7 +14,8 @@ const { makeSkip3 } = require('../helpers/report');
 //          "Review" button is absent.
 //
 //   [RR-C] Clicking "Review" in probe A expands the detail panel:
-//          The Collapse content becomes visible and contains "Submitted" text.
+//          [data-testid="submission-card-body"] becomes visible
+//          (getBoundingClientRect().height > 0).
 //
 // Strategy: boots a disposable test server with the privileges harness.
 // Uses two intercept layers for each probe (same pattern as
@@ -296,8 +297,8 @@ async function writeReport(runId) {
     '  `canResend=true`. Asserts `[data-testid="resend-link-btn"]` is visible and',
     '  the "Review" button is absent.',
     '- **[RR-C] Click Review → expands detail**: From probe A, clicks the "Review"',
-    '  button and asserts the Collapse content (containing "Submitted" date text)',
-    '  becomes visible in the DOM.',
+    '  button and polls for `[data-testid="submission-card-body"]` with',
+    '  `getBoundingClientRect().height > 0` to confirm the Collapse body is visible.',
     '',
     '## Relevant files',
     '',
@@ -456,24 +457,21 @@ async function main() {
           }
         });
 
-        // Poll for "Submitted" text appearing in the expanded content.
-        // SubmissionCard renders <Typography>Submitted {fmtDate(sub.submitted_at)}…</Typography>
-        // inside the Collapse when open=true and !isPending.
+        // Poll for [data-testid="submission-card-body"] becoming visible
+        // (getBoundingClientRect().height > 0).  This is the stable testid
+        // on the Collapse body rendered by SubmissionCard when open=true.
         const collapseOpen = await pollPage(pageA, () => {
-          const section = document.getElementById('customer-info-submissions-section');
-          if (!section) return null;
-          // Look for text containing "Submitted" inside the section (the
-          // expanded detail renders the submitted date).
-          const allText = section.textContent || '';
-          return allText.includes('Submitted') ? 'ok' : null;
+          const body = document.querySelector('[data-testid="submission-card-body"]');
+          if (!body) return null;
+          return body.getBoundingClientRect().height > 0 ? 'ok' : null;
         }, 10000);
 
         record(
           PROBE_LABELS[4],
           !!collapseOpen,
           collapseOpen
-            ? 'detail panel expanded: "Submitted" text visible after clicking Review'
-            : 'detail panel did not reveal "Submitted" text within 10 s',
+            ? '[data-testid="submission-card-body"] visible (height > 0) after clicking Review'
+            : '[data-testid="submission-card-body"] did not become visible within 10 s',
         );
       } else {
         record(PROBE_LABELS[4], false, 'skipped — Review button was not found in probe A');
