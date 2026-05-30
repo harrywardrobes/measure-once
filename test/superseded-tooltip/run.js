@@ -456,8 +456,7 @@ async function main() {
 
     // Wait for the Superseded chip to appear after the Collapse opens.
     const supersededChipFound = await pollPage(page, () => {
-      const chips = Array.from(document.querySelectorAll('[class*="MuiChip-label"]'));
-      return chips.some(c => (c.textContent || '').trim() === 'Superseded') ? 'ok' : null;
+      return document.querySelector('[data-testid="superseded-chip"]') ? 'ok' : null;
     }, 8000).then(() => true).catch(() => false);
 
     record(
@@ -475,13 +474,9 @@ async function main() {
     let tooltipSeen = false;
 
     if (supersededChipFound) {
-      // Find the element that contains the Superseded chip label and hover it.
-      // The Chip root element wraps the label span; we hover the root.
+      // Find the Superseded chip by its test id and hover it.
       const chipHandle = await page.evaluateHandle(() => {
-        const labels = Array.from(document.querySelectorAll('[class*="MuiChip-label"]'));
-        const label  = labels.find(c => (c.textContent || '').trim() === 'Superseded');
-        // Go up to the Chip root (MuiChip-root) so the hover target is the full chip.
-        return label ? label.closest('[class*="MuiChip-root"]') : null;
+        return document.querySelector('[data-testid="superseded-chip"]');
       });
 
       const chipElement = chipHandle.asElement();

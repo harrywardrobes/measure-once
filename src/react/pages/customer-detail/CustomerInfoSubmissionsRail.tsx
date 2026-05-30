@@ -364,7 +364,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
                 placement="top"
                 arrow
               >
-                <Chip label="Superseded" size="small" variant="outlined" />
+                <Chip label="Superseded" size="small" variant="outlined" data-testid="superseded-chip" />
               </Tooltip>
             </Box>
           ) : (
