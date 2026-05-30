@@ -1,19 +1,23 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Collapse from '@mui/material/Collapse';
 import Divider from '@mui/material/Divider';
+import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
 import Alert from '@mui/material/Alert';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CheckIcon from '@mui/icons-material/Check';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HomeIcon from '@mui/icons-material/Home';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SendIcon from '@mui/icons-material/Send';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useToast } from '../../contexts/ToastContext';
@@ -37,6 +41,7 @@ interface Submission {
   photo_keys: string[];
   photoUrls: string[];
   email_skipped_count: number;
+  form_link: string | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -53,6 +58,39 @@ function roomLabel(count: string | null): string {
   if (count === '1') return '1 room';
   if (count === '2') return '2 rooms';
   return '3+ rooms';
+}
+
+// ── Copy link button ──────────────────────────────────────────────────────────
+
+function CopyLinkButton({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {
+      // Clipboard write failed — silent
+    });
+  }
+
+  useEffect(() => () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); }, []);
+
+  return (
+    <Tooltip title={copied ? 'Copied!' : 'Copy link'} placement="top" arrow>
+      <IconButton
+        size="small"
+        onClick={handleCopy}
+        aria-label="Copy customer link"
+        color={copied ? 'success' : 'default'}
+        data-testid="copy-link-btn"
+      >
+        {copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
+      </IconButton>
+    </Tooltip>
+  );
 }
 
 // ── Resend button ─────────────────────────────────────────────────────────────
@@ -143,11 +181,10 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
   const [open, setOpen] = useState(false);
   const isPending = !sub.submitted_at;
   const isExpired = isPending && new Date(sub.expires_at) < new Date();
+  const isActive  = isPending && !isExpired;
 
   const statusChip = isPending ? (
-    isExpired
-      ? <Chip icon={<HourglassBottomIcon />} label="Link expired" size="small" color="warning" variant="outlined" />
-      : <Chip icon={<HourglassBottomIcon />} label="Awaiting submission" size="small" color="default" variant="outlined" />
+    <Chip icon={<HourglassBottomIcon />} label="Awaiting submission" size="small" color="default" variant="outlined" />
   ) : (
     <Chip icon={<CheckCircleIcon />} label="Submitted" size="small" color="success" variant="outlined" />
   );
@@ -199,7 +236,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
           }
         </Box>
 
-        {/* Action button — Review for submitted, Resend for pending/expired */}
+        {/* Action area */}
         {!isPending ? (
           <Box sx={{ flexShrink: 0 }}>
             <Button
@@ -210,11 +247,29 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
               Review
             </Button>
           </Box>
-        ) : canResend && (
-          <Box sx={{ flexShrink: 0 }}>
-            <ResendButton contactId={contactId} onSuccess={onResendSuccess} />
-          </Box>
-        )}
+        ) : isActive ? (
+          <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, alignItems: 'center' }}>
+            {sub.form_link && (
+              <>
+                <CopyLinkButton url={sub.form_link} />
+                <Tooltip title="Open link in new tab" placement="top" arrow>
+                  <IconButton
+                    size="small"
+                    component="a"
+                    href={sub.form_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Open customer link in new tab"
+                    data-testid="open-link-btn"
+                  >
+                    <OpenInNewIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </>
+            )}
+            {canResend && <ResendButton contactId={contactId} onSuccess={onResendSuccess} />}
+          </Stack>
+        ) : null}
       </Box>
 
       {/* Expanded detail */}
@@ -223,9 +278,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess }: {
         <Box sx={{ px: 2, py: 2 }}>
           {isPending ? (
             <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
-              {isExpired
-                ? 'The customer did not complete this form before the link expired.'
-                : 'Waiting for the customer to complete the form.'}
+              Waiting for the customer to complete the form.
             </Typography>
           ) : (
             <Stack spacing={2}>
@@ -379,7 +432,14 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
     loadSubmissions();
   }, [loadSubmissions]);
 
-  if (!loading && !error && submissions.length === 0) return null;
+  // Filter out expired-pending cards — staff only need to see active and submitted entries
+  const visibleSubmissions = submissions.filter(sub => {
+    const isPending = !sub.submitted_at;
+    const isExpired = isPending && new Date(sub.expires_at) < new Date();
+    return !(isPending && isExpired);
+  });
+
+  if (!loading && !error && visibleSubmissions.length === 0) return null;
 
   return (
     <Box
@@ -401,9 +461,9 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
         <HomeIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
         <Typography variant="subtitle2" sx={{ fontWeight: 600, flex: 1 }}>
           Customer Info
-          {submissions.length > 0 && (
+          {visibleSubmissions.length > 0 && (
             <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
-              ({submissions.length})
+              ({visibleSubmissions.length})
             </Typography>
           )}
         </Typography>
@@ -426,7 +486,7 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
         )}
         {!loading && !error && (
           <Stack spacing={1.5}>
-            {submissions.map(sub => (
+            {visibleSubmissions.map(sub => (
               <SubmissionCard
                 key={sub.id}
                 sub={sub}

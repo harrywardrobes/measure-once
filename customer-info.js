@@ -154,6 +154,10 @@ async function ensureCustomerInfoSubmissionsTable() {
     ALTER TABLE customer_info_submissions
     ADD COLUMN IF NOT EXISTS email_skipped_count INTEGER NOT NULL DEFAULT 0
   `);
+  await pool.query(`
+    ALTER TABLE customer_info_submissions
+    ADD COLUMN IF NOT EXISTS form_link TEXT
+  `);
 }
 
 async function ensureResendLogTable() {
@@ -625,14 +629,15 @@ router.post('/api/customer-info/by-contact/:contactId/generate-link',
     const rawToken  = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
+    const formLink  = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
 
     if (isResend) {
       const keepId = existingRows[0].id;
       await pool.query(
         `UPDATE customer_info_submissions
-         SET token_hash = $1, expires_at = $2
-         WHERE id = $3`,
-        [tokenHash, expiresAt.toISOString(), keepId]
+         SET token_hash = $1, expires_at = $2, form_link = $3
+         WHERE id = $4`,
+        [tokenHash, expiresAt.toISOString(), formLink, keepId]
       );
       if (existingRows.length > 1) {
         const staleIds = existingRows.slice(1).map(r => r.id);
@@ -649,15 +654,14 @@ router.post('/api/customer-info/by-contact/:contactId/generate-link',
       await pool.query(
         `INSERT INTO customer_info_submissions
            (contact_id, contact_name, contact_email, token_hash, expires_at,
-            masked_email, masked_phone)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            masked_email, masked_phone, form_link)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [cid, name, email, tokenHash, expiresAt.toISOString(),
-         maskEmail(email), maskPhone(phone)]
+         maskEmail(email), maskPhone(phone), formLink]
       );
       console.log(`[customer-info] Created new link for contact ${cid} (isResend=false)`);
     }
 
-    const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
     res.status(201).json({ formLink, expiresAt: expiresAt.toISOString(), token: rawToken, isResend });
   }
 );
@@ -725,16 +729,17 @@ router.post('/api/card-actions/upload-photos-and-info',
       console.log(`[customer-info] Expired ${expireResult.rowCount} active link(s) for contact ${cid} before sending new one`);
     }
 
+    const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
+
     await pool.query(
       `INSERT INTO customer_info_submissions
          (contact_id, contact_name, contact_email, token_hash, expires_at,
-          masked_email, masked_phone)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          masked_email, masked_phone, form_link)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [cid, name, email, tokenHash, expiresAt.toISOString(),
-       maskEmail(email), maskPhone(phone)]
+       maskEmail(email), maskPhone(phone), formLink]
     );
 
-    const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
     await sendCustomerInviteEmail(email, maskEmail(email), formLink);
 
     res.status(201).json({ ok: true });
@@ -808,10 +813,11 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
   }
   const keys = rawKeys;
 
-  // Mark submitted
+  // Mark submitted (clear form_link so staff can no longer use the stale URL)
   await pool.query(
     `UPDATE customer_info_submissions SET
        submitted_at     = NOW(),
+       form_link        = NULL,
        corrected_email  = $1,
        corrected_mobile = $2,
        address_line1    = $3,
@@ -1081,17 +1087,17 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
     const rawToken  = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
+    const formLink  = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
 
     await pool.query(
       `INSERT INTO customer_info_submissions
          (contact_id, contact_name, contact_email, token_hash, expires_at,
-          masked_email, masked_phone)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          masked_email, masked_phone, form_link)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [cid, name, email, tokenHash, expiresAt.toISOString(),
-       maskEmail(email), maskPhone(phone)]
+       maskEmail(email), maskPhone(phone), formLink]
     );
 
-    const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
     await sendCustomerInviteEmail(email, maskEmail(email), formLink);
 
     console.log(`[customer-info] Resent invite link for contact ${cid}`);
@@ -1109,7 +1115,8 @@ router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, async (r
   const r = await pool.query(
     `SELECT id, contact_name, contact_email, created_at, expires_at, submitted_at,
             corrected_email, corrected_mobile, address_line1, city, postcode,
-            room_count, room_notes, photo_keys, masked_email, email_skipped_count
+            room_count, room_notes, photo_keys, masked_email, email_skipped_count,
+            CASE WHEN submitted_at IS NULL THEN form_link ELSE NULL END AS form_link
      FROM customer_info_submissions
      WHERE contact_id = $1
      ORDER BY created_at DESC`,
