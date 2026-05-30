@@ -16,6 +16,8 @@
 //   (E) Active-pending card with form_link: null shows neither Copy nor Open.
 //   (F) Skipped-email count badge: present with correct count when non-zero;
 //       absent when email_skipped_count is 0.
+//   (G) Clicking the Review button on a submitted card opens the card body
+//       (MuiCollapse transitions to the "entered" state).
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:customer-info-rail
@@ -437,6 +439,9 @@ function writeReport(runId) {
     '  render `[data-testid="skipped-photo-link"]` inside an Alert whose text contains',
     '  the count ("3"). **(F2)** A card with `email_skipped_count: 0` (same `photoUrls`)',
     '  must not render the Alert or the link element at all.',
+    '- **(G) Review button opens card body**: clicking `[data-testid="review-btn"]`',
+    '  on the submitted card triggers the MUI Collapse to enter the open state',
+    '  (`MuiCollapse-entered` class appears inside `[data-testid="submission-card-3"]`).',
     '',
     'All API calls are stubbed via evaluateOnNewDocument fetch interception.',
     'No HubSpot token or real contact data is required.',
@@ -521,6 +526,7 @@ async function main() {
     '(E) active card with null form_link shows no open-link-btn',
     '(F1) email_skipped_count=3: skipped-email Alert renders with count in text',
     '(F2) email_skipped_count=0: skipped-email Alert is absent',
+    '(G) clicking Review button opens submitted card body',
   ];
 
   if (!puppeteer) {
@@ -764,6 +770,37 @@ async function main() {
       'no open-link-btn on active card with null form_link',
       bState.noOpenOnNoLink ? 'open-link-btn absent (correct)' : 'open-link-btn present (wrong)',
       !!bState.noOpenOnNoLink,
+    );
+
+    // ── Probe G: clicking Review expands submitted card body ───────────────
+    console.log('\n  [G] Review button expands submitted card body');
+
+    // Locate the review-btn via Puppeteer and click it.
+    const reviewBtn = await page.$('[data-testid="review-btn"]');
+
+    let cardBodyOpen = false;
+    if (reviewBtn) {
+      await reviewBtn.click();
+
+      // After clicking, the MUI Collapse inside the submitted card transitions
+      // from the hidden state to the "entered" state (MuiCollapse-entered class
+      // is applied once the open animation completes).
+      cardBodyOpen = await pollPage(page, () => {
+        const card = document.querySelector('[data-testid="submission-card-3"]');
+        if (!card) return null;
+        return card.querySelector('[class*="MuiCollapse-entered"]') ? 'ok' : null;
+      }, 5000).then(() => true).catch(() => false);
+    }
+
+    record(
+      PROBE_LABELS[11],
+      'MuiCollapse-entered class present inside submission-card-3 after click',
+      cardBodyOpen
+        ? 'card body entered state (correct)'
+        : reviewBtn
+          ? 'review-btn found but card body did not open'
+          : 'review-btn not found',
+      cardBodyOpen,
     );
 
     await page.__ctx.close().catch(() => {});
