@@ -170,6 +170,7 @@ const DB_SUITES = [
   'test:dev-mode-bc-sync:ci',
   'test:workflow-map:ci',
   'test:upload-photos-resend-mode:ci',
+  'test:active-link-expires:ci',
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

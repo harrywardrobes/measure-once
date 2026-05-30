@@ -145,6 +145,7 @@ const STEPS = [
   'test:workflow-map:ci',
   'test:upload-photos-resend-mode:ci',
   'test:projects-top-spacing:ci',
+  'test:active-link-expires:ci',
   'build:storybook',
   { script: 'test:storybook-output-clean', env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
   { script: 'test:storybook-smoke',        env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
