@@ -4,7 +4,8 @@
  *
  * Scans every *.stories.tsx file under src/react/ for raw hex colour values
  * (`#[0-9a-fA-F]{3,6}`) appearing in style-related properties: bgcolor,
- * background, color, borderColor, and fill.
+ * background, backgroundColor, color, borderColor, fill, stroke,
+ * outlineColor, textDecorationColor, caretColor, and boxShadow.
  *
  * Hardcoded hex colours in story files should be replaced with semantic theme
  * tokens (STAGE_COLORS, STATUS_COLORS, MUI palette strings, etc.) so that
@@ -95,10 +96,10 @@ const HEX_RE = /#[0-9a-fA-F]{3,6}(?![0-9a-fA-F])/;
 /**
  * Style-related prop names that must not use raw hex colours.
  * Anchored with word boundaries so "background" doesn't match inside
- * "backgroundImage", for example — but bgcolor/background/color/borderColor/fill
- * are all distinct tokens in practice.
+ * "backgroundImage", for example — but all listed tokens are distinct
+ * in practice.
  */
-const STYLE_PROP_RE = /\b(?:bgcolor|background|borderColor|fill|color)\b/;
+const STYLE_PROP_RE = /\b(?:bgcolor|background|backgroundColor|borderColor|fill|color|stroke|outlineColor|textDecorationColor|caretColor|boxShadow)\b/;
 
 /** Suppression comment that exempts a line from this check. */
 const SUPPRESSION_RE = /\/\/\s*story-hex-ok\s*:/;
@@ -114,7 +115,7 @@ const SUPPRESSION_RE = /\/\/\s*story-hex-ok\s*:/;
  * The [^:\n]* between the prop name and ":" allows for optional whitespace or
  * TypeScript type annotations before the colon.
  */
-const MULTILINE_PROP_RE = /\b(?:bgcolor|background|borderColor|fill|color)\b[^:\n]*:\s*\r?\n([^\n]*)/g;
+const MULTILINE_PROP_RE = /\b(?:bgcolor|background|backgroundColor|borderColor|fill|color|stroke|outlineColor|textDecorationColor|caretColor|boxShadow)\b[^:\n]*:\s*\r?\n([^\n]*)/g;
 
 const storyFiles = findStoriesFiles(SRC_DIR);
 

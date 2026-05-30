@@ -301,7 +301,7 @@ export function buildFlowGraph(
           target: statusNodeId,
           type: 'smoothstep',
           animated: false,
-          style: { stroke: sc.bg || '#94a3b8', strokeWidth: 1.5 },
+          style: { stroke: sc.bg || '#94a3b8', strokeWidth: 1.5 }, // hex-color-ok: fallback slate colour when stage token absent
         });
 
         let subY = currentY;
@@ -336,7 +336,7 @@ export function buildFlowGraph(
             target: subNodeId,
             type: 'smoothstep',
             animated: false,
-            style: { stroke: sc.light || '#e2e8f0', strokeWidth: 1.5, strokeDasharray: '4 3' },
+            style: { stroke: sc.light || '#e2e8f0', strokeWidth: 1.5, strokeDasharray: '4 3' }, // hex-color-ok: fallback slate colour when stage token absent
           });
 
           subY += SUB_H + V_GAP;
@@ -498,11 +498,11 @@ const StageNode = memo(function StageNode({ data, selected }: NodeProps<Node<Wor
         borderRadius: '8px',
         background: isReadOnly ? `linear-gradient(90deg, ${sc.bg}cc, ${sc.bg}99)` : sc.bg,
         color: 'common.white',
-        boxShadow: selected ? `0 0 0 2px #fff, 0 0 0 4px ${sc.bg}` : '0 1px 4px rgba(0,0,0,.18)',
+        boxShadow: selected ? `0 0 0 2px #fff, 0 0 0 4px ${sc.bg}` : '0 1px 4px rgba(0,0,0,.18)', // hex-color-ok: #fff ring is intentional white in multi-layer shadow
         cursor: 'pointer',
         userSelect: 'none',
         transition: 'box-shadow .15s',
-        '&:hover': { boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${sc.bg}` },
+        '&:hover': { boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${sc.bg}` }, // hex-color-ok: #fff ring is intentional white in multi-layer shadow
         opacity: isReadOnly ? 0.85 : 1,
       }}
     >
