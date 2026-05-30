@@ -32,7 +32,10 @@
  *   plain probe-ID strings (e.g. ['CC-A2']) — listing IDs that appear in docs
  *   but intentionally have no dedicated entry in PROBE_LABELS (typically because
  *   two distinct doc IDs map to a single implementation probe label).  These IDs
- *   are excluded from the reverse-check failures.
+ *   are excluded from the reverse-check failures.  Whenever PROBE_LABELS_DOC_EXTRAS
+ *   is detected in any scanned test file, the script emits a non-failing advisory
+ *   message naming the suite and suppressed IDs as a reminder that the preferred
+ *   fix is to give each probe a distinct label so no suppression is needed.
  *
  * Run via:  npm run test:suite-probe-counts
  */
@@ -152,6 +155,7 @@ for (const line of docsSrc.split('\n')) {
 const forwardFailures = [];
 const reverseFailures = [];
 const noArrayWarn     = [];  // suites with doc probes but no PROBE_LABELS, not in allowlist
+const docExtrasWarn   = [];  // suites using PROBE_LABELS_DOC_EXTRAS (non-failing advisory)
 let   checked         = 0;
 let   skipped         = 0;
 let   allowlisted     = 0;
@@ -206,6 +210,18 @@ for (const [suiteName, rowText] of suiteRows) {
   // Reverse check: probes documented in docs not found in the test file.
   // PROBE_LABELS_DOC_EXTRAS in the test file suppresses known doc-only aliases.
   const docExtras = extractDocExtrasProbeIds(src);
+
+  // Advisory (non-failing): warn when PROBE_LABELS_DOC_EXTRAS is used.
+  // The preferred fix is to give each probe a distinct label so no suppression
+  // is needed.
+  if (docExtras.size > 0) {
+    docExtrasWarn.push({
+      suite:     suiteName,
+      file:      filePath.replace(ROOT + '/', ''),
+      extraIds:  [...docExtras].sort(),
+    });
+  }
+
   const stale = [...docIds].filter((id) => !runIds.has(id) && !docExtras.has(id)).sort();
   if (stale.length > 0) {
     reverseFailures.push({
@@ -245,6 +261,25 @@ if (noArrayWarn.length > 0) {
 }
 
 // ---------------------------------------------------------------------------
+// Report advisories (non-failing) for suites using PROBE_LABELS_DOC_EXTRAS
+// ---------------------------------------------------------------------------
+
+if (docExtrasWarn.length > 0) {
+  console.warn(
+    `ℹ️   suite-probe-counts: ${docExtrasWarn.length} suite` +
+    `${docExtrasWarn.length === 1 ? '' : 's'} use` +
+    `${docExtrasWarn.length === 1 ? 's' : ''} PROBE_LABELS_DOC_EXTRAS` +
+    ` to suppress the reverse check for` +
+    ` ${docExtrasWarn.length === 1 ? 'a doc-only alias' : 'doc-only aliases'}.\n` +
+    `    Preferred fix: give each probe a distinct label so no suppression is needed.\n`,
+  );
+  for (const { suite, file, extraIds } of docExtrasWarn) {
+    console.warn(`  ${suite}  (${file})`);
+    console.warn(`    Suppressed IDs : ${extraIds.join(', ')}\n`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Report failures (exit 1) for probe mismatches in either direction
 // ---------------------------------------------------------------------------
 
@@ -252,9 +287,10 @@ const totalFailures = forwardFailures.length + reverseFailures.length;
 
 if (totalFailures === 0) {
   const parts = [`all ${checked} suites with documented probes are up-to-date`];
-  if (skipped > 0)          parts.push(`${skipped} skipped (no probe callouts in docs or file not found)`);
-  if (allowlisted > 0)      parts.push(`${allowlisted} allowlisted (no PROBE_LABELS array — see NO_PROBE_LABELS_ALLOWLIST)`);
-  if (noArrayWarn.length > 0) parts.push(`${noArrayWarn.length} warned (no PROBE_LABELS array — not in allowlist)`);
+  if (skipped > 0)              parts.push(`${skipped} skipped (no probe callouts in docs or file not found)`);
+  if (allowlisted > 0)          parts.push(`${allowlisted} allowlisted (no PROBE_LABELS array — see NO_PROBE_LABELS_ALLOWLIST)`);
+  if (noArrayWarn.length > 0)   parts.push(`${noArrayWarn.length} warned (no PROBE_LABELS array — not in allowlist)`);
+  if (docExtrasWarn.length > 0) parts.push(`${docExtrasWarn.length} advisory (PROBE_LABELS_DOC_EXTRAS used — prefer distinct labels)`);
   console.log(`✅  suite-probe-counts: ${parts.join('; ')}`);
   process.exit(0);
 }
