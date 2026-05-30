@@ -1,18 +1,22 @@
 'use strict';
-
-const PROBE_LABELS = [
-  '(A) no uncaught JS exception fires in the page (pageerror event)',
-  '(B) no Storybook error-boundary overlay visible in the DOM',
-  '(C) #storybook-root is non-empty after render timeout',
-  '(D) no React error-boundary console rethrow',
-];
-
-// test/admin-grouped-tabs-bar-stories/run.js
+// test/tabbar-stories/run.js
 //
-// Lightweight CI story-render probe for the AdminGroupedTabsBar Storybook
-// stories.  Loads all five stories from the pre-built Storybook output via a
-// local static HTTP server and Puppeteer, then asserts that none of them throw
+// Puppeteer story-render probe for the TabBar Storybook stories.
+// Loads all five stories from the pre-built Storybook output via a local
+// static HTTP server and Puppeteer, then asserts that none of them throw
 // render errors or remain blank.
+//
+// For the `ActiveIndicatorVisible` story an extra visual assertion **(E)** is
+// run: it verifies that the plum bottom-border indicator on the active tab is
+// actually visible — specifically that:
+//   - `.ui-tabbar` uses `overflow-y: clip` (not `hidden`), which allows the
+//     active button's `margin-bottom: -2px` to escape the container boundary.
+//   - The active button's computed `border-bottom` width is > 0 px.
+//   - The active button's computed `border-bottom-color` is not transparent.
+//
+// Without `overflow-y: clip` + `overflow-clip-margin`, the negative margin
+// trick is silently clipped and the plum underline disappears even though
+// all CSS classes are applied correctly.
 //
 // Requires STORYBOOK_OUT_DIR to point at a pre-built Storybook directory.
 // In CI this is set automatically when the step is enrolled after
@@ -26,9 +30,12 @@ const PROBE_LABELS = [
 //   (C) `#storybook-root` is still completely empty after the timeout.
 //   (D) A `console.error` that starts with "The above error" (React's
 //       error-boundary rethrow message) is recorded.
+//   (E) [ActiveIndicatorVisible only] The plum active-tab indicator is not
+//       visually present: `overflow-y` is not `clip`, or the active button's
+//       border-bottom is zero-width or transparent.
 //
 // Usage:
-//   STORYBOOK_OUT_DIR=public/storybook npm run test:admin-grouped-tabs-bar-stories
+//   STORYBOOK_OUT_DIR=public/storybook npm run test:tabbar-stories
 
 const { createServer }  = require('http');
 const { readFileSync, writeFileSync, mkdirSync, existsSync, statSync } = require('fs');
@@ -41,9 +48,22 @@ const PREBUILT_DIR = process.env.STORYBOOK_OUT_DIR
   ? resolve(ROOT, process.env.STORYBOOK_OUT_DIR)
   : null;
 
-const RENDER_TIMEOUT_MS = 10_000;
-const STORY_TITLE       = 'Admin/AdminGroupedTabsBar';
-const EXPECTED_COUNT    = 5;
+const RENDER_TIMEOUT_MS          = 10_000;
+const STORY_TITLE                = 'Components/TabBar';
+const EXPECTED_COUNT             = 5;
+const ACTIVE_INDICATOR_STORY_ID  = 'components-tabbar--active-indicator-visible';
+
+// ── probe labels ──────────────────────────────────────────────────────────────
+// Consumed by scripts/check-suite-probe-counts.mjs to guard against docs drift.
+const PROBE_LABELS = [
+  '[A] uncaught JS exceptions (pageerror)',
+  '[B] Storybook error-boundary overlay visible',
+  '[C] #storybook-root empty after render',
+  '[D] React error-boundary console rethrow',
+  '[E] active-tab plum indicator visible (ActiveIndicatorVisible story only)',
+];
+// eslint-disable-next-line no-unused-vars
+void PROBE_LABELS;
 
 mkdirSync(RESULTS_DIR, { recursive: true });
 
@@ -142,9 +162,9 @@ function writeReport(findings, fatalMessage) {
   const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
   const lines = [
-    `# AdminGroupedTabsBar Stories — ${now}`,
+    `# TabBar Stories — ${now}`,
     '',
-    `- Command: \`npm run test:admin-grouped-tabs-bar-stories\``,
+    `- Command: \`npm run test:tabbar-stories\``,
     `- Date: ${now}`,
     `- Component: \`${STORY_TITLE}\``,
     '',
@@ -155,7 +175,7 @@ function writeReport(findings, fatalMessage) {
   if (fatalMessage) {
     lines.push(`- ❌ FAIL: ${fatalMessage}`);
   } else if (failed === 0) {
-    lines.push(`- ✅ PASS: All ${total} AdminGroupedTabsBar stories rendered without errors.`);
+    lines.push(`- ✅ PASS: All ${total} TabBar stories rendered without errors.`);
   } else {
     lines.push(`- ❌ FAIL: ${failed} of ${total} stories failed.`);
     lines.push(`- Passed: ${passed} / ${total}`);
@@ -189,13 +209,80 @@ function writeReport(findings, fatalMessage) {
     '- **(B)** Storybook error-boundary overlays rendered in the DOM.',
     '- **(C)** Stories that leave `#storybook-root` empty (stuck in loading).',
     '- **(D)** React error-boundary console messages ("The above error …").',
+    '- **(E)** [ActiveIndicatorVisible only] The plum active-tab indicator is not',
+    '  visually present: `overflow-y` is not `clip` on `.ui-tabbar`, or the active',
+    "  button's `border-bottom` is zero-width or transparent.",
   );
 
-  lines.push('', `---`, `_Generated by \`test/admin-grouped-tabs-bar-stories/run.js\`_`);
+  lines.push('', `---`, `_Generated by \`test/tabbar-stories/run.js\`_`);
 
-  const out = join(RESULTS_DIR, 'admin-grouped-tabs-bar-stories.md');
+  const out = join(RESULTS_DIR, 'tabbar-stories.md');
   writeFileSync(out, lines.join('\n'), 'utf8');
-  process.stdout.write('  Report: test-results/admin-grouped-tabs-bar-stories.md\n');
+  process.stdout.write('  Report: test-results/tabbar-stories.md\n');
+}
+
+// ── Active-indicator visual assertion (probe E) ───────────────────────────────
+//
+// Checks three computed-style properties that must all hold for the plum
+// bottom-border to be visible on the active tab:
+//
+//   1. `.ui-tabbar` overflowY === 'clip'
+//      If it were 'hidden' the negative margin on the active button would be
+//      clipped and the plum line would be invisible.
+//
+//   2. `.ui-tabbar-btn.is-active` borderBottomWidth > 0
+//      A zero-width border means the indicator line has been removed.
+//
+//   3. `.ui-tabbar-btn.is-active` borderBottomColor is not 'transparent' /
+//      rgba(0,0,0,0) — i.e. the plum colour is actually applied.
+//
+// Returns null on pass, or an error string on failure.
+async function checkActiveIndicatorVisible(page) {
+  return page.evaluate(() => {
+    const tabbar = document.querySelector('.ui-tabbar');
+    if (!tabbar) return 'Could not find .ui-tabbar element in the rendered story';
+
+    const activeBtn = tabbar.querySelector('.ui-tabbar-btn.is-active');
+    if (!activeBtn) return 'Could not find .ui-tabbar-btn.is-active in the rendered story';
+
+    const tabbarStyle  = window.getComputedStyle(tabbar);
+    const btnStyle     = window.getComputedStyle(activeBtn);
+
+    const overflowY    = tabbarStyle.overflowY;
+    const borderWidth  = parseFloat(btnStyle.borderBottomWidth  || '0');
+    const borderColor  = btnStyle.borderBottomColor || '';
+
+    if (overflowY !== 'clip') {
+      return (
+        `overflow-y regression: .ui-tabbar has overflow-y="${overflowY}" ` +
+        '(expected "clip"). Without overflow-y:clip the active-tab ' +
+        'margin-bottom:-2px is clipped and the plum indicator disappears.'
+      );
+    }
+
+    if (borderWidth <= 0) {
+      return (
+        `border-bottom-width regression: .ui-tabbar-btn.is-active has ` +
+        `border-bottom-width=${borderWidth}px (expected > 0). ` +
+        'The plum indicator border has been removed.'
+      );
+    }
+
+    const isTransparent =
+      borderColor === 'transparent' ||
+      borderColor === 'rgba(0, 0, 0, 0)' ||
+      borderColor === '';
+
+    if (isTransparent) {
+      return (
+        `border-bottom-color regression: .ui-tabbar-btn.is-active has ` +
+        `border-bottom-color="${borderColor}" (expected the plum accent colour, ` +
+        'not transparent). The active-tab indicator is invisible.'
+      );
+    }
+
+    return null;
+  }).catch((err) => `evaluate error: ${err.message}`);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -223,7 +310,7 @@ async function main() {
     process.exit(1);
   }
 
-  process.stdout.write(`\n  admin-grouped-tabs-bar-stories — using pre-built output at ${PREBUILT_DIR}\n\n`);
+  process.stdout.write(`\n  tabbar-stories — using pre-built output at ${PREBUILT_DIR}\n\n`);
 
   // ── 2. Load story index ─────────────────────────────────────────────────────
   const indexPath = join(PREBUILT_DIR, 'index.json');
@@ -336,6 +423,12 @@ async function main() {
 
         if (rootEmpty) errors.push('#storybook-root is empty (story did not render)');
 
+        // (E) Extra visual check for the ActiveIndicatorVisible story
+        if (story.id === ACTIVE_INDICATOR_STORY_ID && errors.length === 0) {
+          const indicatorError = await checkActiveIndicatorVisible(page);
+          if (indicatorError) errors.push(`(E) active-indicator: ${indicatorError}`);
+        }
+
         record(story.id, errors.length === 0, errors[0]);
       } catch (e) {
         const msg = e.message || String(e);
@@ -365,6 +458,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  process.stderr.write(`[admin-grouped-tabs-bar-stories] fatal: ${err.stack || err.message}\n`);
+  process.stderr.write(`[tabbar-stories] fatal: ${err.stack || err.message}\n`);
   process.exit(1);
 });

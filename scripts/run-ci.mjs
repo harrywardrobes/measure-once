@@ -164,6 +164,7 @@ const STEPS = [
   { script: 'test:storybook-output-clean',          env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
   { script: 'test:storybook-smoke',                 env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
   { script: 'test:admin-grouped-tabs-bar-stories',  env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
+  { script: 'test:tabbar-stories',                  env: { STORYBOOK_OUT_DIR: 'public/storybook' } },
 ];
 
 /**
