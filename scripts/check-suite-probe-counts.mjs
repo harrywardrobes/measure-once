@@ -38,6 +38,38 @@
  *   fix is to give each probe a distinct label so no suppression is needed.
  *
  * Run via:  npm run test:suite-probe-counts
+ *
+ * ---------------------------------------------------------------------------
+ * Authoring contract — summary for new test suites
+ * ---------------------------------------------------------------------------
+ * When adding a new suite that covers distinct named probes (e.g. (A), (B),
+ * (ST-A)), you must:
+ *
+ *   1. Declare a PROBE_LABELS array near the top of the test file, one entry
+ *      per probe.  Each string must begin with the probe ID in parentheses or
+ *      square brackets, e.g.:
+ *
+ *        const PROBE_LABELS = [
+ *          '(A) happy-path description',
+ *          '(B) error-state description',
+ *        ];
+ *
+ *      IDs must start with an uppercase letter; digits, hyphens, and further
+ *      letters are allowed (A, F1, ST-A, CC-A, A-open, A-open-blocked, …).
+ *
+ *   2. List every probe ID in the matching docs/TEST_SUITES.md row using bold
+ *      callout notation: **(A)**, **(ST-A)**, slash-separated for groups:
+ *      **(A-open/B-open/B2-open)**.
+ *
+ *   3. Keep PROBE_LABELS and the docs row in sync in both directions — this
+ *      script fails CI for any mismatch.
+ *
+ * Suites with no named probes should omit PROBE_LABELS entirely; rows with no
+ * bold callouts are silently skipped.
+ *
+ * See docs/TEST_SUITES.md § "Adding a new test suite" for the full checklist
+ * and edge-case guidance (PROBE_LABELS_DOC_EXTRAS, NO_PROBE_LABELS_ALLOWLIST).
+ * ---------------------------------------------------------------------------
  */
 
 import { readFileSync, existsSync } from 'fs';

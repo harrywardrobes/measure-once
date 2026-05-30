@@ -45,6 +45,75 @@ so the renderer paths under test still run faithfully.
 **Test-only env overrides** (never set in production): `QB_API_BASE_OVERRIDE`
 (`design-visits.js`), `HUBSPOT_API_BASE_OVERRIDE`, `MAIL_TRANSPORT_FILE_OVERRIDE`.
 
+## Adding a new test suite
+
+### Checklist
+
+1. **Add the script** to `package.json` as `test:<name>` (and `test:<name>:ci`
+   if it needs the isolated temp-database wrapper).
+2. **Enroll in CI** by adding `test:<name>:ci` to both `scripts/run-ci.mjs`
+   and `scripts/run-ci-parallel.mjs` — the `test:ci-runner-sync` lint will
+   fail if they drift apart.
+3. **Document the suite** by adding a row to the "Suite reference" table below.
+   The `test:ci-doc-sync` and `test:suite-descriptions` lints enforce this.
+4. **Declare `PROBE_LABELS`** — see the convention below.  The
+   `test:suite-probe-counts` lint enforces it.
+
+### PROBE_LABELS convention
+
+Every suite that covers distinct named probes (labelled **(A)**, **(B)**,
+**(ST-A)**, **(CC-A)**, etc.) must declare a `PROBE_LABELS` constant at the
+top of its test file.  The constant is an array of string literals, one entry
+per probe, where the first token in each string is the probe ID in parentheses
+or square brackets:
+
+```js
+const PROBE_LABELS = [
+  '(A) happy-path — widget renders with default props',
+  '(B) error-state — widget shows "Something went wrong"',
+  '(C) empty-state — zero items hides the list',
+];
+```
+
+**ID format** — IDs must start with an uppercase letter and may contain digits,
+hyphens, and further letters: `A`, `F1`, `ST-A`, `CC-A`, `A-open`,
+`A-open-blocked`, `SKP-A`.  Lowercase-only tokens (e.g. `[pageerror]`,
+`[setup]`) are ignored by the drift checker and should not be used for probe
+IDs.
+
+**Docs entry** — the matching row in the "Suite reference" table must list
+every probe ID in bold-parentheses callout notation: `**(A)**`, `**(ST-A)**`,
+etc.  When a single table cell is long, slash-separate related IDs:
+`**(A-open/B-open/B2-open)**`.  The `test:suite-probe-counts` lint compares
+the PROBE_LABELS array against the docs row in **both directions**:
+
+- **Forward check** — every ID in the test file must appear in docs.
+- **Reverse check** — every ID in docs must appear in the test file.
+
+Both checks fail CI with a clear message naming the mismatched probe IDs.
+
+**What if a suite has no named probes?** Simply omit `PROBE_LABELS`.  The lint
+only runs for suites whose docs row already contains a bold callout, so a row
+with no `**(X)**` notation is silently skipped.
+
+**Rare edge case — `PROBE_LABELS_DOC_EXTRAS`** — when two doc IDs intentionally
+map to a single implementation probe label (e.g. the doc lists `**(CC-A)**`
+and `**(CC-A2)**` but a single label covers both), list the doc-only alias in a
+`PROBE_LABELS_DOC_EXTRAS` constant to suppress the reverse-check failure:
+
+```js
+const PROBE_LABELS_DOC_EXTRAS = ['CC-A2'];
+```
+
+The script emits a non-failing advisory whenever `PROBE_LABELS_DOC_EXTRAS` is
+used, as a reminder that the preferred fix is to give each probe a distinct
+label.
+
+**Legacy suites** that existed before this convention and have not yet been
+migrated can be added to the `NO_PROBE_LABELS_ALLOWLIST` in
+`scripts/check-suite-probe-counts.mjs` with a short reason comment.  New
+suites should not use the allowlist.
+
 ## Suite reference
 
 | Script | Covers |
