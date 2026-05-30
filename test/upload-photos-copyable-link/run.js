@@ -422,17 +422,17 @@ async function main() {
           if (btn) btn.click();
         });
 
-        // Poll until the MuiDialog-root leaves the DOM.
+        // Poll until the upload-photos-dialog leaves the DOM.
         const dialogGone = await pollPage(page, () =>
-          !document.querySelector('.MuiDialog-root') ? 'gone' : null,
+          !document.querySelector('[data-testid="upload-photos-dialog"]') ? 'gone' : null,
         10000);
 
         record(
           PROBE_LABELS[2],
           !!dialogGone,
           dialogGone
-            ? 'MuiDialog-root left the DOM after clicking Copy & close'
-            : 'MuiDialog-root still present 10 s after clicking Copy & close',
+            ? 'upload-photos-dialog left the DOM after clicking Copy & close'
+            : 'upload-photos-dialog still present 10 s after clicking Copy & close',
         );
       } else {
         record(PROBE_LABELS[1], false, 'skipped — button not found in probe A');

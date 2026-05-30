@@ -391,8 +391,8 @@ async function main() {
 
       // Poll until the dialog title reads "Active link exists".
       const titleFound = await pollPage(page, () => {
-        const titles = [...document.querySelectorAll('.MuiDialogTitle-root')];
-        return titles.some(el => el.textContent.trim() === 'Active link exists')
+        const titleEl = document.querySelector('[data-testid="upload-photos-dialog-title"]');
+        return titleEl && titleEl.textContent.trim() === 'Active link exists'
           ? 'found'
           : null;
       }, 15000);
@@ -509,8 +509,8 @@ async function main() {
 
         // Wait for the confirming phase (dialog title "Active link exists").
         const titleFoundD = await pollPage(pageD, () => {
-          const titles = [...document.querySelectorAll('.MuiDialogTitle-root')];
-          return titles.some(el => el.textContent.trim() === 'Active link exists')
+          const titleEl = document.querySelector('[data-testid="upload-photos-dialog-title"]');
+          return titleEl && titleEl.textContent.trim() === 'Active link exists'
             ? 'found'
             : null;
         }, 15000);
@@ -548,16 +548,15 @@ async function main() {
 
             // (D.2) The dialog must no longer be visible.
             const dialogGone = await pageD.evaluate(() => {
-              const dialogs = [...document.querySelectorAll('.MuiDialog-root')];
-              return dialogs.every(d => {
-                const style = window.getComputedStyle(d);
-                return style.display === 'none'
-                  || style.visibility === 'hidden'
-                  || d.getAttribute('aria-hidden') === 'true'
-                  || !d.querySelector('.MuiDialogTitle-root');
-              })
-                ? 'gone'
-                : null;
+              const dialog = document.querySelector('[data-testid="upload-photos-dialog"]');
+              if (!dialog) return 'gone';
+              const style = window.getComputedStyle(dialog);
+              return style.display === 'none'
+                || style.visibility === 'hidden'
+                || dialog.getAttribute('aria-hidden') === 'true'
+                || !document.querySelector('[data-testid="upload-photos-dialog-title"]')
+                  ? 'gone'
+                  : null;
             });
 
             record(

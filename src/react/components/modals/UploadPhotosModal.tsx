@@ -453,8 +453,8 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
-      <DialogTitle>{title}</DialogTitle>
+    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth data-testid="upload-photos-dialog">
+      <DialogTitle data-testid="upload-photos-dialog-title">{title}</DialogTitle>
       <DialogContent>{renderContent()}</DialogContent>
       <DialogActions>{renderActions()}</DialogActions>
     </Dialog>

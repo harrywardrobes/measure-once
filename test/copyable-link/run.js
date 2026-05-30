@@ -334,8 +334,9 @@ async function openUploadModal(page, contactId, contactName, contactEmail) {
 
       const got = await page.evaluate(() => {
         // MUI Dialog uses position:fixed so offsetParent is null even when
-        // visible.  Check for the MuiDialog-container child instead.
-        const d = document.querySelector('.MuiDialog-root');
+        // visible.  Check for the MuiDialog-container child to confirm it is
+        // actually rendered (not just present in the DOM with aria-hidden).
+        const d = document.querySelector('[data-testid="upload-photos-dialog"]');
         return (d && d.querySelector('.MuiDialog-container')) ? 'ok' : null;
       }).catch(() => null);
       if (got) return 'ok';
@@ -522,7 +523,7 @@ async function main() {
       // Wait for generate-link to complete: poll for a readonly input whose
       // value contains our fake token's marker string.
       const linkFieldValue = await pollPage(pageHappy, () => {
-        const dialog = document.querySelector('.MuiDialog-root');
+        const dialog = document.querySelector('[data-testid="upload-photos-dialog"]');
         if (!dialog) return null;
         // Look for all inputs — MUI TextField with readOnly renders a standard
         // <input readonly> element.  Also accept inputs whose .readOnly JS
@@ -568,7 +569,7 @@ async function main() {
 
         // Wait for the send to complete (confirmation state).
         const confirmVisible = await pollPage(pageHappy, () => {
-          const dialog = document.querySelector('.MuiDialog-root');
+          const dialog = document.querySelector('[data-testid="upload-photos-dialog"]');
           if (!dialog) return null;
           return (dialog.textContent || '').includes('email has been sent') ? 'ok' : null;
         }, 10000);
@@ -598,7 +599,7 @@ async function main() {
           record(ALL_PROBE_LABELS[2], false, 'confirmation state ("email has been sent") not reached');
         } else {
           const postSendState = await pageHappy.evaluate((expectedLink) => {
-            const dialog = document.querySelector('.MuiDialog-root');
+            const dialog = document.querySelector('[data-testid="upload-photos-dialog"]');
             if (!dialog) return { confirmText: false, linkVisible: false, linkValue: null };
             const text   = dialog.textContent || '';
             const inputs = Array.from(dialog.querySelectorAll('input'));
@@ -650,7 +651,7 @@ async function main() {
       // error message appears.  We poll until the "Generating link…" spinner
       // is gone, then snapshot the error state.
       const errorState = await pollPage(pageError, () => {
-        const dialog = document.querySelector('.MuiDialog-root');
+        const dialog = document.querySelector('[data-testid="upload-photos-dialog"]');
         if (!dialog) return null;
         const text = dialog.textContent || '';
         // Still loading — wait for it to settle.

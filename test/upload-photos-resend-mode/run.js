@@ -290,7 +290,7 @@ async function openModal(page) {
   }, CONTACT_ID, CONTACT_NAME, CONTACT_EMAIL);
 
   // Wait for the MUI Dialog to appear in the DOM.
-  await pollPage(page, () => !!document.querySelector('.MuiDialog-root'), null, 10000);
+  await pollPage(page, () => !!document.querySelector('[data-testid="upload-photos-dialog"]'), null, 10000);
 
   return page;
 }
@@ -300,7 +300,7 @@ async function openModal(page) {
  */
 async function readModal(page) {
   return page.evaluate(() => {
-    const titleEl   = document.querySelector('.MuiDialogTitle-root');
+    const titleEl   = document.querySelector('[data-testid="upload-photos-dialog-title"]');
     const primaryEl = document.querySelector('[data-testid="cah-primary"]');
 
     // The title element contains a Typography child — grab the first text node
@@ -331,12 +331,12 @@ async function readModal(page) {
  */
 async function closeModal(page) {
   await page.evaluate(() => {
-    const cancelBtn = Array.from(document.querySelectorAll('.MuiDialogActions-root button'))
+    const cancelBtn = Array.from(document.querySelectorAll('[data-testid="upload-photos-dialog"] button'))
       .find(b => b.textContent.trim() === 'Cancel');
     if (cancelBtn) cancelBtn.click();
   });
   // Wait for dialog to unmount.
-  await pollPage(page, () => !document.querySelector('.MuiDialog-root'), null, 5000).catch(() => {});
+  await pollPage(page, () => !document.querySelector('[data-testid="upload-photos-dialog"]'), null, 5000).catch(() => {});
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────

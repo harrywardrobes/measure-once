@@ -370,8 +370,8 @@ async function main() {
       console.log('\n  Waiting for confirming phase ("Active link exists" dialog title)…');
 
       const titleFound = await pollPage(page, () => {
-        const titles = [...document.querySelectorAll('.MuiDialogTitle-root')];
-        return titles.some(el => el.textContent.trim() === 'Active link exists')
+        const titleEl = document.querySelector('[data-testid="upload-photos-dialog-title"]');
+        return titleEl && titleEl.textContent.trim() === 'Active link exists'
           ? 'found'
           : null;
       }, 15000);

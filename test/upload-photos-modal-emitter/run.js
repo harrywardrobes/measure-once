@@ -601,8 +601,8 @@ async function main() {
 
     // Wait for the "Active link exists" confirming-phase dialog title.
     const confirmingPhase = await pollPage(page, () => {
-      const titles = Array.from(document.querySelectorAll('.MuiDialogTitle-root'));
-      return titles.some(t => (t.textContent || '').includes('Active link exists')) ? 'ok' : null;
+      const titleEl = document.querySelector('[data-testid="upload-photos-dialog-title"]');
+      return titleEl && (titleEl.textContent || '').includes('Active link exists') ? 'ok' : null;
     }, 12000).catch(() => null);
 
     record(
