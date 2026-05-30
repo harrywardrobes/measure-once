@@ -178,15 +178,8 @@ const radiusLines = Object.entries(radius).map(([key, value]) =>
 );
 
 // ── Build status-colour section (theme-sourced tokens, e.g. neutral) ─────────
-//
-// Keys listed in STATUS_LEGACY_MANAGED are skipped here because the hardcoded
-// legacy-alias block (below the auto-derived section in the CSS output) already
-// emits those exact token names with the canonical values used by the codebase.
-// Suppressing them here avoids duplicate declarations in the generated file.
-const STATUS_LEGACY_MANAGED = new Set(['success']);
 
 const statusColorLines = Object.entries(statusColors)
-  .filter(([key]) => !STATUS_LEGACY_MANAGED.has(key))
   .map(([key, colors]) => {
     const w = 24;
     const lines = [col(`status-${key}-bg`, colors.bg, w), col(`status-${key}-text`, colors.text, w)];
@@ -283,26 +276,6 @@ ${neutralLines.join('\n')}
 
   /* ── Status colours (auto-derived from STATUS_COLORS in theme.ts) ───────── */
 ${statusColorLines.join('\n')}
-
-  /* ── Status colour aliases (explicit legacy tokens) ──────────────────────
-   *  Placed after the auto-derived block so these values take precedence when
-   *  a token name is shared (e.g. --status-success-bg/-text/-border).
-   *  --status-danger-*  semantic error alias; no STATUS_COLORS key named 'danger'
-   *  --status-success   standalone accent colour; no plain STATUS_COLORS 'success' colour
-   *  --status-warn-*    shorthand alias; STATUS_COLORS uses 'warning' (--status-warning-*)
-   *  NOTE: --status-chunk-error-border is intentionally absent here; it is
-   *  fully covered by auto-derivation from STATUS_COLORS.chunkError.border.   */
-  --status-danger:        #dc2626;
-  --status-danger-text:   #991b1b;
-  --status-danger-bg:     #fef2f2;
-  --status-danger-border: #fecaca;
-  --status-success:       #16a34a;
-  --status-success-text:  #14532d;
-  --status-success-bg:    #f0fdf4;
-  --status-success-border:#bbf7d0;
-  --status-warn-bg:       #fef9c3;
-  --status-warn-border:   #fde047;
-  --status-warn-text:     #713f12;
 
   /* ── Brand action accents ────────────────────────────────────────────────── */
   --brand-accent:       #3d0f7a;

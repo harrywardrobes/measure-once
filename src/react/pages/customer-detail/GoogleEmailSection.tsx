@@ -62,7 +62,7 @@ export function GoogleEmailSection({ contactEmail, emails, loading, error, conne
       </Box>
       {loading && <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>Loading emails…</p>}
       {!loading && error && (
-        <p className="text-sm px-1" style={{ color: 'var(--status-danger)' }}>Could not load emails.</p>
+        <p className="text-sm px-1" style={{ color: 'var(--status-danger-text)' }}>Could not load emails.</p>
       )}
       {!loading && !error && emails.length === 0 && (
         <p className="text-sm italic px-1" style={{ color: 'var(--stone-deep)' }}>No emails found.</p>

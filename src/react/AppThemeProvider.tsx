@@ -2,7 +2,7 @@ import React from 'react';
 import { ThemeProvider } from '@mui/material/styles';
 import GlobalStyles from '@mui/material/GlobalStyles';
 import ScopedCssBaseline from '@mui/material/ScopedCssBaseline';
-import { theme, BRAND_COLORS, STAGE_COLORS, RADIUS } from './theme';
+import { theme, BRAND_COLORS, STAGE_COLORS, STATUS_COLORS, RADIUS } from './theme';
 import { ToastProvider } from './contexts/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
 
@@ -89,22 +89,19 @@ const rootTokens = {
   '--shadow-modal':     '0 20px 60px rgba(0,0,0,0.25)',
   '--overlay-scrim':    'rgba(0,0,0,0.45)',
 
-  /* ── Status colours ──────────────────────────────────────────────────────── */
-  '--status-danger':        '#dc2626',
-  '--status-danger-text':   '#991b1b',
-  '--error':                'var(--status-danger-text)',
-  '--status-danger-bg':     '#fef2f2',
-  '--status-danger-border':      '#fecaca',
-  '--status-error-light-border': '#fecaca',
-  '--status-errorLight-border':  '#fecaca',
-  '--status-chunk-error-border': '#fed7aa',
-  '--status-success':       '#16a34a',
-  '--status-success-text':  '#14532d',
-  '--status-success-bg':    '#f0fdf4',
-  '--status-success-border':'#bbf7d0',
-  '--status-warn-bg':       '#fef9c3',
-  '--status-warn-border':   '#fde047',
-  '--status-warn-text':     '#713f12',
+  /* ── Status colours (auto-derived from STATUS_COLORS in theme.ts) ───────── */
+  ...Object.fromEntries(
+    Object.entries(STATUS_COLORS).flatMap(([key, colors]) => {
+      const prefix = `--status-${camelToKebab(key)}`;
+      const entries: [string, string | undefined][] = [
+        [`${prefix}-bg`, colors.bg],
+        [`${prefix}-text`, colors.text],
+      ];
+      if (colors.border) entries.push([`${prefix}-border`, colors.border]);
+      return entries.filter((e): e is [string, string] => e[1] !== undefined);
+    })
+  ),
+  '--error': 'var(--status-danger-text)',
 
   /* ── Brand action accents ────────────────────────────────────────────────── */
   '--brand-accent':       '#3d0f7a',

@@ -70,6 +70,7 @@ export const STATUS_COLORS: Record<string, { bg: string; text: string; border?: 
   error:        { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' },
   errorLight:   { bg: '#fef2f2', text: '#991b1b', border: '#fecaca' },
   chunkError:   { bg: '#fff7ed', text: '#9a3412', border: '#fed7aa' },
+  danger:       { bg: '#fef2f2', text: '#dc2626', border: '#fecaca' },
   success:      { bg: '#dcfce7', text: '#166534', border: '#bbf7d0' },
   successLight: { bg: '#f0fdf4', text: '#166534' },
   successDeep:  { bg: '#d1fae5', text: '#065f46' },

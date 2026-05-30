@@ -12,7 +12,7 @@ const sxDate: React.CSSProperties = { fontSize: '0.68rem', color: 'var(--ink-4)'
 const sxText: React.CSSProperties = { fontSize: '0.875rem', color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' };
 const sxCancelBtn: React.CSSProperties = { background: 'none', color: 'var(--ink-3)', fontSize: '.88rem', border: 'none', cursor: 'pointer', padding: '8px 16px' };
 const sxMuted: React.CSSProperties = { fontSize: '0.875rem', fontStyle: 'italic', padding: '0 4px', color: 'var(--stone-deep)' };
-const sxError: React.CSSProperties = { fontSize: '0.875rem', padding: '0 4px', color: 'var(--status-danger)' };
+const sxError: React.CSSProperties = { fontSize: '0.875rem', padding: '0 4px', color: 'var(--status-danger-text)' };
 const sxStack: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6 };
 
 interface Template {
@@ -169,7 +169,7 @@ export function WhatsAppModal({ contactId, phone, open, onClose }: Pick<Props, '
 
           {mode === 'freeform' && (
             <div id="wa-panel-freeform">
-              <div style={{ fontSize: '0.78rem', background: 'var(--status-warn-bg)', border: '1px solid var(--status-warn-border)', borderRadius: 8, padding: '8px 12px', color: 'var(--status-warn-text)', marginBottom: 10, lineHeight: 1.5 }}>
+              <div style={{ fontSize: '0.78rem', background: 'var(--status-warning-bg)', border: '1px solid var(--status-warning-border)', borderRadius: 8, padding: '8px 12px', color: 'var(--status-warning-text)', marginBottom: 10, lineHeight: 1.5 }}>
                 <strong>24-hour rule:</strong> Free-form messages can only be sent within 24 hours of the customer last messaging your business. Outside that window, use a template.
               </div>
               <textarea id="wa-freeform-text" rows={4} placeholder="Type your message…" value={freeText} onChange={e => setFreeText(e.target.value)}
@@ -178,7 +178,7 @@ export function WhatsAppModal({ contactId, phone, open, onClose }: Pick<Props, '
           )}
 
           {sendError && <div id="wa-send-error" style={{ fontSize: '0.82rem', color: 'var(--error)', marginTop: 8, padding: '6px 10px', background: 'var(--status-danger-bg)', borderRadius: 6 }}>{sendError}</div>}
-          {sendSuccess && <div id="wa-send-success" style={{ fontSize: '0.82rem', color: 'var(--status-success)', marginTop: 8, padding: '6px 10px', background: 'var(--status-success-bg)', borderRadius: 6 }}>Message sent successfully!</div>}
+          {sendSuccess && <div id="wa-send-success" style={{ fontSize: '0.82rem', color: 'var(--status-success-light-text)', marginTop: 8, padding: '6px 10px', background: 'var(--status-success-light-bg)', borderRadius: 6 }}>Message sent successfully!</div>}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
             <button onClick={onClose} style={sxCancelBtn}>Cancel</button>
