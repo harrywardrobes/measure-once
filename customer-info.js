@@ -154,6 +154,12 @@ async function ensureCustomerInfoSubmissionsTable() {
     ALTER TABLE customer_info_submissions
     ADD COLUMN IF NOT EXISTS email_skipped_count INTEGER NOT NULL DEFAULT 0
   `);
+  // form_link stores the full invite URL so staff can copy/open it from the
+  // dashboard rail.  Added after initial launch — rows created before this
+  // migration have form_link = NULL and cannot be backfilled (only the
+  // token_hash is stored, not the raw token, so the URL is unrecoverable).
+  // The staff-resend route writes form_link on every resend, so the
+  // Copy/Open buttons will appear after the first staff-initiated resend.
   await pool.query(`
     ALTER TABLE customer_info_submissions
     ADD COLUMN IF NOT EXISTS form_link TEXT
@@ -1051,7 +1057,7 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
     if (preToken) {
       const tokenHash = crypto.createHash('sha256').update(preToken).digest('hex');
       const { rows } = await pool.query(
-        `SELECT contact_email, masked_email, contact_name FROM customer_info_submissions
+        `SELECT contact_email, masked_email, contact_name, form_link FROM customer_info_submissions
          WHERE token_hash = $1 AND contact_id = $2`,
         [tokenHash, cid]
       );
@@ -1060,6 +1066,15 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
       }
       const row = rows[0];
       const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(preToken)}`;
+      // Back-populate form_link for rows created before the column was added
+      // (pre-migration rows have form_link = NULL; raw token is available here
+      // so we can reconstruct and persist the URL now).
+      if (!row.form_link) {
+        await pool.query(
+          `UPDATE customer_info_submissions SET form_link = $1 WHERE token_hash = $2`,
+          [formLink, tokenHash]
+        );
+      }
       await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink);
       console.log(`[customer-info] Resent (pre-generated) invite link for contact ${cid}`);
       return res.json({ ok: true });
@@ -1166,11 +1181,38 @@ async function backfillMaskedEmails() {
   console.log(`${label} done — updated ${updated}, failed ${failed}`);
 }
 
+// Boot-time diagnostic: count active-pending rows with no stored form_link.
+// These rows were created before the form_link column was added; they cannot
+// be backfilled (only the token_hash is stored, not the raw token).  Logging
+// the count makes admins aware so they know to use Resend for affected rows.
+async function logNullFormLinkCount() {
+  const label = '[customer-info-boot]';
+  try {
+    const { rows } = await pool.query(`
+      SELECT COUNT(*) AS cnt
+      FROM customer_info_submissions
+      WHERE submitted_at IS NULL
+        AND expires_at > NOW()
+        AND form_link IS NULL
+    `);
+    const cnt = parseInt(rows[0].cnt, 10);
+    if (cnt > 0) {
+      console.log(
+        `${label} ${cnt} active-pending submission(s) have no stored form_link ` +
+        `(pre-migration rows — Copy/Open buttons will appear after the first staff resend).`
+      );
+    }
+  } catch (e) {
+    console.warn(`${label} could not count null form_link rows:`, e.message);
+  }
+}
+
 module.exports = {
   router,
   ensureCustomerInfoSubmissionsTable,
   ensureResendLogTable,
   backfillMaskedEmails,
+  logNullFormLinkCount,
   signCustomerPhotoUrl,
   setSharedSseClients,
   setProjectContactsCacheInvalidator,
