@@ -3,13 +3,15 @@
 //
 // Meta-test: verifies that scripts/check-suite-probe-counts.mjs correctly
 // emits the PROBE_LABELS_DOC_EXTRAS advisory when a test file declares that
-// constant, and stays silent (no advisory) when the constant is absent.
+// constant, stays silent (no advisory) when the constant is absent, AND emits
+// the missing-PROBE_LABELS warning when a test file has doc probe callouts but
+// omits the PROBE_LABELS array entirely.
 //
 // Strategy: for each scenario, build a minimal synthetic fixture in a temp
 // directory that has its own docs/TEST_SUITES.md, package.json, and a test
 // file, then copy the real script there so ROOT (derived from import.meta.url)
 // resolves to the fixture root.  Run the copy as a subprocess and assert the
-// combined stdout+stderr contains (or does not contain) the advisory text.
+// combined stdout+stderr contains (or does not contain) the expected text.
 //
 // No server, no database, no Puppeteer — entirely self-contained.
 //
@@ -75,6 +77,18 @@ const PROBE_LABELS = [
 ];
 `;
 
+// Test file that omits PROBE_LABELS entirely.  The script should emit the
+// non-failing missing-PROBE_LABELS warning (not a CI failure).
+const SYNTH_NO_PROBE_LABELS = `\
+'use strict';
+// This suite intentionally omits PROBE_LABELS to exercise the warning path.
+function runTests() {
+  console.log('probe A done');
+  console.log('probe B done');
+}
+runTests();
+`;
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function buildFixture(docsSrc, synthSrc) {
@@ -110,24 +124,39 @@ function cleanFixture(dir) {
 
 const scenarios = [
   {
-    name:        'advisory fires when PROBE_LABELS_DOC_EXTRAS is present',
-    docsSrc:     DOCS_WITH_ALIAS,
-    synthSrc:    SYNTH_WITH_EXTRAS,
-    expectAdvisory:  true,
-    expectExit0:     true,
-    expectIds:       ['A2'],
+    name:              'advisory fires when PROBE_LABELS_DOC_EXTRAS is present',
+    docsSrc:           DOCS_WITH_ALIAS,
+    synthSrc:          SYNTH_WITH_EXTRAS,
+    expectAdvisory:    true,
+    expectMissingWarn: false,
+    expectExit0:       true,
+    expectIds:         ['A2'],
   },
   {
-    name:        'no advisory when PROBE_LABELS_DOC_EXTRAS is absent and probes match docs',
-    docsSrc:     DOCS_WITHOUT_ALIAS,
-    synthSrc:    SYNTH_WITHOUT_EXTRAS,
-    expectAdvisory:  false,
-    expectExit0:     true,
-    expectIds:       [],
+    name:              'no advisory when PROBE_LABELS_DOC_EXTRAS is absent and probes match docs',
+    docsSrc:           DOCS_WITHOUT_ALIAS,
+    synthSrc:          SYNTH_WITHOUT_EXTRAS,
+    expectAdvisory:    false,
+    expectMissingWarn: false,
+    expectExit0:       true,
+    expectIds:         [],
+  },
+  {
+    name:              'missing-PROBE_LABELS warning fires when test file omits PROBE_LABELS entirely',
+    docsSrc:           DOCS_WITHOUT_ALIAS,
+    synthSrc:          SYNTH_NO_PROBE_LABELS,
+    expectAdvisory:    false,
+    expectMissingWarn: true,
+    expectExit0:       true,
+    expectIds:         [],
   },
 ];
 
 // ── run ───────────────────────────────────────────────────────────────────────
+
+// Phrase emitted by check-suite-probe-counts.mjs when a suite has doc probe
+// callouts but its test file lacks a PROBE_LABELS array.
+const MISSING_WARN_PHRASE = 'lack a PROBE_LABELS array';
 
 const results = [];
 
@@ -140,16 +169,23 @@ for (const sc of scenarios) {
     cleanFixture(dir);
   }
 
-  const combined = (result.stdout || '') + (result.stderr || '');
-  const hasAdvisory = combined.includes('PROBE_LABELS_DOC_EXTRAS');
-  const exit0       = result.status === 0;
+  const combined       = (result.stdout || '') + (result.stderr || '');
+  const hasAdvisory    = combined.includes('PROBE_LABELS_DOC_EXTRAS');
+  const hasMissingWarn = combined.includes(MISSING_WARN_PHRASE);
+  const exit0          = result.status === 0;
 
-  const pass_advisory = sc.expectAdvisory ? hasAdvisory : !hasAdvisory;
-  const pass_exit     = sc.expectExit0 ? exit0 : !exit0;
-  const pass_ids      = sc.expectIds.every((id) => !sc.expectAdvisory || combined.includes(id));
+  const pass_advisory     = sc.expectAdvisory    ? hasAdvisory    : !hasAdvisory;
+  const pass_missing_warn = sc.expectMissingWarn ? hasMissingWarn : !hasMissingWarn;
+  const pass_exit         = sc.expectExit0       ? exit0          : !exit0;
+  const pass_ids          = sc.expectIds.every((id) => !sc.expectAdvisory || combined.includes(id));
 
-  const pass = pass_advisory && pass_exit && pass_ids;
-  results.push({ sc, pass, pass_advisory, pass_exit, pass_ids, combined, status: result.status });
+  const pass = pass_advisory && pass_missing_warn && pass_exit && pass_ids;
+  results.push({
+    sc,
+    pass, pass_advisory, pass_missing_warn, pass_exit, pass_ids,
+    combined,
+    status: result.status,
+  });
 }
 
 // ── report ────────────────────────────────────────────────────────────────────
@@ -162,17 +198,18 @@ const lines = [
   '',
   'Meta-test: verifies that `check-suite-probe-counts.mjs` emits the',
   '`PROBE_LABELS_DOC_EXTRAS` advisory exactly when the constant is present,',
-  'and stays silent otherwise.',
+  'stays silent otherwise, and emits the missing-PROBE_LABELS warning when a',
+  'test file omits PROBE_LABELS entirely while its docs row has probe callouts.',
   '',
   `Ran ${results.length} scenario${results.length === 1 ? '' : 's'}.`,
   '',
-  '| Scenario | advisory correct | exit 0 | suppressed IDs found | result |',
-  '| --- | --- | --- | --- | --- |',
+  '| Scenario | advisory correct | missing-array warning correct | exit 0 | suppressed IDs found | result |',
+  '| --- | --- | --- | --- | --- | --- |',
 ];
 
-for (const { sc, pass, pass_advisory, pass_exit, pass_ids } of results) {
+for (const { sc, pass, pass_advisory, pass_missing_warn, pass_exit, pass_ids } of results) {
   lines.push(
-    `| ${sc.name} | ${pass_advisory ? '✓' : '✗'} | ${pass_exit ? '✓' : '✗'} | ${pass_ids ? '✓' : '✗'} | ${pass ? 'PASS' : '**FAIL**'} |`,
+    `| ${sc.name} | ${pass_advisory ? '✓' : '✗'} | ${pass_missing_warn ? '✓' : '✗'} | ${pass_exit ? '✓' : '✗'} | ${pass_ids ? '✓' : '✗'} | ${pass ? 'PASS' : '**FAIL**'} |`,
   );
 }
 
@@ -182,7 +219,7 @@ if (failures.length === 0) {
   lines.push(`**All ${passed} scenario${passed === 1 ? '' : 's'} passed.**`);
 } else {
   lines.push(`**${failures.length} scenario${failures.length === 1 ? '' : 's'} failed:**`);
-  for (const { sc, pass_advisory, pass_exit, pass_ids, combined, status } of failures) {
+  for (const { sc, pass_advisory, pass_missing_warn, pass_exit, pass_ids, combined, status } of failures) {
     lines.push('');
     lines.push(`### ${sc.name}`);
     if (!pass_advisory) {
@@ -190,6 +227,13 @@ if (failures.length === 0) {
         sc.expectAdvisory
           ? '- Expected advisory containing `PROBE_LABELS_DOC_EXTRAS` but it was absent from output.'
           : '- Expected no advisory but `PROBE_LABELS_DOC_EXTRAS` appeared in output.',
+      );
+    }
+    if (!pass_missing_warn) {
+      lines.push(
+        sc.expectMissingWarn
+          ? `- Expected missing-PROBE_LABELS warning ("${MISSING_WARN_PHRASE}") but it was absent from output.`
+          : `- Expected no missing-PROBE_LABELS warning but "${MISSING_WARN_PHRASE}" appeared in output.`,
       );
     }
     if (!pass_exit) {
@@ -215,13 +259,20 @@ if (failures.length === 0) {
   console.log(`[suite-probe-counts-advisory] All ${passed} scenario${passed === 1 ? '' : 's'} passed. ✓`);
 } else {
   console.error(`[suite-probe-counts-advisory] ${failures.length} scenario${failures.length === 1 ? '' : 's'} failed:`);
-  for (const { sc, pass_advisory, pass_exit, pass_ids, status } of failures) {
+  for (const { sc, pass_advisory, pass_missing_warn, pass_exit, pass_ids, status } of failures) {
     console.error(`  • ${sc.name}`);
     if (!pass_advisory) {
       console.error(
         sc.expectAdvisory
           ? '    advisory expected but not found in output'
           : '    advisory unexpectedly present in output',
+      );
+    }
+    if (!pass_missing_warn) {
+      console.error(
+        sc.expectMissingWarn
+          ? '    missing-PROBE_LABELS warning expected but not found in output'
+          : '    missing-PROBE_LABELS warning unexpectedly present in output',
       );
     }
     if (!pass_exit)  console.error(`    expected exit 0, got ${status}`);
