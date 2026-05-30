@@ -181,10 +181,10 @@ const radiusLines = Object.entries(radius).map(([key, value]) =>
 
 const statusColorLines = Object.entries(statusColors)
   .map(([key, colors]) => {
+    const kebab = camelToKebab(key);
     const w = 24;
-    const kebabKey = camelToKebab(key);
-    const lines = [col(`status-${kebabKey}-bg`, colors.bg, w), col(`status-${kebabKey}-text`, colors.text, w)];
-    if (colors.border) lines.push(col(`status-${kebabKey}-border`, colors.border, w));
+    const lines = [col(`status-${kebab}-bg`, colors.bg, w), col(`status-${kebab}-text`, colors.text, w)];
+    if (colors.border) lines.push(col(`status-${kebab}-border`, colors.border, w));
     return lines.join('\n');
   });
 
