@@ -146,15 +146,21 @@ function AuthAlert({ msg, severity, id }: { msg: string; severity: 'success' | '
   );
 }
 
-function LoginPageInner() {
-  usePageTitle('Sign In · Measure Once');
+const VIEW_TITLES: Record<View, string> = {
+  login: 'Sign In · Measure Once',
+  forgot: 'Reset Password · Measure Once',
+  request: 'Request Access · Measure Once',
+};
 
+function LoginPageInner() {
   const [view, setView] = React.useState<View>(() => {
     const h = window.location.hash;
     if (h === '#forgot') return 'forgot';
     if (h === '#request') return 'request';
     return 'login';
   });
+
+  usePageTitle(VIEW_TITLES[view]);
 
   const [loginEmail, setLoginEmail] = React.useState('');
   const [loginPassword, setLoginPassword] = React.useState('');
