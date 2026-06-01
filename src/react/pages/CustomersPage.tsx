@@ -1157,6 +1157,34 @@ export function CustomersPage(): React.ReactElement {
     };
   }, [contacts]);
 
+  // Pre-fill the customer name cache so that clicking any contact from the
+  // list shows the correct name in the browser tab immediately, even on a
+  // first visit. Existing cache entries (for recently-viewed contacts not
+  // currently on this page) are preserved in their MRU order; visible
+  // contacts are merged in without displacing them.
+  React.useEffect(() => {
+    if (!contacts.length) return;
+    try {
+      const KEY = 'cp_recent_customers';
+      type CacheEntry = { id: string; name: string; company: string; ts: number };
+      const existing: CacheEntry[] = JSON.parse(localStorage.getItem(KEY) || '[]');
+      const byId = new Map<string, CacheEntry>(existing.map((e) => [e.id, e]));
+      const now = Date.now();
+      const toAppend: CacheEntry[] = [];
+      for (const c of contacts) {
+        const name = contactName(c);
+        if (byId.has(c.id)) {
+          byId.get(c.id)!.name = name;
+        } else {
+          toAppend.push({ id: c.id, name, company: '', ts: now });
+        }
+      }
+      const merged = [...existing.map((e) => byId.get(e.id) ?? e), ...toAppend];
+      localStorage.setItem(KEY, JSON.stringify(merged.slice(0, 20)));
+    } catch {
+      /* ignore localStorage errors */
+    }
+  }, [contacts]);
 
   // Resolve rooms for display on a contact card. Stage and archived filtering
   // are now both server-side: when a stage is active and showArchived is false,
