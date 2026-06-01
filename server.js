@@ -170,6 +170,7 @@ app.get('/design-visit/sign-off', async (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   let ogTitle = 'Design Visit Sign-Off · Harry Wardrobes';
   let ogDescription = 'Review and sign off on your design visit details with Harry Wardrobes.';
+  let pageTitle = 'Design Visit Sign-Off · Measure Once';
   const rawToken = String(req.query.token || '').trim();
   if (rawToken && rawToken.length <= 200) {
     try {
@@ -182,13 +183,14 @@ app.get('/design-visit/sign-off', async (req, res) => {
         const name = rows[0].contact_name;
         ogTitle = `Design Visit Sign-Off for ${name} · Harry Wardrobes`;
         ogDescription = `${name} has been sent a design visit sign-off request. Review and sign off on the details with Harry Wardrobes.`;
+        pageTitle = `Design Visit Sign-Off for ${name} · Measure Once`;
       }
     } catch (_) {
       // Fall back to generic strings if lookup fails
     }
   }
   res.render('design-visit-signoff', {
-    title: 'Design Visit Sign-Off · Measure Once',
+    title: pageTitle,
     description: 'Review and sign off on your design visit details with Harry Wardrobes.',
     ogTitle,
     ogDescription,
