@@ -339,10 +339,42 @@ export function DevEnvironmentPage() {
             </Typography>
           </AccordionSummary>
           <AccordionDetails>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Quick reference for key server modules and recently renamed helpers.
               Only visible in non-production environments.
             </Typography>
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+              Domain abbreviation conventions
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              These prefixes were historically used as shorthand. All new code should use the full names below.
+            </Typography>
+            <Table size="small" sx={{ mb: 3 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700, width: '12%' }}>Abbrev</TableCell>
+                  <TableCell sx={{ fontWeight: 700, width: '20%' }}>Full name</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Examples of renamed symbols</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {([
+                  { abbrev: 'hs', full: 'hubspot / HubSpot', examples: 'getHubSpotHeaders(), getHubSpotCredential(), getHubSpotBaseUrl()' },
+                  { abbrev: 'qb', full: 'quickbooks / QuickBooks', examples: 'quickbooksRoutes, getQuickBooksBaseUrl(), fetchFromQuickBooks()' },
+                  { abbrev: 'dv', full: 'designVisit / DESIGN_VISIT', examples: 'checkDesignVisitRateLimit(), _designVisitRateMap, DESIGN_VISIT_RATE_LIMIT' },
+                  { abbrev: 'bc', full: 'descriptive channel name', examples: 'devModeChannel, draftChannel (BroadcastChannel locals in useProjectsData.ts)' },
+                ] as Array<{ abbrev: string; full: string; examples: string }>).map((row) => (
+                  <TableRow key={row.abbrev}>
+                    <TableCell><code className="adm-inline-code">{row.abbrev}</code></TableCell>
+                    <TableCell><Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{row.full}</Typography></TableCell>
+                    <TableCell><Typography variant="caption" color="text.secondary">{row.examples}</Typography></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            <Divider sx={{ mb: 2 }} />
 
             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
               Key server-side modules
@@ -398,6 +430,12 @@ export function DevEnvironmentPage() {
                   { old: 'hsHeaders()', next: 'getHubSpotHeaders()', file: 'server.js / customer-info.js / photo-reviews.js', note: 'Returns HubSpot auth headers' },
                   { old: 'userKey(req)', next: 'getUserRateLimitKey(req)', file: 'rate-limiters.js', note: 'Returns per-user rate-limit key' },
                   { old: '_sign(key, exp)', next: '_createUrlSignature(key, exp)', file: 'design-visit-uploads.js', note: 'Creates HMAC signature for signed URL' },
+                  { old: 'dvHsHeaders()', next: 'getHubSpotHeaders()', file: 'design-visits.js', note: 'Returns HubSpot auth headers for design-visit sync (dv + hs both expanded)' },
+                  { old: 'dvHubspotRequestWithRetry()', next: 'hubspotRequestWithRetry()', file: 'design-visits.js', note: 'Retrying HubSpot API request helper (dv prefix dropped; already in design-visits module)' },
+                  { old: 'checkDvRateLimit()', next: 'checkDesignVisitRateLimit()', file: 'design-visits.js', note: 'Per-user rate limiter for visit creation / submission' },
+                  { old: 'DV_RATE_LIMIT / DV_RATE_WINDOW_MS', next: 'DESIGN_VISIT_RATE_LIMIT / DESIGN_VISIT_RATE_WINDOW_MS', file: 'design-visits.js', note: 'Rate-limit tuning constants' },
+                  { old: 'hsGetCredential(key)', next: 'getHubSpotCredential(key)', file: 'design-visits.js', note: 'Looks up a HubSpot credential from DB (import alias renamed)' },
+                  { old: 'qbRoutes', next: 'quickbooksRoutes', file: 'server.js', note: 'Express router for QuickBooks API routes' },
                 ],
               },
               {
@@ -412,6 +450,8 @@ export function DevEnvironmentPage() {
                 heading: 'React — hooks',
                 rows: [
                   { old: 'fetchNonce / setFetchNonce', next: 'refetchTrigger / setRefetchTrigger', file: 'src/react/hooks/useProjectsData.ts', note: 'Counter incremented to trigger a data refetch' },
+                  { old: 'bc (dev mode BroadcastChannel)', next: 'devModeChannel', file: 'src/react/hooks/useProjectsData.ts', note: 'BroadcastChannel that listens for dev_mode_changed events' },
+                  { old: 'bc (draft BroadcastChannel)', next: 'draftChannel', file: 'src/react/hooks/useProjectsData.ts', note: 'BroadcastChannel that listens for design_visit_draft_changed events' },
                 ],
               },
             ].map((section) => (

@@ -11,7 +11,7 @@ const fs        = require('fs');
 const multer    = require('multer');
 const { isAuthenticated, requireAdmin, requirePrivilege, getRequestPrivilegeLevel } = require('./auth');
 const dvUploads = require('./design-visit-uploads');
-const { getCredential: hsGetCredential } = require('./hubspot-creds');
+const { getCredential: getHubSpotCredential } = require('./hubspot-creds');
 
 const HANDLES_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'handles');
 if (!fs.existsSync(HANDLES_UPLOAD_DIR)) fs.mkdirSync(HANDLES_UPLOAD_DIR, { recursive: true });
@@ -149,13 +149,13 @@ function hubspotApiBase() {
   // at a local mock server. Never set in production.
   return process.env.HUBSPOT_API_BASE_OVERRIDE || 'https://api.hubapi.com';
 }
-function dvHsHeaders() {
+function getHubSpotHeaders() {
   return {
-    Authorization: `Bearer ${hsGetCredential('access_token')}`,
+    Authorization: `Bearer ${getHubSpotCredential('access_token')}`,
     'Content-Type': 'application/json',
   };
 }
-async function dvHubspotRequestWithRetry(method, url, data, { timeout = 15000, maxAttempts = 4, baseDelayMs = 300, maxDelayMs = 4000 } = {}) {
+async function hubspotRequestWithRetry(method, url, data, { timeout = 15000, maxAttempts = 4, baseDelayMs = 300, maxDelayMs = 4000 } = {}) {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const isTransient = err => {
     const s = err.response?.status;
@@ -176,7 +176,7 @@ async function dvHubspotRequestWithRetry(method, url, data, { timeout = 15000, m
     }
     return null;
   };
-  const cfg = { headers: dvHsHeaders(), timeout };
+  const cfg = { headers: getHubSpotHeaders(), timeout };
   let lastErr;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -241,16 +241,16 @@ async function getQbTokens() {
 }
 
 // ── Per-user rate limiter for design visit create/submit ──────────────────────
-const DV_RATE_WINDOW_MS = 10 * 60 * 1000;
-const DV_RATE_LIMIT     = 20;
-const _dvRateMap = new Map();
-function checkDvRateLimit(userId) {
+const DESIGN_VISIT_RATE_WINDOW_MS = 10 * 60 * 1000;
+const DESIGN_VISIT_RATE_LIMIT     = 20;
+const _designVisitRateMap = new Map();
+function checkDesignVisitRateLimit(userId) {
   const now = Date.now();
-  const cutoff = now - DV_RATE_WINDOW_MS;
-  const ts = (_dvRateMap.get(userId) || []).filter(t => t > cutoff);
-  if (ts.length >= DV_RATE_LIMIT) return false;
+  const cutoff = now - DESIGN_VISIT_RATE_WINDOW_MS;
+  const ts = (_designVisitRateMap.get(userId) || []).filter(t => t > cutoff);
+  if (ts.length >= DESIGN_VISIT_RATE_LIMIT) return false;
   ts.push(now);
-  _dvRateMap.set(userId, ts);
+  _designVisitRateMap.set(userId, ts);
   return true;
 }
 
@@ -542,9 +542,9 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
   const submitterPrivilege = submitterUser?.privilege_level || 'member'; // privilege-read-ok: checking the submitter's privilege, not the current request user's
   const submitterCanEditPipeline = submitterPrivilege === 'admin' || submitterPrivilege === 'manager';
   const submittedLeadStatus = submitterCanEditPipeline ? handlerConfig?.submittedLeadStatus : null;
-  if (submittedLeadStatus && hsGetCredential('access_token') && visit.contact_id) {
+  if (submittedLeadStatus && getHubSpotCredential('access_token') && visit.contact_id) {
     try {
-      await dvHubspotRequestWithRetry('patch',
+      await hubspotRequestWithRetry('patch',
         `${hubspotApiBase()}/crm/v3/objects/contacts/${encodeURIComponent(visit.contact_id)}`,
         { properties: { hs_lead_status: submittedLeadStatus } }
       );
@@ -554,7 +554,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
   }
 
   // 3. HubSpot note (non-fatal)
-  if (hsGetCredential('access_token') && visit.contact_id) {
+  if (getHubSpotCredential('access_token') && visit.contact_id) {
     try {
       const roomLines = (visit.rooms || []).map(r =>
         `  • ${r.room_name}: ${r.unit_count} unit(s) @ £${penceToGbp(r.unit_price_pence)} each`
@@ -567,7 +567,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
         visit.visit_date          ? `Visit date: ${new Date(visit.visit_date).toLocaleString()}` : null,
         roomLines ? `Rooms:\n${roomLines}` : null,
       ].filter(Boolean).join('\n');
-      await dvHubspotRequestWithRetry('post',
+      await hubspotRequestWithRetry('post',
         `${hubspotApiBase()}/crm/v3/objects/notes`,
         {
           properties: {
@@ -1388,7 +1388,7 @@ router.get('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
 // POST /api/design-visits — create + run full side-effect chain
 router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const userId = req.user?.claims?.sub;
-  if (!checkDvRateLimit(userId)) {
+  if (!checkDesignVisitRateLimit(userId)) {
     return res.status(429).json({ error: 'Too many requests. Please wait before submitting another design visit.' });
   }
 
@@ -1587,7 +1587,7 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   const userId = req.user?.claims?.sub;
-  if (!checkDvRateLimit(userId)) {
+  if (!checkDesignVisitRateLimit(userId)) {
     return res.status(429).json({ error: 'Too many requests. Please wait before resubmitting.' });
   }
 
@@ -1863,7 +1863,7 @@ router.post('/api/design-visits/:id/submit', isAuthenticated, requirePrivilege('
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   const userId = req.user?.claims?.sub;
-  if (!checkDvRateLimit(userId)) {
+  if (!checkDesignVisitRateLimit(userId)) {
     return res.status(429).json({ error: 'Too many requests.' });
   }
   try {

@@ -196,12 +196,12 @@ export function useProjectsData(): ProjectsData {
   // dev_mode_enabled, so a toggle requires a fresh fetch to update the list.
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
-    let bc: BroadcastChannel | null = null;
+    let devModeChannel: BroadcastChannel | null = null;
     try {
-      bc = new BroadcastChannel('dev_mode_changed');
-      bc.onmessage = () => setRefetchTrigger((n) => n + 1);
+      devModeChannel = new BroadcastChannel('dev_mode_changed');
+      devModeChannel.onmessage = () => setRefetchTrigger((n) => n + 1);
     } catch { /* BroadcastChannel not available */ }
-    return () => { bc?.close(); };
+    return () => { devModeChannel?.close(); };
   }, []);
 
   // ── Draft visit detection ──────────────────────────────────────────────────
@@ -226,9 +226,9 @@ export function useProjectsData(): ProjectsData {
   // Listen for design_visit_draft_changed broadcast to refresh draft IDs.
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
-    const bc = new BroadcastChannel('design_visit_draft_changed');
-    bc.addEventListener('message', () => setDraftRefreshTick((t) => t + 1));
-    return () => bc.close();
+    const draftChannel = new BroadcastChannel('design_visit_draft_changed');
+    draftChannel.addEventListener('message', () => setDraftRefreshTick((t) => t + 1));
+    return () => draftChannel.close();
   }, []);
 
   // ── Re-fetch when a customer submits their info (photos received badge) ─────

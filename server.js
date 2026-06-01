@@ -15,7 +15,7 @@ const {
   prefsWriteLimiter,
   whatsappSendLimiter,
 } = require('./rate-limiters');
-const qbRoutes = require('./quickbooks');
+const quickbooksRoutes = require('./quickbooks');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
@@ -368,7 +368,7 @@ function requireHubspotToken(req, res, next) {
   next();
 }
 // QuickBooks routes (auth enforced inside the router)
-app.use(qbRoutes);
+app.use(quickbooksRoutes);
 app.use(visitsRouter);
 app.use(designVisitsRouter);
 app.use(customerInfoRouter);
