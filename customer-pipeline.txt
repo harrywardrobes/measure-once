@@ -1,0 +1,414 @@
+MEASURE ONCE — CUSTOMER PIPELINE REFERENCE
+==========================================
+Purpose: Documents the complete customer pipeline from new lead through to
+READY_FOR_PRODUCTION. Intended audience: human team members and AI agents
+assisting with pipeline tasks.
+
+This document covers three pipeline stages — Sales, Design Visit, and Survey —
+and stops at READY_FOR_PRODUCTION. Stages beyond that point (Order, Workshop,
+Packing, Delivery, Installation, Aftercare) are outside the scope of this
+document.
+
+
+SYSTEMS INVOLVED
+----------------
+
+Measure Once Dashboard
+  The internal web application where staff manage the customer pipeline.
+  Displays a Kanban-style board driven by HubSpot lead status. Staff use it to
+  send the customer-info form link, view photo submissions, manage design visit
+  records, schedule visits, and advance customers through stages.
+
+HubSpot CRM
+  The authoritative record of each customer (contact). Two custom properties
+  drive the pipeline display in the dashboard:
+    hs_lead_status      — primary pipeline status (e.g. IN_PROGRESS, SCHEDULED)
+    hw_lead_substatus   — secondary qualifier beneath certain statuses
+                          (e.g. DS_CONFIRMED / DS_UNCONFIRMED under SCHEDULED,
+                          or AWPH_RECEIVED under AWAITING_PHOTOS)
+  The dashboard reads these properties to place each contact on the board.
+  Staff update them via the dashboard or directly in HubSpot. All CRM notes
+  are written back to HubSpot automatically on certain events (e.g. design
+  visit submission).
+
+QuickBooks
+  Used for financial tracking. Estimates are created automatically by the
+  dashboard when a design visit is submitted. Invoices (including deposit
+  invoices) are created manually by staff inside QuickBooks; the dashboard
+  reads and displays outstanding invoice balances but does not create invoices
+  itself.
+
+Customer-Info Form
+  A token-gated public web page sent to the customer during the Sales stage.
+  Collects contact details, address, number of rooms, room notes, and photos.
+  The link is personal to the customer and expires after 28 days. Staff trigger
+  it via the dashboard. On submission it notifies admins by email and can
+  automatically advance the customer's HubSpot lead status.
+
+Design Visit Sign-Off Page
+  A token-gated public web page sent to the customer after a design visit is
+  submitted. Shows the room breakdown and pricing summary. The customer signs
+  off their design by clicking an approval button on this page. The token
+  expires after 7 days and is rotated each time the designer re-submits the
+  visit. Old tokens are retained as superseded hashes so the system can show
+  the customer a helpful "designer is making changes" message rather than a
+  generic error if they click a stale link.
+
+Google Calendar
+  Used to schedule visits (design visits, survey visits, and other appointment
+  types). Calendar events are created from within the dashboard and optionally
+  synced to Google Calendar via OAuth.
+
+Email (SMTP)
+  Transactional emails sent by the dashboard: the customer-info form invite,
+  the customer thank-you after form submission, the design visit sign-off link,
+  and admin notification emails when a customer submits their info form.
+
+
+STAGE 1 — SALES
+---------------
+
+This stage covers the period from first contact through to a confirmed design
+visit appointment.
+
+HubSpot lead statuses in pipeline order:
+
+1. FORM_SUBMISSION
+   The customer has submitted an initial enquiry (e.g. via the website contact
+   form). Staff action: email and WhatsApp the customer to ask for more
+   information. This is the entry point for all new leads.
+
+2. ATTEMPTED_CONTACT
+   Staff have tried to reach the customer but received no reply. Staff action:
+   if no response within 2 working days, call to discuss. The customer-info
+   form link is often sent at this stage to gather details asynchronously.
+
+3. IN_PROGRESS
+   Active conversation is underway. The lead is being qualified.
+
+4. AWAITING_PHOTOS
+   Staff are waiting for the customer to submit their photos and home details
+   via the customer-info form. The AWPH_RECEIVED substatus (hw_lead_substatus)
+   is set automatically when the customer submits the form.
+
+   Customer-Info Form Flow:
+   - Staff click "Send info form" on the dashboard contact card.
+   - The dashboard generates a unique token, stores its hash with a 28-day
+     expiry, and emails the customer a personal link.
+   - The customer opens the link and fills in: corrected email, corrected
+     mobile, address, number of rooms (1 / 2 / 3+), room notes, and photos
+     (up to 15 images, JPEG/PNG/WebP).
+   - On submission: the dashboard stores the answers, emails an admin
+     notification (with photos attached where possible), emails the customer a
+     thank-you, and updates hs_lead_status and hw_lead_substatus in HubSpot.
+   - The admin notification includes all submitted details and any photos that
+     fit within the email size limit. Large photos are skipped with a note to
+     view them on the dashboard.
+
+5. ROUGH_ESTIMATE_SENT
+   Staff have reviewed the photos and sent a rough price estimate to the
+   customer.
+
+   Photo Review Flow (two outcomes):
+   a) rough_estimate_sent — The rooms and photos look suitable. Staff send a
+      rough estimate and advance the status to ROUGH_ESTIMATE_SENT.
+   b) not_suitable — The enquiry is not a good fit (e.g. property type,
+      scale, or scope). Staff mark the lead NOT_SUITABLE (see closed exits
+      below). The customer may be informed by email outside the dashboard.
+
+Closed (exit) statuses — these can be applied at any point in Sales:
+
+   UNQUALIFIED
+     The customer does not meet the basic criteria for a project (e.g. budget
+     too low, property type out of scope). No further action is taken.
+
+   NOT_SUITABLE
+     The enquiry is unsuitable for a specific reason identified after more
+     information was gathered (e.g. after photo review). Distinct from
+     UNQUALIFIED in that a qualification step was reached before the decision.
+
+   BAD_TIMING
+     The customer is interested but not ready now. Staff note a follow-up date
+     (typically 1 month or a date the customer suggested) and recontact later.
+     The lead may be re-entered into the active pipeline at that point.
+
+
+STAGE 2 — DESIGN VISIT
+-----------------------
+
+This stage covers the scheduling, delivery, and customer sign-off of a design
+visit. A design visit is an in-home aesthetic consultation where the designer
+discusses furniture styles, handles, door finishes, room layouts, and pricing.
+It is distinct from the Survey visit (see Stage 3).
+
+HubSpot lead statuses in pipeline order:
+
+1. SCHEDULED
+   A design visit appointment has been booked. Two substatuses (hw_lead_substatus)
+   are used to track confirmation:
+     DS_CONFIRMED    — the customer has confirmed the appointment
+     DS_UNCONFIRMED  — the appointment is tentative, awaiting customer confirmation
+   The date is added to the shared calendar from the dashboard.
+
+2. OPEN_DEAL
+   The design visit has taken place and a design visit record has been submitted.
+   The deal is open and the customer's sign-off is awaited (or has been received).
+
+Design Visit Record Statuses (internal, stored in the design_visits table):
+
+The design visit record is separate from the HubSpot contact status. It tracks
+the state of the design document itself.
+
+  draft
+    The designer has started a design visit record but has not yet submitted it.
+    Rooms, pricing, handles, furniture range, and door styles can be edited
+    freely. No QB estimate exists yet.
+
+  submitted
+    The designer has submitted the record. This triggers all side effects:
+      - Status field updated to "submitted" in the database.
+      - A new sign-off token is generated and emailed to the customer (7-day
+        link to the public sign-off page).
+      - An old token (if any) is moved to superseded_signoff_token_hashes.
+      - A HubSpot CRM note is created summarising the visit details and room
+        breakdown, associated with the contact.
+      - hs_lead_status in HubSpot may be updated (if the submitter is a
+        manager or admin and submittedLeadStatus is configured).
+      - A QuickBooks estimate is created (or updated — see QB estimate logic
+        below).
+
+  revision_requested
+    After reviewing the sign-off page, the customer has requested changes. The
+    designer edits the record (rooms, pricing, styles) and resubmits. This
+    status can cycle multiple times. Each resubmission:
+      - Generates a new sign-off token (old one is superseded).
+      - Re-runs the full side-effect chain (HubSpot note, QB estimate update).
+      - The revision_note field records the customer's change request.
+
+  signed_off
+    The customer has approved the design via the public sign-off page. The
+    signed_off_at timestamp is recorded. The pipeline then advances toward
+    the Survey stage (staff set hs_lead_status to DESIGN_ACCEPTED in HubSpot
+    when they are ready to proceed).
+
+QuickBooks Estimate Logic (triggered on submit / resubmit):
+
+  Each room in the design visit maps to one line item in the QB estimate:
+    - Description: room name, door style, dimensions, and unit count
+    - Amount:      unit_price * unit_count (converted from pence to GBP)
+    - ItemRef:     "Design & Fit" service item
+    - TxnDate:     today's date
+    - CustomerRef: the HubSpot contact ID (used as the QB customer reference)
+    - CustomerMemo: "Design visit — [contact name]\nHandle: ...\nFurniture range: ..."
+    - ExpirationDate: visit date + 30 days
+
+  On first submission: a new estimate is created and its QB estimate ID and
+  document number are stored on the design_visits row.
+
+  On resubmission (revision_requested → resubmit):
+    - If the prior estimate still has TxnStatus = "Pending" (or no status),
+      the dashboard issues a sparse update to the existing estimate. The
+      qb_estimate_id and qb_estimate_doc_num remain unchanged.
+    - If the prior estimate is in any other state (Accepted, Closed, Rejected,
+      voided, deleted, or otherwise unreachable), a new estimate is created.
+      The old estimate ID is appended to the qb_estimate_history JSONB column
+      with a replaced_at timestamp, replaced_by user, and reason field set to
+      "prior_estimate_not_updatable". The qb_estimate_id is updated to the
+      new estimate.
+
+Stale Sign-Off Link (edge case):
+
+  If the customer clicks an old sign-off link (from a previous submission or
+  resubmission), the public sign-off route recognises the token as superseded
+  (present in superseded_signoff_token_hashes) and returns a 409 response with
+  a message explaining that the designer is making changes. This prevents the
+  customer from approving an outdated design.
+
+No-Show Visit (edge case):
+
+  There is no formal system status for a customer who does not attend their
+  design visit appointment. Staff handle no-shows operationally: a HubSpot
+  note is added manually, the appointment is rescheduled via the calendar, and
+  the HubSpot status may remain SCHEDULED or be adjusted to reflect the
+  situation. The dashboard does not have an automatic no-show workflow.
+
+
+STAGE 3 — SURVEY
+-----------------
+
+This stage covers the period from design sign-off through to the point where
+the project is ready to enter production. The survey is a separate physical
+visit from the design visit. Where the design visit is about aesthetics and
+pricing, the survey is a technical measurement visit to capture exact
+dimensions for manufacturing.
+
+HubSpot lead statuses in pipeline order:
+
+1. DESIGN_ACCEPTED
+   The customer has signed off the design. The pipeline has formally moved from
+   the Design Visit stage into the Survey stage.
+
+2. AWAITING_DEPOSIT
+   Staff are waiting for the customer to pay a deposit invoice. Deposit invoices
+   are created manually by staff inside QuickBooks; the dashboard displays the
+   outstanding balance fetched from QuickBooks but does not create the invoice
+   itself. Staff advance the status manually in the dashboard once payment is
+   confirmed.
+
+3. SCHEDULED (Survey stage)
+   The survey visit has been booked. The appointment is added to the calendar.
+
+4. IN_PROGRESS
+   The survey is underway. Staff action: check the date with the customer
+   and confirm the surveyor is on site.
+
+5. READY_FOR_PRODUCTION
+   The survey has been completed and all technical measurements have been
+   confirmed. Staff action: email the customer to confirm the installation date.
+   This status is advanced manually by staff after verifying that the survey
+   data is complete and correct.
+
+   READY_FOR_PRODUCTION is the endpoint of this document. It signals that the
+   job is ready to be handed to the Order and Workshop stages.
+
+
+TRANSITION: READY_FOR_PRODUCTION TO WORKSHOP
+--------------------------------------------
+
+Once a customer is at READY_FOR_PRODUCTION, the project enters the production
+pipeline. The stages beyond this point (outside the scope of this document) are:
+
+  Order     — Staff order doors, sheet materials, and hardware.
+  Workshop  — Staff prepare the installer pack, print labels, cut and prep all
+              components, and notify the customer that production is underway.
+  Packing   — Components are wrapped, a delivery date is agreed, and the van
+              is loaded.
+  Delivery  — Components are delivered to site.
+  Installation — The installation team fits everything on site, completes a
+              sign-off with the customer, and the final invoice is sent.
+  Aftercare — Final payment is received and a thank-you message is sent.
+
+
+COMPLETE PIPELINE SUMMARY TABLE
+--------------------------------
+
+Stage          Status                  Key Event / Trigger
+---------------------------------------------------------------------------
+Sales          FORM_SUBMISSION         Initial customer enquiry received
+Sales          ATTEMPTED_CONTACT       Staff tried to reach customer; no reply
+Sales          IN_PROGRESS             Active conversation underway
+Sales          AWAITING_PHOTOS         Customer-info form link sent; waiting
+                 (substatus AWPH_RECEIVED)  for customer to submit
+Sales          ROUGH_ESTIMATE_SENT     Photos reviewed; rough estimate sent
+Sales          UNQUALIFIED             Lead does not qualify; closed
+Sales          NOT_SUITABLE            Lead unsuitable after review; closed
+Sales          BAD_TIMING              Customer interested but not ready; follow
+                                        up at agreed date
+Design Visit   SCHEDULED               Design visit booked
+                 (substatus DS_CONFIRMED / DS_UNCONFIRMED)
+Design Visit   OPEN_DEAL               Design visit submitted; sign-off sent
+                                        to customer; QB estimate created
+Survey         DESIGN_ACCEPTED         Customer signed off design
+Survey         AWAITING_DEPOSIT        Deposit invoice issued; awaiting payment
+Survey         SCHEDULED               Survey visit booked
+Survey         IN_PROGRESS             Survey visit underway
+Survey         READY_FOR_PRODUCTION    Survey complete; ready for Order stage
+
+
+KEY FIELD REFERENCE
+-------------------
+
+HubSpot Contact Properties:
+
+  hs_lead_status
+    Primary pipeline position. Values correspond to the statuses listed in the
+    Pipeline Summary Table above. This is the field the dashboard board reads
+    to place a contact in the correct column.
+
+  hw_lead_substatus
+    Secondary qualifier. Relevant values in the pipeline:
+      AWPH_RECEIVED     — customer has submitted the info form (under
+                          AWAITING_PHOTOS)
+      DS_CONFIRMED      — design visit appointment confirmed (under SCHEDULED)
+      DS_UNCONFIRMED    — design visit appointment not yet confirmed (under
+                          SCHEDULED)
+
+Design Visits Table Fields (design_visits):
+
+  status
+    Current lifecycle state of the design visit record. One of:
+      draft, submitted, revision_requested, signed_off
+
+  revision_note
+    Text recorded when a customer requests changes. Populated when the sign-off
+    page receives a revision request. May be updated on each revision cycle.
+
+  signoff_token_hash
+    SHA-256 hash of the current active sign-off token. The raw token is
+    embedded in the link emailed to the customer. The server only stores the
+    hash and never the raw token.
+
+  signoff_expires_at
+    Expiry timestamp of the current active sign-off token (7 days from
+    submission). The public sign-off page rejects expired tokens.
+
+  superseded_signoff_token_hashes
+    Array of SHA-256 hashes for all previously issued (now invalidated) sign-off
+    tokens on this visit. Used to distinguish a stale-but-valid-format link
+    (show a helpful message) from an unrecognised token (generic not-found).
+
+  qb_estimate_id
+    QuickBooks estimate ID for the current estimate. Updated on each successful
+    estimate create or sparse update.
+
+  qb_estimate_doc_num
+    QuickBooks document number (human-readable estimate reference, e.g. "1042").
+    Displayed in the dashboard alongside the estimate ID.
+
+  qb_estimate_history
+    JSONB array of objects, one entry per replaced estimate. Each entry contains:
+      qb_estimate_id      — the old estimate's QB ID
+      qb_estimate_doc_num — the old estimate's document number
+      replaced_at         — ISO timestamp when it was replaced
+      replaced_by         — email of the submitter who triggered the replacement
+      reason              — always "prior_estimate_not_updatable"
+
+
+NOTES FOR AI AGENTS
+-------------------
+
+1. hs_lead_status is the primary pipeline signal. When determining where a
+   customer is in the pipeline, always read hs_lead_status from HubSpot first.
+   hw_lead_substatus is a secondary qualifier that provides extra detail within
+   a status; it does not replace hs_lead_status.
+
+2. Design visit and survey visit are two different physical appointments.
+   A "design visit" (Stage 2) is an aesthetic consultation about styles,
+   handles, finishes, and pricing — it produces a design visit record in the
+   database and a QB estimate. A "survey visit" (Stage 3) is a separate
+   technical measurement visit that happens after the customer has signed off
+   the design and paid a deposit. Do not conflate the two.
+
+3. QB estimates are created automatically on design visit submission; invoices
+   are created manually by staff in QuickBooks. The dashboard can display
+   outstanding invoice balances (read from QuickBooks) but it does not create
+   or send invoices. Deposit invoices are issued manually by staff once a
+   customer reaches AWAITING_DEPOSIT.
+
+4. A signed-off design does not mean the customer is READY_FOR_PRODUCTION.
+   After the customer approves the design (signed_off), the pipeline still
+   requires: staff to advance to DESIGN_ACCEPTED, the customer to pay a
+   deposit (AWAITING_DEPOSIT), a survey visit to be scheduled and conducted
+   (SCHEDULED → IN_PROGRESS), and staff to manually confirm the survey data
+   before advancing to READY_FOR_PRODUCTION.
+
+5. revision_requested can cycle multiple times. A customer may request changes
+   and the designer may resubmit more than once before the customer signs off.
+   Each resubmission rotates the sign-off token and re-runs the full side-effect
+   chain (HubSpot note, QB estimate update). The qb_estimate_history field
+   records the audit trail of any replaced estimates across these cycles.
+
+6. READY_FOR_PRODUCTION is a manual staff advancement. The system does not
+   automatically advance a customer to READY_FOR_PRODUCTION after the survey
+   visit is marked complete. Staff must confirm the survey data is correct
+   and then manually move the customer to this status in the dashboard.
