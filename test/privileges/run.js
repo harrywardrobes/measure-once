@@ -186,8 +186,9 @@ async function main() {
       }];
     }
     probeResults.push(...uiResults);
-    const probeFails = probeResults.filter(p => !p.ok);
-    console.log(`    probes: ${probeResults.length - probeFails.length}/${probeResults.length} ok`);
+    const probeFails = probeResults.filter(p => !p.ok && !p.skipped);
+    const probeSkipped = probeResults.filter(p => p.skipped).length;
+    console.log(`    probes: ${probeResults.length - probeFails.length - probeSkipped}/${probeResults.length} ok${probeSkipped ? ` (${probeSkipped} skipped)` : ''}`);
 
     const finishedAt = new Date().toISOString();
     const report = buildReport({

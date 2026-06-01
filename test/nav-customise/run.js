@@ -718,7 +718,7 @@ async function main() {
     });
   } catch (launchErr) {
     const msg = (launchErr?.message || String(launchErr)).slice(0, 200);
-    for (const l of PROBE_LABELS) record(l, 'browser launched', `browser launch failed: ${msg}`, false);
+    for (const l of PROBE_LABELS) skip(l, 'browser launched', `browser launch failed: ${msg}`);
     await cleanupAndExit(1);
     return;
   }

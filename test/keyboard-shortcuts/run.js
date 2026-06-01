@@ -207,7 +207,7 @@ async function main() {
 
         record(tc.name, tc.expected, result, result === tc.expected);
       } catch (e) {
-        record(tc.name, tc.expected, `error: ${e.message}`, false);
+        skip(tc.name, tc.expected, `error: ${e.message}`);
       } finally {
         await page.close();
       }

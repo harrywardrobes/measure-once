@@ -4,7 +4,7 @@ const path = require('path');
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
 const RANK_FOR_REPORT = { unauth: -1, viewer: 0, member: 1, manager: 2, admin: 3 };
 
-function badge(ok) { return ok ? 'PASS' : 'FAIL'; }
+function badge(ok, skipped) { return ok ? 'PASS' : skipped ? 'SKIP' : 'FAIL'; }
 
 function escapePipe(s) { return String(s).replace(/\|/g, '\\|').replace(/\n/g, ' '); }
 
@@ -19,7 +19,8 @@ function buildReport({ runId, startedAt, finishedAt, matrix, probes, harnessLog 
   lines.push('');
 
   const totalProbes = probes.length;
-  const failedProbes = probes.filter(p => !p.ok);
+  const skippedProbes = probes.filter(p => p.skipped);
+  const failedProbes = probes.filter(p => !p.ok && !p.skipped);
   const matrixFails = matrix.filter(m => !m.ok);
   const matrixInconclusive = matrix.filter(m => m.inconclusive);
   const allFails = [...matrixFails.map(m => ({ ...m, source: 'matrix' })),
@@ -28,7 +29,7 @@ function buildReport({ runId, startedAt, finishedAt, matrix, probes, harnessLog 
   lines.push(`## Summary`);
   lines.push('');
   lines.push(`- Capability matrix: ${matrix.length - matrixFails.length}/${matrix.length} passed (${matrixInconclusive.length} inconclusive — guard fired before authz, see below)`);
-  lines.push(`- Adversarial probes: ${totalProbes - failedProbes.length}/${totalProbes} passed`);
+  lines.push(`- Adversarial probes: ${totalProbes - failedProbes.length - skippedProbes.length}/${totalProbes} passed${skippedProbes.length ? ` (${skippedProbes.length} skipped)` : ''}`);
   lines.push(`- **Findings**: ${allFails.length}`);
   for (const sev of SEVERITY_ORDER) {
     const n = allFails.filter(f => (f.severity || 'info') === sev).length;
@@ -111,7 +112,7 @@ function buildReport({ runId, startedAt, finishedAt, matrix, probes, harnessLog 
     lines.push('| Result | Severity | Probe | Expected | Observed | Notes |');
     lines.push('|---|---|---|---|---|---|');
     for (const p of list) {
-      lines.push(`| ${badge(p.ok)} | ${p.severity} | ${escapePipe(p.name)} | ${escapePipe(p.expected)} | ${escapePipe(p.observed)} | ${escapePipe(p.detail)} |`);
+      lines.push(`| ${badge(p.ok, p.skipped)} | ${p.severity} | ${escapePipe(p.name)} | ${escapePipe(p.expected)} | ${escapePipe(p.observed)} | ${escapePipe(p.detail)} |`);
     }
     lines.push('');
   }

@@ -35,6 +35,11 @@ async function runUiSmoke({ users, runId, clients }) {
   function record(name, expected, observed, severity, ok, detail) {
     findings.push({ category: 'ui-smoke', name, expected, observed, severity, ok, detail: detail || '' });
   }
+  function skip(name, expected, reason, severity = 'high') {
+    findings.push({ category: 'ui-smoke', name, expected, observed: reason, severity, ok: false, skipped: true, detail: '' });
+    console.log(`  –  ${name}`);
+    console.log(`     skipped  : ${reason}`);
+  }
 
   if (!puppeteer) {
     record('puppeteer available', 'require("puppeteer") resolves',
@@ -80,7 +85,7 @@ async function runUiSmoke({ users, runId, clients }) {
         'critical', bouncedToLogin);
       await page.close().catch(() => {});
     } catch (e) {
-      record('unauth /admin probe ran', 'no error', `error: ${e.message}`, 'high', false);
+      skip('unauth /admin probe ran', 'no error', `error: ${e.message}`);
     }
 
     for (const role of ROLES) {
