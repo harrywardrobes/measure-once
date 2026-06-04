@@ -235,7 +235,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
     // async check completes.
     let pendingWindow: Window | null = null;
     if (target === 'open') {
-      pendingWindow = window.open('', '_blank', 'noopener,noreferrer');
+      pendingWindow = window.open('', '_blank');
     }
 
     setIsChecking(true);
