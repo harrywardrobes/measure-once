@@ -81,13 +81,13 @@ const STAGES: Stage[] = [
         hint: "Customer sending room photos / measurements",
         subs: [
           { key: "AWPH_MORE_INFO", label: "More Info Requested" },
-          { key: "AWPH_RECEIVED", label: "Photos Received", actionLabel: "Review Photos" },
+          { key: "AWPH_RECEIVED", label: "Photos Received", actionLabel: "Review Photos → Rough Estimate" },
         ],
       },
       {
         key: "ROUGH_ESTIMATE",
         label: "Rough Estimate",
-        hint: "Estimate shared with customer — awaiting decision",
+        hint: "Follows photo review — estimate shared, awaiting decision",
       },
       {
         key: "BAD_TIMING",

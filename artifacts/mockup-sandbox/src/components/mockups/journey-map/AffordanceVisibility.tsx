@@ -24,6 +24,7 @@ type Sub = {
   key: string;          // enum key
   label: string;
   action?: ActionFn;
+  thenAction?: ActionFn; // chained step that runs after action
 };
 
 type Status = {
@@ -112,13 +113,18 @@ const STAGES: Stage[] = [
         hint: "Customer sending room photos / measurements",
         subs: [
           { key: "MORE_INFO",     label: "More Info Requested", action: { label: "Request Info",   fn: "sendInfoRequest()",    method: "POST",   endpoint: "POST /api/contacts/:id/notes" } },
-          { key: "PHOTOS_RCVD",  label: "Photos Received",     action: { label: "Review Photos",  fn: "openPhotosModal()",    method: "client" } },
+          {
+            key: "PHOTOS_RCVD",
+            label: "Photos Received",
+            action:     { label: "Review Photos",         fn: "openPhotosModal()",    method: "client" },
+            thenAction: { label: "Advance to Rough Est.", fn: "setLeadStatus()",      method: "PATCH",  endpoint: "PATCH /api/contacts/:id" },
+          },
         ],
       },
       {
         key: "ROUGH_ESTIMATE",
         label: "Rough Estimate",
-        hint: "Estimate shared — awaiting decision",
+        hint: "Follows photo review — estimate shared, awaiting decision",
         action: { label: "Send Estimate", fn: "createQBEstimate()", method: "POST", endpoint: "POST /api/qb/estimates" },
       },
       { key: "NO_RESPONSE_X3", label: "No Response ×3", isExit: true, exitIcon: "◌" },
@@ -342,6 +348,12 @@ function StatusBlock({ s, color }: { s: Status; color: string }) {
               {sub.action && (
                 <div className="mt-1 ml-3">
                   <FnCall a={sub.action} color={color} />
+                  {sub.thenAction && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className="font-mono text-[9px] text-slate-400 pl-1">↓ then</span>
+                    </div>
+                  )}
+                  {sub.thenAction && <FnCall a={sub.thenAction} color={color} />}
                 </div>
               )}
             </div>
