@@ -236,6 +236,14 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
     let pendingWindow: Window | null = null;
     if (target === 'open') {
       pendingWindow = window.open('', '_blank');
+      // Security trade-off: `noopener,noreferrer` is intentionally omitted here.
+      // This provisional open targets a blank page with no cross-origin content,
+      // so there is no actual opener-exploitation risk at this point. Keeping the
+      // opener reference is required so we can navigate the tab to the real URL
+      // (or close it) once the async conflict-check below resolves — without a
+      // handle the tab would be orphaned and we'd have to open a second popup.
+      // The final window.open calls that load a real URL (see below) DO pass
+      // 'noopener,noreferrer', severing the reference once the destination is set.
     }
 
     setIsChecking(true);
