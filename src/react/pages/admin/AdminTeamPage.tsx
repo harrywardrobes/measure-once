@@ -38,7 +38,7 @@ type Allowed = {
   email: string;
   note?: string;
   approved_at?: string;
-  protected?: boolean;
+
   metadata?: Record<string, string>;
   conflict_created_at?: string;
   pending_profile_updates?: Record<string, ProfileConflict> | null;
@@ -897,9 +897,7 @@ export function AdminTeamPage() {
                           ) : null}
                         </TableCell>
                         <TableCell align="right">
-                          {a.protected
-                            ? <Typography variant="caption" color="text.disabled">Protected</Typography>
-                            : <Button size="small" color="error" variant="outlined" onClick={() => handleRevoke(a.email)}>Revoke</Button>}
+                          <Button size="small" color="error" variant="outlined" onClick={() => handleRevoke(a.email)}>Revoke</Button>
                         </TableCell>
                       </TableRow>
                     );

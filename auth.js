@@ -386,6 +386,13 @@ async function ensureAuthTables() {
       approved_at TIMESTAMP DEFAULT NOW(),
       note VARCHAR
     );
+    -- Tracks which ADMIN_EMAILS addresses have been bootstrapped into
+    -- allowed_emails. Once an email is recorded here, restarts will not
+    -- re-add it to allowed_emails even if an admin later revokes it.
+    CREATE TABLE IF NOT EXISTS bootstrap_admin_emails (
+      email VARCHAR PRIMARY KEY,
+      seeded_at TIMESTAMP DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS account_requests (
       id SERIAL PRIMARY KEY,
       name VARCHAR NOT NULL,
@@ -589,18 +596,35 @@ async function ensureAuthTables() {
 
   // Seed admin emails from env var + create user rows for them so the very
   // first admin can sign in once they set a password via the emailed link.
+  //
+  // The allowed_emails seed is tracked in bootstrap_admin_emails so it runs
+  // exactly once per email. If an admin is later deprovisioned (removed from
+  // allowed_emails), a server restart will NOT re-add them because their email
+  // is already in the sentinel table. The users insert uses ON CONFLICT DO
+  // NOTHING for the same reason — a privilege downgrade must survive restarts.
   const admins = (process.env.ADMIN_EMAILS || '')
     .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   for (const email of admins) {
-    await pool.query(
-      `INSERT INTO allowed_emails (email, note) VALUES ($1, 'admin')
-       ON CONFLICT (email) DO NOTHING`,
-      [email]
+    // Only seed into allowed_emails if this address has never been bootstrapped.
+    const seeded = await pool.query(
+      `SELECT 1 FROM bootstrap_admin_emails WHERE email = $1`, [email]
     );
+    if (seeded.rowCount === 0) {
+      await pool.query(
+        `INSERT INTO allowed_emails (email, note) VALUES ($1, 'admin')
+         ON CONFLICT (email) DO NOTHING`,
+        [email]
+      );
+      await pool.query(
+        `INSERT INTO bootstrap_admin_emails (email) VALUES ($1)
+         ON CONFLICT (email) DO NOTHING`,
+        [email]
+      );
+    }
     await pool.query(
       `INSERT INTO users (email, privilege_level, onboarding_status)
        VALUES ($1, 'admin', 'active')
-       ON CONFLICT (email) DO UPDATE SET privilege_level = 'admin'`,
+       ON CONFLICT (email) DO NOTHING`,
       [email]
     );
   }
@@ -981,7 +1005,7 @@ async function setupAuth(app) {
     const captcha = await verifyCaptchaToken(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
     if (!captcha.ok) return turnstileError(res);
     try {
-      if (!(await isEmailApproved(email)) && !isAdminEmail(email)) {
+      if (!(await isEmailApproved(email))) {
         return res.status(401).json({ error: 'Invalid email or password.' });
       }
       const dbUser = await getUserByEmail(email);
@@ -1106,7 +1130,7 @@ async function setupAuth(app) {
     const captcha = await verifyCaptchaToken(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
     if (!captcha.ok) return turnstileError(res);
     try {
-      if (await isEmailApproved(email) || isAdminEmail(email)) {
+      if (await isEmailApproved(email)) {
         try {
           const token = await issuePasswordSetToken(email, { purpose: 'reset' });
           await sendSetPasswordEmail(email, token, { reset: true });
@@ -1688,8 +1712,7 @@ async function setupAuth(app) {
       const r = await pool.query(
         `SELECT email, approved_at, note, metadata, pending_profile_updates, conflict_created_at FROM allowed_emails ORDER BY approved_at DESC`
       );
-      const adminSet = getAdminEmails();
-      res.json(r.rows.map(row => ({ ...row, protected: adminSet.has(row.email) })));
+      res.json(r.rows);
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -1698,9 +1721,6 @@ async function setupAuth(app) {
   app.delete('/api/admin/allowed/:email', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const email = req.params.email.toLowerCase();
-      if (isAdminEmail(email)) {
-        return res.status(400).json({ error: 'Cannot revoke an ADMIN_EMAILS address.' });
-      }
       const del = await pool.query(`DELETE FROM allowed_emails WHERE email = $1`, [email]);
       if (del.rowCount > 0) {
         const adminEmail = req.user?.claims?.email || req.user?.email || null;
@@ -2636,9 +2656,10 @@ async function setupAuth(app) {
 const isAuthenticated = async (req, res, next) => {
   if (req.isAuthenticated && req.isAuthenticated() && req.user && req.user.claims?.sub) {
     // Defense-in-depth: re-verify the user is still on the allow-list on every
-    // request. ADMIN_EMAILS addresses are exempt (they are never in allowed_emails).
+    // request. All users, including those originally seeded from ADMIN_EMAILS,
+    // must remain in allowed_emails to continue accessing the application.
     const email = req.user.claims?.email;
-    if (email && !isAdminEmail(email)) {
+    if (email) {
       try {
         const approved = await isEmailApproved(email);
         if (!approved) {
