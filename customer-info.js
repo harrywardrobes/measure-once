@@ -806,14 +806,15 @@ router.get('/api/customer-info/:token', async (req, res) => {
 // Public: submit the form
 // POST /api/customer-info/:token
 router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (req, res) => {
-  const row = await lookupToken(req.params.token);
-  if (!row) {
+  // Fast pre-flight lookup (no lock) — avoids opening a transaction for bogus tokens.
+  const preRow = await lookupToken(req.params.token);
+  if (!preRow) {
     return res.status(404).json({ error: 'Link not found.' });
   }
-  if (new Date(row.expires_at) < new Date()) {
+  if (new Date(preRow.expires_at) < new Date()) {
     return res.status(410).json({ error: 'This link has expired.', status: 'expired' });
   }
-  if (row.submitted_at) {
+  if (preRow.submitted_at) {
     return res.status(410).json({ error: 'Already submitted.', status: 'submitted' });
   }
 
@@ -824,7 +825,7 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     photoKeys,
   } = req.body;
 
-  // Validate
+  // Validate inputs before opening the transaction.
   if (!['1', '2', '3+'].includes(roomCount)) {
     return res.status(400).json({ error: 'roomCount must be 1, 2, or 3+.' });
   }
@@ -844,41 +845,80 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
   }
   const keys = rawKeys;
 
-  // Mark submitted (clear form_link so staff can no longer use the stale URL)
-  await pool.query(
-    `UPDATE customer_info_submissions SET
-       submitted_at     = NOW(),
-       form_link        = NULL,
-       corrected_email  = $1,
-       corrected_mobile = $2,
-       address_line1    = $3,
-       city             = $4,
-       postcode         = $5,
-       room_count       = $6,
-       room_notes       = $7,
-       photo_keys       = $8::jsonb
-     WHERE id = $9`,
-    [
-      correctedEmail  || null,
-      correctedMobile || null,
-      addressLine1.trim(),
-      city.trim(),
-      postcode.trim(),
-      roomCount,
-      roomNotes || null,
-      JSON.stringify(keys),
-      row.id,
-    ]
-  );
+  // Atomically lock the row, re-verify it is still unsubmitted, and mark it
+  // submitted — all inside a single transaction.  This prevents two concurrent
+  // requests using the same valid bearer token from both succeeding.
+  const client = await pool.connect();
+  let fresh;
+  let lockedContactId;
+  try {
+    await client.query('BEGIN');
 
-  // Fetch fresh row for emails
-  const freshR = await pool.query(`SELECT * FROM customer_info_submissions WHERE id = $1`, [row.id]);
-  const fresh  = freshR.rows[0];
+    // Lock the row so any concurrent submission request blocks here until we commit.
+    const tokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex');
+    const lockR = await client.query(
+      `SELECT * FROM customer_info_submissions WHERE token_hash = $1 LIMIT 1 FOR UPDATE`,
+      [tokenHash]
+    );
+    const row = lockR.rows[0];
+    if (row) lockedContactId = row.contact_id;
+
+    if (!row) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Link not found.' });
+    }
+    if (new Date(row.expires_at) < new Date()) {
+      await client.query('ROLLBACK');
+      return res.status(410).json({ error: 'This link has expired.', status: 'expired' });
+    }
+    if (row.submitted_at) {
+      await client.query('ROLLBACK');
+      return res.status(410).json({ error: 'Already submitted.', status: 'submitted' });
+    }
+
+    // Mark submitted (clear form_link so staff can no longer use the stale URL).
+    await client.query(
+      `UPDATE customer_info_submissions SET
+         submitted_at     = NOW(),
+         form_link        = NULL,
+         corrected_email  = $1,
+         corrected_mobile = $2,
+         address_line1    = $3,
+         city             = $4,
+         postcode         = $5,
+         room_count       = $6,
+         room_notes       = $7,
+         photo_keys       = $8::jsonb
+       WHERE id = $9`,
+      [
+        correctedEmail  || null,
+        correctedMobile || null,
+        addressLine1.trim(),
+        city.trim(),
+        postcode.trim(),
+        roomCount,
+        roomNotes || null,
+        JSON.stringify(keys),
+        row.id,
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    // Fetch fresh row for emails (outside the transaction — lock is released).
+    const freshR = await client.query(`SELECT * FROM customer_info_submissions WHERE id = $1`, [row.id]);
+    fresh = freshR.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 
   // Update HubSpot lead status (non-fatal)
   try {
     if (process.env.HUBSPOT_ACCESS_TOKEN) {
-      await updateHubSpotLeadStatus(row.contact_id, 'AWAITING_PHOTOS');
+      await updateHubSpotLeadStatus(lockedContactId, 'AWAITING_PHOTOS');
       // Ensure sub-status exists locally, then patch HubSpot.
       // HubSpot hw_lead_substatus values are namespaced: STATUS_KEY__SUBSTATUS_KEY
       const awphId = await ensureSubstatusExists('AWPH_RECEIVED', 'Photos Received', 'AWAITING_PHOTOS');
@@ -887,7 +927,7 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
         `UPDATE lead_substatuses SET action_label = 'Review Photos' WHERE id = $1 AND (action_label IS NULL OR action_label = '' OR action_label = 'Photos Received')`,
         [awphId]
       );
-      await updateHubSpotSubstatus(row.contact_id, 'AWAITING_PHOTOS__AWPH_RECEIVED');
+      await updateHubSpotSubstatus(lockedContactId, 'AWAITING_PHOTOS__AWPH_RECEIVED');
     }
   } catch (err) {
     console.error('[customer-info] HubSpot update failed (non-fatal):', err.message);
@@ -902,7 +942,7 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
 
   // Notify all connected dashboard tabs so the "Photos received" badge appears
   // on the projects board without a page refresh.
-  pushSseEvent({ type: 'customer_info_submitted', contactId: row.contact_id });
+  pushSseEvent({ type: 'customer_info_submitted', contactId: lockedContactId });
 
   // Send emails (non-fatal)
   try { await sendAdminNotificationEmail(fresh); } catch (e) {
