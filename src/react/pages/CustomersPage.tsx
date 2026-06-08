@@ -43,6 +43,7 @@ import { useCardActionHandlers, type CardActionHandlerData } from '../hooks/useC
 import { useOfflineContactEntries } from '../hooks/useOfflineContactEntries';
 import { SyncStatePill } from '../components/SyncStatePill';
 import { ContactSyncRecovery } from '../components/ContactSyncRecovery';
+import { BulkContactActions } from '../components/BulkContactActions';
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
@@ -1627,6 +1628,8 @@ export function CustomersPage(): React.ReactElement {
             Contact list may be out of date — HubSpot is temporarily unavailable.
           </Alert>
         ) : null}
+
+        <BulkContactActions contactSyncMap={contactSyncMap} />
 
         {loading ? (
           <Grid container spacing={2} id="customers-results">
