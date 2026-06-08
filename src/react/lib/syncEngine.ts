@@ -153,6 +153,15 @@ function surfaceFailure(entry: QueueEntry, reason: string): void {
   }
 }
 
+/** Notify the app that a queued write replayed successfully (2xx). */
+function surfaceSuccess(entry: QueueEntry): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent<SyncEventDetail>('mo:offline-sync-ok', {
+      detail: { area: entry.area, label: entry.label, reason: 'synced' },
+    }));
+  }
+}
+
 /** Notify the app that a queued write replayed onto a record that had changed. */
 function surfaceConflict(entry: QueueEntry): void {
   log('warn', 'sync_conflict', { area: entry.area, label: entry.label, recordKey: entry.recordKey });
@@ -272,6 +281,7 @@ async function processEntry(entry: QueueEntry): Promise<void> {
   if (result.ok) {
     await removeEntry(entry.id);
     await markSynced();
+    surfaceSuccess(entry);
     log('info', 'sync_ok', { area: entry.area, label: entry.label, status: result.status });
     return;
   }

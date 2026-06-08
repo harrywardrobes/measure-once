@@ -191,6 +191,11 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 .ls-stage-select[data-stage="CUSTOMER_SERVICE"] { border-left-color: var(--stage-customerservice-bg); }
 
 
+/* ── Offline sync pill spinner ───────────────────────────────────────────────── */
+@keyframes dv-sync-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Customer List Skeleton ──────────────────────────────────────────────────── */
 @keyframes skeleton-shimmer {
 

@@ -148,6 +148,22 @@ without a `conflictCheckUrl` skip the check gracefully.
 | Design-visit wizard <!-- offline-areas: visit --> | Submit (create and edit; edits carry a `conflictCheckUrl`); **room photos captured offline** ride along inline (see below) |
 | Arrange-visit modal <!-- offline-areas: visit --> | `not_proceeding` outcome, and `booked` outcome (calendar event dispatched only when the write is sent now, not when queued) |
 
+### Per-visit pending/synced state
+
+The customer detail design-visit list shows the offline status of each queued
+design-visit write so a field user isn't relying on the global header pill alone
+(`src/react/hooks/useOfflineVisitEntries.ts` + `DesignVisitsList.tsx`):
+
+- A visit **created** offline appears as its own dashed "pending sync" card
+  (derived from the queued payload) until it replays — the server has no row for
+  it yet. The card shows `Pending sync` → `Syncing…`, or `Sync failed` if the
+  write is parked.
+- A queued **edit** badges its existing server card with the same sync pill.
+- When the sync engine confirms a write (2xx) it dispatches a
+  `mo:offline-sync-ok` window event and removes the outbox entry; the list
+  detects the removal, refetches `/api/design-visits`, and the real (synced)
+  card replaces the pending one.
+
 ### Offline design-visit room photos
 
 The design-visit wizard supports capturing room photos while offline. Online,

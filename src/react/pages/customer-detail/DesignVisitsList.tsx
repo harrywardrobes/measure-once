@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { DesignVisit, DesignVisitRoom, fmtDesignVisitWhen, fmtGbp } from './types';
 import { DesignVisitStatusPill } from './DesignVisitStatusPill';
 import { usePrivilege } from '../../hooks/usePrivilege';
+import { useOfflineVisitEntries, type PendingVisitEntry } from '../../hooks/useOfflineVisitEntries';
 import { DesignVisitWizard, type DesignVisitWizardHandler, type DesignVisitWizardCtx, type ExistingVisit } from '../../components/DesignVisitWizard';
 
 const sxHeader: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 };
@@ -12,6 +13,71 @@ const sxMetaSep: React.CSSProperties = { fontSize: '0.65rem', color: 'var(--ink-
 const sxDate: React.CSSProperties = { fontSize: '0.68rem', color: 'var(--ink-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' };
 const sxText: React.CSSProperties = { fontSize: '0.875rem', color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' };
 const sxSecondaryBtn: React.CSSProperties = { background: 'none', color: 'var(--ink-3)', fontSize: '0.75rem', border: '1px solid var(--stone)', borderRadius: 'var(--radius-md)', cursor: 'pointer', padding: '4px 10px' };
+
+/** Visual treatment for the per-visit offline sync state, matching DesignVisitStatusPill. */
+const SYNC_PILL: Record<PendingVisitEntry['status'], { label: string; bg: string; fg: string }> = {
+  pending: { label: 'Pending sync',  bg: 'var(--stage-workshop-light)', fg: 'var(--stage-workshop-text)' },
+  syncing: { label: 'Syncing…',      bg: 'var(--stage-order-light)',    fg: 'var(--stage-order-text)'    },
+  failed:  { label: 'Sync failed',   bg: 'var(--status-error-bg)',      fg: 'var(--status-error-text)'   },
+  synced:  { label: 'Synced',        bg: 'var(--stage-packing-light)',  fg: 'var(--stage-packing-text)'  },
+};
+
+function SyncStatePill({ status }: { status: PendingVisitEntry['status'] }) {
+  const s = SYNC_PILL[status] ?? SYNC_PILL.pending;
+  return (
+    <span
+      data-testid="dv-sync-pill"
+      style={{
+        fontSize: '0.7rem', background: s.bg, color: s.fg, borderRadius: 4,
+        padding: '1px 6px', fontWeight: 600, whiteSpace: 'nowrap',
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+      }}
+    >
+      {status === 'syncing' && (
+        <span
+          aria-hidden
+          style={{
+            width: 8, height: 8, borderRadius: '50%',
+            border: '1.5px solid currentColor', borderTopColor: 'transparent',
+            display: 'inline-block', animation: 'dv-sync-spin 0.8s linear infinite',
+          }}
+        />
+      )}
+      {s.label}
+    </span>
+  );
+}
+
+/** A design visit captured offline that has not yet reached the server. */
+function PendingVisitCard({ entry }: { entry: PendingVisitEntry }) {
+  const when = fmtDesignVisitWhen(entry.visitDate || new Date(entry.createdAt).toISOString());
+  const totalGbp = fmtGbp(entry.estimateTotalPence || 0);
+  return (
+    <div
+      data-testid="dv-pending-card"
+      style={{
+        ...sxItem, marginBottom: 6, flexDirection: 'column', alignItems: 'stretch', gap: 6,
+        borderStyle: 'dashed', opacity: entry.status === 'failed' ? 1 : 0.95,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div data-testid="dv-when" style={{ ...sxText, fontWeight: 500 }}>{when}</div>
+          <div style={{ ...sxMeta, marginTop: 2 }}>
+            <SyncStatePill status={entry.status} />
+            <span style={sxMetaSep}>·</span>
+            <span style={sxDate}>Estimate: £{totalGbp}</span>
+          </div>
+        </div>
+      </div>
+      <p style={{ fontSize: '0.78rem', color: 'var(--ink-3)', margin: 0 }}>
+        {entry.status === 'failed'
+          ? `Couldn't sync this visit${entry.lastError ? ` — ${entry.lastError}` : ''}. It needs attention before it can upload.`
+          : "Saved on this device — it'll upload and send the sign-off email when you're back online."}
+      </p>
+    </div>
+  );
+}
 
 interface Props {
   contactId: string;
@@ -40,6 +106,30 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
   const [wizardState, setWizardState] = useState<WizardState | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Queued offline design-visit writes for this contact (Phase 2). New visits
+  // appear as their own pending cards; queued edits badge their server card.
+  const pendingEntries = useOfflineVisitEntries(contactId);
+  const pendingCreates = pendingEntries.filter(e => !e.isEdit);
+  const pendingEditByVisitId = new Map<number, PendingVisitEntry>();
+  for (const e of pendingEntries) {
+    if (e.isEdit && e.editVisitId != null) pendingEditByVisitId.set(e.editVisitId, e);
+  }
+
+  // When a queued write drains (entry removed on a confirmed 2xx) the server
+  // copy is now authoritative — refetch so the real card replaces the pending
+  // one. Compare ids across renders so we only refresh on an actual removal.
+  const prevIdsRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    const current = new Set(pendingEntries.map(e => e.id));
+    const prev = prevIdsRef.current;
+    let removed = false;
+    for (const id of prev) {
+      if (!current.has(id)) { removed = true; break; }
+    }
+    prevIdsRef.current = current;
+    if (removed) onRefresh();
+  }, [pendingEntries, onRefresh]);
 
   const toggleExpanded = useCallback(async (id: number) => {
     setExpanded(prev => {
@@ -131,9 +221,14 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
         {!loading && error && (
           <p style={{ fontSize: '0.85rem', color: 'var(--error)', padding: '4px 0' }}>Could not load design visits.</p>
         )}
-        {!loading && !error && visits.length === 0 && (
+        {!loading && !error && visits.length === 0 && pendingCreates.length === 0 && (
           <p style={{ fontSize: '0.85rem', padding: '4px 0', fontStyle: 'italic' }}>No design visits yet.</p>
         )}
+        {/* Pending offline cards render even when the server fetch failed —
+            that's the offline case where this visibility matters most. */}
+        {!loading && pendingCreates.map(p => (
+          <PendingVisitCard key={`pending-${p.id}`} entry={p} />
+        ))}
         {!loading && !error && visits.map(v => {
           const when     = fmtDesignVisitWhen(v.visit_date || v.created_at);
           const totalGbp = fmtGbp(Number(v.estimate_total_pence) || 0);
@@ -155,6 +250,9 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
                     <span data-testid="dv-status-pill">
                       <DesignVisitStatusPill status={v.status} />
                     </span>
+                    {pendingEditByVisitId.has(v.id) && (
+                      <SyncStatePill status={pendingEditByVisitId.get(v.id)!.status} />
+                    )}
                     <span style={sxMetaSep}>·</span>
                     <span data-testid="dv-date" style={sxDate}>Estimate: £{totalGbp}</span>
                     {v.qb_estimate_doc_num && (

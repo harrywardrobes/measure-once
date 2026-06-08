@@ -6,3 +6,4 @@
 - [Offline DV photos](offline-photos-inline-datauri.md) — offline room photos travel as inline data: URIs in the queued submit; server materialises them on replay (fallback to inline).
 - [Offline Phase 2 bundle constraints](offline-phase2-bundle.md) — offline-aware UI in main-bundle components (e.g. GlobalHeader) must React.lazy the leaf; main.js sits right at its 40kB cap.
 - [Log snapshot staleness](log-snapshot-staleness.md) — /tmp/logs/*.log only update on refresh_all_logs, not restart_workflow; call refresh after a restart to see the new boot.
+- [Offline visit per-visit state](offline-visit-entries.md) — design-visit & arrange-visit both use area 'visit' (filter by URL); failed entries don't auto-retry; refetch on outbox drain.
