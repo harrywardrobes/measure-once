@@ -87,7 +87,7 @@ function NavRoleRow({ roleName, isCustomized, roleNavKeys, defaultNavKeys }: Nav
 
 // ── Fixture data ─────────────────────────────────────────────────────────────
 
-const DEFAULT_NAV_KEYS = ['home', 'customers', 'calendar'];
+const DEFAULT_NAV_KEYS = ['home', 'customers', 'projects'];
 const CUSTOM_NAV_KEYS  = ['home', 'customers', 'projects', 'invoices'];
 
 // ── Meta ──────────────────────────────────────────────────────────────────────

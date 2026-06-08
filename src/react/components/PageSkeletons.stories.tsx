@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react';
 import {
   PageLoadingSkeleton,
   CustomersPageSkeleton,
-  CalendarPageSkeleton,
   HomePageSkeleton,
   ProfilePageSkeleton,
   AdminTeamPageSkeleton,
@@ -41,11 +40,6 @@ export const PageLoading: Story = {
 export const Customers: Story = {
   name: 'CustomersPageSkeleton',
   render: () => <CustomersPageSkeleton forceVisible />,
-};
-
-export const Calendar: Story = {
-  name: 'CalendarPageSkeleton',
-  render: () => <CalendarPageSkeleton forceVisible />,
 };
 
 export const Home: Story = {

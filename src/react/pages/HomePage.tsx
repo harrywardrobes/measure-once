@@ -13,7 +13,6 @@ import {
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import { EmptyState } from '../components/EmptyState';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { broadcastConnect } from '../lib/qbInvoicesStore';
 import type { InvoiceSummary } from '../components/InvoiceDetailDrawer';
@@ -29,19 +28,6 @@ type PersonalTask = {
   title: string;
   done?: boolean;
   dueDate?: string;
-};
-
-type CalendarEvent = {
-  id?: string;
-  summary?: string;
-  start?: { dateTime?: string; date?: string };
-};
-
-type CalendarResp = {
-  events?: CalendarEvent[];
-  connected?: boolean;
-  error?: string;
-  code?: string;
 };
 
 type Contact = {
@@ -226,8 +212,6 @@ function TaskSection({
             />
           ) : null
         }
-        linkLabel="See all"
-        linkHref="/calendar"
       />
       {due.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
@@ -238,7 +222,7 @@ function TaskSection({
           {visible.map((t) => {
             const isOvr = !!t.dueDate && new Date(t.dueDate).getTime() < todayMs;
             return (
-              <HomeCard key={t.id} onClick={() => (location.href = '/calendar')}>
+              <HomeCard key={t.id}>
                 <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
                   {t.title}
                 </Typography>
@@ -255,130 +239,12 @@ function TaskSection({
             );
           })}
           {due.length > 4 ? (
-            <Button fullWidth size="small" onClick={() => (location.href = '/calendar')}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', py: 1 }}>
               +{due.length - 4} more tasks
-            </Button>
+            </Typography>
           ) : null}
         </>
       )}
-    </Box>
-  );
-}
-
-function CalendarSection({
-  loading,
-  error,
-  errorCode,
-  connected,
-  events,
-  onRetry,
-}: {
-  loading: boolean;
-  error: boolean;
-  errorCode: string | null;
-  connected: boolean;
-  events: CalendarEvent[];
-  onRetry: () => void;
-}) {
-  if (loading) {
-    return (
-      <Box sx={{ mb: 3 }}>
-        <SectionHeader title="Upcoming" />
-        <HomeCard disabled>
-          <Skeleton variant="text" width="40%" height={12} />
-          <Skeleton variant="text" width="60%" height={18} sx={{ mt: 0.5 }} />
-        </HomeCard>
-        <HomeCard disabled>
-          <Skeleton variant="text" width="36%" height={12} />
-          <Skeleton variant="text" width="50%" height={18} sx={{ mt: 0.5 }} />
-        </HomeCard>
-      </Box>
-    );
-  }
-  if (error) {
-    const authError = errorCode === 'GOOGLE_AUTH';
-    return (
-      <Box sx={{ mb: 3 }}>
-        <SectionHeader title="Upcoming" />
-        <Alert
-          severity="error"
-          icon={<WarningAmberIcon fontSize="inherit" />}
-          action={
-            authError ? (
-              <Button size="small" color="inherit" href="/profile">
-                Reconnect
-              </Button>
-            ) : (
-              <Button size="small" color="inherit" startIcon={<RefreshIcon />} onClick={onRetry}>
-                Retry
-              </Button>
-            )
-          }
-        >
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {authError ? 'Your Google account was disconnected' : "Calendar couldn't be loaded"}
-          </Typography>
-          <Typography variant="caption" sx={{ display: 'block' }}>
-            {authError
-              ? 'Reconnect Google to see your upcoming events.'
-              : 'Google Calendar returned an unexpected error. Check your connection and try again.'}
-          </Typography>
-        </Alert>
-      </Box>
-    );
-  }
-  if (!connected) {
-    return (
-      <Box sx={{ mb: 3 }}>
-        <SectionHeader title="Upcoming" />
-        <Alert
-          severity="info"
-          action={
-            <Button size="small" color="inherit" href="/profile">
-              Connect
-            </Button>
-          }
-        >
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            Connect Google Calendar to see upcoming events
-          </Typography>
-        </Alert>
-      </Box>
-    );
-  }
-  if (events.length === 0) {
-    return (
-      <Box sx={{ mb: 3 }}>
-        <SectionHeader title="Upcoming" linkLabel="Calendar" linkHref="/calendar" />
-        <EmptyState message="No upcoming events" />
-      </Box>
-    );
-  }
-  return (
-    <Box sx={{ mb: 3 }}>
-      <SectionHeader title="Upcoming" linkLabel="Calendar" linkHref="/calendar" />
-      {events.slice(0, 3).map((ev, i) => {
-        const start = ev.start?.dateTime || ev.start?.date;
-        const d = start ? new Date(start) : null;
-        const when = d
-          ? d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) +
-            (ev.start?.dateTime
-              ? ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-              : '')
-          : '';
-        return (
-          <HomeCard key={ev.id || i}>
-            {when ? (
-              <Typography variant="caption" color="text.secondary">
-                {when}
-              </Typography>
-            ) : null}
-            <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
-              {ev.summary || 'Event'}
-            </Typography>
-          </HomeCard>
-        );
-      })}
     </Box>
   );
 }
@@ -586,12 +452,6 @@ export function HomePage(): React.ReactElement {
   const [tasks, setTasks] = React.useState<PersonalTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(true);
 
-  const [calLoading, setCalLoading] = React.useState(true);
-  const [calError, setCalError] = React.useState(false);
-  const [calErrorCode, setCalErrorCode] = React.useState<string | null>(null);
-  const [calConnected, setCalConnected] = React.useState(false);
-  const [calEvents, setCalEvents] = React.useState<CalendarEvent[]>([]);
-
   const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, company: qbCompany, connected: qbConnected, statusKnown: qbStatusKnown, refresh: loadInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
 
@@ -638,31 +498,6 @@ export function HomePage(): React.ReactElement {
       .finally(() => setTasksLoading(false));
   }, []);
 
-  const loadCalendar = React.useCallback(() => {
-    setCalLoading(true);
-    setCalError(false);
-    setCalErrorCode(null);
-    jget<CalendarResp>('/api/calendar/upcoming')
-      .then((cal) => {
-        if (cal && cal.error) {
-          setCalError(true);
-          setCalErrorCode(cal.code || 'GOOGLE_ERROR');
-          setCalConnected(!!cal.connected);
-          setCalEvents([]);
-        } else {
-          setCalConnected(!!cal?.connected);
-          setCalEvents((cal?.events as CalendarEvent[]) || []);
-        }
-      })
-      .catch(() => {
-        setCalError(true);
-        setCalErrorCode('GOOGLE_ERROR');
-        setCalConnected(false);
-        setCalEvents([]);
-      })
-      .finally(() => setCalLoading(false));
-  }, []);
-
   const loadProjects = React.useCallback(() => {
     setProjectsLoading(true);
     setProjectsError(false);
@@ -690,9 +525,8 @@ export function HomePage(): React.ReactElement {
 
   React.useEffect(() => {
     loadTasks();
-    loadCalendar();
     loadProjects();
-  }, [loadTasks, loadCalendar, loadProjects]);
+  }, [loadTasks, loadProjects]);
 
   return (
     <Box
@@ -726,14 +560,6 @@ export function HomePage(): React.ReactElement {
         </Alert>
       )}
       <TaskSection tasks={tasks} loading={tasksLoading} todayMs={todayMs} />
-      <CalendarSection
-        loading={calLoading}
-        error={calError}
-        errorCode={calErrorCode}
-        connected={calConnected}
-        events={calEvents}
-        onRetry={loadCalendar}
-      />
       <InvoicesSection
         loading={qbLoading}
         error={qbError}

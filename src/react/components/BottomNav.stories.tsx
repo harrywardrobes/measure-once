@@ -104,10 +104,10 @@ export const ManagerProjectsSelected: Story = {
   },
 };
 
-export const ManagerCalendarSelected: Story = {
-  name: 'Manager — Calendar selected (overflow → More highlighted)',
+export const ManagerInvoicesSelected: Story = {
+  name: 'Manager — Invoices selected (overflow → More highlighted)',
   render: () => {
-    history.replaceState(null, '', '/calendar');
+    history.replaceState(null, '', '/invoices');
     (window as { __moHeaderUser?: { privilege_level: string } }).__moHeaderUser = { privilege_level: 'manager' };
     return <BottomNav />;
   },
@@ -115,7 +115,7 @@ export const ManagerCalendarSelected: Story = {
     docs: {
       description: {
         story:
-          'Manager view with the active page (Calendar) in the overflow set. The "More" button shows as selected.',
+          'Manager view with the active page (Invoices) in the overflow set. The "More" button shows as selected.',
       },
     },
   },

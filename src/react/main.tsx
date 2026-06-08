@@ -10,7 +10,6 @@ import { openCardActionModal } from './utils/cardActionModalRegistry';
 import {
   PageLoadingSkeleton,
   CustomersPageSkeleton,
-  CalendarPageSkeleton,
   HomePageSkeleton,
   ProfilePageSkeleton,
   AdminTeamPageSkeleton,
@@ -53,7 +52,6 @@ const SearchSettingsPage = React.lazy(() => import('./pages/SearchSettingsPage')
 const WorkshopSettingsPage = React.lazy(() => import('./pages/WorkshopSettingsPage').then(m => ({ default: m.WorkshopSettingsPage })));
 const CustomersPage      = React.lazy(() => import('./pages/CustomersPage').then(m => ({ default: m.CustomersPage })));
 const HomePage           = React.lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
-const CalendarPage       = React.lazy(() => import('./pages/CalendarPage').then(m => ({ default: m.CalendarPage })));
 const ProfilePage        = React.lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
 const SettingsPage       = React.lazy(() => import('./pages/admin/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const CardActionsPage    = React.lazy(() => import('./pages/admin/CardActionsPage').then(m => ({ default: m.CardActionsPage })));
@@ -173,7 +171,6 @@ const MOUNTS: Array<{
   { id: 'command-palette-mount', render: () => <CommandPalette />, fallback: <></> },    // chrome-global
   { id: 'trades-view',          render: () => <TradesPage /> },
   { id: 'home-view',            render: () => <HomePage />,     fallback: <HomePageSkeleton /> },
-  { id: 'tab-calendar',         render: () => <CalendarPage />, fallback: <CalendarPageSkeleton /> },
   { id: 'profile-view',         render: () => <ProfilePage />,  fallback: <ProfilePageSkeleton /> },
   { id: 'admin-grouped-tabs-mount', render: () => <AdminGroupedTabsBar /> },
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },

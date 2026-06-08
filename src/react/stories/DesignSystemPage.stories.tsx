@@ -4,7 +4,6 @@ import Typography from '@mui/material/Typography';
 import {
   PageLoadingSkeleton,
   CustomersPageSkeleton,
-  CalendarPageSkeleton,
   HomePageSkeleton,
   ProfilePageSkeleton,
   AdminTeamPageSkeleton,
@@ -26,7 +25,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'Gallery of all 14 page-level Suspense skeleton variants. ' +
+          'Gallery of all page-level Suspense skeleton variants. ' +
           'Each ComponentShowcase card renders a skeleton with `forceVisible` ' +
           'so it is immediately visible without the 200 ms delay.',
       },
@@ -90,10 +89,6 @@ export const AllSkeletons: Story = {
 
       <ComponentShowcase label="CustomersPageSkeleton">
         <CustomersPageSkeleton forceVisible />
-      </ComponentShowcase>
-
-      <ComponentShowcase label="CalendarPageSkeleton">
-        <CalendarPageSkeleton forceVisible />
       </ComponentShowcase>
 
       <ComponentShowcase label="HomePageSkeleton">

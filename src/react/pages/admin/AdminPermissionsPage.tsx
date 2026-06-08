@@ -166,7 +166,7 @@ export function AdminPermissionsPage() {
 
   const levels = caps.levels.length ? caps.levels : [...PRIVILEGE_LEVELS];
 
-  const FALLBACK_NAV_KEYS = ['home', 'calendar', 'trades'];
+  const FALLBACK_NAV_KEYS = ['home', 'customers', 'projects'];
   const defaultNavKeys = navConfigs['__default__']?.primary_keys || FALLBACK_NAV_KEYS;
 
   const editingTargetEntry = navEditTarget ? navConfigs[navEditTarget] : null;

@@ -540,25 +540,41 @@ async function ensureAuthTables() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS nav_role_configs (
       role_name    TEXT PRIMARY KEY,
-      primary_keys JSONB NOT NULL DEFAULT '["home","customers","calendar"]',
+      primary_keys JSONB NOT NULL DEFAULT '["home","customers","projects"]',
       updated_at   TIMESTAMP DEFAULT NOW()
     );
     ALTER TABLE nav_role_configs ADD COLUMN IF NOT EXISTS is_customized BOOLEAN NOT NULL DEFAULT FALSE;
     INSERT INTO nav_role_configs (role_name, primary_keys) VALUES
-      ('__default__',  '["home","customers","calendar"]'),
-      ('Fitter',       '["home","customers","calendar"]'),
+      ('__default__',  '["home","customers","projects"]'),
+      ('Fitter',       '["home","customers","projects"]'),
       ('Site Manager', '["home","sales","projects"]'),
-      ('Sales',        '["home","customers","calendar"]'),
+      ('Sales',        '["home","customers","projects"]'),
       ('Admin',        '["home","sales","projects"]'),
       ('Office',       '["home","sales","projects"]')
     ON CONFLICT (role_name) DO NOTHING;
+    -- One-time migration: the in-app Calendar page was retired (Google Calendar
+    -- is now the single source of truth). Replace any stored "calendar" nav key
+    -- with "projects" so no saved layout references the removed page. Element-wise
+    -- and order-preserving; runs unconditionally (even for is_customized=TRUE) so
+    -- admin-customised layouts are repaired too. A row that already contained
+    -- "projects" alongside "calendar" collapses to a duplicate and is rejected by
+    -- the client-side VALID_NAV_KEYS check, which then falls back to defaults.
+    UPDATE nav_role_configs
+      SET primary_keys = (
+        SELECT jsonb_agg(
+          CASE WHEN elem = '"calendar"'::jsonb THEN '"projects"'::jsonb ELSE elem END
+          ORDER BY ord
+        )
+        FROM jsonb_array_elements(primary_keys) WITH ORDINALITY AS arr(elem, ord)
+      )
+    WHERE primary_keys @> '"calendar"';
     -- One-time migration: fix any existing __default__ row that still contains
     -- the invalid "trades" key (seeded before task #1892 corrected it).
     -- Runs unconditionally so it repairs the row even if is_customized=true
     -- (an admin who saved a layout containing "trades" would otherwise still
     -- have their default rejected by the client-side VALID_NAV_KEYS check).
     UPDATE nav_role_configs
-      SET primary_keys = '["home","customers","calendar"]'
+      SET primary_keys = '["home","customers","projects"]'
     WHERE role_name = '__default__'
       AND primary_keys @> '"trades"';
     -- One-time migration: mark pre-existing customised rows as is_customized=TRUE.
@@ -572,7 +588,7 @@ async function ensureAuthTables() {
       SET is_customized = TRUE
     WHERE is_customized = FALSE
       AND role_name != '__default__'
-      AND primary_keys != '["home","customers","calendar"]'::jsonb;
+      AND primary_keys != '["home","customers","projects"]'::jsonb;
   `);
 
   // Seed admin emails from env var + create user rows for them so the very
@@ -2397,7 +2413,7 @@ async function setupAuth(app) {
         const r = await pool.query(
           "SELECT primary_keys, is_customized FROM nav_role_configs WHERE role_name = '__default__'"
         );
-        primary_keys = r.rows[0]?.primary_keys || ['home', 'customers', 'calendar'];
+        primary_keys = r.rows[0]?.primary_keys || ['home', 'customers', 'projects'];
         default_is_customized = r.rows[0]?.is_customized || false;
       }
       res.json({ primary_keys, role: jobRole, default_is_customized });
@@ -2416,7 +2432,7 @@ async function setupAuth(app) {
         'SELECT role_name, primary_keys, is_customized FROM nav_role_configs ORDER BY role_name ASC'
       );
       const defaultRow = r.rows.find(row => row.role_name === '__default__');
-      const defaultKeys = defaultRow?.primary_keys || ['home', 'customers', 'calendar'];
+      const defaultKeys = defaultRow?.primary_keys || ['home', 'customers', 'projects'];
       const rows = r.rows.map(row => {
         if (!row.is_customized && row.role_name !== '__default__') {
           return { ...row, primary_keys: defaultKeys };
@@ -2431,7 +2447,7 @@ async function setupAuth(app) {
 
   // Admin: upsert nav primary_keys for a specific role.
   const VALID_NAV_KEYS_SERVER = new Set([
-    'home', 'customers', 'sales', 'survey', 'projects', 'calendar', 'invoices', 'trades', 'ideas',
+    'home', 'customers', 'sales', 'survey', 'projects', 'invoices', 'trades', 'ideas',
   ]);
   app.patch('/api/admin/nav-role-config/:roleName', isAuthenticated, requireAdmin, async (req, res) => {
     const roleName = req.params.roleName;

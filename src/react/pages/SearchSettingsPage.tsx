@@ -21,7 +21,6 @@ const SEARCH_ACTIONS_META: SearchAction[] = [
   { id: 'go-sales',         label: 'Sales board',              category: 'Navigate', hint: 'Manage leads and open deals' },
   { id: 'go-survey',        label: 'Survey pipeline',          category: 'Navigate', hint: 'Track survey and design visit stages' },
   { id: 'go-projects',      label: 'Projects tracker',         category: 'Navigate', hint: 'Active workshop and delivery jobs' },
-  { id: 'go-calendar',      label: 'Calendar',                 category: 'Navigate', hint: 'Appointments and scheduled visits' },
   { id: 'go-invoices',      label: 'Invoices & payments',      category: 'Navigate', hint: 'View and send invoices via QuickBooks' },
   { id: 'go-admin',         label: 'Admin panel',              category: 'Navigate', hint: 'Manage users and team access' },
   { id: 'go-profile',       label: 'Your profile',             category: 'Account',  hint: 'Update your account details' },

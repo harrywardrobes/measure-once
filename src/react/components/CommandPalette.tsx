@@ -21,7 +21,6 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import GroupIcon from '@mui/icons-material/Group';
 import HomeIcon from '@mui/icons-material/Home';
 import ViewKanbanIcon from '@mui/icons-material/ViewKanban';
-import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import PersonIcon from '@mui/icons-material/Person';
@@ -54,7 +53,6 @@ const ALL_ACTIONS: Action[] = [
   { id: 'go-customers',    label: 'All customers',          hint: 'Browse your customer list',              category: 'Navigate', icon: <GroupIcon fontSize="small" />,           href: '/customers' },
   { id: 'go-home',         label: 'Home dashboard',         hint: 'Go to the main dashboard',               category: 'Navigate', icon: <HomeIcon fontSize="small" />,            href: '/' },
   { id: 'go-projects',     label: 'Projects tracker',       hint: 'Active workshop and delivery jobs',      category: 'Navigate', icon: <ViewKanbanIcon fontSize="small" />,      href: '/projects' },
-  { id: 'go-calendar',     label: 'Calendar',               hint: 'Appointments and scheduled visits',      category: 'Navigate', icon: <CalendarMonthIcon fontSize="small" />,   href: '/calendar' },
   { id: 'go-invoices',     label: 'Invoices & payments',    hint: 'View and send invoices via QuickBooks',  category: 'Navigate', icon: <ReceiptLongIcon fontSize="small" />,     href: '/invoices' },
   { id: 'go-admin',        label: 'Admin panel',            hint: 'Manage users and team access',           category: 'Navigate', icon: <AdminPanelSettingsIcon fontSize="small" />, href: '/admin' },
   { id: 'go-profile',      label: 'Your profile',           hint: 'Update your account details',            category: 'Account',  icon: <PersonIcon fontSize="small" />,          href: '/profile' },

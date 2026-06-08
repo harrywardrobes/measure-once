@@ -149,7 +149,6 @@ app.use(express.json({ limit: '25mb' }));
 // /trades, /admin, /projects, /invoices are protected — handled below after auth middleware is set up
 app.get('/',          (_req, res) => res.render('index',     { title: 'Home · Measure Once',      description: 'Your Measure Once project dashboard — track jobs, customers, and design visits in one place.' }));
 app.get('/customers', (_req, res) => res.render('customers', { title: 'Customers · Measure Once',  description: 'Browse and manage your customer accounts, contact details, and project history.' }));
-app.get('/calendar',  (_req, res) => res.render('calendar',  { title: 'Calendar · Measure Once',   description: 'View and schedule upcoming design visits, installations, and team appointments.' }));
 app.get('/profile',   (_req, res) => res.render('profile',   { title: 'Profile · Measure Once',    description: 'Update your personal details, preferences, and account settings.' }));
 
 // Dynamic customer detail page
@@ -2827,7 +2826,7 @@ app.get('/api/users/me/prefs', isAuthenticated, async (req, res) => {
   }
 });
 
-const VALID_NAV_KEYS = new Set(['home', 'customers', 'sales', 'survey', 'projects', 'calendar', 'invoices', 'trades', 'ideas']);
+const VALID_NAV_KEYS = new Set(['home', 'customers', 'sales', 'survey', 'projects', 'invoices', 'trades', 'ideas']);
 const NAV_BAR_SIZE = 3;
 
 app.patch('/api/users/me/prefs', isAuthenticated, prefsWriteLimiter, async (req, res) => {
@@ -3871,33 +3870,6 @@ app.post('/api/admin/trades/migrate', isAuthenticated, requireAdmin, async (req,
     res.json({ dry_run: dryRun, migrated, skipped, unmatched });
   } catch (e) {
     res.status(500).json({ error: e.message });
-  }
-});
-
-// ── Google Calendar: upcoming events (14-day window) ──────────────────────────
-app.get('/api/calendar/upcoming', async (req, res) => {
-  if (!req.session.googleTokens) return res.json({ events: [], connected: false });
-  try {
-    const auth = getGoogleClient(req.session.googleTokens);
-    const calendar = google.calendar({ version: 'v3', auth });
-    const now = new Date();
-    const twoWeeks = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-    const response = await calendar.events.list({
-      calendarId: 'primary',
-      timeMin: now.toISOString(),
-      timeMax: twoWeeks.toISOString(),
-      singleEvents: true,
-      orderBy: 'startTime',
-      maxResults: 50
-    });
-    res.json({ events: response.data.items || [], connected: true });
-  } catch (e) {
-    const code = classifyGoogleError(e);
-    if (code === 'GOOGLE_AUTH') {
-      delete req.session.googleTokens;
-      return res.json({ events: [], connected: false, error: e.message, code });
-    }
-    res.json({ events: [], connected: true, error: e.message, code });
   }
 });
 

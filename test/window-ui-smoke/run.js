@@ -47,7 +47,6 @@ const ROUTES = [
   '/sales',
   '/survey',
   '/projects',
-  '/calendar',
   '/invoices',
   '/trades',
   '/ideas',

@@ -258,7 +258,6 @@ async function main() {
     { label: 'Projects', path: '/projects' },
     { label: 'Survey',   path: '/survey' },
     { label: 'Invoices', path: '/invoices' },
-    { label: 'Calendar', path: '/calendar' },
   ];
 
   try {

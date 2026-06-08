@@ -22,10 +22,6 @@ args = "Start application"
 task = "workflow.run"
 args = "test:privileges"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "test:calendar-empty-state"
-
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -48,17 +44,6 @@ args = "PRIVTEST_ALLOW_SHARED_DB=1 npm run test:privileges"
 
 [workflows.workflow.metadata]
 isValidation = true
-
-[[workflows.workflow]]
-name = "test:calendar-empty-state"
-author = "agent"
-
-[workflows.workflow.metadata]
-isValidation = true
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "PRIVTEST_ALLOW_SHARED_DB=1 npm run test:calendar-empty-state"
 
 [[ports]]
 localPort = 5000

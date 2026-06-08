@@ -17,8 +17,6 @@ import { NavCustomiseDialog } from './NavCustomiseDialog';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import SquareFootIcon from '@mui/icons-material/SquareFoot';
 import SquareFootOutlinedIcon from '@mui/icons-material/SquareFootOutlined';
-import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
-import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
@@ -70,11 +68,10 @@ export const NAV: NavItem[] = [
   { key: 'home',      href: '/',          label: 'Home',      Icon: HomeIcon,             IconOutlined: HomeOutlinedIcon },
   { key: 'customers', href: '/customers', label: 'Customers', Icon: PeopleAltIcon,        IconOutlined: PeopleAltOutlinedIcon },
   { key: 'projects', href: '/projects', label: 'Projects', Icon: SquareFootIcon,    IconOutlined: SquareFootOutlinedIcon },
-  { key: 'calendar', href: '/calendar', label: 'Calendar', Icon: CalendarMonthIcon, IconOutlined: CalendarMonthOutlinedIcon },
   { key: 'invoices', href: '/invoices', label: 'Invoices', Icon: ReceiptLongIcon,   IconOutlined: ReceiptLongOutlinedIcon,   managerOnly: true },
 ];
 
-const DEFAULT_PRIMARY_KEYS = ['home', 'customers', 'calendar'];
+const DEFAULT_PRIMARY_KEYS = ['home', 'customers', 'projects'];
 const BAR_SIZE = 3;
 
 function accentFor(key: string, theme: Theme): string {
