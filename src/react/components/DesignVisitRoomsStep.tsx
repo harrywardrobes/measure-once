@@ -179,6 +179,75 @@ export function DesignVisitRoomsStep({
     setFileKeyById(prev => { const n = { ...prev }; delete n[clientId]; return n; });
   }
 
+  // Tracks re-sign attempts per opaque storage key so a genuinely broken image
+  // (not just an expired URL) cannot loop the sign endpoint forever. Attempts
+  // reset after a long gap so a real TTL expiry (e.g. an hours-long editing
+  // session) is always re-signable again.
+  const resignStateRef = useRef<Map<string, { attempts: number; ts: number }>>(new Map());
+
+  /**
+   * Lazily refresh an expired thumbnail. The signed `viewUrl` for an
+   * online-uploaded photo is short-lived (~1h); if the wizard stays open past
+   * that TTL the browser fails to load the thumbnail. On that failure we
+   * re-derive a fresh signed URL for the opaque key and swap it in, so previews
+   * keep working through long editing sessions.
+   *
+   * Offline-captured photos keep a `data:` URI in `storageKey` and render
+   * directly — they are never re-signed (a failed data URI is genuinely broken).
+   */
+  function handleImageError(clientId: string, imgIdx: number) {
+    setRooms(prev => {
+      const room = prev.find(r => r.clientId === clientId);
+      const img = room?.data.images[imgIdx];
+      const key = img?.storageKey || '';
+      if (!key.startsWith('obj:')) return prev; // data URI / legacy URL — can't re-sign
+
+      const now = Date.now();
+      const state = resignStateRef.current.get(key) || { attempts: 0, ts: 0 };
+      // Reset the attempt counter after 5 min of quiet so a later genuine
+      // expiry can be re-signed again.
+      if (now - state.ts > 5 * 60 * 1000) state.attempts = 0;
+      if (state.attempts >= 3) return prev; // give up — key is genuinely broken
+      state.attempts += 1;
+      state.ts = now;
+      resignStateRef.current.set(key, state);
+
+      void (async () => {
+        try {
+          const r = await fetch('/api/design-visits/sign-image-urls', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storageKeys: [key] }),
+          });
+          if (!r.ok) return;
+          const data = await r.json();
+          const fresh = data?.urls?.[key];
+          if (typeof fresh !== 'string' || !fresh) return;
+          setRooms(curr =>
+            curr.map(rm =>
+              rm.clientId !== clientId
+                ? rm
+                : {
+                    ...rm,
+                    data: {
+                      ...rm.data,
+                      images: rm.data.images.map((im, i) =>
+                        i === imgIdx && im.storageKey === key ? { ...im, viewUrl: fresh } : im
+                      ),
+                    },
+                  }
+            )
+          );
+        } catch {
+          // Offline or server error — leave the broken thumbnail; the underlying
+          // image data still re-submits correctly on save.
+        }
+      })();
+
+      return prev;
+    });
+  }
+
   function removeImage(clientId: string, imgIdx: number) {
     let removedKey: string | null = null;
     setRooms(prev =>
@@ -593,6 +662,7 @@ export function DesignVisitRoomsStep({
                       component="img"
                       src={img.viewUrl || img.storageKey || ''}
                       alt="Room photo"
+                      onError={() => handleImageError(clientId, imgIdx)}
                       sx={{
                         width: 64,
                         height: 64,
