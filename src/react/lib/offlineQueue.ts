@@ -513,7 +513,7 @@ function toSnakeKey(key: string): string {
 }
 
 /** Recursively rewrite an object's keys to snake_case (read shape). */
-function deepSnakeize(value: unknown): unknown {
+export function deepSnakeize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(deepSnakeize);
   if (value && typeof value === 'object') {
     const out: Record<string, unknown> = {};
@@ -544,7 +544,7 @@ function scalarEqual(a: unknown, b: unknown): boolean {
  * Used to tell a "restore server copy" field apart from a "keep mine" field so
  * the former can adopt the server snapshot's exact read shape.
  */
-function isServerEquivalent(resolved: unknown, server: unknown): boolean {
+export function isServerEquivalent(resolved: unknown, server: unknown): boolean {
   if (Array.isArray(resolved)) {
     if (!Array.isArray(server) || server.length !== resolved.length) return false;
     return resolved.every((el, i) => isServerEquivalent(el, server[i]));
@@ -571,7 +571,7 @@ function isServerEquivalent(resolved: unknown, server: unknown): boolean {
  * object (including server-only fields like `door_style_name`), while
  * user-kept rooms are still deep-snake-cased from the write shape.
  */
-function reconcileForCache(resolved: unknown, server: unknown): unknown {
+export function reconcileForCache(resolved: unknown, server: unknown): unknown {
   if (Array.isArray(resolved)) {
     const sArr = Array.isArray(server) ? server : [];
     return resolved.map((el, i) =>
@@ -597,7 +597,7 @@ function reconcileForCache(resolved: unknown, server: unknown): unknown {
  * `door_style_name`) even when the overall array is not identical to the
  * server's. Returns `null` when nothing maps.
  */
-function buildRestoredCachePatch(
+export function buildRestoredCachePatch(
   conflict: ConflictEntry,
   resolvedBody: Record<string, unknown>,
 ): Record<string, unknown> | null {
