@@ -1174,7 +1174,6 @@ async function main() {
       config: {
         defaultDurationMin: 60,
         defaultTitle:       'PrivTest visit title',
-        addToGoogleCalendar: false,
       },
       bindings: [{ stage_key: 'sales', status_key: LBL_KEY_DV }],
     });
@@ -1334,7 +1333,6 @@ async function main() {
       config: {
         visitType:          'survey',
         defaultDurationMin: 60,
-        addToGoogleCalendar: false,
       },
       bindings: [{ stage_key: 'sales', status_key: LBL_KEY_SV }],
     });

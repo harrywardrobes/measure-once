@@ -70,7 +70,7 @@ const INITIAL_TWO_HANDLERS = [
     id: 2,
     name: 'Schedule survey visit',
     type: 'schedule_visit',
-    config: { visitType: 'survey', addToGoogleCalendar: true },
+    config: { visitType: 'survey' },
     bindings: [{ stage_key: 'sales', status_key: 'quote_sent' }],
   },
 ];
@@ -94,7 +94,7 @@ const INITIAL_THREE_HANDLERS_SUB = [
     id: 5,
     name: 'Schedule follow-up visit',
     type: 'schedule_visit',
-    config: { visitType: 'remedial', addToGoogleCalendar: false },
+    config: { visitType: 'remedial' },
     bindings: [{ substatus_id: 10 }],
   },
 ];

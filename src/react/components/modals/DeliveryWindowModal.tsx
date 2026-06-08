@@ -71,7 +71,7 @@ export function DeliveryWindowModal(props: Props) {
   const defaultTitle = isEdit
     ? (visit?.title || 'Delivery')
     : ((cfg.defaultTitle as string) || (contactName ? `Delivery — ${contactName}` : 'Delivery'));
-  const addToGoogleDefault = isEdit ? false : isCreateDirect ? false : (cfg.addToGoogleCalendar as boolean) !== false;
+  const addToGoogleDefault = !isEdit && !isCreateDirect;
 
   const initialStart = isEdit && visit
     ? dayjs(visit.startAt)

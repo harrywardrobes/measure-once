@@ -77,7 +77,7 @@ export function InstallationSlotModal(props: Props) {
     ? (visit?.title || 'Installation')
     : ((cfg.defaultTitle as string) || (contactName ? `Installation — ${contactName}` : 'Installation'));
 
-  const addToGoogleDefault = isEdit ? false : isCreateDirect ? false : (cfg.addToGoogleCalendar as boolean) !== false;
+  const addToGoogleDefault = !isEdit && !isCreateDirect;
 
   const initialStart = isEdit && visit
     ? dayjs(visit.startAt)

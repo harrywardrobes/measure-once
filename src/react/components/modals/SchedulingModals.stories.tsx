@@ -33,14 +33,14 @@ const emptyCtx: CardActionContext = {
 const deliveryHandler: CardActionHandlerData = {
   id: 1,
   type: 'schedule_delivery_window',
-  config: { addToGoogleCalendar: true },
+  config: {},
   bindings: [],
 };
 
 const installationHandler: CardActionHandlerData = {
   id: 2,
   type: 'schedule_installation_slot',
-  config: { defaultDurationMin: 240, addToGoogleCalendar: true },
+  config: { defaultDurationMin: 240 },
   bindings: [],
 };
 

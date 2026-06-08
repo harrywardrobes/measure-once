@@ -5592,8 +5592,8 @@ app.post('/api/admin/lead-substatuses/sync-hubspot', isAuthenticated, requireAdm
 // Admins can attach an interactive "handler" to a card action label. Built-in
 // handler types:
 //   • add_design_visit_to_calendar — click opens a date/time picker; on submit
-//     a `visits` row (type=design) + (optionally) a Google Calendar event are
-//     created via existing endpoints (POST /api/visits, POST /api/events).
+//     a `visits` row (type=design) + a Google Calendar event are created via
+//     existing endpoints (POST /api/visits, POST /api/events).
 //   • schedule_visit — generic version of the above; visit type (survey,
 //     installation, remedial, workshop, etc.) is set via config.visitType.
 //   • summarise_phone_call — click opens a textarea modal; on submit a HubSpot
@@ -5621,9 +5621,6 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
       if (v.length > 120) return { error: 'defaultTitle must be 120 characters or fewer.' };
       out.defaultTitle = v;
     }
-    if (cfg.addToGoogleCalendar !== undefined) {
-      out.addToGoogleCalendar = !!cfg.addToGoogleCalendar;
-    }
     return { value: out };
   },
   schedule_visit(cfg) {
@@ -5647,9 +5644,6 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
       const v = String(cfg.defaultTitle || '');
       if (v.length > 120) return { error: 'defaultTitle must be 120 characters or fewer.' };
       out.defaultTitle = v;
-    }
-    if (cfg.addToGoogleCalendar !== undefined) {
-      out.addToGoogleCalendar = !!cfg.addToGoogleCalendar;
     }
     return { value: out };
   },
@@ -5694,9 +5688,6 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
       if (v.length > 60) return { error: 'submittedLeadStatus must be 60 characters or fewer.' };
       out.submittedLeadStatus = v;
     }
-    if (cfg.addToGoogleCalendar !== undefined) {
-      out.addToGoogleCalendar = !!cfg.addToGoogleCalendar;
-    }
     if (cfg.termsAndConditions !== undefined) {
       const v = String(cfg.termsAndConditions || '');
       if (v.length > 4000) return { error: 'termsAndConditions must be 4000 characters or fewer.' };
@@ -5710,9 +5701,6 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
       const v = String(cfg.defaultTitle || '');
       if (v.length > 120) return { error: 'defaultTitle must be 120 characters or fewer.' };
       out.defaultTitle = v;
-    }
-    if (cfg.addToGoogleCalendar !== undefined) {
-      out.addToGoogleCalendar = !!cfg.addToGoogleCalendar;
     }
     return { value: out };
   },
@@ -5729,9 +5717,6 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
       const v = String(cfg.defaultTitle || '');
       if (v.length > 120) return { error: 'defaultTitle must be 120 characters or fewer.' };
       out.defaultTitle = v;
-    }
-    if (cfg.addToGoogleCalendar !== undefined) {
-      out.addToGoogleCalendar = !!cfg.addToGoogleCalendar;
     }
     return { value: out };
   },

@@ -349,7 +349,7 @@ async function main() {
   const isHandlerRes = await adminClient.post('/api/admin/card-action-handlers', {
     name: HANDLER_NAME_IS,
     type: 'schedule_installation_slot',
-    config: { defaultDurationMin: 240, addToGoogleCalendar: false },
+    config: { defaultDurationMin: 240 },
     bindings: [],
   });
   const isHandlerId = isHandlerRes.json?.id;
@@ -363,7 +363,7 @@ async function main() {
   const dwHandlerRes = await adminClient.post('/api/admin/card-action-handlers', {
     name: HANDLER_NAME_DW,
     type: 'schedule_delivery_window',
-    config: { addToGoogleCalendar: false },
+    config: {},
     bindings: [],
   });
   const dwHandlerId = dwHandlerRes.json?.id;
@@ -377,7 +377,7 @@ async function main() {
   const vcmHandlerRes = await adminClient.post('/api/admin/card-action-handlers', {
     name: HANDLER_NAME_VCM,
     type: 'schedule_visit',
-    config: { visitType: 'survey', defaultDurationMin: 60, addToGoogleCalendar: false },
+    config: { visitType: 'survey', defaultDurationMin: 60 },
     bindings: [],
   });
   const vcmHandlerId = vcmHandlerRes.json?.id;
@@ -431,7 +431,7 @@ async function main() {
     const isHandlerObj = {
       id:       isHandlerId,
       type:     'schedule_installation_slot',
-      config:   { defaultDurationMin: 240, addToGoogleCalendar: false },
+      config:   { defaultDurationMin: 240 },
       bindings: [],
     };
     const isCtxObj = {
@@ -570,7 +570,7 @@ async function main() {
     const dwHandlerObj = {
       id:       dwHandlerId,
       type:     'schedule_delivery_window',
-      config:   { addToGoogleCalendar: false },
+      config:   {},
       bindings: [],
     };
     const dwCtxObj = {
@@ -703,7 +703,7 @@ async function main() {
     const vcmHandlerObj = {
       id:       vcmHandlerId,
       type:     'schedule_visit',
-      config:   { visitType: 'survey', defaultDurationMin: 60, addToGoogleCalendar: false },
+      config:   { visitType: 'survey', defaultDurationMin: 60 },
       bindings: [],
     };
     const vcmCtxObj = {
@@ -968,7 +968,7 @@ async function main() {
     const vcmWarnHandlerObj = {
       id:       vcmHandlerId,
       type:     'schedule_visit',
-      config:   { visitType: 'survey', defaultDurationMin: 60, addToGoogleCalendar: false },
+      config:   { visitType: 'survey', defaultDurationMin: 60 },
       bindings: [],
     };
     const vcmWarnCtxObj = {

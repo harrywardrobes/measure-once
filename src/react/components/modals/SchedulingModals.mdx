@@ -16,8 +16,8 @@ appointments directly from a workflow card:
 
 Both modals receive a `handler` (the card-action handler configuration) and
 a `ctx` (the contact context — id, name, email). On confirm they dispatch the
-handler's save action, optionally creating a Google Calendar event when
-`addToGoogleCalendar` is enabled in the handler config.
+handler's save action, creating a Google Calendar event (the shared Google
+Calendar is the single source of truth for scheduling).
 
 ## When to use
 
@@ -41,10 +41,6 @@ handler's save action, optionally creating a Google Calendar event when
 
 **Don't:** open either modal without a valid `handler.id` — the save action
 uses it to record which handler triggered the appointment.
-
-**Do:** guard the Google Calendar option (`addToGoogleCalendar`) with a
-server-side check that the acting user has a connected Google account before
-enabling it in the handler config.
 
 **Don't:** use `DeliveryWindowModal` where only a single point-in-time is
 needed — its range picker always collects both start and end times. Use
