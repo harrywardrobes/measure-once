@@ -8,3 +8,4 @@
 - [Log snapshot staleness](log-snapshot-staleness.md) — /tmp/logs/*.log only update on refresh_all_logs, not restart_workflow; call refresh after a restart to see the new boot.
 - [Offline visit per-visit state](offline-visit-entries.md) — design-visit & arrange-visit both use area 'visit' (filter by URL); failed entries don't auto-retry; refetch on outbox drain.
 - [Offline conflict restore](offline-conflict-restore.md) — resolveConflict evicts cache online / patches it offline; per-field restore needs write body keys to match the GET read shape (design visits don't).
+- [DV write/read shape mismatch](dv-write-read-shape.md) — design-visit edits are camelCase but the server reads snake_case; conflict diff/restore/cache-patch must bridge the two.

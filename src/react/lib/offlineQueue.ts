@@ -507,13 +507,70 @@ function unwrapServerData(data: unknown): Record<string, unknown> {
   return obj;
 }
 
+/** Convert a write-shape (camelCase) key to its read-shape (snake_case) form. */
+function toSnakeKey(key: string): string {
+  return key.replace(/([A-Z])/g, (m) => `_${m.toLowerCase()}`);
+}
+
+/** Recursively rewrite an object's keys to snake_case (read shape). */
+function deepSnakeize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(deepSnakeize);
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[toSnakeKey(k)] = deepSnakeize(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+/** Read a server value by a write-shape key, falling back to its snake_case form. */
+function lookupRead(server: Record<string, unknown>, key: string): unknown {
+  if (key in server) return server[key];
+  const snake = toSnakeKey(key);
+  return snake in server ? server[snake] : undefined;
+}
+
+function scalarEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a == null && b == null) return true;
+  return false;
+}
+
+/**
+ * True when every leaf in the (write-shape) resolved value matches the
+ * corresponding (read-shape) server value, ignoring server-only metadata fields.
+ * Used to tell a "restore server copy" field apart from a "keep mine" field so
+ * the former can adopt the server snapshot's exact read shape.
+ */
+function isServerEquivalent(resolved: unknown, server: unknown): boolean {
+  if (Array.isArray(resolved)) {
+    if (!Array.isArray(server) || server.length !== resolved.length) return false;
+    return resolved.every((el, i) => isServerEquivalent(el, server[i]));
+  }
+  if (resolved && typeof resolved === 'object') {
+    if (!server || typeof server !== 'object' || Array.isArray(server)) return false;
+    const sObj = server as Record<string, unknown>;
+    return Object.keys(resolved as Record<string, unknown>).every((k) =>
+      isServerEquivalent((resolved as Record<string, unknown>)[k], lookupRead(sObj, k)),
+    );
+  }
+  return scalarEqual(resolved, server);
+}
+
 /**
  * Build the read-cache patch that re-applies a resolved conflict's restored
  * values, so an offline read (which can't re-fetch) still shows the restored
- * state. Only keys that exist in the server snapshot (the canonical read shape)
- * are applied — that keeps the patch in the cached record's shape and skips
- * write-only payload keys (e.g. a design visit's camelCased `handlerConfig`)
- * that don't map onto the cached record. Returns `null` when nothing maps.
+ * state. The resolved body is in the *write* shape (camelCase for design
+ * visits); the cached record is the server *read* shape (snake_case), so each
+ * key is mapped to its read-shape counterpart. Only keys that exist in the
+ * server snapshot are applied — that keeps the patch in the cached record's
+ * shape and skips write-only payload keys (e.g. a design visit's `handlerConfig`)
+ * that don't map onto the cached record. For a field whose resolved value equals
+ * the server snapshot (a true "restore"), the exact read-shape server value is
+ * used; a "keep mine" value is rewritten to snake_case. Returns `null` when
+ * nothing maps.
  */
 function buildRestoredCachePatch(
   conflict: ConflictEntry,
@@ -522,7 +579,13 @@ function buildRestoredCachePatch(
   const server = unwrapServerData(conflict.serverData);
   const patch: Record<string, unknown> = {};
   for (const key of Object.keys(resolvedBody)) {
-    if (key in server) patch[key] = resolvedBody[key];
+    const readKey = key in server ? key : (toSnakeKey(key) in server ? toSnakeKey(key) : null);
+    if (!readKey) continue;
+    const resolvedValue = resolvedBody[key];
+    const serverValue = server[readKey];
+    patch[readKey] = isServerEquivalent(resolvedValue, serverValue)
+      ? serverValue
+      : deepSnakeize(resolvedValue);
   }
   return Object.keys(patch).length > 0 ? patch : null;
 }

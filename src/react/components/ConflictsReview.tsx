@@ -77,6 +77,12 @@ const NOISE_KEYS = new Set([
   'createdBy',
   'updated_by',
   'updatedBy',
+  // Design-visit submit plumbing: re-sent on every write, not a stored record
+  // field. `handlerConfig` (lead status / T&C text) and `termsAccepted` have no
+  // readable server counterpart, so diffing/restoring them is meaningless — they
+  // are preserved verbatim from the queued edit instead.
+  'handlerConfig',
+  'termsAccepted',
 ]);
 
 function unwrapRecord(data: unknown): Record<string, unknown> {
@@ -121,6 +127,59 @@ function valuesEqual(a: unknown, b: unknown): boolean {
   }
 }
 
+// ── Write-shape ↔ read-shape key normalisation ──────────────────────────────────
+// A queued edit's body uses the *write* field names the endpoint accepts, while
+// the server snapshot uses the *read* field names it returns. For most areas
+// these match, but design-visit edits are camelCase (`visitDate`, `durationMin`,
+// `rooms[].roomName`) while the server reads back snake_case (`visit_date`,
+// `duration_min`, `rooms[].room_name`). Matching purely by key name then fails:
+// every changed field looks overwritten and a restore writes `null`. We bridge
+// the two by looking up each write-shape key against its snake_case counterpart.
+
+function toSnakeKey(key: string): string {
+  return key.replace(/([A-Z])/g, (m) => `_${m.toLowerCase()}`);
+}
+
+/** Read a value from the server snapshot by its write-shape key, falling back to
+ *  the snake_case counterpart (e.g. `visitDate` → `visit_date`). */
+function lookupServerValue(server: Record<string, unknown>, key: string): unknown {
+  if (key in server) return server[key];
+  const snake = toSnakeKey(key);
+  if (snake in server) return server[snake];
+  return undefined;
+}
+
+/**
+ * Project a server value onto the *shape* of the attempted (write-shape) value
+ * so the two can be compared and restored consistently.
+ *
+ * - Objects: rebuild using the attempted object's keys, resolving each child
+ *   against the server's matching (camel or snake) field. This drops server-only
+ *   metadata (`id`, `door_style_name`, …) that the write body never carries, so
+ *   an otherwise-identical nested record doesn't read as "changed".
+ * - Arrays (e.g. a design visit's rooms): rebuild from the *server* array length
+ *   — so a restore brings back exactly the server's rooms — shaping each element
+ *   to the attempted element template.
+ * - Primitives: return the resolved server scalar.
+ */
+function projectServerValue(attempted: unknown, server: unknown): unknown {
+  if (Array.isArray(attempted)) {
+    if (!Array.isArray(server)) return server;
+    const template = attempted.length ? attempted[0] : (server.length ? server[0] : {});
+    return server.map((el) => projectServerValue(template, el));
+  }
+  if (attempted && typeof attempted === 'object') {
+    if (!server || typeof server !== 'object' || Array.isArray(server)) return server;
+    const sObj = server as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(attempted as Record<string, unknown>)) {
+      out[k] = projectServerValue((attempted as Record<string, unknown>)[k], lookupServerValue(sObj, k));
+    }
+    return out;
+  }
+  return server;
+}
+
 export interface FieldDiffRow {
   key: string;
   label: string;
@@ -145,12 +204,16 @@ export function buildFieldDiff(attemptedBody: unknown, serverData: unknown): Fie
   const rows: FieldDiffRow[] = [];
   for (const key of Object.keys(attempted)) {
     if (NOISE_KEYS.has(key) || typeof attempted[key] === 'function') continue;
+    // Resolve the server value via write→read key normalisation (handles the
+    // design-visit camelCase↔snake_case gap) and project it onto the attempted
+    // shape so the comparison and the displayed "Server copy" line up.
+    const serverValue = projectServerValue(attempted[key], lookupServerValue(server, key));
     rows.push({
       key,
       label: humanizeKey(key),
       attempted: attempted[key],
-      server: server[key],
-      changed: !valuesEqual(attempted[key], server[key]),
+      server: serverValue,
+      changed: !valuesEqual(attempted[key], serverValue),
     });
   }
   return rows;
@@ -177,10 +240,14 @@ export function buildRestoreBody(
   if (!attemptedBody || typeof attemptedBody !== 'object' || Array.isArray(attemptedBody)) {
     return null;
   }
+  const attempted = unwrapRecord(attemptedBody);
   const server = unwrapRecord(serverData);
   const body: Record<string, unknown> = { ...(attemptedBody as Record<string, unknown>) };
   for (const key of restoreKeys) {
-    const value = server[key];
+    // Resolve and reshape the server value to the write shape (camelCase for
+    // design visits) so the restored body is one the endpoint accepts. Missing
+    // server values become `null` to explicitly clear the field.
+    const value = projectServerValue(attempted[key], lookupServerValue(server, key));
     body[key] = value === undefined ? null : value;
   }
   return body;
