@@ -813,6 +813,9 @@ export function CustomerDetailPage() {
             const g  = window as unknown as Record<string, unknown>;
             const st = g.state as Record<string, unknown> | undefined;
             if (st) st.selectedContact = updated;
+            // Silent background re-fetch so the header reflects HubSpot's
+            // normalised values (e.g. phone formatting) without a page reload.
+            void fetchContact().then((c) => { if (c) setContact(c); }).catch(() => { /* best-effort */ });
           }}
         />
       )}
