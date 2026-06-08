@@ -917,6 +917,7 @@ app.get('/auth/google/callback', isAuthenticated, async (req, res) => {
   try {
     const { tokens } = await oauth2Client.getToken(req.query.code);
     req.session.googleTokens = tokens;
+    req.session.googleTokensBoundTo = req.user.sub;
     res.redirect('/?connected=true');
   } catch (e) {
     res.redirect('/?error=google_auth_failed');
@@ -925,16 +926,18 @@ app.get('/auth/google/callback', isAuthenticated, async (req, res) => {
 
 app.post('/auth/logout-google', isAuthenticated, (req, res) => {
   delete req.session.googleTokens;
+  delete req.session.googleTokensBoundTo;
   res.json({ success: true });
 });
 
 // ── Google: Connection status (live token check) ───────────────────────────────
 app.get('/api/google/status', isAuthenticated, async (req, res) => {
-  if (!req.session.googleTokens) {
+  const googleTokens = getVerifiedGoogleTokens(req);
+  if (!googleTokens) {
     return res.json({ connected: false, code: 'NO_TOKEN' });
   }
   try {
-    const auth = getGoogleClient(req.session.googleTokens);
+    const auth = getGoogleClient(googleTokens);
     const { token } = await auth.getAccessToken();
     if (!token) return res.json({ connected: false, code: 'NO_TOKEN' });
     req.session.googleTokens = auth.credentials;
@@ -943,6 +946,7 @@ app.get('/api/google/status', isAuthenticated, async (req, res) => {
     const msg = (e.message || '').toLowerCase();
     if (msg.includes('invalid_grant') || msg.includes('token has been expired') || msg.includes('token has been revoked')) {
       delete req.session.googleTokens;
+      delete req.session.googleTokensBoundTo;
       return res.json({ connected: false, code: 'TOKEN_EXPIRED' });
     }
     if (e.response?.status === 401 || msg.includes('invalid_client')) {
@@ -2329,10 +2333,28 @@ function classifyGoogleError(e) {
   return 'GOOGLE_ERROR';
 }
 
-app.get('/api/emails', async (req, res) => {
-  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+// Returns the session's Google tokens only when they are bound to the currently
+// authenticated Measure Once user.  If tokens exist but belong to a different
+// user (cross-account session reuse), they are cleared and null is returned so
+// stale credentials are never silently forwarded.
+function getVerifiedGoogleTokens(req) {
+  const tokens = req.session.googleTokens;
+  if (!tokens) return null;
+  const boundTo = req.session.googleTokensBoundTo;
+  const currentUser = req.user?.sub;
+  if (!boundTo || !currentUser || boundTo !== currentUser) {
+    delete req.session.googleTokens;
+    delete req.session.googleTokensBoundTo;
+    return null;
+  }
+  return tokens;
+}
+
+app.get('/api/emails', isAuthenticated, async (req, res) => {
+  const googleTokens = getVerifiedGoogleTokens(req);
+  if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   try {
-    const auth = getGoogleClient(req.session.googleTokens);
+    const auth = getGoogleClient(googleTokens);
     const gmail = google.gmail({ version: 'v1', auth });
     const { email } = req.query;
     const q = email ? `from:${email} OR to:${email}` : '';
@@ -2366,9 +2388,10 @@ app.get('/api/emails', async (req, res) => {
 });
 
 app.post('/api/emails/send', isAuthenticated, requirePrivilege('member'), gmailSendLimiter, async (req, res) => {
-  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+  const googleTokens = getVerifiedGoogleTokens(req);
+  if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   try {
-    const auth = getGoogleClient(req.session.googleTokens);
+    const auth = getGoogleClient(googleTokens);
     const gmail = google.gmail({ version: 'v1', auth });
     const { to, subject, body } = req.body;
 
@@ -2385,13 +2408,14 @@ app.post('/api/emails/send', isAuthenticated, requirePrivilege('member'), gmailS
 });
 
 // ── Google Calendar ───────────────────────────────────────────────────────────
-app.get('/api/events', async (req, res) => {
-  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+app.get('/api/events', isAuthenticated, async (req, res) => {
+  const googleTokens = getVerifiedGoogleTokens(req);
+  if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   let calendarId;
   try { calendarId = getSharedCalendarId(); }
   catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
-    const auth = getGoogleClient(req.session.googleTokens);
+    const auth = getGoogleClient(googleTokens);
     const calendar = google.calendar({ version: 'v3', auth });
     const events = await calendar.events.list({
       calendarId,
@@ -2409,12 +2433,13 @@ app.get('/api/events', async (req, res) => {
 });
 
 app.post('/api/events', isAuthenticated, requirePrivilege('member'), calendarEventLimiter, async (req, res) => {
-  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+  const googleTokens = getVerifiedGoogleTokens(req);
+  if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   let calendarId;
   try { calendarId = getSharedCalendarId(); }
   catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
-    const auth = getGoogleClient(req.session.googleTokens);
+    const auth = getGoogleClient(googleTokens);
     const calendar = google.calendar({ version: 'v3', auth });
     const event = await calendar.events.insert({ calendarId, requestBody: req.body });
     res.json(event.data);
@@ -2425,14 +2450,15 @@ app.post('/api/events', isAuthenticated, requirePrivilege('member'), calendarEve
 });
 
 app.patch('/api/events/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
-  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+  const googleTokens = getVerifiedGoogleTokens(req);
+  if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   const eventId = String(req.params.id || '').trim();
   if (!eventId) return res.status(400).json({ error: 'Invalid event id' });
   let calendarId;
   try { calendarId = getSharedCalendarId(); }
   catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
-    const auth = getGoogleClient(req.session.googleTokens);
+    const auth = getGoogleClient(googleTokens);
     const calendar = google.calendar({ version: 'v3', auth });
     const event = await calendar.events.patch({ calendarId, eventId, requestBody: req.body });
     res.json(event.data);
@@ -2443,14 +2469,15 @@ app.patch('/api/events/:id', isAuthenticated, requirePrivilege('member'), async 
 });
 
 app.delete('/api/events/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
-  if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+  const googleTokens = getVerifiedGoogleTokens(req);
+  if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   const eventId = String(req.params.id || '').trim();
   if (!eventId) return res.status(400).json({ error: 'Invalid event id' });
   let calendarId;
   try { calendarId = getSharedCalendarId(); }
   catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
-    const auth = getGoogleClient(req.session.googleTokens);
+    const auth = getGoogleClient(googleTokens);
     const calendar = google.calendar({ version: 'v3', auth });
     await calendar.events.delete({ calendarId, eventId });
     res.json({ success: true });

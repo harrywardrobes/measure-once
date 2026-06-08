@@ -732,7 +732,10 @@ function buildSessionUser(dbUser) {
 
 function loginSessionUser(req, sessionUser) {
   return new Promise((resolve, reject) => {
-    req.login(sessionUser, (err) => err ? reject(err) : resolve(sessionUser));
+    req.session.regenerate((regenerateErr) => {
+      if (regenerateErr) return reject(regenerateErr);
+      req.login(sessionUser, (err) => err ? reject(err) : resolve(sessionUser));
+    });
   });
 }
 
