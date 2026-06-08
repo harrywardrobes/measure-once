@@ -30,6 +30,7 @@ import {
   conflictGetAll,
   conflictDelete,
   evictCachedRecord,
+  updateCachedRecord,
   getMeta,
   setMeta,
 } from './offlineDb';
@@ -490,6 +491,42 @@ function cacheTargetForConflict(conflict: ConflictEntry): { store: CacheStore; i
   return null;
 }
 
+/** Response-envelope keys a server snapshot may be wrapped in. */
+const RESPONSE_ENVELOPE_KEYS = ['visit', 'designVisit', 'submission', 'record', 'data'];
+
+/** Unwrap a server snapshot from its response envelope, if any. */
+function unwrapServerData(data: unknown): Record<string, unknown> {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
+  const obj = data as Record<string, unknown>;
+  for (const key of RESPONSE_ENVELOPE_KEYS) {
+    const nested = obj[key];
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      return nested as Record<string, unknown>;
+    }
+  }
+  return obj;
+}
+
+/**
+ * Build the read-cache patch that re-applies a resolved conflict's restored
+ * values, so an offline read (which can't re-fetch) still shows the restored
+ * state. Only keys that exist in the server snapshot (the canonical read shape)
+ * are applied — that keeps the patch in the cached record's shape and skips
+ * write-only payload keys (e.g. a design visit's camelCased `handlerConfig`)
+ * that don't map onto the cached record. Returns `null` when nothing maps.
+ */
+function buildRestoredCachePatch(
+  conflict: ConflictEntry,
+  resolvedBody: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const server = unwrapServerData(conflict.serverData);
+  const patch: Record<string, unknown> = {};
+  for (const key of Object.keys(resolvedBody)) {
+    if (key in server) patch[key] = resolvedBody[key];
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+
 /**
  * Resolve a persisted conflict.
  *
@@ -579,11 +616,18 @@ export async function resolveConflict(
   if (res.ok || res.queued) {
     await clearConflict(conflict.id);
     // The page the user is looking at (and the structured read cache) still
-    // shows the queued edit. Drop the stale cached copy so the next fetch
-    // repopulates with the restored values, and notify any open page to
-    // re-fetch the affected record without a manual reload.
+    // shows the queued edit. Reconcile the read cache so the screen reflects the
+    // restored values without a manual reload:
+    //  - Sent to the server (online): drop the stale cached copy so the next
+    //    fetch repopulates from the server.
+    //  - Parked offline: the device can't re-fetch, so apply the restored values
+    //    to the cache now — an offline re-read then shows the restored state.
     const target = cacheTargetForConflict(conflict);
-    if (target) await evictCachedRecord(target.store, target.id);
+    if (target) {
+      const patch = res.ok ? null : buildRestoredCachePatch(conflict, resolvedBody);
+      if (patch) await updateCachedRecord(target.store, target.id, patch);
+      else await evictCachedRecord(target.store, target.id);
+    }
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent<ConflictResolvedDetail>(CONFLICT_RESOLVED_EVENT, {
         detail: {

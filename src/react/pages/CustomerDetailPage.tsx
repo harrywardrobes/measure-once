@@ -464,8 +464,10 @@ export function CustomerDetailPage() {
   // Resolving a conflict by restoring the server values replays a write but the
   // on-screen record still shows the queued edit. When that resolution targets
   // the contact in view, re-fetch the affected section so the screen reflects
-  // the restored values without a manual reload. (The structured read cache is
-  // evicted by resolveConflict, so the re-fetch below repopulates it.)
+  // the restored values without a manual reload. Online, resolveConflict evicts
+  // the read cache so the re-fetch repopulates from the server; offline, it
+  // writes the restored values into the read cache so the re-fetch's offline
+  // fallback (readRecord/readRecords) shows the restored state immediately.
 
   useEffect(() => {
     const handler = (e: Event) => {

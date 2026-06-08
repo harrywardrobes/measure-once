@@ -196,6 +196,36 @@ export async function readRecord<T>(store: CacheStore, id: string | number): Pro
 }
 
 /**
+ * Shallow-merge a patch into a cached record's `data`, refreshing its
+ * `cachedAt` so the update reads as fresh. When no record is cached yet the
+ * patch is stored as the whole record. Used when an offline conflict is
+ * resolved by restoring the server copy: the device can't re-fetch, so the
+ * restored values are applied to the read cache directly and an offline re-read
+ * (and the on-screen record) shows the restored state immediately.
+ */
+export async function updateCachedRecord(
+  store: CacheStore,
+  id: string | number,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const dbp = getDb();
+  if (!dbp || id === undefined || id === null) return;
+  try {
+    const db = await dbp;
+    const key = String(id);
+    const existing = await db.get(store, key);
+    const existingData = existing?.data;
+    const nextData =
+      existingData && typeof existingData === 'object' && !Array.isArray(existingData)
+        ? { ...(existingData as Record<string, unknown>), ...patch }
+        : patch;
+    await db.put(store, { id: key, data: nextData, cachedAt: Date.now() });
+  } catch {
+    /* best-effort */
+  }
+}
+
+/**
  * Delete a single cached record by id. Used after an offline sync conflict is
  * resolved by restoring the server copy: the structured read cache still holds
  * the queued edit, so dropping it lets the next fetch repopulate with the
