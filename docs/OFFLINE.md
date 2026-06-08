@@ -1,10 +1,14 @@
-# Offline / PWA (Phase 1)
+# Offline / PWA (Phases 1–2)
 
-Measure Once is an installable Progressive Web App with **read-only** offline
-support. Phase 1 lets a user open the app, browse customers, visits, and photo
-submissions they have already viewed, and install the app to their home screen —
-all without a connection. Writing while offline (a queued outbox + conflict
-detection) is **Phase 2** and is intentionally not implemented here.
+Measure Once is an installable Progressive Web App with offline support.
+
+- **Phase 1 (read):** open the app, browse customers, visits, and photo
+  submissions already viewed, and install to the home screen — all without a
+  connection.
+- **Phase 2 (write):** a selection of create/update actions are **queued** when
+  made offline (or when a write fails transiently), replayed in order when the
+  connection returns, with retry backoff, persistent-failure surfacing, and
+  basic conflict detection. See [Phase 2 — queued writes & sync](#phase-2--queued-writes--sync-engine).
 
 ## Pieces
 
@@ -15,7 +19,11 @@ detection) is **Phase 2** and is intentionally not implemented here.
 | Service worker | `public/sw.js` (generated) | Workbox precache + runtime caching. Built by `scripts/build-sw.mjs`. Gitignored. |
 | SW registration | `src/react/lib/registerServiceWorker.ts` | Registers `/sw.js` at scope `/` (skipped under Vite dev). Called from `main.tsx`. |
 | Offline indicator | `src/react/context/ConnectionToastContext.tsx` + `GlobalHeader.tsx` | `navigator.onLine` + online/offline events drive an "Offline" pill in the header. |
-| Structured store | `src/react/lib/offlineDb.ts` | IndexedDB (`idb`) cache of customer/visit/photo data; foundation for the Phase 2 write queue. |
+| Structured store | `src/react/lib/offlineDb.ts` | IndexedDB (`idb`) cache of customer/visit/photo data, plus the Phase 2 `outbox` + `conflicts` stores and their typed accessors (DB v2). |
+| Write queue | `src/react/lib/offlineQueue.ts` | Domain write queue: `enqueue`/dedupe, status/list/counts, pub/sub, conflict log, and the `sendOrQueue` helper (Blob/multipart aware). |
+| Sync engine | `src/react/lib/syncEngine.ts` | Replays queued writes in order on `online` + on an interval, with retry backoff, conflict detection, and failure surfacing. Bootstrapped via `initOfflineSync()` in `registerServiceWorker.ts` (called from `main.tsx`). |
+| Queue hook | `src/react/hooks/useOfflineQueue.ts` | React hook exposing live pending/syncing/failed counts (dynamic-imports the queue so `idb` stays out of `main.js`). |
+| Pending-sync indicator | `src/react/components/SyncPill.tsx` | Header pill showing queued / syncing / failed counts. Lazy-loaded by `GlobalHeader.tsx`. |
 
 ## Build & serving
 
@@ -54,8 +62,11 @@ count are evicted automatically by Workbox's expiration plugin.
 ### IndexedDB store (`measure-once-offline`)
 
 Object stores: `customers`, `visits`, `photos` (cached read data), `meta`
-(freshness bookkeeping), and `outbox` (**reserved** for the Phase 2 write
-queue). Each cached record is wrapped with a `cachedAt` timestamp.
+(freshness bookkeeping), `outbox` (the Phase 2 write queue) and `conflicts`
+(detected conflicts persisted for Phase 3). Each cached *read* record is wrapped
+with a `cachedAt` timestamp. The DB schema is at **version 2**; the upgrade
+handler is additive (it creates `outbox`/`conflicts` without touching existing
+read stores).
 
 - **TTL:** records older than **12h** are pruned on the next write
   (`CACHE_MAX_AGE_MS`).
@@ -76,7 +87,85 @@ queue). Each cached record is wrapped with a `cachedAt` timestamp.
 To force a clean SW state in the browser, use DevTools → Application → Service
 Workers → Unregister, then hard-reload.
 
+## Phase 2 — queued writes & sync engine
+
+When a covered write is attempted while offline (or it fails with a transient
+network/5xx/429/408 error while online), it is recorded in the IndexedDB
+`outbox` and replayed automatically once the connection returns. The user sees a
+**pending-sync pill** in the header and can keep working.
+
+### Flow
+
+1. **Capture** — covered actions call `sendOrQueue()` instead of `fetch`. When
+   online it sends immediately; a `4xx` (except `408`/`429`) is treated as a
+   real client error and returned to the caller, while transient errors and the
+   offline case enqueue the write. The return value
+   (`{ queued, ok, status, data }`) lets the UI skip online-only side effects
+   (e.g. dispatching a calendar event) when the write was merely queued.
+2. **Queue** — each entry carries an `area`, human label, method, URL, and body
+   (JSON, or a Blob/multipart payload for uploads). Entries are de-duplicated by
+   a caller-supplied key so repeatedly toggling the same field doesn't pile up
+   redundant writes. Status moves through `pending → syncing → synced | failed`.
+3. **Replay** — `syncEngine` flushes the queue in insertion order on the
+   `online` event and on a periodic interval. Replay is idempotent and resumable
+   across reloads (state lives in IndexedDB, not memory).
+4. **Backoff** — transient failures retry with exponential backoff (base 2s,
+   ×2 per attempt, capped at 5 min, jittered) up to a max attempt count; after
+   that the entry is marked `failed`.
+5. **Surface failures** — persistent failures raise a user-visible toast and a
+   structured `console` log, and the header pill switches to a "failed" state.
+   Window events `mo:offline-sync-failed` and `mo:offline-sync-conflict` are
+   dispatched for any other listeners.
+
+### Conflict detection
+
+Conflict detection is **opt-in per entry**: a caller may attach a
+`conflictCheckUrl` plus the `baseVersion` / `baseUpdatedAt` it read the record
+at. Before replaying, the engine GETs that URL and compares the server's
+`version` / `updated_at` against the cached base. On a mismatch it applies
+**last-write-wins (with warning)** — the queued write still proceeds — and
+persists a record in the `conflicts` store for the Phase 3 review UI. Entries
+without a `conflictCheckUrl` skip the check gracefully.
+
+> Server signal availability varies: `GET /api/design-visits/:id` returns both
+> `version` and `updated_at` (so design-visit edits can supply a base), whereas
+> the visits API currently exposes only `updatedAt` and no single-record GET.
+> The detector reads `version`/`updated_at` flexibly from nested response shapes.
+
+### Covered write surfaces
+
+| Surface | Action |
+|---|---|
+| Customer detail | Lead-status change, sub-status quick-set & change, rooms/notes localdata edits |
+| Design-visit wizard | Submit (create and edit; edits carry a `conflictCheckUrl`); **room photos captured offline** ride along inline (see below) |
+| Arrange-visit modal | `not_proceeding` outcome, and `booked` outcome (calendar event dispatched only when the write is sent now, not when queued) |
+
+### Offline design-visit room photos
+
+The design-visit wizard supports capturing room photos while offline. Online,
+`DesignVisitRoomsStep` keeps its two-step flow (POST each photo to
+`/api/design-visits/uploads` → opaque storage key → submit with keys) for
+progress UI and clean storage. When `navigator.onLine` is `false` **or** an
+upload fails at the network level, the step instead keeps the photo as an inline
+`data:image/*;base64,…` URI on the room image (preview still renders from the
+data URI). The data URI travels in the **queued** submit payload, so on
+reconnect the server materialises it into proper object storage via
+`resolveRoomImageForStorage` in `design-visits.js` (POST and PUT). If object
+storage is unavailable the server falls back to persisting the inline data URI
+(the legacy path the GET handler already serves) so a photo is never dropped.
+
+Genuine server rejections (e.g. unsupported type / too large, HTTP ≥ 400) are
+**not** queued inline — they surface as an upload error immediately, since they
+would fail again on replay.
+
 ## Out of scope (Phase 2 / 3)
 
-- Offline writes, an outbox/sync queue, conflict detection.
-- An Admin "Offline" settings section.
+- **Customer-info & "send photos" offline uploads.** The customer-info two-step
+  upload and the "send photos" email link (which needs an online-generated token
+  plus a live Gmail session) remain online-only. The queue already has full
+  multipart/Blob replay support if these are wired later. (Customer-info forms
+  already draft to `localStorage`.)
+- **Arrange-visit "email sent" outcome** — requires a live Gmail session, so it
+  stays online-only.
+- **Phase 3:** a conflicts review UI over the persisted `conflicts` store, and an
+  Admin "Offline" settings section.

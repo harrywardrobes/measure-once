@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Box from '@mui/material/Box';
@@ -25,6 +25,9 @@ import { BRAND_COLORS } from '../theme';
 import { getShortcut } from '../lib/getShortcut';
 
 export type { CurrentUser as HeaderUser } from '../hooks/useCurrentUser';
+
+// Lazy-loaded so the offline-queue hook + its icons stay out of main.js.
+const SyncPill = lazy(() => import('./SyncPill'));
 
 declare global {
   interface Window {
@@ -335,6 +338,11 @@ export function GlobalHeader() {
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+          {/* Pending-sync indicator — appears whenever offline edits are queued,
+              syncing, or failed; independent of the online/offline pill below. */}
+          <Suspense fallback={null}>
+            <SyncPill />
+          </Suspense>
           {/* When offline, the per-service badges are meaningless (every check
               would fail), so show a single Offline pill instead. */}
           {!online ? (

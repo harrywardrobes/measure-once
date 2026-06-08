@@ -230,15 +230,48 @@ export function DesignVisitRoomsStep({
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
       const basePct = (i / totalFiles) * 100;
+
+      // Read the file as a data URL first. This doubles as the offline payload:
+      // when we cannot reach the upload endpoint we keep this data URI on the
+      // image so the (queued) design-visit submit carries the bytes inline, and
+      // the server materialises them into object storage on reconnect.
+      let dataUrl: string;
       try {
-        const dataUrl = await new Promise<string>((resolve, reject) => {
+        dataUrl = await new Promise<string>((resolve, reject) => {
           const fr = new FileReader();
           fr.onload = () => resolve(fr.result as string);
           fr.onerror = () => reject(new Error('FileReader error'));
           fr.readAsDataURL(file);
         });
+      } catch (err: unknown) {
+        hadError = true;
+        const msg = err instanceof Error ? err.message : 'unknown error';
+        console.warn('[design-visit] photo read failed:', msg);
+        const w = window as { toast?: (m: string) => void };
+        if (typeof w.toast === 'function') w.toast('Could not read photo: ' + msg);
+        continue;
+      }
+
+      // Keep the photo inline (no server upload). Used when offline or when the
+      // upload request fails at the network level — the bytes ride along in the
+      // queued submit instead of being dropped.
+      const keepInline = () => {
+        uploaded.push({ storageKey: dataUrl, mimeType: file.type || null, viewUrl: dataUrl });
+        setUploadProgressById(prev => ({
+          ...prev,
+          [clientId]: Math.round(((i + 1) / totalFiles) * 100),
+        }));
+      };
+
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        keepInline();
+        continue;
+      }
+
+      let data: { storageKey?: string; mimeType?: string; viewUrl?: string; error?: string; status?: number };
+      try {
         const body = JSON.stringify({ dataUrl });
-        const data = await new Promise<{ storageKey?: string; mimeType?: string; viewUrl?: string; error?: string; status?: number }>((resolve, reject) => {
+        data = await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open('POST', '/api/design-visits/uploads');
           xhr.setRequestHeader('Content-Type', 'application/json');
@@ -266,25 +299,34 @@ export function DesignVisitRoomsStep({
           xhr.onabort = () => reject(new Error('Upload aborted'));
           xhr.send(body);
         });
-        if ((data.status !== undefined && data.status >= 400) || !data.storageKey) {
-          throw new Error(data.error || 'Upload failed');
-        }
-        const newImg: RoomImage = {
-          storageKey: data.storageKey,
-          mimeType: data.mimeType || file.type,
-          viewUrl: data.viewUrl || '',
-        };
-        onNewUpload?.(newImg.storageKey);
-        uploaded.push(newImg);
-      } catch (err: unknown) {
-        hadError = true;
-        const msg = err instanceof Error ? err.message : 'unknown error';
-        console.warn('[design-visit] photo upload failed:', msg);
-        const w = window as { toast?: (m: string) => void };
-        if (typeof w.toast === 'function') {
-          w.toast('Photo upload failed: ' + msg);
-        }
+      } catch (netErr: unknown) {
+        // Network-level failure (connection lost mid-upload, abort). Treat like
+        // offline: keep the photo inline so the queued submit still carries it.
+        const msg = netErr instanceof Error ? netErr.message : 'unknown error';
+        console.warn('[design-visit] photo upload network error, keeping inline:', msg);
+        keepInline();
+        continue;
       }
+
+      if ((data.status !== undefined && data.status >= 400) || !data.storageKey) {
+        // Server rejected the upload (e.g. too large / unsupported type). This
+        // would fail again on replay, so surface it rather than queue a doomed
+        // photo.
+        hadError = true;
+        const msg = data.error || 'Upload failed';
+        console.warn('[design-visit] photo upload rejected:', msg);
+        const w = window as { toast?: (m: string) => void };
+        if (typeof w.toast === 'function') w.toast('Photo upload failed: ' + msg);
+        continue;
+      }
+
+      const newImg: RoomImage = {
+        storageKey: data.storageKey,
+        mimeType: data.mimeType || file.type,
+        viewUrl: data.viewUrl || '',
+      };
+      onNewUpload?.(newImg.storageKey);
+      uploaded.push(newImg);
     }
 
     if (uploaded.length > 0) {

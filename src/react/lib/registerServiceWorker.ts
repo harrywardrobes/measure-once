@@ -66,3 +66,19 @@ export function registerServiceWorker(): void {
     window.location.reload();
   });
 }
+
+/**
+ * Boot the offline write-queue sync engine (Offline Phase 2).
+ *
+ * The engine (and its `idb` dependency, via `offlineQueue`/`offlineDb`) is
+ * dynamically imported so it never enters the always-loaded main bundle. Safe to
+ * call unconditionally — it no-ops where `window` is unavailable and the engine
+ * itself is idempotent.
+ */
+export function initOfflineSync(): void {
+  import('./syncEngine')
+    .then((m) => m.initSyncEngine())
+    .catch(() => {
+      // Offline sync is an enhancement; failure to load it must not break boot.
+    });
+}

@@ -160,14 +160,23 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
     setSubmitting(true);
     setActionError('');
     try {
-      await POST('/api/card-actions/arrange-visit/outcome', {
-        contactId: ctx.contactId,
-        outcome: 'not_proceeding',
-        visitType: contactInfo?.visitType ?? 'design',
+      // Offline-aware: the status change is queued and replayed on reconnect.
+      const { sendOrQueue } = await import('../../lib/offlineQueue');
+      const res = await sendOrQueue({
+        area: 'visit',
+        label: 'Visit outcome — not proceeding',
+        method: 'POST',
+        url: '/api/card-actions/arrange-visit/outcome',
+        body: {
+          contactId: ctx.contactId,
+          outcome: 'not_proceeding',
+          visitType: contactInfo?.visitType ?? 'design',
+        },
       });
+      if (!res.queued && !res.ok) throw new Error((res.data as { error?: string })?.error || 'Could not update status.');
       clearDraft(key);
       const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-      w.showToast?.('Status updated to Not Suitable', false);
+      w.showToast?.(res.queued ? 'Saved offline — status will update when you reconnect' : 'Status updated to Not Suitable', false);
       setStep('done');
       onClose();
     } catch (e) {
@@ -185,26 +194,40 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
     setSubmitting(true);
     setActionError('');
     try {
-      await POST('/api/card-actions/arrange-visit/outcome', {
-        contactId: ctx.contactId,
-        outcome: 'booked',
-        visitType: contactInfo?.visitType ?? 'design',
-        slot: bookedSlot.toISOString(),
-        address: address.trim(),
+      // Offline-aware: the booking status change is queued and replayed on
+      // reconnect. The calendar-event side effect requires a live Google
+      // session, so it is dispatched only when the write actually went through
+      // now (skipped when queued offline).
+      const { sendOrQueue } = await import('../../lib/offlineQueue');
+      const res = await sendOrQueue({
+        area: 'visit',
+        label: 'Visit booked',
+        method: 'POST',
+        url: '/api/card-actions/arrange-visit/outcome',
+        body: {
+          contactId: ctx.contactId,
+          outcome: 'booked',
+          visitType: contactInfo?.visitType ?? 'design',
+          slot: bookedSlot.toISOString(),
+          address: address.trim(),
+        },
       });
+      if (!res.queued && !res.ok) throw new Error((res.data as { error?: string })?.error || 'Could not update status.');
       clearDraft(key);
       const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-      w.showToast?.(`Visit booked and status updated`, false);
+      w.showToast?.(res.queued ? 'Booking saved offline — it will sync when you reconnect' : `Visit booked and status updated`, false);
 
-      const calendarHandler = _findCalendarHandler();
-      if (calendarHandler) {
-        const d = window as unknown as {
-          dispatchCardActionHandler?: (h: CardActionHandlerData, c: CardActionContext) => void;
-        };
-        d.dispatchCardActionHandler?.(calendarHandler, {
-          ...ctx,
-          contactName: contactInfo?.contactName || ctx.contactName,
-        });
+      if (!res.queued) {
+        const calendarHandler = _findCalendarHandler();
+        if (calendarHandler) {
+          const d = window as unknown as {
+            dispatchCardActionHandler?: (h: CardActionHandlerData, c: CardActionContext) => void;
+          };
+          d.dispatchCardActionHandler?.(calendarHandler, {
+            ...ctx,
+            contactName: contactInfo?.contactName || ctx.contactName,
+          });
+        }
       }
 
       setStep('done');

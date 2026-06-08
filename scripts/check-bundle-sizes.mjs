@@ -83,7 +83,7 @@ const THRESHOLDS = [
     prefix: 'main.js',
     label: 'main (entry)',
     alwaysLoaded: true,
-    threshold: 40 * 1024,       // 40 kB — mount runtime + shell UI + card-action modals (raised: ArrangeVisitModal added)
+    threshold: 41 * 1024,       // 41 kB — mount runtime + shell UI + card-action modals (raised: offline photo-capture inline fallback added to design-visit rooms step)
   },
   // More-specific vendor-* prefixes must come before any shorter prefix.
   {

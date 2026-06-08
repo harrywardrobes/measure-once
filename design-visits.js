@@ -1234,6 +1234,38 @@ router.get('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
   }
 });
 
+// Resolve a submitted room image into a durable storage key + mime type.
+//
+// Offline-captured photos arrive as inline `data:image/*;base64,…` URIs: while
+// offline the client could not reach POST /api/design-visits/uploads, so it
+// embedded the bytes directly in the (queued) submit. When that queued submit
+// finally replays online we materialise those data URIs into proper object
+// storage here, so an offline photo ends up identical to a normally-uploaded
+// one. If object storage is unavailable we fall back to persisting the inline
+// data URI (the legacy path the GET handler already serves) rather than drop
+// the photo. Returns `null` for empty / invalid / oversized input.
+async function resolveRoomImageForStorage(img) {
+  const raw = String(img.storageKey || img.storage_key || img.url || '');
+  if (!raw) return null;
+  const isOpaque    = dvUploads.isOpaqueKey(raw);
+  const isDataImage = /^data:image\/(png|jpe?g|gif|webp|bmp);base64,/i.test(raw);
+  const isHttpUrl   = /^https?:\/\//i.test(raw);
+  const isAppPath   = raw.startsWith('/');
+  if (!isOpaque && !isDataImage && !isHttpUrl && !isAppPath) return null;
+  const MAX_IMG_BYTES = 10 * 1024 * 1024; // 10MB per image (string length)
+  if (raw.length > MAX_IMG_BYTES) return null;
+  if (isDataImage) {
+    try {
+      const up = await dvUploads.uploadFromDataUrl(raw);
+      return { key: up.storageKey, mimeType: up.mimeType };
+    } catch (e) {
+      logger.warn({ err: e.message }, '[design-visits] inline image materialise failed; storing data URI inline');
+      return { key: raw, mimeType: img.mimeType || img.mime_type || null };
+    }
+  }
+  return { key: raw, mimeType: img.mimeType || img.mime_type || null };
+}
+
 // POST /api/design-visits — create + run full side-effect chain
 router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const userId = req.user?.claims?.sub;
@@ -1342,25 +1374,17 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
         ]
       );
       const roomId = rr.rows[0].id;
-      // Insert images (base64 data URIs or URLs)
+      // Insert images. Accepts opaque cloud-storage keys (POST
+      // /api/design-visits/uploads), inline data:image/* URIs from offline
+      // capture (materialised into storage by the helper), http(s) URLs, or
+      // server-relative paths; anything else (e.g. javascript: URIs) is dropped.
       const images = Array.isArray(rm.images) ? rm.images : [];
-      const MAX_IMG_BYTES = 10 * 1024 * 1024; // 10MB per image
       for (const img of images) {
-        const raw = String(img.storageKey || img.storage_key || img.url || '');
-        if (!raw) continue;
-        // Accept (a) opaque cloud-storage keys minted by
-        // POST /api/design-visits/uploads, (b) legacy data:image/* base64
-        // URIs, (c) http(s) URLs, or (d) server-relative paths. Reject
-        // anything else (e.g. javascript: URIs).
-        const isOpaque    = dvUploads.isOpaqueKey(raw);
-        const isDataImage = /^data:image\/(png|jpe?g|gif|webp|bmp);base64,/i.test(raw);
-        const isHttpUrl   = /^https?:\/\//i.test(raw);
-        const isAppPath   = raw.startsWith('/');
-        if (!isOpaque && !isDataImage && !isHttpUrl && !isAppPath) continue;
-        if (raw.length > MAX_IMG_BYTES) continue;
+        const resolved = await resolveRoomImageForStorage(img);
+        if (!resolved) continue;
         await client.query(
           `INSERT INTO design_visit_room_images (room_id, storage_key, mime_type) VALUES ($1,$2,$3)`,
-          [roomId, raw, img.mimeType || img.mime_type || null]
+          [roomId, resolved.key, resolved.mimeType]
         );
       }
     }

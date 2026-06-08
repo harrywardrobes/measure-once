@@ -20,6 +20,7 @@ import {
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { cacheRecord, cacheRecords } from '../lib/offlineDb';
+import { sendOrQueue } from '../lib/offlineQueue';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -454,13 +455,16 @@ export function CustomerDetailPage() {
 
       const body: Record<string, string> = { hs_lead_status: String(newStatus) };
       if (clearSub) body.hw_lead_substatus = '';
-      try {
-        await fetch(`/api/contacts/${encodeURIComponent(id)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-      } catch { /* noop — error toast handled by callers if needed */ }
+      // Offline-aware: when offline / on a network error this is queued and
+      // replayed on reconnect. Optimistic UI above already reflects the change.
+      void sendOrQueue({
+        area: 'customer',
+        label: `Lead status → ${String(newStatus)}`,
+        method: 'PATCH',
+        url: `/api/contacts/${encodeURIComponent(id)}`,
+        body,
+        dedupeKey: `contact:${id}:lead-status`,
+      }).catch(() => { /* noop — optimistic UI already applied */ });
     };
 
     g._quickSetLeadStatusWithSub = async (cId: unknown, statusKey: unknown, substatusKey: unknown) => {
@@ -485,13 +489,14 @@ export function CustomerDetailPage() {
       const st = (window as unknown as Record<string, unknown>).state as Record<string, unknown> | undefined;
       if (st) st.selectedContact = updated;
 
-      try {
-        await fetch(`/api/contacts/${encodeURIComponent(id)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hs_lead_status: String(statusKey), hw_lead_substatus: newHw }),
-        });
-      } catch { /* noop */ }
+      void sendOrQueue({
+        area: 'customer',
+        label: `Lead status → ${String(statusKey)} / ${String(substatusKey)}`,
+        method: 'PATCH',
+        url: `/api/contacts/${encodeURIComponent(id)}`,
+        body: { hs_lead_status: String(statusKey), hw_lead_substatus: newHw },
+        dedupeKey: `contact:${id}:lead-status`,
+      }).catch(() => { /* noop — optimistic UI already applied */ });
     };
 
     return () => {
@@ -509,15 +514,23 @@ export function CustomerDetailPage() {
   // ── Save rooms/notes ───────────────────────────────────────────────────────
 
   const saveRoomsAndNotes = useCallback(async (nextRooms: Room[], nextNotes: string): Promise<void> => {
-    try {
-      await fetch(`/api/contacts/${contactId}/localdata`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rooms: nextRooms, notes: nextNotes }),
-      });
-    } catch (e: unknown) {
-      notifyApiError('database', e);
-      throw e;
+    // Offline-aware: queued and replayed on reconnect when offline / on a
+    // network error. A later edit of the same contact collapses onto this entry
+    // (dedupeKey) so only the newest rooms/notes payload is replayed.
+    const res = await sendOrQueue({
+      area: 'customer',
+      label: 'Rooms & notes',
+      method: 'POST',
+      url: `/api/contacts/${contactId}/localdata`,
+      body: { rooms: nextRooms, notes: nextNotes },
+      dedupeKey: `contact:${contactId}:localdata`,
+    });
+    // Surface only genuine server rejections (4xx) — queued writes are success
+    // from the user's perspective.
+    if (!res.queued && !res.ok) {
+      const err = new Error((res.data as { error?: string })?.error || 'Failed to save');
+      notifyApiError('database', err);
+      throw err;
     }
   }, [contactId, notifyApiError]);
 
@@ -532,16 +545,23 @@ export function CustomerDetailPage() {
     const g  = window as unknown as Record<string, unknown>;
     const st = g.state as Record<string, unknown> | undefined;
     if (st) st.selectedContact = updated;
-    try {
-      await fetch(`/api/contacts/${contactId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hw_lead_substatus: newValue,
-          ...(checked ? { hs_lead_status: statusValue } : {}),
-        }),
-      });
-    } catch (e) { notifyApiError('hubspot', e); setContact(contact); }
+    const res = await sendOrQueue({
+      area: 'customer',
+      label: 'Lead substatus',
+      method: 'PATCH',
+      url: `/api/contacts/${contactId}`,
+      body: {
+        hw_lead_substatus: newValue,
+        ...(checked ? { hs_lead_status: statusValue } : {}),
+      },
+      dedupeKey: `contact:${contactId}:lead-status`,
+    });
+    // Roll back optimistic UI only on a genuine server rejection; a queued write
+    // will replay later and should keep the optimistic value.
+    if (!res.queued && !res.ok) {
+      notifyApiError('hubspot', new Error((res.data as { error?: string })?.error || 'Failed to update'));
+      setContact(contact);
+    }
   }, [contact, contactId, notifyApiError]);
 
   // ── Room select ────────────────────────────────────────────────────────────

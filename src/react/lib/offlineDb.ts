@@ -22,7 +22,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 
 export const OFFLINE_DB_NAME = 'measure-once-offline';
-export const OFFLINE_DB_VERSION = 1;
+export const OFFLINE_DB_VERSION = 2;
 
 /** Cached-data stores (excludes `meta` and the reserved `outbox`). */
 export type CacheStore = 'customers' | 'visits' | 'photos';
@@ -49,8 +49,22 @@ interface MetaRecord {
   updatedAt: number;
 }
 
-/** Reserved for the Phase 2 write queue — intentionally loose. */
+/**
+ * Phase 2 write-queue record. Kept intentionally loose at the storage layer —
+ * the typed shape and domain semantics live in `offlineQueue.ts`. Every record
+ * carries the auto-incremented `id` once persisted.
+ */
 interface OutboxRecord {
+  id?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Phase 2 conflict record. Persisted whenever a queued write is replayed and
+ * the server copy changed since the value was cached. Surfaced by the Phase 3
+ * conflicts view; here it is just durable storage.
+ */
+interface ConflictRecord {
   id?: number;
   [key: string]: unknown;
 }
@@ -61,6 +75,7 @@ interface OfflineDB extends DBSchema {
   photos: { key: string; value: CachedRecord; indexes: { cachedAt: number } };
   meta: { key: string; value: MetaRecord };
   outbox: { key: number; value: OutboxRecord };
+  conflicts: { key: number; value: ConflictRecord };
 }
 
 function idbAvailable(): boolean {
@@ -87,9 +102,14 @@ function getDb(): Promise<IDBPDatabase<OfflineDB>> | null {
         if (!db.objectStoreNames.contains('meta')) {
           db.createObjectStore('meta', { keyPath: 'key' });
         }
-        // Reserved for Phase 2 write queue.
+        // Phase 2 write queue.
         if (!db.objectStoreNames.contains('outbox')) {
           db.createObjectStore('outbox', { keyPath: 'id', autoIncrement: true });
+        }
+        // Phase 2 conflict log (added in DB v2). Holds stale-write conflicts
+        // detected during sync replay until the Phase 3 conflicts view clears them.
+        if (!db.objectStoreNames.contains('conflicts')) {
+          db.createObjectStore('conflicts', { keyPath: 'id', autoIncrement: true });
         }
       },
     }).catch((err) => {
@@ -241,16 +261,99 @@ export async function clearOfflineDb(): Promise<void> {
   if (!dbp) return;
   try {
     const db = await dbp;
-    const tx = db.transaction(['customers', 'visits', 'photos', 'meta', 'outbox'], 'readwrite');
+    const tx = db.transaction(['customers', 'visits', 'photos', 'meta', 'outbox', 'conflicts'], 'readwrite');
     await Promise.all([
       tx.objectStore('customers').clear(),
       tx.objectStore('visits').clear(),
       tx.objectStore('photos').clear(),
       tx.objectStore('meta').clear(),
       tx.objectStore('outbox').clear(),
+      tx.objectStore('conflicts').clear(),
     ]);
     await tx.done;
   } catch {
     /* best-effort */
   }
+}
+
+// ── Low-level write-queue + conflict accessors (Phase 2) ──────────────────────
+// Domain semantics (status transitions, dedupe, backoff, pub/sub) live in
+// `offlineQueue.ts`; these are the thin, defensive IndexedDB primitives it builds
+// on. All are best-effort: they no-op (returning empty/null) when IndexedDB is
+// unavailable so the queue layer never throws into the UI.
+
+/** Append a record to a queue store, returning its new auto-increment id. */
+async function queueAdd(store: 'outbox' | 'conflicts', record: Record<string, unknown>): Promise<number | null> {
+  const dbp = getDb();
+  if (!dbp) return null;
+  try {
+    const db = await dbp;
+    const { id: _ignored, ...rest } = record;
+    const key = await db.add(store, rest as never);
+    return Number(key);
+  } catch {
+    return null;
+  }
+}
+
+/** Read every record from a queue store (insertion order — ascending id). */
+async function queueGetAll<T>(store: 'outbox' | 'conflicts'): Promise<T[]> {
+  const dbp = getDb();
+  if (!dbp) return [];
+  try {
+    const db = await dbp;
+    const all = await db.getAll(store);
+    return (all as T[]).slice().sort(
+      (a, b) => (((a as { id?: number }).id ?? 0) - ((b as { id?: number }).id ?? 0)),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Overwrite a record (must carry its `id`). */
+async function queuePut(store: 'outbox' | 'conflicts', record: Record<string, unknown>): Promise<void> {
+  const dbp = getDb();
+  if (!dbp || record.id === undefined || record.id === null) return;
+  try {
+    const db = await dbp;
+    await db.put(store, record as never);
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** Delete a record by id. */
+async function queueDelete(store: 'outbox' | 'conflicts', id: number): Promise<void> {
+  const dbp = getDb();
+  if (!dbp) return;
+  try {
+    const db = await dbp;
+    await db.delete(store, id);
+  } catch {
+    /* best-effort */
+  }
+}
+
+export async function outboxAdd(record: Record<string, unknown>): Promise<number | null> {
+  return queueAdd('outbox', record);
+}
+export async function outboxGetAll<T>(): Promise<T[]> {
+  return queueGetAll<T>('outbox');
+}
+export async function outboxPut(record: Record<string, unknown>): Promise<void> {
+  return queuePut('outbox', record);
+}
+export async function outboxDelete(id: number): Promise<void> {
+  return queueDelete('outbox', id);
+}
+
+export async function conflictAdd(record: Record<string, unknown>): Promise<number | null> {
+  return queueAdd('conflicts', record);
+}
+export async function conflictGetAll<T>(): Promise<T[]> {
+  return queueGetAll<T>('conflicts');
+}
+export async function conflictDelete(id: number): Promise<void> {
+  return queueDelete('conflicts', id);
 }

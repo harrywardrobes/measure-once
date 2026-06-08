@@ -3,3 +3,5 @@
 - [Isolated test DB schema](isolated-test-db-schema.md) — temp :ci DBs now need migrations applied + rate_limit warmup in with-test-db.js (schema no longer built at boot); design_visit created_by is numeric user id.
 - [Schema migration parity](schema-migration-parity.md) — verify migrations via golden-vs-fresh DB column/index/constraint diff; dev DB has legacy orphan tables/columns to exclude.
 - [Bundle-size gate & idb](bundle-size-idb.md) — main.js has a ~40kB gzip gate; keep idb/offlineDb out of the always-loaded bundle via dynamic import().
+- [Offline DV photos](offline-photos-inline-datauri.md) — offline room photos travel as inline data: URIs in the queued submit; server materialises them on replay (fallback to inline).
+- [Offline Phase 2 bundle constraints](offline-phase2-bundle.md) — offline-aware UI in main-bundle components (e.g. GlobalHeader) must React.lazy the leaf; main.js sits right at its 40kB cap.

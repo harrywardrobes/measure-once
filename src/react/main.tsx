@@ -33,7 +33,7 @@ import { AdminGroupedTabsBar } from './components/AdminGroupedTabsBar';
 import { BottomActionBar } from './components/BottomActionBar';
 import { AppBootstrapProvider } from './contexts/AppBootstrapContext';
 import { PUBLIC_ISLAND_IDS } from './lib/publicIslands';
-import { registerServiceWorker } from './lib/registerServiceWorker';
+import { registerServiceWorker, initOfflineSync } from './lib/registerServiceWorker';
 const CommandPalette    = React.lazy(() => import('./components/CommandPalette').then(m => ({ default: m.CommandPalette })));
 const AccessRequestGate = React.lazy(() => import('./components/AccessRequestGate').then(m => ({ default: m.AccessRequestGate })));
 
@@ -263,6 +263,10 @@ loadSearchSettings();
 
 // Register the offline service worker (no-op under the Vite dev server).
 registerServiceWorker();
+
+// Boot the offline write-queue sync engine (dynamically imported so `idb`
+// stays out of the main bundle).
+initOfflineSync();
 
 /**
  * Global bridge so vanilla-JS call-sites and test probes can open the React

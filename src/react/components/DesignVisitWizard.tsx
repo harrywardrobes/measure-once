@@ -38,6 +38,11 @@ export interface DesignVisitWizardCtx {
 
 export interface ExistingVisit {
   id: string | number;
+  // Sync-readiness columns (returned by GET /api/design-visits/:id via dv.*).
+  // Captured at edit time so the sync engine can detect a stale-write conflict
+  // when a queued edit is replayed after the server row changed underneath it.
+  version?: number | null;
+  updated_at?: string | null;
   visit_date?: string;
   duration_min?: number;
   location?: string;
@@ -472,22 +477,42 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       };
       const url    = editMode ? `/api/design-visits/${encodeURIComponent(String(editVisitId))}` : '/api/design-visits';
       const method = editMode ? 'PUT' : 'POST';
-      const resp = await fetch(url, {
+      // Offline-aware submit. When offline / on a network error the design visit
+      // is queued and replayed (with its side effects — sign-off email, QB
+      // estimate) once connectivity returns. Edit-mode updates carry a
+      // conflict-check URL so a stale overwrite is logged for Phase 3 review.
+      const { sendOrQueue } = await import('../lib/offlineQueue');
+      const res = await sendOrQueue({
+        area: 'visit',
+        label: editMode ? `Edit design visit — ${contactName || contactId}` : `Design visit — ${contactName || contactId}`,
         method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        url,
+        body: payload,
+        ...(editMode
+          ? {
+              conflictCheckUrl: `/api/design-visits/${encodeURIComponent(String(editVisitId))}`,
+              recordKey: `design-visit:${editVisitId}`,
+              baseVersion: existingVisit?.version ?? null,
+              baseUpdatedAt: existingVisit?.updated_at ?? null,
+            }
+          : {}),
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || (editMode ? 'Save failed' : 'Submission failed'));
+      if (!res.queued && !res.ok) {
+        throw new Error((res.data as { error?: string })?.error || (editMode ? 'Save failed' : 'Submission failed'));
+      }
       committedRef.current = true;
       pendingUploadKeysRef.current.clear();
       clearDraft(storageKey);
       setOpen(false);
       setTimeout(() => {
         onClose();
-        const msg = editMode
-          ? 'Design visit updated. A fresh sign-off email has been sent.'
-          : 'Design visit submitted. Customer sign-off email sent.';
+        const msg = res.queued
+          ? (editMode
+              ? "Design visit saved offline — it'll sync and send the sign-off email when you're back online."
+              : "Design visit saved offline — it'll submit and send the sign-off email when you're back online.")
+          : (editMode
+              ? 'Design visit updated. A fresh sign-off email has been sent.'
+              : 'Design visit submitted. Customer sign-off email sent.');
         const w = window as unknown as Record<string, unknown>;
         if (typeof w['toast'] === 'function') {
           (w['toast'] as (m: string) => void)(msg);
