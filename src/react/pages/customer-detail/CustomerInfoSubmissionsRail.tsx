@@ -181,6 +181,76 @@ function ResendButton({
   );
 }
 
+// ── Pending photo-review retry / discard actions ──────────────────────────────
+
+/**
+ * Retry / Discard actions for a queued photo-review outcome that failed to
+ * upload. Mirrors `PendingEditActions` in `DesignVisitsList.tsx`, reusing the
+ * same retry/remove queue APIs. Discarding only drops the unsynced review
+ * outcome from the outbox — the submission row on the server is untouched.
+ */
+export function PendingReviewActions({ entry }: { entry: PendingPhotoReviewEntry }) {
+  const [busy, setBusy] = useState(false);
+
+  const handleRetry = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const engine = await import('../../lib/syncEngine');
+      await engine.retryEntry(entry.id);
+    } catch {
+      /* best-effort — the periodic flush will pick it up */
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, entry.id]);
+
+  const handleDiscard = useCallback(() => {
+    if (busy) return;
+    const doDiscard = async () => {
+      setBusy(true);
+      try {
+        const mod = await import('../../lib/offlineQueue');
+        await mod.removeEntry(entry.id);
+      } catch {
+        /* best-effort */
+      } finally {
+        setBusy(false);
+      }
+    };
+    window.showBottomConfirm(
+      'Discard this unsynced photo review? The outcome saved on this device will be lost — the submission on the server stays as it is.',
+      doDiscard,
+    );
+  }, [busy, entry.id]);
+
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Button
+        size="small"
+        variant="outlined"
+        disabled={busy}
+        onClick={handleRetry}
+        sx={{ fontSize: '0.75rem', py: 0.3 }}
+        data-testid={`photo-review-retry-${entry.submissionId ?? entry.id}`}
+      >
+        Retry
+      </Button>
+      <Button
+        size="small"
+        variant="outlined"
+        color="error"
+        disabled={busy}
+        onClick={handleDiscard}
+        sx={{ fontSize: '0.75rem', py: 0.3 }}
+        data-testid={`photo-review-discard-${entry.submissionId ?? entry.id}`}
+      >
+        Discard
+      </Button>
+    </Stack>
+  );
+}
+
 // ── Submission card ───────────────────────────────────────────────────────────
 
 type ConflictTarget = 'copy' | 'open';
@@ -421,6 +491,19 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
           )
         ) : null}
       </Box>
+
+      {/* Failed photo-review — inline retry / discard */}
+      {pendingReview && pendingReview.status === 'failed' && (
+        <Box
+          sx={{ px: 2, pb: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}
+          data-testid={`photo-review-failed-actions-${sub.id}`}
+        >
+          <Typography variant="caption" sx={{ color: 'text.secondary', flex: 1, minWidth: 0 }}>
+            {`Couldn't sync this photo review${pendingReview.lastError ? ` — ${pendingReview.lastError}` : ''}. Retry to upload it again, or discard it to drop the unsynced outcome.`}
+          </Typography>
+          <PendingReviewActions entry={pendingReview} />
+        </Box>
+      )}
 
       {/* Conflict warning */}
       {conflictTarget && (
