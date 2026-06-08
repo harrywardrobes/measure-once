@@ -1,0 +1,72 @@
+Here's the full Replit prompt, structured as phases with tasks/subtasks so the agent (or you) can track progress incrementally:
+
+---
+
+**Replit prompt:**
+
+> Make this app a browser-based PWA with offline support for **Customer cards & details**, **Visits & schedule**, and **Photo capture & upload** — supporting both *viewing cached data* and *queuing writes* while offline, with changes syncing automatically once back online. Also add a new **Admin → Offline Support** section that clearly documents which features work offline vs. online-only.
+>
+> The app currently has **zero offline infrastructure** (no service worker, manifest, IndexedDB, or `navigator.onLine` checks) and no DB migration framework (schema is created via scattered `ensureXTable()`/`CREATE TABLE IF NOT EXISTS` calls across `server.js`, `auth.js`, `visits.js`, `design-visits.js`, `customer-info.js`, `photo-reviews.js`). Work through the phases below **in order** — each phase should be a separate commit/checkpoint so we can test incrementally. Don't skip ahead to offline work before the foundation phase is solid.
+>
+> ---
+>
+> ### Phase 0 — Foundation (do this first, it's a prerequisite for safe offline work)
+> **Task 0.1: Introduce a real migration framework**
+> - Add a lightweight migration tool (e.g. `node-pg-migrate`) and convert the existing `ensureXTable`/`CREATE TABLE IF NOT EXISTS` calls in `server.js`, `auth.js`, `visits.js`, `design-visits.js`, `customer-info.js`, `photo-reviews.js` into versioned migration files.
+> - Document the new migration workflow (how to add/run/rollback migrations) in the README.
+> - Subtask: audit current tables for missing indexes on frequently-queried columns (especially ones offline sync will touch — customer ID, visit ID, updated_at/timestamps) and add them via migration.
+>
+> **Task 0.2: Add structured logging/error monitoring**
+> - Replace ad-hoc `console.log`/`console.error` calls in critical paths (start with `server.js`, `auth.js`, `visits.js`, `design-visits.js`, `customer-info.js`, `photo-reviews.js`) with a structured logger (e.g. Pino or Winston).
+> - Add error monitoring (e.g. Sentry) so failures — including future sync failures — are visible and traceable.
+>
+> **Task 0.3: Add `updated_at` / version tracking to sync-relevant tables**
+> - Ensure `customers`/`contacts`, `visits`, `design_visits`, and any photo/upload tables have reliable `updated_at` timestamps (and ideally a `version` integer or similar) that can be used later for conflict detection during sync. Add via migration if missing.
+>
+> ---
+>
+> ### Phase 1 — PWA shell & read-only offline caching
+> **Task 1.1: Add PWA manifest and service worker**
+> - Create `public/manifest.json` (app name, icons, theme colour, display: standalone) and register a service worker (e.g. via Workbox) that precaches the app shell (JS/CSS bundles, fonts, icons).
+> - Add install prompts / "Add to Home Screen" support.
+>
+> **Task 1.2: Cache-and-display strategy for the three target areas**
+> - Set up a runtime caching strategy (e.g. stale-while-revalidate) for the API responses behind:
+>   - Customer cards & details (`CustomersPage.tsx`, customer-detail routes/components)
+>   - Visits & schedule (`visits.js` routes, scheduling UI)
+>   - Photo capture/upload screens (wherever photos are captured/reviewed — `photo-reviews.js`, design-visit upload flows)
+> - Subtask: add a visible "offline" indicator in the UI (using `navigator.onLine` + the `online`/`offline` events) so users know when they're viewing cached data.
+> - Subtask: define and document a cache eviction/freshness policy (e.g. cache last N viewed customers, expire after X hours) so storage doesn't grow unbounded.
+>
+> **Task 1.3: Local data store**
+> - Set up IndexedDB (e.g. via `idb` or Dexie) as the local cache for customer, visit, and photo-queue data — this becomes the foundation for queued writes in Phase 2.
+>
+> ---
+>
+> ### Phase 2 — Queued writes & sync
+> **Task 2.1: Local write queue**
+> - Build a write-queue layer in IndexedDB that intercepts create/update actions for the three target areas when offline (e.g. editing a customer note, logging a visit outcome, capturing a photo) and stores them locally with a status (`pending`/`syncing`/`synced`/`failed`).
+> - Update the relevant UI flows (customer detail edits, visit logging, photo capture in `design-visit-uploads.js` / `photo-reviews.js` flows) to write to the queue when offline and show a "pending sync" state.
+>
+> **Task 2.2: Sync engine**
+> - On reconnect (`online` event), replay queued writes against the existing API routes (`/api/visits`, customer update endpoints, photo upload endpoints) in order, marking each as `synced` or `failed`.
+> - Subtask: add retry-with-backoff for failed sync attempts, and surface persistent failures to the user (and to the error monitoring added in Task 0.2).
+>
+> **Task 2.3: Conflict detection (basic)**
+> - Using the `updated_at`/version fields from Task 0.3, detect when a record was changed server-side since it was cached. For a first pass, a simple "last-write-wins with a warning" or "flag conflict for manual review" approach is acceptable — full automatic merge is out of scope for this iteration.
+> - Subtask: add a lightweight "sync conflicts" view (could live in the new Admin → Offline Support section, see Phase 3) where flagged conflicts can be reviewed.
+>
+> ---
+>
+> ### Phase 3 — Admin visibility
+> **Task 3.1: New "Offline Support" section in the admin panel**
+> - Add a new admin page/section (follow existing conventions from `SettingsPage.tsx` / `ActionHandlersPage.tsx`) that clearly lists, for each major feature area of the app, whether it: (a) works fully offline (view + edit), (b) works offline for viewing only, or (c) requires an internet connection. Surface this for at least: Customer cards & details, Visits & schedule, Photo capture & upload, and any other major areas (Trades, Projects, Calendar/scheduling integration, QuickBooks, WhatsApp, Admin settings, etc.) marked as online-only.
+> - Subtask: show current sync queue status here too (pending/failed items count, last successful sync time) — reuse the conflict view from Task 2.3 if helpful.
+> - Subtask: keep this list easy to update as new features are added — e.g. a simple config object/array rather than hardcoded JSX, so it doesn't drift from reality.
+>
+> ---
+>
+> ### Notes for the build
+> - This is a phased rollout — please pause after each phase for review/testing before continuing, rather than building all of it in one pass.
+> - Don't attempt full real-time sync or automatic conflict merging in this iteration — basic queued sync with conflict *flagging* is the target; sophisticated merge logic can be a future iteration once the foundation is proven reliable.
+> - Keep all new code consistent with existing conventions (raw `pg` for new queries unless the migration framework changes that, MUI/Tailwind component patterns, existing test runner style in `test/`).

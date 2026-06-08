@@ -64,22 +64,19 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
   add_design_visit_to_calendar:
     'Clicking the action on a Sales/Survey card opens a modal asking for ' +
     'visit date, time, duration, title and notes.\n' +
-    '• On submit, a visit is created in this CRM (POST /api/visits) and ' +
-    'appears in the "Upcoming visits" section of the customer page.\n' +
-    '• If the operator ticks "Also add to my Google Calendar", a matching ' +
-    'event is also created in their personal Google Calendar (POST ' +
-    '/api/events) using their stored Google OAuth credentials. No email is ' +
-    'sent by this app — Google Calendar may email invitees if attendees ' +
-    'are added.\n' +
+    '• On submit, an event is created on the shared "Measure Once" Google ' +
+    'Calendar (POST /api/events) — the single source of truth for scheduling. ' +
+    'No separate CRM visit row is created. No email is sent by this app — ' +
+    'Google Calendar may email invitees if attendees are added.\n' +
     '• No HubSpot record is changed by this action.',
   schedule_visit:
     'Generic version of "Add design visit to calendar" — works for any visit ' +
     'type (survey, installation, remedial, workshop, etc.).\n' +
     '• Clicking the action on a card opens a MUI DateTimePicker modal asking ' +
     'for date, time, duration, title, location, and notes.\n' +
-    '• On submit, a visit row is created in this CRM (POST /api/visits) with ' +
-    'the visit type you select below.\n' +
-    '• Optionally adds a Google Calendar event (POST /api/events).\n' +
+    '• On submit, an event is created on the shared "Measure Once" Google ' +
+    'Calendar (POST /api/events) — the single source of truth for scheduling. ' +
+    'No separate CRM visit row is created.\n' +
     '• No HubSpot record is changed by this action.',
   summarise_phone_call:
     'Clicking the action on a Sales/Survey card opens a modal with a ' +
@@ -107,17 +104,15 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
   schedule_delivery_window:
     'Clicking the action on a card opens a modal for scheduling a delivery window with a start and end date/time.\n' +
     '• The operator picks a window start and window end (e.g. "8 AM – 1 PM on 12 June").\n' +
-    '• On submit, a visit of type "delivery" is created in this CRM (POST /api/visits) and appears in the "Upcoming visits" section of the customer page.\n' +
-    '• If the operator ticks "Also add to my Google Calendar", a matching event is also created in their personal Google Calendar.\n' +
+    '• On submit, an event is created on the shared "Measure Once" Google Calendar (POST /api/events) — the single source of truth for scheduling. No separate CRM visit row is created.\n' +
     '• No HubSpot record is changed by this action.\n' +
-    'Config keys: defaultTitle (≤120 chars), addToGoogleCalendar (bool).',
+    'Config keys: defaultTitle (≤120 chars).',
   schedule_installation_slot:
     'Clicking the action on a card opens a modal for scheduling a single installation slot with a start time and duration.\n' +
     '• The operator picks a start date/time and a duration in minutes (default 240 min / 4 hours).\n' +
-    '• On submit, a visit of type "installation" is created in this CRM (POST /api/visits) and appears in the "Upcoming visits" section of the customer page.\n' +
-    '• If the operator ticks "Also add to my Google Calendar", a matching event is also created in their personal Google Calendar.\n' +
+    '• On submit, an event is created on the shared "Measure Once" Google Calendar (POST /api/events) — the single source of truth for scheduling. No separate CRM visit row is created.\n' +
     '• No HubSpot record is changed by this action.\n' +
-    'Config keys: defaultDurationMin (5–1440), defaultTitle (≤120 chars), addToGoogleCalendar (bool).',
+    'Config keys: defaultDurationMin (5–1440), defaultTitle (≤120 chars).',
   upload_photos_and_info:
     'Clicking the action on a card opens a confirmation modal showing the customer\'s name and email.\n' +
     '• On confirmation, an email is sent to the customer with a unique, time-limited link to a public form.\n' +

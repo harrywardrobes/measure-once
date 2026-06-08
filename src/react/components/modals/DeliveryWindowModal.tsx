@@ -19,7 +19,7 @@ import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import type { Visit } from '../../pages/customer-detail/types';
-import { POST, PATCH, isGoogleAuthError } from '../../utils/api';
+import { POST, PATCH, isGoogleAuthError, calendarErrorMessage } from '../../utils/api';
 
 interface CreateProps {
   mode?: 'create';
@@ -157,7 +157,7 @@ export function DeliveryWindowModal(props: Props) {
         w.showToast?.('Delivery window updated', false);
         handleClose();
         props.onSaved?.();
-      } else {
+      } else if (isCreateDirect) {
         await POST('/api/visits', {
           type: 'delivery',
           title: title.trim(),
@@ -193,6 +193,26 @@ export function DeliveryWindowModal(props: Props) {
         w.showToast?.('Delivery window scheduled', false);
         handleClose();
         (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
+        props.onSaved?.();
+      } else {
+        // Card-action create → shared Google Calendar is the single source of
+        // truth. No local visits row; failures stay in-modal so the user can
+        // connect Google / retry without losing their input.
+        try {
+          await POST('/api/events', {
+            summary: title.trim(),
+            description: notes.trim() || '',
+            location: location.trim() || '',
+            start: { dateTime: start.toDate().toISOString() },
+            end: { dateTime: end.toDate().toISOString() },
+          });
+        } catch (gcalErr) {
+          setError(calendarErrorMessage(gcalErr));
+          return;
+        }
+
+        w.showToast?.('Delivery window scheduled to the shared calendar', false);
+        handleClose();
         props.onSaved?.();
       }
     } catch (e) {
@@ -318,7 +338,7 @@ export function DeliveryWindowModal(props: Props) {
                 label="Also update my Google Calendar event"
               />
             )}
-            {!isEdit && (
+            {isCreateDirect && (
               <FormControlLabel
                 control={
                   <Checkbox
@@ -330,6 +350,11 @@ export function DeliveryWindowModal(props: Props) {
                 }
                 label="Also add to my Google Calendar"
               />
+            )}
+            {!isEdit && !isCreateDirect && (
+              <Typography variant="caption" color="text.secondary">
+                This delivery window is added to the shared Measure Once Google Calendar.
+              </Typography>
             )}
             {error && (
               <Typography variant="caption" color="error">{error}</Typography>

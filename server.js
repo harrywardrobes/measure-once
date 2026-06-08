@@ -2190,6 +2190,31 @@ function getGoogleClient(tokens) {
   return client;
 }
 
+// ── Shared Google Calendar ────────────────────────────────────────────────────
+// Every app-created event is written to a single shared calendar ("Measure
+// Once", owned by Harry) rather than each user's personal `primary` calendar.
+// The connected user's own OAuth credentials still perform the write — only the
+// target calendar changes. The calendar ID is supplied via the
+// GOOGLE_SHARED_CALENDAR_ID env var. Throws CALENDAR_NOT_CONFIGURED when unset
+// so callers can surface a clear setup message instead of silently writing to
+// the wrong calendar.
+function getSharedCalendarId() {
+  const id = (process.env.GOOGLE_SHARED_CALENDAR_ID || '').trim();
+  if (!id) {
+    const err = new Error('Shared calendar not configured — contact your administrator.');
+    err.code = 'CALENDAR_NOT_CONFIGURED';
+    err.statusCode = 503;
+    throw err;
+  }
+  return id;
+}
+
+console.log(
+  (process.env.GOOGLE_SHARED_CALENDAR_ID || '').trim()
+    ? '[calendar] Shared calendar configured (GOOGLE_SHARED_CALENDAR_ID is set).'
+    : '[calendar] WARNING: GOOGLE_SHARED_CALENDAR_ID is not set — scheduling actions will return a configuration error until it is set.'
+);
+
 function classifyGoogleError(e) {
   const msg = (e.message || '').toLowerCase();
   const status = e.code || e.response?.status || e.status;
@@ -2266,11 +2291,14 @@ app.post('/api/emails/send', isAuthenticated, requirePrivilege('member'), gmailS
 // ── Google Calendar ───────────────────────────────────────────────────────────
 app.get('/api/events', async (req, res) => {
   if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+  let calendarId;
+  try { calendarId = getSharedCalendarId(); }
+  catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
     const auth = getGoogleClient(req.session.googleTokens);
     const calendar = google.calendar({ version: 'v3', auth });
     const events = await calendar.events.list({
-      calendarId: 'primary',
+      calendarId,
       timeMin: new Date().toISOString(),
       maxResults: 20,
       singleEvents: true,
@@ -2286,10 +2314,13 @@ app.get('/api/events', async (req, res) => {
 
 app.post('/api/events', isAuthenticated, requirePrivilege('member'), calendarEventLimiter, async (req, res) => {
   if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+  let calendarId;
+  try { calendarId = getSharedCalendarId(); }
+  catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
     const auth = getGoogleClient(req.session.googleTokens);
     const calendar = google.calendar({ version: 'v3', auth });
-    const event = await calendar.events.insert({ calendarId: 'primary', requestBody: req.body });
+    const event = await calendar.events.insert({ calendarId, requestBody: req.body });
     res.json(event.data);
   } catch (e) {
     const code = classifyGoogleError(e);
@@ -2301,10 +2332,13 @@ app.patch('/api/events/:id', isAuthenticated, requirePrivilege('member'), async 
   if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   const eventId = String(req.params.id || '').trim();
   if (!eventId) return res.status(400).json({ error: 'Invalid event id' });
+  let calendarId;
+  try { calendarId = getSharedCalendarId(); }
+  catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
     const auth = getGoogleClient(req.session.googleTokens);
     const calendar = google.calendar({ version: 'v3', auth });
-    const event = await calendar.events.patch({ calendarId: 'primary', eventId, requestBody: req.body });
+    const event = await calendar.events.patch({ calendarId, eventId, requestBody: req.body });
     res.json(event.data);
   } catch (e) {
     const code = classifyGoogleError(e);
@@ -2316,10 +2350,13 @@ app.delete('/api/events/:id', isAuthenticated, requirePrivilege('member'), async
   if (!req.session.googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   const eventId = String(req.params.id || '').trim();
   if (!eventId) return res.status(400).json({ error: 'Invalid event id' });
+  let calendarId;
+  try { calendarId = getSharedCalendarId(); }
+  catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
     const auth = getGoogleClient(req.session.googleTokens);
     const calendar = google.calendar({ version: 'v3', auth });
-    await calendar.events.delete({ calendarId: 'primary', eventId });
+    await calendar.events.delete({ calendarId, eventId });
     res.json({ success: true });
   } catch (e) {
     const code = classifyGoogleError(e);

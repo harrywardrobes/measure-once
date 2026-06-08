@@ -77,3 +77,19 @@ export function isGoogleAuthError(e: unknown): boolean {
   const code = (e as { code?: string })?.code;
   return code === 'GOOGLE_AUTH' || code === 'GOOGLE_ERROR';
 }
+
+/**
+ * Build a user-facing message for a failed Google Calendar write. Scheduling
+ * now writes directly to the shared calendar with no local fallback, so the
+ * caller surfaces this in-modal and keeps the form open for a retry.
+ */
+export function calendarErrorMessage(e: unknown): string {
+  if (isGoogleAuthError(e)) {
+    return "Your Google account isn't connected — connect it from your profile to schedule on the shared calendar.";
+  }
+  const code = (e as { code?: string })?.code;
+  if (code === 'CALENDAR_NOT_CONFIGURED') {
+    return e instanceof Error ? e.message : 'Shared calendar not configured — contact your administrator.';
+  }
+  return 'Could not schedule: ' + (e instanceof Error ? e.message : 'error');
+}

@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -17,7 +15,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
-import { POST, isGoogleAuthError } from '../../utils/api';
+import { POST, calendarErrorMessage } from '../../utils/api';
 
 interface Props {
   handler: CardActionHandlerData;
@@ -52,7 +50,6 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
   const defaultTitle =
     (cfg.defaultTitle as string) ||
     (ctx.contactName ? `${typeLabel} — ${ctx.contactName}` : typeLabel);
-  const addToGoogleDefault = (cfg.addToGoogleCalendar as boolean) !== false;
 
   const initialStart = dayjs().add(24, 'hour').startOf('hour');
 
@@ -61,7 +58,6 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
   const [duration, setDuration] = useState(String(defaultDuration));
   const [location, setLocation] = useState('');
   const [notes, setNotes]       = useState('');
-  const [addGcal, setAddGcal]   = useState(addToGoogleDefault);
   const [error, setError]       = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [startTimeWarning, setStartTimeWarning] = useState(false);
@@ -100,49 +96,19 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
 
     setSubmitting(true);
     try {
-      await POST('/api/visits', {
-        type:         visitType,
-        title:        title.trim(),
-        customerId:   ctx.contactId   || null,
-        customerName: ctx.contactName || null,
-        startAt:      start.toISOString(),
-        endAt:        end.toISOString(),
-        location:     location.trim() || null,
-        notes:        notes.trim()    || null,
+      await POST('/api/events', {
+        summary:     title.trim(),
+        description: notes.trim() || '',
+        location:    location.trim() || '',
+        start:       { dateTime: start.toISOString() },
+        end:         { dateTime: end.toISOString() },
       });
 
-      if (addGcal) {
-        try {
-          await POST('/api/events', {
-            summary:     title.trim(),
-            description: notes.trim() || '',
-            location:    location.trim() || '',
-            start:       { dateTime: start.toISOString() },
-            end:         { dateTime: end.toISOString() },
-          });
-        } catch (gcalErr) {
-          const gcalMsg = isGoogleAuthError(gcalErr)
-            ? "Google account isn't connected — reconnect in your profile to sync Calendar."
-            : gcalErr instanceof Error ? gcalErr.message : 'error';
-          const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-          w.showToast?.(`Visit saved; Google Calendar add failed: ${gcalMsg}`, true);
-          handleClose();
-          (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
-          return;
-        }
-      }
-
       const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-      w.showToast?.('Visit scheduled', false);
+      w.showToast?.('Visit scheduled to the shared calendar', false);
       handleClose();
-      (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
     } catch (e) {
-      const code = (e as { code?: string }).code;
-      if (code === 'START_IN_PAST') {
-        setError('That time has already passed — please choose a future time.');
-      } else {
-        setError('Could not save: ' + (e instanceof Error ? e.message : 'error'));
-      }
+      setError(calendarErrorMessage(e));
     } finally {
       setSubmitting(false);
     }
@@ -265,17 +231,9 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
               fullWidth
               size="small"
             />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  id="cah-dv-google"
-                  checked={addGcal}
-                  onChange={e => setAddGcal(e.target.checked)}
-                  size="small"
-                />
-              }
-              label="Also add to my Google Calendar"
-            />
+            <Typography variant="caption" color="text.secondary">
+              This visit is added to the shared Measure Once Google Calendar.
+            </Typography>
             {error && (
               <Typography variant="caption" color="error">{error}</Typography>
             )}
