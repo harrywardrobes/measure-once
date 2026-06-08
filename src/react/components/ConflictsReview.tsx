@@ -633,6 +633,21 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
 
   const tooltip = `${count} sync conflict${count === 1 ? '' : 's'} — a record changed on the server while your offline edit was waiting. Review what was overwritten.`;
 
+  // The intro must not assert "last edit wins" for conflicts whose edits were
+  // actually held back (resolution === 'flagged'). Describe what really happened
+  // based on the resolutions present: applied-on-top, held-back, or a mix.
+  const hasApplied = conflicts.some((c) => c.resolution !== 'flagged');
+  const hasFlagged = conflicts.some((c) => c.resolution === 'flagged');
+  let introOutcome: string;
+  if (hasApplied && hasFlagged) {
+    introOutcome =
+      'Some of your edits were saved on top (last edit wins) and others were held back so nothing was overwritten.';
+  } else if (hasFlagged) {
+    introOutcome = 'Your edits were held back, so nothing was overwritten.';
+  } else {
+    introOutcome = 'Your edits were kept (last edit wins).';
+  }
+
   return (
     <>
       <Tooltip title={tooltip}>
@@ -682,7 +697,7 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
         <DialogContent dividers>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
             These records changed on the server while your offline edits were waiting to sync.
-            Your edits were kept (last edit wins). For each conflict, keep your edit or restore the
+            {' '}{introOutcome} For each conflict, keep your edit or restore the
             server copy — expand the field comparison to choose value by value.
           </Typography>
           {reconflictNotice && (
