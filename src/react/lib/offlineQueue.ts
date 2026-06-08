@@ -29,6 +29,8 @@ import {
   conflictAdd,
   conflictGetAll,
   conflictDelete,
+  getMeta,
+  setMeta,
 } from './offlineDb';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -321,4 +323,23 @@ export async function sendOrQueue(input: EnqueueInput): Promise<SendOrQueueResul
 export async function clearConflict(id: number): Promise<void> {
   await conflictDelete(id);
   _notify();
+}
+
+// ── Last successful sync bookkeeping ─────────────────────────────────────────────
+// A small `meta` timestamp the sync engine stamps after every confirmed (2xx)
+// replay, so the Phase 3 Offline Support admin view can show when the queue last
+// drained successfully. Stored as epoch ms.
+
+const LAST_SYNC_META_KEY = 'lastSuccessfulSyncAt';
+
+/** Record that a queued write just replayed successfully (epoch ms). */
+export async function markSynced(at: number = Date.now()): Promise<void> {
+  await setMeta(LAST_SYNC_META_KEY, at);
+  _notify();
+}
+
+/** Epoch-ms timestamp of the last successful sync, or null if none recorded. */
+export async function getLastSyncAt(): Promise<number | null> {
+  const v = await getMeta<number>(LAST_SYNC_META_KEY);
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }

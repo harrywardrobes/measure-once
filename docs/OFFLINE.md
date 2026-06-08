@@ -167,5 +167,25 @@ would fail again on replay.
   already draft to `localStorage`.)
 - **Arrange-visit "email sent" outcome** — requires a live Gmail session, so it
   stays online-only.
-- **Phase 3:** a conflicts review UI over the persisted `conflicts` store, and an
-  Admin "Offline" settings section.
+
+## Phase 3 — Offline support admin view
+
+The admin panel has an **Offline support** tab (Configuration group;
+`#tab-offline`, mounted from `src/react/pages/admin/OfflineSupportPage.tsx`). It
+is a **read-only** operations view — it surfaces offline behaviour without
+changing it:
+
+- **Capability matrix** — a config-driven table (the `FEATURE_AREAS` array in
+  `OfflineSupportPage.tsx`, capability levels `full` / `view` / `online`)
+  documenting which areas work fully offline, are view-only when cached, or need
+  a live connection. Keep it in sync with the "Covered write surfaces" and "Out
+  of scope" sections above.
+- **Live sync status** — pending / syncing / failed queue counts (via
+  `useOfflineQueue`) plus the **last successful sync time**. The sync engine
+  stamps `markSynced()` (a `lastSuccessfulSyncAt` value in the `meta` store) after
+  every confirmed 2xx replay; the view reads it with `getLastSyncAt()`. A "Sync
+  now" button triggers `flushQueue()`.
+- **Conflicts for review** — lists entries from the `conflicts` store
+  (`getConflicts()`) flagged during replay (last-write-wins-with-warning), with a
+  per-row **Dismiss** action (`clearConflict(id)`). Manual review only — no
+  automatic resolution.

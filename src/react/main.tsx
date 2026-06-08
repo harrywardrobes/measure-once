@@ -59,6 +59,7 @@ const CardActionsPage    = React.lazy(() => import('./pages/admin/CardActionsPag
 const ActionHandlersPage = React.lazy(() => import('./pages/admin/ActionHandlersPage').then(m => ({ default: m.ActionHandlersPage })));
 const DesignVisitPage    = React.lazy(() => import('./pages/admin/DesignVisitPage').then(m => ({ default: m.DesignVisitPage })));
 const DevEnvironmentPage = React.lazy(() => import('./pages/admin/DevEnvironmentPage').then(m => ({ default: m.DevEnvironmentPage })));
+const OfflineSupportPage = React.lazy(() => import('./pages/admin/OfflineSupportPage').then(m => ({ default: m.OfflineSupportPage })));
 const EmailTemplatesPage = React.lazy(() => import('./pages/admin/EmailTemplatesPage'));
 const AdminTeamPage      = React.lazy(() => import('./pages/admin/AdminTeamPage').then(m => ({ default: m.AdminTeamPage })));
 const AdminPermissionsPage = React.lazy(() => import('./pages/admin/AdminPermissionsPage').then(m => ({ default: m.AdminPermissionsPage })));
@@ -186,6 +187,7 @@ const MOUNTS: Array<{
   { id: 'tab-actionhandlers',   render: () => <ActionHandlersPage />,  fallback: <ActionHandlersPageSkeleton /> },
   { id: 'tab-designvisit',      render: () => <DesignVisitPage /> },
   { id: 'tab-devenv',           render: () => <DevEnvironmentPage /> },
+  { id: 'tab-offline',          render: () => <OfflineSupportPage /> },
   { id: 'tab-emailtemplates',   render: () => <EmailTemplatesPage /> },
   { id: 'ideas-page-mount',       render: () => <IdeasPage /> },
   { id: 'customer-detail-root',   render: () => <CustomerDetailPage />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },

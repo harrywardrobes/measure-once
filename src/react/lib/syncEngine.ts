@@ -27,6 +27,7 @@ import {
   updateEntry,
   removeEntry,
   recordConflict,
+  markSynced,
   type QueueEntry,
   type OfflineArea,
   type QueueMethod,
@@ -270,6 +271,7 @@ async function processEntry(entry: QueueEntry): Promise<void> {
   const result = await replayRequest(entry);
   if (result.ok) {
     await removeEntry(entry.id);
+    await markSynced();
     log('info', 'sync_ok', { area: entry.area, label: entry.label, status: result.status });
     return;
   }
