@@ -20,6 +20,7 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { POST, ApiError, isGoogleAuthError } from '../../utils/api';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
+import { useToast } from '../../contexts/ToastContext';
 
 interface Props {
   handler: CardActionHandlerData;
@@ -87,6 +88,8 @@ function visitLabel(visitType: 'design' | 'survey'): string {
 export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
   const key = draftKey(ctx.contactId);
   const draft = loadDraft(key);
+
+  const showToast = useToast();
 
   const [step, setStep] = useState<Step>('loading');
   const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
@@ -175,8 +178,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       });
       if (!res.queued && !res.ok) throw new Error((res.data as { error?: string })?.error || 'Could not update status.');
       clearDraft(key);
-      const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-      w.showToast?.(res.queued ? 'Saved offline — status will update when you reconnect' : 'Status updated to Not Suitable', false);
+      showToast(res.queued ? 'Saved offline — status will update when you reconnect' : 'Status updated to Not Suitable', false);
       setStep('done');
       onClose();
     } catch (e) {
@@ -214,8 +216,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       });
       if (!res.queued && !res.ok) throw new Error((res.data as { error?: string })?.error || 'Could not update status.');
       clearDraft(key);
-      const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-      w.showToast?.(res.queued ? 'Booking saved offline — it will sync when you reconnect' : `Visit booked and status updated`, false);
+      showToast(res.queued ? 'Booking saved offline — it will sync when you reconnect' : 'Visit booked and status updated', false);
 
       if (!res.queued) {
         const calendarHandler = _findCalendarHandler();
@@ -276,8 +277,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
         visitType,
       });
       clearDraft(key);
-      const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-      w.showToast?.('Email sent and status updated', false);
+      showToast('Email sent and status updated', false);
       setStep('done');
       onClose();
     } catch (e) {
