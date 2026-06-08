@@ -19,7 +19,6 @@ import {
   TableHead,
   TableRow,
   Tabs,
-  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
@@ -29,6 +28,7 @@ import {
 import { GET, PATCH, POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { TokenHighlightField } from '../../components/TokenHighlightField';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -422,39 +422,43 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
               </Alert>
             )}
 
-            <TextField
+            <TokenHighlightField
               label="Subject"
               value={fields.subject}
               onChange={set('subject')}
-              fullWidth
+              knownVariables={template.variables}
               required
+              data-testid="template-field-subject"
             />
-            <TextField
+            <TokenHighlightField
               label="Body (plain text)"
               value={fields.body_text}
               onChange={set('body_text')}
-              fullWidth
+              knownVariables={template.variables}
               multiline
               minRows={6}
               helperText="Sent as the plain-text part of the email."
+              data-testid="template-field-body-text"
             />
-            <TextField
+            <TokenHighlightField
               label="Body (HTML)"
               value={fields.body_html}
               onChange={set('body_html')}
-              fullWidth
+              knownVariables={template.variables}
               multiline
               minRows={6}
               helperText="Optional. Leave blank to auto-generate HTML from the plain-text body."
+              data-testid="template-field-body-html"
             />
-            <TextField
+            <TokenHighlightField
               label="Footer"
               value={fields.footer_text}
               onChange={set('footer_text')}
-              fullWidth
+              knownVariables={template.variables}
               multiline
               minRows={2}
               helperText="Appended to the end of every send of this template."
+              data-testid="template-field-footer"
             />
           </Stack>
         </Box>
