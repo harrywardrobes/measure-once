@@ -48,6 +48,69 @@ function SyncStatePill({ status }: { status: PendingVisitEntry['status'] }) {
   );
 }
 
+/**
+ * Retry / Discard actions for a queued *edit* that failed to upload. The edit
+ * targets an existing server visit, so discarding only drops the unsynced
+ * changes — the server copy stays. Reuses the same retry/remove APIs as
+ * PendingVisitCard.
+ */
+export function PendingEditActions({ entry }: { entry: PendingVisitEntry }) {
+  const [busy, setBusy] = useState(false);
+
+  const handleRetry = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const engine = await import('../../lib/syncEngine');
+      await engine.retryEntry(entry.id);
+    } catch {
+      /* best-effort — the periodic flush will pick it up */
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, entry.id]);
+
+  const handleDiscard = useCallback(() => {
+    if (busy) return;
+    const doDiscard = async () => {
+      setBusy(true);
+      try {
+        const mod = await import('../../lib/offlineQueue');
+        await mod.removeEntry(entry.id);
+      } catch {
+        /* best-effort */
+      } finally {
+        setBusy(false);
+      }
+    };
+    window.showBottomConfirm(
+      "Discard this unsynced edit? The changes saved on this device will be lost — the visit's last synced copy on the server stays as it is.",
+      doDiscard,
+    );
+  }, [busy, entry.id]);
+
+  return (
+    <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+      <button
+        data-testid="dv-edit-retry"
+        style={sxSecondaryBtn}
+        disabled={busy}
+        onClick={handleRetry}
+      >
+        Retry
+      </button>
+      <button
+        data-testid="dv-edit-discard"
+        style={{ ...sxSecondaryBtn, color: 'var(--error)' }}
+        disabled={busy}
+        onClick={handleDiscard}
+      >
+        Discard
+      </button>
+    </div>
+  );
+}
+
 /** A design visit captured offline that has not yet reached the server. */
 export function PendingVisitCard({ entry }: { entry: PendingVisitEntry }) {
   const when = fmtDesignVisitWhen(entry.visitDate || new Date(entry.createdAt).toISOString());
@@ -345,6 +408,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
           const canEditV  = v.status === 'submitted' || v.status === 'revision_requested' || v.status === 'draft';
           const isExp     = expanded.has(v.id);
           const det       = details[v.id];
+          const pendingEdit = pendingEditByVisitId.get(v.id);
 
           return (
             <div
@@ -359,8 +423,8 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
                     <span data-testid="dv-status-pill">
                       <DesignVisitStatusPill status={v.status} />
                     </span>
-                    {pendingEditByVisitId.has(v.id) && (
-                      <SyncStatePill status={pendingEditByVisitId.get(v.id)!.status} />
+                    {pendingEdit && (
+                      <SyncStatePill status={pendingEdit.status} />
                     )}
                     <span style={sxMetaSep}>·</span>
                     <span data-testid="dv-date" style={sxDate}>Estimate: £{totalGbp}</span>
@@ -399,8 +463,16 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
                       Delete
                     </button>
                   )}
+                  {pendingEdit?.status === 'failed' && (
+                    <PendingEditActions entry={pendingEdit} />
+                  )}
                 </div>
               </div>
+              {pendingEdit?.status === 'failed' && (
+                <p style={{ fontSize: '0.78rem', color: 'var(--ink-3)', margin: 0 }}>
+                  {`Couldn't sync your edit to this visit${pendingEdit.lastError ? ` — ${pendingEdit.lastError}` : ''}. Retry to upload it again, or discard it to drop the unsynced changes and keep the server copy.`}
+                </p>
+              )}
 
               {isExp && (
                 <div id={`design-visit-detail-${v.id}`} style={{
