@@ -19,6 +19,7 @@ import type { InvoiceSummary } from '../components/InvoiceDetailDrawer';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { readRecords } from '../lib/offlineDb';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
 type _Icons = typeof RefreshIcon | typeof WarningAmberIcon;
@@ -32,10 +33,42 @@ type PersonalTask = {
 
 type Contact = {
   id: string;
-  properties?: { firstname?: string; lastname?: string };
+  properties?: {
+    firstname?: string;
+    lastname?: string;
+    /** JSON-encoded workflow rooms; used to derive stage pills offline. */
+    measure_once_rooms?: string;
+  };
 };
 type Room = { room?: string; stageKey?: string; roomStatus?: string };
 type WorkflowDef = { stages?: Record<string, { label?: string }> };
+
+/**
+ * Parse a contact's own cached `measure_once_rooms` property into Room pills.
+ * Mirrors `parseContactRooms` in CustomersPage so the home "Active Projects"
+ * section can show correct stage labels offline (when `/api/localdata/all`
+ * fails and the `roomsByContact` map is empty). Returns [] if the property is
+ * missing or unparseable.
+ */
+function parseContactRooms(contact: Contact): Room[] {
+  const roomsJson = contact.properties?.measure_once_rooms;
+  if (!roomsJson) return [];
+  try {
+    const rooms = JSON.parse(roomsJson) as Array<{
+      room?: string;
+      stageKey?: string;
+      roomStatus?: string;
+    }>;
+    if (!Array.isArray(rooms)) return [];
+    return rooms.map((r) => ({
+      room: r.room || 'Main',
+      stageKey: r.stageKey || 'sales',
+      roomStatus: r.roomStatus || 'active',
+    }));
+  } catch {
+    return [];
+  }
+}
 
 const DEFAULT_STAGE_LABELS: Record<string, string> = {
   sales: 'Sales',
@@ -514,10 +547,36 @@ export function HomePage(): React.ReactElement {
         () => ({} as Record<string, Room[]>),
       ),
     ])
-      .then(([wf, contactsResp, localdata]) => {
+      .then(async ([wf, contactsResp, localdata]) => {
+        let list = contactsResp?.results || [];
+        // Offline fallback: if the live contacts fetch failed, fall back to the
+        // customers list cached by the Customers page (IndexedDB). When we can
+        // surface cached projects we no longer treat this as an error state.
+        if (contactsFailed) {
+          try {
+            const cached = await readRecords<Contact>('customers');
+            if (cached.length > 0) {
+              list = cached;
+              contactsFailed = false;
+            }
+          } catch {
+            /* ignore cache-read errors */
+          }
+        }
+        // Offline fallback for rooms: when /api/localdata/all has no entry for a
+        // contact (e.g. its fetch failed offline), derive the room pills from
+        // that contact's own cached `measure_once_rooms` property — mirrors
+        // CustomersPage.resolveRooms so stage labels match the Customers page.
+        const merged: Record<string, Room[]> = { ...(localdata || {}) };
+        for (const c of list) {
+          if (!merged[c.id] || merged[c.id].length === 0) {
+            const parsed = parseContactRooms(c);
+            if (parsed.length > 0) merged[c.id] = parsed;
+          }
+        }
         setWorkflow(wf || null);
-        setContacts(contactsResp?.results || []);
-        setRoomsByContact(localdata || {});
+        setContacts(list);
+        setRoomsByContact(merged);
         setProjectsError(contactsFailed);
       })
       .finally(() => setProjectsLoading(false));
