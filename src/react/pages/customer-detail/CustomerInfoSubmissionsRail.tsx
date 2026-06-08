@@ -22,6 +22,8 @@ import SendIcon from '@mui/icons-material/Send';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useToast } from '../../contexts/ToastContext';
+import { SyncStatePill } from '../../components/SyncStatePill';
+import { useOfflinePhotoReviewEntries, type PendingPhotoReviewEntry } from '../../hooks/useOfflinePhotoReviewEntries';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -183,13 +185,14 @@ function ResendButton({
 
 type ConflictTarget = 'copy' | 'open';
 
-function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSuperseded, autoExpand }: {
+function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSuperseded, autoExpand, pendingReview }: {
   sub: Submission;
   contactId: string;
   canResend: boolean;
   onResendSuccess: () => void;
   isSuperseded?: boolean;
   autoExpand?: boolean;
+  pendingReview?: PendingPhotoReviewEntry;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -356,6 +359,9 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
               Sent {fmtDate(sub.created_at)}
             </Typography>
             {statusChip}
+            {pendingReview && pendingReview.status !== 'synced' && (
+              <SyncStatePill status={pendingReview.status} testId={`photo-review-sync-pill-${sub.id}`} />
+            )}
           </Stack>
           {open
             ? <ExpandLessIcon className="expand-icon" fontSize="small" sx={{ color: 'text.disabled', ml: 'auto', flexShrink: 0 }} />
@@ -599,6 +605,7 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
   const [open, setOpen]               = useState(true);
   const [deepLinkId, setDeepLinkId]   = useState<number | null>(null);
   const { isViewer }                  = usePrivilege();
+  const pendingReviews                = useOfflinePhotoReviewEntries(contactId);
 
   const loadSubmissions = useCallback(() => {
     if (!contactId || isViewer) return;
@@ -720,6 +727,7 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
                 onResendSuccess={loadSubmissions}
                 isSuperseded={activeIds.has(sub.id) && index > 0}
                 autoExpand={sub.id === deepLinkId}
+                pendingReview={pendingReviews.get(sub.id)}
               />
             ))}
           </Stack>
