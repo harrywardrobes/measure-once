@@ -313,17 +313,18 @@ export function buildFieldDiff(attemptedBody: unknown, serverData: unknown): Fie
 /**
  * Assemble a mixed `rooms` array from per-room choices.
  *
- * Rooms are paired by position with the server snapshot. For each index the
- * caller's `roomChoices[i]` decides which side wins (default `'mine'`):
- * - `'mine'`  → keep the user's room at that index. A room the user *removed*
- *   (present only on the server) stays dropped.
- * - `'server'` → take the server's room at that index, projected to the write
- *   shape so the body is one the endpoint accepts. A room the user *added*
- *   (absent on the server) is dropped.
+ * Rooms are paired via `computeRoomDiffs` (id-based when rooms carry an `id`,
+ * index-based otherwise) so the pairing is identical to what the UI shows.
+ * For each diff item the caller's `roomChoices[item.index]` decides which side
+ * wins (default `'mine'`):
+ * - `'mine'`   → keep the user's room (or keep a server-only room dropped).
+ * - `'server'` → take the server's room projected to the write shape.  A room
+ *   the user *added* (absent on the server) is dropped.
  *
- * The result preserves only rooms that survive their per-index choice, so a
- * field user can keep their Room 2 edit while taking the server's Room 1, and
- * individually keep or drop added/removed rooms.
+ * The result preserves only rooms that survive their per-item choice, so a
+ * field user can keep their Kitchen edit while restoring the server's Bedroom,
+ * and individually keep or drop added/removed rooms — even when the server
+ * inserted or deleted rooms that shifted array positions.
  */
 function buildMixedRooms(
   attemptedRooms: unknown,
@@ -332,19 +333,17 @@ function buildMixedRooms(
 ): unknown[] {
   const aRooms = Array.isArray(attemptedRooms) ? attemptedRooms : [];
   const sRooms = Array.isArray(serverRooms) ? serverRooms : [];
-  const count = Math.max(aRooms.length, sRooms.length);
   // Template for projecting a chosen server room onto the write shape: prefer a
   // user room (true write shape), else fall back to a server room.
   const template = aRooms.length ? aRooms[0] : sRooms.length ? sRooms[0] : {};
+  const items = computeRoomDiffs(attemptedRooms, serverRooms);
   const out: unknown[] = [];
-  for (let i = 0; i < count; i++) {
-    const choice = roomChoices[i] ?? 'mine';
+  for (const item of items) {
+    const choice = roomChoices[item.index] ?? 'mine';
     if (choice === 'server') {
-      const serverRoom = sRooms[i];
-      if (serverRoom != null) out.push(projectServerValue(template, serverRoom));
+      if (item.serverRaw != null) out.push(projectServerValue(template, item.serverRaw));
     } else {
-      const attemptedRoom = aRooms[i];
-      if (attemptedRoom != null) out.push(attemptedRoom);
+      if (item.attemptedRaw != null) out.push(item.attemptedRaw);
     }
   }
   return out;
@@ -405,8 +404,9 @@ const ROOM_ATTR_DEFS: Array<{ key: 'door' | 'dim' | 'units' | 'price'; label: st
   { key: 'price', label: 'Unit price', field: 'price' },
 ];
 
-/** One room's position-paired diff status. `changed` is true when the room was
- *  added, removed, or any compared attribute differs. */
+/** One room's diff status. `changed` is true when the room was added, removed,
+ *  or any compared attribute differs. `index` is the sequential position of this
+ *  item in the diff list — used as the stable key for per-room choices. */
 interface RoomDiffItem {
   index: number;
   attemptedRaw: unknown;
@@ -416,12 +416,73 @@ interface RoomDiffItem {
   changed: boolean;
 }
 
-/** Pair the queued edit's rooms with the server snapshot's rooms by position
- *  and classify each as added / removed / changed. Shared by the renderer and
- *  the resolve logic so both agree on which rooms are individually selectable. */
+/** Extract the `id` from a room object if present (shared write and read shape). */
+function getRoomId(room: unknown): unknown {
+  if (!room || typeof room !== 'object' || Array.isArray(room)) return undefined;
+  const id = (room as Record<string, unknown>).id;
+  return id != null ? id : undefined;
+}
+
+/**
+ * Pair the queued edit's rooms with the server snapshot's rooms and classify
+ * each as added / removed / changed.  Shared by the renderer and the resolve
+ * logic so both agree on which rooms are individually selectable.
+ *
+ * **ID-based matching (preferred):** when any room in either array carries an
+ * `id` field, rooms are matched by `id` rather than by array index.  This
+ * ensures that a server-side room insertion or deletion does not shift the
+ * index-to-room mapping and show the wrong server room next to each offline
+ * room.  The item order is: attempted rooms first (each paired with their
+ * server counterpart by id, or `null` if absent = "added by user"), followed
+ * by server rooms not found in the attempted array ("removed by user").
+ *
+ * **Index-based matching (fallback):** when no rooms carry an `id`, the
+ * original position-based comparison is used (existing behaviour).
+ */
 function computeRoomDiffs(attempted: unknown, server: unknown): RoomDiffItem[] {
   const aRooms = Array.isArray(attempted) ? attempted : [];
   const sRooms = Array.isArray(server) ? server : [];
+
+  const hasIds =
+    aRooms.some((r) => getRoomId(r) != null) ||
+    sRooms.some((r) => getRoomId(r) != null);
+
+  if (hasIds) {
+    // Build id → server-room lookup for O(1) matching.
+    const serverById = new Map<unknown, unknown>();
+    for (const r of sRooms) {
+      const id = getRoomId(r);
+      if (id != null) serverById.set(id, r);
+    }
+
+    const items: RoomDiffItem[] = [];
+    const matchedIds = new Set<unknown>();
+
+    // First: every attempted room, paired with its server counterpart (or null).
+    for (const attemptedRaw of aRooms) {
+      const id = getRoomId(attemptedRaw);
+      const serverRaw = (id != null && serverById.has(id))
+        ? (serverById.get(id) ?? null)
+        : null;
+      if (id != null) matchedIds.add(id);
+      const added = serverRaw == null;
+      const removed = false;
+      const changed =
+        added || ROOM_ATTR_DEFS.some((def) => roomAttrChanged(attemptedRaw, serverRaw, def.key));
+      items.push({ index: items.length, attemptedRaw, serverRaw, added, removed, changed });
+    }
+
+    // Then: server rooms not present in the attempted array (user removed them).
+    for (const serverRaw of sRooms) {
+      const id = getRoomId(serverRaw);
+      if (id != null && matchedIds.has(id)) continue;
+      items.push({ index: items.length, attemptedRaw: null, serverRaw, added: false, removed: true, changed: true });
+    }
+
+    return items;
+  }
+
+  // Fallback: index-based matching (no ids present).
   const count = Math.max(aRooms.length, sRooms.length);
   const items: RoomDiffItem[] = [];
   for (let i = 0; i < count; i++) {
@@ -436,10 +497,11 @@ function computeRoomDiffs(attempted: unknown, server: unknown): RoomDiffItem[] {
   return items;
 }
 
-/** One room's side-by-side comparison. Rooms are paired by position: a room
- *  present on only one side reads as added (your edit) or removed (server). A
- *  changed room carries its own keep-mine / use-server toggle so the field user
- *  can resolve it independently of the other rooms. */
+/** One room's side-by-side comparison. Rooms are paired by id when available
+ *  (falling back to position when no room carries an `id`). A room present on
+ *  only one side reads as added (your edit) or removed (server-only). A changed
+ *  room carries its own keep-mine / use-server toggle so the field user can
+ *  resolve it independently of the other rooms. */
 function RoomDiffBlock({
   item,
   choice,

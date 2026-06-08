@@ -273,6 +273,83 @@ export const BulkRoomShortcuts: Story = {
 };
 
 /**
+ * ID-based room alignment: while the user was offline the server *inserted* a
+ * new room (Study, id 3) between the two existing rooms. Without id-based
+ * matching the UI would pair the user's Bedroom against the server's Study —
+ * showing a false diff for both. With id-based matching each room lines up with
+ * its correct counterpart:
+ * - Kitchen (id 1): changed (user raised unit count from 10 → 12)
+ * - Bedroom (id 2): unchanged
+ * - Study (id 3): only on server (the insertion — shown as "Only on server")
+ *
+ * This verifies that `computeRoomDiffs` and `buildMixedRooms` both use id-based
+ * pairing so the field user sees accurate diffs and per-room choices.
+ */
+export const ServerAddedRoom: Story = {
+  name: 'Per-room: server inserted a room (id-based alignment)',
+  render: () => {
+    function ServerAdded() {
+      const serverAddedConflict: ConflictEntry = {
+        id: 4,
+        area: 'visit',
+        label: 'Design visit — 3 Elm Close',
+        url: '/api/design-visits/720',
+        method: 'PUT',
+        recordKey: 'dv:720',
+        baseVersion: 2,
+        serverVersion: 4,
+        baseUpdatedAt: new Date(now - 1000 * 60 * 60 * 4).toISOString(),
+        serverUpdatedAt: new Date(now - 1000 * 60 * 20).toISOString(),
+        attemptedBody: {
+          notes: 'Ready to proceed.',
+          // Write shape: camelCase, rooms carry their `id`. The user edited
+          // Kitchen (raised unit count) and left Bedroom untouched. They never
+          // saw Study — it was added on the server while they were offline.
+          rooms: [
+            { id: 1, roomName: 'Kitchen', doorStyleId: 3, widthMm: 3200, heightMm: 2400, depthMm: 600, unitCount: 12, unitPricePence: 145000 },
+            { id: 2, roomName: 'Bedroom', doorStyleId: 7, widthMm: 4000, heightMm: 2400, depthMm: 600, unitCount: 8, unitPricePence: 98000 },
+          ],
+        },
+        serverData: {
+          contact_id: '4099',
+          designVisit: {
+            version: 4,
+            updated_at: new Date(now - 1000 * 60 * 20).toISOString(),
+            notes: 'Ready to proceed.',
+            // Read shape: snake_case. The server inserted Study (id 3) between
+            // Kitchen and Bedroom. Old index-based matching would incorrectly
+            // pair Bedroom (user, index 1) with Study (server, index 1) and show
+            // a phantom diff. Id-based matching pairs each room correctly.
+            rooms: [
+              { id: 1, room_name: 'Kitchen', door_style_id: 3, door_style_name: 'Shaker White', width_mm: 3200, height_mm: 2400, depth_mm: 600, unit_count: 10, unit_price_pence: 145000 },
+              { id: 3, room_name: 'Study',   door_style_id: 5, door_style_name: 'Classic Oak',  width_mm: 2200, height_mm: 2400, depth_mm: 600, unit_count: 4,  unit_price_pence: 72000 },
+              { id: 2, room_name: 'Bedroom', door_style_id: 7, door_style_name: 'Oak Veneer',   width_mm: 4000, height_mm: 2400, depth_mm: 600, unit_count: 8,  unit_price_pence: 98000 },
+            ],
+          },
+        },
+        resolution: 'last_write_wins',
+        detectedAt: now - 1000 * 60 * 10,
+      };
+      const [conflicts, setConflicts] = useState<ConflictEntry[]>([serverAddedConflict]);
+      return (
+        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+          <ConflictsReview
+            conflicts={conflicts}
+            defaultOpen
+            onResolve={async (conflict) => {
+              setConflicts((cs) => cs.filter((c) => c.id !== conflict.id));
+              return { ok: true, queued: false, status: 200 };
+            }}
+            onDismissAll={() => setConflicts([])}
+          />
+        </Box>
+      );
+    }
+    return <ServerAdded />;
+  },
+};
+
+/**
  * Per-room resolution: the queued edit *removed* a room the server still has
  * (Room 2, Bedroom — present only on the server). Its per-room toggle reads
  * "Keep mine" (stay removed) vs "Restore room" (bring the server's room back),
